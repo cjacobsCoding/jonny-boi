@@ -16,6 +16,7 @@
 import type { CardDefinition } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
+import type { ContinuousEffect } from './internal/continuous.js';
 
 /** Opaque, stable identity for a player. */
 export type PlayerId = 'A' | 'B';
@@ -111,11 +112,12 @@ export const STEP_ORDER: readonly Step[] = [
 export const MAIN_STEPS: readonly Step[] = ['precombatMain', 'postcombatMain'];
 
 /**
- * An object on the stack: a spell (a card instance moving through the stack) or an
- * ability. For the MVP every stack object carries the resolving instance and the
- * effects to run. Resolution is LIFO.
+ * A spell (or permanent) on the stack: a card instance moving through the stack.
+ * Carries the resolving instance and resolves to a zone. Resolution is LIFO.
  */
-export interface StackObject {
+export interface SpellStackObject {
+  /** Discriminator; a spell/permanent moving through the stack. */
+  readonly kind: 'spell';
   readonly instanceId: InstanceId;
   /** The card instance this stack object represents. */
   readonly card: CardInstance;
@@ -126,6 +128,29 @@ export interface StackObject {
   /** Targets chosen at cast time (instance ids and/or players); empty if none. */
   readonly targets: ReadonlyArray<InstanceId | PlayerId>;
 }
+
+/**
+ * A triggered ability on the stack (DESIGN §3.9). Unlike a spell it carries no card
+ * moving zones — it runs its effects against its source then leaves the stack.
+ */
+export interface TriggeredStackObject {
+  readonly kind: 'trigger';
+  /** A unique id for this stack object (distinct from the source instance). */
+  readonly instanceId: InstanceId;
+  /** The permanent whose ability this is. */
+  readonly sourceInstanceId: InstanceId;
+  /** Who controls the ability. */
+  readonly controller: PlayerId;
+  /** Effect refs to run on resolution. */
+  readonly effects: ReadonlyArray<import('./card.js').EffectRef>;
+  /** Targets, if any (resolved when the trigger went on the stack). */
+  readonly targets: ReadonlyArray<InstanceId | PlayerId>;
+  /** Debug label for the inspector/event log. */
+  readonly label: string;
+}
+
+/** Anything that can sit on the stack. */
+export type StackObject = SpellStackObject | TriggeredStackObject;
 
 /** Combat bookkeeping for the current turn (null outside combat). */
 export interface CombatState {
@@ -150,6 +175,12 @@ export interface GameState {
   battlefield: CardInstance[];
   /** The stack, index 0 = bottom, last = top (resolves first). */
   stack: StackObject[];
+  /**
+   * Active continuous effects (DESIGN §3.9): temporary P/T buffs and keyword grants,
+   * mostly "until end of turn", removed in cleanup. Effective P/T and keywords are
+   * computed by layering these over each permanent's base (see internal/continuous).
+   */
+  continuous: ContinuousEffect[];
   combat: CombatState | null;
   /** Set once the game is decided. */
   winner: PlayerId | null;

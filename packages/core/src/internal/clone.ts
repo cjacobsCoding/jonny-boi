@@ -52,7 +52,19 @@ function clonePlayer(p: PlayerState): PlayerState {
 }
 
 function cloneStackObject(o: StackObject): StackObject {
+  if (o.kind === 'trigger') {
+    return {
+      kind: 'trigger',
+      instanceId: o.instanceId,
+      sourceInstanceId: o.sourceInstanceId,
+      controller: o.controller,
+      effects: o.effects.map((e) => ({ ...e })),
+      targets: [...o.targets],
+      label: o.label,
+    };
+  }
   return {
+    kind: 'spell',
     instanceId: o.instanceId,
     card: cloneInstance(o.card),
     controller: o.controller,
@@ -81,6 +93,7 @@ export function cloneState(state: GameState): GameState {
     players,
     battlefield: cloneInstances(state.battlefield),
     stack: state.stack.map(cloneStackObject),
+    continuous: state.continuous.map((e) => ({ ...e, keywords: e.keywords ? { ...e.keywords } : undefined })),
     combat: cloneCombat(state.combat),
     winner: state.winner,
     gameOver: state.gameOver,

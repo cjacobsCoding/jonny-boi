@@ -78,6 +78,14 @@ export interface CardDefinition {
   readonly produces?: readonly import('./mana.js').ManaColor[];
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
+  /**
+   * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
+   * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
+   * — the trigger machinery (triggers.ts) matches conditions against the event log
+   * and the engine resolves the effects via the same registry as spells. Omit for
+   * cards with no triggers.
+   */
+  readonly triggers?: readonly import('./triggers.js').TriggeredAbility[];
 }
 
 /** Convenience predicates over a definition's type line. */

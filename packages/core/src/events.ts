@@ -7,6 +7,8 @@
 
 import type { InstanceId, PlayerId, Step, ZoneName } from './state.js';
 import type { ManaColor } from './mana.js';
+import type { CardType } from './card.js';
+import type { ContinuousDuration } from './internal/continuous.js';
 
 /** Discriminated union of everything the engine reports. */
 export type GameEvent =
@@ -28,6 +30,8 @@ export type GameEvent =
       readonly player: PlayerId;
       readonly instanceId: InstanceId;
       readonly name: string;
+      /** The card types of the spell cast (so cast-triggers can filter by type). */
+      readonly castTypes: readonly CardType[];
     }
   | {
       readonly type: 'stackResolved';
@@ -70,7 +74,41 @@ export type GameEvent =
   | { readonly type: 'playerLost'; readonly player: PlayerId; readonly reason: string }
   | { readonly type: 'gameOver'; readonly winner: PlayerId | null }
   | { readonly type: 'actionRejected'; readonly reason: string }
-  | { readonly type: 'counterAdded'; readonly instanceId: InstanceId; readonly kind: string; readonly amount: number };
+  | { readonly type: 'counterAdded'; readonly instanceId: InstanceId; readonly kind: string; readonly amount: number }
+  | {
+      // A triggered ability matched an event and was placed on the stack.
+      readonly type: 'triggerPutOnStack';
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly label: string;
+    }
+  | {
+      // A triggered ability finished resolving (its effects ran).
+      readonly type: 'triggeredAbilityResolved';
+      readonly sourceInstanceId: InstanceId;
+      readonly label: string;
+    }
+  | {
+      // An "until end of turn" (or other-duration) continuous effect was removed.
+      readonly type: 'continuousEffectExpired';
+      readonly targetInstanceId: InstanceId;
+      readonly sourceInstanceId: InstanceId;
+      readonly duration: ContinuousDuration;
+    }
+  | {
+      // A continuous effect (e.g. a pump) was registered onto a permanent.
+      readonly type: 'continuousEffectAdded';
+      readonly targetInstanceId: InstanceId;
+      readonly sourceInstanceId: InstanceId;
+      readonly duration: ContinuousDuration;
+    }
+  | {
+      // A token permanent was created on the battlefield.
+      readonly type: 'tokenCreated';
+      readonly instanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly name: string;
+    };
 
 /** The append-only log. Construct via `createEventLog`; never reorder/mutate. */
 export interface EventLog {

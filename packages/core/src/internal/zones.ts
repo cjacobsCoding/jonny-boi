@@ -26,8 +26,10 @@ export function findInstance(state: GameState, id: InstanceId): CardInstance | u
       if (found) return found;
     }
   }
-  const onStack = state.stack.find((o) => o.instanceId === id);
-  return onStack?.card;
+  for (const o of state.stack) {
+    if (o.kind === 'spell' && o.card.instanceId === id) return o.card;
+  }
+  return undefined;
 }
 
 /** Remove an instance from whatever owner-zone it currently sits in (not stack). */

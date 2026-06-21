@@ -59,6 +59,31 @@ export {
   castTiming,
 } from './card.js';
 
+// Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.
+export type {
+  TriggeredAbility,
+  TriggerCondition,
+  TriggerEvent,
+  TriggerWho,
+  PendingTrigger,
+  TriggerSource,
+} from './triggers.js';
+export { conditionMatches, matchTriggers, orderPendingTriggers } from './triggers.js';
+
+// Continuous-effects seam (DESIGN §3.9): "until end of turn" P/T buffs + keyword grants.
+export type {
+  ContinuousEffect,
+  ContinuousDuration,
+  AggregatedMod,
+  ContinuousIndex,
+} from './internal/continuous.js';
+export {
+  indexContinuous,
+  aggregateFor,
+  expireContinuousEffects,
+  NO_MOD,
+} from './internal/continuous.js';
+
 // State
 export type {
   GameState,
@@ -69,6 +94,8 @@ export type {
   ZoneName,
   Step,
   StackObject,
+  SpellStackObject,
+  TriggeredStackObject,
   CombatState,
 } from './state.js';
 export { PLAYER_IDS, STEP_ORDER, MAIN_STEPS, createPlayer, playerZone } from './state.js';
@@ -78,7 +105,7 @@ export type { GameEvent, EventLog } from './events.js';
 export { createEventLog, eventsOfType } from './events.js';
 
 // Effect registry seam
-export type { EffectContext, EffectPrimitive, EffectRegistry } from './effects.js';
+export type { EffectContext, EffectPrimitive, EffectRegistry, ContinuousModRequest } from './effects.js';
 export { createEffectRegistry, applyEffectRef } from './effects.js';
 
 // Actions seam
@@ -97,8 +124,17 @@ export type {
 export type { DeckList, GameSetup, EngineResult, Engine } from './engine.js';
 export { createGame, createEngine, applyAction, generateLegalActions } from './engine.js';
 
-// Stat helpers (combat/SBA-facing; AI heuristics will want these)
-export { effectivePower, effectiveToughness, remainingToughness, PLUS_ONE_COUNTER } from './internal/stats.js';
+// Stat helpers (combat/SBA-facing; AI heuristics will want these). The effective
+// accessors take an optional AggregatedMod so callers can layer continuous effects
+// (e.g. `effectivePower(inst, indexContinuous(state).get(inst.instanceId) ?? NO_MOD)`).
+export {
+  effectivePower,
+  effectiveToughness,
+  remainingToughness,
+  effectiveKeywords,
+  hasKeyword,
+  PLUS_ONE_COUNTER,
+} from './internal/stats.js';
 
 // Debug / inspector seam
 export type { SerializedState } from './serialize.js';

@@ -32,7 +32,7 @@ import type {
   GameState,
   InstanceId,
   PlayerId,
-  StackObject,
+  SpellStackObject,
   Step,
 } from './state.js';
 import {
@@ -42,6 +42,8 @@ import {
   STEP_ORDER,
 } from './state.js';
 import { cloneState } from './internal/clone.js';
+import { createTriggerCollector } from './internal/triggers-runtime.js';
+import { expireContinuousEffects, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
 import { checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.js';
 import {
@@ -119,7 +121,7 @@ export function createGame(setup: GameSetup): EngineResult {
   const startingPlayer = setup.startingPlayer ?? 'A';
   const rng = createRng(setup.seed);
   const events: GameEvent[] = [];
-  const emit = (e: GameEvent) => events.push(e);
+  const baseEmit = (e: GameEvent) => events.push(e);
 
   const state: GameState = {
     nextInstanceId: 1,
@@ -133,6 +135,7 @@ export function createGame(setup: GameSetup): EngineResult {
     },
     battlefield: [],
     stack: [],
+    continuous: [],
     combat: null,
     winner: null,
     gameOver: false,
@@ -140,6 +143,11 @@ export function createGame(setup: GameSetup): EngineResult {
     seed: setup.seed,
     rngState: rng.state,
   };
+
+  // Wrap emit so events are scanned for triggers (none can fire during setup
+  // before the first upkeep, but beginning-of-upkeep triggers fire as turn 1 opens).
+  const collector = createTriggerCollector(state, baseEmit);
+  const emit = collector.emit;
 
   // Build + shuffle libraries.
   for (const pid of PLAYER_IDS) {
@@ -161,6 +169,13 @@ export function createGame(setup: GameSetup): EngineResult {
 
   // Begin the first turn.
   beginTurn(state, config, emit);
+
+  // Put any triggers that fired during setup/turn-1 opening (e.g. an upkeep
+  // trigger) onto the stack; the active player then holds priority over them.
+  if (collector.flush() > 0) {
+    state.priorityPlayer = state.activePlayer;
+    state.consecutivePasses = 0;
+  }
 
   return { state, events };
 }
@@ -306,7 +321,11 @@ function performStepTurnBasedActions(
     }
     case 'cleanup': {
       enterStep(state, step, emit);
-      // Clear marked damage; "until end of turn" effects would end here (none yet).
+      // "Until end of turn" continuous effects end here (emits an expiry event per
+      // effect for the inspector/sim-log), then marked damage clears. Order matters
+      // only for observability; expiry before damage-clear mirrors MTG cleanup.
+      expireContinuousEffects(state, 'endOfTurn', emit);
+      pruneOrphanContinuousEffects(state);
       for (const inst of state.battlefield) {
         inst.damageMarked = 0;
         inst.markedByDeathtouch = false;
@@ -401,6 +420,12 @@ function resolveTopOfStack(
 ): void {
   const top = state.stack.pop();
   if (!top) return;
+
+  if (top.kind === 'trigger') {
+    resolveTriggeredAbility(state, top, registry, emit);
+    return;
+  }
+
   const card = top.card;
 
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
@@ -440,6 +465,57 @@ function resolveTopOfStack(
   checkStateBasedActions(state, emit);
 }
 
+/**
+ * Resolve a triggered ability off the stack: run its effect refs against its source
+ * permanent, then leave the stack (no card moves zones). If the source has left the
+ * battlefield, the ability still resolves (per MTG) using a last-known-information
+ * stand-in source so the effects can run. Robust: unknown primitives degrade to
+ * `effectUnsupported` via `applyEffectRef`.
+ */
+function resolveTriggeredAbility(
+  state: GameState,
+  obj: Extract<import('./state.js').StackObject, { kind: 'trigger' }>,
+  registry: EffectRegistry,
+  emit: (e: GameEvent) => void,
+): void {
+  const source = findOnBattlefield(state, obj.sourceInstanceId) ?? findInstanceAnywhere(state, obj.sourceInstanceId);
+  // A trigger always has a controller even if its source is gone; build a minimal
+  // synthetic source only when the real instance can't be found at all.
+  const effectSource: CardInstance =
+    source ?? {
+      instanceId: obj.sourceInstanceId,
+      def: { id: 'unknown-trigger-source', name: 'unknown', types: [] },
+      controller: obj.controller,
+      owner: obj.controller,
+      zone: 'exile',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+    };
+
+  for (const ref of obj.effects) {
+    applyEffectRef(registry, ref, { state, source: effectSource, controller: obj.controller }, emit, obj.targets);
+  }
+  emit({ type: 'triggeredAbilityResolved', sourceInstanceId: obj.sourceInstanceId, label: obj.label });
+  checkStateBasedActions(state, emit);
+}
+
+/** Find an instance in any zone (battlefield/hand/grave/exile/stack), else undefined. */
+function findInstanceAnywhere(state: GameState, id: InstanceId): CardInstance | undefined {
+  const bf = findOnBattlefield(state, id);
+  if (bf) return bf;
+  for (const pid of PLAYER_IDS) {
+    const p = state.players[pid];
+    for (const zone of [p.graveyard, p.exile, p.hand, p.library, p.command]) {
+      const found = zone.find((c) => c.instanceId === id);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
 // --- the action entry point ----------------------------------------------------
 
 /**
@@ -455,7 +531,12 @@ export function applyAction(
 ): EngineResult {
   const state = cloneState(prevState);
   const events: GameEvent[] = [];
-  const emit = (e: GameEvent) => events.push(e);
+  const baseEmit = (e: GameEvent) => events.push(e);
+  // Wrap emit so every mutation's event is scanned for triggered abilities. The
+  // collector queues matches; we flush onto the stack once the action's mutations
+  // settle (below), so triggers go on the stack the moment before priority returns.
+  const collector = createTriggerCollector(state, baseEmit);
+  const emit = collector.emit;
   // Thread the effect registry explicitly through the call chain (no module
   // global). With none supplied, default to an empty registry: registry-free
   // actions (playLand/passPriority/combat) are unaffected; only spell resolution
@@ -463,39 +544,46 @@ export function applyAction(
   const effectRegistry = registry ?? createEffectRegistry();
 
   if (state.gameOver) {
-    emit({ type: 'actionRejected', reason: 'the game is already over' });
+    baseEmit({ type: 'actionRejected', reason: 'the game is already over' });
     return { state, events };
   }
 
-  const reject = (reason: string): EngineResult => {
-    // Return a state with only the rejection appended; no mutation leaked because
-    // we discard the draft's other changes by re-cloning from prevState.
-    const clean = cloneState(prevState);
-    return { state: clean, events: [{ type: 'actionRejected', reason }] };
+  const dispatch = (): EngineResult => {
+    switch (action.kind) {
+      case 'passPriority': {
+        if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+        onPassPriority(state, config, effectRegistry, emit);
+        return { state, events };
+      }
+      case 'playLand':
+        return applyPlayLand(state, prevState, action, config, emit, events);
+      case 'tapForMana':
+        return applyTapForMana(state, prevState, action, emit, events);
+      case 'castSpell':
+        return applyCastSpell(state, prevState, action, config, emit, events);
+      case 'declareAttackers':
+        return applyDeclareAttackers(state, prevState, action, emit, events);
+      case 'declareBlockers':
+        return applyDeclareBlockers(state, prevState, action, emit, events);
+      default: {
+        const _exhaustive: never = action;
+        void _exhaustive;
+        return rejectWith(prevState, 'unknown action');
+      }
+    }
   };
 
-  switch (action.kind) {
-    case 'passPriority': {
-      if (action.player !== state.priorityPlayer) return reject('you do not have priority');
-      onPassPriority(state, config, effectRegistry, emit);
-      return { state, events };
-    }
-    case 'playLand':
-      return applyPlayLand(state, prevState, action, config, emit, events);
-    case 'tapForMana':
-      return applyTapForMana(state, prevState, action, emit, events);
-    case 'castSpell':
-      return applyCastSpell(state, prevState, action, config, emit, events);
-    case 'declareAttackers':
-      return applyDeclareAttackers(state, prevState, action, emit, events);
-    case 'declareBlockers':
-      return applyDeclareBlockers(state, prevState, action, emit, events);
-    default: {
-      const _exhaustive: never = action;
-      void _exhaustive;
-      return reject('unknown action');
+  const result = dispatch();
+  // On a clean (non-rejected) action, put any triggered abilities that fired onto
+  // the stack and hand the active player priority over them. Rejections return a
+  // fresh clone of prevState, so `result.state !== state`; we only flush our draft.
+  if (result.state === state && !result.events.some((e) => e.type === 'actionRejected')) {
+    if (collector.flush() > 0 && !state.gameOver) {
+      state.priorityPlayer = state.activePlayer;
+      state.consecutivePasses = 0;
     }
   }
+  return result;
 }
 
 function rejectWith(prevState: GameState, reason: string): EngineResult {
@@ -593,8 +681,9 @@ function applyCastSpell(
   // Move the card to the stack.
   removeFromHand(player, card.instanceId);
   card.zone = 'stack';
-  const resolvesTo: StackObject['resolvesTo'] = isPermanentType(card.def) ? 'battlefield' : 'graveyard';
-  const stackObject: StackObject = {
+  const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(card.def) ? 'battlefield' : 'graveyard';
+  const stackObject: SpellStackObject = {
+    kind: 'spell',
     instanceId: card.instanceId,
     card,
     controller: action.player,
@@ -602,7 +691,13 @@ function applyCastSpell(
     targets: action.targets ?? [],
   };
   state.stack.push(stackObject);
-  emit({ type: 'spellCast', player: action.player, instanceId: card.instanceId, name: card.def.name });
+  emit({
+    type: 'spellCast',
+    player: action.player,
+    instanceId: card.instanceId,
+    name: card.def.name,
+    castTypes: [...card.def.types],
+  });
   // Caster retains priority after putting something on the stack.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;

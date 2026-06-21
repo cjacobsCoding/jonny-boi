@@ -103,7 +103,7 @@ remain.
 ### 3.8 Meta-deck gauntlet content — ⬜ not started
 The 5 curated meta decks (data) that define the baseline gauntlet, plus swap-candidate cards.
 
-### 3.9 Core engine v2 — triggered abilities + continuous effects — ⬜ not started  *(quality gate for trustworthy sims)*
+### 3.9 Core engine v2 — triggered abilities + continuous effects — ✅ done  *(quality gate for trustworthy sims)*
 The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta decks it needs: a
 **triggered-ability system** (ETB/attack/cast/death triggers → the stack), a **continuous-effects / "until
 end of turn" layer** with proper cleanup-step expiry (so `pumpUntilEndOfTurn` and similar wear off — current
