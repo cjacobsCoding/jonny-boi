@@ -293,7 +293,7 @@ describe('counterSpell', () => {
   it('removes a targeted spell from the stack to its owner graveyard', () => {
     const s = emptyState();
     const spell = inst({ id: 'bolt', name: 'Bolt', types: ['instant'] }, 'B', 'stack');
-    s.stack.push({ instanceId: spell.instanceId, card: spell, controller: 'B', resolvesTo: 'graveyard', targets: [] });
+    s.stack.push({ kind: 'spell', instanceId: spell.instanceId, card: spell, controller: 'B', resolvesTo: 'graveyard', targets: [] });
     const src = inst({ id: 'cs', name: 'Counterspell', types: ['instant'] }, 'A', 'stack');
     const { ctx } = ctxFor(s, src, {}, [spell.instanceId]);
     counterSpell(ctx);
