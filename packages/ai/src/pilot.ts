@@ -13,7 +13,7 @@
  * game reproduces the same choices. No `Math.random`, no wall-clock.
  */
 
-import type { GameAction, GameState, Rng } from '@jonny-boi/core';
+import type { EffectRegistry, GameAction, GameState, Rng, RulesConfig } from '@jonny-boi/core';
 
 /**
  * A **read-only** view of the game a pilot reasons over. It is structurally the
@@ -57,6 +57,32 @@ export interface DecisionContext {
    * work. Observability without coupling.
    */
   readonly trace?: (trace: DecisionTrace) => void;
+  /**
+   * Optional **forward-model registry** for pilots that *simulate ahead* (the MCTS
+   * pilot). A look-ahead pilot calls the core engine's `applyAction` to roll out
+   * hypothetical lines, and `applyAction` needs the effect `registry` to resolve a
+   * spell's primitives. The `ai` package does NOT depend on `cards` (which owns the
+   * registry), so the harness — which *does* have it — may hand it in here for
+   * **high-fidelity** rollouts.
+   *
+   * When ABSENT, a look-ahead pilot falls back to rolling out with an empty
+   * registry: lands, mana, creatures, combat, and attacks still resolve faithfully
+   * (most of the game); only spell *effects* no-op. The pilot must work either way.
+   *
+   * INTEGRATOR NOTE: the sim harness (`packages/sim/src/match.ts`) already holds the
+   * pool's registry (`seats.registry`) and the `RulesConfig`. To get full-fidelity
+   * MCTS rollouts it should pass `registry` (and `rulesConfig`) into this context at
+   * its `pilot.chooseAction(...)` call. That is a small sim-side change the
+   * integrator makes — this package neither edits nor depends on sim.
+   */
+  readonly registry?: EffectRegistry;
+  /**
+   * Optional rules config for look-ahead pilots, paired with `registry`. When the
+   * harness simulates with a non-default `RulesConfig`, it should thread the same
+   * config here so rollouts match the real game's rules (land drops, life, draws).
+   * Absent ⇒ the pilot rolls out with core's `DEFAULT_RULES`.
+   */
+  readonly rulesConfig?: RulesConfig;
 }
 
 /**
