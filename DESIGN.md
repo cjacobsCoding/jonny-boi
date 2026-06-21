@@ -89,10 +89,14 @@ test that returns a significance verdict ("card X is better/worse/inconclusive a
 Given a deck + the gauntlet, propose candidate single-card swaps, evaluate each via the sim, and rank by
 win-rate delta + significance. The signature "make my deck better" loop.
 
-### 3.7 Web PWA — deck builder + card browser + lab + match viewer — ⬜ not started
+### 3.7 Web PWA — deck builder + card browser + lab + match viewer — 🚧 in progress
 Professional React/Vite UI: browse cards (Scryfall art), build/edit decks, run the gauntlet and see
 win-rate deltas, accept suggestions, watch/replay a match from the event log. Installable PWA (offline
 shell), responsive for phone + desktop.
+*Foundation landed:* a polished card browser (real Scryfall art, search/color/type filters, mana-value
+sort, detail view) and a deck builder (4-of rule, type-grouped list, mana-curve chart, localStorage
+persistence, sim-compatible JSON import/export). The lab (gauntlet/A-B), suggestions, and match viewer
+remain.
 
 ### 3.8 Meta-deck gauntlet content — ⬜ not started
 The 5 curated meta decks (data) that define the baseline gauntlet, plus swap-candidate cards.
