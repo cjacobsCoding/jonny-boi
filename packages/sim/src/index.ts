@@ -64,6 +64,25 @@ export { runGauntlet } from './gauntlet.js';
 export type { CardSwap, SwapVerdict, SwapEvaluation } from './swap.js';
 export { evaluateSwap, applySwap, decideVerdict } from './swap.js';
 
+// The suggestion engine (DESIGN §3.6) — ranked single-card-swap recommendations.
+export type {
+  SuggestConfig,
+  HeuristicWeights,
+} from './suggest-config.js';
+export {
+  DEFAULT_SUGGEST_CONFIG,
+  DEFAULT_HEURISTIC_WEIGHTS,
+} from './suggest-config.js';
+export type {
+  SwapCandidate,
+  SkippedCandidate,
+  RankedSwap,
+  SuggestionReport,
+  SuggestionNotes,
+  SuggestOptions,
+} from './suggest.js';
+export { suggestSwaps, generateCandidates, rankEvaluations, scoreCandidate } from './suggest.js';
+
 // Reporter registry (the §2 seam).
 export type { Reporter, ReporterFactory, ReporterRegistry, MetricRow } from './reporters.js';
 export {

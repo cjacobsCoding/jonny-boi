@@ -87,9 +87,15 @@ single-card-swap** test (paired / common-random-numbers + **McNemar's test**) th
 verdict ("card X is better/worse/inconclusive at N games"). Reporter registry (§2 seam), sample-deck data
 gauntlet, and the `npm run sim` CLI (`decks`/`match`/`gauntlet`/`swap`). Provisional pending §3.9 fidelity.
 
-### 3.6 Suggestion engine — ⬜ not started
+### 3.6 Suggestion engine — ✅ done
 Given a deck + the gauntlet, propose candidate single-card swaps, evaluate each via the sim, and rank by
-win-rate delta + significance. The signature "make my deck better" loop.
+win-rate delta + significance. The signature "make my deck better" loop. `suggestSwaps(deck, options) →
+SuggestionReport`: generates legal candidates (focused or bounded-auto top-K by a cheap color/curve
+heuristic), evaluates each through the §3.5 paired `evaluateSwap` (common random numbers + McNemar, reused
+not reinvented), and ranks proven-better → inconclusive → proven-worse (by delta, then p-value). Honest
+coverage (capped/illegal candidates recorded, no silent truncation), deterministic per seed, throughput
+instrumented, and the §3.9 provisional caveat carried through. CLI: `npm run sim -- suggest <deck>
+[--games N] [--cut "Card"] [--max-candidates K] [--pilot id]`.
 
 ### 3.7 Web PWA — deck builder + card browser + lab + match viewer — 🚧 in progress
 Professional React/Vite UI: browse cards (Scryfall art), build/edit decks, run the gauntlet and see
