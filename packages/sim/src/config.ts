@@ -82,3 +82,19 @@ export const DEFAULT_STATS_CONFIG: StatsConfig = Object.freeze({
   z: 1.959963984540054,
   minGamesForVerdict: 30,
 });
+
+/**
+ * The single, shared fidelity caveat (DESIGN §3.9 — now DONE). Engine v2 models
+ * triggered abilities and until-end-of-turn continuous effects, so prowess,
+ * cast/ETB-trigger tokens, persist, and pumps that wear off all play correctly.
+ * A small set of advanced mechanics is still genuinely unimplemented (the
+ * authoritative list is `STUBBED_MECHANICS` in `@jonny-boi/cards`); cards that
+ * use them play as a simplified subset. Every surface (CLI output, help text,
+ * the suggestion report's `notes.fidelityCaveat`, and the web Lab) references
+ * THIS constant so there is exactly one wording. The statistics are always exact.
+ */
+export const FIDELITY_CAVEAT =
+  'Note: the engine models triggered abilities and until-end-of-turn effects. A few ' +
+  'advanced mechanics remain unimplemented — transform/double-faced cards, dynamic ' +
+  'power/toughness, planeswalker loyalty, and flash/flashback — so cards using them ' +
+  'play as a simplified subset. The statistics are exact.';

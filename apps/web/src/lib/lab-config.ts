@@ -3,12 +3,13 @@
  * shapes a sim run — default game counts, the candidate cap, the base seed, the
  * tuning-slider bounds — lives here as a NAMED token (DESIGN §1: no magic
  * numbers). The Lab UI reads these instead of inlining literals, and re-exports
- * the sim's own provisional caveat so the honesty note has a single source.
+ * the sim's own fidelity caveat so the honesty note has a single source.
  */
 import {
   DEFAULT_SIM_CONFIG,
   DEFAULT_SUGGEST_CONFIG,
   DEFAULT_STATS_CONFIG,
+  FIDELITY_CAVEAT,
 } from '@jonny-boi/sim';
 
 /**
@@ -57,11 +58,8 @@ export const SUGGEST_MAX_CANDIDATES = {
 export const VERDICT_ALPHA = DEFAULT_STATS_CONFIG.alpha;
 
 /**
- * The §3.9 provisional-verdict caveat, surfaced near every verdict. We re-derive
- * it from the sim's exported suggestion notes so there is exactly one wording —
- * `suggestSwaps` stamps this same text into `report.notes.fidelityCaveat`.
+ * The fidelity caveat surfaced near every verdict. Re-exported verbatim from the
+ * sim so there is exactly one wording across CLI and web — `suggestSwaps` stamps
+ * this same text into `report.notes.fidelityCaveat`.
  */
-export const FIDELITY_CAVEAT =
-  'Verdicts are PROVISIONAL (DESIGN §3.9): the MVP engine omits triggered ' +
-  'abilities & until-end-of-turn expiry, so some cards play as a faithful vanilla ' +
-  'subset. The statistics are exact; fidelity grows when engine v2 lands.';
+export { FIDELITY_CAVEAT };

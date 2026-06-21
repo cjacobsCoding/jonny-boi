@@ -10,11 +10,11 @@
  * games where base and variant *disagreed* and ask whether that disagreement is
  * lopsided enough to be real. We answer with **McNemar's paired test**.
  *
- * Honesty about fidelity (DESIGN §3.9): the MVP engine has no triggered-ability
- * or until-EOT-expiry system, so some cards play as a faithful vanilla subset.
- * The swap machinery is exact; a verdict is only as faithful as the cards' MVP
- * models. The CLI prints this caveat. We build the math correctly regardless — it
- * gets more faithful when §3.9 lands.
+ * Honesty about fidelity (DESIGN §3.9, done): the engine NOW models triggered
+ * abilities and until-end-of-turn continuous effects. Only a few advanced mechanics
+ * remain unimplemented (transform/DFC, dynamic P/T, planeswalker loyalty, flash/
+ * flashback — see `FIDELITY_CAVEAT`), so cards using them play as a simplified
+ * subset. The swap machinery and statistics are exact; the CLI prints this caveat.
  */
 
 import type { EffectRegistry, PlayerId, CardDefinition } from '@jonny-boi/core';

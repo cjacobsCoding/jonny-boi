@@ -197,7 +197,7 @@ describe('suggestSwaps (end-to-end, tiny + fast)', () => {
     expect(report.suggestions[0]!.outName).toBe('Young Pyromancer');
     expect(report.suggestions[0]!.inName).toBe('Sol Ring');
     expect(report.notes.totalGamesRun).toBeGreaterThan(0);
-    expect(report.notes.fidelityCaveat).toMatch(/PROVISIONAL/);
+    expect(report.notes.fidelityCaveat).toMatch(/simplified subset/);
   });
 
   it('is deterministic: same inputs + seed reproduce the identical ranking', () => {

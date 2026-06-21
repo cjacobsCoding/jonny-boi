@@ -41,6 +41,7 @@ import {
   rankEvaluations,
   DEFAULT_STATS_CONFIG,
   DEFAULT_SUGGEST_CONFIG,
+  FIDELITY_CAVEAT,
   type Deck,
   type LoadedDeck,
   type MatchupPilots,
@@ -195,11 +196,6 @@ function runSwapJob(req: Extract<SimRequest, { kind: 'swap' }>, lab: Lab): void 
 }
 
 // --- suggestions ---------------------------------------------------------------
-
-const FIDELITY_CAVEAT =
-  'Verdicts are PROVISIONAL (DESIGN §3.9): the MVP engine omits triggered abilities ' +
-  '& until-end-of-turn expiry, so some cards play as a faithful vanilla subset. The ' +
-  'statistics are exact; fidelity grows when engine v2 lands.';
 
 /** A stable non-negative seed salt for a candidate (mirrors suggest.ts). */
 function candidateSeedSalt(outId: string, inId: string): number {

@@ -37,9 +37,11 @@ describe('lab-config coherence', () => {
     expect(VERDICT_ALPHA).toBe(DEFAULT_STATS_CONFIG.alpha);
   });
 
-  it('the seed is a finite integer and the caveat names DESIGN §3.9', () => {
+  it('the seed is a finite integer and the caveat states accurate fidelity', () => {
     expect(Number.isInteger(DEFAULT_LAB_SEED)).toBe(true);
-    expect(FIDELITY_CAVEAT).toMatch(/§3\.9/);
-    expect(FIDELITY_CAVEAT).toMatch(/PROVISIONAL/);
+    // Engine v2 models triggers + until-EOT effects; the caveat must say so and
+    // flag the remaining simplified mechanics — not call verdicts provisional.
+    expect(FIDELITY_CAVEAT).toMatch(/simplified subset/);
+    expect(FIDELITY_CAVEAT).not.toMatch(/PROVISIONAL/i);
   });
 });

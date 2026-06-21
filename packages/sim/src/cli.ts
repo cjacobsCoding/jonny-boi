@@ -32,7 +32,7 @@ import { runGauntlet, type GauntletResult } from './gauntlet.js';
 import { evaluateSwap, type SwapEvaluation } from './swap.js';
 import { suggestSwaps, type SuggestionReport } from './suggest.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
-import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG } from './config.js';
+import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, FIDELITY_CAVEAT } from './config.js';
 import type { ProportionCI } from './stats.js';
 
 const PROGRAM = 'jonny-boi sim';
@@ -54,9 +54,10 @@ Notes:
     auto mode (top ${DEFAULT_SUGGEST_CONFIG.maxCandidates} candidates by a cheap color/curve heuristic).
     --max-candidates K caps how many swaps are simulated (default ${DEFAULT_SUGGEST_CONFIG.maxCandidates}).
     Per-candidate games default to ${DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate} for suggest.
-  • Engine MVP caveat (DESIGN §3.9): triggered abilities & "until end of turn"
-    expiry are not yet modelled, so some cards play as a faithful vanilla subset
-    and verdicts are PROVISIONAL. The statistics are exact; fidelity grows with §3.9.`;
+  • Fidelity (DESIGN §3.9, done): the engine models triggered abilities & "until
+    end of turn" effects. A few advanced mechanics remain unimplemented (transform/
+    DFC, dynamic P/T, planeswalker loyalty, flash/flashback) — cards using them play
+    as a simplified subset. The statistics are exact.`;
 
 /** A parsed flag bag. */
 interface Flags {
@@ -208,8 +209,9 @@ function table(header: readonly string[], rows: readonly (readonly string[])[]):
   return [fmt(header), sep, ...rows.map(fmt)].join('\n');
 }
 
-const FIDELITY_NOTE =
-  'Note: engine MVP (DESIGN §3.9) omits triggered abilities & until-EOT expiry — verdicts are provisional.';
+// The fidelity note printed under every subcommand's output. One shared wording
+// (DESIGN §1: no duplicated strings) sourced from the sim config.
+const FIDELITY_NOTE = FIDELITY_CAVEAT;
 
 // --- subcommands ---------------------------------------------------------------
 
