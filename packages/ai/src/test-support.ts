@@ -14,6 +14,7 @@
 import type {
   CardDefinition,
   CardInstance,
+  EffectRegistry,
   GameState,
   InstanceId,
   KeywordFlags,
@@ -21,7 +22,44 @@ import type {
   ManaCost,
   PlayerId,
 } from '@jonny-boi/core';
-import { addMana } from '@jonny-boi/core';
+import { addMana, createEffectRegistry } from '@jonny-boi/core';
+
+// --- a tiny effect registry (full-fidelity rollouts in tests) ------------------
+
+/**
+ * A minimal effect registry that resolves the one primitive the AI fixtures use:
+ * `dealDamage`. The real primitive bodies live in `@jonny-boi/cards`, which the
+ * `ai` package may not depend on — so the tests register their own faithful copy
+ * here. With this registry threaded into both the match loop's `applyAction` AND
+ * the pilot's `DecisionContext`, burn spells resolve at *full fidelity* (face
+ * damage / creature damage), exactly mirroring how the sim harness hands the pool's
+ * registry to look-ahead pilots in production. Without it, `dealDamage` no-ops
+ * (graceful fallback) — which is what the empty-registry robustness test exercises.
+ *
+ * Behaviour mirrors `cards`' canonical `dealDamage`: a player target loses life; a
+ * creature target gets marked damage (the engine's SBA destroys it if lethal); no
+ * target ⇒ safe no-op.
+ */
+export function createTestRegistry(): EffectRegistry {
+  const registry = createEffectRegistry();
+  registry.register('dealDamage', (ctx) => {
+    const amount = typeof ctx.params.amount === 'number' ? ctx.params.amount : 0;
+    if (amount <= 0) return;
+    const target = ctx.targets[0];
+    if (target === undefined) return;
+    if (target === 'A' || target === 'B') {
+      const p = ctx.state.players[target];
+      p.life -= amount;
+      ctx.emit({ type: 'lifeChanged', player: target, delta: -amount, to: p.life });
+      return;
+    }
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === target);
+    if (!perm) return; // target fizzled — safe no-op
+    perm.damageMarked += amount;
+    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
+  });
+  return registry;
+}
 
 // --- card definitions ----------------------------------------------------------
 

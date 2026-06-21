@@ -138,7 +138,17 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
 
     const seat = state.priorityPlayer;
     const pilot = pilots[seat];
-    const action = pilot.chooseAction({ view: state, legalActions: legal, rng: rngs[seat] });
+    // Thread the pool's effect registry + the active rules config into the decision
+    // context so look-ahead pilots (MCTS) roll out hypothetical lines through the
+    // *same* forward model the real game uses — spell effects resolve at full
+    // fidelity, not as no-ops. Non-simulating pilots simply ignore these fields.
+    const action = pilot.chooseAction({
+      view: state,
+      legalActions: legal,
+      rng: rngs[seat],
+      registry: seats.registry,
+      rulesConfig: config,
+    });
     if (decisions) decisions.push({ player: seat, action });
 
     const result = applyAction(state, action, config, seats.registry);

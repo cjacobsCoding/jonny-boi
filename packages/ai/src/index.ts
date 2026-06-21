@@ -11,6 +11,10 @@
  *   - `heuristic` — a competent, non-random pilot (develop mana, remove threats,
  *                   develop the board, attack/block for value), driven by a
  *                   tunable `HeuristicWeights` data object (no magic numbers).
+ *   - `mcts`      — a Monte-Carlo Tree Search pilot (UCB1 selection + engine
+ *                   rollouts), tunable via `MctsConfig`. Stronger but slower — it
+ *                   simulates many playouts per decision through the core engine, so
+ *                   the sim's deck verdicts carry less noise.
  *
  * Determinism: every choice is reproducible given the seed — the RNG is injected,
  * never `Math.random`, never the wall clock.
@@ -31,15 +35,21 @@ export { createAiRegistry } from './pilot.js';
 // Built-in pilots + their ids.
 export { RANDOM_PILOT_ID, createRandomPilot } from './random.js';
 export { HEURISTIC_PILOT_ID, createHeuristicPilot } from './heuristic.js';
+export { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
 
 // Tunable heuristic weights (data-driven, designer-tunable).
 export type { HeuristicWeights } from './weights.js';
 export { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
 
+// Tunable MCTS config (data-driven, designer-tunable: budget, depth, eval weights).
+export type { MctsConfig } from './mcts-config.js';
+export { DEFAULT_MCTS_CONFIG, FAST_MCTS_CONFIG } from './mcts-config.js';
+
 import type { AiRegistry } from './pilot.js';
 import { createAiRegistry } from './pilot.js';
 import { RANDOM_PILOT_ID, createRandomPilot } from './random.js';
 import { HEURISTIC_PILOT_ID, createHeuristicPilot } from './heuristic.js';
+import { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
 
 /**
  * Build a registry pre-loaded with the built-in pilots. The sim/web call this to
@@ -57,6 +67,7 @@ export function createDefaultAiRegistry(): AiRegistry {
 export function registerBuiltInPilots(registry: AiRegistry): void {
   registry.registerPilot(RANDOM_PILOT_ID, () => createRandomPilot());
   registry.registerPilot(HEURISTIC_PILOT_ID, () => createHeuristicPilot());
+  registry.registerPilot(MCTS_PILOT_ID, () => createMctsPilot());
 }
 
 /**
