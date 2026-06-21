@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { loadCardPool } from '@jonny-boi/cards';
+import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
+import { createHeuristicPilot } from '@jonny-boi/ai';
 import { loadDeck, validateDeck, DeckLoadError, type Deck } from './deck.js';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
 import { DEFAULT_DECK_RULES } from './config.js';
+import { runMatch } from './match.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 
@@ -95,6 +97,39 @@ describe('SAMPLE_DECKS', () => {
     for (const deck of SAMPLE_DECKS) {
       const loaded = loadDeck(deck, pool);
       expect(loaded.size, deck.name).toBe(DEFAULT_DECK_RULES.minDeckSize);
+    }
+  });
+
+  it('provides at least five gauntlet decks with distinct names and archetypes', () => {
+    // DESIGN §3.8: the polished gauntlet is a spread of distinct identities, so a
+    // hero deck is measured against a real meta, not five copies of one plan.
+    expect(SAMPLE_DECKS.length).toBeGreaterThanOrEqual(5);
+    const names = new Set(SAMPLE_DECKS.map((d) => d.name));
+    expect(names.size, 'deck names must be unique').toBe(SAMPLE_DECKS.length);
+    const archetypes = new Set(SAMPLE_DECKS.map((d) => d.archetype));
+    expect(archetypes.size, 'every gauntlet deck must have a distinct archetype').toBe(
+      SAMPLE_DECKS.length,
+    );
+  });
+
+  it('every gauntlet deck can complete a game against another without erroring', () => {
+    // A cheap, deterministic smoke test: pair each deck with the next one (wrapping)
+    // and play a single seeded game. We don't assert WHO wins — only that every list
+    // resolves to a finished (or cleanly timed-out) game with no thrown error, so a
+    // broken/unplayable list is caught here rather than in the gauntlet.
+    const registry = buildRegistry();
+    const pilot = createHeuristicPilot();
+    const loaded = SAMPLE_DECKS.map((d) => loadDeck(d, pool));
+    for (let i = 0; i < loaded.length; i++) {
+      const a = loaded[i]!;
+      const b = loaded[(i + 1) % loaded.length]!;
+      const result = runMatch(
+        { deckA: a, deckB: b, pilotA: pilot, pilotB: pilot, registry },
+        // A fixed per-pair seed keeps the test deterministic and fast.
+        1000 + i,
+      );
+      expect(['win', 'timeout'], `${a.name} vs ${b.name}`).toContain(result.outcome.kind);
+      expect(result.turns, `${a.name} vs ${b.name} made progress`).toBeGreaterThan(0);
     }
   });
 });
