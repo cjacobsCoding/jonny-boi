@@ -6,18 +6,24 @@ import { defineConfig } from 'vitest/config';
  * runs every `*.test.ts` across all workspace packages and the web app, so the
  * whole suite is one command with one pass/fail summary.
  *
- * Workspace packages are aliased to their `src` entry so tests run against
+ * Every workspace package is aliased to its `src` entry so tests run against
  * TypeScript source directly — the suite stays green on a fresh checkout with
- * no prior `npm run build` (which would only have produced the `dist` output
- * the package `exports` otherwise point at).
+ * no prior `npm run build` (without these aliases, cross-package imports would
+ * resolve through each package's `exports`, which point at the unbuilt `dist`).
+ * Add a package here when it gains cross-package importers in tests.
  */
-const coreSrcEntry = fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url));
+const SOURCE_ALIASED_PACKAGES = ['core', 'cards', 'ai', 'sim', 'data-tools'] as const;
+
+const aliasToSrc = Object.fromEntries(
+  SOURCE_ALIASED_PACKAGES.map((pkg) => [
+    `@jonny-boi/${pkg}`,
+    fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url)),
+  ]),
+);
 
 export default defineConfig({
   resolve: {
-    alias: {
-      '@jonny-boi/core': coreSrcEntry,
-    },
+    alias: aliasToSrc,
   },
   test: {
     include: ['{packages,apps}/*/src/**/*.test.ts'],
