@@ -77,7 +77,7 @@ card pool sufficient to express the meta decks. Each card is data; each primitiv
 Fetch + cache card data and art for the curated pool; produce a normalized card index the engine/UI use.
 Robust to misses; respects Scryfall guidelines.
 
-### 3.4 AI pilots — ⬜ not started
+### 3.4 AI pilots — ✅ done
 The `chooseAction` interface + read-only game view + legal-action generator; a `random` baseline and a
 `heuristic` pilot good enough to play the meta decks competently. Tested against scripted scenarios.
 
