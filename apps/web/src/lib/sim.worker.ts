@@ -57,6 +57,9 @@ import type {
   SimResponse,
   SimDeckPayload,
 } from './sim-protocol.js';
+import { buildMatchTrace } from './replay-build.js';
+import { MAX_REPLAY_FRAMES } from './replay-config.js';
+import type { ReplaySeat } from './replay-types.js';
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -292,6 +295,50 @@ function runSuggestJob(req: Extract<SimRequest, { kind: 'suggest' }>, lab: Lab):
   post({ type: 'result', payload: { kind: 'suggest', result: report } });
 }
 
+// --- single-game replay trace --------------------------------------------------
+
+function runMatchJob(req: Extract<SimRequest, { kind: 'match' }>, lab: Lab): void {
+  const hero = loadDeck(heroDeck(req.hero), lab.pool);
+  const sample = SAMPLE_DECKS.find((d) => d.name === req.opponentName);
+  if (!sample) throw new Error(`unknown opponent deck: ${req.opponentName}`);
+  if (sample.name === req.hero.name) throw new Error('a deck cannot play itself — pick a different opponent.');
+  const opponent = loadDeck(sample, lab.pool);
+
+  // One unit of work — a single game — but emit a progress tick so the UI shows
+  // it spun the worker up rather than appearing to hang on a slow game.
+  post({
+    type: 'progress',
+    done: 0,
+    total: 1,
+    gamesRun: 0,
+    elapsedSeconds: 0,
+    label: `playing ${hero.name} vs ${opponent.name}…`,
+  });
+
+  const seatNames: Record<'A' | 'B', ReplaySeat> = {
+    A: { player: 'A', deckName: hero.name, pilot: HEURISTIC_PILOT_ID },
+    B: { player: 'B', deckName: opponent.name, pilot: HEURISTIC_PILOT_ID },
+  };
+
+  // The frame count tracks the event count; cap events generously and frames a bit
+  // lower so a runaway game still yields a usable, bounded trace.
+  const maxEvents = Math.max(1, Math.min(req.maxEvents, MAX_REPLAY_FRAMES * 8));
+  const trace = buildMatchTrace(
+    {
+      deckA: hero,
+      deckB: opponent,
+      pilotA: lab.pilots.pilotA,
+      pilotB: lab.pilots.pilotB,
+      registry: lab.registry,
+      seatNames,
+    },
+    req.seed,
+    maxEvents,
+  );
+
+  post({ type: 'result', payload: { kind: 'match', result: trace } });
+}
+
 // --- dispatch ------------------------------------------------------------------
 
 ctx.onmessage = (event: MessageEvent<SimRequest>): void => {
@@ -307,6 +354,9 @@ ctx.onmessage = (event: MessageEvent<SimRequest>): void => {
         break;
       case 'suggest':
         runSuggestJob(req, lab);
+        break;
+      case 'match':
+        runMatchJob(req, lab);
         break;
       default:
         post({ type: 'error', message: `unknown request kind` });

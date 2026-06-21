@@ -97,7 +97,7 @@ coverage (capped/illegal candidates recorded, no silent truncation), determinist
 instrumented, and the §3.9 provisional caveat carried through. CLI: `npm run sim -- suggest <deck>
 [--games N] [--cut "Card"] [--max-candidates K] [--pilot id]`.
 
-### 3.7 Web PWA — deck builder + card browser + lab + match viewer — 🚧 in progress
+### 3.7 Web PWA — deck builder + card browser + lab + match viewer — ✅ done
 Professional React/Vite UI: browse cards (Scryfall art), build/edit decks, run the gauntlet and see
 win-rate deltas, accept suggestions, watch/replay a match from the event log. Installable PWA (offline
 shell), responsive for phone + desktop.
@@ -113,8 +113,15 @@ table), and ranked **suggestions** (tunable games-per-candidate + max-candidates
 evaluated/total + capped/illegal coverage), with the §3.9 provisional caveat surfaced near every
 verdict and a fixed/editable seed for reproducibility. Build stays installable (PWA artifacts emitted;
 the sim ships in the worker chunk, off the main bundle).
-*Still remaining (why this is 🚧, not ✅):* the watch/replay **match viewer** (turn-by-turn from the
-event log) — a clean seam is left (the sim exposes `runMatch(..., {recordTrace:true})`), not yet built.
+*The match viewer landed:* a **"Watch a Game"** surface plays ONE traced AI-vs-AI game in the sim
+Web Worker (new `match` protocol request; `runMatch(..., {recordTrace:true})` composed with the same
+core primitives to capture a serializable per-action board snapshot) and replays it with a
+**timeline scrubber + Play/Pause/Step/Restart + named-config speeds**: both players' life totals,
+turn/phase, each board (permanents with effective P/T + tapped/summoning-sick state), hand/library/
+graveyard counts, and a scrolling event log built from one shared event→text formatter. Key moments
+(a creature dies, a player crosses into lethal range, the winner) are marked on the scrubber. The pure
+event→state fold, the formatter, and the playback config are unit-tested; long games are capped with an
+honest truncation note; an illegal deck / worker error lands in a friendly state, never a blank screen.
 
 ### 3.8 Meta-deck gauntlet content — ✅ done
 Six curated, distinct 60-card meta decks (data) define the baseline gauntlet, each a well-constructed

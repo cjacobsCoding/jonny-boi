@@ -4,12 +4,14 @@ import { useDecks } from './lib/useDecks.js';
 import { CardsView } from './views/CardsView.js';
 import { DeckBuilderView } from './views/DeckBuilderView.js';
 import { LabView } from './views/LabView.js';
+import { MatchView } from './views/MatchView.js';
 
 /** The top-level views the header navigates between. */
 const VIEWS = [
   { id: 'cards', label: 'Cards' },
   { id: 'deck', label: 'Deck Builder' },
   { id: 'lab', label: 'Lab' },
+  { id: 'match', label: 'Watch a Game' },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]['id'];
@@ -54,6 +56,7 @@ export function App(): ReactElement {
         {view === 'cards' && <CardsView />}
         {view === 'deck' && <DeckBuilderView decks={decks} />}
         {view === 'lab' && <LabView decks={decks} />}
+        {view === 'match' && <MatchView decks={decks} />}
       </main>
 
       <footer className="app__footer">
