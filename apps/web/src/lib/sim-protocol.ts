@@ -16,6 +16,7 @@ import type {
   SwapEvaluation,
   SuggestionReport,
 } from '@jonny-boi/sim';
+import type { MatchTrace } from './replay-types.js';
 
 /** A deck handed to the worker: the sim's `Deck` shape (id-or-name cardIds). */
 export interface SimDeckPayload {
@@ -55,8 +56,24 @@ export interface SuggestRequest {
   readonly seed: number;
 }
 
+/**
+ * Play ONE game (hero vs a chosen opponent) and record the full trace, so the
+ * match-replay viewer can scrub through it turn by turn (DESIGN §3.7). The hero
+ * sits in seat A, the opponent in seat B; the worker resolves the opponent by
+ * sample-deck name. A `maxEvents` cap bounds a pathological game's trace.
+ */
+export interface MatchRequest {
+  readonly kind: 'match';
+  readonly hero: SimDeckPayload;
+  /** Sample-deck name to play against (resolved by the worker). */
+  readonly opponentName: string;
+  readonly seed: number;
+  /** Hard cap on recorded events (named in replay-config); the worker truncates. */
+  readonly maxEvents: number;
+}
+
 /** Anything the UI can ask the worker to run. */
-export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest;
+export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest;
 
 /** Coarse progress so the UI can show a bar + throughput while a run is live. */
 export interface SimProgress {
@@ -77,7 +94,8 @@ export interface SimProgress {
 export type SimResultPayload =
   | { readonly kind: 'gauntlet'; readonly result: GauntletResult; readonly gamesPerSecond: number }
   | { readonly kind: 'swap'; readonly result: SwapEvaluation; readonly gamesPerSecond: number }
-  | { readonly kind: 'suggest'; readonly result: SuggestionReport };
+  | { readonly kind: 'suggest'; readonly result: SuggestionReport }
+  | { readonly kind: 'match'; readonly result: MatchTrace };
 
 /** A successful result message. */
 export interface SimDone {
