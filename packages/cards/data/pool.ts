@@ -203,9 +203,22 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1 },
     power: 3,
     toughness: 2,
-    // ETB: gain 2 life. (Persist — return on death with a -1/-1 counter — needs a
-    // death-trigger system the engine lacks; the ETB lifegain is faithful.)
-    effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+    // ETB: gain 2 life — authored as an `etb` trigger (not a resolution `effects`
+    // script) so it ALSO fires when persist returns the creature to the battlefield.
+    // Persist: when it dies, return it with a -1/-1 counter (engine-v2 dies-trigger +
+    // the `persistReturn` primitive); the returned body can't persist again.
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: 'ETB: gain 2 life',
+      },
+      {
+        condition: { on: 'dies' },
+        effects: [{ primitive: 'persistReturn', params: { minusCounters: 1 } }],
+        label: 'Persist: return with a -1/-1 counter',
+      },
+    ],
   },
   {
     id: '30b24e8e-3b0e-4d8e-90f3-f66eb7c1858c',
@@ -228,8 +241,19 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     keywords: { haste: true },
-    // Attack-trigger (reveal top card) needs a trigger system; vanilla 2/2 haste
-    // plays correctly.
+    // "Whenever Goblin Guide attacks, the DEFENDING player reveals the top card of
+    // their library; if it's a land they put it into their hand." The engine has no
+    // reveal/look-then-conditionally-draw primitive, so we approximate the real
+    // card's net effect — the opponent gets a card off the top — with the closest
+    // available primitive: an opponent draw on attack. (Faithful in spirit; the
+    // conditional "only if a land" filter is the documented approximation.)
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'opponent' } }],
+        label: 'Attacks: defending player draws (approx. of reveal-top-land)',
+      },
+    ],
   },
   {
     id: 'dafd2713-d1bc-474b-b390-d2ff20b5375e',
@@ -239,8 +263,21 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 2,
     keywords: { haste: true },
-    // Prowess (+1/+1 when you cast a noncreature spell) is a cast-trigger the
-    // engine lacks; vanilla 1/2 haste plays correctly.
+    // Prowess: whenever you cast a noncreature spell, +1/+1 until end of turn.
+    // Modelled as cast-triggers on instant + sorcery (the noncreature spells in the
+    // pool) that pump the source itself via the until-EOT continuous layer.
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Prowess (instant): +1/+1 until end of turn',
+      },
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Prowess (sorcery): +1/+1 until end of turn',
+      },
+    ],
   },
   {
     id: '4b7ac066-e5c7-43e6-9e7e-2739b24a905d',
@@ -258,8 +295,21 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, R: 1 },
     power: 2,
     toughness: 1,
-    // Token-on-spell-cast is a cast-trigger; vanilla 2/1 plays correctly. The
-    // `createToken` primitive exists and is tested for when the trigger lands.
+    // "Whenever you cast an instant or sorcery spell, create a 1/1 red Elemental
+    // creature token." Two cast-triggers (instant + sorcery), each making a 1/1 via
+    // the `makeToken` primitive (token P/T/name are DATA — no magic numbers).
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Elemental' } }],
+        label: 'Cast instant: make a 1/1 red Elemental',
+      },
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
+        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Elemental' } }],
+        label: 'Cast sorcery: make a 1/1 red Elemental',
+      },
+    ],
   },
   {
     id: '2bb2eda7-3b38-4c56-870f-c3218a1056f5',

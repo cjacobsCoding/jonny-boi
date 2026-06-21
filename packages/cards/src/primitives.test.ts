@@ -27,7 +27,9 @@ import {
   drawCards,
   exileTarget,
   gainLife,
+  grantKeywordUntilEndOfTurn,
   loseLife,
+  makeToken,
   pumpUntilEndOfTurn,
   returnFromGraveyard,
   tapTarget,
@@ -54,6 +56,7 @@ function inst(def: CardDefinition, player: PlayerId, zone: CardInstance['zone'] 
 
 function emptyState(): GameState {
   return {
+    continuous: [],
     nextInstanceId: 1000,
     turnNumber: 1,
     activePlayer: 'A',
@@ -96,8 +99,58 @@ function ctxFor(
     targets,
     params,
     emit: (e) => events.push(e),
+    // Mirror the engine's continuous-effect channel (effects.ts) so primitives that
+    // register an until-EOT modification can be unit-tested in isolation: push a
+    // ContinuousEffect onto the draft and return its id.
+    addContinuousEffect(mod) {
+      const id = state.nextInstanceId++;
+      state.continuous.push({
+        id,
+        targetInstanceId: mod.target ?? source.instanceId,
+        sourceInstanceId: source.instanceId,
+        duration: mod.duration ?? 'endOfTurn',
+        power: mod.power,
+        toughness: mod.toughness,
+        keywords: mod.keywords,
+      });
+      events.push({
+        type: 'continuousEffectAdded',
+        targetInstanceId: mod.target ?? source.instanceId,
+        sourceInstanceId: source.instanceId,
+        duration: mod.duration ?? 'endOfTurn',
+      });
+      return id;
+    },
+    // Mirror the engine's token creation: place a creature token on the battlefield.
+    createToken(def, controller) {
+      const instanceId = state.nextInstanceId++;
+      const ctrl = controller ?? source.controller;
+      state.battlefield.push({
+        instanceId,
+        def,
+        controller: ctrl,
+        owner: ctrl,
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: def.types.includes('creature') ? !(def.keywords?.haste ?? false) : false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        counters: {},
+      });
+      events.push({ type: 'tokenCreated', instanceId, controller: ctrl, name: def.name });
+      events.push({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });
+      return instanceId;
+    },
   };
   return { ctx, events };
+}
+
+/** Effective P/T reading the draft's continuous layer for a given instance. */
+function effectivePT(state: GameState, target: CardInstance): { power: number; toughness: number } {
+  const mods = state.continuous.filter((c) => c.targetInstanceId === target.instanceId);
+  const dp = mods.reduce((a, m) => a + (m.power ?? 0), 0);
+  const dt = mods.reduce((a, m) => a + (m.toughness ?? 0), 0);
+  return { power: effectivePower(target) + dp, toughness: effectiveToughness(target) + dt };
 }
 
 const bear: CardDefinition = { id: 'bear', name: 'Bear', types: ['creature'], power: 2, toughness: 2, cost: { generic: 2 } };
@@ -183,17 +236,72 @@ describe('gainLife / loseLife', () => {
 // --- pumpUntilEndOfTurn --------------------------------------------------------
 
 describe('pumpUntilEndOfTurn', () => {
-  it('+3/+3 changes combat math via counters', () => {
+  it('+3/+3 registers an until-EOT continuous effect (no permanent counter) and raises effective P/T', () => {
     const s = emptyState();
     const target = inst(bear, 'A');
     s.battlefield.push(target);
     const src = inst({ id: 'gg', name: 'Giant Growth', types: ['instant'] }, 'A', 'stack');
     const { ctx, events } = ctxFor(s, src, { power: 3, toughness: 3 }, [target.instanceId]);
     pumpUntilEndOfTurn(ctx);
-    expect(target.counters[PLUS_ONE_COUNTER]).toBe(3);
-    expect(effectivePower(target)).toBe(5);
-    expect(effectiveToughness(target)).toBe(5);
-    expect(events.some((e) => e.type === 'counterAdded')).toBe(true);
+    // No permanent +1/+1 counter is added — the buff lives in the continuous layer.
+    expect(target.counters[PLUS_ONE_COUNTER]).toBeUndefined();
+    expect(s.continuous).toHaveLength(1);
+    expect(s.continuous[0]).toMatchObject({ targetInstanceId: target.instanceId, power: 3, toughness: 3, duration: 'endOfTurn' });
+    expect(effectivePT(s, target)).toEqual({ power: 5, toughness: 5 });
+    expect(events.some((e) => e.type === 'continuousEffectAdded')).toBe(true);
+  });
+
+  it('with no target pumps the source itself (prowess-style self-buff)', () => {
+    const s = emptyState();
+    const self = inst(bear, 'A');
+    s.battlefield.push(self);
+    const { ctx } = ctxFor(s, self, { power: 1, toughness: 1 }, []);
+    pumpUntilEndOfTurn(ctx);
+    expect(s.continuous).toHaveLength(1);
+    expect(s.continuous[0]!.targetInstanceId).toBe(self.instanceId);
+    expect(effectivePT(s, self)).toEqual({ power: 3, toughness: 3 });
+  });
+});
+
+// --- grantKeywordUntilEndOfTurn ------------------------------------------------
+
+describe('grantKeywordUntilEndOfTurn', () => {
+  it('registers an until-EOT keyword grant on the target', () => {
+    const s = emptyState();
+    const target = inst(bear, 'A');
+    s.battlefield.push(target);
+    const src = inst({ id: 'wings', name: 'Wings', types: ['instant'] }, 'A', 'stack');
+    const { ctx, events } = ctxFor(s, src, { keywords: { trample: true } }, [target.instanceId]);
+    grantKeywordUntilEndOfTurn(ctx);
+    expect(s.continuous).toHaveLength(1);
+    expect(s.continuous[0]).toMatchObject({ targetInstanceId: target.instanceId, keywords: { trample: true }, duration: 'endOfTurn' });
+    expect(events.some((e) => e.type === 'continuousEffectAdded')).toBe(true);
+  });
+
+  it('an empty/absent keyword grant is a safe no-op', () => {
+    const s = emptyState();
+    const target = inst(bear, 'A');
+    s.battlefield.push(target);
+    const src = inst({ id: 'wings', name: 'Wings', types: ['instant'] }, 'A', 'stack');
+    const { ctx } = ctxFor(s, src, {}, [target.instanceId]);
+    grantKeywordUntilEndOfTurn(ctx);
+    expect(s.continuous).toHaveLength(0);
+  });
+});
+
+// --- makeToken -----------------------------------------------------------------
+
+describe('makeToken', () => {
+  it('creates N data-driven tokens via ctx.createToken (P/T/name/keywords are params)', () => {
+    const s = emptyState();
+    const src = inst({ id: 'pyro', name: 'Young Pyromancer', types: ['creature'] }, 'A', 'battlefield');
+    const { ctx, events } = ctxFor(s, src, { count: 2, power: 1, toughness: 1, name: 'Elemental' });
+    makeToken(ctx);
+    const tokens = s.battlefield.filter((c) => c.def.name === 'Elemental');
+    expect(tokens).toHaveLength(2);
+    expect(tokens[0]!.controller).toBe('A');
+    expect(tokens[0]!.def.power).toBe(1);
+    expect(events.filter((e) => e.type === 'tokenCreated')).toHaveLength(2);
   });
 });
 
