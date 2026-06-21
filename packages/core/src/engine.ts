@@ -761,6 +761,10 @@ function applyDeclareBlockers(
   if (!state.combat) return rejectWith(prevState, 'not in combat');
   if (Object.keys(state.combat.blocks).length > 0) return rejectWith(prevState, 'blockers already declared');
 
+  // Read EFFECTIVE evasion (printed OR continuous grants) so an until-EOT flying/reach
+  // grant is honored for block legality, matching the damage step which builds the same
+  // index (DESIGN §3.9). Build it once and thread it into every canBlock check.
+  const cont = indexContinuous(state);
   for (const { blocker, attacker } of action.blocks) {
     const b = findOnBattlefield(state, blocker);
     const a = findOnBattlefield(state, attacker);
@@ -771,7 +775,7 @@ function applyDeclareBlockers(
     if (!state.combat.attackers.includes(attacker)) {
       return rejectWith(prevState, `${a.def.name} is not attacking`);
     }
-    if (!canBlock(a, b)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
+    if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
   }
 
   const blocks: Record<InstanceId, InstanceId> = {};

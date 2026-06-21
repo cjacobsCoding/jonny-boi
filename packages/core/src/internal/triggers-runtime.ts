@@ -80,6 +80,10 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // Refresh the known-source set so a permanent that entered earlier in this same
     // action can trigger on a later event.
     rememberSources();
+    // Perf early-exit (N1): with no triggerful permanent ever seen this action, no
+    // event can match — skip the array spread + matchTriggers scan entirely. Behavior
+    // is unchanged: matchTriggers over an empty source list always returns [].
+    if (seenSources.size === 0) return;
     const matched = matchTriggers([...seenSources.values()], event);
     for (const m of matched) queue.push(m);
   };

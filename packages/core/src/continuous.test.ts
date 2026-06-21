@@ -322,6 +322,186 @@ describe('granted haste enables a summoning-sick creature to attack', () => {
   });
 });
 
+describe('granted flying constrains block legality (B1)', () => {
+  /**
+   * Combat legality must read EFFECTIVE evasion, matching the damage step. An
+   * attacker granted flying until EOT can only be blocked by flyers/reach — a
+   * groundling block is rejected, exactly as if flying were printed.
+   */
+  function setup(seed: number): {
+    reg: EffectRegistry;
+    state: GameState;
+    beaterId: InstanceId;
+    grantInst: InstanceId;
+  } {
+    const reg = testRegistry();
+    const Beater = creatureDef('Beater', 2, 2); // no flying printed
+    const g = createGame({ seed, decks: { A: lib(), B: lib() }, registry: reg });
+    const state = g.state;
+    const beaterId = place(state, Beater, 'A');
+    const Wings: CardDefinition = {
+      id: 'Wings', name: 'Wings', types: ['instant'], timing: 'instant', cost: { generic: 0 },
+      effects: [{ primitive: 'grantKeywordUntilEOT', params: { keywords: { flying: true } } }],
+    };
+    const grantInst = state.nextInstanceId++;
+    state.players.A.hand.push({
+      instanceId: grantInst, def: Wings, controller: 'A', owner: 'A', zone: 'hand',
+      tapped: false, summoningSick: false, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    });
+    return { reg, state, beaterId, grantInst };
+  }
+
+  /** Advance to declareBlockers having granted flying and declared the beater attacking. */
+  function toBlockersWithGrant(seed: number): {
+    reg: EffectRegistry;
+    s: GameState;
+    beaterId: InstanceId;
+  } {
+    const { reg, state, beaterId, grantInst } = setup(seed);
+    let s = advanceToStep(state, 'precombatMain', reg);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: grantInst, targets: [beaterId] }, reg);
+    s = pass(s, reg);
+    s = pass(s, reg); // resolves the flying grant
+    expect(s.continuous.length).toBe(1);
+    s = advanceToStep(s, 'declareAttackers', reg);
+    s = act(s, { kind: 'declareAttackers', player: 'A', attackers: [beaterId] }, reg);
+    s = advanceToStep(s, 'declareBlockers', reg);
+    return { reg, s, beaterId };
+  }
+
+  it('a non-flying creature CANNOT block an attacker granted flying until EOT', () => {
+    const { reg, s, beaterId } = toBlockersWithGrant(21);
+    const groundlingId = place(s, creatureDef('Groundling', 1, 1), 'B');
+    const r = applyAction(
+      s,
+      { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: groundlingId, attacker: beaterId }] },
+      DEFAULT_RULES,
+      reg,
+    );
+    expect(r.events.some((e) => e.type === 'actionRejected')).toBe(true);
+  });
+
+  it('a flyer or a reach creature still CAN block the granted-flying attacker', () => {
+    const { reg, s, beaterId } = toBlockersWithGrant(22);
+    const flyerId = place(s, creatureDef('Flyer', 1, 1, { keywords: { flying: true } }), 'B');
+    const r1 = act(
+      s,
+      { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: flyerId, attacker: beaterId }] },
+      reg,
+    );
+    expect(r1.combat!.blocks[flyerId]).toBe(beaterId);
+
+    const { reg: reg2, s: s2, beaterId: beater2 } = toBlockersWithGrant(23);
+    const reacherId = place(s2, creatureDef('Reacher', 1, 1, { keywords: { reach: true } }), 'B');
+    const r2 = act(
+      s2,
+      { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: reacherId, attacker: beater2 }] },
+      reg2,
+    );
+    expect(r2.combat!.blocks[reacherId]).toBe(beater2);
+  });
+});
+
+describe('granted defender prevents attacking (M1)', () => {
+  function setup(seed: number): {
+    reg: EffectRegistry;
+    state: GameState;
+    bearId: InstanceId;
+    grantInst: InstanceId;
+  } {
+    const reg = testRegistry();
+    const Bear = creatureDef('Bear', 2, 2); // no defender printed; not summoning-sick via place()
+    const g = createGame({ seed, decks: { A: lib(), B: lib() }, registry: reg });
+    const state = g.state;
+    const bearId = place(state, Bear, 'A');
+    const Wall: CardDefinition = {
+      id: 'Wall', name: 'Wall', types: ['instant'], timing: 'instant', cost: { generic: 0 },
+      effects: [{ primitive: 'grantKeywordUntilEOT', params: { keywords: { defender: true } } }],
+    };
+    const grantInst = state.nextInstanceId++;
+    state.players.A.hand.push({
+      instanceId: grantInst, def: Wall, controller: 'A', owner: 'A', zone: 'hand',
+      tapped: false, summoningSick: false, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    });
+    return { reg, state, bearId, grantInst };
+  }
+
+  it('a creature granted defender until EOT CANNOT be declared as an attacker', () => {
+    const { reg, state, bearId, grantInst } = setup(31);
+    let s = advanceToStep(state, 'precombatMain', reg);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: grantInst, targets: [bearId] }, reg);
+    s = pass(s, reg);
+    s = pass(s, reg); // resolves the defender grant
+    expect(s.continuous.length).toBe(1);
+    s = advanceToStep(s, 'declareAttackers', reg);
+    // Absent from the offered attackers...
+    const attack = generateLegalActions(s).find((a) => a.kind === 'declareAttackers');
+    expect(
+      attack === undefined ||
+        !(attack as Extract<GameAction, { kind: 'declareAttackers' }>).attackers.includes(bearId),
+    ).toBe(true);
+    // ...and a direct declaration is rejected.
+    const r = applyAction(s, { kind: 'declareAttackers', player: 'A', attackers: [bearId] }, DEFAULT_RULES, reg);
+    expect(r.events.some((e) => e.type === 'actionRejected')).toBe(true);
+  });
+
+  it('control: with no defender grant the same creature CAN attack', () => {
+    const { reg, state, bearId } = setup(32);
+    const s = advanceToStep(state, 'declareAttackers', reg);
+    const attack = generateLegalActions(s).find((a) => a.kind === 'declareAttackers');
+    expect(attack).toBeDefined();
+    expect((attack as Extract<GameAction, { kind: 'declareAttackers' }>).attackers).toContain(bearId);
+    const r = act(s, { kind: 'declareAttackers', player: 'A', attackers: [bearId] }, reg);
+    expect(r.combat!.attackers).toContain(bearId);
+  });
+});
+
+describe('printed keywords behave unchanged with no continuous grants (regression guard)', () => {
+  it('printed flying blocks a groundling but not a flyer; printed haste/defender gate attacks', () => {
+    const reg = testRegistry();
+    // Printed-flying attacker: groundling block rejected, flyer block accepted.
+    {
+      const g = createGame({ seed: 41, decks: { A: lib(), B: lib() }, registry: reg });
+      let s = g.state;
+      const flyAttackerId = place(s, creatureDef('FlyAttacker', 2, 2, { keywords: { flying: true } }), 'A');
+      s = advanceToStep(s, 'declareAttackers', reg);
+      s = act(s, { kind: 'declareAttackers', player: 'A', attackers: [flyAttackerId] }, reg);
+      s = advanceToStep(s, 'declareBlockers', reg);
+      expect(s.continuous.length).toBe(0);
+      const groundId = place(s, creatureDef('Ground', 1, 1), 'B');
+      const rejected = applyAction(
+        s,
+        { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: groundId, attacker: flyAttackerId }] },
+        DEFAULT_RULES,
+        reg,
+      );
+      expect(rejected.events.some((e) => e.type === 'actionRejected')).toBe(true);
+      const flyerId = place(s, creatureDef('BFlyer', 1, 1, { keywords: { flying: true } }), 'B');
+      const ok = act(
+        s,
+        { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: flyerId, attacker: flyAttackerId }] },
+        reg,
+      );
+      expect(ok.combat!.blocks[flyerId]).toBe(flyAttackerId);
+    }
+    // Printed defender: cannot attack even with no continuous effects.
+    {
+      const g = createGame({ seed: 42, decks: { A: lib(), B: lib() }, registry: reg });
+      let s = g.state;
+      const wallId = place(s, creatureDef('Wall', 0, 4, { keywords: { defender: true } }), 'A');
+      s = advanceToStep(s, 'declareAttackers', reg);
+      expect(s.continuous.length).toBe(0);
+      const attack = generateLegalActions(s).find((a) => a.kind === 'declareAttackers');
+      expect(
+        attack === undefined ||
+          !(attack as Extract<GameAction, { kind: 'declareAttackers' }>).attackers.includes(wallId),
+      ).toBe(true);
+      const rejected = applyAction(s, { kind: 'declareAttackers', player: 'A', attackers: [wallId] }, DEFAULT_RULES, reg);
+      expect(rejected.events.some((e) => e.type === 'actionRejected')).toBe(true);
+    }
+  });
+});
+
 describe('determinism', () => {
   it('same seed → identical pumped combat result', () => {
     const run = (seed: number): number => {
