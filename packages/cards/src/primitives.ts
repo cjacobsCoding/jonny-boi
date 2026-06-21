@@ -21,13 +21,16 @@
  */
 
 import type {
+  CardDefinition,
   CardInstance,
   EffectContext,
   EffectPrimitive,
   EffectRegistry,
   GameState,
   InstanceId,
+  KeywordFlags,
   PlayerId,
+  TriggeredAbility,
 } from '@jonny-boi/core';
 import { PLUS_ONE_COUNTER, effectivePower, isCreature } from '@jonny-boi/core';
 
@@ -49,6 +52,22 @@ function strParam(ctx: EffectContext, key: string): string | undefined {
 function strArrayParam(ctx: EffectContext, key: string): readonly string[] {
   const v = ctx.params[key];
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+}
+
+/**
+ * Read a `keywords` param (a `KeywordFlags`-shaped object, e.g. `{ trample: true }`)
+ * keeping only the boolean-true flags. Used by `grantKeywordUntilEndOfTurn`. A
+ * missing/ill-typed param yields an empty grant (safe no-op).
+ */
+function keywordsParam(ctx: EffectContext): KeywordFlags {
+  const v = ctx.params.keywords;
+  if (typeof v !== 'object' || v === null) return {};
+  const src = v as Record<string, unknown>;
+  const out: Record<string, boolean> = {};
+  for (const key in src) {
+    if (src[key] === true) out[key] = true;
+  }
+  return out as KeywordFlags;
 }
 
 // --- target helpers ------------------------------------------------------------
@@ -116,13 +135,16 @@ export const dealDamage: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `drawCards` — the controller draws `params.count` cards. Drawing from an empty
- * library flags a loss via SBA on the next check (we move the top card or stop).
- * Used by Brainstorm (3), Ponder (1), Cryptic Command (1).
+ * `drawCards` — a player draws `params.count` cards. Defaults to the controller;
+ * `params.whichPlayer: 'opponent'` makes the controller's opponent draw instead
+ * (e.g. Goblin Guide's attack trigger gives the defending player a card). Drawing
+ * from an empty library flags a loss via SBA on the next check (we move the top
+ * card or stop). Used by Brainstorm (3), Ponder (1), Cryptic Command (1).
  */
 export const drawCards: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
-  const player = ctx.state.players[ctx.controller];
+  const drawer = strParam(ctx, 'whichPlayer') === 'opponent' ? otherPlayer(ctx.controller) : ctx.controller;
+  const player = ctx.state.players[drawer];
   for (let i = 0; i < count; i++) {
     const top = player.library.shift();
     if (!top) {
@@ -133,7 +155,7 @@ export const drawCards: EffectPrimitive = (ctx) => {
     }
     top.zone = 'hand';
     player.hand.push(top);
-    ctx.emit({ type: 'drawCard', player: ctx.controller, instanceId: top.instanceId });
+    ctx.emit({ type: 'drawCard', player: drawer, instanceId: top.instanceId });
   }
 };
 
@@ -165,29 +187,115 @@ export const loseLife: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `pumpUntilEndOfTurn` — give the target creature +X/+Y for the turn. The MVP
- * engine has no "until end of turn" expiry layer yet, so we model the buff with
- * persistent +1/+1 counters when the bonus is symmetric (the common case:
- * Giant Growth +3/+3). Reads `params.power` / `params.toughness`. This changes
- * combat math immediately (effectivePower/Toughness read counters). A creature
- * with no target → safe no-op.
+ * `pumpUntilEndOfTurn` — give a creature +X/+Y *until end of turn* (DESIGN §3.9).
+ * Reads `params.power` / `params.toughness`. With engine-v2's continuous-effects
+ * layer this registers a real "until end of turn" modification via
+ * `ctx.addContinuousEffect`, so the buff changes effective P/T (and combat math)
+ * immediately AND genuinely wears off in the cleanup step — no more persistent
+ * +1/+1-counter hack that biased combat sims (DESIGN §3.9 / §3.2 revisit).
  *
- * NOTE: counters persist past end of turn (engine limitation, documented), so a
- * symmetric pump is faithful for the resolution it happens on. Asymmetric pumps
- * fall back to the larger magnitude as a +1/+1 count so combat is never wrong in
- * the caster's favor by less than intended.
+ * Target resolution: the first creature target among `ctx.targets` (a combat trick
+ * like Giant Growth), or — when no target was chosen — the source itself (a
+ * cast-trigger pumping its own permanent, e.g. prowess). A pump with no valid
+ * creature anywhere → safe no-op. Asymmetric pumps (+X/+Y, X≠Y) are now fully
+ * faithful since power and toughness are independent deltas.
  */
 export const pumpUntilEndOfTurn: EffectPrimitive = (ctx) => {
   const power = intParam(ctx, 'power', 0);
   const toughness = intParam(ctx, 'toughness', 0);
-  const target = firstPermanentTarget(ctx);
+  if (power === 0 && toughness === 0) return;
+  const target = firstPermanentTarget(ctx) ?? selfIfCreature(ctx);
   if (!target || !isCreature(target.def)) return;
-  // Model the buff as +1/+1 counters using the dominant magnitude so both power
-  // and toughness move; Giant Growth (+3/+3) → 3 counters.
-  const stacks = Math.max(power, toughness);
-  if (stacks <= 0) return;
-  target.counters[PLUS_ONE_COUNTER] = (target.counters[PLUS_ONE_COUNTER] ?? 0) + stacks;
-  ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind: PLUS_ONE_COUNTER, amount: stacks });
+  ctx.addContinuousEffect({ target: target.instanceId, power, toughness, duration: 'endOfTurn' });
+};
+
+/**
+ * `grantKeywordUntilEndOfTurn` — grant the target creature (or, with no target, the
+ * source) one or more keywords *until end of turn* (DESIGN §3.9): e.g. trample,
+ * flying, or haste for the turn. Reads `params.keywords` (a `{ flying: true, … }`
+ * flag object). Registered through the continuous layer so combat/legality read the
+ * effective keyword set and the grant expires at cleanup. No valid creature → no-op.
+ */
+export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
+  const keywords = keywordsParam(ctx);
+  if (isEmptyKeywords(keywords)) return;
+  const target = firstPermanentTarget(ctx) ?? selfIfCreature(ctx);
+  if (!target || !isCreature(target.def)) return;
+  ctx.addContinuousEffect({ target: target.instanceId, keywords, duration: 'endOfTurn' });
+};
+
+/**
+ * `makeToken` — create `params.count` (default 1) creature tokens under the
+ * controller via engine-v2's `ctx.createToken`, so the token enters the battlefield
+ * properly (summoning-sick unless it has haste) and fires ETB triggers like any
+ * permanent. Token P/T, name, and keywords are all DATA from params (no magic
+ * numbers): `power`/`toughness`/`name`/`keywords`. Used by cast-triggers such as
+ * Young Pyromancer's "make a 1/1 red Elemental".
+ */
+export const makeToken: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  const power = intParam(ctx, 'power', 1);
+  const toughness = intParam(ctx, 'toughness', 1);
+  const name = strParam(ctx, 'name') ?? 'Token';
+  const keywords = keywordsParam(ctx);
+  const def: CardDefinition = {
+    id: `token:${name}`,
+    name,
+    types: ['creature'],
+    power,
+    toughness,
+    ...(isEmptyKeywords(keywords) ? {} : { keywords }),
+  };
+  for (let i = 0; i < count; i++) ctx.createToken(def);
+};
+
+/**
+ * `persistReturn` — the death-return half of *persist* (DESIGN §3.9). Authored as a
+ * `dies` trigger's effect: when the creature dies, return it to the battlefield
+ * under its owner with a -1/-1 counter (modelled as a negative `+1/+1` counter, the
+ * one counter the stat layer reads — so a 3/2 returns as a 2/1). Reads
+ * `params.minusCounters` (default 1) for the magnitude.
+ *
+ * "Dies for good the second time": the returned body comes back as a copy whose
+ * definition has had *this* persist trigger stripped (identified by the
+ * `persistReturn` primitive in its effects). So when it dies again it no longer has
+ * a persist trigger to fire — exactly mirroring real persist's "only if it had no
+ * -1/-1 counter" guard, without relying on counter state that the engine wipes when
+ * a permanent leaves the battlefield. The ETB half (e.g. Kitchen Finks' lifegain)
+ * is authored as a separate `etb` trigger so it re-fires on the persist return.
+ *
+ * At resolution the source sits in its owner's graveyard (last-known information);
+ * if it isn't there (already moved/exiled) this is a safe no-op.
+ */
+export const persistReturn: EffectPrimitive = (ctx) => {
+  const minus = intParam(ctx, 'minusCounters', 1);
+  const source = ctx.source;
+  const owner = ctx.state.players[source.owner];
+  const idx = owner.graveyard.findIndex((c) => c.instanceId === source.instanceId);
+  if (idx < 0) return; // not in the graveyard (already left) — safe no-op
+  const dead = owner.graveyard[idx]!;
+  owner.graveyard.splice(idx, 1);
+
+  // Return a copy whose definition no longer carries this persist trigger, so a
+  // second death cannot re-persist (it now "has a -1/-1 counter").
+  const returnedDef: CardDefinition = stripPersistTriggers(dead.def);
+  const returned: CardInstance = {
+    instanceId: dead.instanceId,
+    def: returnedDef,
+    controller: source.owner,
+    owner: source.owner,
+    zone: 'battlefield',
+    tapped: false,
+    summoningSick: isCreature(returnedDef),
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    counters: { [PLUS_ONE_COUNTER]: -Math.max(minus, 0) },
+  };
+  ctx.state.battlefield.push(returned);
+  ctx.emit({ type: 'counterAdded', instanceId: returned.instanceId, kind: PLUS_ONE_COUNTER, amount: -Math.max(minus, 0) });
+  // A battlefield entry: emit the zoneChange so ETB triggers (e.g. the lifegain
+  // half of persist) observe the return through the one "enters" mechanism.
+  ctx.emit({ type: 'zoneChange', instanceId: returned.instanceId, from: 'graveyard', to: 'battlefield' });
 };
 
 /**
@@ -361,6 +469,41 @@ function otherPlayer(p: PlayerId): PlayerId {
   return p === 'A' ? 'B' : 'A';
 }
 
+/** The source as a creature target (for self-pumps / self-grants), or undefined. */
+function selfIfCreature(ctx: EffectContext): CardInstance | undefined {
+  const self = permanentById(ctx.state, ctx.source.instanceId);
+  return self && isCreature(self.def) ? self : undefined;
+}
+
+/** Whether a keyword flag object has no true flags. */
+function isEmptyKeywords(k: KeywordFlags): boolean {
+  for (const key in k) {
+    if ((k as Record<string, unknown>)[key]) return false;
+  }
+  return true;
+}
+
+/**
+ * A copy of `def` with every triggered ability whose effects invoke `persistReturn`
+ * removed — the returned persist body must not persist again. Other triggers (e.g.
+ * an ETB lifegain) are preserved so they still fire on the return.
+ */
+function stripPersistTriggers(def: CardDefinition): CardDefinition {
+  const triggers = def.triggers;
+  if (!triggers || triggers.length === 0) return def;
+  const kept = triggers.filter((t: TriggeredAbility) => !abilityHasPersist(t));
+  if (kept.length === triggers.length) return def;
+  return { ...def, triggers: kept };
+}
+
+/** Whether a triggered ability's effects include the persist-return primitive. */
+function abilityHasPersist(ability: TriggeredAbility): boolean {
+  return ability.effects.some((e) => e.primitive === PERSIST_RETURN_PRIMITIVE);
+}
+
+/** The stable id under which `persistReturn` registers (also referenced by data). */
+const PERSIST_RETURN_PRIMITIVE = 'persistReturn';
+
 /** Whether `target` passes this destroy/removal's optional filter params. */
 function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean {
   const notColor = strParam(ctx, 'notColor');
@@ -429,6 +572,9 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   gainLife,
   loseLife,
   pumpUntilEndOfTurn,
+  grantKeywordUntilEndOfTurn,
+  makeToken,
+  persistReturn,
   destroyTarget,
   exileTarget,
   destroyAll,

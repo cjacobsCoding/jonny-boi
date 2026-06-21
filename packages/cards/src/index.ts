@@ -28,6 +28,9 @@ export {
   gainLife,
   loseLife,
   pumpUntilEndOfTurn,
+  grantKeywordUntilEndOfTurn,
+  makeToken,
+  persistReturn,
   destroyTarget,
   exileTarget,
   destroyAll,
@@ -52,24 +55,28 @@ export {
 export { CARD_POOL } from '../data/pool.js';
 
 /**
- * Mechanics intentionally stubbed because the MVP engine (§3.1) lacks the system
- * to model them faithfully. Each listed card still LOADS and PLAYS (correct cost,
- * zone, P/T, keywords, mana production); only the listed sub-mechanic is omitted.
- * This is the honest record referenced by `../data/pool`'s header. When the
- * relevant engine system lands, wire these to the existing primitives (the
- * `createToken` / `tapTarget` primitives already exist for the trigger cases).
+ * Mechanics intentionally stubbed because the engine (even with v2's triggers +
+ * until-end-of-turn continuous effects, DESIGN §3.9) lacks the system to model them
+ * faithfully. Each listed card still LOADS and PLAYS (correct cost, zone, P/T,
+ * keywords, mana production); only the listed sub-mechanic is omitted. This is the
+ * honest record referenced by `../data/pool`'s header.
+ *
+ * Engine-v2 un-stubbed (now wired onto real triggers + continuous effects, no longer
+ * here): Young Pyromancer (cast-trigger tokens), Monastery Swiftspear (prowess),
+ * Goblin Guide (attack trigger — approximated; see its data comment), and Kitchen
+ * Finks (ETB lifegain + persist death-return). Giant Growth's pump now uses the real
+ * until-EOT layer and wears off at cleanup. The cards below stay stubbed because
+ * their missing system (planeswalker loyalty, transform/DFC, dynamic P/T, flash +
+ * flashback, search/selection, modal choices) is genuinely not yet in the engine —
+ * we do NOT fake those.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
   { card: 'Delver of Secrets', missingEngineSystem: 'transform (upkeep look + flip to 3/2 flyer)' },
-  { card: 'Goblin Guide', missingEngineSystem: 'attack trigger (defender reveals top card)' },
-  { card: 'Monastery Swiftspear', missingEngineSystem: 'prowess (cast-noncreature-spell trigger)' },
-  { card: 'Young Pyromancer', missingEngineSystem: 'cast trigger (make a 1/1 token per instant/sorcery)' },
   { card: 'Snapcaster Mage', missingEngineSystem: 'flash timing + graveyard flashback recast' },
   { card: 'Sakura-Tribe Elder', missingEngineSystem: 'activated sacrifice ability + basic-land search' },
-  { card: 'Kitchen Finks', missingEngineSystem: 'persist (death trigger returning it with a -1/-1 counter)' },
   { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T from graveyard card types' },
   { card: 'Liliana of the Veil', missingEngineSystem: 'planeswalker loyalty abilities' },
   { card: 'Fatal Push', missingEngineSystem: 'revolt (≤4 mode when a permanent left your battlefield)' },
@@ -79,4 +86,8 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
   { card: 'Cryptic Command', missingEngineSystem: 'modal "choose two" (we author counter + draw)' },
   { card: 'Thoughtseize', missingEngineSystem: 'reveal hand + opponent-chosen nonland discard' },
   { card: 'Eternal Witness', missingEngineSystem: 'choose which graveyard card to return' },
+  {
+    card: 'Goblin Guide',
+    missingEngineSystem: 'attack trigger reveals defender top card only-if-land (approximated as opponent draw)',
+  },
 ]);

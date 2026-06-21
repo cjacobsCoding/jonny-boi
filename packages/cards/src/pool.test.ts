@@ -8,7 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { CardDefinition, CardInstance, GameState, PlayerId } from '@jonny-boi/core';
-import { createGame, createEngine } from '@jonny-boi/core';
+import { createGame, createEngine, effectivePower, effectiveToughness, indexContinuous, NO_MOD } from '@jonny-boi/core';
 import {
   buildRegistry,
   CORE_PRIMITIVE_IDS,
@@ -211,7 +211,7 @@ describe('integration — casting pool cards through createEngine', () => {
     expect(s.players.A.hand.length).toBe(handBefore + 3);
   });
 
-  it('Giant Growth pumps a creature so it survives lethal combat damage math', () => {
+  it('Giant Growth pumps a creature via the until-EOT layer (no permanent counter)', () => {
     const registry = buildRegistry();
     const { state } = createGame({
       seed: SEED,
@@ -230,6 +230,11 @@ describe('integration — casting pool cards through createEngine', () => {
     s = engine.applyAction(s, { kind: 'castSpell', player: 'A', instanceId: ggId, targets: [bearId] }).state;
     s = resolveStack(engine, s);
     const pumped = s.battlefield.find((c) => c.instanceId === bearId)!;
-    expect(pumped.counters['+1/+1']).toBe(3);
+    // The buff is a real until-EOT continuous effect, NOT a permanent +1/+1 counter.
+    expect(pumped.counters['+1/+1']).toBeUndefined();
+    const mod = indexContinuous(s).get(bearId) ?? NO_MOD;
+    expect(effectivePower(pumped, mod)).toBe(5);
+    expect(effectiveToughness(pumped, mod)).toBe(5);
+    expect(s.continuous.length).toBe(1);
   });
 });

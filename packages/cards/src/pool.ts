@@ -52,7 +52,10 @@ export function loadCardPool(options?: {
     if (byId.has(card.id)) onWarn(`[cards] duplicate card id '${card.id}' (${card.name})`);
     byId.set(card.id, card);
     byName.set(card.name, card);
-    for (const ref of card.effects ?? []) {
+    // Validate the resolution/ETB script refs AND every triggered-ability effect ref
+    // (DESIGN §3.9): a card now carries effects via both `effects` and `triggers`.
+    const refs = [...(card.effects ?? []), ...(card.triggers ?? []).flatMap((t) => t.effects)];
+    for (const ref of refs) {
       if (!known.has(ref.primitive)) {
         unsupportedRefs.push({ cardId: card.id, cardName: card.name, primitive: ref.primitive });
         onWarn(`[cards] '${card.name}' references unknown primitive '${ref.primitive}'`);
