@@ -1,0 +1,21 @@
+{
+  "id": "11111111-1111-1111-1111-111111111111",
+  "oracle_id": "22222222-2222-2222-2222-222222222222",
+  "name": "Adeliz, the Cinder Wind",
+  "mana_cost": "{1}{U}{R}",
+  "cmc": 3.0,
+  "type_line": "Legendary Creature — Faerie Wizard",
+  "oracle_text": "Flying, haste\nWhenever you cast an instant or sorcery spell, put a +1/+1 counter on Adeliz, the Cinder Wind, then it gains flying and haste until end of turn.",
+  "power": "2",
+  "toughness": "2",
+  "colors": ["R", "U"],
+  "color_identity": ["R", "U"],
+  "keywords": ["Flying", "Haste"],
+  "set": "dom",
+  "collector_number": "187",
+  "rarity": "rare",
+  "image_uris": {
+    "normal": "https://cards.scryfall.io/normal/front/1/1/adeliz.jpg",
+    "art_crop": "https://cards.scryfall.io/art_crop/front/1/1/adeliz.jpg"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "id": "33333333-3333-3333-3333-333333333333",
+  "oracle_id": "44444444-4444-4444-4444-444444444444",
+  "name": "Delver of Secrets // Insectile Aberration",
+  "cmc": 1.0,
+  "type_line": "Creature — Human Wizard // Creature — Human Insect",
+  "colors": ["U"],
+  "color_identity": ["U"],
+  "keywords": ["Flying"],
+  "set": "isd",
+  "collector_number": "51",
+  "rarity": "common",
+  "layout": "transform",
+  "card_faces": [
+    {
+      "name": "Delver of Secrets",
+      "mana_cost": "{U}",
+      "type_line": "Creature — Human Wizard",
+      "oracle_text": "At the beginning of your upkeep, look at the top card of your library. You may reveal that card. If an instant or sorcery card is revealed this way, transform Delver of Secrets.",
+      "power": "1",
+      "toughness": "1",
+      "colors": ["U"],
+      "image_uris": {
+        "normal": "https://cards.scryfall.io/normal/front/3/3/delver.jpg",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/3/delver.jpg"
+      }
+    },
+    {
+      "name": "Insectile Aberration",
+      "mana_cost": "",
+      "type_line": "Creature — Human Insect",
+      "oracle_text": "Flying",
+      "power": "3",
+      "toughness": "2",
+      "colors": ["U"],
+      "image_uris": {
+        "normal": "https://cards.scryfall.io/normal/back/3/3/aberration.jpg",
+        "art_crop": "https://cards.scryfall.io/art_crop/back/3/3/aberration.jpg"
+      }
+    }
+  ]
+}

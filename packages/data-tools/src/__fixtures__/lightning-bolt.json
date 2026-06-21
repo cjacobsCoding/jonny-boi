@@ -1,0 +1,23 @@
+{
+  "id": "e3285e6b-3e79-4d7c-bf96-d920f973b122",
+  "oracle_id": "4457ed35-7c10-48c8-9776-456485fdf070",
+  "name": "Lightning Bolt",
+  "mana_cost": "{R}",
+  "cmc": 1.0,
+  "type_line": "Instant",
+  "oracle_text": "Lightning Bolt deals 3 damage to any target.",
+  "colors": ["R"],
+  "color_identity": ["R"],
+  "keywords": [],
+  "set": "2x2",
+  "collector_number": "117",
+  "rarity": "uncommon",
+  "image_uris": {
+    "small": "https://cards.scryfall.io/small/front/e/3/e3285e6b.jpg",
+    "normal": "https://cards.scryfall.io/normal/front/e/3/e3285e6b.jpg",
+    "large": "https://cards.scryfall.io/large/front/e/3/e3285e6b.jpg",
+    "png": "https://cards.scryfall.io/png/front/e/3/e3285e6b.png",
+    "art_crop": "https://cards.scryfall.io/art_crop/front/e/3/e3285e6b.jpg",
+    "border_crop": "https://cards.scryfall.io/border_crop/front/e/3/e3285e6b.jpg"
+  }
+}

@@ -73,7 +73,7 @@ actions, win/loss by life/decking. Seeded RNG. Pure + fully tested.
 The card data schema, the effect-primitive registry + a starter set of primitives, and an initial curated
 card pool sufficient to express the meta decks. Each card is data; each primitive is tested.
 
-### 3.3 Scryfall data-tools pipeline — ⬜ not started
+### 3.3 Scryfall data-tools pipeline — ✅ done
 Fetch + cache card data and art for the curated pool; produce a normalized card index the engine/UI use.
 Robust to misses; respects Scryfall guidelines.
 
