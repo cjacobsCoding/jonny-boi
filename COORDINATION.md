@@ -48,7 +48,10 @@ throughput (games/sec) from regressing.
 | feat/engine-v2-triggers | DESKTOP-90PJPM4 (worker) | packages/core | ✅ INTEGRATED |
 | feat/cards-v2 | DESKTOP-90PJPM4 (worker) | packages/cards | ✅ INTEGRATED |
 | feat/web-lab | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
-| fix/fidelity-caveat | DESKTOP-90PJPM4 (worker) | packages/sim | 🚧 building |
+| fix/fidelity-caveat | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
+| feat/match-viewer | DESKTOP-90PJPM4 (worker) | apps/web | 🚧 building |
+| feat/mcts-ai | DESKTOP-90PJPM4 (worker) | packages/ai | 🚧 building |
+| feat/meta-decks | DESKTOP-90PJPM4 (worker) | packages/sim (data) | 🚧 building |
 | feat/suggestion-engine | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
 | feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | ✅ INTEGRATED |
 
