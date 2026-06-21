@@ -81,9 +81,11 @@ Robust to misses; respects Scryfall guidelines.
 The `chooseAction` interface + read-only game view + legal-action generator; a `random` baseline and a
 `heuristic` pilot good enough to play the meta decks competently. Tested against scripted scenarios.
 
-### 3.5 Sim harness + statistics — ⬜ not started
-Headless `runMatch`/`runGauntlet`; win-rate with **confidence intervals**; the **A/B single-card-swap**
-test that returns a significance verdict ("card X is better/worse/inconclusive at N games"). `npm run sim` CLI.
+### 3.5 Sim harness + statistics — ✅ done
+Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B
+single-card-swap** test (paired / common-random-numbers + **McNemar's test**) that returns a significance
+verdict ("card X is better/worse/inconclusive at N games"). Reporter registry (§2 seam), sample-deck data
+gauntlet, and the `npm run sim` CLI (`decks`/`match`/`gauntlet`/`swap`). Provisional pending §3.9 fidelity.
 
 ### 3.6 Suggestion engine — ⬜ not started
 Given a deck + the gauntlet, propose candidate single-card swaps, evaluate each via the sim, and rank by
