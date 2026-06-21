@@ -1,0 +1,51 @@
+name: Deploy PWA
+
+# Builds the web PWA and publishes it to the public repo cjacobsCoding/jonny-boi-app,
+# which serves it via GitHub Pages at https://cjacobscoding.github.io/jonny-boi-app/.
+# This source repo is private (GitHub Pages is unavailable on private repos for this
+# plan), so the built static site is mirrored to a dedicated public repo. Every push
+# to main redeploys the latest build automatically.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# The Pages project site lives under this sub-path; Vite + the PWA manifest read it.
+env:
+  DEPLOY_BASE: /jonny-boi-app/
+
+# Avoid overlapping deploys clobbering each other.
+concurrency:
+  group: deploy-pwa
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build PWA (sub-path base)
+        run: npm run build
+
+      - name: Add SPA 404 fallback
+        run: cp apps/web/dist/index.html apps/web/dist/404.html
+
+      - name: Publish to public Pages repo
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
+          external_repository: cjacobsCoding/jonny-boi-app
+          publish_branch: gh-pages
+          publish_dir: ./apps/web/dist
+          commit_message: "deploy: ${{ github.sha }}"
