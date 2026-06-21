@@ -14,6 +14,7 @@ import {
   DEFAULT_RULES,
   effectivePower,
   effectiveToughness,
+  generateLegalActions,
   indexContinuous,
   NO_MOD,
   type CardDefinition,
@@ -250,6 +251,74 @@ describe('toughness buff wearing off can be lethal', () => {
       // path is doing its job. Nothing to assert about expiry in this branch.
       expect(eggAlive).toBe(false);
     }
+  });
+});
+
+describe('granted haste enables a summoning-sick creature to attack', () => {
+  /** Place a creature that IS summoning sick (unlike `place`) and return its id. */
+  function placeSick(state: GameState, def: CardDefinition, controller: PlayerId): InstanceId {
+    const id = state.nextInstanceId++;
+    state.battlefield.push({
+      instanceId: id, def, controller, owner: controller, zone: 'battlefield',
+      tapped: false, summoningSick: true, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    });
+    return id;
+  }
+
+  function setup(seed: number): { reg: EffectRegistry; state: GameState; bearId: InstanceId; grantInst: InstanceId } {
+    const reg = testRegistry();
+    const Bear = creatureDef('Bear', 2, 2); // no haste printed
+    const g = createGame({ seed, decks: { A: lib(), B: lib() }, registry: reg });
+    const state = g.state;
+    // A summoning-sick Bear on A's side (placed after turn 1 began, so it stays sick).
+    const bearId = placeSick(state, Bear, 'A');
+    const Haste: CardDefinition = {
+      id: 'Haste', name: 'Haste', types: ['instant'], timing: 'instant', cost: { generic: 0 },
+      effects: [{ primitive: 'grantKeywordUntilEOT', params: { keywords: { haste: true } } }],
+    };
+    const grantInst = state.nextInstanceId++;
+    state.players.A.hand.push({
+      instanceId: grantInst, def: Haste, controller: 'A', owner: 'A', zone: 'hand',
+      tapped: false, summoningSick: false, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    });
+    return { reg, state, bearId, grantInst };
+  }
+
+  // Everything stays on turn 1 (A active): a permanent placed after the game's
+  // turn-1 begin remains summoning-sick all turn, since beginTurn only clears
+  // sickness at the START of a turn. So only a haste GRANT can let it attack now.
+
+  it('control: a summoning-sick creature with no haste grant cannot attack', () => {
+    const { reg, state, bearId } = setup(11);
+    const s = advanceToStep(state, 'declareAttackers', reg);
+    expect(s.battlefield.find((c) => c.instanceId === bearId)!.summoningSick).toBe(true);
+    // Not offered as an attacker, and a direct declaration is rejected.
+    expect(generateLegalActions(s).some((a) => a.kind === 'declareAttackers')).toBe(false);
+    const rejected = applyAction(s, { kind: 'declareAttackers', player: 'A', attackers: [bearId] }, DEFAULT_RULES, reg);
+    expect(rejected.events.some((e) => e.type === 'actionRejected')).toBe(true);
+  });
+
+  it('reads EFFECTIVE keywords: an until-EOT haste grant lets the sick creature be declared', () => {
+    const { reg, state, bearId, grantInst } = setup(12);
+
+    // Grant haste until end of turn this same turn, then go to combat.
+    let s = advanceToStep(state, 'precombatMain', reg);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: grantInst, targets: [bearId] }, reg);
+    s = pass(s, reg);
+    s = pass(s, reg); // resolves the haste grant
+    expect(s.continuous.length).toBe(1);
+    // The Bear is still flagged summoning-sick; only the EFFECTIVE keyword set saves it.
+    expect(s.battlefield.find((c) => c.instanceId === bearId)!.summoningSick).toBe(true);
+
+    s = advanceToStep(s, 'declareAttackers', reg);
+    // generateLegalActions now offers the Bear as an attacker.
+    const attack = generateLegalActions(s).find((a) => a.kind === 'declareAttackers');
+    expect(attack).toBeDefined();
+    expect((attack as Extract<GameAction, { kind: 'declareAttackers' }>).attackers).toContain(bearId);
+
+    // And applyDeclareAttackers accepts it (no rejection); the Bear becomes an attacker.
+    s = act(s, { kind: 'declareAttackers', player: 'A', attackers: [bearId] }, reg);
+    expect(s.combat!.attackers).toContain(bearId);
   });
 });
 

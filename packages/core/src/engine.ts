@@ -43,7 +43,8 @@ import {
 } from './state.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
-import { expireContinuousEffects, pruneOrphanContinuousEffects } from './internal/continuous.js';
+import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
+import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
 import { checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.js';
 import {
@@ -722,17 +723,20 @@ function applyDeclareAttackers(
   if (!state.combat) return rejectWith(prevState, 'not in combat');
   if (state.combat.attackers.length > 0) return rejectWith(prevState, 'attackers already declared');
 
-  // Validate each attacker.
+  // Validate each attacker. Read EFFECTIVE keywords (printed OR continuous grants)
+  // so an until-EOT haste/defender grant is honored for attack legality (DESIGN §3.9).
+  const cont = indexContinuous(state);
   for (const id of action.attackers) {
     const a = findOnBattlefield(state, id);
     if (!a) return rejectWith(prevState, `attacker ${id} is not on the battlefield`);
     if (a.controller !== action.player) return rejectWith(prevState, `you do not control ${a.def.name}`);
     if (!isCreature(a.def)) return rejectWith(prevState, `${a.def.name} is not a creature`);
     if (a.tapped) return rejectWith(prevState, `${a.def.name} is tapped and cannot attack`);
-    if (a.summoningSick && !(a.def.keywords?.haste ?? false)) {
+    const kw = effectiveKeywords(a, cont.get(a.instanceId) ?? NO_MOD);
+    if (a.summoningSick && !kw.haste) {
       return rejectWith(prevState, `${a.def.name} has summoning sickness`);
     }
-    if (a.def.keywords?.defender) return rejectWith(prevState, `${a.def.name} has defender and cannot attack`);
+    if (kw.defender) return rejectWith(prevState, `${a.def.name} has defender and cannot attack`);
   }
 
   state.combat.attackers = [...action.attackers];
@@ -827,15 +831,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
 
   // Declare attackers: a single composite action listing all eligible attackers.
   if (state.step === 'declareAttackers' && me === state.activePlayer && state.combat && state.combat.attackers.length === 0) {
+    // Effective keywords (printed OR continuous grants) so a haste/defender granted
+    // by an until-EOT effect is reflected in the eligible-attacker set (DESIGN §3.9).
+    const cont = indexContinuous(state);
     const eligible = state.battlefield
-      .filter(
-        (c) =>
-          c.controller === me &&
-          isCreature(c.def) &&
-          !c.tapped &&
-          (!c.summoningSick || (c.def.keywords?.haste ?? false)) &&
-          !(c.def.keywords?.defender ?? false),
-      )
+      .filter((c) => {
+        if (c.controller !== me || !isCreature(c.def) || c.tapped) return false;
+        const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
+        return (!c.summoningSick || Boolean(kw.haste)) && !kw.defender;
+      })
       .map((c) => c.instanceId);
     if (eligible.length > 0) {
       // Offer "attack with all eligible" as the canonical option; the AI may also
