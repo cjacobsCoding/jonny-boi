@@ -29,6 +29,7 @@ export {
   DEFAULT_SIM_CONFIG,
   DEFAULT_STATS_CONFIG,
   BASIC_LAND_NAMES,
+  FIDELITY_CAVEAT,
 } from './config.js';
 
 // Deck model + loader.

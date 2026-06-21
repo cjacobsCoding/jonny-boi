@@ -8,7 +8,7 @@ import type { PanelProps, GamesConfig } from './panel-types.js';
  * The suggestion engine surface: rank candidate single-card swaps that improve
  * the hero. Shows the ranked table (out → in, base% → variant%, delta, p-value,
  * verdict), plus the honest coverage note (evaluated/total, capped-by-budget,
- * illegal skips) and the §3.9 provisional caveat. Two sliders trade speed vs
+ * illegal skips) and the shared fidelity caveat. Two sliders trade speed vs
  * confidence: games-per-candidate and the candidate cap.
  */
 export function SuggestPanel({

@@ -16,10 +16,10 @@
  *     (color match + curve fit — no sim), keep the top `maxCandidates`, and RECORD
  *     everything we skipped so coverage is honest (CLAUDE.md: no silent truncation).
  *
- * Honesty (DESIGN §3.9): the MVP engine omits triggered abilities & until-EOT
- * expiry, so every verdict is PROVISIONAL — the report carries that caveat and the
- * CLI prints it. We build the ranking correctly regardless; it grows more faithful
- * when §3.9 lands.
+ * Honesty (DESIGN §3.9, done): the engine models triggered abilities & until-EOT
+ * effects; only a few advanced mechanics remain unimplemented (see `FIDELITY_CAVEAT`).
+ * The report carries that caveat and the CLI prints it. The ranking math is exact
+ * regardless of how many cards use a still-simplified mechanic.
  *
  * Determinism: `suggestSwaps` is a pure function of its decks + options + seed.
  * Each candidate evaluates on a seed derived from the base seed and a STABLE
@@ -37,6 +37,7 @@ import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor } from './matchup.js';
 import {
   DEFAULT_DECK_RULES,
+  FIDELITY_CAVEAT,
   type DeckRules,
 } from './config.js';
 import {
@@ -107,7 +108,7 @@ export interface SuggestionNotes {
   readonly candidatesGenerated: number;
   /** True when the auto cap trimmed the candidate set. */
   readonly cappedByBudget: boolean;
-  /** The §3.9 provisional-verdict caveat, carried so the UI/CLI can surface it. */
+  /** The shared fidelity caveat (`FIDELITY_CAVEAT`), carried so the UI/CLI can surface it. */
   readonly fidelityCaveat: string;
 }
 
@@ -143,11 +144,6 @@ export interface SuggestOptions {
    */
   readonly inOnly?: readonly string[];
 }
-
-const FIDELITY_CAVEAT =
-  'Verdicts are PROVISIONAL (DESIGN §3.9): the MVP engine omits triggered abilities ' +
-  '& until-end-of-turn expiry, so some cards play as a faithful vanilla subset. The ' +
-  'statistics are exact; fidelity grows when engine v2 lands.';
 
 // --- candidate generation (pure) ----------------------------------------------
 
@@ -374,7 +370,7 @@ function swapKey(e: SwapEvaluation): string {
  *    (`evaluateSwap`), on a seed derived from the base seed + the candidate key so
  *    the whole run is deterministic.
  * 4. Rank the results and assemble a `SuggestionReport` with throughput notes and
- *    the §3.9 provisional caveat.
+ *    the shared fidelity caveat.
  *
  * Robust: a candidate that throws (e.g. a freshly-illegal variant) is recorded as
  * skipped with its reason, not crashed on; zero valid candidates ⇒ a well-formed
