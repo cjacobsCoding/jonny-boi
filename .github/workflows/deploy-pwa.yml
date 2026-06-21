@@ -9,6 +9,9 @@ name: Deploy PWA
 on:
   push:
     branches: [main]
+    # Docs-only changes don't affect the build — skip redeploying for them.
+    paths-ignore:
+      - '**/*.md'
   workflow_dispatch: {}
 
 # The Pages project site lives under this sub-path; Vite + the PWA manifest read it.

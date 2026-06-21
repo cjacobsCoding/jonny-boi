@@ -19,9 +19,17 @@ agent sees. Read it at the start of a session; update your section before you pu
    committed with **explicit paths** (never `git add -A`), pushed.
 
 ## Ship / release process (integrator)
-Per landed feature/batch: merge → `npm run build` + `npm test` green → publish a verified build (deploy
-the PWA / tag a `latest`) so collaborators and other machines get it. Keep sim throughput (games/sec)
-from regressing.
+Per landed feature/batch: merge → `npm run build` + `npm test` green → the build auto-publishes. Keep sim
+throughput (games/sec) from regressing.
+
+### Live build (always-latest, mobile-accessible)
+- **URL: https://cjacobscoding.github.io/jonny-boi-app/** — the PWA, installable on phone + desktop.
+- This source repo is **private** (GitHub Pages unavailable on Free plan for private repos), so the built
+  static site is mirrored to the **public** repo `cjacobsCoding/jonny-boi-app` (gh-pages branch → Pages).
+- **Auto-deploy:** `.github/workflows/deploy-pwa.yml` runs on every push to `main` — `npm ci` →
+  `npm run build` (with `DEPLOY_BASE=/jonny-boi-app/`) → mirrors `apps/web/dist` to the public repo via a
+  write-scoped SSH deploy key stored as the `ACTIONS_DEPLOY_KEY` secret. No manual step; every merge ships.
+- The web app's Vite `base` + PWA manifest scope read `DEPLOY_BASE` (default `/` for local `npm run dev`).
 
 ## Roles
 - **Integrator** — `DESKTOP-90PJPM4` (supervisor on this machine merges to `main` + ships).
@@ -37,6 +45,8 @@ from regressing.
 | feat/ai-pilots | DESKTOP-90PJPM4 (worker) | packages/ai | ✅ INTEGRATED |
 | feat/sim-harness | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
 | feat/web-foundation | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
+| feat/engine-v2-triggers | DESKTOP-90PJPM4 (worker) | packages/core | 🚧 building |
+| feat/suggestion-engine | DESKTOP-90PJPM4 (worker) | packages/sim | 🚧 building |
 | feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | ✅ INTEGRATED |
 
 ## Messages between agents
