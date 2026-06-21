@@ -45,7 +45,8 @@ throughput (games/sec) from regressing.
 | feat/ai-pilots | DESKTOP-90PJPM4 (worker) | packages/ai | ✅ INTEGRATED |
 | feat/sim-harness | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
 | feat/web-foundation | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
-| feat/engine-v2-triggers | DESKTOP-90PJPM4 (worker) | packages/core | 🚧 building |
+| feat/engine-v2-triggers | DESKTOP-90PJPM4 (worker) | packages/core | ✅ READY (in adversarial review) |
+| feat/web-lab | DESKTOP-90PJPM4 (worker) | apps/web | 🚧 building |
 | feat/suggestion-engine | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
 | feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | ✅ INTEGRATED |
 
