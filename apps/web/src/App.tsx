@@ -1,21 +1,60 @@
-import type { ReactElement } from 'react';
-import { PACKAGE_NAME as CORE_PACKAGE_NAME } from '@jonny-boi/core';
+import { useState, type ReactElement } from 'react';
+import { attribution, allCards } from './lib/cards.js';
+import { useDecks } from './lib/useDecks.js';
+import { CardsView } from './views/CardsView.js';
+import { DeckBuilderView } from './views/DeckBuilderView.js';
+
+/** The top-level views the header navigates between. */
+const VIEWS = [
+  { id: 'cards', label: 'Cards' },
+  { id: 'deck', label: 'Deck Builder' },
+] as const;
+
+type ViewId = (typeof VIEWS)[number]['id'];
 
 /**
- * Scaffold landing page. Importing CORE_PACKAGE_NAME from `@jonny-boi/core`
- * proves a workspace cross-package import resolves through the PWA build.
+ * App shell: a sticky professional header (brand + nav), the active view, and a
+ * footer carrying the Scryfall attribution (etiquette). Routing is local state —
+ * the PWA is a single-page shell, so we avoid a router dependency for two views.
  */
 export function App(): ReactElement {
+  const [view, setView] = useState<ViewId>('cards');
+  const decks = useDecks();
+
   return (
-    <main className="app-shell">
-      <h1>jonny-boi — MTG deck lab</h1>
-      <p>
-        Scaffolding in place. The deck builder, card browser, A/B tuning lab, and match viewer
-        arrive with later roadmap items.
-      </p>
-      <p className="app-shell__note">
-        Linked workspace package: <code>@jonny-boi/{CORE_PACKAGE_NAME}</code>
-      </p>
-    </main>
+    <div className="app">
+      <header className="app__header">
+        <div className="app__brand">
+          <span className="app__brand-mark" aria-hidden="true">
+            ⚙
+          </span>
+          <span>jonny-boi</span>
+          <span style={{ color: 'var(--color-fg-faint)', fontSize: 'var(--text-xs)' }}>
+            deck lab
+          </span>
+        </div>
+        <nav className="app__nav" aria-label="Primary">
+          {VIEWS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              className={`nav-link${view === id ? ' nav-link--active' : ''}`}
+              aria-current={view === id ? 'page' : undefined}
+              onClick={() => setView(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      <main className="app__main">
+        {view === 'cards' ? <CardsView /> : <DeckBuilderView decks={decks} />}
+      </main>
+
+      <footer className="app__footer">
+        {allCards.length} curated cards · {attribution}
+      </footer>
+    </div>
   );
 }
