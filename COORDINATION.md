@@ -32,12 +32,20 @@ from regressing.
 | branch | owner / machine | files owned | status |
 |--------|-----------------|-------------|--------|
 | feat/scaffold | DESKTOP-90PJPM4 | root configs + all package skeletons | ✅ INTEGRATED |
-| feat/core-engine | DESKTOP-90PJPM4 (worker) | packages/core | 🚧 building |
+| feat/core-engine | DESKTOP-90PJPM4 (worker) | packages/core | ✅ INTEGRATED |
+| feat/cards-pool | DESKTOP-90PJPM4 (worker) | packages/cards | 🚧 building |
+| feat/ai-pilots | DESKTOP-90PJPM4 (worker) | packages/ai | 🚧 building |
 | feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | ✅ INTEGRATED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-06-20 DESKTOP-90PJPM4: `core` (§3.1) INTEGRATED to main — 62 core tests (incl. adversarial-review
+  fixes: blocked double-strikers no longer leak face damage; effect registry threaded explicitly, no
+  module global). Full main suite = 102 tests green. Wave 2 dispatched: `feat/cards-pool` (§3.2) +
+  `feat/ai-pilots` (§3.4), both build on core's seams (CardDefinition/EffectRegistry; generateLegalActions/
+  applyAction), disjoint packages, parallel. `ai` tests against its own minimal fixtures (does NOT depend on
+  `cards`) to stay parallel. (Integrator)
 - 2026-06-20 DESKTOP-90PJPM4: `data-tools` (§3.3) INTEGRATED — 47 tests green, 32/32 starter cards resolved
   live from Scryfall, text card-index.json committed (image bytes gitignored). Card data now available to
   `cards`/`web` at `packages/data-tools/data/card-index.json`. (Integrator)
