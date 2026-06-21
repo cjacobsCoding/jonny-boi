@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+import type { ProportionCI } from '@jonny-boi/sim';
+import {
+  toSimPayload,
+  pct,
+  signedPct,
+  ciStr,
+  pValueStr,
+  verdictDisplay,
+  gamesPerSecond,
+} from './sim-format.js';
+import type { Deck } from './deck.js';
+
+const makeDeck = (cards: Deck['cards']): Deck => ({
+  id: 'd1',
+  name: 'Test Deck',
+  cards,
+  updatedAt: '2026-01-01T00:00:00.000Z',
+});
+
+describe('toSimPayload', () => {
+  it('carries cardIds and counts verbatim into the sim Deck shape', () => {
+    const deck = makeDeck([
+      { cardId: 'abc-123', count: 4 },
+      { cardId: 'def-456', count: 2 },
+    ]);
+    const payload = toSimPayload(deck);
+    expect(payload.name).toBe('Test Deck');
+    // The sim Deck requires an archetype; we derive it from the name.
+    expect(payload.archetype).toBe('Test Deck');
+    expect(payload.cards).toEqual([
+      { cardId: 'abc-123', count: 4 },
+      { cardId: 'def-456', count: 2 },
+    ]);
+  });
+
+  it('produces an independent cards array (no shared reference)', () => {
+    const deck = makeDeck([{ cardId: 'x', count: 1 }]);
+    const payload = toSimPayload(deck);
+    expect(payload.cards).not.toBe(deck.cards);
+  });
+});
+
+describe('formatting helpers', () => {
+  it('pct renders a probability as a one-decimal percentage', () => {
+    expect(pct(0.5)).toBe('50.0%');
+    expect(pct(0.532)).toBe('53.2%');
+    expect(pct(0)).toBe('0.0%');
+    expect(pct(1)).toBe('100.0%');
+  });
+
+  it('signedPct prefixes a + for non-negative deltas only', () => {
+    expect(signedPct(0.024)).toBe('+2.4%');
+    expect(signedPct(0)).toBe('+0.0%');
+    expect(signedPct(-0.011)).toBe('-1.1%');
+  });
+
+  it('ciStr renders the point estimate with its interval', () => {
+    const ci: ProportionCI = { p: 0.532, low: 0.481, high: 0.582, successes: 53, n: 100 };
+    expect(ciStr(ci)).toBe('53.2% (48.1%–58.2%)');
+  });
+
+  it('pValueStr uses exponential for tiny values and decimals otherwise', () => {
+    expect(pValueStr(0)).toBe('0');
+    expect(pValueStr(0.0001)).toBe('1.00e-4');
+    expect(pValueStr(0.04)).toBe('0.040');
+    expect(pValueStr(1)).toBe('1.000');
+  });
+});
+
+describe('verdictDisplay', () => {
+  it('maps each verdict to a label + tone', () => {
+    expect(verdictDisplay('better')).toEqual({ label: 'BETTER', tone: 'better' });
+    expect(verdictDisplay('worse')).toEqual({ label: 'WORSE', tone: 'worse' });
+    expect(verdictDisplay('inconclusive')).toEqual({
+      label: 'INCONCLUSIVE',
+      tone: 'inconclusive',
+    });
+  });
+});
+
+describe('gamesPerSecond', () => {
+  it('divides games by elapsed seconds', () => {
+    expect(gamesPerSecond(1000, 2)).toBe(500);
+  });
+
+  it('returns 0 rather than dividing by zero', () => {
+    expect(gamesPerSecond(1000, 0)).toBe(0);
+  });
+});

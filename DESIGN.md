@@ -103,8 +103,18 @@ win-rate deltas, accept suggestions, watch/replay a match from the event log. In
 shell), responsive for phone + desktop.
 *Foundation landed:* a polished card browser (real Scryfall art, search/color/type filters, mana-value
 sort, detail view) and a deck builder (4-of rule, type-grouped list, mana-curve chart, localStorage
-persistence, sim-compatible JSON import/export). The lab (gauntlet/A-B), suggestions, and match viewer
-remain.
+persistence, sim-compatible JSON import/export).
+*The Lab landed:* an in-browser Lab view running the sim in a **dedicated Web Worker** (cancellable,
+with live progress + games/sec, never freezing the main thread): pick a saved deck as the hero (sim
+`validateDeck` gates illegal decks with a guided message), choose gauntlet opponents, then run a
+**gauntlet** (per-opponent win-rate + 95% CI bars + overall), the signature **A/B single-card-swap**
+test (BETTER/WORSE/INCONCLUSIVE verdict with base→variant win-rate, delta, McNemar p-value, paired 2×2
+table), and ranked **suggestions** (tunable games-per-candidate + max-candidates, honest
+evaluated/total + capped/illegal coverage), with the §3.9 provisional caveat surfaced near every
+verdict and a fixed/editable seed for reproducibility. Build stays installable (PWA artifacts emitted;
+the sim ships in the worker chunk, off the main bundle).
+*Still remaining (why this is 🚧, not ✅):* the watch/replay **match viewer** (turn-by-turn from the
+event log) — a clean seam is left (the sim exposes `runMatch(..., {recordTrace:true})`), not yet built.
 
 ### 3.8 Meta-deck gauntlet content — ⬜ not started
 The 5 curated meta decks (data) that define the baseline gauntlet, plus swap-candidate cards.

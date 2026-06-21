@@ -10,8 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@jonny-boi/ai": "*",
+    "@jonny-boi/cards": "*",
     "@jonny-boi/core": "*",
     "@jonny-boi/data-tools": "*",
+    "@jonny-boi/sim": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
