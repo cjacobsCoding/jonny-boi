@@ -3,11 +3,13 @@ import { attribution, allCards } from './lib/cards.js';
 import { useDecks } from './lib/useDecks.js';
 import { CardsView } from './views/CardsView.js';
 import { DeckBuilderView } from './views/DeckBuilderView.js';
+import { LabView } from './views/LabView.js';
 
 /** The top-level views the header navigates between. */
 const VIEWS = [
   { id: 'cards', label: 'Cards' },
   { id: 'deck', label: 'Deck Builder' },
+  { id: 'lab', label: 'Lab' },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]['id'];
@@ -49,7 +51,9 @@ export function App(): ReactElement {
       </header>
 
       <main className="app__main">
-        {view === 'cards' ? <CardsView /> : <DeckBuilderView decks={decks} />}
+        {view === 'cards' && <CardsView />}
+        {view === 'deck' && <DeckBuilderView decks={decks} />}
+        {view === 'lab' && <LabView decks={decks} />}
       </main>
 
       <footer className="app__footer">
