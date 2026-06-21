@@ -51,7 +51,7 @@ throughput (games/sec) from regressing.
 | fix/fidelity-caveat | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
 | feat/match-viewer | DESKTOP-90PJPM4 (worker) | apps/web | 🚧 building |
 | feat/mcts-ai | DESKTOP-90PJPM4 (worker) | packages/ai | 🚧 building |
-| feat/meta-decks | DESKTOP-90PJPM4 (worker) | packages/sim (data) | 🚧 building |
+| feat/meta-decks | DESKTOP-90PJPM4 (worker) | packages/sim (data) | ✅ INTEGRATED |
 | feat/suggestion-engine | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
 | feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | ✅ INTEGRATED |
 
