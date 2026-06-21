@@ -36,6 +36,7 @@ from regressing.
 | feat/cards-pool | DESKTOP-90PJPM4 (worker) | packages/cards | ✅ INTEGRATED |
 | feat/ai-pilots | DESKTOP-90PJPM4 (worker) | packages/ai | ✅ INTEGRATED |
 | feat/sim-harness | DESKTOP-90PJPM4 (worker) | packages/sim | 🚧 building |
+| feat/web-foundation | DESKTOP-90PJPM4 (worker) | apps/web | 🚧 building |
 | feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | ✅ INTEGRATED |
 
 ## Messages between agents
