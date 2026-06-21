@@ -69,7 +69,7 @@ GameState + zones + event log; turn structure (untap/upkeep/draw/main/combat/end
 mana pool & paying costs, playing lands, casting creatures/instants/sorceries, the combat step, state-based
 actions, win/loss by life/decking. Seeded RNG. Pure + fully tested.
 
-### 3.2 Card model + effect primitives + curated pool — ⬜ not started
+### 3.2 Card model + effect primitives + curated pool — ✅ done
 The card data schema, the effect-primitive registry + a starter set of primitives, and an initial curated
 card pool sufficient to express the meta decks. Each card is data; each primitive is tested.
 

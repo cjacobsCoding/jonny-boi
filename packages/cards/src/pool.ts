@@ -1,0 +1,98 @@
+/**
+ * Pool loader + registry builder — the public runtime surface of
+ * `@jonny-boi/cards`. Cards are DATA (`../data/pool`); this module indexes them
+ * for lookup and validates that every effect ref resolves to a registered
+ * primitive (robustness: a bad ref is *warned*, never a crash — DESIGN §1 robust).
+ */
+
+import type { CardDefinition, EffectRegistry } from '@jonny-boi/core';
+import { createEffectRegistry } from '@jonny-boi/core';
+import { CARD_POOL } from '../data/pool.js';
+import { CORE_PRIMITIVE_IDS, registerCoreEffects } from './primitives.js';
+
+/** A loaded, validated pool: the definitions plus by-id / by-name indexes. */
+export interface CardPool {
+  readonly cards: readonly CardDefinition[];
+  /** Lookup by Scryfall id (the join key to data-tools' card-index.json). */
+  get(id: string): CardDefinition | undefined;
+  /** Lookup by exact card name (secondary join key). */
+  getByName(name: string): CardDefinition | undefined;
+  /** Effect refs that point at an unregistered primitive (empty when healthy). */
+  readonly unsupportedRefs: readonly UnsupportedRef[];
+}
+
+/** A diagnostic for a card referencing a primitive id no registry provides. */
+export interface UnsupportedRef {
+  readonly cardId: string;
+  readonly cardName: string;
+  readonly primitive: string;
+}
+
+/**
+ * Load the curated pool, indexed for O(1) lookup. Pure and synchronous — the data
+ * is a static module, never a network call (DESIGN §2.1). Validates effect refs
+ * against the known primitive ids and surfaces any gaps in `unsupportedRefs`
+ * (also logged via `onWarn`) rather than throwing — a card with an unknown ref
+ * still loads and degrades to core's safe no-op at resolution time.
+ */
+export function loadCardPool(options?: {
+  /** Sink for validation warnings; defaults to `console.warn`. Pass a no-op to silence. */
+  readonly onWarn?: (message: string) => void;
+  /** Known primitive ids to validate against; defaults to this package's set. */
+  readonly knownPrimitiveIds?: readonly string[];
+}): CardPool {
+  const onWarn = options?.onWarn ?? ((m: string) => console.warn(m));
+  const known = new Set(options?.knownPrimitiveIds ?? CORE_PRIMITIVE_IDS);
+
+  const byId = new Map<string, CardDefinition>();
+  const byName = new Map<string, CardDefinition>();
+  const unsupportedRefs: UnsupportedRef[] = [];
+
+  for (const card of CARD_POOL) {
+    if (byId.has(card.id)) onWarn(`[cards] duplicate card id '${card.id}' (${card.name})`);
+    byId.set(card.id, card);
+    byName.set(card.name, card);
+    for (const ref of card.effects ?? []) {
+      if (!known.has(ref.primitive)) {
+        unsupportedRefs.push({ cardId: card.id, cardName: card.name, primitive: ref.primitive });
+        onWarn(`[cards] '${card.name}' references unknown primitive '${ref.primitive}'`);
+      }
+    }
+  }
+
+  return {
+    cards: CARD_POOL,
+    get: (id) => byId.get(id),
+    getByName: (name) => byName.get(name),
+    unsupportedRefs,
+  };
+}
+
+/** Direct by-id accessor without constructing a full pool (convenience). */
+export function getCardDefinition(id: string): CardDefinition | undefined {
+  return CARD_POOL.find((c) => c.id === id);
+}
+
+/**
+ * Build a fresh `EffectRegistry` with every primitive this package provides
+ * registered. Hand this to `createEngine(config, registry)` / `createGame({ …,
+ * registry })` so the pool's cards resolve. Isolated per call — no shared global.
+ */
+export function buildRegistry(): EffectRegistry {
+  const registry = createEffectRegistry();
+  registerCoreEffects(registry);
+  return registry;
+}
+
+/**
+ * Convenience bundle for callers (sim/web/tests): a definition plus a ready
+ * registry, the two things `createEngine` needs to actually play that card.
+ * Returns `undefined` if the id isn't in the pool.
+ */
+export function getCardWithRegistry(
+  id: string,
+): { readonly card: CardDefinition; readonly registry: EffectRegistry } | undefined {
+  const card = getCardDefinition(id);
+  if (!card) return undefined;
+  return { card, registry: buildRegistry() };
+}
