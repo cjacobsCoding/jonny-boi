@@ -97,6 +97,14 @@ shell), responsive for phone + desktop.
 ### 3.8 Meta-deck gauntlet content — ⬜ not started
 The 5 curated meta decks (data) that define the baseline gauntlet, plus swap-candidate cards.
 
+### 3.9 Core engine v2 — triggered abilities + continuous effects — ⬜ not started  *(quality gate for trustworthy sims)*
+The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta decks it needs: a
+**triggered-ability system** (ETB/attack/cast/death triggers → the stack), a **continuous-effects / "until
+end of turn" layer** with proper cleanup-step expiry (so `pumpUntilEndOfTurn` and similar wear off — current
+behavior persists the buff and biases combat sims), and later **planeswalkers**, **transform/DFC**, and
+**dynamic P/T** (e.g. Tarmogoyf). Tracked here because §3.2 cards stubbed these mechanics against the MVP.
+Prioritize triggers + EOT-expiry before leaning on §3.5/§3.6 verdicts; the rest can follow.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
