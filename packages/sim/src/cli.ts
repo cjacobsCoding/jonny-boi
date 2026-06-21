@@ -7,6 +7,7 @@
  *   match <deckA> <deckB> [opts]            n games A vs B, win-rate + CI
  *   gauntlet <deck> [opts]                  deck vs every sample deck
  *   swap <deck> --out X --in Y [opts]       the paired A/B single-card-swap verdict
+ *   suggest <deck> [opts]                   rank candidate swaps that improve the deck
  *
  * Common options: --games N, --seed S, --pilot <id> (heuristic|random).
  * Decks and cards are accepted by NAME or id. The CLI is robust: a bad arg or an
@@ -29,6 +30,8 @@ import { loadDeck, DeckLoadError } from './deck.js';
 import { makeSeats, runMatchup, type MatchupPilots, type MatchupResult } from './matchup.js';
 import { runGauntlet, type GauntletResult } from './gauntlet.js';
 import { evaluateSwap, type SwapEvaluation } from './swap.js';
+import { suggestSwaps, type SuggestionReport } from './suggest.js';
+import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
 import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG } from './config.js';
 import type { ProportionCI } from './stats.js';
 
@@ -42,10 +45,15 @@ Usage:
   npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot heuristic|random]
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot heuristic|random]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id]
+  npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S] [--pilot id]
 
 Notes:
   • Decks and cards may be given by NAME (quote names with spaces) or by id.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
+  • suggest: --cut may repeat to focus the cards considered for cutting; omit for
+    auto mode (top ${DEFAULT_SUGGEST_CONFIG.maxCandidates} candidates by a cheap color/curve heuristic).
+    --max-candidates K caps how many swaps are simulated (default ${DEFAULT_SUGGEST_CONFIG.maxCandidates}).
+    Per-candidate games default to ${DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate} for suggest.
   • Engine MVP caveat (DESIGN §3.9): triggered abilities & "until end of turn"
     expiry are not yet modelled, so some cards play as a faithful vanilla subset
     and verdicts are PROVISIONAL. The statistics are exact; fidelity grows with §3.9.`;
@@ -58,6 +66,10 @@ interface Flags {
   readonly pilot?: string;
   readonly out?: string;
   readonly in?: string;
+  /** suggest: cards to focus the cut on (repeatable). Empty = auto mode. */
+  readonly cut: readonly string[];
+  /** suggest: cap on candidate swaps simulated. */
+  readonly maxCandidates?: number;
   readonly help: boolean;
 }
 
@@ -71,6 +83,8 @@ function parseFlags(args: readonly string[]): Flags {
   let pilot: string | undefined;
   let out: string | undefined;
   let inCard: string | undefined;
+  const cut: string[] = [];
+  let maxCandidates: number | undefined;
   let help = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -95,13 +109,19 @@ function parseFlags(args: readonly string[]): Flags {
       case '--in':
         inCard = requireValue(arg, args[++i]);
         break;
+      case '--cut':
+        cut.push(requireValue(arg, args[++i]));
+        break;
+      case '--max-candidates':
+        maxCandidates = parseIntFlag(arg, args[++i]);
+        break;
       default:
         if (arg.startsWith('--')) throw new CliError(`unknown option "${arg}"`);
         positionals.push(arg);
     }
   }
 
-  return { positionals, games, seed, pilot, out, in: inCard, help };
+  return { positionals, games, seed, pilot, out, in: inCard, cut, maxCandidates, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -335,6 +355,89 @@ function cmdSwap(flags: Flags): number {
   return 0;
 }
 
+function cmdSuggest(flags: Flags): number {
+  const [heroSel] = flags.positionals;
+  if (!heroSel) throw new CliError('suggest needs a deck: suggest <deck> [--cut "<card>"] [--max-candidates K]');
+  const lab = makeLab();
+  const baseDeck = resolveDeck(heroSel);
+  const pilots = resolvePilots(flags);
+  const games = flags.games ?? DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate;
+  const maxCandidates = flags.maxCandidates ?? DEFAULT_SUGGEST_CONFIG.maxCandidates;
+  if (maxCandidates < 1) throw new CliError('--max-candidates must be at least 1');
+  const seed = flags.seed ?? DEFAULT_SEED;
+
+  const gauntletDecks = SAMPLE_DECKS.filter((d) => d.name !== baseDeck.name).map((d) =>
+    loadOrThrow(d, lab.pool),
+  );
+
+  let report: SuggestionReport;
+  try {
+    report = suggestSwaps(baseDeck, {
+      gauntletDecks,
+      pilots,
+      pool: lab.pool,
+      registry: lab.registry,
+      baseSeed: seed,
+      gamesPerCandidate: games,
+      suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates },
+      cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
+    });
+  } catch (err) {
+    if (err instanceof DeckLoadError) throw new CliError(err.message);
+    throw new CliError(err instanceof Error ? err.message : String(err));
+  }
+
+  console.log(
+    `Suggestions for "${report.baseDeck}" vs ${gauntletDecks.length} decks — ` +
+      `${games} games/candidate, seed ${seed}`,
+  );
+  console.log(`Base gauntlet win rate: ${ciStr(report.baseGauntletWinRate)}\n`);
+
+  if (report.suggestions.length === 0) {
+    console.log('No candidate swaps were evaluated (none legal, or all capped).');
+  } else {
+    console.log(
+      table(
+        ['#', 'Out → In', 'Base%', 'Variant%', 'Delta', 'p-value', 'Verdict'],
+        report.suggestions.map((s) => {
+          const e = s.evaluation;
+          const sign = e.delta >= 0 ? '+' : '';
+          return [
+            String(s.rank),
+            `${s.outName} → ${s.inName}`,
+            pct(e.baseWinRate.p),
+            pct(e.variantWinRate.p),
+            `${sign}${pct(e.delta)}`,
+            e.pValue.toExponential(2),
+            e.verdict.toUpperCase(),
+          ];
+        }),
+      ),
+    );
+  }
+
+  const n = report.notes;
+  console.log(
+    `\nEvaluated ${report.candidatesEvaluated} of ${n.candidatesGenerated} candidates` +
+      (n.cappedByBudget ? ` (capped at ${maxCandidates})` : ''),
+  );
+  if (report.skipped.length > 0) {
+    const illegal = report.skipped.filter((s) => s.reason === 'illegal').length;
+    const capped = report.skipped.filter((s) => s.reason === 'capped').length;
+    const parts: string[] = [];
+    if (capped > 0) parts.push(`${capped} capped for budget`);
+    if (illegal > 0) parts.push(`${illegal} skipped (illegal variant)`);
+    console.log(`Coverage: ${parts.join(', ')}.`);
+  }
+  const gps = n.gamesPerSecond;
+  console.log(
+    `${n.totalGamesRun} games` +
+      (n.elapsedSeconds ? ` in ${n.elapsedSeconds.toFixed(2)}s → ${gps ? gps.toFixed(0) : '?'} games/sec` : ''),
+  );
+  console.log(FIDELITY_NOTE);
+  return 0;
+}
+
 // --- entry ---------------------------------------------------------------------
 
 function run(argv: readonly string[]): number {
@@ -359,6 +462,8 @@ function run(argv: readonly string[]): number {
       return cmdGauntlet(flags);
     case 'swap':
       return cmdSwap(flags);
+    case 'suggest':
+      return cmdSuggest(flags);
     default:
       throw new CliError(`unknown command "${command}". Run with --help for usage.`);
   }
