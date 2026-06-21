@@ -116,8 +116,15 @@ the sim ships in the worker chunk, off the main bundle).
 *Still remaining (why this is 🚧, not ✅):* the watch/replay **match viewer** (turn-by-turn from the
 event log) — a clean seam is left (the sim exposes `runMatch(..., {recordTrace:true})`), not yet built.
 
-### 3.8 Meta-deck gauntlet content — ⬜ not started
-The 5 curated meta decks (data) that define the baseline gauntlet, plus swap-candidate cards.
+### 3.8 Meta-deck gauntlet content — ✅ done
+Six curated, distinct 60-card meta decks (data) define the baseline gauntlet, each a well-constructed
+archetype built only from fully-supported pool cards (no fully-stubbed card is a deck's core): Mono-Red
+Aggro (burn), Izzet Prowess (spell-velocity go-wide), Mono-Green Ramp (resilient midrange), UW Control
+(removal + counters + a flying finisher), Golgari Midrange (discard + removal attrition), and Boros Aggro
+(removal-backed beatdown). Each passes `validateDeck` (legal size, 4-of, pool membership) and is
+registered in `SAMPLE_DECKS`. A heuristic-pilot round-robin (40 games/matchup) confirms no deck is
+degenerate — overall win-rates span ~27%–79% with no ~0%/~100% list. The decks double as the swap-candidate
+baseline the §3.6 suggestion engine tunes against.
 
 ### 3.9 Core engine v2 — triggered abilities + continuous effects — ✅ done  *(quality gate for trustworthy sims)*
 The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta decks it needs: a
