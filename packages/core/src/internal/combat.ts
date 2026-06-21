@@ -107,7 +107,15 @@ function runDamageStep(
 ): void {
   const participates = firstStep ? dealsFirstStrike : dealsNormal;
 
-  // Group blockers by the attacker they block.
+  // "Was this attacker blocked this combat?" is determined from the DECLARED
+  // blocks, not from whether a blocker is currently alive. Once a creature is
+  // blocked it stays blocked for the whole combat (CR 509.1b/510.1c): even if
+  // its blocker dies (e.g. to a first-strike step before the normal step), a
+  // non-trample attacker assigns no damage in later steps, and a trample
+  // attacker tramples its full power through (the dead blocker absorbs 0 lethal).
+  const blockedAttackers = new Set<InstanceId>(Object.values(combat.blocks));
+
+  // Group *living* blockers by the attacker they block, for lethal assignment.
   const blockersByAttacker = new Map<InstanceId, CardInstance[]>();
   for (const [blockerIdStr, attackerId] of Object.entries(combat.blocks)) {
     const blocker = findOnBattlefield(state, Number(blockerIdStr));
@@ -124,8 +132,19 @@ function runDamageStep(
     const power = effectivePower(attacker);
     if (power <= 0) continue;
     const blockers = blockersByAttacker.get(attackerId);
+    const wasBlocked = blockedAttackers.has(attackerId);
     if (!blockers || blockers.length === 0) {
-      // Unblocked → straight to the defending player.
+      if (wasBlocked) {
+        // Blocked, but no living blocker remains (blocker died earlier this
+        // combat). A blocked creature stays blocked: without trample it deals
+        // no damage; with trample it tramples its full power through (all
+        // "lethal" was absorbed by the now-dead blocker = 0 remaining to assign).
+        if (kw(attacker).trample) {
+          applyDamage(state, attacker, defendingPlayer, power, emit);
+        }
+        continue;
+      }
+      // Genuinely unblocked → straight to the defending player.
       applyDamage(state, attacker, defendingPlayer, power, emit);
       continue;
     }

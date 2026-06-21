@@ -363,7 +363,12 @@ function resolveCombatDamage(state: GameState, emit: (e: GameEvent) => void): vo
  * the stack if non-empty, else advance the step. Active player regains priority
  * after a stack object resolves.
  */
-function onPassPriority(state: GameState, config: RulesConfig, emit: (e: GameEvent) => void): void {
+function onPassPriority(
+  state: GameState,
+  config: RulesConfig,
+  registry: EffectRegistry,
+  emit: (e: GameEvent) => void,
+): void {
   emit({ type: 'priorityPassed', player: state.priorityPlayer });
   state.consecutivePasses += 1;
 
@@ -376,7 +381,7 @@ function onPassPriority(state: GameState, config: RulesConfig, emit: (e: GameEve
   // Both passed.
   state.consecutivePasses = 0;
   if (state.stack.length > 0) {
-    resolveTopOfStack(state, config, emit);
+    resolveTopOfStack(state, config, registry, emit);
     // After resolution the active player receives priority again.
     if (!state.gameOver) {
       state.priorityPlayer = state.activePlayer;
@@ -388,10 +393,14 @@ function onPassPriority(state: GameState, config: RulesConfig, emit: (e: GameEve
 }
 
 /** Resolve the top (last) stack object: run its effects, move it to its zone. */
-function resolveTopOfStack(state: GameState, _config: RulesConfig, emit: (e: GameEvent) => void): void {
+function resolveTopOfStack(
+  state: GameState,
+  _config: RulesConfig,
+  registry: EffectRegistry,
+  emit: (e: GameEvent) => void,
+): void {
   const top = state.stack.pop();
   if (!top) return;
-  const registry = activeRegistry;
   const card = top.card;
 
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
@@ -431,10 +440,6 @@ function resolveTopOfStack(state: GameState, _config: RulesConfig, emit: (e: Gam
   checkStateBasedActions(state, emit);
 }
 
-// The registry in force for the current applyAction call. Threaded via a closure
-// in applyAction rather than a true global; reset on every entry (single-threaded).
-let activeRegistry: EffectRegistry = createEffectRegistry();
-
 // --- the action entry point ----------------------------------------------------
 
 /**
@@ -451,7 +456,11 @@ export function applyAction(
   const state = cloneState(prevState);
   const events: GameEvent[] = [];
   const emit = (e: GameEvent) => events.push(e);
-  activeRegistry = registry ?? createEffectRegistry();
+  // Thread the effect registry explicitly through the call chain (no module
+  // global). With none supplied, default to an empty registry: registry-free
+  // actions (playLand/passPriority/combat) are unaffected; only spell resolution
+  // needs primitives, and a bare call signals "no cards registered".
+  const effectRegistry = registry ?? createEffectRegistry();
 
   if (state.gameOver) {
     emit({ type: 'actionRejected', reason: 'the game is already over' });
@@ -468,7 +477,7 @@ export function applyAction(
   switch (action.kind) {
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return reject('you do not have priority');
-      onPassPriority(state, config, emit);
+      onPassPriority(state, config, effectRegistry, emit);
       return { state, events };
     }
     case 'playLand':

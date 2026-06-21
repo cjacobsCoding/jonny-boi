@@ -202,6 +202,65 @@ describe('combat damage', () => {
     expect(s.players.B.life).toBe(DEFAULT_RULES.startingLife - 3);
   });
 
+  it('double striker that kills its vanilla blocker on first strike deals NO face damage without trample', () => {
+    // 2/2 double strike vs a vanilla 2/2 blocker. First-strike step deals 2 →
+    // kills the blocker (SBAs remove it before the normal step). The attacker
+    // stays blocked for the whole combat, so with no trample it leaks ZERO to
+    // the defending player on the normal step (the bug let it hit for 2).
+    const ds = creatureDef('DS', 2, 2, { keywords: { doubleStrike: true } });
+    const vanilla = creatureDef('V', 2, 2);
+    const { state, attackerIds, blockerIds } = combatSetup([ds], [vanilla]);
+    const s = runCombat(state, attackerIds, [{ blocker: blockerIds[0]!, attacker: attackerIds[0]! }]);
+    expect(s.players.B.life).toBe(DEFAULT_RULES.startingLife); // no face damage
+    expect(s.battlefield.some((c) => c.instanceId === blockerIds[0])).toBe(false); // blocker dead
+    expect(s.battlefield.some((c) => c.instanceId === attackerIds[0])).toBe(true); // DS survives
+  });
+
+  it('double-strike trample over a blocker it kills on first strike tramples full power on the normal step', () => {
+    // 4/4 double-strike trample vs a 2/2 blocker. First-strike step: 2 lethal to
+    // the 2-toughness blocker, 2 tramples through → B takes 2; SBAs remove the
+    // dead blocker. Normal step: still blocked but no living blocker — trample
+    // pushes the FULL power (4) through (0 lethal left to assign to the corpse).
+    // Total face damage = 2 (FS overflow) + 4 (normal, fully trampled) = 6.
+    const dst = creatureDef('DST', 4, 4, { keywords: { doubleStrike: true, trample: true } });
+    const blocker = creatureDef('Blk', 2, 2);
+    const { state, attackerIds, blockerIds } = combatSetup([dst], [blocker]);
+    const s = runCombat(state, attackerIds, [{ blocker: blockerIds[0]!, attacker: attackerIds[0]! }]);
+    expect(s.players.B.life).toBe(DEFAULT_RULES.startingLife - 6);
+    expect(s.battlefield.some((c) => c.instanceId === blockerIds[0])).toBe(false); // blocker dead
+    expect(s.battlefield.some((c) => c.instanceId === attackerIds[0])).toBe(true); // DST survives
+  });
+
+  it('a regular attacker whose blocker is removed before damage deals NO face damage without trample', () => {
+    // Declare a block, then the blocker leaves play before combat damage (e.g.
+    // bounced/destroyed). The attacker stays blocked: a non-trample attacker
+    // deals zero to the defending player, not its full power.
+    const attacker = creatureDef('A1', 3, 3);
+    const blocker = creatureDef('B1', 1, 1);
+    const { state, attackerIds, blockerIds } = combatSetup([attacker], [blocker]);
+    let s = act(state, { kind: 'declareAttackers', player: 'A', attackers: [...attackerIds] });
+    s = advanceToStep(s, 'declareBlockers');
+    s = act(s, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: blockerIds[0]!, attacker: attackerIds[0]! }] });
+    // Remove the blocker from the battlefield before combat damage resolves.
+    s = { ...s, battlefield: s.battlefield.filter((c) => c.instanceId !== blockerIds[0]) };
+    s = advanceToStep(s, 'postcombatMain');
+    expect(s.players.B.life).toBe(DEFAULT_RULES.startingLife); // no face damage leaked
+  });
+
+  it('a blocked trampler whose blocker is removed before damage tramples its full power', () => {
+    // Same scenario but the attacker has trample: with the blocker gone, all of
+    // its power tramples through (no lethal to absorb).
+    const trampler = creatureDef('TR', 3, 3, { keywords: { trample: true } });
+    const blocker = creatureDef('B1', 1, 1);
+    const { state, attackerIds, blockerIds } = combatSetup([trampler], [blocker]);
+    let s = act(state, { kind: 'declareAttackers', player: 'A', attackers: [...attackerIds] });
+    s = advanceToStep(s, 'declareBlockers');
+    s = act(s, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker: blockerIds[0]!, attacker: attackerIds[0]! }] });
+    s = { ...s, battlefield: s.battlefield.filter((c) => c.instanceId !== blockerIds[0]) };
+    s = advanceToStep(s, 'postcombatMain');
+    expect(s.players.B.life).toBe(DEFAULT_RULES.startingLife - 3); // full power trampled
+  });
+
   it('combat damage to a player can be lethal and ends the game', () => {
     const big = creatureDef('Big', 5, 5);
     const { state, attackerIds } = combatSetup([big], [], { startingLife: 4 });
