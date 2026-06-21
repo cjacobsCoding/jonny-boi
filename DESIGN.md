@@ -64,7 +64,7 @@ Keep markers honest — a feature is ✅ only once tests pass **and the work is 
 npm workspaces, TypeScript (strict), Vitest, ESLint/Prettier, Vite PWA shell, a `core` smoke test, and
 `npm run build` / `npm test` / `npm run dev` wired. One owner; everyone branches off this.
 
-### 3.1 Core rules engine — MVP — ⬜ not started
+### 3.1 Core rules engine — MVP — ✅ done
 GameState + zones + event log; turn structure (untap/upkeep/draw/main/combat/end), priority & the stack,
 mana pool & paying costs, playing lands, casting creatures/instants/sorceries, the combat step, state-based
 actions, win/loss by life/decking. Seeded RNG. Pure + fully tested.
