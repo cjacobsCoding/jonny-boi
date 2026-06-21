@@ -8,6 +8,7 @@ import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
 import { poolTotal } from './mana.js';
 import { effectivePower, effectiveToughness } from './internal/stats.js';
+import { indexContinuous, NO_MOD } from './internal/continuous.js';
 import { isCreature } from './card.js';
 
 /** A plain, JSON-safe snapshot of the game (no methods, no class instances). */
@@ -58,6 +59,7 @@ export function serializeState(state: GameState): SerializedState {
       hasLost: p.hasLost,
     };
   }
+  const index = indexContinuous(state);
   return {
     turnNumber: state.turnNumber,
     activePlayer: state.activePlayer,
@@ -67,16 +69,19 @@ export function serializeState(state: GameState): SerializedState {
     winner: state.winner,
     stackSize: state.stack.length,
     players,
-    battlefield: state.battlefield.map((c: CardInstance) => ({
-      instanceId: c.instanceId,
-      name: c.def.name,
-      controller: c.controller,
-      tapped: c.tapped,
-      summoningSick: c.summoningSick,
-      power: isCreature(c.def) ? effectivePower(c) : undefined,
-      toughness: isCreature(c.def) ? effectiveToughness(c) : undefined,
-      damageMarked: c.damageMarked,
-    })),
+    battlefield: state.battlefield.map((c: CardInstance) => {
+      const mod = index.get(c.instanceId) ?? NO_MOD;
+      return {
+        instanceId: c.instanceId,
+        name: c.def.name,
+        controller: c.controller,
+        tapped: c.tapped,
+        summoningSick: c.summoningSick,
+        power: isCreature(c.def) ? effectivePower(c, mod) : undefined,
+        toughness: isCreature(c.def) ? effectiveToughness(c, mod) : undefined,
+        damageMarked: c.damageMarked,
+      };
+    }),
   };
 }
 

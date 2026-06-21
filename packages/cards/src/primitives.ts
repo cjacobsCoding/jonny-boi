@@ -262,9 +262,12 @@ export const counterSpell: EffectPrimitive = (ctx) => {
   if (target === undefined || isPlayerTarget(target)) return;
   const idx = ctx.state.stack.findIndex((o) => o.instanceId === target);
   if (idx < 0) return; // not on the stack — safe no-op
-  const [countered] = ctx.state.stack.splice(idx, 1);
-  if (!countered) return;
-  const card = countered.card;
+  const targeted = ctx.state.stack[idx];
+  // "Counter target spell" only affects spells, not triggered abilities on the
+  // stack (the engine-v2 StackObject union includes 'trigger' objects with no card).
+  if (!targeted || targeted.kind !== 'spell') return; // safe no-op
+  ctx.state.stack.splice(idx, 1);
+  const card = targeted.card;
   card.zone = 'graveyard';
   ctx.state.players[card.owner].graveyard.push(card);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });

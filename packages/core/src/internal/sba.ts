@@ -16,6 +16,7 @@ import type { GameEvent } from '../events.js';
 import { isCreature } from '../card.js';
 import { effectiveToughness, remainingToughness } from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
+import { indexContinuous, NO_MOD } from './continuous.js';
 
 /** Run all pending SBAs until a fixpoint. Mutates the draft; emits events. */
 export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) => void): void {
@@ -23,12 +24,18 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
   while (changed && !state.gameOver) {
     changed = false;
 
+    // Effective toughness/damage are read through the continuous layer so an
+    // until-EOT pump that raises toughness keeps a creature alive, and a negative
+    // buff can be lethal. Rebuilt each fixpoint pass (effects can change between).
+    const index = indexContinuous(state);
+
     // Creature death: lethal damage or non-positive toughness.
     for (const inst of [...state.battlefield]) {
       if (!isCreature(inst.def)) continue;
+      const mod = index.get(inst.instanceId) ?? NO_MOD;
       const dead =
-        effectiveToughness(inst) <= 0 ||
-        remainingToughness(inst) <= 0 ||
+        effectiveToughness(inst, mod) <= 0 ||
+        remainingToughness(inst, mod) <= 0 ||
         (inst.markedByDeathtouch && inst.damageMarked > 0);
       if (dead) {
         emit({ type: 'creatureDied', instanceId: inst.instanceId, name: inst.def.name });

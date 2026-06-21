@@ -11,7 +11,8 @@
 
 import type { CardInstance, GameState, PlayerId, InstanceId } from './state.js';
 import type { GameEvent } from './events.js';
-import type { EffectRef } from './card.js';
+import type { CardDefinition, EffectRef } from './card.js';
+import type { ContinuousDuration } from './internal/continuous.js';
 
 /**
  * The handle a primitive receives. It mutates the *draft* state in place (the
@@ -31,6 +32,33 @@ export interface EffectContext {
   readonly params: Readonly<Record<string, unknown>>;
   /** Append an event to the log. */
   emit(event: GameEvent): void;
+  /**
+   * Register a temporary continuous modification (DESIGN §3.9) on a permanent — the
+   * channel a Giant-Growth-style pump or keyword grant uses. With `duration:
+   * 'endOfTurn'` (the default) the modification is removed in the cleanup step, so
+   * the buff genuinely wears off. Returns the new effect's id. This is the proper
+   * replacement for modelling pumps as permanent +1/+1 counters.
+   */
+  addContinuousEffect(mod: ContinuousModRequest): number;
+  /**
+   * Create a token permanent on the battlefield under `controller` (defaults to the
+   * source's controller) from a token card definition. Returns the new instance id.
+   * Tokens enter summoning-sick (unless they have haste) and trigger ETB like any
+   * permanent. Used by token-makers (e.g. a cast-trigger that makes a 1/1).
+   */
+  createToken(def: CardDefinition, controller?: PlayerId): InstanceId;
+}
+
+/**
+ * The data a primitive supplies to register a continuous effect. `target` defaults
+ * to the source instance; `duration` defaults to `'endOfTurn'`.
+ */
+export interface ContinuousModRequest {
+  readonly target?: InstanceId;
+  readonly duration?: ContinuousDuration;
+  readonly power?: number;
+  readonly toughness?: number;
+  readonly keywords?: CardDefinition['keywords'];
 }
 
 /** A primitive: a small pure function mutating the draft via the context. */
@@ -76,7 +104,7 @@ export function createEffectRegistry(): EffectRegistry {
 export function applyEffectRef(
   registry: EffectRegistry,
   ref: EffectRef,
-  base: Omit<EffectContext, 'params' | 'emit' | 'targets'>,
+  base: Omit<EffectContext, 'params' | 'emit' | 'targets' | 'addContinuousEffect' | 'createToken'>,
   emit: (event: GameEvent) => void,
   targets: ReadonlyArray<InstanceId | PlayerId>,
 ): void {
@@ -92,7 +120,66 @@ export function applyEffectRef(
     targets,
     params: ref.params ?? {},
     emit,
+    addContinuousEffect(mod) {
+      return addContinuousEffectToState(base.state, base.source.instanceId, mod, emit);
+    },
+    createToken(def, controller) {
+      return createTokenInState(base.state, def, controller ?? base.controller, emit);
+    },
   };
   primitive(ctx);
   emit({ type: 'effectApplied', primitive: ref.primitive, sourceInstanceId: base.source.instanceId });
+}
+
+/** Register a continuous modification on the draft state; returns its id. */
+function addContinuousEffectToState(
+  state: GameState,
+  sourceInstanceId: InstanceId,
+  mod: ContinuousModRequest,
+  emit: (event: GameEvent) => void,
+): number {
+  const id = state.nextInstanceId++;
+  const duration: ContinuousDuration = mod.duration ?? 'endOfTurn';
+  const target = mod.target ?? sourceInstanceId;
+  state.continuous.push({
+    id,
+    targetInstanceId: target,
+    sourceInstanceId,
+    duration,
+    power: mod.power,
+    toughness: mod.toughness,
+    keywords: mod.keywords,
+  });
+  emit({ type: 'continuousEffectAdded', targetInstanceId: target, sourceInstanceId, duration });
+  return id;
+}
+
+/** Create a token permanent on the battlefield; returns its instance id. */
+function createTokenInState(
+  state: GameState,
+  def: CardDefinition,
+  controller: PlayerId,
+  emit: (event: GameEvent) => void,
+): InstanceId {
+  const instanceId = state.nextInstanceId++;
+  const hasHaste = Boolean(def.keywords?.haste);
+  const isCreatureToken = def.types.includes('creature');
+  const token: CardInstance = {
+    instanceId,
+    def,
+    controller,
+    owner: controller,
+    zone: 'battlefield',
+    tapped: false,
+    summoningSick: isCreatureToken ? !hasHaste : false,
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    counters: {},
+  };
+  state.battlefield.push(token);
+  emit({ type: 'tokenCreated', instanceId, controller, name: def.name });
+  // A token entering is a zoneChange into the battlefield — this is what ETB
+  // triggers (its own and others') observe, keeping one mechanism for "enters".
+  emit({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });
+  return instanceId;
 }
