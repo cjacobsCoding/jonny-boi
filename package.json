@@ -12,7 +12,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @jonny-boi/core -w @jonny-boi/data-tools -w @jonny-boi/cards -w @jonny-boi/ai -w @jonny-boi/sim -w @jonny-boi/web --if-present",
     "test": "vitest run",
     "dev": "npm run dev --workspace @jonny-boi/web",
     "sim": "npm run sim --workspace @jonny-boi/sim --",
