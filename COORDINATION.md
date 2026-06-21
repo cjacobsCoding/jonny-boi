@@ -31,11 +31,18 @@ from regressing.
 
 | branch | owner / machine | files owned | status |
 |--------|-----------------|-------------|--------|
-| _example_ | _hostname_ | _packages/..._ | 🚧 building / ✅ READY / ✅ INTEGRATED |
+| feat/scaffold | DESKTOP-90PJPM4 | root configs + all package skeletons | ✅ INTEGRATED |
+| feat/core-engine | DESKTOP-90PJPM4 (worker) | packages/core | 🚧 building |
+| feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | 🚧 building |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-06-20 DESKTOP-90PJPM4: Wave 1 dispatched — `feat/core-engine` (§3.1) + `feat/data-tools-scryfall`
+  (§3.3) in parallel; disjoint packages, no cross-dependency. core blocks cards/ai/sim, so it's the
+  keystone. data-tools is independent. (Supervisor/integrator)
+- 2026-06-20 DESKTOP-90PJPM4: Scaffold (§3.0) INTEGRATED to main — `npm install/test/build` all green,
+  PWA build emits sw.js + manifest. Other packages branch off `origin/main`. (Integrator)
 - 2026-06-20 DESKTOP-90PJPM4: Repo seeded with rules + this board + DESIGN. Stack = TS npm-workspaces
   monorepo (core/cards/ai/sim/data-tools + apps/web PWA), Scryfall art, curated card pool. Node 24 LTS
   installed on this machine. Scaffold (§3.0) goes first and blocks all other work. (Supervisor)
