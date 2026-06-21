@@ -1,0 +1,18 @@
+{
+  "name": "@jonny-boi/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure MTG rules engine — no DOM, no network. Runs in Node and a browser Web Worker.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

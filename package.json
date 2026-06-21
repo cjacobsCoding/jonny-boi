@@ -1,0 +1,31 @@
+{
+  "name": "jonny-boi",
+  "version": "0.0.0",
+  "private": true,
+  "description": "An MTG deck-tuning lab: AI-piloted gauntlet sims with statistically-grounded single-card A/B testing.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "vitest run",
+    "dev": "npm run dev --workspace @jonny-boi/web",
+    "sim": "npm run sim --workspace @jonny-boi/sim --",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^2.1.8"
+  }
+}

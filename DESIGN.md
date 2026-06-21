@@ -60,7 +60,7 @@ in the hot path (seeded RNG for reproducible sims).
 **Status legend:** ✅ done (implemented, tested, committed) · 🚧 in progress · ⬜ not started.
 Keep markers honest — a feature is ✅ only once tests pass **and the work is committed/pushed**.
 
-### 3.0 Monorepo scaffold + tooling — ⬜ not started  *(foundational — blocks everything)*
+### 3.0 Monorepo scaffold + tooling — ✅ done  *(foundational — blocks everything)*
 npm workspaces, TypeScript (strict), Vitest, ESLint/Prettier, Vite PWA shell, a `core` smoke test, and
 `npm run build` / `npm test` / `npm run dev` wired. One owner; everyone branches off this.
 

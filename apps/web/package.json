@@ -1,0 +1,24 @@
+{
+  "name": "@jonny-boi/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The jonny-boi React/Vite PWA shell (deck builder, card browser, lab, match viewer).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@jonny-boi/core": "*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.5",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}

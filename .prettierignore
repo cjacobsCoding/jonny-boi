@@ -1,0 +1,12 @@
+node_modules
+dist
+dev-dist
+coverage
+package-lock.json
+*.tsbuildinfo
+
+# Project governance docs are authored/owned outside the toolchain; leave their
+# formatting to their owners rather than churning them through Prettier.
+CLAUDE.md
+COORDINATION.md
+DESIGN.md

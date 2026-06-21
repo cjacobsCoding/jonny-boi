@@ -1,0 +1,29 @@
+{
+  "name": "@jonny-boi/sim",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Headless simulation harness and the CLI behind `npm run sim`.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "jonny-boi-sim": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "sim": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@jonny-boi/core": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2"
+  }
+}

@@ -1,0 +1,32 @@
+:root {
+  color-scheme: dark;
+  --color-bg: #0f1419;
+  --color-fg: #e6e8eb;
+  --color-accent: #7c5cff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: system-ui, sans-serif;
+}
+
+.app-shell {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.app-shell h1 {
+  color: var(--color-accent);
+}
+
+.app-shell__note {
+  opacity: 0.75;
+  font-size: 0.9rem;
+}
