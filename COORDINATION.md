@@ -49,6 +49,9 @@ throughput (games/sec) from regressing.
 | feat/cards-v2 | DESKTOP-90PJPM4 (worker) | packages/cards | ✅ INTEGRATED |
 | feat/web-lab | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
 | fix/fidelity-caveat | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
+| (net-protocol) | DESKTOP-90PJPM4 (integrator) | packages/protocol (new) | ✅ INTEGRATED (committed direct to main) |
+| feat/online-server | DESKTOP-90PJPM4 (worker) | apps/server (new) + root cfg | 🚧 building |
+| feat/online-client | DESKTOP-90PJPM4 (worker) | apps/web | 🚧 building |
 | feat/match-viewer | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
 | feat/mcts-ai | DESKTOP-90PJPM4 (worker) | packages/ai (+sim wiring) | ✅ INTEGRATED (selectable, not default) |
 | feat/hotseat-play | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
@@ -59,6 +62,15 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-06-22 DESKTOP-90PJPM4: ONLINE MULTIPLAYER underway (user: "hotseat now, online later" → now). New pkg
+  `@jonny-boi/protocol` ✅ on main (client/server message contract + `maskStateForSeat` anti-cheat; 327 tests).
+  Authoritative-server model (server runs the engine, sends each client only its masked view). Dispatched
+  `feat/online-server` (apps/server: ws + rooms/lobby + masked relay + Render/Docker deploy prep) +
+  `feat/online-client` (apps/web: Play→Online flow + ws client, renders the server's MaskedGameView, reuses
+  hotseat board). Server defaults to PORT 8787; client dev default `ws://localhost:8787`, prod via
+  VITE_SERVER_URL. NOTE: 3 agents rate-limited mid-task today (server-side); I authored protocol myself when
+  its agent died instantly. Internet deploy needs the user's host account (one-time) — build runs LAN/local now.
+  (Integrator)
 - 2026-06-21 DESKTOP-90PJPM4: `hotseat-play` INTEGRATED — 2 humans play a full MTG game on ONE device
   (pass-and-play). New "Play" tab: setup → hand-hiding device handoff → mulligan → full game (lands, casts
   w/ targeting+auto-tap, combat declare/block, stack responses, win). Main = **321 tests, build exit 0**.
