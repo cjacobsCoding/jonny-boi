@@ -12,7 +12,7 @@ import { defineConfig } from 'vitest/config';
  * resolve through each package's `exports`, which point at the unbuilt `dist`).
  * Add a package here when it gains cross-package importers in tests.
  */
-const SOURCE_ALIASED_PACKAGES = ['core', 'cards', 'ai', 'sim', 'data-tools'] as const;
+const SOURCE_ALIASED_PACKAGES = ['core', 'protocol', 'cards', 'ai', 'sim', 'data-tools'] as const;
 
 const aliasToSrc = Object.fromEntries(
   SOURCE_ALIASED_PACKAGES.map((pkg) => [
