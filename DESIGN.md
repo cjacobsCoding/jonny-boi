@@ -141,6 +141,24 @@ behavior persists the buff and biases combat sims), and later **planeswalkers**,
 **dynamic P/T** (e.g. Tarmogoyf). Tracked here because §3.2 cards stubbed these mechanics against the MVP.
 Prioritize triggers + EOT-expiry before leaning on §3.5/§3.6 verdicts; the rest can follow.
 
+### 3.10 Hotseat pass-and-play — two humans, one device — ✅ done
+A **"Play"** surface where two people play a full game of MTG on one device, taking turns at the
+keyboard. Built entirely on top of the existing pure core (drives `applyAction`/`generateLegalActions`
+on the main thread — no worker), it adds **no rules of its own**: a thin immutable `GameSession`
+controller (`lib/play/session.ts`) wraps the engine, exposes the priority-holder's legal actions, and
+offers client conveniences that decompose into legal engine actions (auto-tap-to-pay a cast; London
+mulligan bottoming). Setup picks two decks (saved decks and/or the six `SAMPLE_DECKS`), validated with
+the sim's `validateDeck` (illegal deck → friendly structured message, never a throw). A
+**`SeatTransport` seam** (`lib/play/seat.ts`) abstracts who controls a seat and when a handoff is
+needed, so the SAME UI can later host online play (a networked transport would gate `localControls` to
+the peer's own seat and drop the handoff). Hidden information is enforced at one chokepoint — the
+`buildBoardView` view-model masks the opponent's hand to a count — and a **pass-the-device handoff
+screen** covers the board between turns so no secret leaks. Targeting is inferred from card effect
+primitives (data table, not per-card code): lands, creatures, burn-with-target, combat (declare
+attackers/blockers), instant-speed responses on the stack, and a winner. The session controller,
+targeting, deck setup, and hidden-info masking are unit-tested, including a full game driven to a
+winner through the public session API (proving the loop has no dead-end).
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

@@ -1,0 +1,63 @@
+/**
+ * Named UI/flow constants for the hotseat (pass-and-play) mode. DESIGN §1.3: no
+ * magic numbers — every value that affects the hotseat flow or feel lives here so
+ * it is tunable from one place. Rules-affecting values (starting hand, lands/turn,
+ * phase names) come from the engine's `DEFAULT_RULES`/`STEP_ORDER`, NOT from here;
+ * this module only owns the *client* knobs the engine has no opinion about.
+ */
+import { DEFAULT_RULES } from '@jonny-boi/core';
+
+/** A frozen bundle of hotseat client knobs. */
+export interface HotseatConfig {
+  /**
+   * Maximum number of mulligans a player may take before they must keep. London
+   * mulligan: you always draw a full hand, then bottom N cards equal to how many
+   * times you mulliganed. Capped at the starting hand size so you can't bottom more
+   * than you hold.
+   */
+  readonly maxMulligans: number;
+  /** Default name for seat A when the player leaves it blank. */
+  readonly defaultNameA: string;
+  /** Default name for seat B when the player leaves it blank. */
+  readonly defaultNameB: string;
+  /** Seed used when the player doesn't enter one (kept deterministic for replays). */
+  readonly defaultSeed: number;
+  /**
+   * A safety cap on automatic engine advancement (e.g. when a player passes and the
+   * engine resolves a chain of steps with nothing to do). Bounds any internal loop
+   * so a pathological state can never hang the UI — mirrors the sim's action cap.
+   */
+  readonly maxAutoAdvanceSteps: number;
+}
+
+/** The default hotseat configuration. */
+export const HOTSEAT_CONFIG: HotseatConfig = Object.freeze({
+  // You can mulligan down to a one-card hand at most (London: bottom up to a full
+  // hand). Capping at the starting hand size keeps "bottom N" always legal.
+  maxMulligans: DEFAULT_RULES.startingHandSize - 1,
+  defaultNameA: 'Player 1',
+  defaultNameB: 'Player 2',
+  defaultSeed: 12345,
+  maxAutoAdvanceSteps: 512,
+});
+
+/** Human-readable labels for the engine's turn steps (UI display only). */
+export const STEP_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  untap: 'Untap',
+  upkeep: 'Upkeep',
+  draw: 'Draw',
+  precombatMain: 'Main Phase 1',
+  beginCombat: 'Begin Combat',
+  declareAttackers: 'Declare Attackers',
+  declareBlockers: 'Declare Blockers',
+  combatDamage: 'Combat Damage',
+  endCombat: 'End of Combat',
+  postcombatMain: 'Main Phase 2',
+  end: 'End Step',
+  cleanup: 'Cleanup',
+});
+
+/** A readable label for a step, falling back to the raw id. */
+export function stepLabel(step: string): string {
+  return STEP_LABELS[step] ?? step;
+}
