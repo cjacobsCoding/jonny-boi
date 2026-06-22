@@ -14,6 +14,7 @@ import { MulliganScreen } from '../components/play/MulliganScreen.js';
 import { HandoffScreen } from '../components/play/HandoffScreen.js';
 import { PlayBoard } from '../components/play/PlayBoard.js';
 import { EndScreen } from '../components/play/EndScreen.js';
+import { OnlinePlay } from '../components/online/OnlinePlay.js';
 
 /** The high-level phase the hotseat is in. */
 type Phase =
@@ -54,7 +55,73 @@ interface MulliganState {
  * drop in later (handoffs off, each peer sees only their own seat) without touching
  * this component's rendering.
  */
+/** Local (pass-and-play) vs Online play. */
+type PlayMode = 'choose' | 'local' | 'online';
+
+/**
+ * The Play tab: a landing that lets the player choose Local (pass-and-play on one
+ * device) or Online (two devices over the internet). Local reuses the full hotseat
+ * flow (`LocalPlay`); Online drops into the networked client (`OnlinePlay`). Both
+ * reuse the same board components and theme.
+ */
 export function PlayView({ decks }: { decks: DecksApi }): ReactElement {
+  const [mode, setMode] = useState<PlayMode>('choose');
+
+  if (mode === 'local') {
+    return (
+      <>
+        <div className="play-view play-view--mode-bar">
+          <button type="button" className="btn btn--ghost play-mode__back" onClick={() => setMode('choose')}>
+            ← Play menu
+          </button>
+        </div>
+        <LocalPlay decks={decks} />
+      </>
+    );
+  }
+  if (mode === 'online') {
+    return (
+      <>
+        <div className="play-view play-view--mode-bar">
+          <button type="button" className="btn btn--ghost play-mode__back" onClick={() => setMode('choose')}>
+            ← Play menu
+          </button>
+        </div>
+        <div className="play-view">
+          <OnlinePlay decks={decks} />
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="play-view">
+      <div className="play-mode">
+        <h2 className="play-setup__title">Play Magic</h2>
+        <p className="play-setup__intro">Choose how you want to play.</p>
+        <div className="play-mode__choices">
+          <button type="button" className="play-mode__card" onClick={() => setMode('local')}>
+            <span className="play-mode__icon" aria-hidden="true">🛋️</span>
+            <span className="play-mode__title">Local (pass-and-play)</span>
+            <span className="play-mode__desc">
+              Two players share one device. Pass it back and forth — each sees only their own hand.
+            </span>
+          </button>
+          <button type="button" className="play-mode__card" onClick={() => setMode('online')}>
+            <span className="play-mode__icon" aria-hidden="true">🌐</span>
+            <span className="play-mode__title">Online</span>
+            <span className="play-mode__desc">
+              Play a friend on another device over the internet. Create a room and share the code.
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The local pass-and-play game (the original hotseat flow). */
+function LocalPlay({ decks }: { decks: DecksApi }): ReactElement {
   const [phase, setPhase] = useState<Phase>({ kind: 'setup' });
   const [config, setConfig] = useState<GameConfig | null>(null);
   const [seed, setSeed] = useState<number>(HOTSEAT_CONFIG.defaultSeed);
