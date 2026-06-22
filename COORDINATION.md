@@ -51,7 +51,7 @@ throughput (games/sec) from regressing.
 | fix/fidelity-caveat | DESKTOP-90PJPM4 (worker) | packages/sim | ✅ INTEGRATED |
 | (net-protocol) | DESKTOP-90PJPM4 (integrator) | packages/protocol (new) | ✅ INTEGRATED (committed direct to main) |
 | feat/online-server | DESKTOP-90PJPM4 (worker) | apps/server (new) + root cfg | ✅ INTEGRATED |
-| feat/online-client | DESKTOP-90PJPM4 (worker) | apps/web | 🚧 building |
+| feat/online-client | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
 | feat/match-viewer | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
 | feat/mcts-ai | DESKTOP-90PJPM4 (worker) | packages/ai (+sim wiring) | ✅ INTEGRATED (selectable, not default) |
 | feat/hotseat-play | DESKTOP-90PJPM4 (worker) | apps/web | ✅ INTEGRATED |
@@ -62,6 +62,15 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-06-22 DESKTOP-90PJPM4: ONLINE MULTIPLAYER server + client BOTH INTEGRATED. main = **384 tests,
+  build exit 0**. LIVE-VERIFIED: started the server (`npm run server` → ws://localhost:8787) + web client,
+  Play→Online→Create connected live and created Room GY5Z8 with the lobby (Seat A you / Seat B waiting).
+  Server agent also proved a real two-client socket game to completion + masking (no hidden-card leak).
+  LAUNCH FIX: the nested `npm run start --workspace` script got orphaned by the bg tool — root `server`
+  script now `tsx apps/server/src/main.ts` (dedicated unconditional entry; index.ts is pure lib). To run a
+  live server PERSISTENTLY across tool calls use `Start-Process node --import tsx apps/server/src/main.ts`
+  detached (the run_in_background tool tears the server down). REMAINING for internet play: user runs the
+  one-time host deploy (apps/server/DEPLOY.md → Render/Docker) + sets web build `VITE_SERVER_URL=wss://host`.
 - 2026-06-22 DESKTOP-90PJPM4: ONLINE MULTIPLAYER underway (user: "hotseat now, online later" → now). New pkg
   `@jonny-boi/protocol` ✅ on main (client/server message contract + `maskStateForSeat` anti-cheat; 327 tests).
   Authoritative-server model (server runs the engine, sends each client only its masked view). Dispatched
