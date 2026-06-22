@@ -16,7 +16,7 @@
     "build": "npm run build -w @jonny-boi/core -w @jonny-boi/protocol -w @jonny-boi/data-tools -w @jonny-boi/cards -w @jonny-boi/ai -w @jonny-boi/sim -w @jonny-boi/web -w @jonny-boi/server --if-present",
     "test": "vitest run",
     "dev": "npm run dev --workspace @jonny-boi/web",
-    "server": "npm run start --workspace @jonny-boi/server",
+    "server": "tsx apps/server/src/main.ts",
     "sim": "npm run sim --workspace @jonny-boi/sim --",
     "lint": "eslint .",
     "format": "prettier --write ."

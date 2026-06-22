@@ -12,7 +12,6 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ServerMessage } from '@jonny-boi/protocol';
 import { DEFAULT_PORT, HEARTBEAT_INTERVAL_MS } from './config.js';
@@ -117,12 +116,5 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
   return wss;
 }
 
-// Boot when run directly (tsx src/index.ts / node dist/index.js). Importing this
-// module for tests does not auto-start a server (we export `startServer`); running
-// it as the entry point does. Compare resolved file URLs so it works under both
-// tsx (.ts) and node (.js) and on Windows paths.
-const entryArg = process.argv[1];
-const isEntryPoint = entryArg !== undefined && import.meta.url === pathToFileURL(entryArg).href;
-if (isEntryPoint) {
-  startServer();
-}
+// This module is a pure library (no import side-effects) so tests can import
+// `startServer` and boot on an ephemeral port. The executable entry is `main.ts`.

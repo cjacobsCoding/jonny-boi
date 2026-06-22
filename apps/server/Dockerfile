@@ -26,4 +26,4 @@ ENV PORT=8787
 EXPOSE 8787
 
 # Run the compiled entry point.
-CMD ["node", "apps/server/dist/index.js"]
+CMD ["node", "apps/server/dist/src/main.js"]

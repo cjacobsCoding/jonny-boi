@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "description": "The jonny-boi authoritative online game server: a Node WebSocket server that runs real MTG games between two networked players, sending each only their own masked view.",
-  "main": "dist/index.js",
+  "main": "dist/src/index.js",
   "scripts": {
-    "start": "tsx src/index.ts",
+    "start": "tsx src/main.ts",
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
