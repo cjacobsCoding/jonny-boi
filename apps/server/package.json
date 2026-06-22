@@ -1,0 +1,23 @@
+{
+  "name": "@jonny-boi/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The jonny-boi authoritative online game server: a Node WebSocket server that runs real MTG games between two networked players, sending each only their own masked view.",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@jonny-boi/cards": "*",
+    "@jonny-boi/core": "*",
+    "@jonny-boi/protocol": "*",
+    "@jonny-boi/sim": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2"
+  }
+}

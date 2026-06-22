@@ -1,0 +1,20 @@
+# Render blueprint for the jonny-boi online game server.
+# Render natively supports WebSocket connections on Web Services. Push this repo,
+# then in Render: "New +" → "Blueprint" → point at the repo. Render reads this file.
+#
+# The Docker build uses the repo root as context (the server imports sibling
+# workspace packages), so `dockerfilePath` + `dockerContext` are set accordingly.
+services:
+  - type: web
+    name: jonny-boi-server
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      # Render injects PORT automatically; this documents the contract. The server
+      # binds process.env.PORT and falls back to 8787 locally.
+      - key: PORT
+        value: 8787
