@@ -193,4 +193,22 @@ describe('OnlineConnection status transitions', () => {
     socket.error();
     expect(conn.status).toBe('error');
   });
+
+  it('queues a send issued before open and flushes it on open (tunnel-latency race)', () => {
+    let socket!: MockSocket;
+    const conn = new OnlineConnection({
+      socketFactory: () => (socket = new MockSocket()),
+      timers: manualTimers(),
+    });
+    conn.connect();
+    // Socket is 'connecting', not open yet — like clicking Create over a slow tunnel.
+    expect(conn.status).toBe('connecting');
+    const queued = conn.send({ t: 'createRoom', protocolVersion: 1, name: 'P1' });
+    expect(queued).toBe(true);
+    expect(socket.sent).toHaveLength(0); // nothing sent on a not-yet-open socket
+    socket.open();
+    // On open the queued createRoom is flushed in order.
+    expect(socket.sent).toHaveLength(1);
+    expect(JSON.parse(socket.sent[0]!)).toEqual({ t: 'createRoom', protocolVersion: 1, name: 'P1' });
+  });
 });

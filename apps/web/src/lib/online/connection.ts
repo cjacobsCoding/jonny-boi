@@ -45,6 +45,15 @@ export type SocketFactory = (url: string) => SocketLike;
 
 const defaultSocketFactory: SocketFactory = (url) => new WebSocket(url) as unknown as SocketLike;
 
+/**
+ * Cap on messages buffered while the socket is still opening (then flushed in order
+ * on open). Without this, a send issued during the connect handshake — e.g. clicking
+ * "Create room" before the socket opens, common over a higher-latency tunnel — would
+ * be silently dropped and the UI would hang waiting for a reply that never comes.
+ * Bounded so a never-opening socket can't grow the queue unboundedly.
+ */
+const MAX_PENDING_SENDS = 50;
+
 /** Listener signatures. */
 export type MessageListener = (msg: ServerMessage) => void;
 export type StatusListener = (status: ConnectionStatus) => void;
@@ -132,6 +141,8 @@ export class OnlineConnection {
   private pingHandle: unknown = null;
   /** True once the consumer asks to disconnect — suppresses auto-reconnect. */
   private disposed = false;
+  /** Messages enqueued while not yet 'open', flushed in order once the socket opens. */
+  private readonly pendingSends: ClientMessage[] = [];
 
   private readonly messageListeners = new Set<MessageListener>();
   private readonly statusListeners = new Set<StatusListener>();
@@ -172,6 +183,7 @@ export class OnlineConnection {
       this.attempt = 0;
       this.setStatus('open');
       this.startKeepalive();
+      this.flushPending();
     };
     socket.onmessage = (ev) => {
       const msg = parseServerMessage(ev.data);
@@ -191,20 +203,46 @@ export class OnlineConnection {
     };
   }
 
-  /** Send a client message (no-op + status hint if the socket isn't open). */
+  /**
+   * Send a client message. If the socket is open, it goes immediately; if it is still
+   * opening, the message is QUEUED and flushed in order on open — so a createRoom/join
+   * issued during the connect handshake (likely over a tunnel's latency) isn't lost and
+   * the UI doesn't hang forever. Keepalive `ping`s are dropped (not queued) when not
+   * open — a stale ping has no value. Returns true if the message was sent or queued.
+   */
   send(msg: ClientMessage): boolean {
-    if (!this.socket || this.statusValue !== 'open') return false;
-    try {
-      this.socket.send(serializeClientMessage(msg));
-      return true;
-    } catch {
-      return false;
+    if (this.socket && this.statusValue === 'open') {
+      try {
+        this.socket.send(serializeClientMessage(msg));
+        return true;
+      } catch {
+        // transient send failure → fall through and queue for the next open
+      }
+    }
+    if (this.disposed || msg.t === 'ping') return false;
+    if (this.pendingSends.length >= MAX_PENDING_SENDS) this.pendingSends.shift();
+    this.pendingSends.push(msg);
+    if (!this.socket) this.connect(); // ensure we're opening so the queue will flush
+    return true;
+  }
+
+  /** Flush any messages queued while connecting, in order, once the socket is open. */
+  private flushPending(): void {
+    if (this.pendingSends.length === 0 || !this.socket) return;
+    const queued = this.pendingSends.splice(0);
+    for (const m of queued) {
+      try {
+        this.socket.send(serializeClientMessage(m));
+      } catch {
+        /* drop on a failed send rather than throw */
+      }
     }
   }
 
   /** Permanently close the connection and cancel all timers. */
   dispose(): void {
     this.disposed = true;
+    this.pendingSends.length = 0;
     this.cancelReconnect();
     this.stopKeepalive();
     if (this.socket) {
