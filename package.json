@@ -17,6 +17,7 @@
     "test": "vitest run",
     "dev": "npm run dev --workspace @jonny-boi/web",
     "server": "tsx apps/server/src/main.ts",
+    "host:online": "powershell -ExecutionPolicy Bypass -File scripts/host-online.ps1",
     "sim": "npm run sim --workspace @jonny-boi/sim --",
     "lint": "eslint .",
     "format": "prettier --write ."
