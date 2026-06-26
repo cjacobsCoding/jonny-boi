@@ -1,0 +1,22 @@
+# Render Blueprint (repo root, where Render auto-discovers it) for the always-on
+# online game server. ONE-TIME setup: sign in at https://render.com → "New +" →
+# "Blueprint" → connect this repo → Render reads this file and deploys the server.
+# Render natively supports WebSockets on Web Services; the server also answers HTTP
+# health checks with 200 (see apps/server/src/index.ts) so the service goes healthy.
+#
+# After it deploys, the server's public URL is https://jonny-boi-server.onrender.com
+# (wss://jonny-boi-server.onrender.com for the game). Point the web app at it by
+# setting the GitHub Actions repo variable VITE_SERVER_URL to that wss URL — the
+# PWA deploy workflow bakes it in so "Online" just works for everyone.
+services:
+  - type: web
+    name: jonny-boi-server
+    runtime: docker
+    plan: free
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: .
+    autoDeploy: true
+    envVars:
+      # Render injects PORT automatically; the server binds it (falls back to 8787).
+      - key: PORT
+        value: 8787

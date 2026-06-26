@@ -12,6 +12,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ServerMessage } from '@jonny-boi/protocol';
 import { DEFAULT_PORT, HEARTBEAT_INTERVAL_MS } from './config.js';
@@ -42,7 +43,15 @@ type LivenessSocket = WebSocket & { isAlive?: boolean };
 export function startServer(port: number = resolvePort()): WebSocketServer {
   const manager = new RoomManager();
   const router = new MessageRouter(manager);
-  const wss = new WebSocketServer({ port });
+  // A plain HTTP server so non-WebSocket requests (a host's health probe — Render,
+  // Fly, etc. — or a curious browser) get a 200, while WebSocket upgrades are handed
+  // to `ws` on the SAME port. Without this a WS-only server fails HTTP health checks
+  // and the host restart-loops it (so it never goes live).
+  const httpServer = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('jonny-boi game server: ok\n');
+  });
+  const wss = new WebSocketServer({ server: httpServer });
 
   wss.on('connection', (socket: WebSocket) => {
     (socket as LivenessSocket).isAlive = true;
@@ -108,7 +117,7 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
   }, HEARTBEAT_INTERVAL_MS);
   heartbeat.unref?.();
 
-  wss.on('listening', () => {
+  httpServer.listen(port, () => {
     // eslint-disable-next-line no-console
     console.log(`[server] jonny-boi game server listening on ws://localhost:${port}`);
   });

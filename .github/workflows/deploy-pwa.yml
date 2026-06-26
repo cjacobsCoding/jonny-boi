@@ -17,6 +17,10 @@ on:
 # The Pages project site lives under this sub-path; Vite + the PWA manifest read it.
 env:
   DEPLOY_BASE: /jonny-boi-app/
+  # Permanent online server URL, baked into the build. Set the repo Actions variable
+  # VITE_SERVER_URL (e.g. wss://jonny-boi-server.onrender.com) once the server is
+  # deployed; empty → the app falls back to localhost / a runtime ?server= link.
+  VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
 
 # Avoid overlapping deploys clobbering each other.
 concurrency:
