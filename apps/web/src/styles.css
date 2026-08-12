@@ -2043,3 +2043,266 @@ button {
   .play-board__center { grid-template-columns: 1fr; }
   .play-mode__choices, .online-menu__actions, .play-setup__seats, .online-lobby__seats { grid-template-columns: 1fr; }
 }
+
+/* ==================================================================== */
+/* Proxies — print-ready cut-to-size proxy sheets                        */
+/* ==================================================================== */
+
+.proxies-layout {
+  display: grid;
+  grid-template-columns: 22rem 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.proxies-controls {
+  position: sticky;
+  top: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.proxies-title {
+  font-family: var(--font-serif);
+  color: var(--color-accent-soft);
+  font-size: var(--text-xl);
+  margin: 0;
+}
+
+.proxies-intro {
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.proxies-textarea {
+  min-height: 9rem;
+  font-family: var(--font-sans);
+}
+
+.proxies-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.proxies-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.proxies-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.proxies-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.proxies-errors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.proxies-errors code {
+  color: var(--color-fg-faint);
+}
+
+.proxies-unresolved {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+}
+.proxies-unresolved ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+
+.proxies-summary {
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.proxies-attribution {
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs);
+  margin: 0;
+}
+
+.proxies-preview {
+  min-width: 0;
+}
+
+.proxies-empty {
+  color: var(--color-fg-muted);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.proxies-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+/* A physical sheet. On screen it's scaled down to fit; the mm dimensions on the
+   element are what the printer uses for a true 1:1 page. */
+.proxy-sheet {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: var(--shadow-pop);
+  box-sizing: border-box;
+  position: relative;
+  /* Screen-only: shrink the big physical page to something previewable. The
+     print stylesheet resets this transform so paper output stays true-size. */
+  transform: scale(0.62);
+  transform-origin: top center;
+  margin-bottom: -34%; /* reclaim the vertical space the scale leaves behind */
+}
+
+.proxy-grid {
+  display: grid;
+  justify-content: center;
+  align-content: center;
+  height: 100%;
+}
+
+.proxy-card {
+  box-sizing: border-box;
+  overflow: hidden;
+  background: #ffffff;
+  position: relative;
+}
+
+/* Hairline black cut guide around each card so it can be trimmed accurately. */
+.proxy-card--guides {
+  outline: var(--proxy-cut-guide-width, 0.2mm) solid #000000;
+  outline-offset: 0;
+}
+
+.proxy-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+}
+
+.proxy-card__fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2mm;
+  border: 0.3mm solid #000000;
+  color: #000000;
+  font-size: 9pt;
+  text-align: center;
+  padding: 2mm;
+}
+.proxy-card__face {
+  color: #444444;
+  font-size: 7pt;
+}
+
+.proxy-sheet__footer {
+  position: absolute;
+  bottom: 1.5mm;
+  right: 3mm;
+  color: #999999;
+  font-size: 7pt;
+}
+
+@media (max-width: 860px) {
+  .proxies-layout { grid-template-columns: 1fr; }
+  .proxies-controls { position: static; }
+}
+
+/* -------------------------------------------------------------------- */
+/* Print: only the proxy sheets, at true physical size                   */
+/* -------------------------------------------------------------------- */
+
+/* Drive the true page geometry. Overridden per-selected-size below via a body
+   class would require JS; instead we render the size on the .proxy-sheet element
+   (mm) and set a sensible default @page. Browsers honor the element's mm size
+   for pagination when @page size matches. */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  /* Hide everything that isn't the proxy sheets. */
+  .app__header,
+  .app__footer,
+  .proxies-controls,
+  .no-print {
+    display: none !important;
+  }
+
+  body,
+  .app,
+  .app__main {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+
+  .proxies-layout {
+    display: block !important;
+  }
+
+  .proxies-pages {
+    display: block !important;
+  }
+
+  /* Reset the on-screen preview scaling — print at 1:1 physical size. */
+  .proxy-sheet {
+    transform: none !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    /* Each sheet is its own physical page. */
+    page-break-after: always;
+    break-after: page;
+  }
+  .proxy-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  /* Ensure browsers print the card art backgrounds/colors, not white boxes. */
+  .proxy-card,
+  .proxy-card__img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
