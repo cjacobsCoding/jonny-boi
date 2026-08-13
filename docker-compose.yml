@@ -1,0 +1,20 @@
+# Docker Compose for hosting the jonny-boi ONLINE GAME SERVER on a NAS
+# (Synology Container Manager, or `docker compose up -d --build` over SSH).
+#
+# Full Synology + DDNS + public-HTTPS(wss) runbook: apps/server/DEPLOY-NAS.md
+#
+# The server imports sibling workspace packages, so the Docker build context is the
+# repo ROOT and the Dockerfile lives under apps/server/. This is the ONLY thing this
+# compose runs — the web app is hosted separately (GitHub Pages); the NAS only serves
+# the WebSocket game server.
+services:
+  jonny-boi-server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: jonny-boi-server
+    ports:
+      - '8787:8787' # host:container — Synology reverse proxy points 443 → localhost:8787
+    environment:
+      - PORT=8787
+    restart: unless-stopped
