@@ -16,7 +16,20 @@ import type {
   SwapEvaluation,
   SuggestionReport,
 } from '@jonny-boi/sim';
+import type { CardDefinition } from '@jonny-boi/core';
 import type { MatchTrace } from './replay-types.js';
+
+/**
+ * Fields every request carries. `importedCards` is how deck import reaches the
+ * simulation: the worker builds its own card pool from scratch, so without
+ * shipping the compiled definitions across the boundary an imported deck would
+ * fail to load in the Lab even though it plays fine on the main thread. The
+ * hook injects this automatically so no call site can forget it.
+ */
+export interface SimRequestBase {
+  /** Compiled definitions for cards outside the curated pool (see `decklist/`). */
+  readonly importedCards?: readonly CardDefinition[];
+}
 
 /** A deck handed to the worker: the sim's `Deck` shape (id-or-name cardIds). */
 export interface SimDeckPayload {
@@ -26,7 +39,7 @@ export interface SimDeckPayload {
 }
 
 /** Run the hero against the chosen gauntlet decks (by sample-deck name). */
-export interface GauntletRequest {
+export interface GauntletRequest extends SimRequestBase {
   readonly kind: 'gauntlet';
   readonly hero: SimDeckPayload;
   /** Sample-deck names to test against (the worker resolves them to decks). */
@@ -36,7 +49,7 @@ export interface GauntletRequest {
 }
 
 /** Evaluate a single-card swap (out → in) on the hero against the gauntlet. */
-export interface SwapRequest {
+export interface SwapRequest extends SimRequestBase {
   readonly kind: 'swap';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -47,7 +60,7 @@ export interface SwapRequest {
 }
 
 /** Rank candidate single-card swaps that improve the hero (the suggestion loop). */
-export interface SuggestRequest {
+export interface SuggestRequest extends SimRequestBase {
   readonly kind: 'suggest';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -62,7 +75,7 @@ export interface SuggestRequest {
  * sits in seat A, the opponent in seat B; the worker resolves the opponent by
  * sample-deck name. A `maxEvents` cap bounds a pathological game's trace.
  */
-export interface MatchRequest {
+export interface MatchRequest extends SimRequestBase {
   readonly kind: 'match';
   readonly hero: SimDeckPayload;
   /** Sample-deck name to play against (resolved by the worker). */
