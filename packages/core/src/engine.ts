@@ -306,7 +306,7 @@ function performStepTurnBasedActions(
       break;
     }
     case 'beginCombat': {
-      state.combat = { attackers: [], blocks: {} };
+      state.combat = { attackers: [], blocks: {}, attackersDeclared: false, blockersDeclared: false };
       advanceToStepWithPriority(state, step, emit);
       break;
     }
@@ -525,6 +525,10 @@ function findInstanceAnywhere(state: GameState, id: InstanceId): CardInstance | 
  * Apply a single action to a state. Clones the input, validates, mutates the
  * draft, and returns the new state + events. Illegal actions are rejected cleanly
  * with an `actionRejected` event — the engine never throw-crashes on bad input.
+ *
+ * The caller's `prevState` is never modified: this is the pure entry point the
+ * sim, the replay, and the UI all rely on. Look-ahead search that owns its state
+ * outright can skip the copy with {@link applyActionInPlace}.
  */
 export function applyAction(
   prevState: GameState,
@@ -532,7 +536,48 @@ export function applyAction(
   config: RulesConfig = DEFAULT_RULES,
   registry?: EffectRegistry,
 ): EngineResult {
-  const state = cloneState(prevState);
+  return applyActionToDraft(cloneState(prevState), prevState, action, config, registry);
+}
+
+/**
+ * Apply an action by MUTATING `state` directly, skipping the defensive clone.
+ *
+ * This exists for look-ahead search (the MCTS pilot), which plays out hundreds of
+ * thousands of hypothetical actions and already owns a private copy of the state.
+ * `applyAction`'s clone deep-copies both players' whole libraries — well over a
+ * hundred card instances — on EVERY action, so cloning per ply dominated rollout
+ * cost. Cloning once per playout instead and mutating from there is exactly the
+ * same search: identical actions, identical results, far less garbage.
+ *
+ * ⚠️ The caller MUST own `state` exclusively — anything still holding a reference
+ * observes the mutation. Never pass a state the sim, the UI, or a replay can see.
+ * Prefer {@link applyAction} everywhere else.
+ *
+ * Rejections are still safe: every action validates fully before it mutates, so a
+ * rejected action leaves `state` untouched (it returns a copy, as the pure path
+ * does, keeping the two entry points' contracts identical).
+ */
+export function applyActionInPlace(
+  state: GameState,
+  action: GameAction,
+  config: RulesConfig = DEFAULT_RULES,
+  registry?: EffectRegistry,
+): EngineResult {
+  return applyActionToDraft(state, state, action, config, registry);
+}
+
+/**
+ * The shared body: `state` is a draft the caller permits us to mutate, and
+ * `prevState` is what a rejection reports (cloned by `rejectWith`, so a rejected
+ * action never hands back an aliased or half-written state either way).
+ */
+function applyActionToDraft(
+  state: GameState,
+  prevState: GameState,
+  action: GameAction,
+  config: RulesConfig,
+  registry?: EffectRegistry,
+): EngineResult {
   const events: GameEvent[] = [];
   const baseEmit = (e: GameEvent) => events.push(e);
   // Wrap emit so every mutation's event is scanned for triggered abilities. The
@@ -752,7 +797,7 @@ function applyDeclareAttackers(
   if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
   if (state.step !== 'declareAttackers') return rejectWith(prevState, 'not the declare-attackers step');
   if (!state.combat) return rejectWith(prevState, 'not in combat');
-  if (state.combat.attackers.length > 0) return rejectWith(prevState, 'attackers already declared');
+  if (state.combat.attackersDeclared) return rejectWith(prevState, 'attackers already declared');
 
   // Validate each attacker. Read EFFECTIVE keywords (printed OR continuous grants)
   // so an until-EOT haste/defender grant is honored for attack legality (DESIGN §3.9).
@@ -771,6 +816,7 @@ function applyDeclareAttackers(
   }
 
   state.combat.attackers = [...action.attackers];
+  state.combat.attackersDeclared = true;
   tapAttackers(state, action.attackers, emit);
   emit({ type: 'attackersDeclared', attackers: [...action.attackers] });
   // Priority passes to active player (could cast a trick), then on to blockers.
@@ -790,7 +836,7 @@ function applyDeclareBlockers(
   if (action.player !== defender) return rejectWith(prevState, 'only the defending player declares blockers');
   if (state.step !== 'declareBlockers') return rejectWith(prevState, 'not the declare-blockers step');
   if (!state.combat) return rejectWith(prevState, 'not in combat');
-  if (Object.keys(state.combat.blocks).length > 0) return rejectWith(prevState, 'blockers already declared');
+  if (state.combat.blockersDeclared) return rejectWith(prevState, 'blockers already declared');
 
   // Read EFFECTIVE evasion (printed OR continuous grants) so an until-EOT flying/reach
   // grant is honored for block legality, matching the damage step which builds the same
@@ -812,6 +858,7 @@ function applyDeclareBlockers(
   const blocks: Record<InstanceId, InstanceId> = {};
   for (const { blocker, attacker } of action.blocks) blocks[blocker] = attacker;
   state.combat.blocks = blocks;
+  state.combat.blockersDeclared = true;
   emit({
     type: 'blockersDeclared',
     blocks: action.blocks.map((b) => ({ blocker: b.blocker, attacker: b.attacker })),
@@ -878,7 +925,10 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   }
 
   // Declare attackers: a single composite action listing all eligible attackers.
-  if (state.step === 'declareAttackers' && me === state.activePlayer && state.combat && state.combat.attackers.length === 0) {
+  // Gated on the DECLARED flag, not on emptiness — "I attack with nobody" is a
+  // real choice, and re-offering it afterwards is what let a searching pilot
+  // declare an empty attack forever without the step ever advancing.
+  if (state.step === 'declareAttackers' && me === state.activePlayer && state.combat && !state.combat.attackersDeclared) {
     // Effective keywords (printed OR continuous grants) so a haste/defender granted
     // by an until-EOT effect is reflected in the eligible-attacker set (DESIGN §3.9).
     const cont = indexContinuous(state);
@@ -897,11 +947,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   }
 
   // Declare blockers: offer the empty (no-block) declaration as a baseline; the AI
-  // constructs specific assignments and passes them to applyAction.
-  if (state.step === 'declareBlockers' && me === defendingPlayerOf(state) && state.combat) {
-    if (Object.keys(state.combat.blocks).length === 0) {
-      actions.push({ kind: 'declareBlockers', player: me, blocks: [] });
-    }
+  // constructs specific assignments and passes them to applyAction. Same reasoning
+  // as attackers — gate on the flag, since declaring no blocks is legal and common.
+  if (
+    state.step === 'declareBlockers' &&
+    me === defendingPlayerOf(state) &&
+    state.combat &&
+    !state.combat.blockersDeclared
+  ) {
+    actions.push({ kind: 'declareBlockers', player: me, blocks: [] });
   }
 
   return actions;

@@ -62,6 +62,29 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-13 DESKTOP-90PJPM4: `fix/ai-play-quality` — **COMBAT COULD NOT END.** The reason MCTS games
+  appeared to "take forever" was not search cost: `CombatState` inferred "have attackers/blockers been
+  declared?" from whether the list was NON-EMPTY. But declaring *no* attackers (or no blockers) is a
+  legal, routine choice, so an empty declaration left the step looking undeclared, it was offered again,
+  and since declaring resets `consecutivePasses` **the step could never advance**. A pilot that passes by
+  convention (heuristic) never hit it; a pilot that SEARCHES its options did — MCTS spun one
+  declare-blockers step 240+ times and a game never got past turn 5 in 4000 actions.
+  Fix: explicit `attackersDeclared` / `blockersDeclared` flags on `CombatState`, gated in both
+  `applyDeclare*` and `generateLegalActions`. Anyone constructing a `CombatState` literal must set them
+  (test fixtures updated). Regression covered in `packages/core/src/combat-declaration.test.ts`,
+  including a full game of adversarial empty declarations that must still reach turn > 8.
+  Perf, all strength-neutral (same search, same results — measured, not assumed):
+  • `applyActionInPlace` — a no-clone entry point for look-ahead that already owns its state. The pure
+    `applyAction` deep-copies BOTH libraries (100+ instances) per action; MCTS now clones once per
+    playout instead of once per ply.
+  • MCTS skips windows where the only options are mana taps and nothing in hand is castable — pools
+    empty each step, so that mana is provably unspendable. Cut searched decisions 390 → 216.
+  Net for one full game: **never terminated → 50s → 29s** (bench), and end-to-end **18.6 s/game**
+  (10-game CLI match). Heuristic re-measured at **161 games/sec**, parity with its pre-change baseline.
+  ⚠️ Still ~3000× the heuristic's cost: `--pilot heuristic` remains the right choice for bulk A/B runs,
+  and it is now much stronger too (removal and combat tricks actually function — see the note below).
+  (Worker — branch pushed.)
+
 - 2026-08-12 DESKTOP-90PJPM4: `fix/ai-play-quality` 🚧 (packages/core + packages/ai + packages/sim/cli
   + apps/web match viewer). Four real bugs a user spotted while WATCHING a game, plus the AI upgrade:
   1. **Summoning sickness did not gate `{T}` abilities** (rule 302.6). A Birds of Paradise could tap for

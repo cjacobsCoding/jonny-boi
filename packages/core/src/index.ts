@@ -128,7 +128,12 @@ export { DEFAULT_MANA_MODE } from './actions.js';
 
 // Engine
 export type { DeckList, GameSetup, EngineResult, Engine } from './engine.js';
-export { createGame, createEngine, applyAction, generateLegalActions } from './engine.js';
+export { createGame, createEngine, applyAction, applyActionInPlace, generateLegalActions } from './engine.js';
+/**
+ * Deep-copy the mutable parts of a state (card definitions stay shared). Paired
+ * with `applyActionInPlace`: a look-ahead pilot clones once, then mutates freely.
+ */
+export { cloneState } from './internal/clone.js';
 
 // Stat helpers (combat/SBA-facing; AI heuristics will want these). The effective
 // accessors take an optional AggregatedMod so callers can layer continuous effects

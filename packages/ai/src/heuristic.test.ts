@@ -47,7 +47,7 @@ function intoDeclareAttackers(state: GameState): void {
   state.step = 'declareAttackers';
   state.activePlayer = 'A';
   state.priorityPlayer = 'A';
-  state.combat = { attackers: [], blocks: {} };
+  state.combat = { attackers: [], blocks: {}, attackersDeclared: false, blockersDeclared: false };
 }
 
 /** Put B into the declare-blockers step defending against A's attackers. */
@@ -55,7 +55,12 @@ function intoDeclareBlockers(state: GameState, attackers: CardInstance[]): void 
   state.step = 'declareBlockers';
   state.activePlayer = 'A';
   state.priorityPlayer = 'B';
-  state.combat = { attackers: attackers.map((a) => a.instanceId), blocks: {} };
+  state.combat = {
+    attackers: attackers.map((a) => a.instanceId),
+    blocks: {},
+    attackersDeclared: true,
+    blockersDeclared: false,
+  };
 }
 
 const pilot = createHeuristicPilot();
@@ -281,7 +286,7 @@ describe('heuristic pilot — combat tricks (pump)', () => {
     state.step = 'declareBlockers';
     state.activePlayer = 'A';
     state.priorityPlayer = 'A';
-    state.combat = { attackers: [ours!.instanceId], blocks: { [theirs!.instanceId]: ours!.instanceId } };
+    state.combat = { attackers: [ours!.instanceId], blocks: { [theirs!.instanceId]: ours!.instanceId }, attackersDeclared: true, blockersDeclared: true };
     giveHand(state, 'A', [pumpDef('Giant Growth', 3, 3)]);
     addPool(state, 'A', 'G', 1);
 
@@ -300,7 +305,7 @@ describe('heuristic pilot — combat tricks (pump)', () => {
     state.step = 'declareBlockers';
     state.activePlayer = 'A';
     state.priorityPlayer = 'A';
-    state.combat = { attackers: [ours!.instanceId], blocks: {} };
+    state.combat = { attackers: [ours!.instanceId], blocks: {}, attackersDeclared: true, blockersDeclared: true };
     giveHand(state, 'A', [pumpDef('Giant Growth', 3, 3)]);
     addPool(state, 'A', 'G', 1);
 
@@ -317,7 +322,7 @@ describe('heuristic pilot — combat tricks (pump)', () => {
     state.step = 'declareBlockers';
     state.activePlayer = 'A';
     state.priorityPlayer = 'A';
-    state.combat = { attackers: [ours!.instanceId], blocks: { [theirs!.instanceId]: ours!.instanceId } };
+    state.combat = { attackers: [ours!.instanceId], blocks: { [theirs!.instanceId]: ours!.instanceId }, attackersDeclared: true, blockersDeclared: true };
     giveHand(state, 'A', [pumpDef('Giant Growth', 3, 3)]);
     addPool(state, 'A', 'G', 1);
 
