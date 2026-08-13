@@ -62,15 +62,21 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
-- 2026-08-12 DESKTOP-90PJPM4: `feat/app-icon` ✅ (apps/web icons only) — replaced the "jb" placeholder
-  with a real app icon, "The Rake": three claw gashes torn across a dark plane bleeding the five colors
-  of magic. It is **generated**, not hand-drawn — `apps/web/scripts/generate-icons.mjs` (`npm run icons
-  -w @jonny-boi/web`) emits all seven assets from one set of named constants, so retuning the mark is a
-  constant edit, never seven file edits. All original vector geometry: no traced Wizards/Scryfall art and
-  no trademarked symbols. Manifest now declares `any` and `maskable` as **separate** assets (the old
-  single "any maskable" entry would have had the framed icon cropped by Android's launcher mask).
-  Regenerating PNGs needs `npm i -D sharp`; it is deliberately not a repo dep since the PNGs are
-  committed. (Integrator)
+- 2026-08-13 DESKTOP-90PJPM4: `feat/app-icon` ✅ (apps/web icons only) — replaced the "jb" placeholder
+  with **AI-generated key art**: a phoenix erupting in fire inside a burning ring.
+  **Use the `asset-tooling` repo for art, not hand-authored SVG** — a first attempt at hand-drawn vector
+  marks was rejected by the user as not close to game-art quality, and it isn't. Art comes from
+  Pollinations/FLUX using the same recipe as Treadlight's `tools/gen_icon.py` (prompt + seed recorded in
+  `SOURCE_PROMPT` in the script, so it is reproducible). Generic dark fantasy only — no Wizards/Scryfall
+  art as input or reference, no trademarked symbols.
+  `apps/web/scripts/generate-icons.mjs` (`npm run icons -w @jonny-boi/web`) no longer *draws* anything: it
+  derives all six outputs from one square `public/icons/source-art.png`, so **swapping the icon = drop in a
+  new PNG + re-run**. `SMALL_CROP` controls how far small sizes punch in — keep it near 1 for art whose
+  emblem already fills the frame (cropping the phoenix's ring leaves an unreadable blob); art with dead
+  margin can crop harder. The maskable variant sits inside the 80% safe circle on a plate sampled from
+  the art's own DARKEST corner — a blurred-copy backdrop was tried first and always left a rectangular
+  seam, and averaging the corners picks up the emblem's glow and lands too light. Manifest/`index.html` are now PNG-only (the SVG icons are gone). Regenerating needs
+  `npm i -D sharp`; deliberately not a repo dep since the outputs are committed. (Integrator)
 
 - 2026-06-26 DESKTOP-90PJPM4: `feat/proxy-print` 🚧 (apps/web) — porting the user's separate `mtg-proxy-man`
   tool (Python/PySide6/Scribus proxy-print pipeline: A4, exact card size, custom art, upscaling; the real
