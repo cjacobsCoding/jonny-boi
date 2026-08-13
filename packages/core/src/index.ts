@@ -32,11 +32,13 @@ export type { Rng } from './rng.js';
 export { createRng, shuffle } from './rng.js';
 
 // Mana
-export type { ManaColor, ManaCost, ManaPool, PaymentResult } from './mana.js';
+export type { ManaColor, ManaCost, ManaPool, ManaProduction, PaymentResult } from './mana.js';
 export {
   MANA_COLORS,
   emptyPool,
   addMana,
+  addProduction,
+  productionTotal,
   poolTotal,
   convertedManaCost,
   payCost,
@@ -56,6 +58,9 @@ export {
   isLand,
   isCreature,
   isPermanentType,
+  isManaSource,
+  manaModesOf,
+  bestManaYield,
   castTiming,
 } from './card.js';
 
@@ -119,10 +124,16 @@ export type {
   DeclareAttackersAction,
   DeclareBlockersAction,
 } from './actions.js';
+export { DEFAULT_MANA_MODE } from './actions.js';
 
 // Engine
 export type { DeckList, GameSetup, EngineResult, Engine } from './engine.js';
-export { createGame, createEngine, applyAction, generateLegalActions } from './engine.js';
+export { createGame, createEngine, applyAction, applyActionInPlace, generateLegalActions } from './engine.js';
+/**
+ * Deep-copy the mutable parts of a state (card definitions stay shared). Paired
+ * with `applyActionInPlace`: a look-ahead pilot clones once, then mutates freely.
+ */
+export { cloneState } from './internal/clone.js';
 
 // Stat helpers (combat/SBA-facing; AI heuristics will want these). The effective
 // accessors take an optional AggregatedMod so callers can layer continuous effects

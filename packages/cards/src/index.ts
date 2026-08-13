@@ -54,6 +54,16 @@ export {
 // The raw data (read-only) for tooling/UI that wants the whole list.
 export { CARD_POOL } from '../data/pool.js';
 
+// Oracle-text compiler — import ANY real card as a genuine engine definition, or
+// get an honest list of the engine systems it would still need (`./compile`).
+export type {
+  CompilableCard,
+  CompileResult,
+  CompileStatus,
+  UnsupportedClause,
+} from './compile/index.js';
+export { compileCard, compileCards, explainUnsupported } from './compile/index.js';
+
 /**
  * Mechanics intentionally stubbed because the engine (even with v2's triggers +
  * until-end-of-turn continuous effects, DESIGN §3.9) lacks the system to model them

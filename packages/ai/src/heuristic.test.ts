@@ -16,6 +16,7 @@ import {
   destroyDef,
   giveHand,
   landDef,
+  pumpDef,
   putOnBattlefield,
 } from './test-support.js';
 
@@ -46,7 +47,7 @@ function intoDeclareAttackers(state: GameState): void {
   state.step = 'declareAttackers';
   state.activePlayer = 'A';
   state.priorityPlayer = 'A';
-  state.combat = { attackers: [], blocks: {} };
+  state.combat = { attackers: [], blocks: {}, attackersDeclared: false, blockersDeclared: false };
 }
 
 /** Put B into the declare-blockers step defending against A's attackers. */
@@ -54,7 +55,12 @@ function intoDeclareBlockers(state: GameState, attackers: CardInstance[]): void 
   state.step = 'declareBlockers';
   state.activePlayer = 'A';
   state.priorityPlayer = 'B';
-  state.combat = { attackers: attackers.map((a) => a.instanceId), blocks: {} };
+  state.combat = {
+    attackers: attackers.map((a) => a.instanceId),
+    blocks: {},
+    attackersDeclared: true,
+    blockersDeclared: false,
+  };
 }
 
 const pilot = createHeuristicPilot();
@@ -135,7 +141,8 @@ describe('heuristic pilot — removal & burn', () => {
     // A controls an untapped Mountain but has no floating mana yet.
     const [mountain] = putOnBattlefield(state, 'A', [landDef('Mountain', 'R')]);
     const action = choose(state);
-    expect(action).toEqual({ kind: 'tapForMana', player: 'A', instanceId: mountain!.instanceId });
+    // `mode` names which mana the tap makes; a Mountain has exactly one mode.
+    expect(action).toEqual({ kind: 'tapForMana', player: 'A', instanceId: mountain!.instanceId, mode: 0 });
   });
 
   it('does not waste removal when there is no valid target', () => {
@@ -256,5 +263,134 @@ describe('heuristic pilot — blocking', () => {
     pilot.chooseAction({ view: state, legalActions: legal, rng: rng(), trace: (t) => traces.push(t.reason) });
     expect(traces.length).toBeGreaterThan(0);
     expect(traces[0]).toContain('land');
+  });
+});
+
+describe('heuristic pilot — combat tricks (pump)', () => {
+  it('does NOT cast a pump in the main phase, where it does nothing', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'A', [creatureDef('Bear', 2, 2)]);
+    giveHand(state, 'A', [pumpDef('Giant Growth', 3, 3)]);
+    addPool(state, 'A', 'G', 1);
+    const action = choose(state);
+    // The old pilot cast this here with NO target, which silently no-opped.
+    expect(action.kind).not.toBe('castSpell');
+  });
+
+  it('casts a pump to SAVE a blocked attacker that would otherwise die, and names the target', () => {
+    const state = freshGame();
+    const [ours] = putOnBattlefield(state, 'A', [creatureDef('Bear', 2, 2)]);
+    const [theirs] = putOnBattlefield(state, 'B', [creatureDef('Ogre', 3, 3)]);
+    // A's Bear attacks and is blocked by B's Ogre: without help the Bear dies.
+    state.step = 'declareBlockers';
+    state.activePlayer = 'A';
+    state.priorityPlayer = 'A';
+    state.combat = { attackers: [ours!.instanceId], blocks: { [theirs!.instanceId]: ours!.instanceId }, attackersDeclared: true, blockersDeclared: true };
+    giveHand(state, 'A', [pumpDef('Giant Growth', 3, 3)]);
+    addPool(state, 'A', 'G', 1);
+
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') {
+      // +3/+3 makes the Bear a 5/5: it survives 3 damage AND kills the 3/3.
+      expect(action.targets).toEqual([ours!.instanceId]);
+    }
+  });
+
+  it('casts a pump for LETHAL through an unblocked attacker', () => {
+    const state = freshGame();
+    const [ours] = putOnBattlefield(state, 'A', [creatureDef('Bear', 2, 2)]);
+    state.players.B.life = 5; // 2 power + 3 pump = exactly lethal
+    state.step = 'declareBlockers';
+    state.activePlayer = 'A';
+    state.priorityPlayer = 'A';
+    state.combat = { attackers: [ours!.instanceId], blocks: {}, attackersDeclared: true, blockersDeclared: true };
+    giveHand(state, 'A', [pumpDef('Giant Growth', 3, 3)]);
+    addPool(state, 'A', 'G', 1);
+
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') expect(action.targets).toEqual([ours!.instanceId]);
+  });
+
+  it('holds the pump when it would change no combat outcome', () => {
+    const state = freshGame();
+    const [ours] = putOnBattlefield(state, 'A', [creatureDef('Ogre', 4, 4)]);
+    const [theirs] = putOnBattlefield(state, 'B', [creatureDef('Rat', 1, 1)]);
+    state.players.B.life = 20; // nowhere near lethal
+    state.step = 'declareBlockers';
+    state.activePlayer = 'A';
+    state.priorityPlayer = 'A';
+    state.combat = { attackers: [ours!.instanceId], blocks: { [theirs!.instanceId]: ours!.instanceId }, attackersDeclared: true, blockersDeclared: true };
+    giveHand(state, 'A', [pumpDef('Giant Growth', 3, 3)]);
+    addPool(state, 'A', 'G', 1);
+
+    // The Ogre already kills the Rat and already survives it — the trick is waste.
+    const action = choose(state);
+    expect(action.kind).not.toBe('castSpell');
+  });
+});
+
+describe('heuristic pilot — mana is tapped only as needed', () => {
+  it('stops tapping once the cost is covered (no stranded floating mana)', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    // Five untapped Forests, but the spell in hand costs {G}{G}.
+    putOnBattlefield(state, 'A', [
+      landDef('Forest1', 'G'),
+      landDef('Forest2', 'G'),
+      landDef('Forest3', 'G'),
+      landDef('Forest4', 'G'),
+      landDef('Forest5', 'G'),
+    ]);
+    giveHand(state, 'A', [creatureDef('Bear', 2, 2, { cost: { G: 2 } })]);
+
+    // Drive the pilot forward until it casts, counting the taps it makes.
+    let taps = 0;
+    let s = state;
+    for (let i = 0; i < 10; i++) {
+      const action = choose(s);
+      if (action.kind === 'castSpell') break;
+      expect(action.kind).toBe('tapForMana');
+      if (action.kind === 'tapForMana') {
+        taps++;
+        const perm = s.battlefield.find((c) => c.instanceId === action.instanceId)!;
+        perm.tapped = true;
+        s.players.A.manaPool.G += 1;
+      }
+    }
+    // Exactly two taps for a two-mana spell — the old pilot could tap more.
+    expect(taps).toBe(2);
+  });
+
+  it('does not commit to a spell it cannot fund, and passes instead', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    // One Forest on board, but the only spell costs five.
+    putOnBattlefield(state, 'A', [landDef('Forest', 'G')]);
+    giveHand(state, 'A', [creatureDef('Giant', 6, 6, { cost: { G: 5 } })]);
+    const action = choose(state);
+    expect(action.kind).toBe('passPriority');
+  });
+
+  it('taps a one-colour source before an any-colour one, keeping flexibility', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    const bird: Parameters<typeof putOnBattlefield>[2][number] = {
+      id: 'Bird',
+      name: 'Bird',
+      types: ['creature'],
+      power: 0,
+      toughness: 1,
+      producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+    };
+    const [forest] = putOnBattlefield(state, 'A', [landDef('Forest', 'G')]);
+    putOnBattlefield(state, 'A', [bird]);
+    giveHand(state, 'A', [creatureDef('Bear', 2, 2, { cost: { G: 1 } })]);
+
+    const action = choose(state);
+    expect(action.kind).toBe('tapForMana');
+    if (action.kind === 'tapForMana') expect(action.instanceId).toBe(forest!.instanceId);
   });
 });

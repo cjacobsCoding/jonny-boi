@@ -40,6 +40,19 @@ export function loadCardPool(options?: {
   readonly onWarn?: (message: string) => void;
   /** Known primitive ids to validate against; defaults to this package's set. */
   readonly knownPrimitiveIds?: readonly string[];
+  /**
+   * Extra definitions to load alongside the curated pool — the seam deck import
+   * plugs into (DESIGN §2). The web app passes definitions produced by the
+   * Oracle compiler (`./compile`) for cards the user imported, so an imported
+   * deck resolves, validates and *plays* through exactly the same code path as
+   * a curated one. Only definitions the compiler judged COMPLETE should be
+   * passed: an id here is treated as fully playable.
+   *
+   * A card whose id is already in the curated pool does not override it — the
+   * hand-authored definition wins, since it was written and reviewed for the
+   * engine specifically.
+   */
+  readonly extraCards?: readonly CardDefinition[];
 }): CardPool {
   const onWarn = options?.onWarn ?? ((m: string) => console.warn(m));
   const known = new Set(options?.knownPrimitiveIds ?? CORE_PRIMITIVE_IDS);
@@ -48,7 +61,11 @@ export function loadCardPool(options?: {
   const byName = new Map<string, CardDefinition>();
   const unsupportedRefs: UnsupportedRef[] = [];
 
-  for (const card of CARD_POOL) {
+  const curatedIds = new Set(CARD_POOL.map((card) => card.id));
+  const extras = (options?.extraCards ?? []).filter((card) => !curatedIds.has(card.id));
+  const allCards: readonly CardDefinition[] = extras.length > 0 ? [...CARD_POOL, ...extras] : CARD_POOL;
+
+  for (const card of allCards) {
     if (byId.has(card.id)) onWarn(`[cards] duplicate card id '${card.id}' (${card.name})`);
     byId.set(card.id, card);
     byName.set(card.name, card);
@@ -64,7 +81,7 @@ export function loadCardPool(options?: {
   }
 
   return {
-    cards: CARD_POOL,
+    cards: allCards,
     get: (id) => byId.get(id),
     getByName: (name) => byName.get(name),
     unsupportedRefs,

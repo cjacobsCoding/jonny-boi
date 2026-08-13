@@ -45,13 +45,20 @@ import type {
   Rng,
 } from '@jonny-boi/core';
 import {
-  applyAction,
+  applyActionInPlace,
+  bestManaYield,
+  castTiming,
+  cloneState,
+  convertedManaCost,
   createEffectRegistry,
   DEFAULT_RULES,
   effectivePower,
   effectiveToughness,
   generateLegalActions,
   isCreature,
+  isLand,
+  MAIN_STEPS,
+  MANA_COLORS,
 } from '@jonny-boi/core';
 import type { DecisionContext, Pilot } from './pilot.js';
 import type { MctsConfig } from './mcts-config.js';
@@ -128,6 +135,17 @@ function search(ctx: DecisionContext, config: MctsConfig, rolloutPilot: Pilot): 
     return only;
   }
 
+  // A window where the only thing on offer is floating mana we could never spend
+  // is not a decision — pass without paying for a search. This is free strength:
+  // mana pools empty at the end of every step, so mana tapped with nothing
+  // castable is strictly wasted, and these windows are the single most common
+  // shape in a game (every opponent step where we hold no affordable instant).
+  if (isUnspendableManaWindow(view as GameState, nonPass)) {
+    const pass = legalActions.find((a) => a.kind === 'passPriority') ?? (legalActions[0] as GameAction);
+    ctx.trace?.({ action: pass, reason: 'no castable spell — mana would be wasted, passing' });
+    return pass;
+  }
+
   const registry = ctx.registry ?? createEffectRegistry();
   const rulesConfig = ctx.rulesConfig ?? DEFAULT_RULES;
 
@@ -187,10 +205,11 @@ function runSimulation(
   rolloutPilot: Pilot,
   rng: Rng,
 ): void {
-  // Each simulation starts from the (untouched) root state. The engine's
-  // `applyAction` is non-mutating — it clones internally — so each `step` yields a
-  // fresh state and the shared `rootState` is never modified.
-  let state: GameState = rootState;
+  // Each simulation starts from its OWN copy of the root state and mutates that
+  // copy from here on (`step` is in-place). This is the only clone a simulation
+  // makes: the shared `rootState` — which is the real, live game view — is never
+  // touched, and every ply after this one costs no copy at all.
+  let state: GameState = cloneState(rootState);
   const path: SearchNode[] = [root];
   const edges: ChildEdge[] = [];
 
@@ -333,14 +352,20 @@ function boardPresence(state: GameState, player: PlayerId): number {
 // --- engine glue ----------------------------------------------------------------
 
 /**
- * Apply one action to a sim state via the engine forward model. `applyAction`
- * clones internally and returns a fresh state; we adopt that as our working copy.
+ * Advance a simulation's PRIVATE state by one action, mutating it in place.
+ *
+ * Every caller here owns its state outright (each simulation clones the root once
+ * up front — see `runSimulation`), so the engine's defensive clone is pure waste:
+ * it deep-copies both players' entire libraries on every ply, and a single
+ * decision plays tens of thousands of plies. Cloning once per playout instead of
+ * once per ply searches exactly the same tree for a fraction of the allocation.
+ *
  * Robust: on any throw (shouldn't happen — the engine rejects bad input cleanly)
- * we keep the prior state so a rollout can't crash the search.
+ * we keep the state as-is so a rollout can't crash the search.
  */
 function step(state: GameState, action: GameAction, config: RulesConfig, registry: EffectRegistry): GameState {
   try {
-    return applyAction(state, action, config, registry).state;
+    return applyActionInPlace(state, action, config, registry).state;
   } catch {
     return state;
   }
@@ -369,9 +394,16 @@ interface DamageIntent {
   readonly canHitCreature: boolean;
 }
 
-/** The primitive ids the enrichment recognises for targeting (mirrors the heuristic). */
+/**
+ * The primitive ids the enrichment recognises for targeting (mirrors the
+ * heuristic's vocabulary). These MUST match the ids `cards` actually registers:
+ * an id that matches nothing leaves the spell as a bare, target-less cast, which
+ * resolves as a no-op — so a typo here silently turns removal and combat tricks
+ * into blank cards that the search then cheerfully "spends".
+ */
 const DAMAGE_PRIMITIVE = 'dealDamage';
-const DESTROY_PRIMITIVE = 'destroy';
+const REMOVAL_PRIMITIVES: readonly string[] = ['destroyTarget', 'exileTarget'];
+const PUMP_PRIMITIVE = 'pumpUntilEndOfTurn';
 
 /**
  * Expand the engine's bare legal actions into the set MCTS actually searches: every
@@ -397,8 +429,9 @@ function candidateActions(state: GameState, legal: readonly GameAction[]): GameA
     }
     const card = handCard(state, me, action.instanceId);
     const intent = card ? damageIntentOf(card.def) : undefined;
-    const isDestroy = card ? hasPrimitive(card.def, DESTROY_PRIMITIVE) : false;
-    if (!intent && !isDestroy) {
+    const isRemoval = card ? REMOVAL_PRIMITIVES.some((p) => hasPrimitive(card.def, p)) : false;
+    const isPump = card ? hasPrimitive(card.def, PUMP_PRIMITIVE) : false;
+    if (!intent && !isRemoval && !isPump) {
       out.push(action); // creature / non-targeting spell — cast as-is
       continue;
     }
@@ -415,8 +448,15 @@ function candidateActions(state: GameState, legal: readonly GameAction[]): GameA
           added = true;
         }
       }
-    } else if (isDestroy) {
+    } else if (isRemoval) {
       for (const id of topThreatIds(oppCreatures, Infinity)) {
+        out.push({ ...action, targets: [id] });
+        added = true;
+      }
+    } else if (isPump) {
+      // A pump targets OUR OWN creature, so it needs its own candidate set —
+      // enriching it against enemy creatures would only ever help the opponent.
+      for (const id of pumpTargetIds(state, me)) {
         out.push({ ...action, targets: [id] });
         added = true;
       }
@@ -453,6 +493,68 @@ function handCard(state: GameState, player: PlayerId, id: InstanceId) {
 
 function opposingCreatures(state: GameState, opp: PlayerId) {
   return state.battlefield.filter((c) => c.controller === opp && isCreature(c.def));
+}
+
+/**
+ * Candidate targets for a pump: our own creatures, **creatures currently in
+ * combat first** — that is where a trick decides something. Capped like the
+ * removal targets so the branching factor stays bounded.
+ */
+function pumpTargetIds(state: GameState, me: PlayerId): InstanceId[] {
+  const inCombat = new Set<InstanceId>();
+  if (state.combat) {
+    for (const id of state.combat.attackers) inCombat.add(id);
+    for (const blocker of Object.keys(state.combat.blocks)) inCombat.add(Number(blocker) as InstanceId);
+  }
+  return state.battlefield
+    .filter((c) => c.controller === me && isCreature(c.def))
+    .sort((a, b) => {
+      const combatDelta = Number(inCombat.has(b.instanceId)) - Number(inCombat.has(a.instanceId));
+      return combatDelta !== 0 ? combatDelta : effectivePower(b) - effectivePower(a);
+    })
+    .slice(0, MAX_PUMP_TARGETS)
+    .map((c) => c.instanceId);
+}
+
+/** Keep the pump branching factor small — the creature that matters is in combat. */
+const MAX_PUMP_TARGETS = 2;
+
+/**
+ * True when every action on offer is "tap something for mana" AND no card in hand
+ * could be cast in this window even after tapping everything available. Such a
+ * window has exactly one sensible line — pass — so searching it is pure cost.
+ *
+ * Safe by the rules, not just by heuristic: mana pools empty at the end of each
+ * step, so mana produced with nothing to spend it on is simply lost. There is no
+ * "hold up mana" line to miss here, because holding it is not a thing the pool
+ * permits.
+ */
+function isUnspendableManaWindow(state: GameState, nonPass: readonly GameAction[]): boolean {
+  if (nonPass.length === 0) return false;
+  for (const action of nonPass) {
+    if (action.kind !== 'tapForMana') return false;
+  }
+
+  const me = state.priorityPlayer;
+  const player = state.players[me];
+
+  // The most mana we could put in the pool this window: what floats now, plus the
+  // best single mode of every untapped source we control.
+  let available = 0;
+  for (const color of MANA_COLORS) available += player.manaPool[color];
+  for (const perm of state.battlefield) {
+    if (perm.controller === me && !perm.tapped) available += bestManaYield(perm.def);
+  }
+
+  const sorcerySpeedOpen =
+    me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+
+  for (const card of player.hand) {
+    if (isLand(card.def)) continue;
+    if (castTiming(card.def) !== 'instant' && !sorcerySpeedOpen) continue;
+    if (convertedManaCost(card.def.cost ?? {}) <= available) return false; // something to play for
+  }
+  return true;
 }
 
 /**

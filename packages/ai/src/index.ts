@@ -71,6 +71,23 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
 }
 
 /**
+ * The pilot every consumer uses unless it is told otherwise — the CLI sim, the
+ * in-browser lab, and the "watch a game" replay all read this one constant, so
+ * the strength of AI play is a single data decision rather than a default
+ * repeated at each call site.
+ *
+ * It is the LOOK-AHEAD pilot: the heuristic is one action deep and cannot plan a
+ * turn, let alone several, so games piloted by it read as "tap everything, dump
+ * the hand". MCTS searches real engine rollouts instead. It is materially slower
+ * per decision (see `MctsConfig.simulationsPerDecision`) — that cost buys the
+ * play quality, and `FAST_MCTS_CONFIG` exists for speed-sensitive callers.
+ */
+export const DEFAULT_PILOT_ID = MCTS_PILOT_ID;
+
+/** The pilot ids a consumer may select from data (CLI flag, UI picker). */
+export const SELECTABLE_PILOT_IDS: readonly string[] = [MCTS_PILOT_ID, HEURISTIC_PILOT_ID, RANDOM_PILOT_ID];
+
+/**
  * Convenience: resolve a pilot by id from a fresh default registry. For one-off
  * lookups; long-lived consumers should build one registry via
  * `createDefaultAiRegistry` and reuse it.

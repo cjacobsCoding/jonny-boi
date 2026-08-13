@@ -41,6 +41,20 @@ export interface HeuristicWeights {
    *  bodies are better development. */
   readonly castCreaturePerStat: number;
 
+  // --- combat tricks (pump) ------------------------------------------------
+  /** Base score for a +X/+Y trick that saves one of our creatures from dying in
+   *  combat. Cards-for-cards this is a real two-for-one, so it sits near removal;
+   *  the creature's own stats are added on top (see `ownCreatureLossPerStat`). */
+  readonly pumpSaveCreatureScore: number;
+  /** Base score for a trick that lets our creature win a fight it would otherwise
+   *  lose or draw. The victim's stats are added on top (`killEnemyPerStat`). */
+  readonly pumpWinFightScore: number;
+  /** Score per point of extra face damage from pumping an UNBLOCKED attacker.
+   *  Deliberately small: spending a card to chip a few life is a poor rate, so
+   *  this only wins when nothing better is on offer (lethal is scored separately
+   *  at `lethalBurnScore`). */
+  readonly pumpFaceDamagePerPower: number;
+
   // --- generic / fallback --------------------------------------------------
   /** Score for any other castable spell we don't specifically understand. Above
    *  passing (so we do *something* with mana) but below targeted plays. */
@@ -74,8 +88,9 @@ export interface HeuristicWeights {
 
 /**
  * The default, MTG-sensible weights. Tuned so the ordering is:
- *   lethal burn  >  play land  >  removal (scaled by threat)  >  develop board
- *   >  burn face  >  generic spell  >  pass.
+ *   lethal burn  >  play land  >  removal (scaled by threat)  >  combat trick
+ *   that saves a creature or wins a fight  >  develop board  >  burn face
+ *   >  generic spell  >  pass.
  * Numbers are coarse on purpose — the *relative ordering* is the design, and it's
  * all editable here.
  */
@@ -94,6 +109,12 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // develop
   castCreatureBaseScore: 40,
   castCreaturePerStat: 2,
+
+  // combat tricks — saving a creature or winning a fight is removal-adjacent
+  // value; pumping an unblocked attacker for a few points is not.
+  pumpSaveCreatureScore: 50,
+  pumpWinFightScore: 55,
+  pumpFaceDamagePerPower: 2,
 
   // generic / fallback
   genericSpellScore: 25,

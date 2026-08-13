@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import type { NormalizedCard } from '@jonny-boi/data-tools';
-import { allCards } from '../lib/cards.js';
+import { allAvailableCards } from '../lib/cards.js';
 import { queryCards, EMPTY_QUERY, type CardQuery } from '../lib/filter.js';
 import {
   deckSize,
@@ -10,7 +10,6 @@ import {
   manaCurve,
   validateDeck,
   toExport,
-  fromExport,
 } from '../lib/deck.js';
 import { MIN_DECK_SIZE } from '../lib/config.js';
 import type { DecksApi } from '../lib/useDecks.js';
@@ -18,6 +17,8 @@ import { CardToolbar } from '../components/CardToolbar.js';
 import { CardGrid } from '../components/CardGrid.js';
 import { CardDetail } from '../components/CardDetail.js';
 import { ManaCurveChart } from '../components/ManaCurveChart.js';
+import { ImportDeckDialog } from '../components/ImportDeckDialog.js';
+import { deckToDecklist } from '../lib/proxy/deckToText.js';
 
 /**
  * The Deck Builder: a card pool on the left (reusing the browser's toolbar +
@@ -29,7 +30,10 @@ export function DeckBuilderView({ decks }: { decks: DecksApi }): ReactElement {
   const [query, setQuery] = useState<CardQuery>(EMPTY_QUERY);
   const [selected, setSelected] = useState<NormalizedCard | null>(null);
 
-  const results = useMemo(() => queryCards(allCards, query), [query]);
+  // Includes cards added by deck import, so an imported card is browsable and
+  // re-addable exactly like a curated one.
+  const pool = useMemo(() => allAvailableCards(), [decks.decks]);
+  const results = useMemo(() => queryCards(pool, query), [pool, query]);
   const active = decks.activeDeck;
 
   const deckControls = (card: NormalizedCard) => {
@@ -69,8 +73,7 @@ function DeckPanel({
 }): ReactElement {
   const active = decks.activeDeck;
   const [ioOpen, setIoOpen] = useState(false);
-  const [importText, setImportText] = useState('');
-  const [importError, setImportError] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   if (!active) {
     return (
@@ -85,19 +88,6 @@ function DeckPanel({
   const curve = manaCurve(active);
   const issues = validateDeck(active);
   const atTarget = size >= MIN_DECK_SIZE;
-
-  const handleImport = () => {
-    try {
-      const parsed: unknown = JSON.parse(importText);
-      const deck = fromExport(parsed);
-      decks.importDeck(deck);
-      setImportText('');
-      setImportError(null);
-      setIoOpen(false);
-    } catch (error) {
-      setImportError(error instanceof Error ? error.message : 'Could not parse deck JSON.');
-    }
-  };
 
   const exportJson = JSON.stringify(toExport(active), null, 2);
 
@@ -114,13 +104,16 @@ function DeckPanel({
           <button type="button" className="btn btn--ghost" onClick={decks.newDeck}>
             New
           </button>
+          <button type="button" className="btn btn--primary" onClick={() => setImportOpen(true)}>
+            Import deck
+          </button>
           <button
             type="button"
             className="btn btn--ghost"
             onClick={() => setIoOpen((open) => !open)}
             aria-expanded={ioOpen}
           >
-            Import / Export
+            Export
           </button>
           <button
             type="button"
@@ -203,39 +196,30 @@ function DeckPanel({
         <div>
           <div className="section-label">Export (sim-compatible JSON)</div>
           <textarea className="io-textarea" readOnly value={exportJson} aria-label="Deck export JSON" />
-          <button
-            type="button"
-            className="btn btn--ghost"
-            style={{ marginTop: 'var(--space-2)' }}
-            onClick={() => navigator.clipboard?.writeText(exportJson)}
-          >
-            Copy
-          </button>
-
-          <div className="section-label" style={{ marginTop: 'var(--space-3)' }}>
-            Import
+          <div className="import-row">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => navigator.clipboard?.writeText(exportJson)}
+            >
+              Copy JSON
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => navigator.clipboard?.writeText(deckToDecklist(active))}
+            >
+              Copy decklist
+            </button>
           </div>
-          <textarea
-            className="io-textarea"
-            placeholder='{"name":"My Deck","cards":[{"cardId":"…","count":4}]}'
-            value={importText}
-            onChange={(event) => setImportText(event.target.value)}
-            aria-label="Deck import JSON"
-          />
-          {importError && <div className="io-error">{importError}</div>}
-          <button
-            type="button"
-            className="btn btn--primary"
-            style={{ marginTop: 'var(--space-2)' }}
-            onClick={handleImport}
-            disabled={importText.trim().length === 0}
-          >
-            Import deck
-          </button>
         </div>
       )}
 
       <SavedDecks decks={decks} />
+
+      {importOpen && (
+        <ImportDeckDialog decks={decks} onClose={() => setImportOpen(false)} />
+      )}
     </aside>
   );
 }

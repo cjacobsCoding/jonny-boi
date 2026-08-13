@@ -27,7 +27,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon.svg'],
+      includeAssets: [
+        'icons/favicon-32.png',
+        'icons/favicon-16.png',
+        'icons/apple-touch-icon.png',
+      ],
       manifest: {
         name: APP_NAME,
         short_name: APP_NAME,
@@ -38,12 +42,21 @@ export default defineConfig({
         id: DEPLOY_BASE,
         scope: DEPLOY_BASE,
         start_url: DEPLOY_BASE,
+        /**
+         * Two purposes, deliberately separate assets (see
+         * `scripts/generate-icons.mjs`): `any` is the rounded mark, while
+         * `maskable` is the full-bleed variant whose emblem sits inside the 80%
+         * safe circle so Android's launcher mask cannot crop it. Declaring one
+         * asset as "any maskable" would get the rounded icon cropped.
+         */
         icons: [
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           {
-            src: 'icons/icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
+            src: 'icons/icon-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
           },
         ],
       },

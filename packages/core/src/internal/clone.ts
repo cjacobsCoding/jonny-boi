@@ -75,7 +75,12 @@ function cloneStackObject(o: StackObject): StackObject {
 
 function cloneCombat(c: CombatState | null): CombatState | null {
   if (!c) return null;
-  return { attackers: [...c.attackers], blocks: { ...c.blocks } };
+  return {
+    attackers: [...c.attackers],
+    blocks: { ...c.blocks },
+    attackersDeclared: c.attackersDeclared,
+    blockersDeclared: c.blockersDeclared,
+  };
 }
 
 /** Deep-clone the mutable parts of a GameState; share immutable card defs. */

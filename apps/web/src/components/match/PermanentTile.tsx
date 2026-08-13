@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
+import { CardHover } from '../CardHover.js';
 import type { ReplayPermanent } from '../../lib/replay-types.js';
 
 /**
@@ -14,35 +15,37 @@ export function PermanentTile({ permanent }: { permanent: ReplayPermanent }): Re
   const wounded = permanent.isCreature && permanent.damageMarked > 0;
 
   return (
-    <div
-      className={`perm${permanent.tapped ? ' perm--tapped' : ''}`}
-      title={`${permanent.name}${
-        permanent.isCreature ? ` · ${permanent.power}/${permanent.toughness}` : ''
-      }${permanent.summoningSick ? ' · summoning sick' : ''}`}
-    >
-      <div className="perm__art">
-        {art ? (
-          <img src={art} alt={permanent.name} loading="lazy" decoding="async" />
-        ) : (
-          <span className="perm__fallback">{permanent.name}</span>
-        )}
-        {permanent.tapped && (
-          <span className="perm__tap-badge" aria-label="Tapped">
-            ⤵
+    <CardHover cardId={permanent.cardId}>
+      <div
+        className={`perm${permanent.tapped ? ' perm--tapped' : ''}`}
+        title={`${permanent.name}${
+          permanent.isCreature ? ` · ${permanent.power}/${permanent.toughness}` : ''
+        }${permanent.summoningSick ? ' · summoning sick' : ''}`}
+      >
+        <div className="perm__art">
+          {art ? (
+            <img src={art} alt={permanent.name} loading="lazy" decoding="async" />
+          ) : (
+            <span className="perm__fallback">{permanent.name}</span>
+          )}
+          {permanent.tapped && (
+            <span className="perm__tap-badge" aria-label="Tapped">
+              ⤵
+            </span>
+          )}
+        </div>
+        <div className="perm__foot">
+          <span className="perm__name" title={permanent.name}>
+            {permanent.name}
           </span>
-        )}
+          {permanent.isCreature && (
+            <span className={`perm__pt${wounded ? ' perm__pt--wounded' : ''}`}>
+              {permanent.power}/{permanent.toughness}
+              {wounded && <span className="perm__dmg"> (−{permanent.damageMarked})</span>}
+            </span>
+          )}
+        </div>
       </div>
-      <div className="perm__foot">
-        <span className="perm__name" title={permanent.name}>
-          {permanent.name}
-        </span>
-        {permanent.isCreature && (
-          <span className={`perm__pt${wounded ? ' perm__pt--wounded' : ''}`}>
-            {permanent.power}/{permanent.toughness}
-            {wounded && <span className="perm__dmg"> (−{permanent.damageMarked})</span>}
-          </span>
-        )}
-      </div>
-    </div>
+    </CardHover>
   );
 }

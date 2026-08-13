@@ -24,7 +24,7 @@ import {
 import type { CardPool } from '@jonny-boi/cards';
 import {
   createDefaultAiRegistry,
-  HEURISTIC_PILOT_ID,
+  DEFAULT_PILOT_ID,
 } from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
 import type { EffectRegistry } from '@jonny-boi/core';
@@ -75,9 +75,9 @@ function makeLab(): Lab {
   const pool = loadCardPool({ onWarn: () => {} });
   const registry = buildRegistry();
   const aiRegistry = createDefaultAiRegistry();
-  const pilotA = aiRegistry.getPilot(HEURISTIC_PILOT_ID);
-  const pilotB = aiRegistry.getPilot(HEURISTIC_PILOT_ID);
-  if (!pilotA || !pilotB) throw new Error('could not instantiate the heuristic pilot');
+  const pilotA = aiRegistry.getPilot(DEFAULT_PILOT_ID);
+  const pilotB = aiRegistry.getPilot(DEFAULT_PILOT_ID);
+  if (!pilotA || !pilotB) throw new Error(`could not instantiate the "${DEFAULT_PILOT_ID}" pilot`);
   return { pool, registry, pilots: { pilotA: pilotA as Pilot, pilotB: pilotB as Pilot } };
 }
 
@@ -316,8 +316,8 @@ function runMatchJob(req: Extract<SimRequest, { kind: 'match' }>, lab: Lab): voi
   });
 
   const seatNames: Record<'A' | 'B', ReplaySeat> = {
-    A: { player: 'A', deckName: hero.name, pilot: HEURISTIC_PILOT_ID },
-    B: { player: 'B', deckName: opponent.name, pilot: HEURISTIC_PILOT_ID },
+    A: { player: 'A', deckName: hero.name, pilot: DEFAULT_PILOT_ID },
+    B: { player: 'B', deckName: opponent.name, pilot: DEFAULT_PILOT_ID },
   };
 
   // The frame count tracks the event count; cap events generously and frames a bit

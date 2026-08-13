@@ -25,7 +25,22 @@ export interface TapForManaAction {
   readonly kind: 'tapForMana';
   readonly player: PlayerId;
   readonly instanceId: InstanceId;
+  /**
+   * Which mana mode to activate, indexing the source's normalised mode list
+   * (`manaModesOf`). A modal source — Birds of Paradise, a dual land — offers one
+   * action per mode, so the *choice of color is part of the action* and an AI can
+   * enumerate and score it. Omitted means {@link DEFAULT_MANA_MODE}, which is the
+   * only mode a single-mode source has.
+   */
+  readonly mode?: number;
 }
+
+/**
+ * The mode a `tapForMana` action activates when it doesn't say. Single-mode
+ * sources (every basic land) have only this one, so omitting `mode` stays the
+ * natural way to tap a Forest.
+ */
+export const DEFAULT_MANA_MODE = 0;
 
 /**
  * Cast a spell from hand onto the stack. `targets` carries any chosen targets

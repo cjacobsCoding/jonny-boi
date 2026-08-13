@@ -38,8 +38,10 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
 
   // --- Mana creatures / rocks (vanilla — mana production is data, no effects) --
   {
-    // Birds of Paradise: 0/1 flyer that taps for any color. The engine's
-    // `produces` is a fixed color list; we approximate "any color" as all five.
+    // Birds of Paradise: 0/1 flyer, "{T}: Add one mana of any color" — a MODAL
+    // source, so each color is its own mode and one tap yields exactly one mana.
+    // (The old fixed-bundle `produces: ['W','U','B','R','G']` meant "add one of
+    // each", which made it a five-mana rock.)
     id: 'd3a0b660-358c-41bd-9cd2-41fbf3491b1a',
     name: 'Birds of Paradise',
     types: ['creature'],
@@ -47,7 +49,7 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 0,
     toughness: 1,
     keywords: { flying: true },
-    produces: ['W', 'U', 'B', 'R', 'G'],
+    producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
   },
   {
     id: '68954295-54e3-4303-a6bc-fc4547a4e3a3',
@@ -63,8 +65,8 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Sol Ring',
     types: ['artifact'],
     cost: { generic: 1 },
-    // {T}: Add {C}{C}. The engine taps a source for one of each listed color, so
-    // two {C} entries yield two colorless on a single tap.
+    // {T}: Add {C}{C} — a fixed bundle (no choice), so the legacy `produces`
+    // form is exactly right: one tap adds one of each entry, i.e. two colorless.
     produces: ['C', 'C'],
   },
 

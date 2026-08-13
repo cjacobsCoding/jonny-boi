@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
+import { CardHover } from '../CardHover.js';
 import type { BoardPermanent } from '../../lib/play/view-model.js';
 
 /** Short keyword abbreviations shown as chips on a creature. */
@@ -93,16 +94,22 @@ export function BoardPermanentTile({
     </>
   );
 
+  // Wrapped so hovering a permanent raises the full, readable card — the tile
+  // itself is only an art crop, and a player needs the rules text to decide.
   if (onClick && selectable) {
     return (
-      <button type="button" className={className} onClick={onClick} title={title} aria-pressed={selected}>
-        {body}
-      </button>
+      <CardHover cardId={perm.cardId}>
+        <button type="button" className={className} onClick={onClick} title={title} aria-pressed={selected}>
+          {body}
+        </button>
+      </CardHover>
     );
   }
   return (
-    <div className={className} title={title}>
-      {body}
-    </div>
+    <CardHover cardId={perm.cardId}>
+      <div className={className} title={title}>
+        {body}
+      </div>
+    </CardHover>
   );
 }

@@ -23,4 +23,12 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Build-time scripts run in Node, outside the browser/worker bundles, so
+    // they legitimately reach for Node's globals.
+    files: ['scripts/**/*.{js,mjs}', '**/scripts/**/*.{js,mjs}'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly' },
+    },
+  },
 );

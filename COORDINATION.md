@@ -62,6 +62,91 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-13 DESKTOP-90PJPM4: `fix/ai-play-quality` — **COMBAT COULD NOT END.** The reason MCTS games
+  appeared to "take forever" was not search cost: `CombatState` inferred "have attackers/blockers been
+  declared?" from whether the list was NON-EMPTY. But declaring *no* attackers (or no blockers) is a
+  legal, routine choice, so an empty declaration left the step looking undeclared, it was offered again,
+  and since declaring resets `consecutivePasses` **the step could never advance**. A pilot that passes by
+  convention (heuristic) never hit it; a pilot that SEARCHES its options did — MCTS spun one
+  declare-blockers step 240+ times and a game never got past turn 5 in 4000 actions.
+  Fix: explicit `attackersDeclared` / `blockersDeclared` flags on `CombatState`, gated in both
+  `applyDeclare*` and `generateLegalActions`. Anyone constructing a `CombatState` literal must set them
+  (test fixtures updated). Regression covered in `packages/core/src/combat-declaration.test.ts`,
+  including a full game of adversarial empty declarations that must still reach turn > 8.
+  Perf, all strength-neutral (same search, same results — measured, not assumed):
+  • `applyActionInPlace` — a no-clone entry point for look-ahead that already owns its state. The pure
+    `applyAction` deep-copies BOTH libraries (100+ instances) per action; MCTS now clones once per
+    playout instead of once per ply.
+  • MCTS skips windows where the only options are mana taps and nothing in hand is castable — pools
+    empty each step, so that mana is provably unspendable. Cut searched decisions 390 → 216.
+  Net for one full game: **never terminated → 50s → 29s** (bench), and end-to-end **18.6 s/game**
+  (10-game CLI match). Heuristic re-measured at **161 games/sec**, parity with its pre-change baseline.
+  ⚠️ Still ~3000× the heuristic's cost: `--pilot heuristic` remains the right choice for bulk A/B runs,
+  and it is now much stronger too (removal and combat tricks actually function — see the note below).
+  (Worker — branch pushed.)
+
+- 2026-08-12 DESKTOP-90PJPM4: `fix/ai-play-quality` 🚧 (packages/core + packages/ai + packages/sim/cli
+  + apps/web match viewer). Four real bugs a user spotted while WATCHING a game, plus the AI upgrade:
+  1. **Summoning sickness did not gate `{T}` abilities** (rule 302.6). A Birds of Paradise could tap for
+     mana the turn it landed. `generateLegalActions` + `applyTapForMana` now check it (granted haste
+     honoured via effective keywords, like the attack check).
+  2. **`produces` meant "add one of EACH"**, so an any-colour source made FIVE mana. Added
+     `CardDefinition.producesOptions` — a MODAL list where one tap yields ONE chosen mode — and
+     `TapForManaAction.mode` to pick it. `manaModesOf()` normalises both forms into one mode list.
+     **Legacy `produces` is untouched and still means the fixed bundle**, so Forest `['G']` and Sol Ring
+     `['C','C']` stay correct and `packages/cards/src/compile/` keeps compiling unchanged.
+     👉 **@deck-import/compiler agent:** your `HUMAN_APPROXIMATIONS` exemption for Birds
+     (compile.test.ts) documents exactly this bug — core can now express it. Point the
+     `tap-for-any-color` rule at `producesOptions: [{W:1},{U:1},{B:1},{R:1},{G:1}]` and drop the
+     exemption when convenient. `tap-for-mana` ({T}: Add {C}{C}) needs no change.
+  3. **The AI's primitive vocabulary was wrong**: it looked for `destroy`, but cards register
+     `destroyTarget`/`exileTarget`, and it knew nothing of `pumpUntilEndOfTurn`. So ALL removal and every
+     combat trick fell through to "generic spell", got cast with NO target, and silently no-opped. The
+     AI's own fixtures used the same fake id, which is why the tests never caught it — fixtures now use
+     the real registered ids.
+  4. **Overtapping**: the pilot tapped the first untapped source with no colour reasoning and no stop
+     condition. Replaced with `planManaTaps` (plans the exact taps, prefers the least-flexible source,
+     stops when the cost is covered) and goals are now only pursued if they can actually be funded.
+  Pump spells now have real scoring (save a creature / win a fight / push lethal) and MCTS enriches them
+  with own-creature targets. **`DEFAULT_PILOT_ID` (packages/ai) is now `mcts`** — per user decision, the
+  look-ahead pilot everywhere: CLI default + the web lab/replay worker. ⚠️ **Throughput warning below.**
+  Perf (rule 7): measured heuristic at **162.7 games/sec vs 161.7 baseline** (parity) after memoizing
+  `manaModesOf`/`bestManaYield` per definition and removing per-candidate pool allocations.
+  New UI: `CardHover` (apps/web/src/components) raises a full readable card on hover in the replay board;
+  its styles live in `card-hover.css`, NOT styles.css, to stay off the deck-import branch's toes.
+  (Worker — branch pushed, NOT merged.)
+
+- 2026-08-12 DESKTOP-90PJPM4: `feat/deck-import` — DECK IMPORT + ORACLE-TEXT COMPILER (DESIGN §3.11).
+  Paste any decklist / deck URL / file → real cards. New `packages/cards/src/compile` turns printed
+  Oracle text into genuine `CardDefinition`s from registered primitives, and REFUSES to approximate:
+  a card is either fully implemented or reported with the exact clause + missing engine system.
+  Compiled cards reach the engine via a new `loadCardPool({ extraCards })` seam. Suite = **535 tests,
+  build exit 0**. Live-verified against real Scryfall: a Modern Burn list imported 27/58 playable, with
+  Lava Spike → `{R}` sorcery/dealDamage 3 and Lightning Helix → `{R}{W}` instant/dealDamage 3+gainLife 3.
+  **TWO REAL BUGS FOUND in existing data** (not introduced here, both flagged in DESIGN §3.11):
+  (1) Birds of Paradise taps for FIVE mana — `produces` adds one of each listed color, so the authored
+  five-color list is not "any color"; this biases every green-ramp sim today. (2) Kitchen Finks is
+  authored as `{1}`, dropping its `{G/W}{G/W}` — a 3-mana 3/2 costing one. Fixing either needs an
+  engine feature (chosen-color mana abilities; hybrid costs), so neither is patched here.
+  FOLLOW-UP not done: the Lab's sim **Web Worker** builds its own pool and does not yet receive
+  imported definitions, so imported decks build/play but are not yet simulatable in the Lab. Also
+  `apps/web/src/lib/proxy/scryfall.ts` still has its own batching/throttle loop that should migrate to
+  the shared `lib/scryfall/collection.ts`. (Integrator)
+
+- 2026-08-13 DESKTOP-90PJPM4: `feat/app-icon` ✅ (apps/web icons only) — replaced the "jb" placeholder
+  with **AI-generated key art**: a horned beast skull, gold horns, molten eyes, ember flourish.
+  **Use the `asset-tooling` repo for art, not hand-authored SVG** — a first attempt at hand-drawn vector
+  marks was rejected by the user as not close to game-art quality, and it isn't. Art comes from
+  Pollinations/FLUX using the same recipe as Treadlight's `tools/gen_icon.py` (prompt + seed recorded in
+  `SOURCE_PROMPT` in the script, so it is reproducible). Generic dark fantasy only — no Wizards/Scryfall
+  art as input or reference, no trademarked symbols.
+  `apps/web/scripts/generate-icons.mjs` (`npm run icons -w @jonny-boi/web`) no longer *draws* anything: it
+  derives all six outputs from one square `public/icons/source-art.png`, so **swapping the icon = drop in a
+  new PNG + re-run**. Small sizes punch in on the centre (`SMALL_CROP`) because the full emblem mushes out
+  below ~48px; the maskable variant sits inside the 80% safe circle over a blurred copy of itself, so
+  there is no seam. Manifest/`index.html` are now PNG-only (the SVG icons are gone). Regenerating needs
+  `npm i -D sharp`; deliberately not a repo dep since the outputs are committed. (Integrator)
+
 - 2026-06-26 DESKTOP-90PJPM4: `feat/proxy-print` 🚧 (apps/web) — porting the user's separate `mtg-proxy-man`
   tool (Python/PySide6/Scribus proxy-print pipeline: A4, exact card size, custom art, upscaling; the real
   version is LOCAL at C:\Users\Caleb\Documents\VS Code Projects\mtg-proxy-man, GitHub has only the art
