@@ -1,19 +1,8 @@
 import { useCallback, useState, type ReactElement, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { getCard, cardImage } from '../lib/cards.js';
-import {
-  CARD_PREVIEW_WIDTH_PX,
-  CARD_PREVIEW_ASPECT,
-  CARD_PREVIEW_CURSOR_GAP_PX,
-  CARD_PREVIEW_VIEWPORT_MARGIN_PX,
-} from './card-hover-config.js';
+import { previewPlacement, type PreviewAnchor } from './card-hover-position.js';
 import './card-hover.css';
-
-/** Where the floating preview should be drawn, in viewport pixels. */
-interface PreviewAnchor {
-  readonly x: number;
-  readonly y: number;
-}
 
 /**
  * Wraps any board element so hovering it raises a **full, readable card** beside
@@ -84,9 +73,9 @@ export function CardHover({
 }
 
 /**
- * The floating panel itself. Placed beside the cursor, then clamped so it stays
- * fully on screen — flipping to the cursor's left when it would overflow the
- * right edge, and riding up from the bottom when it would overflow below.
+ * The floating panel itself. Placement (including the off-screen clamping) lives
+ * in the pure, unit-tested `previewPlacement`; this component only reads the live
+ * viewport and paints the result.
  */
 function CardHoverPanel({
   anchor,
@@ -97,27 +86,15 @@ function CardHoverPanel({
   readonly image: string;
   readonly name: string;
 }): ReactElement {
-  const height = CARD_PREVIEW_WIDTH_PX * CARD_PREVIEW_ASPECT;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  // Prefer the cursor's right; flip left if the panel would run off that edge.
-  const spillsRight = anchor.x + CARD_PREVIEW_CURSOR_GAP_PX + CARD_PREVIEW_WIDTH_PX >
-    viewportWidth - CARD_PREVIEW_VIEWPORT_MARGIN_PX;
-  const left = spillsRight
-    ? Math.max(CARD_PREVIEW_VIEWPORT_MARGIN_PX, anchor.x - CARD_PREVIEW_CURSOR_GAP_PX - CARD_PREVIEW_WIDTH_PX)
-    : anchor.x + CARD_PREVIEW_CURSOR_GAP_PX;
-
-  // Centre on the cursor vertically, then clamp inside the viewport.
-  const top = Math.min(
-    Math.max(CARD_PREVIEW_VIEWPORT_MARGIN_PX, anchor.y - height / 2),
-    Math.max(CARD_PREVIEW_VIEWPORT_MARGIN_PX, viewportHeight - height - CARD_PREVIEW_VIEWPORT_MARGIN_PX),
-  );
+  const { left, top, width } = previewPlacement(anchor, {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
 
   return (
     <div
       className="card-hover-preview"
-      style={{ left: `${left}px`, top: `${top}px`, width: `${CARD_PREVIEW_WIDTH_PX}px` }}
+      style={{ left: `${left}px`, top: `${top}px`, width: `${width}px` }}
       role="tooltip"
       aria-label={name}
     >
