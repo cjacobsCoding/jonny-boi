@@ -105,6 +105,65 @@ export const SCRYFALL_COLLECTION_PATH = '/cards/collection';
 /** localStorage key for the resolved-card cache (name → best image). */
 export const PROXY_CACHE_STORAGE_KEY = 'jonny-boi.proxyCache.v1';
 
+/** Search endpoint path — used to list a card's alternate printings. */
+export const SCRYFALL_SEARCH_PATH = '/cards/search';
+
+/**
+ * localStorage key for per-card art overrides (chosen alt printing or an
+ * uploaded custom image), keyed by normalized card name.
+ */
+export const PROXY_OVERRIDES_STORAGE_KEY = 'jonny-boi.proxyOverrides.v1';
+
+/** localStorage key for the cached alternate-printings lists (name → prints). */
+export const PROXY_PRINTS_CACHE_STORAGE_KEY = 'jonny-boi.proxyPrints.v1';
+
+/**
+ * How long a cached printings list stays fresh (milliseconds). Printings change
+ * rarely (a new set now and then), so a week keeps us well within Scryfall
+ * etiquette without ever serving badly stale data. 7 days.
+ */
+export const PRINTS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Cap on how many alternate printings we request/show for one card. Scryfall
+ * pages results; a single page is far more than a human wants to scroll, and it
+ * keeps the picker light. This is also our fetch page size (`order=released`).
+ */
+export const MAX_PRINTS_SHOWN = 60;
+
+/** Thumbnail edge width in the printings picker / override rows (pixels). */
+export const PROXY_THUMBNAIL_WIDTH_PX = 96;
+
+/**
+ * Maximum size of a user-uploaded custom-art image (bytes). Kept modest: the
+ * override is persisted to localStorage as a base64 data URL (which inflates
+ * ~1.33×), so a smaller cap keeps custom art durable across reloads. 5 MB.
+ */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+/** Uploaded files must be an image; we accept any `image/*` MIME type. */
+export const ACCEPTED_UPLOAD_MIME_PREFIX = 'image/';
+
+/** File-input `accept` attribute matching {@link ACCEPTED_UPLOAD_MIME_PREFIX}. */
+export const UPLOAD_ACCEPT_ATTR = 'image/*';
+
+/**
+ * Linear scale factor applied by the optional print-quality upscale pass. 2× is
+ * the sweet spot: it doubles the pixel grid the printer samples (crisper edges
+ * at 300+ DPI) without ballooning memory or the exported PDF.
+ */
+export const UPSCALE_FACTOR = 2;
+
+/**
+ * Canvas resample quality for the upscale pass. `'high'` selects the browser's
+ * best (bicubic-class) interpolation — the honest, dependency-free path. This is
+ * a smoother resample, NOT a neural super-resolution model; see `upscale.ts`.
+ */
+export const UPSCALE_SMOOTHING_QUALITY: ImageSmoothingQuality = 'high';
+
+/** Output MIME for an upscaled tile. PNG keeps card text lossless for print. */
+export const UPSCALE_OUTPUT_MIME = 'image/png';
+
 /** Scryfall attribution line (etiquette — card images © Wizards, via Scryfall). */
 export const SCRYFALL_ATTRIBUTION =
   'Card images © Wizards of the Coast, sourced via the Scryfall API.';
