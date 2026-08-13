@@ -62,6 +62,23 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-12 DESKTOP-90PJPM4: `feat/deck-import` — DECK IMPORT + ORACLE-TEXT COMPILER (DESIGN §3.11).
+  Paste any decklist / deck URL / file → real cards. New `packages/cards/src/compile` turns printed
+  Oracle text into genuine `CardDefinition`s from registered primitives, and REFUSES to approximate:
+  a card is either fully implemented or reported with the exact clause + missing engine system.
+  Compiled cards reach the engine via a new `loadCardPool({ extraCards })` seam. Suite = **535 tests,
+  build exit 0**. Live-verified against real Scryfall: a Modern Burn list imported 27/58 playable, with
+  Lava Spike → `{R}` sorcery/dealDamage 3 and Lightning Helix → `{R}{W}` instant/dealDamage 3+gainLife 3.
+  **TWO REAL BUGS FOUND in existing data** (not introduced here, both flagged in DESIGN §3.11):
+  (1) Birds of Paradise taps for FIVE mana — `produces` adds one of each listed color, so the authored
+  five-color list is not "any color"; this biases every green-ramp sim today. (2) Kitchen Finks is
+  authored as `{1}`, dropping its `{G/W}{G/W}` — a 3-mana 3/2 costing one. Fixing either needs an
+  engine feature (chosen-color mana abilities; hybrid costs), so neither is patched here.
+  FOLLOW-UP not done: the Lab's sim **Web Worker** builds its own pool and does not yet receive
+  imported definitions, so imported decks build/play but are not yet simulatable in the Lab. Also
+  `apps/web/src/lib/proxy/scryfall.ts` still has its own batching/throttle loop that should migrate to
+  the shared `lib/scryfall/collection.ts`. (Integrator)
+
 - 2026-08-12 DESKTOP-90PJPM4: `feat/app-icon` ✅ (apps/web icons only) — replaced the "jb" placeholder
   with a real app icon, "The Rake": three claw gashes torn across a dark plane bleeding the five colors
   of magic. It is **generated**, not hand-drawn — `apps/web/scripts/generate-icons.mjs` (`npm run icons

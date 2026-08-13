@@ -14,12 +14,26 @@ import { defineConfig } from 'vitest/config';
  */
 const SOURCE_ALIASED_PACKAGES = ['core', 'protocol', 'cards', 'ai', 'sim', 'data-tools'] as const;
 
-const aliasToSrc = Object.fromEntries(
-  SOURCE_ALIASED_PACKAGES.map((pkg) => [
+/**
+ * Package subpath entries (e.g. `@jonny-boi/data-tools/pure`, the browser-safe
+ * subset the web app imports). These MUST come first: Vite aliases match by
+ * prefix, so the bare `@jonny-boi/data-tools` entry would otherwise rewrite the
+ * subpath into `…/src/index.ts/pure`.
+ */
+const SOURCE_ALIASED_SUBPATHS: readonly (readonly [string, string])[] = [
+  ['@jonny-boi/data-tools/pure', './packages/data-tools/src/pure.ts'],
+];
+
+const aliasToSrc = Object.fromEntries([
+  ...SOURCE_ALIASED_SUBPATHS.map(([specifier, path]) => [
+    specifier,
+    fileURLToPath(new URL(path, import.meta.url)),
+  ]),
+  ...SOURCE_ALIASED_PACKAGES.map((pkg) => [
     `@jonny-boi/${pkg}`,
     fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url)),
   ]),
-);
+]);
 
 export default defineConfig({
   resolve: {

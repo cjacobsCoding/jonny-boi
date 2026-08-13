@@ -15,6 +15,7 @@
  */
 import type { CardIndex, NormalizedCard, ManaCost } from '@jonny-boi/data-tools';
 import rawIndex from '../data/card-index.json';
+import { importedCard, importedCards } from './decklist/importedCards.js';
 
 /** The bundled, normalized card index. */
 export const cardIndex: CardIndex = rawIndex as CardIndex;
@@ -22,7 +23,11 @@ export const cardIndex: CardIndex = rawIndex as CardIndex;
 /** Scryfall attribution string to display in the UI (Scryfall etiquette). */
 export const attribution: string = cardIndex.attribution;
 
-/** All cards, sorted by name (the index is already name-sorted). */
+/**
+ * The CURATED cards bundled with the build, sorted by name. Deck import adds
+ * more at runtime — use {@link allAvailableCards} when you want everything the
+ * user can actually put in a deck.
+ */
 export const allCards: readonly NormalizedCard[] = cardIndex.cards;
 
 /** Look up a card by its stable Scryfall id. */
@@ -30,9 +35,25 @@ const cardsById: ReadonlyMap<string, NormalizedCard> = new Map(
   cardIndex.cards.map((card) => [card.id, card]),
 );
 
-/** Resolve a card by id, or `undefined` if it is not in the pool. */
+/**
+ * Resolve a card by id, or `undefined` if it is in neither the curated pool nor
+ * the user's imported cards. Every display path (deck lists, curves, validation)
+ * goes through here, so an imported card renders exactly like a curated one.
+ */
 export function getCard(id: string): NormalizedCard | undefined {
-  return cardsById.get(id);
+  return cardsById.get(id) ?? importedCard(id);
+}
+
+/**
+ * Every card available to the user right now: the curated pool plus everything
+ * deck import has added, name-sorted. Recomputed per call because the imported
+ * set changes at runtime; the lists are small enough that this is cheaper than
+ * cache invalidation.
+ */
+export function allAvailableCards(): readonly NormalizedCard[] {
+  const imported = importedCards();
+  if (imported.length === 0) return allCards;
+  return [...allCards, ...imported].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

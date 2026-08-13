@@ -159,6 +159,38 @@ attackers/blockers), instant-speed responses on the stack, and a winner. The ses
 targeting, deck setup, and hidden-info masking are unit-tested, including a full game driven to a
 winner through the public session API (proving the loop has no dead-end).
 
+### 3.11 Deck import + the Oracle-text card compiler — ✅ done
+Getting a real deck into the app is now one paste. The **Import deck** dialog in the deck builder
+accepts a decklist in any mainstream export flavour (plain, MTG Arena with set + collector number,
+Moxfield foil markers, Archidekt categories, `SB:` sideboard markers, CSV from Deckbox/Delver Lens,
+and the app's own deck JSON), a **deck URL** (Moxfield / Archidekt / MTGGoldfish / TappedOut), or a
+dropped/chosen file. One parser (`apps/web/src/lib/decklist/parse.ts`) backs both this and the
+Proxies view, so a format learned once works everywhere.
+
+The part that makes imported cards *real* is the **Oracle-text compiler** (`packages/cards/src/compile`):
+a data-driven rule table that turns a Scryfall card's printed rules text into a genuine
+`CardDefinition` built from registered effect primitives — cost, types, P/T, keyword flags, mana
+production, triggered abilities and spell scripts. Its contract is strict: a card either compiles to
+something the engine plays **exactly as printed**, or it is reported `incomplete` with the precise
+clause and the engine system it would need. Nothing is approximated, because a card that "sort of"
+works would silently bias every §3.5/§3.6 verdict. Compiled cards join the pool through the
+`loadCardPool({ extraCards })` seam and persist locally, so an imported card browses, builds,
+validates, prints and plays exactly like a curated one.
+
+Ground truth: the compiler is tested by re-deriving all 32 hand-authored pool cards from nothing but
+their real Scryfall text and asserting it independently reaches the same definitions — and by
+asserting it reports `incomplete` for every card the humans flagged in `STUBBED_MECHANICS`.
+
+**Engine gaps this surfaced** (the honest to-do list; each blocks real decks today):
+- *mana abilities that produce a chosen color* — core's `produces` adds one of **each** listed color,
+  so "add one mana of any color" cannot be expressed. **This is also a live bug in the curated pool:**
+  Birds of Paradise is authored `['W','U','B','R','G']` and therefore taps for **five** mana.
+- *permanents entering tapped* — blocks nearly every nonbasic dual land.
+- *hybrid / Phyrexian / {X} mana costs* — Kitchen Finks is authored as `{1}`, dropping `{G/W}{G/W}`.
+- *player choice during resolution* — modal spells, targeted discard, "you may".
+- *activated abilities with costs*, *library search*, *dynamic P/T*, *planeswalker loyalty*,
+  *transform/DFC*, *alternative costs* (suspend, spectacle).
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

@@ -10,12 +10,25 @@
  */
 import { loadCardPool as loadSimPool } from '@jonny-boi/cards';
 import type { CardPool } from '@jonny-boi/cards';
+import { importedDefinitions, subscribeToImportedCards } from './decklist/importedCards.js';
 
 let cached: CardPool | null = null;
 
-/** The curated pool, memoized. Warnings are silenced (stubbed mechanics are intended). */
+// Importing a deck adds playable definitions to the pool, so the memoized pool
+// must be rebuilt on the next read — otherwise a freshly imported deck would
+// fail validation against a stale pool.
+subscribeToImportedCards(() => {
+  cached = null;
+});
+
+/**
+ * The pool the UI validates against: the curated cards plus every card deck
+ * import compiled to a genuinely playable definition. Memoized (rebuilt when the
+ * imported set changes). Warnings are silenced — stubbed curated mechanics are
+ * intended and documented.
+ */
 export function loadCardPool(): CardPool {
   if (cached) return cached;
-  cached = loadSimPool({ onWarn: () => {} });
+  cached = loadSimPool({ onWarn: () => {}, extraCards: importedDefinitions() });
   return cached;
 }
