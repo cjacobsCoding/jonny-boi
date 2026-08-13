@@ -57,6 +57,7 @@ export {
   isCreature,
   isPermanentType,
   castTiming,
+  entersTapped,
 } from './card.js';
 
 // Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.

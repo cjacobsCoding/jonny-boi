@@ -93,6 +93,8 @@ export interface ClauseContribution {
   readonly produces?: readonly import('@jonny-boi/core').ManaColor[];
   /** Keyword flags granted to the card itself. */
   readonly keywords?: CardDefinition['keywords'];
+  /** Set when the printed text says this permanent enters the battlefield tapped. */
+  readonly entersTapped?: boolean;
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

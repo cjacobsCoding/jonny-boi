@@ -200,7 +200,10 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '5470dcfa-4eff-43da-abf7-19922841f719',
     name: 'Kitchen Finks',
     types: ['creature'],
-    cost: { generic: 1 },
+    // {1}{G/W}{G/W} — a real hybrid cost now that the mana system can pay one
+    // symbol with either color. (It was previously authored as a bare {1},
+    // which made this a one-mana 3/2 and quietly warped every sim it appeared in.)
+    cost: { generic: 1, hybrid: [['G', 'W'], ['G', 'W']] },
     power: 3,
     toughness: 2,
     // ETB: gain 2 life — authored as an `etb` trigger (not a resolution `effects`

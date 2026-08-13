@@ -25,6 +25,18 @@ export interface ManaCost {
   readonly G?: number;
   /** Colorless-specific {C} requirement (distinct from generic). */
   readonly C?: number;
+  /**
+   * Hybrid symbols. Each entry is ONE printed symbol together with the colors
+   * that may pay it: `{G/W}{G/W}` is `[['G','W'], ['G','W']]`. A hybrid symbol
+   * counts 1 toward mana value, and the payer picks a different color per symbol
+   * if that is what makes the cost payable.
+   *
+   * Only colour/colour hybrids are modelled. Monocolour hybrid (`{2/W}`) and
+   * Phyrexian (`{W/P}`, payable with life) are deliberately absent — they need
+   * an alternative-payment concept this cost shape does not have, so cards
+   * printing them stay unimplemented instead of being silently mis-costed.
+   */
+  readonly hybrid?: readonly (readonly ManaColor[])[];
 }
 
 /** A floating mana pool: counts of each color currently available. */
@@ -45,7 +57,10 @@ export function addMana(pool: ManaPool, color: ManaColor, amount: number): ManaP
   return { ...pool, [color]: pool[color] + amount };
 }
 
-/** The converted mana cost (total pips) of a cost — used for sorting/curve. */
+/**
+ * The converted mana cost (total pips) of a cost — used for sorting/curve.
+ * Each hybrid symbol counts 1, matching the printed mana value.
+ */
 export function convertedManaCost(cost: ManaCost): number {
   return (
     (cost.generic ?? 0) +
@@ -54,7 +69,8 @@ export function convertedManaCost(cost: ManaCost): number {
     (cost.B ?? 0) +
     (cost.R ?? 0) +
     (cost.G ?? 0) +
-    (cost.C ?? 0)
+    (cost.C ?? 0) +
+    (cost.hybrid?.length ?? 0)
   );
 }
 
@@ -70,6 +86,69 @@ export type PaymentResult =
  * success, or a reason on failure. Pure — never mutates `pool`.
  */
 export function payCost(pool: ManaPool, cost: ManaCost): PaymentResult {
+  const hybrids = cost.hybrid ?? [];
+  if (hybrids.length > 0) return payWithHybrids(pool, cost, hybrids);
+  return payFixedCost(pool, cost);
+}
+
+/**
+ * Pay a cost containing hybrid symbols by trying every assignment of colors to
+ * those symbols and taking the first that works.
+ *
+ * Exhaustive search is the right tool here, not a heuristic: a greedy choice
+ * ("always pay {G/W} with G") can fail a cost that is genuinely payable, which
+ * would make the AI think it cannot cast a card it can. The space is tiny — a
+ * printed card has at most a handful of hybrid symbols with 2 options each — and
+ * the search short-circuits on the first success, so the common case is one pass.
+ *
+ * Assignments are enumerated in a fixed order, so payment stays deterministic
+ * and sims remain reproducible (DESIGN §2.1).
+ */
+function payWithHybrids(
+  pool: ManaPool,
+  cost: ManaCost,
+  hybrids: readonly (readonly ManaColor[])[],
+): PaymentResult {
+  const choice: ManaColor[] = [];
+
+  const search = (index: number): PaymentResult | null => {
+    if (index === hybrids.length) {
+      // Fold the chosen colors into the fixed colored requirements and pay.
+      const folded: Record<string, number> = {
+        generic: cost.generic ?? 0,
+        W: cost.W ?? 0,
+        U: cost.U ?? 0,
+        B: cost.B ?? 0,
+        R: cost.R ?? 0,
+        G: cost.G ?? 0,
+        C: cost.C ?? 0,
+      };
+      for (const color of choice) folded[color] = (folded[color] ?? 0) + 1;
+      const result = payFixedCost(pool, folded as ManaCost);
+      return result.ok ? result : null;
+    }
+    for (const color of hybrids[index] ?? []) {
+      choice.push(color);
+      const found = search(index + 1);
+      choice.pop();
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const paid = search(0);
+  return (
+    paid ?? {
+      ok: false,
+      reason: `insufficient mana for hybrid cost (${hybrids
+        .map((options) => `{${options.join('/')}}`)
+        .join('')})`,
+    }
+  );
+}
+
+/** Pay a cost with no hybrid symbols — the original fixed-symbol algorithm. */
+function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
   const remaining = { ...pool };
 
   // 1. Pay each specific color requirement from its own color.
