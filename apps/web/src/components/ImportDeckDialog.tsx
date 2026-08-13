@@ -3,6 +3,7 @@ import type { DecksApi } from '../lib/useDecks.js';
 import { useDeckImport } from '../lib/decklist/useDeckImport.js';
 import { blockedByEngineSystem, type ResolvedLine } from '../lib/decklist/resolve.js';
 import type { BuildResult } from '../lib/decklist/buildDeck.js';
+import { ScanDeckDialog } from './ScanDeckDialog.js';
 
 /**
  * The deck importer.
@@ -28,6 +29,7 @@ export function ImportDeckDialog({
   const [text, setText] = useState('');
   const [deckName, setDeckName] = useState('');
   const [result, setResult] = useState<BuildResult | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const blockedGroups = useMemo(
@@ -106,6 +108,9 @@ export function ImportDeckDialog({
                 onClick={() => fileInputRef.current?.click()}
               >
                 Choose a file…
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={() => setScanOpen(true)}>
+                Scan from a photo…
               </button>
               <input
                 ref={fileInputRef}
@@ -188,6 +193,20 @@ export function ImportDeckDialog({
           </>
         )}
       </div>
+
+      {scanOpen && (
+        <ScanDeckDialog
+          onClose={() => setScanOpen(false)}
+          onUseDecklist={(decklistText) => {
+            // A scanned list is just a decklist — it goes through the exact same
+            // parse → Scryfall → compile path as a pasted one, so scanned cards
+            // are as real as typed ones.
+            setScanOpen(false);
+            setText(decklistText);
+            void importer.resolve(decklistText);
+          }}
+        />
+      )}
     </div>
   );
 }
