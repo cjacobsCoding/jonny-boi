@@ -1,0 +1,41 @@
+/*
+ * Styles for the hover card preview. Kept in its own file (imported by
+ * CardHover.tsx) rather than appended to the global styles.css, so this feature
+ * owns its styles and does not collide with other in-flight work there.
+ */
+
+.card-hover-preview {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none; /* never steals the hover that opened it */
+  border-radius: 4.75% / 3.5%; /* matches a real card's corner radius */
+  overflow: hidden;
+  box-shadow:
+    0 18px 40px rgb(0 0 0 / 55%),
+    0 0 0 1px rgb(0 0 0 / 35%);
+  animation: card-hover-preview-in 90ms ease-out;
+}
+
+.card-hover-preview__img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+@keyframes card-hover-preview-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Respect users who ask for reduced motion: show it, just don't animate it. */
+@media (prefers-reduced-motion: reduce) {
+  .card-hover-preview {
+    animation: none;
+  }
+}

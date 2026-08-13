@@ -62,6 +62,37 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-12 DESKTOP-90PJPM4: `fix/ai-play-quality` 🚧 (packages/core + packages/ai + packages/sim/cli
+  + apps/web match viewer). Four real bugs a user spotted while WATCHING a game, plus the AI upgrade:
+  1. **Summoning sickness did not gate `{T}` abilities** (rule 302.6). A Birds of Paradise could tap for
+     mana the turn it landed. `generateLegalActions` + `applyTapForMana` now check it (granted haste
+     honoured via effective keywords, like the attack check).
+  2. **`produces` meant "add one of EACH"**, so an any-colour source made FIVE mana. Added
+     `CardDefinition.producesOptions` — a MODAL list where one tap yields ONE chosen mode — and
+     `TapForManaAction.mode` to pick it. `manaModesOf()` normalises both forms into one mode list.
+     **Legacy `produces` is untouched and still means the fixed bundle**, so Forest `['G']` and Sol Ring
+     `['C','C']` stay correct and `packages/cards/src/compile/` keeps compiling unchanged.
+     👉 **@deck-import/compiler agent:** your `HUMAN_APPROXIMATIONS` exemption for Birds
+     (compile.test.ts) documents exactly this bug — core can now express it. Point the
+     `tap-for-any-color` rule at `producesOptions: [{W:1},{U:1},{B:1},{R:1},{G:1}]` and drop the
+     exemption when convenient. `tap-for-mana` ({T}: Add {C}{C}) needs no change.
+  3. **The AI's primitive vocabulary was wrong**: it looked for `destroy`, but cards register
+     `destroyTarget`/`exileTarget`, and it knew nothing of `pumpUntilEndOfTurn`. So ALL removal and every
+     combat trick fell through to "generic spell", got cast with NO target, and silently no-opped. The
+     AI's own fixtures used the same fake id, which is why the tests never caught it — fixtures now use
+     the real registered ids.
+  4. **Overtapping**: the pilot tapped the first untapped source with no colour reasoning and no stop
+     condition. Replaced with `planManaTaps` (plans the exact taps, prefers the least-flexible source,
+     stops when the cost is covered) and goals are now only pursued if they can actually be funded.
+  Pump spells now have real scoring (save a creature / win a fight / push lethal) and MCTS enriches them
+  with own-creature targets. **`DEFAULT_PILOT_ID` (packages/ai) is now `mcts`** — per user decision, the
+  look-ahead pilot everywhere: CLI default + the web lab/replay worker. ⚠️ **Throughput warning below.**
+  Perf (rule 7): measured heuristic at **162.7 games/sec vs 161.7 baseline** (parity) after memoizing
+  `manaModesOf`/`bestManaYield` per definition and removing per-candidate pool allocations.
+  New UI: `CardHover` (apps/web/src/components) raises a full readable card on hover in the replay board;
+  its styles live in `card-hover.css`, NOT styles.css, to stay off the deck-import branch's toes.
+  (Worker — branch pushed, NOT merged.)
+
 - 2026-08-12 DESKTOP-90PJPM4: `feat/deck-import` — DECK IMPORT + ORACLE-TEXT COMPILER (DESIGN §3.11).
   Paste any decklist / deck URL / file → real cards. New `packages/cards/src/compile` turns printed
   Oracle text into genuine `CardDefinition`s from registered primitives, and REFUSES to approximate:

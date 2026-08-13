@@ -30,6 +30,27 @@ export interface ManaCost {
 /** A floating mana pool: counts of each color currently available. */
 export type ManaPool = Record<ManaColor, number>;
 
+/**
+ * The exact mana a *single* activation of a mana ability adds to the pool — one
+ * "mode" of that ability. `{ G: 1 }` is a Forest's only mode; `{ C: 2 }` is Sol
+ * Ring's. A source with several modes (Birds of Paradise, a dual land) offers
+ * one of these per activation and the controller picks (see
+ * `CardDefinition.producesOptions`). Omitted colors mean zero.
+ */
+export type ManaProduction = Readonly<Partial<Record<ManaColor, number>>>;
+
+/** Total mana one production mode yields — how much a single tap is worth. */
+export function productionTotal(production: ManaProduction): number {
+  return MANA_COLORS.reduce((sum, c) => sum + (production[c] ?? 0), 0);
+}
+
+/** Add every color of a production mode to a pool, returning a new pool. */
+export function addProduction(pool: ManaPool, production: ManaProduction): ManaPool {
+  const next = { ...pool };
+  for (const color of MANA_COLORS) next[color] += production[color] ?? 0;
+  return next;
+}
+
 /** An empty pool with every color at zero. */
 export function emptyPool(): ManaPool {
   return { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };

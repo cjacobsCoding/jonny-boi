@@ -80,6 +80,16 @@ Robust to misses; respects Scryfall guidelines.
 ### 3.4 AI pilots — ✅ done
 The `chooseAction` interface + read-only game view + legal-action generator; a `random` baseline and a
 `heuristic` pilot good enough to play the meta decks competently. Tested against scripted scenarios.
+The look-ahead **`mcts`** pilot (UCB1 + engine rollouts, tunable `MctsConfig`) is now `DEFAULT_PILOT_ID`
+— every consumer that doesn't name a pilot gets it. It plays *far* better than the heuristic, which has
+no lookahead at all, but is **orders of magnitude slower**: pass `--pilot heuristic` (or lower
+`MctsConfig.maxDecisionMillis`) for runs where throughput matters. The heuristic remains MCTS's rollout
+policy, so its play quality still bounds the search's.
+*Play-quality fixes (2026-08):* pilots read effect primitives by **registered id** — a mismatched id
+(`destroy` vs `destroyTarget`) silently degrades a spell to an untargeted "generic" cast that no-ops, so
+`test-support.ts` fixtures must use the real ids. Pumps are scored as combat tricks (save / win the fight
+/ push lethal) rather than cast blind, and mana is tapped from a **funding plan** so the pilot stops
+tapping once a cost is covered.
 
 ### 3.5 Sim harness + statistics — ✅ done
 Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B

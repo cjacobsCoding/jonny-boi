@@ -33,16 +33,22 @@ import type {
   GameState,
   InstanceId,
   ManaCost,
+  ManaPool,
+  ManaProduction,
   PlayerId,
 } from '@jonny-boi/core';
 import {
-  canPay,
+  addProduction,
+  bestManaYield,
   castTiming,
   convertedManaCost,
   effectivePower,
   effectiveToughness,
   isCreature,
   isLand,
+  MANA_COLORS,
+  manaModesOf,
+  productionTotal,
   remainingToughness,
 } from '@jonny-boi/core';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -61,7 +67,13 @@ export const HEURISTIC_PILOT_ID = 'heuristic';
  */
 const PRIMITIVE = Object.freeze({
   dealDamage: 'dealDamage',
-  destroy: 'destroy',
+  /** Targeted hard removal. NOTE: the registered id is `destroyTarget`, not
+   *  `destroy` — an id typo here silently downgrades every removal spell to an
+   *  untargeted "generic spell" that fizzles on resolution. */
+  destroyTarget: 'destroyTarget',
+  exileTarget: 'exileTarget',
+  /** Combat trick (+X/+Y until end of turn). Also targeted. */
+  pumpUntilEndOfTurn: 'pumpUntilEndOfTurn',
   gainLife: 'gainLife',
   drawCards: 'drawCards',
 });
@@ -70,6 +82,7 @@ const PRIMITIVE = Object.freeze({
 type SpellIntent =
   | { readonly kind: 'damage'; readonly amount: number; readonly canTargetCreature: boolean; readonly canTargetPlayer: boolean }
   | { readonly kind: 'destroyCreature' }
+  | { readonly kind: 'pump'; readonly power: number; readonly toughness: number }
   | { readonly kind: 'creature' }
   | { readonly kind: 'other' };
 
@@ -139,14 +152,14 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
   const landScore = canPlayLand ? weights.playLandScore : -Infinity;
-  const spellScore = bestSpell ? bestSpell.score : -Infinity;
+  const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
 
   if (landScore >= spellScore && canPlayLand) {
     const landAction = legalActions.find((a) => a.kind === 'playLand');
     if (landAction) return emit(ctx, landAction, 'develop mana — play a land', weights.playLandScore);
   }
 
-  if (bestSpell && bestSpell.score > weights.passScore) {
+  if (bestSpell && bestSpell.goal.score > weights.passScore) {
     return pursueSpell(ctx, bestSpell);
   }
 
@@ -155,11 +168,24 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
 }
 
 /**
- * Find the highest-scoring spell the pilot can *afford this turn* (using its
- * current pool plus all untapped mana sources), with targets chosen. Returns
- * undefined if no spell is worth casting.
+ * A goal together with the taps that actually fund it. Pairing the two is the
+ * point: a goal we cannot pay for is not a goal, and an empty plan means the
+ * floating pool already covers the cost, so the next action is the cast itself.
  */
-function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): SpellGoal | undefined {
+interface FundedGoal {
+  readonly goal: SpellGoal;
+  readonly plan: readonly ManaTap[];
+}
+
+/**
+ * Find the highest-scoring spell the pilot can *actually fund right now*, with
+ * targets chosen. Candidates are scored first, then walked best-first until one
+ * has a real funding plan — so the pilot never commits to a spell it cannot pay
+ * for and then strands mana tapping toward it.
+ *
+ * Returns undefined if nothing is worth casting or nothing is payable.
+ */
+function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedGoal | undefined {
   const { view } = ctx;
   const me = view.priorityPlayer;
   const opp = otherPlayer(me);
@@ -173,22 +199,29 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): SpellGo
   const sorcerySpeedOpen =
     me === view.activePlayer && (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
 
-  let best: SpellGoal | undefined;
+  const scored: SpellGoal[] = [];
   for (const card of hand) {
     const def = card.def;
     if (isLand(def)) continue;
     const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
     if (!timingOk) continue;
     const cost = def.cost ?? {};
-    // Affordable this turn if we could tap enough to pay it.
+    // Cheap upper-bound prefilter; `planManaTaps` below is the real test.
     if (convertedManaCost(cost) > availableMana) continue;
 
     const intent = classifySpell(def);
-    const scored = scoreSpell(view, opp, card, intent, weights);
-    if (!scored) continue;
-    if (!best || scored.score > best.score) best = scored;
+    const goal = scoreSpell(view, opp, card, intent, weights);
+    if (goal) scored.push(goal);
   }
-  return best;
+
+  // Best-first, but only a goal we can genuinely fund. Planning is the expensive
+  // step, so it runs on ranked candidates and stops at the first payable one.
+  scored.sort((a, b) => b.score - a.score);
+  for (const goal of scored) {
+    const plan = planManaTaps(view, me, goal.cost, ctx.legalActions);
+    if (plan) return { goal, plan };
+  }
+  return undefined;
 }
 
 /**
@@ -259,21 +292,147 @@ function scoreSpell(
         reason: `develop board — cast ${card.def.name}`,
       };
     }
+    case 'pump': {
+      const play = bestPumpPlay(view, otherPlayer(opp), opp, intent, weights);
+      if (!play) return undefined; // no combat use right now — hold the trick
+      return { score: play.score, card, cost, targets: [play.target], reason: play.reason };
+    }
     case 'other':
       return { score: weights.genericSpellScore, card, cost, targets: [], reason: `cast ${card.def.name}` };
   }
 }
 
+/** A combat trick's best use right now: whom to pump, and what it buys us. */
+interface PumpPlay {
+  readonly target: InstanceId;
+  readonly score: number;
+  readonly reason: string;
+}
+
 /**
- * Emit the next micro-action toward casting `goal`: if we can already pay, cast it
- * (with targets); otherwise tap an untapped mana source to build toward the cost.
+ * Where a +X/+Y trick actually earns its card. A pump is only worth casting when
+ * combat is live and it CHANGES an outcome, so we score the three real uses and
+ * decline otherwise:
+ *
+ *   - **push lethal** — an unblocked attacker's extra power finishes the opponent;
+ *   - **win the fight** — our creature now kills the creature it is facing;
+ *   - **survive** — our creature lives through damage that would have killed it.
+ *
+ * Returns undefined outside combat, or when the pump changes nothing: holding the
+ * card beats spending it for nothing. (The previous pilot never classified pumps
+ * at all, so it cast them target-less in its main phase and they silently
+ * no-opped — a blank card that ate a mana.)
  */
-function pursueSpell(ctx: DecisionContext, goal: SpellGoal): GameAction {
+function bestPumpPlay(
+  view: PilotView,
+  me: PlayerId,
+  opp: PlayerId,
+  intent: Extract<SpellIntent, { kind: 'pump' }>,
+  weights: HeuristicWeights,
+): PumpPlay | undefined {
+  const combat = view.combat;
+  if (!combat) return undefined;
+  const iAmAttacking = view.activePlayer === me;
+
+  // Our creatures currently in combat, each with the enemy creatures fighting it.
+  const engagements: { own: CardInstance; enemies: CardInstance[] }[] = [];
+  if (iAmAttacking) {
+    for (const attackerId of combat.attackers) {
+      const own = findInstance(view, attackerId);
+      if (!own || own.controller !== me) continue;
+      const enemies: CardInstance[] = [];
+      for (const [blockerId, blockedId] of Object.entries(combat.blocks)) {
+        if (blockedId !== attackerId) continue;
+        const blocker = findInstance(view, Number(blockerId) as InstanceId);
+        if (blocker) enemies.push(blocker);
+      }
+      engagements.push({ own, enemies });
+    }
+  } else {
+    for (const [blockerId, attackerId] of Object.entries(combat.blocks)) {
+      const own = findInstance(view, Number(blockerId) as InstanceId);
+      if (!own || own.controller !== me) continue;
+      const attacker = findInstance(view, attackerId);
+      engagements.push({ own, enemies: attacker ? [attacker] : [] });
+    }
+  }
+  if (engagements.length === 0) return undefined;
+
+  // Face damage already coming through from our unblocked attackers — the baseline
+  // the pump adds to when we're deciding whether it's lethal.
+  const unblockedDamage = iAmAttacking
+    ? engagements.reduce((sum, e) => (e.enemies.length === 0 ? sum + effectivePower(e.own) : sum), 0)
+    : 0;
+
+  let best: PumpPlay | undefined;
+  for (const { own, enemies } of engagements) {
+    if (enemies.length === 0) {
+      // Unblocked attacker: the pump is face damage. Lethal is the whole game.
+      if (!iAmAttacking) continue;
+      if (unblockedDamage + intent.power >= view.players[opp].life) {
+        return {
+          target: own.instanceId,
+          score: weights.lethalBurnScore,
+          reason: `pump ${own.def.name} for lethal (${unblockedDamage} + ${intent.power} ≥ ${view.players[opp].life})`,
+        };
+      }
+      const score = weights.pumpFaceDamagePerPower * intent.power;
+      if (score > 0 && (!best || score > best.score)) {
+        best = { target: own.instanceId, score, reason: `pump ${own.def.name} — +${intent.power} face damage` };
+      }
+      continue;
+    }
+
+    // In a fight: does the pump flip either outcome?
+    const ownToughLeft = remainingToughness(own);
+    const ownPower = effectivePower(own);
+    const incoming = enemies.reduce((sum, e) => sum + effectivePower(e), 0);
+
+    const diesNow = incoming >= ownToughLeft;
+    const survivesWithPump = incoming < ownToughLeft + intent.toughness;
+    // The biggest enemy we could newly kill with the power boost.
+    let newlyKilled: CardInstance | undefined;
+    for (const enemy of enemies) {
+      const need = remainingToughness(enemy);
+      if (ownPower >= need) continue; // already killing it — the pump adds nothing here
+      if (ownPower + intent.power < need) continue; // still can't kill it
+      if (!newlyKilled || effectivePower(enemy) > effectivePower(newlyKilled)) newlyKilled = enemy;
+    }
+
+    let score = 0;
+    const reasons: string[] = [];
+    if (diesNow && survivesWithPump) {
+      score += weights.pumpSaveCreatureScore + weights.ownCreatureLossPerStat * (ownPower + effectiveToughness(own));
+      reasons.push(`saves ${own.def.name} from ${incoming} damage`);
+    }
+    if (newlyKilled) {
+      score +=
+        weights.pumpWinFightScore +
+        weights.killEnemyPerStat * (effectivePower(newlyKilled) + effectiveToughness(newlyKilled));
+      reasons.push(`kills ${newlyKilled.def.name}`);
+    }
+    if (score > 0 && (!best || score > best.score)) {
+      best = { target: own.instanceId, score, reason: `pump ${own.def.name} — ${reasons.join(' + ')}` };
+    }
+  }
+  return best;
+}
+
+/**
+ * Emit the next micro-action toward casting `funded.goal`: cast it once the pool
+ * covers the cost, otherwise make the next tap in its funding plan.
+ *
+ * Because the plan only ever contains taps that move us closer to paying, the
+ * pilot stops tapping the moment the cost is covered — no more floating a fifth
+ * mana for a four-mana turn.
+ */
+function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
   const { view } = ctx;
   const me = view.priorityPlayer;
-  const pool = view.players[me].manaPool;
+  const { goal, plan } = funded;
 
-  if (canPay(pool, goal.cost)) {
+  const next = plan[0];
+  if (!next) {
     const cast: GameAction = {
       kind: 'castSpell',
       player: me,
@@ -283,17 +442,17 @@ function pursueSpell(ctx: DecisionContext, goal: SpellGoal): GameAction {
     return emit(ctx, cast, goal.reason, goal.score);
   }
 
-  // Need more mana: tap an untapped source we control.
-  const source = view.battlefield.find(
-    (perm) => perm.controller === me && !perm.tapped && (perm.def.produces?.length ?? 0) > 0,
-  );
-  if (source) {
-    const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: source.instanceId };
-    return emit(ctx, tap, `tap for mana → ${goal.reason}`, goal.score);
-  }
+  const source = findInstance(view, next.instanceId);
+  const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
+  const label = source ? `tap ${source.def.name} for ${describeProduction(next.production)}` : 'tap for mana';
+  return emit(ctx, tap, `${label} → ${goal.reason}`, goal.score);
+}
 
-  // Couldn't fund it after all → pass rather than spin.
-  return emit(ctx, passAction(view), 'cannot fund desired spell — passing');
+/** Render a production mode for a decision trace, e.g. `{G:1}` → "G", `{C:2}` → "CC". */
+function describeProduction(production: ManaProduction): string {
+  let out = '';
+  for (const color of MANA_COLORS) out += color.repeat(production[color] ?? 0);
+  return out || 'no mana';
 }
 
 // --- attacking -----------------------------------------------------------------
@@ -494,8 +653,15 @@ function classifySpell(def: CardDefinition): SpellIntent {
         canTargetPlayer: targets === 'any' || targets === 'player',
       };
     }
-    if (ref.primitive === PRIMITIVE.destroy) {
+    if (ref.primitive === PRIMITIVE.destroyTarget || ref.primitive === PRIMITIVE.exileTarget) {
       return { kind: 'destroyCreature' };
+    }
+    if (ref.primitive === PRIMITIVE.pumpUntilEndOfTurn) {
+      return {
+        kind: 'pump',
+        power: numberParam(ref.params, 'power', 0),
+        toughness: numberParam(ref.params, 'toughness', 0),
+      };
     }
   }
   return { kind: 'other' };
@@ -503,16 +669,138 @@ function classifySpell(def: CardDefinition): SpellIntent {
 
 // --- evaluation helpers --------------------------------------------------------
 
-/** Total mana a player could produce this turn: current pool + untapped sources. */
+/**
+ * Total mana a player could produce this turn: current pool + untapped sources.
+ *
+ * A source contributes the value of its BEST single mode, because tapping it
+ * activates exactly one — a five-color source is worth one mana, not five. (Reading
+ * the mode count as an amount is what convinced the old pilot it could afford
+ * spells it could not, so it tapped toward them and stranded the mana.)
+ *
+ * This is a cheap upper bound used only to skip obviously-unaffordable spells;
+ * `planManaTaps` is the authority on whether a cost can actually be paid.
+ */
 function totalAvailableMana(view: PilotView, player: PlayerId): number {
   let total = 0;
   const pool = view.players[player].manaPool;
-  for (const color of ['W', 'U', 'B', 'R', 'G', 'C'] as const) total += pool[color];
+  for (const color of MANA_COLORS) total += pool[color];
   for (const perm of view.battlefield) {
-    if (perm.controller === player && !perm.tapped) total += perm.def.produces?.length ?? 0;
+    if (perm.controller !== player || perm.tapped) continue;
+    total += bestManaYield(perm.def);
   }
   return total;
 }
+
+// --- mana planning --------------------------------------------------------------
+
+/** One activation in a funding plan: which permanent to tap, in which mode. */
+interface ManaTap {
+  readonly instanceId: InstanceId;
+  readonly mode: number;
+  readonly production: ManaProduction;
+}
+
+/**
+ * How far `pool` is from paying `cost`, in pips still unfunded. Zero means payable.
+ * Used to rank candidate taps: a tap is only worth making if it strictly reduces
+ * this distance, which is what stops the pilot tapping mana it cannot spend.
+ */
+function distanceToPayable(pool: ManaPool, cost: ManaCost): number {
+  let short = 0;
+  let spare = 0;
+  for (const color of MANA_COLORS) {
+    const need = cost[color] ?? 0;
+    const have = pool[color];
+    if (have < need) short += need - have;
+    else spare += have - need;
+  }
+  const generic = cost.generic ?? 0;
+  return short + Math.max(0, generic - spare);
+}
+
+/**
+ * Plan the taps that would fund `cost`, or undefined if this board cannot pay it.
+ * An empty plan means the floating pool already covers the cost — i.e. **stop
+ * tapping**, which is the case the old pilot had no way to express.
+ *
+ * Candidates come from the engine's own offered `tapForMana` actions, so the plan
+ * can only ever contain legal activations (summoning-sick sources are already
+ * excluded upstream) and each carries its chosen colour as `mode`. We take one tap
+ * at a time, always the one that closes the most of the remaining shortfall,
+ * breaking ties toward the LEAST flexible source (spend the Forest, keep the
+ * any-colour Bird) and then the smallest producer (don't crack a 2-mana rock for a
+ * single pip). Tapping a permanent removes it from the pool of candidates, so the
+ * loop always terminates.
+ */
+function planManaTaps(
+  view: PilotView,
+  me: PlayerId,
+  cost: ManaCost,
+  legalActions: readonly GameAction[],
+): ManaTap[] | undefined {
+  let pool: ManaPool = { ...view.players[me].manaPool };
+  // `distanceToPayable === 0` is exactly `canPay`, without payCost's pool copy.
+  if (distanceToPayable(pool, cost) === 0) return [];
+
+  // Group the offered activations by permanent: the modes of one source are
+  // alternatives, and tapping it spends the whole permanent.
+  const candidates = new Map<InstanceId, ManaTap[]>();
+  for (const action of legalActions) {
+    if (action.kind !== 'tapForMana') continue;
+    const perm = findInstance(view, action.instanceId);
+    if (!perm) continue;
+    const modes = manaModesOf(perm.def);
+    const mode = action.mode ?? 0;
+    const production = modes[mode];
+    if (!production) continue;
+    const list = candidates.get(action.instanceId);
+    const tap: ManaTap = { instanceId: action.instanceId, mode, production };
+    if (list) list.push(tap);
+    else candidates.set(action.instanceId, [tap]);
+  }
+
+  const plan: ManaTap[] = [];
+  // One reusable scratch pool for candidate evaluation. This inner loop runs for
+  // every source × mode on every planning pass, and it is on the sim's hot path
+  // (MCTS calls the heuristic once per rollout ply) — materialising a fresh pool
+  // per candidate cost real throughput, so we copy into scratch instead.
+  const scratch: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+  let current = distanceToPayable(pool, cost);
+  while (current > 0) {
+    let best: ManaTap | undefined;
+    let bestDistance = current;
+    let bestFlexibility = Infinity;
+    let bestSize = Infinity;
+
+    for (const taps of candidates.values()) {
+      const flexibility = taps.length; // how many colours this source could have made
+      for (const tap of taps) {
+        for (const color of MANA_COLORS) scratch[color] = pool[color] + (tap.production[color] ?? 0);
+        const distance = distanceToPayable(scratch, cost);
+        if (distance >= current) continue; // this tap buys us nothing — never make it
+        const size = productionTotal(tap.production);
+        const better =
+          distance < bestDistance ||
+          (distance === bestDistance && flexibility < bestFlexibility) ||
+          (distance === bestDistance && flexibility === bestFlexibility && size < bestSize);
+        if (better) {
+          best = tap;
+          bestDistance = distance;
+          bestFlexibility = flexibility;
+          bestSize = size;
+        }
+      }
+    }
+
+    if (!best) return undefined; // nothing left that helps — the cost is unpayable
+    candidates.delete(best.instanceId);
+    pool = addProduction(pool, best.production);
+    current = bestDistance;
+    plan.push(best);
+  }
+  return plan;
+}
+
 
 /** Creatures a player controls on the battlefield. */
 function creaturesControlledBy(view: PilotView, player: PlayerId): CardInstance[] {

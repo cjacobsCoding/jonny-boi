@@ -369,9 +369,16 @@ interface DamageIntent {
   readonly canHitCreature: boolean;
 }
 
-/** The primitive ids the enrichment recognises for targeting (mirrors the heuristic). */
+/**
+ * The primitive ids the enrichment recognises for targeting (mirrors the
+ * heuristic's vocabulary). These MUST match the ids `cards` actually registers:
+ * an id that matches nothing leaves the spell as a bare, target-less cast, which
+ * resolves as a no-op — so a typo here silently turns removal and combat tricks
+ * into blank cards that the search then cheerfully "spends".
+ */
 const DAMAGE_PRIMITIVE = 'dealDamage';
-const DESTROY_PRIMITIVE = 'destroy';
+const REMOVAL_PRIMITIVES: readonly string[] = ['destroyTarget', 'exileTarget'];
+const PUMP_PRIMITIVE = 'pumpUntilEndOfTurn';
 
 /**
  * Expand the engine's bare legal actions into the set MCTS actually searches: every
@@ -397,8 +404,9 @@ function candidateActions(state: GameState, legal: readonly GameAction[]): GameA
     }
     const card = handCard(state, me, action.instanceId);
     const intent = card ? damageIntentOf(card.def) : undefined;
-    const isDestroy = card ? hasPrimitive(card.def, DESTROY_PRIMITIVE) : false;
-    if (!intent && !isDestroy) {
+    const isRemoval = card ? REMOVAL_PRIMITIVES.some((p) => hasPrimitive(card.def, p)) : false;
+    const isPump = card ? hasPrimitive(card.def, PUMP_PRIMITIVE) : false;
+    if (!intent && !isRemoval && !isPump) {
       out.push(action); // creature / non-targeting spell — cast as-is
       continue;
     }
@@ -415,8 +423,15 @@ function candidateActions(state: GameState, legal: readonly GameAction[]): GameA
           added = true;
         }
       }
-    } else if (isDestroy) {
+    } else if (isRemoval) {
       for (const id of topThreatIds(oppCreatures, Infinity)) {
+        out.push({ ...action, targets: [id] });
+        added = true;
+      }
+    } else if (isPump) {
+      // A pump targets OUR OWN creature, so it needs its own candidate set —
+      // enriching it against enemy creatures would only ever help the opponent.
+      for (const id of pumpTargetIds(state, me)) {
         out.push({ ...action, targets: [id] });
         added = true;
       }
@@ -454,6 +469,30 @@ function handCard(state: GameState, player: PlayerId, id: InstanceId) {
 function opposingCreatures(state: GameState, opp: PlayerId) {
   return state.battlefield.filter((c) => c.controller === opp && isCreature(c.def));
 }
+
+/**
+ * Candidate targets for a pump: our own creatures, **creatures currently in
+ * combat first** — that is where a trick decides something. Capped like the
+ * removal targets so the branching factor stays bounded.
+ */
+function pumpTargetIds(state: GameState, me: PlayerId): InstanceId[] {
+  const inCombat = new Set<InstanceId>();
+  if (state.combat) {
+    for (const id of state.combat.attackers) inCombat.add(id);
+    for (const blocker of Object.keys(state.combat.blocks)) inCombat.add(Number(blocker) as InstanceId);
+  }
+  return state.battlefield
+    .filter((c) => c.controller === me && isCreature(c.def))
+    .sort((a, b) => {
+      const combatDelta = Number(inCombat.has(b.instanceId)) - Number(inCombat.has(a.instanceId));
+      return combatDelta !== 0 ? combatDelta : effectivePower(b) - effectivePower(a);
+    })
+    .slice(0, MAX_PUMP_TARGETS)
+    .map((c) => c.instanceId);
+}
+
+/** Keep the pump branching factor small — the creature that matters is in combat. */
+const MAX_PUMP_TARGETS = 2;
 
 /**
  * The instance ids of the opponent's biggest creatures that this spell can hit
