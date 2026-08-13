@@ -181,15 +181,35 @@ Ground truth: the compiler is tested by re-deriving all 32 hand-authored pool ca
 their real Scryfall text and asserting it independently reaches the same definitions — and by
 asserting it reports `incomplete` for every card the humans flagged in `STUBBED_MECHANICS`.
 
-**Engine gaps this surfaced** (the honest to-do list; each blocks real decks today):
-- *mana abilities that produce a chosen color* — core's `produces` adds one of **each** listed color,
-  so "add one mana of any color" cannot be expressed. **This is also a live bug in the curated pool:**
-  Birds of Paradise is authored `['W','U','B','R','G']` and therefore taps for **five** mana.
-- *permanents entering tapped* — blocks nearly every nonbasic dual land.
-- *hybrid / Phyrexian / {X} mana costs* — Kitchen Finks is authored as `{1}`, dropping `{G/W}{G/W}`.
-- *player choice during resolution* — modal spells, targeted discard, "you may".
-- *activated abilities with costs*, *library search*, *dynamic P/T*, *planeswalker loyalty*,
-  *transform/DFC*, *alternative costs* (suspend, spectacle).
+**Engine gaps this surfaced** — the honest to-do list. Two are now closed:
+- ✅ *colour/colour hybrid costs* — `ManaCost.hybrid` + an exhaustive payment search. Kitchen Finks
+  carries its real `{1}{G/W}{G/W}` instead of the `{1}` the pool used to cheat with.
+- ✅ *permanents entering tapped* — `CardDefinition.entersTapped`, honored on every battlefield-entry
+  path. (Only the unconditional printed form; conditional/pay-to-untap variants need player choice.)
+- ✅ *mana abilities that produce a chosen colour* — closed separately by `producesOptions` (§3.4
+  play-quality work), which also fixed Birds of Paradise tapping for five mana.
+Still open, roughly by how often they block a real decklist:
+- *player choice during resolution* — modal spells, targeted discard, "you may". The deepest of these:
+  it needs a decision to travel out to whoever controls the choice (AI pilot, hotseat player, or a
+  network peer), so it touches core, ai, sim, play and the online protocol together.
+- *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
+  pool (fetchlands, mana rocks, sac outlets).
+- *library search* (needs a chooser), *alternative and additional costs* (suspend, spectacle, kicker),
+  *{X} and Phyrexian costs*, *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*.
+
+### 3.12 Scan a deck from a photo — ✅ done
+Lay the physical cards out, take one photo, get a decklist — entirely on-device, no upload.
+Cards are located by **variance profiling** (a laid-out deck is busy card faces separated by a flat
+surface, so per-column/row variance yields the grid) rather than a contour/perspective pipeline: no CV
+library, and pure array work that is unit-tested against synthetic images. A manual rows × columns
+fallback covers photos the detector can't read. Only each card's **title strip** is OCR'd (greyscaled,
+contrast-stretched, upscaled) — the biggest accuracy win, since art and rules text otherwise generate
+confident nonsense. Raw OCR is never trusted: card names are a **closed vocabulary**, so the text is
+corrected against Scryfall's full name catalog by edit distance, which turns recognition into cheap
+spelling correction. A **review grid** shows each card's own crop with its match, flags anything
+unconfident, and lets any guess be re-picked or cleared; only then does the list flow into §3.11's
+importer, so scanned cards get the same Oracle-compiler treatment as typed ones. Tesseract is
+dynamically imported so its WASM core stays off the initial bundle.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
