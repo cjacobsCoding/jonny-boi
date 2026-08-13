@@ -62,6 +62,16 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-12 DESKTOP-90PJPM4: `feat/app-icon` ✅ (apps/web icons only) — replaced the "jb" placeholder
+  with a real app icon, "The Rake": three claw gashes torn across a dark plane bleeding the five colors
+  of magic. It is **generated**, not hand-drawn — `apps/web/scripts/generate-icons.mjs` (`npm run icons
+  -w @jonny-boi/web`) emits all seven assets from one set of named constants, so retuning the mark is a
+  constant edit, never seven file edits. All original vector geometry: no traced Wizards/Scryfall art and
+  no trademarked symbols. Manifest now declares `any` and `maskable` as **separate** assets (the old
+  single "any maskable" entry would have had the framed icon cropped by Android's launcher mask).
+  Regenerating PNGs needs `npm i -D sharp`; it is deliberately not a repo dep since the PNGs are
+  committed. (Integrator)
+
 - 2026-06-26 DESKTOP-90PJPM4: `feat/proxy-print` 🚧 (apps/web) — porting the user's separate `mtg-proxy-man`
   tool (Python/PySide6/Scribus proxy-print pipeline: A4, exact card size, custom art, upscaling; the real
   version is LOCAL at C:\Users\Caleb\Documents\VS Code Projects\mtg-proxy-man, GitHub has only the art

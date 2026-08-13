@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="jonny-boi">
-  <title>jonny-boi</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="jonny-boi (maskable)">
+  <title>jonny-boi (maskable)</title>
   <defs>
     <clipPath id="plane-clip">
-      <rect width="512" height="512" rx="112" />
+      <rect width="512" height="512" />
     </clipPath>
     <radialGradient id="plane" gradientUnits="userSpaceOnUse"
         cx="256" cy="256" r="256">
@@ -35,9 +35,9 @@
       <feGaussianBlur stdDeviation="7" />
     </filter>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#plane)" />
+  <rect width="512" height="512" fill="url(#plane)" />
   <g clip-path="url(#plane-clip)">
-    <g>
+    <g transform="translate(46.08 46.08) scale(0.82)">
       <g filter="url(#bleed-blur-0)" opacity="0.34">
         <path d="M79.03 356.62 Q217.5 261.07 213.41 92.89 Q167.6 235.65 79.03 356.62 Z" fill="url(#spectrum)" stroke="url(#spectrum)" stroke-width="168" stroke-linejoin="round" />
         <path d="M147.68 402.93 Q333.81 297.54 346.93 84.06 Q265.96 255.15 147.68 402.93 Z" fill="url(#spectrum)" stroke="url(#spectrum)" stroke-width="168" stroke-linejoin="round" />
@@ -80,8 +80,4 @@
       </g>
     </g>
   </g>
-    <rect x="24" y="24"
-      width="464" height="464"
-      rx="88" fill="none"
-      stroke="#e0c45a" stroke-opacity="0.2" stroke-width="4" />
 </svg>
