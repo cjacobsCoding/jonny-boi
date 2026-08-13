@@ -46,10 +46,14 @@ interface CollectionResponse {
   not_found?: Array<{ name?: string }>;
 }
 
-/** A minimal structural subset of the global `fetch` we depend on. */
+/**
+ * A minimal structural subset of the global `fetch` we depend on. `body` is
+ * optional so the client can issue both `POST /cards/collection` (with a body)
+ * and `GET /cards/search` (a bare GET — a GET request must not carry a body).
+ */
 export type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
+  init: { method: string; headers: Record<string, string>; body?: string },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 /** A resolved card ready to print: its best print image (+ optional DFC back). */
