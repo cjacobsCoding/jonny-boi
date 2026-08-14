@@ -1,41 +1,46 @@
 /**
- * Boros Aggro — aggressive RW midrange with reach and a flying top-end.
+ * Boros Aggro — white-weenie beatdown in the air, with burn as the finisher (RW).
  *
- * Game plan: open on hasty red one-drops, then back the assault with the best
- * removal in the gauntlet — Lightning Bolt for reach/blockers and white exile
- * (Swords / Path) to clear anything that out-sizes the team. Young Pyromancer
- * widens the board off the burn/removal, and Serra Angel (4/4 flying vigilance)
- * is a resilient top-end that pressures and defends — a finisher pure mono-red
- * lacks. More midrange-grindy and removal-dense than Mono-Red Aggro, but faster
- * and more proactive than UW Control: it occupies the middle of the gauntlet.
+ * **Game plan.** Curve out with efficient white bodies, take the sky with hasty
+ * and vigilant fliers, and use burn to clear the one blocker that matters or to
+ * deal the last three. Where Mono-Red wins on raw speed, Boros wins on *board
+ * quality*: first strike, flying and lifelink mean its creatures survive combat
+ * the red deck's do not, and Lightning Helix's three life buys back a whole turn
+ * of the mirror.
  *
- * Every card is a fully-supported pool card (haste, prowess, attack and token
- * triggers, exile/destroy removal all resolve under engine-v2). Identity: the
- * removal-backed beatdown pillar.
+ * **Why it was retuned down.** The old build was the best removal suite in the
+ * gauntlet (Bolt + Swords + Path) bolted onto an aggro shell, so it out-removed
+ * the midrange decks *and* out-raced the control deck — 75% overall, the most
+ * dominant list in the meta. The removal is now four Swords and four Helix (which
+ * are also a clock and a lifegain plan), and the freed slots went into creatures.
+ * It is an aggro deck with reach, not a removal pile that happens to attack.
+ *
+ * Identity: the beatdown-in-the-air pillar. Weak to sweepers, strong against
+ * ground-based midrange and any deck that stumbles on its early turns.
  */
 
 import type { Deck } from '../../src/deck.js';
 
 export const BOROS_AGGRO: Deck = {
   name: 'Boros Aggro',
-  archetype: 'Aggro-midrange (creatures + removal)',
+  archetype: 'Aggro (weenies + burn)',
   cards: [
-    // Hasty one-drop pressure (a touch lighter than Mono-Red's — this is the
-    // removal-backed midrange of the two aggressive red decks, not the max-speed one).
-    { cardId: 'Goblin Guide', count: 4 }, // 2/2 haste
-    { cardId: 'Monastery Swiftspear', count: 3 }, // 1/2 haste, prowess
-    // Token engine off the removal suite.
-    { cardId: 'Young Pyromancer', count: 4 }, // 2/1
-    // Removal — reach + exile a key blocker (a lighter package than UW's, so the
-    // deck stays an aggressive beatdown rather than a removal-pile that out-values
-    // every archetype).
+    // One-drops: a body that trades up, and evasion that gains life.
+    { cardId: 'Savannah Lions', count: 4 }, // 2/1
+    { cardId: "Healer's Hawk", count: 4 }, // 1/1 flying, lifelink
+    { cardId: 'Monastery Swiftspear', count: 4 }, // 1/2 haste, prowess
+    // Two- and three-drops that win combat rather than just showing up.
+    { cardId: 'Youthful Knight', count: 4 }, // 2/1 first strike
+    { cardId: 'Skyknight Legionnaire', count: 4 }, // 2/2 flying haste
+    { cardId: 'Aerial Responder', count: 4 }, // 2/3 flying, vigilance, lifelink
+    // Reach + the answer to the single blocker that stops the curve.
+    { cardId: 'Lightning Helix', count: 4 }, // 3 damage + 3 life
     { cardId: 'Lightning Bolt', count: 4 },
-    { cardId: 'Swords to Plowshares', count: 3 },
-    { cardId: 'Path to Exile', count: 2 },
-    // Flying, vigilant top-end — a few copies to close, not a bomb-heavy curve.
-    { cardId: 'Serra Angel', count: 3 }, // 4/4 flying, vigilance
-    // Two-color manabase.
-    { cardId: 'Mountain', count: 19 },
-    { cardId: 'Plains', count: 18 },
+    { cardId: 'Swords to Plowshares', count: 4 },
+    // Two-colour mana. The Guildgates enter tapped, which is a real cost for an
+    // aggro deck, so only four of them back up twenty basics.
+    { cardId: 'Boros Guildgate', count: 4 },
+    { cardId: 'Plains', count: 10 },
+    { cardId: 'Mountain', count: 10 },
   ],
 };

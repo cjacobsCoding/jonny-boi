@@ -85,8 +85,8 @@ describe('generateCandidates (pure)', () => {
   });
 
   it('respects the basic-land floor: will not cut Mountains below the kept minimum', () => {
-    // Mono-Red runs 44 Mountains; cutting one stays well above the floor, so it IS
-    // a candidate. But a deck already at the floor must never offer that cut.
+    // Mono-Red runs 24 Mountains; cutting one stays above the floor, so it IS a
+    // candidate. But a deck already at the floor must never offer that cut.
     const atFloor: Deck = {
       name: 'Floor test',
       archetype: 'test',

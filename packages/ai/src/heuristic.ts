@@ -263,33 +263,41 @@ function scoreSpell(
 
   switch (intent.kind) {
     case 'damage': {
+      const life = view.players[opp].life;
       // Lethal to the face? Take the win.
-      if (intent.canTargetPlayer && intent.amount >= view.players[opp].life) {
+      if (intent.canTargetPlayer && intent.amount >= life) {
         return {
           score: weights.lethalBurnScore,
           card,
           cost,
           targets: [opp],
-          reason: `burn to face — lethal (${intent.amount} ≥ ${view.players[opp].life})`,
+          reason: `burn to face — lethal (${intent.amount} ≥ ${life})`,
         };
       }
-      // Otherwise prefer killing the biggest threat this burn can actually kill.
+      // Otherwise WEIGH the two uses against each other rather than always
+      // preferring the creature kill. A burn deck that spends every card killing
+      // whatever happens to be blocking never actually closes: the previous rule
+      // only allowed a face burn when no creature was killable at all.
       const killable = intent.canTargetCreature
         ? oppCreatures.filter((c) => remainingToughness(c) <= intent.amount)
         : [];
       const target = biggestThreat(killable);
+      const killScore = target
+        ? weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target)
+        : -Infinity;
+      const faceScore = intent.canTargetPlayer ? faceBurnScore(life, intent.amount, weights) : -Infinity;
+
+      if (faceScore >= killScore && faceScore > -Infinity) {
+        return { score: faceScore, card, cost, targets: [opp], reason: `burn to face — ${life} life left` };
+      }
       if (target) {
         return {
-          score: weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target),
+          score: killScore,
           card,
           cost,
           targets: [target.instanceId],
           reason: `burn removal — kill ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`,
         };
-      }
-      // No good creature target → chip the face if we can.
-      if (intent.canTargetPlayer) {
-        return { score: weights.burnFaceBaseScore, card, cost, targets: [opp], reason: 'burn to face — no better target' };
       }
       return undefined;
     }
@@ -352,6 +360,25 @@ function scoreSpell(
     case 'other':
       return { score: weights.genericSpellScore, card, cost, targets: [], reason: `cast ${card.def.name}` };
   }
+}
+
+/**
+ * What pointing `amount` damage at a player on `life` is worth.
+ *
+ * The point of the curve is that the SAME burn spell is a different card at
+ * different life totals. At twenty, three damage to the face is a poor rate and
+ * killing a blocker is plainly better. At eight it is a quarter of the game and
+ * beats killing almost anything, because the creature you did not kill will not
+ * matter — you are two spells from winning. A flat "chip the face" score could
+ * never express that, so an aggro deck piloted by the old rule spent its whole
+ * hand answering creatures and then ran out of gas at twelve life.
+ *
+ * The value scales with the fraction of their remaining life the burn removes,
+ * which is exactly the intuition, and is continuous — no cliff, no mode flag.
+ */
+function faceBurnScore(life: number, amount: number, weights: HeuristicWeights): number {
+  const pressure = weights.burnFaceLifeReference / Math.max(life, 1);
+  return weights.burnFaceBaseScore + weights.burnFacePerDamage * amount * pressure;
 }
 
 /**

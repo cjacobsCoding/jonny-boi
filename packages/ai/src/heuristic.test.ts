@@ -125,6 +125,26 @@ describe('heuristic pilot — removal & burn', () => {
     }
   });
 
+  it('burns the FACE instead of a blocker once the opponent is nearly dead', () => {
+    // The same board, the same Bolt, a different life total: at 20 killing the
+    // creature is right, at 6 the game is two spells away and the creature is
+    // irrelevant. A flat "chip the face" score could not tell those apart, so an
+    // aggro deck answered creatures until it ran out of cards.
+    const play = (life: number) => {
+      const state = freshGame();
+      intoMainPhase(state);
+      state.players.B.life = life;
+      putOnBattlefield(state, 'B', [creatureDef('Bear', 2, 2, { cost: { R: 2 } })]);
+      giveHand(state, 'A', [burnDef('Bolt', 3, { R: 1 })]);
+      addPool(state, 'A', 'R', 1);
+      const action = choose(state);
+      if (action.kind !== 'castSpell') throw new Error('expected a cast');
+      return action.targets;
+    };
+    expect(play(20)).not.toEqual(['B']); // healthy: kill the blocker
+    expect(play(6)).toEqual(['B']); // low: race
+  });
+
   it('targets the BIGGEST killable threat with removal', () => {
     const state = freshGame();
     intoMainPhase(state);

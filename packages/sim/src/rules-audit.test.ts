@@ -302,10 +302,13 @@ function formatViolations(vs: readonly Violation[]): string {
 }
 
 describe('rules audit — full games against the real card pool', () => {
+  // Every gauntlet deck appears at least once, so a card that only one archetype
+  // plays still gets its invariants audited across full games.
   const matchups: [string, string][] = [
     ['Mono-Red Aggro', 'Mono-Green Ramp'],
     ['UW Control', 'Izzet Prowess'],
     ['Golgari Midrange', 'Boros Aggro'],
+    ['Rakdos Goblins', 'Orzhov Lifegain'],
   ];
 
   for (const [a, b] of matchups) {

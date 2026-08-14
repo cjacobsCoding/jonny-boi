@@ -27,10 +27,20 @@ export interface HeuristicWeights {
   readonly removalPerPowerOfTarget: number;
 
   // --- burn to face --------------------------------------------------------
-  /** Base score for pointing direct damage at the opponent's face. Lower than
-   *  removal so the AI prefers killing a real threat over chipping life — unless
-   *  the damage is lethal (see `lethalBurnScore`). */
+  /** Floor score for pointing direct damage at the opponent's face, before the
+   *  pressure term below. On its own it is lower than removal, so at a healthy
+   *  life total the AI still prefers killing a real threat over chipping. */
   readonly burnFaceBaseScore: number;
+  /** Score per point of face damage, scaled by `burnFaceLifeReference / life`.
+   *  This is what makes the same burn spell a chip at twenty life and the best
+   *  card in the deck at eight — burn is worth the FRACTION of the remaining life
+   *  it removes, so an aggro deck actually closes instead of answering creatures
+   *  until it runs out of gas. */
+  readonly burnFacePerDamage: number;
+  /** The life total at which face burn is worth exactly `burnFacePerDamage` per
+   *  point. Above it burn is worth less, below it more — set at the starting life
+   *  total so "a fresh opponent" is the reference point. */
+  readonly burnFaceLifeReference: number;
   /** Score for burn that is *lethal* to the opponent right now — take the win. */
   readonly lethalBurnScore: number;
 
@@ -169,8 +179,12 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   removalBaseScore: 60,
   removalPerPowerOfTarget: 6,
 
-  // burn to face
+  // burn to face. Three damage scores ~42 at twenty life (a kill on a 2/2 is 72,
+  // so the AI still removes), ~74 at eight life (now the face wins), and jumps to
+  // `lethalBurnScore` the moment it finishes the game.
   burnFaceBaseScore: 20,
+  burnFacePerDamage: 6,
+  burnFaceLifeReference: 24,
   lethalBurnScore: 1000,
 
   // develop
