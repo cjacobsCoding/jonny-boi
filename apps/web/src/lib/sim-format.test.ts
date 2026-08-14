@@ -8,6 +8,8 @@ import {
   pValueStr,
   verdictDisplay,
   gamesPerSecond,
+  throughputText,
+  etaText,
 } from './sim-format.js';
 import type { Deck } from './deck.js';
 
@@ -86,5 +88,43 @@ describe('gamesPerSecond', () => {
 
   it('returns 0 rather than dividing by zero', () => {
     expect(gamesPerSecond(1000, 0)).toBe(0);
+  });
+});
+
+describe('throughputText', () => {
+  it('reads as games/sec for a run fast enough to round meaningfully', () => {
+    expect(throughputText(42)).toBe('42 games/sec');
+    expect(throughputText(1)).toBe('1 games/sec');
+  });
+
+  it('flips to seconds-per-game when games/sec would round to zero', () => {
+    // An MCTS game can take tens of seconds; "0 games/sec" reads as broken.
+    expect(throughputText(1 / 37.1)).toBe('37.1s/game');
+    expect(throughputText(0.5)).toBe('2.0s/game');
+  });
+
+  it('shows a dash rather than a number before any game has finished', () => {
+    expect(throughputText(0)).toBe('— games/sec');
+    expect(throughputText(-1)).toBe('— games/sec');
+  });
+});
+
+describe('etaText', () => {
+  it('extrapolates the remaining time from the work done so far', () => {
+    // 5 of 10 games in 30s => 5 games at 6s each = 30s.
+    expect(etaText(5, 10, 30)).toBe('~30s left');
+    // 2 of 10 in 20s => 80s, long enough to read in minutes.
+    expect(etaText(2, 10, 20)).toBe('~1 min left');
+  });
+
+  it('switches to minutes once the estimate is long', () => {
+    expect(etaText(1, 100, 12)).toBe('~20 min left');
+  });
+
+  it('says nothing when there is nothing to extrapolate from', () => {
+    expect(etaText(0, 10, 5)).toBeNull();
+    expect(etaText(2, 10, 0)).toBeNull();
+    expect(etaText(10, 10, 50)).toBeNull();
+    expect(etaText(2, 0, 5)).toBeNull();
   });
 });
