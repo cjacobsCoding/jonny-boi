@@ -23,10 +23,10 @@
  * property (Sol Ring is the canonical legal swap-IN to test against, so it must
  * not already be here).
  *
- * Excluded on fidelity grounds: Lava Spike and Flame Slash compile without their
- * printed target restrictions (the engine has no "damage to creatures only" /
- * "to players only" parameter), so they would play as strictly better than they
- * print. Everything below plays exactly as written.
+ * Lava Spike and Flame Slash were once excluded here because the engine could not
+ * express their printed target restrictions, so they played as strictly better than
+ * they print. That gap is closed (core's `targets` restriction), and both are now
+ * faithful and deckable. Everything below plays exactly as written.
  */
 
 import type { Deck } from '../../src/deck.js';
