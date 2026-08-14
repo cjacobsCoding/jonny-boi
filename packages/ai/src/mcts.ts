@@ -67,6 +67,7 @@ import type { MctsConfig } from './mcts-config.js';
 import { DEFAULT_MCTS_CONFIG } from './mcts-config.js';
 import { createRandomPilot } from './random.js';
 import { createHeuristicPilot } from './heuristic.js';
+import { safeFallbackAction } from './choices.js';
 
 /** The id the MCTS pilot registers under and is selected by from data. */
 export const MCTS_PILOT_ID = 'mcts';
@@ -612,8 +613,10 @@ function safeFallback(ctx: DecisionContext): GameAction {
     ctx.trace?.({ action: first, reason: 'fallback — first legal action' });
     return first;
   }
-  const bare: GameAction = { kind: 'passPriority', player: view.priorityPlayer };
-  ctx.trace?.({ action: bare, reason: 'fallback — bare pass' });
+  // Nothing offered at all. Passing is not universally legal — while a choice is
+  // parked the engine only accepts an answer — so ask for the move that always is.
+  const bare = safeFallbackAction(view as unknown as GameState);
+  ctx.trace?.({ action: bare, reason: 'fallback — forced move' });
   return bare;
 }
 

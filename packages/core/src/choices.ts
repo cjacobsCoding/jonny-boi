@@ -177,11 +177,18 @@ export function collectCardOptions(state: GameState, zone: ZoneName, opts: Colle
 // --- requests (what a card author asks for) --------------------------------------
 
 /**
- * What the selection MEANS for the player making it, so an AI can answer any card
- * it has never seen. The rule an AI applies is always "the chooser picks what is
- * best for the chooser": with `'gain'` (Eternal Witness returning a card) it takes
- * the most valuable options; with `'loss'` (Thoughtseize's victim naming their own
- * discard, Brainstorm putting two cards back) it gives up the least valuable.
+ * Whether **being selected is good or bad**, from the answering player's point of
+ * view. This one hint is what lets an AI answer a card it has never seen, without
+ * core or the AI knowing anything about specific cards:
+ *
+ *   - `'gain'` — selection is favourable. Pick your BEST cards (Eternal Witness
+ *     returning a card from your graveyard); pick YOURSELF among players.
+ *   - `'loss'` — selection costs you. Pick your WORST cards (Thoughtseize's victim
+ *     naming their own discard, Brainstorm choosing two cards to put back); pick
+ *     the OPPONENT among players.
+ *   - `'neutral'` — no steer; the AI takes the smallest legal selection.
+ *
+ * It is a hint for answering only — it never affects what answers are legal.
  */
 export type ChoiceValence = 'gain' | 'loss' | 'neutral';
 
@@ -211,8 +218,11 @@ export interface SelectCardsRequest extends ChoiceRequestBase, ChoiceCountReques
   readonly kind: 'selectCards';
   readonly candidates: readonly CardOption[];
   /**
-   * When true the ANSWER ORDER is meaningful and the answer must list every chosen
-   * card in the order the effect will use — "put them back on top in any order".
+   * When true the ANSWER ORDER is meaningful: the answer lists the chosen cards in
+   * the order the effect will use them, FIRST being the position that comes up
+   * soonest — the card that ends up on top of the library, is drawn first, is seen
+   * first. (An AI therefore orders its picks best-first.) This is what "put them
+   * back on top in any order" is; there is no separate "arrange" choice kind.
    */
   readonly ordered?: boolean;
   /** Where the candidates came from; UI copy + AI context only. */

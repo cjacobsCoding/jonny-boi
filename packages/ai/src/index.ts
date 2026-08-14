@@ -41,6 +41,14 @@ export { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
 export type { HeuristicWeights } from './weights.js';
 export { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
 
+/**
+ * Answering core's player CHOICES. Pilots use these automatically; they are
+ * exported so any other consumer that has to answer on a player's behalf (a
+ * hotseat "auto-play this seat" control, a server filling in for a disconnected
+ * seat) reaches for the same reasoning rather than reinventing it.
+ */
+export { answerChoiceHeuristically, answerAction, safeFallbackAction, cardValue } from './choices.js';
+
 // Tunable MCTS config (data-driven, designer-tunable: budget, depth, eval weights).
 export type { MctsConfig } from './mcts-config.js';
 export { DEFAULT_MCTS_CONFIG, FAST_MCTS_CONFIG } from './mcts-config.js';

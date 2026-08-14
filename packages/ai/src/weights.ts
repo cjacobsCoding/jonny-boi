@@ -84,6 +84,24 @@ export interface HeuristicWeights {
    *  if the trade is at least this good (kills the attacker without losing more
    *  than we gain). */
   readonly blockValueThreshold: number;
+
+  // --- answering player choices (choices.ts) --------------------------------
+  /** What a LAND is worth when the pilot must rank cards for a choice ("which card
+   *  do I discard / return / put back on top"). Low: a land in hand late is the
+   *  card you part with first, which is the common case for these effects. */
+  readonly choiceLandValue: number;
+  /** Base worth of a CREATURE being ranked for a choice. */
+  readonly choiceCreatureBaseValue: number;
+  /** Extra worth per point of (power + toughness) — bigger bodies rank higher. */
+  readonly choiceCreaturePerStatValue: number;
+  /** Base worth of any non-land, non-creature card (removal, burn, a draw spell). */
+  readonly choiceSpellBaseValue: number;
+  /** Extra worth per point of mana value — expensive spells are the payoff cards
+   *  you keep, cheap ones the chaff you pitch. */
+  readonly choiceSpellPerManaValue: number;
+  /** Answer to a "you may …" that carries no `ChoiceValence` steer. Yes by default:
+   *  an optional clause on a card you chose to cast is normally its upside. */
+  readonly choiceConfirmNeutralYes: boolean;
 }
 
 /**
@@ -129,4 +147,14 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // blocking
   desperateLifeThreshold: 10,
   blockValueThreshold: 0,
+
+  // answering choices — the ordering these produce is
+  //   big creature > small creature ≈ expensive spell > cheap spell > land
+  // which is what "discard your worst card / return your best one" should mean.
+  choiceLandValue: 2,
+  choiceCreatureBaseValue: 10,
+  choiceCreaturePerStatValue: 2,
+  choiceSpellBaseValue: 8,
+  choiceSpellPerManaValue: 2,
+  choiceConfirmNeutralYes: true,
 });

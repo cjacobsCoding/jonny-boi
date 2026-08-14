@@ -8,7 +8,8 @@
  * for whoever holds it, which the engine accepts or harmlessly rejects.
  */
 
-import type { GameAction } from '@jonny-boi/core';
+import type { GameAction, GameState } from '@jonny-boi/core';
+import { safeFallbackAction } from './choices.js';
 import type { DecisionContext, Pilot } from './pilot.js';
 
 /** The id the random pilot registers under and is selected by from data. */
@@ -25,9 +26,11 @@ export function createRandomPilot(): Pilot {
     chooseAction(ctx: DecisionContext): GameAction {
       const { legalActions, rng, view } = ctx;
       if (legalActions.length === 0) {
-        // Defensive: nothing offered. Pass priority for the current holder.
-        const fallback: GameAction = { kind: 'passPriority', player: view.priorityPlayer };
-        ctx.trace?.({ action: fallback, reason: 'no legal actions — passing' });
+        // Defensive: nothing offered. Take the move that is always accepted — a
+        // priority pass normally, or the default answer while a choice is parked
+        // (where passing would be rejected).
+        const fallback = safeFallbackAction(view as unknown as GameState);
+        ctx.trace?.({ action: fallback, reason: 'no legal actions — forced move' });
         return fallback;
       }
       const index = rng.nextInt(legalActions.length);
