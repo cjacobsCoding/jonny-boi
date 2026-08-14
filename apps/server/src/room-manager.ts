@@ -73,8 +73,10 @@ export class RoomManager {
   }
 
   /**
-   * Drop rooms that have had no seated nor spectating socket for longer than the
-   * grace period. The grace window is what makes reconnect possible when BOTH players
+   * Drop rooms with no seated nor spectating socket: at once if no game was ever
+   * dealt there, otherwise once the grace period has elapsed. Splitting the two is
+   * what keeps the grace window from being abusable (see below). The window itself
+   * is what makes reconnect possible when BOTH players
    * drop at once (a shared-network blip would otherwise destroy the match instantly);
    * the periodic sweep in the WS layer guarantees the room is still reaped afterwards,
    * so retention stays bounded. `now` is injectable so tests need no timers.
@@ -82,6 +84,17 @@ export class RoomManager {
   pruneEmpty(now: number = Date.now()): void {
     for (const [code, room] of this.rooms) {
       if (!room.isEmpty()) {
+        this.emptySince.delete(code);
+        continue;
+      }
+      // A room where no cards were ever dealt holds no match to reconnect to (a
+      // lobby drop already vacates the seat and voids its token), so it is reclaimed
+      // at once rather than held for the grace window. Without this split the grace
+      // period is an amplifier: one socket can open MAX_ROOMS empty lobbies in a
+      // burst and pin the server's entire capacity for the whole window, refusing
+      // every legitimate `createRoom` — and simply keep doing it.
+      if (!room.hasGame()) {
+        this.rooms.delete(code);
         this.emptySince.delete(code);
         continue;
       }

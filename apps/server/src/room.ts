@@ -169,6 +169,25 @@ export class Room {
     return noSeated && this.spectators.size === 0;
   }
 
+  /**
+   * Whether cards have ever been dealt here — i.e. this room holds a match that is
+   * worth preserving across a disconnect. An empty room that never got this far has
+   * nothing to reconnect TO, which is what lets the manager reclaim it immediately.
+   */
+  hasGame(): boolean {
+    return this.state !== null;
+  }
+
+  /**
+   * Whether there is a board a client should be rendering. Before play begins the
+   * `GameState` exists but the match is still in its mulligan step, and a `state`
+   * message there would tell the priority seat it is their turn in a game that has
+   * not started. Only `playing`/`finished` rooms have a board to send.
+   */
+  private hasLiveBoard(): boolean {
+    return this.state !== null && (this.phase === 'playing' || this.phase === 'finished');
+  }
+
   // --- lobby: join / seating -------------------------------------------------
 
   /**
@@ -209,8 +228,9 @@ export class Room {
       }
       this.spectators.add(conn);
       conn.send({ t: 'roomJoined', code: this.code, yourSeat: null, spectator: true });
-      // A spectator joining mid-game should see the current board.
-      if (this.state) this.sendStateTo(conn, null);
+      // A spectator joining mid-game should see the current board — but only once
+      // there IS one. During the mulligan step the state is not yet a playable board.
+      if (this.hasLiveBoard()) this.sendStateTo(conn, null);
       this.broadcastLobby();
       return { seat: null, spectator: true };
     }
@@ -499,7 +519,6 @@ export class Room {
     try {
       result = applyAction(this.state, action as never, this.config, this.registry);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error(`[room ${this.code}] action threw:`, err);
       conn.send({ t: 'error', code: 'illegalAction', message: 'that action could not be applied' });
       this.sendStateTo(conn, seatId);
@@ -654,12 +673,33 @@ export class Room {
       reconnectToken: seat.reconnectToken,
     });
     this.broadcastLobby();
-    // Resend the player's view so the client resyncs after the drop.
-    if (this.state) this.sendStateTo(conn, seatId);
+    // Resend whatever this seat is actually waiting on, so the client resyncs.
+    this.resyncSeat(conn, seatId);
     const opponent = seatId === 'A' ? 'B' : 'A';
     const oppConn = this.seats[opponent].connection;
     if (oppConn) oppConn.send({ t: 'opponentReconnected' });
     return seatId;
+  }
+
+  /**
+   * Bring a reconnected seat back in sync with whatever the room is waiting on.
+   *
+   * The mulligan step is driven by `mulliganPrompt`, NOT by `state`: a player who
+   * reconnects mid-mulligan and is only sent a `state` never sees the hand they are
+   * being asked about, so their mulligan can never settle — and because play begins
+   * only when BOTH seats settle, the room wedges permanently with no game and no way
+   * back to the lobby. Re-issuing the prompt is what makes a mulligan-phase drop
+   * survivable.
+   */
+  private resyncSeat(conn: Connection, seatId: PlayerId): void {
+    if (!this.state) return;
+    if (this.phase === 'mulligan') {
+      // A seat that already kept is simply waiting on the opponent; the lobby message
+      // it just received tells it so.
+      if (!this.seats[seatId].mulliganSettled) this.sendMulliganPrompt(conn, seatId);
+      return;
+    }
+    if (this.hasLiveBoard()) this.sendStateTo(conn, seatId);
   }
 
   // --- protocol version ------------------------------------------------------

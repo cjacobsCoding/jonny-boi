@@ -68,8 +68,15 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
       socket,
       send(message: ServerMessage) {
         // Only write to an open socket; a closed one is a no-op, never an error.
-        if (socket.readyState === socket.OPEN) {
+        if (socket.readyState !== socket.OPEN) return;
+        // A send MUST NOT throw. A room broadcasts by looping over its connections,
+        // so a throw here (a socket torn down mid-loop, a payload that fails to
+        // serialize) would abort that loop and leave every client after this one
+        // unsynced — one bad socket silently desyncing the rest of the room.
+        try {
           socket.send(JSON.stringify(message));
+        } catch (err) {
+          console.error('[server] send failed:', err);
         }
       },
     };
@@ -88,7 +95,6 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
         router.handle(conn, msg);
       } catch (err) {
         // A handler bug must never crash the process or other rooms.
-        // eslint-disable-next-line no-console
         console.error('[server] handler error:', err);
         conn.send({ t: 'error', code: 'internal', message: 'server error handling message' });
       }
@@ -143,8 +149,14 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
     httpServer.close();
   });
 
+  // A listener error (the port is already taken, the address is unavailable) is
+  // emitted, not thrown: with no handler Node turns it into an uncaught exception and
+  // an opaque stack trace. Report it plainly instead — the NAS deploy runs unattended.
+  httpServer.on('error', (err) => {
+    console.error(`[server] could not listen on port ${port}:`, err);
+  });
+
   httpServer.listen(port, () => {
-    // eslint-disable-next-line no-console
     console.log(`[server] jonny-boi game server listening on ws://localhost:${port}`);
   });
 

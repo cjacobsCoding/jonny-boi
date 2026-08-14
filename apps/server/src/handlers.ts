@@ -46,7 +46,6 @@ export class MessageRouter {
     try {
       this.dispatch(conn, msg);
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('[router] handler error:', err);
       conn.send({ t: 'error', code: 'internal', message: 'server error handling message' });
     }
@@ -165,7 +164,6 @@ export class MessageRouter {
         session.room = null;
       }
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('[router] disconnect error:', err);
     }
     this.manager.pruneEmpty();
