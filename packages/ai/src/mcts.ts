@@ -645,6 +645,8 @@ function describeAction(action: GameAction): string {
       return `block ×${action.blocks.length}`;
     case 'passPriority':
       return 'pass';
+    case 'answerChoice':
+      return `answer choice #${action.choiceId}`;
     default: {
       const _exhaustive: never = action;
       void _exhaustive;

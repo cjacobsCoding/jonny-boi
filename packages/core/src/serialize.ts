@@ -4,6 +4,8 @@
  * plain data and inspectable as-is. No I/O here — callers decide where output goes.
  */
 
+import type { PendingChoice } from './choices.js';
+import { choiceOptionCount } from './choices.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
 import { poolTotal } from './mana.js';
@@ -42,6 +44,21 @@ export interface SerializedState {
     readonly toughness?: number;
     readonly damageMarked: number;
   }>;
+  /**
+   * The question the game is currently waiting on, if any — so the debug
+   * inspector can show WHY a game is parked and who owes an answer, instead of a
+   * board that mysteriously refuses to advance.
+   */
+  readonly pendingChoice?: {
+    readonly id: number;
+    readonly kind: string;
+    readonly chooser: PlayerId;
+    readonly prompt: string;
+    readonly source: string;
+    readonly min: number;
+    readonly max: number;
+    readonly optionCount: number;
+  };
 }
 
 /** Produce a JSON-safe snapshot for the inspector / replay tooling. */
@@ -82,6 +99,21 @@ export function serializeState(state: GameState): SerializedState {
         damageMarked: c.damageMarked,
       };
     }),
+    ...(state.pendingChoice ? { pendingChoice: serializePendingChoice(state.pendingChoice) } : {}),
+  };
+}
+
+/** Flatten a parked choice for the inspector (option counts, not option payloads). */
+function serializePendingChoice(choice: PendingChoice): NonNullable<SerializedState['pendingChoice']> {
+  return {
+    id: choice.id,
+    kind: choice.kind,
+    chooser: choice.chooser,
+    prompt: choice.prompt,
+    source: choice.sourceName,
+    min: choice.min,
+    max: choice.max,
+    optionCount: choiceOptionCount(choice),
   };
 }
 
@@ -108,6 +140,10 @@ export function dumpState(state: GameState): string {
     }
   }
   if (s.stackSize > 0) lines.push(`  stack: ${s.stackSize} object(s)`);
+  if (s.pendingChoice) {
+    const c = s.pendingChoice;
+    lines.push(`  awaiting ${c.kind} from ${c.chooser}: "${c.prompt}" (${c.min}-${c.max} of ${c.optionCount})`);
+  }
   if (s.gameOver) lines.push(`  GAME OVER — winner: ${s.winner ?? 'draw'}`);
   return lines.join('\n');
 }

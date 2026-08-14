@@ -9,6 +9,7 @@ import type { InstanceId, PlayerId, Step, ZoneName } from './state.js';
 import type { ManaColor } from './mana.js';
 import type { CardType } from './card.js';
 import type { ContinuousDuration } from './internal/continuous.js';
+import type { ChoiceAnswer, ChoiceKind } from './choices.js';
 
 /** Discriminated union of everything the engine reports. */
 export type GameEvent =
@@ -108,6 +109,48 @@ export type GameEvent =
       readonly instanceId: InstanceId;
       readonly controller: PlayerId;
       readonly name: string;
+    }
+  | {
+      // A resolving spell/ability asked a player a question; resolution is parked
+      // until it is answered. The replay/inspector needs both halves of every
+      // choice, which is why asking and answering are BOTH events.
+      readonly type: 'choiceAsked';
+      readonly choiceId: number;
+      readonly chooser: PlayerId;
+      readonly choiceKind: ChoiceKind;
+      readonly prompt: string;
+      readonly sourceInstanceId: InstanceId;
+      /** How many options were offered (cards / players / modes / yes-no). */
+      readonly optionCount: number;
+    }
+  | {
+      // A choice was answered and its resolution resumed.
+      readonly type: 'choiceAnswered';
+      readonly choiceId: number;
+      readonly chooser: PlayerId;
+      readonly choiceKind: ChoiceKind;
+      /** The answer itself — plain data, so a replay reproduces the game exactly. */
+      readonly answer: ChoiceAnswer;
+      /** A compact rendering for logs/inspectors. */
+      readonly summary: string;
+    }
+  | {
+      // The engine answered on the chooser's behalf, because the question had
+      // exactly one legal answer or could not be put to them (see `reason`).
+      readonly type: 'choiceAutoAnswered';
+      readonly choiceId: number;
+      readonly chooser: PlayerId;
+      readonly choiceKind: ChoiceKind;
+      readonly answer: ChoiceAnswer;
+      readonly reason: string;
+    }
+  | {
+      // A resolution was abandoned because its question could not be represented
+      // (an unknown choice kind) or it asked too many. Safe degradation, said out
+      // loud rather than a crash or a hang.
+      readonly type: 'choiceAbandoned';
+      readonly sourceInstanceId: InstanceId;
+      readonly reason: string;
     };
 
 /** The append-only log. Construct via `createEventLog`; never reorder/mutate. */
