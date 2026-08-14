@@ -16,17 +16,31 @@ import {
   getCardWithRegistry,
   loadCardPool,
 } from './index.js';
-import { CARD_POOL } from '../data/pool.js';
+import { CARD_POOL, CURATED_CARD_POOL } from '../data/pool.js';
+import { EXPANDED_CARD_POOL } from '../data/expanded-pool.js';
 
 const SEED = 1234;
-const EXPECTED_POOL_SIZE = 32;
+/** Hand-authored cards (`CURATED_CARD_POOL`) — the reviewed-against-engine set. */
+const EXPECTED_CURATED_SIZE = 32;
+/** Cards the Oracle compiler built faithfully (`EXPANDED_CARD_POOL`). */
+const EXPECTED_COMPILED_SIZE = 124;
+const EXPECTED_POOL_SIZE = EXPECTED_CURATED_SIZE + EXPECTED_COMPILED_SIZE;
 
 // --- pool loading + validation -------------------------------------------------
 
 describe('card pool loading', () => {
-  it(`loads all ${EXPECTED_POOL_SIZE} curated cards`, () => {
+  it(`loads all ${EXPECTED_POOL_SIZE} pool cards (authored + compiled)`, () => {
     const pool = loadCardPool({ onWarn: () => {} });
     expect(pool.cards).toHaveLength(EXPECTED_POOL_SIZE);
+    expect(CURATED_CARD_POOL).toHaveLength(EXPECTED_CURATED_SIZE);
+    expect(EXPANDED_CARD_POOL).toHaveLength(EXPECTED_COMPILED_SIZE);
+  });
+
+  it('the two halves are disjoint — a compiled card never shadows an authored one', () => {
+    const authored = new Set(CURATED_CARD_POOL.map((card) => card.name));
+    for (const card of EXPANDED_CARD_POOL) {
+      expect(authored.has(card.name), `${card.name} is authored AND compiled`).toBe(false);
+    }
   });
 
   it('every effect ref resolves to a registered primitive (no unsupported refs)', () => {
