@@ -22,6 +22,7 @@ import type {
   EffectRef,
   ManaColor,
   ManaCost,
+  ManaProduction,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import type {
@@ -81,7 +82,11 @@ const LAND_SUBTYPE_MANA: Readonly<Record<string, ManaColor>> = Object.freeze({
  * noncreature spell type that pumps the source until end of turn.
  */
 const KEYWORD_ABILITY_TEXT: Readonly<Record<string, string>> = Object.freeze({
-  prowess: 'whenever you cast a noncreature spell, target creature gets +1/+1 until end of turn',
+  // Prowess's own reminder text, in the compiler's canonical form: the SOURCE
+  // gets the buff. (It must be the self template, not "target creature" — a
+  // triggered ability resolves with no chosen targets, so only a self-referring
+  // pump is faithful inside one. See `triggerFrom` in ./rules.ts.)
+  prowess: 'whenever you cast a noncreature spell, ~ gets +1/+1 until end of turn',
 });
 
 /**
@@ -90,6 +95,13 @@ const KEYWORD_ABILITY_TEXT: Readonly<Record<string, string>> = Object.freeze({
  * not match — the engine cannot pay those, so they must stay reported.
  */
 const HYBRID_SYMBOL = /^([WUBRGC])\/([WUBRGC])$/;
+
+/** Fold a fixed bundle of colors ({C}{C}) into the single mode one tap adds. */
+function bundleAsMode(bundle: readonly ManaColor[]): ManaProduction {
+  const mode: Partial<Record<ManaColor, number>> = {};
+  for (const color of bundle) mode[color] = (mode[color] ?? 0) + 1;
+  return mode;
+}
 
 /** Split `other` cost symbols into payable hybrids and genuinely unpayable ones. */
 function partitionOtherSymbols(symbols: readonly string[]): {
@@ -119,13 +131,21 @@ function toCoreCost(card: CompilableCard, hybrid: readonly (readonly ManaColor[]
   return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
 }
 
-/** Try every rule in a table against one clause; return the first contribution. */
+/**
+ * Try every rule in a table against one clause; return the first contribution.
+ *
+ * `targetFree` restricts the table to rules whose effects work without a
+ * caster-chosen target — the mode trigger bodies compile in, since core resolves
+ * triggered abilities with no targets.
+ */
 function applyRules(
   rules: readonly CompileRule[],
   clause: string,
   ctx: RuleContext,
+  targetFree = false,
 ): { contribution: ClauseContribution; ruleId: string } | null {
   for (const rule of rules) {
+    if (targetFree && rule.needsChosenTarget) continue;
     const match = clause.match(rule.pattern);
     if (!match) continue;
     const contribution = rule.build(match, ctx);
@@ -141,6 +161,7 @@ interface Assembly {
   readonly effects: EffectRef[];
   readonly triggers: TriggeredAbility[];
   readonly produces: ManaColor[];
+  readonly producesOptions: ManaProduction[];
   keywords: Record<string, boolean>;
   entersTapped: boolean;
   readonly matchedRules: string[];
@@ -152,6 +173,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.effects) assembly.effects.push(...contribution.effects);
   if (contribution.triggers) assembly.triggers.push(...contribution.triggers);
   if (contribution.produces) assembly.produces.push(...contribution.produces);
+  if (contribution.producesOptions) assembly.producesOptions.push(...contribution.producesOptions);
   if (contribution.keywords) {
     assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
   }
@@ -283,6 +305,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     effects: [],
     triggers: [],
     produces: [],
+    producesOptions: [],
     keywords: {},
     entersTapped: false,
     matchedRules: [],
@@ -360,16 +383,20 @@ export function compileCard(card: CompilableCard): CompileResult {
   const isSpell = types.includes('instant') || types.includes('sorcery');
   const ctx: RuleContext = {
     card,
-    compileEffectClause(text: string): readonly EffectRef[] | null {
+    compileEffectClause(
+      text: string,
+      options?: { readonly targetFree?: boolean },
+    ): readonly EffectRef[] | null {
+      const targetFree = options?.targetFree === true;
       const clause = normalizeClause(text);
-      const whole = applyRules(EFFECT_RULES, clause, ctx);
+      const whole = applyRules(EFFECT_RULES, clause, ctx, targetFree);
       if (whole) return whole.contribution.effects ?? [];
       // A multi-sentence trigger body: every sentence must compile.
       const sentences = splitSentences(text).map(normalizeClause);
       if (sentences.length > 1) {
         const refs: EffectRef[] = [];
         for (const sentence of sentences) {
-          const result = applyRules(EFFECT_RULES, sentence, ctx);
+          const result = applyRules(EFFECT_RULES, sentence, ctx, targetFree);
           if (!result) return null;
           refs.push(...(result.contribution.effects ?? []));
         }
@@ -406,6 +433,19 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
 
   // --- assemble --------------------------------------------------------------
+  // Mana production has two authoring forms and a card uses exactly one of them:
+  // a fixed bundle (`produces`, one tap adds all of it) or a list of modes
+  // (`producesOptions`, one tap adds one). A card printing BOTH shapes has two
+  // mana abilities, and since it can only be tapped once they are simply more
+  // modes of the same choice — so the bundle folds in as one extra mode.
+  const manaModes: readonly ManaProduction[] =
+    assembly.producesOptions.length > 0
+      ? [
+          ...(assembly.produces.length > 0 ? [bundleAsMode(assembly.produces)] : []),
+          ...assembly.producesOptions,
+        ]
+      : [];
+
   const definition: CardDefinition = {
     id: card.id,
     // A double-faced card is played as its front face; the back is a separate
@@ -418,7 +458,11 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
-    ...(assembly.produces.length > 0 ? { produces: assembly.produces } : {}),
+    ...(manaModes.length > 0
+      ? { producesOptions: manaModes }
+      : assembly.produces.length > 0
+        ? { produces: assembly.produces }
+        : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
   };
 

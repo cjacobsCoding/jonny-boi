@@ -1,4 +1,4 @@
-import { useEffect, type ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import { cardImage, displayRarity } from '../lib/cards.js';
 import { ManaCost } from './ManaCost.js';
@@ -8,19 +8,69 @@ interface CardDetailProps {
   onClose: () => void;
 }
 
+/** Elements a Tab press may land on inside the dialog (the focus-trap ring). */
+const FOCUSABLE_SELECTOR =
+  'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 /**
  * The single reusable card detail view (DRY). Renders a large card image plus
  * full data: mana cost, type line, oracle text, P/T, colors, keywords, set, and
  * rarity. Shown as a modal; closes on overlay click or the Escape key.
  */
 export function CardDetail({ card, onClose }: CardDetailProps): ReactElement {
-  // Escape-to-close + restore focus discipline keeps the modal keyboard-friendly.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Keyboard discipline for a real modal. The dialog declares `aria-modal`, so
+   * focus has to live inside it: on open we move focus in (remembering where it
+   * came from), Tab/Shift+Tab wrap within the dialog instead of walking the card
+   * grid behind the overlay, Escape closes, and on close focus returns to the
+   * tile the user opened.
+   */
   useEffect(() => {
+    const dialog = dialogRef.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    const focusableIn = (root: HTMLElement): HTMLElement[] =>
+      [...root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+        (element) => !element.hasAttribute('disabled'),
+      );
+
+    dialog?.focus();
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+      const focusable = focusableIn(dialog);
+      if (focusable.length === 0) {
+        // Nothing to land on — keep focus on the dialog itself.
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+      if (!dialog.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
+
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      previouslyFocused?.focus?.();
+    };
   }, [onClose]);
 
   const imageUrl = cardImage(card, 'large');
@@ -30,10 +80,14 @@ export function CardDetail({ card, onClose }: CardDetailProps): ReactElement {
   return (
     <div className="modal-overlay" onClick={onClose} role="presentation">
       <div
+        ref={dialogRef}
         className="modal"
         role="dialog"
         aria-modal="true"
         aria-label={card.name}
+        // Programmatically focusable (so focus can enter the dialog) but not a
+        // tab stop of its own.
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
         style={{ position: 'relative' }}
       >

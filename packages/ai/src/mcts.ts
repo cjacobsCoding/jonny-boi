@@ -18,8 +18,10 @@
  * Determinism: every random choice (rollout policy tie-breaks, UCB1 ties, the final
  * pick among equally-visited children) is taken from the seeded `Rng` threaded in
  * via `DecisionContext`. Same seed ⇒ same action. No `Math.random`, no `Date.now`
- * inside the reproducible path (the wall-clock cap is a pure safety backstop that,
- * by config, stays inert on normal positions).
+ * inside the reproducible path: `MctsConfig.maxDecisionMillis` defaults to
+ * `Infinity`, so the clock is not consulted at all. A caller that sets a finite
+ * cap (an interactive UI bounding a turn) knowingly trades reproducibility for a
+ * real-time bound — never do that for the sim's statistics.
  *
  * Forward-model registry (IMPORTANT): rollouts call `applyAction`, which needs the
  * effect `registry` to resolve spells. The `ai` package does not depend on `cards`,
@@ -65,6 +67,7 @@ import type { MctsConfig } from './mcts-config.js';
 import { DEFAULT_MCTS_CONFIG } from './mcts-config.js';
 import { createRandomPilot } from './random.js';
 import { createHeuristicPilot } from './heuristic.js';
+import { safeFallbackAction } from './choices.js';
 
 /** The id the MCTS pilot registers under and is selected by from data. */
 export const MCTS_PILOT_ID = 'mcts';
@@ -610,8 +613,10 @@ function safeFallback(ctx: DecisionContext): GameAction {
     ctx.trace?.({ action: first, reason: 'fallback — first legal action' });
     return first;
   }
-  const bare: GameAction = { kind: 'passPriority', player: view.priorityPlayer };
-  ctx.trace?.({ action: bare, reason: 'fallback — bare pass' });
+  // Nothing offered at all. Passing is not universally legal — while a choice is
+  // parked the engine only accepts an answer — so ask for the move that always is.
+  const bare = safeFallbackAction(view as unknown as GameState);
+  ctx.trace?.({ action: bare, reason: 'fallback — forced move' });
   return bare;
 }
 
@@ -643,6 +648,8 @@ function describeAction(action: GameAction): string {
       return `block ×${action.blocks.length}`;
     case 'passPriority':
       return 'pass';
+    case 'answerChoice':
+      return `answer choice #${action.choiceId}`;
     default: {
       const _exhaustive: never = action;
       void _exhaustive;

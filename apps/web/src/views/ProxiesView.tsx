@@ -3,7 +3,7 @@ import type { DecksApi } from '../lib/useDecks.js';
 import { parseDecklist } from '../lib/proxy/parseDecklist.js';
 import { deckToDecklist } from '../lib/proxy/deckToText.js';
 import { toCountedProxies } from '../lib/proxy/scryfall.js';
-import { buildPages, type CountedProxyCard } from '../lib/proxy/paginate.js';
+import { buildPages, totalCopies, type CountedProxyCard } from '../lib/proxy/paginate.js';
 import { useProxyResolver } from '../lib/proxy/useProxyResolver.js';
 import { useUpscaler } from '../lib/proxy/useUpscaler.js';
 import {
@@ -21,6 +21,7 @@ import {
   DEFAULT_DENSITY_ID,
   DEFAULT_PAGE_SIZE_ID,
   GRID_DENSITIES,
+  MAX_PROXY_CARDS,
   PAGE_SIZES,
   SCRYFALL_ATTRIBUTION,
   UPSCALE_FACTOR,
@@ -166,8 +167,15 @@ export function ProxiesView({ decks }: { decks: DecksApi }): ReactElement {
     }));
   }, [counted, upscaleOn, upscaler.map]);
 
-  const pages = useMemo(() => buildPages(displayCounted, perPage), [displayCounted, perPage]);
-  const totalCards = counted.reduce((sum, c) => sum + c.qty, 0);
+  const pages = useMemo(
+    () => buildPages(displayCounted, perPage, MAX_PROXY_CARDS),
+    [displayCounted, perPage],
+  );
+  // What the list asked for vs. what we will actually build — a mistyped
+  // quantity is capped rather than allowed to lock up the main thread.
+  const totalCards = totalCopies(counted);
+  const printedCards = pages.reduce((sum, page) => sum + page.length, 0);
+  const truncated = totalCards > printedCards;
 
   // Kick off / tear down the upscale pass as the toggle and card set change.
   const uniqueImagesKey = useMemo(
@@ -385,8 +393,15 @@ export function ProxiesView({ decks }: { decks: DecksApi }): ReactElement {
 
         {pages.length > 0 && (
           <div className="proxies-summary">
-            {totalCards} card{totalCards === 1 ? '' : 's'} · {pages.length} page
+            {printedCards} card{printedCards === 1 ? '' : 's'} · {pages.length} page
             {pages.length === 1 ? '' : 's'} · {pageSize.label} · exact 63 × 88 mm
+            {truncated && (
+              <div className="proxies-truncated">
+                Your list asks for {totalCards} cards — showing the first{' '}
+                {MAX_PROXY_CARDS}. Trim the quantities (or print in batches) to
+                get the rest.
+              </div>
+            )}
           </div>
         )}
 

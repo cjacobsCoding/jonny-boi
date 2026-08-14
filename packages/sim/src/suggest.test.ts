@@ -14,6 +14,7 @@ import {
   suggestSwaps,
 } from './suggest.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
+import { DEFAULT_DECK_RULES } from './config.js';
 import { MONO_RED_AGGRO, MONO_GREEN_STOMPY, UW_CONTROL } from '../data/decks/index.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
@@ -171,6 +172,79 @@ describe('rankEvaluations (pure ordering contract)', () => {
     rankEvaluations(evals);
     expect(evals.map((e) => e.swap.out)).toEqual(before);
   });
+
+  it('breaks full ties by CODE UNIT, not locale collation (host-independent order)', () => {
+    // The final tiebreak used `localeCompare`, whose ordering depends on the host's
+    // locale and ICU build: it sorts "a" before "B" (case-insensitive-ish collation)
+    // while code-unit order puts "B" (0x42) before "a" (0x61). Two machines could
+    // therefore rank the same run differently — a silent break of "same inputs +
+    // seed ⇒ same ranking". These two entries are identical apart from their key.
+    const evals = [fakeEval('a', 'x', 0.1, 0.04, 'better'), fakeEval('B', 'x', 0.1, 0.04, 'better')];
+    expect(rankEvaluations(evals).map((e) => e.swap.out)).toEqual(['B', 'a']);
+  });
+});
+
+// --- regression: candidate counting is PER CARD, not per decklist line ----------
+
+/**
+ * A card can legitimately occupy two decklist lines — `applySwap` itself splits the
+ * line it cuts from, so a suggested swap fed back into the deck produces exactly
+ * that shape. Counting cuttables per LINE then broke two ways: the same card was
+ * emitted as a cut candidate once per line (duplicate evaluations, wasted sim
+ * budget, duplicate rows in the report), and the basic-land floor was compared
+ * against a single line instead of the deck's real total, so a deck with plenty of
+ * Mountains split across lines was refused any Mountain cut at all.
+ */
+describe('generateCandidates — counts copies per card, not per line (regression)', () => {
+  /** 60 cards; Goblin Guide and Mountain are each split across two lines. */
+  const splitLines: Deck = {
+    name: 'Split lines',
+    archetype: 'test',
+    cards: [
+      { cardId: 'Goblin Guide', count: 2 },
+      { cardId: 'Goblin Guide', count: 2 },
+      { cardId: 'Lightning Bolt', count: 4 },
+      { cardId: 'Mountain', count: 10 },
+      { cardId: 'Mountain', count: 15 },
+      { cardId: 'Forest', count: 27 },
+    ],
+  };
+
+  it('emits each (out, in) pair exactly once even when a card spans two lines', () => {
+    const { candidates } = generateCandidates(splitLines, pool);
+    const keys = candidates.map((c) => `${c.outId}>${c.inId}`);
+    expect(keys.length).toBeGreaterThan(0);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('measures the basic-land floor against the deck total, not one line', () => {
+    // 10 + 15 = 25 Mountains, comfortably above the floor → cutting one is legal.
+    // Per-line counting saw 10 and 15, both under the floor, and offered no cut.
+    expect(DEFAULT_SUGGEST_CONFIG.minBasicLandsKept).toBeLessThan(25);
+    const { candidates } = generateCandidates(splitLines, pool);
+    expect(candidates.some((c) => c.outName === 'Mountain')).toBe(true);
+  });
+
+  it('still refuses the cut when the split lines TOTAL to the floor', () => {
+    const atFloor: Deck = {
+      name: 'At floor, split',
+      archetype: 'test',
+      cards: [
+        { cardId: 'Goblin Guide', count: 4 },
+        { cardId: 'Lightning Bolt', count: 4 },
+        { cardId: 'Mountain', count: 9 },
+        { cardId: 'Mountain', count: DEFAULT_SUGGEST_CONFIG.minBasicLandsKept - 9 },
+        { cardId: 'Forest', count: 60 - 8 - DEFAULT_SUGGEST_CONFIG.minBasicLandsKept },
+      ],
+    };
+    const { candidates } = generateCandidates(atFloor, pool);
+    expect(candidates.some((c) => c.outName === 'Mountain')).toBe(false);
+  });
+
+  it('totals split lines when deciding a card is already a 4-of (never an add)', () => {
+    const { candidates } = generateCandidates(splitLines, pool);
+    expect(candidates.some((c) => c.inName === 'Goblin Guide')).toBe(false);
+  });
 });
 
 describe('suggestSwaps (end-to-end, tiny + fast)', () => {
@@ -224,8 +298,40 @@ describe('suggestSwaps (end-to-end, tiny + fast)', () => {
     expect(report.candidatesEvaluated).toBe(2);
     expect(report.notes.cappedByBudget).toBe(true);
     expect(report.skipped.some((s) => s.reason === 'capped')).toBe(true);
-    // generated = evaluated + skipped accounting holds.
-    expect(report.notes.candidatesGenerated).toBeGreaterThanOrEqual(report.candidatesEvaluated);
+    // Coverage must add up EXACTLY: every candidate we generated is either
+    // evaluated or listed in `skipped`. `candidatesGenerated` was derived after the
+    // evaluation loop had already appended its own failures to the skip list, so a
+    // candidate that generated cleanly and then threw was counted twice and the
+    // total no longer reconciled — in a figure whose whole job is honest coverage.
+    expect(report.notes.candidatesGenerated).toBe(report.candidatesEvaluated + report.skipped.length);
+  });
+
+  it('evaluates candidates under the CALLER\'s deck rules, not the defaults', () => {
+    // `suggestSwaps` vetted candidates with `deckRules` but `evaluateSwap` re-loaded
+    // the variant under DEFAULT_DECK_RULES, so a caller running a smaller format got
+    // every candidate rejected as "illegal" and an empty report with no real reason.
+    const fortyCardRules = { ...DEFAULT_DECK_RULES, minDeckSize: 40 };
+    const smallDeck: Deck = {
+      name: 'Forty-card brew',
+      archetype: 'test',
+      cards: [
+        { cardId: 'Goblin Guide', count: 4 },
+        { cardId: 'Monastery Swiftspear', count: 4 },
+        { cardId: 'Young Pyromancer', count: 4 },
+        { cardId: 'Lightning Bolt', count: 4 },
+        { cardId: 'Mountain', count: 24 },
+      ],
+    };
+    const report = suggestSwaps(smallDeck, {
+      ...baseOpts,
+      gamesPerCandidate: 2,
+      deckRules: fortyCardRules,
+      cutOnly: ['Young Pyromancer'],
+      inOnly: ['Sol Ring'],
+    });
+    expect(report.candidatesEvaluated).toBe(1);
+    expect(report.skipped).toHaveLength(0);
+    expect(report.suggestions[0]!.evaluation.nGames).toBeGreaterThan(0);
   });
 
   it('zero valid candidates yields a clear, well-formed empty report', () => {

@@ -19,6 +19,7 @@ import {
   indexContinuous,
   isCreature,
   isLand,
+  manaColorsOffered,
   NO_MOD,
   type CardInstance,
   type GameState,
@@ -127,7 +128,10 @@ function boardPermanent(state: GameState, inst: CardInstance): BoardPermanent {
     toughness: creature ? effectiveToughness(inst, mod) : 0,
     damageMarked: inst.damageMarked,
     keywords: effectiveKeywords(inst, mod),
-    producesIfTapped: !inst.tapped && (inst.def.produces?.length ?? 0) > 0 ? [...inst.def.produces!] : [],
+    // Which mana this source could still make. Reads normalised MODES, so a modal
+    // source (any-colour creature, dual land) lists each colour it could choose —
+    // and reading the legacy `produces` field alone would show nothing for them.
+    producesIfTapped: inst.tapped ? [] : manaColorsOffered(inst.def),
   };
 }
 

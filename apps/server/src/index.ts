@@ -15,7 +15,12 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { ServerMessage } from '@jonny-boi/protocol';
-import { DEFAULT_PORT, HEARTBEAT_INTERVAL_MS } from './config.js';
+import {
+  DEFAULT_PORT,
+  HEARTBEAT_INTERVAL_MS,
+  MAX_FRAME_BYTES,
+  ROOM_SWEEP_INTERVAL_MS,
+} from './config.js';
 import { MessageRouter } from './handlers.js';
 import type { Connection } from './room.js';
 import { RoomManager } from './room-manager.js';
@@ -51,7 +56,10 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
     res.writeHead(200, { 'content-type': 'text/plain' });
     res.end('jonny-boi game server: ok\n');
   });
-  const wss = new WebSocketServer({ server: httpServer });
+  // `maxPayload` caps an inbound frame. ws defaults to 100 MB, which an unauthenticated
+  // client could send repeatedly to exhaust memory; nothing in this protocol is close
+  // to the cap, and an oversized frame just closes that one socket.
+  const wss = new WebSocketServer({ server: httpServer, maxPayload: MAX_FRAME_BYTES });
 
   wss.on('connection', (socket: WebSocket) => {
     (socket as LivenessSocket).isAlive = true;
@@ -60,8 +68,15 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
       socket,
       send(message: ServerMessage) {
         // Only write to an open socket; a closed one is a no-op, never an error.
-        if (socket.readyState === socket.OPEN) {
+        if (socket.readyState !== socket.OPEN) return;
+        // A send MUST NOT throw. A room broadcasts by looping over its connections,
+        // so a throw here (a socket torn down mid-loop, a payload that fails to
+        // serialize) would abort that loop and leave every client after this one
+        // unsynced — one bad socket silently desyncing the rest of the room.
+        try {
           socket.send(JSON.stringify(message));
+        } catch (err) {
+          console.error('[server] send failed:', err);
         }
       },
     };
@@ -80,7 +95,6 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
         router.handle(conn, msg);
       } catch (err) {
         // A handler bug must never crash the process or other rooms.
-        // eslint-disable-next-line no-console
         console.error('[server] handler error:', err);
         conn.send({ t: 'error', code: 'internal', message: 'server error handling message' });
       }
@@ -117,8 +131,32 @@ export function startServer(port: number = resolvePort()): WebSocketServer {
   }, HEARTBEAT_INTERVAL_MS);
   heartbeat.unref?.();
 
+  // Sweep abandoned rooms. Pruning on disconnect alone is not enough now that an
+  // empty room is held briefly for reconnect: without a timer, the last room emptied
+  // before the server went quiet would be retained until the next disconnect ever.
+  const roomSweep = setInterval(() => {
+    manager.pruneEmpty();
+  }, ROOM_SWEEP_INTERVAL_MS);
+  roomSweep.unref?.();
+
+  // Release both timers with the server so a booted-and-closed instance (tests, a
+  // harness) leaves nothing running behind it.
+  wss.on('close', () => {
+    clearInterval(heartbeat);
+    clearInterval(roomSweep);
+    // The HTTP listener is ours (we created it), so it closes with us — otherwise a
+    // closed WebSocketServer would leave the port bound.
+    httpServer.close();
+  });
+
+  // A listener error (the port is already taken, the address is unavailable) is
+  // emitted, not thrown: with no handler Node turns it into an uncaught exception and
+  // an opaque stack trace. Report it plainly instead — the NAS deploy runs unattended.
+  httpServer.on('error', (err) => {
+    console.error(`[server] could not listen on port ${port}:`, err);
+  });
+
   httpServer.listen(port, () => {
-    // eslint-disable-next-line no-console
     console.log(`[server] jonny-boi game server listening on ws://localhost:${port}`);
   });
 

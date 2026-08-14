@@ -14,6 +14,16 @@ import type { GameEvent } from './events.js';
 import type { CardDefinition, EffectRef } from './card.js';
 import { entersTapped } from './card.js';
 import type { ContinuousDuration } from './internal/continuous.js';
+import type {
+  ChooseModesRequest,
+  ChoiceAnswer,
+  ChoiceRequest,
+  ConfirmRequest,
+  SelectCardsRequest,
+  SelectPlayersRequest,
+} from './choices.js';
+import { defaultAnswerFor, normalizeChoiceRequest } from './choices.js';
+import { createRng, shuffle } from './rng.js';
 
 /**
  * The handle a primitive receives. It mutates the *draft* state in place (the
@@ -48,6 +58,81 @@ export interface EffectContext {
    * permanent. Used by token-makers (e.g. a cast-trigger that makes a 1/1).
    */
   createToken(def: CardDefinition, controller?: PlayerId): InstanceId;
+
+  // --- player choice (choices.ts) ------------------------------------------------
+  /**
+   * Ask a player a question mid-resolution. Returns their answer, or `undefined`
+   * when the question has been PARKED — in which case the primitive **must return
+   * immediately without mutating anything**.
+   *
+   * The contract in one line: **ask everything first, then mutate.** When the
+   * answer arrives the engine re-runs this same effect ref from the top, replaying
+   * the questions already answered (they return their recorded answers without
+   * stopping) until execution reaches the point it left off. Anything the
+   * primitive did *before* an unanswered ask would therefore happen twice;
+   * anything after an ask happens exactly once.
+   *
+   *     const chosen = ctx.chooseCards({ prompt: 'Discard a card', candidates });
+   *     if (!chosen) return;          // parked — resume later, nothing mutated
+   *     for (const id of chosen) discard(id);
+   *
+   * Prefer the typed helpers ({@link EffectContext.chooseCards} and friends); this
+   * is the general form for generic code.
+   */
+  ask(request: ChoiceRequest): ChoiceAnswer | undefined;
+  /**
+   * Choose `min..max` cards. Returns the chosen ids — IN THE CHOSEN ORDER when the
+   * request set `ordered` — or `undefined` if parked. An empty array is a real
+   * answer ("chose none"), which is what a `min: 0` "you may" looks like when
+   * declined; only `undefined` means "stop and come back".
+   * `chooser` defaults to the source's controller.
+   */
+  chooseCards(request: ChoiceRequestArgs<SelectCardsRequest>): readonly InstanceId[] | undefined;
+  /** Choose `min..max` players (defaults to exactly one). `undefined` ⇒ parked. */
+  choosePlayers(request: ChoiceRequestArgs<SelectPlayersRequest>): readonly PlayerId[] | undefined;
+  /**
+   * Choose `min..max` of the listed modes; returns the chosen mode ids. Pair it
+   * with {@link EffectContext.enqueueEffects} to run the chosen modes' effects —
+   * that is all a modal card needs, and it needs no new primitive per card.
+   */
+  chooseModes(request: ChoiceRequestArgs<ChooseModesRequest>): readonly string[] | undefined;
+  /** Ask a yes/no ("you may …"). `undefined` ⇒ parked; `false` ⇒ declined. */
+  confirm(request: ChoiceRequestArgs<ConfirmRequest>): boolean | undefined;
+  /**
+   * Schedule further effect refs to run inside THIS resolution, immediately after
+   * the current one. The composition seam for modal spells and for any effect
+   * whose follow-up depends on an answer — the extra effects resolve as part of
+   * the same spell, may ask their own questions, and are not new stack objects.
+   */
+  enqueueEffects(refs: readonly EffectRef[]): void;
+  /**
+   * Shuffle a player's library using the game's seeded RNG (state-carried, so it
+   * stays reproducible). The mandatory tail of every library search.
+   */
+  shuffleLibrary(player: PlayerId): void;
+}
+
+/**
+ * The argument shape of the typed `choose*` helpers: the request without its
+ * `kind` discriminator (the helper supplies it) and with `chooser` optional
+ * (defaulting to the source's controller, which is right for every card except
+ * the ones that deliberately hand the decision to the opponent).
+ */
+export type ChoiceRequestArgs<T extends ChoiceRequest> = Omit<T, 'kind' | 'chooser'> & { readonly chooser?: PlayerId };
+
+/**
+ * How an effect's questions reach the engine. Supplied by the resolution loop; an
+ * `applyEffectRef` call made WITHOUT one (a direct call outside a resolution)
+ * still works — every question is auto-answered with its safe default — so a
+ * primitive is never the thing that crashes.
+ */
+export interface ChoiceChannel {
+  /** Raise (or replay) one question. `undefined` ⇒ the resolution is now parked. */
+  ask(request: ChoiceRequest): ChoiceAnswer | undefined;
+  /** Insert effect refs to run next within the same resolution. */
+  enqueueEffects(refs: readonly EffectRef[]): void;
+  /** Shuffle a library from the state-carried seeded RNG. */
+  shuffleLibrary(player: PlayerId): void;
 }
 
 /**
@@ -105,15 +190,22 @@ export function createEffectRegistry(): EffectRegistry {
 export function applyEffectRef(
   registry: EffectRegistry,
   ref: EffectRef,
-  base: Omit<EffectContext, 'params' | 'emit' | 'targets' | 'addContinuousEffect' | 'createToken'>,
+  base: EffectContextBase,
   emit: (event: GameEvent) => void,
   targets: ReadonlyArray<InstanceId | PlayerId>,
+  channel?: ChoiceChannel,
 ): void {
   const primitive = registry.get(ref.primitive);
   if (!primitive) {
     emit({ type: 'effectUnsupported', primitive: ref.primitive, sourceInstanceId: base.source.instanceId });
     return;
   }
+  // Without a resolution to park into, a question cannot wait for anybody: answer
+  // it with its safe default so a primitive called outside the resolution loop
+  // still completes instead of silently doing nothing.
+  const ask: ChoiceChannel['ask'] = channel
+    ? (request) => channel.ask(request)
+    : (request) => detachedAnswer(request, base.source.instanceId, emit);
   const ctx: EffectContext = {
     state: base.state,
     source: base.source,
@@ -127,9 +219,74 @@ export function applyEffectRef(
     createToken(def, controller) {
       return createTokenInState(base.state, def, controller ?? base.controller, emit);
     },
+    ask,
+    chooseCards(request) {
+      const answer = ask({ ...request, kind: 'selectCards', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'selectCards' ? answer.instanceIds : undefined;
+    },
+    choosePlayers(request) {
+      const answer = ask({ ...request, kind: 'selectPlayers', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'selectPlayers' ? answer.players : undefined;
+    },
+    chooseModes(request) {
+      const answer = ask({ ...request, kind: 'chooseModes', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'chooseModes' ? answer.modeIds : undefined;
+    },
+    confirm(request) {
+      const answer = ask({ ...request, kind: 'confirm', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'confirm' ? answer.yes : undefined;
+    },
+    enqueueEffects(refs) {
+      channel?.enqueueEffects(refs);
+    },
+    shuffleLibrary(player) {
+      if (channel) channel.shuffleLibrary(player);
+      else shuffleLibraryInState(base.state, player);
+    },
   };
   primitive(ctx);
   emit({ type: 'effectApplied', primitive: ref.primitive, sourceInstanceId: base.source.instanceId });
+}
+
+/** The parts of an `EffectContext` the caller supplies; the rest are wired here. */
+export type EffectContextBase = Pick<EffectContext, 'state' | 'source' | 'controller'>;
+
+/**
+ * Answer a question raised with no resolution to park into: normalise it, take the
+ * safe default, and say so in the log. Never returns `undefined`, so a primitive
+ * invoked this way runs straight through rather than parking forever.
+ */
+function detachedAnswer(
+  request: ChoiceRequest,
+  sourceInstanceId: InstanceId,
+  emit: (event: GameEvent) => void,
+): ChoiceAnswer | undefined {
+  const choice = normalizeChoiceRequest(request, { id: 0, sourceInstanceId, sourceName: '' });
+  if (!choice) {
+    emit({ type: 'choiceAbandoned', sourceInstanceId, reason: `unknown choice kind '${String(request.kind)}'` });
+    return undefined;
+  }
+  const answer = defaultAnswerFor(choice);
+  emit({
+    type: 'choiceAutoAnswered',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    answer,
+    reason: 'asked outside a resolution — took the default answer',
+  });
+  return answer;
+}
+
+/**
+ * Shuffle a player's library from the state-carried RNG cursor, advancing it. The
+ * cursor lives in state (not in a module-level generator), which is precisely what
+ * makes a search-and-shuffle reproducible under a fixed seed.
+ */
+export function shuffleLibraryInState(state: GameState, player: PlayerId): void {
+  const rng = createRng(state.rngState);
+  state.players[player].library = shuffle(state.players[player].library, rng);
+  state.rngState = rng.state;
 }
 
 /** Register a continuous modification on the draft state; returns its id. */

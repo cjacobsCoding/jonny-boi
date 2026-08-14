@@ -14,7 +14,13 @@
  * bias every A/B verdict the deck lab produces, which is worse than saying no.
  */
 
-import type { CardType, EffectRef, ManaColor, TriggeredAbility } from '@jonny-boi/core';
+import type {
+  CardType,
+  EffectRef,
+  ManaColor,
+  ManaProduction,
+  TriggeredAbility,
+} from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, parseCount } from './text.js';
 
@@ -128,6 +134,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'damage-any-target',
     description: '"~ deals N damage to any target / target creature / target player"',
     pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}$`),
+    needsChosenTarget: true,
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null ? null : effects({ primitive: 'dealDamage', params: { amount } });
@@ -140,6 +147,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: new RegExp(
       `^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}(?:\\.|,)? and you gain ${COUNT_TOKEN} life$|^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}\\. you gain ${COUNT_TOKEN} life$`,
     ),
+    needsChosenTarget: true,
     build(match) {
       // The pattern has two alternations ("… and you gain" / "…. You gain"), so
       // read whichever pair of capture groups actually matched.
@@ -183,6 +191,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'target-player-loses-life',
     description: '"Target player/opponent loses N life"',
     pattern: new RegExp(`^target (?:player|opponent) loses ${COUNT_TOKEN} life$`),
+    needsChosenTarget: true,
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null
@@ -196,6 +205,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: new RegExp(
       `^destroy target (non(?:white|blue|black|red|green) )?creature(?: with mana value ${COUNT_TOKEN} or less)?$`,
     ),
+    needsChosenTarget: true,
     build(match) {
       const params: Record<string, unknown> = {};
       if (match[1]) {
@@ -223,6 +233,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'exile-target-creature',
     description: '"Exile target creature"',
     pattern: /^exile target creature$/,
+    needsChosenTarget: true,
     build() {
       return effects({ primitive: 'exileTarget' });
     },
@@ -231,6 +242,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'exile-creature-controller-gains-life',
     description: '"Exile target creature. Its controller gains life equal to its power."',
     pattern: /^exile target creature\. its controller gains life equal to its power$/,
+    needsChosenTarget: true,
     build() {
       return effects({ primitive: 'exileTarget', params: { gainLifeEqualPower: true } });
     },
@@ -239,6 +251,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'counter-target-spell',
     description: '"Counter target spell"',
     pattern: /^counter target spell$/,
+    needsChosenTarget: true,
     build() {
       return effects({ primitive: 'counterSpell' });
     },
@@ -247,6 +260,22 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'pump-until-eot',
     description: '"Target creature gets +X/+Y until end of turn"',
     pattern: /^target creature gets ([+-]\d+)\/([+-]\d+) until end of turn$/,
+    needsChosenTarget: true,
+    build(match) {
+      const power = Number.parseInt(match[1] ?? '', 10);
+      const toughness = Number.parseInt(match[2] ?? '', 10);
+      if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      return effects({ primitive: 'pumpUntilEndOfTurn', params: { power, toughness } });
+    },
+  },
+  {
+    // The SELF form, printed on every "grows when you do X" creature (prowess's
+    // reminder text, Kiln Fiend, …). It needs no chosen target — the primitive
+    // falls back to its own source — which is exactly why it is the only pump a
+    // triggered ability may use (see `needsChosenTarget` and `triggerFrom`).
+    id: 'self-pump-until-eot',
+    description: '"~ gets +X/+Y until end of turn" (the source pumps itself)',
+    pattern: /^~ gets ([+-]\d+)\/([+-]\d+) until end of turn$/,
     build(match) {
       const power = Number.parseInt(match[1] ?? '', 10);
       const toughness = Number.parseInt(match[2] ?? '', 10);
@@ -260,6 +289,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: new RegExp(
       `^target creature gets ([+-]\\d+)\\/([+-]\\d+) and gains ${KEYWORD_TOKEN} until end of turn$`,
     ),
+    needsChosenTarget: true,
     build(match) {
       const power = Number.parseInt(match[1] ?? '', 10);
       const toughness = Number.parseInt(match[2] ?? '', 10);
@@ -275,6 +305,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'grant-keyword-until-eot',
     description: '"Target creature gains KEYWORD until end of turn"',
     pattern: new RegExp(`^target creature gains ${KEYWORD_TOKEN} until end of turn$`),
+    needsChosenTarget: true,
     build(match) {
       const keywords = keywordFlag(match[1] ?? '');
       return keywords === null
@@ -286,6 +317,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     id: 'tap-target-creature',
     description: '"Tap target creature"',
     pattern: /^tap target creature$/,
+    needsChosenTarget: true,
     build() {
       return effects({ primitive: 'tapTarget' });
     },
@@ -335,14 +367,23 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
 // rules above. If the body has no faithful implementation the whole trigger is
 // rejected (returns null) — never a trigger that fires and does nothing.
 
-/** Build a one-condition trigger whose body is compiled from `bodyText`. */
+/**
+ * Build a one-condition trigger whose body is compiled from `bodyText`.
+ *
+ * The body is compiled in TARGET-FREE mode, because core resolves a triggered
+ * ability with an empty target list (`triggers-runtime.ts` puts `targets: []` on
+ * the stack object): nothing chooses targets for a trigger yet. So a body like
+ * "destroy target creature" would go on the stack, resolve, find no target and
+ * do NOTHING — a card that reads as removal and is actually blank. Rejecting the
+ * whole trigger reports the card instead, which is the compiler's contract.
+ */
 function triggerFrom(
   ctx: RuleContext,
   condition: TriggeredAbility['condition'],
   bodyText: string,
   label: string,
 ): ClauseContribution | null {
-  const body = ctx.compileEffectClause(bodyText);
+  const body = ctx.compileEffectClause(bodyText, { targetFree: true });
   if (body === null || body.length === 0) return null;
   return { triggers: [{ condition, effects: body, label }] };
 }
@@ -392,7 +433,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     build(match, ctx) {
       const types = spellTypesFor(match[1] ?? '');
       if (!types) return null;
-      const body = ctx.compileEffectClause(match[2] ?? '');
+      const body = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
       if (body === null || body.length === 0) return null;
       // One trigger per concrete card type — core filters on a single CardType.
       return {
@@ -420,6 +461,19 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
 ]);
 
+/** The colors "one mana of any color" may be taken as, in canonical order. */
+const ANY_COLOR: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
+
+/** Turn a run of symbols ("{c}{c}") into the single mode one tap adds. */
+function productionFromColors(colors: readonly ManaColor[]): ManaProduction {
+  const mode: Partial<Record<ManaColor, number>> = {};
+  for (const color of colors) mode[color] = (mode[color] ?? 0) + 1;
+  return mode;
+}
+
+/** Split an "or"-list of mana runs ("{w}, {u}, or {b}") into its alternatives. */
+const MANA_ALTERNATIVE_SEPARATOR = /,? or |, /;
+
 export const MANA_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'tap-for-mana',
@@ -430,13 +484,43 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       return colors === null ? null : { produces: colors };
     },
   },
-  // NOTE: there is deliberately NO rule for "{T}: Add one mana of any color" or
-  // "{T}: Add {R} or {W}". Core's `produces` is a fixed list and tapping adds
-  // ONE OF EACH listed color, so authoring a five-color list would make the
-  // permanent tap for FIVE mana rather than one of a chosen color. Modelling a
-  // choice needs a mana ability that takes a color at activation time, which the
-  // engine does not have — so these fall through to `missing` (see
-  // UNSUPPORTED_HINTS) instead of compiling into a mana engine that lies.
+  {
+    // A CHOICE between fixed alternatives — the printed form of every common
+    // dual land ("{T}: Add {W} or {U}"). Core models this exactly with
+    // `producesOptions`: one tap adds one MODE, chosen at activation. (Writing
+    // the alternatives as a `produces` bundle would instead add one of each,
+    // turning a dual land into a two-mana land — which is why this rule may only
+    // ever build modes, never a bundle.)
+    id: 'tap-for-mana-choice',
+    description: '"{T}: Add {W} or {U}" / "{T}: Add {W}, {U}, {B}, {R}, or {G}"',
+    pattern:
+      /^\{t\}: add ((?:\{[wubrgc]\})+(?:,? or (?:\{[wubrgc]\})+|, (?:\{[wubrgc]\})+)+)$/,
+    build(match) {
+      const alternatives = (match[1] ?? '').split(MANA_ALTERNATIVE_SEPARATOR);
+      const producesOptions: ManaProduction[] = [];
+      for (const alternative of alternatives) {
+        const colors = manaSymbols(alternative);
+        if (colors === null) return null;
+        producesOptions.push(productionFromColors(colors));
+      }
+      return producesOptions.length > 1 ? { producesOptions } : null;
+    },
+  },
+  {
+    // "Add one mana of any color" is the same modal ability with the five colors
+    // spelled out in words — Birds of Paradise, Manalith, Alloy Myr.
+    id: 'tap-for-any-color',
+    description: '"{T}: Add one mana of any color"',
+    pattern: /^\{t\}: add one mana of any color$/,
+    build() {
+      return { producesOptions: ANY_COLOR.map((color) => productionFromColors([color])) };
+    },
+  },
+  // NOTE: there is still deliberately NO rule for a mana ability whose colors are
+  // not a fixed printed list — "add one mana of any color that a land you control
+  // could produce", "add one mana of the chosen type". Those need the choice to be
+  // constrained by board state at activation time, which the engine cannot do, so
+  // they fall through to `missing` (see UNSUPPORTED_HINTS).
 ]);
 
 /**
@@ -512,6 +596,58 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
   { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'activated abilities with costs' },
+  // --- below here: patterns that only refine the DEFAULT explanation. Nothing
+  // above changes; these exist so "this card didn't compile" names a buildable
+  // engine feature instead of shrugging. They are ordered specific → general,
+  // and each one was written because a batch of real cards landed on it (see
+  // `../../data/expansion-report.json`).
+  {
+    pattern: /\bcascade\b|\bevoke\b|\bsuspend\b|\bbattle cry\b|\binvestigate\b|fateful hour/,
+    missingEngineSystem: 'named keyword mechanics with their own subsystem',
+  },
+  {
+    pattern: /damage to each (?:creature|player|opponent)|to each of|damage to you\b/,
+    missingEngineSystem: 'effects that hit several targets at once (each creature / each opponent)',
+  },
+  {
+    pattern: /return target .* to (?:its|their) owner'?s hand/,
+    missingEngineSystem: 'returning a permanent to its owner’s hand (bounce)',
+  },
+  {
+    pattern: /gain control of target/,
+    missingEngineSystem: 'gaining control of another player’s permanent',
+  },
+  { pattern: /\bfights?\b/, missingEngineSystem: 'creatures fighting each other' },
+  {
+    pattern: /unless (?:its controller|that player|you) pays?/,
+    missingEngineSystem: 'optional payment during resolution ("unless its controller pays")',
+  },
+  {
+    pattern: /leaves the battlefield/,
+    missingEngineSystem: 'leaves-the-battlefield triggers',
+  },
+  {
+    pattern: /(?:other )?creatures you control (?:get|have)|as long as you control|creatures? you control gets?/,
+    missingEngineSystem: 'static continuous effects (anthems and conditional buffs)',
+  },
+  {
+    // "Destroy target artifact or creature", "Counter target creature spell",
+    // "Destroy target nonlegendary creature" — the effect exists, the FILTER on
+    // what may be chosen does not.
+    pattern: /^(?:destroy|exile|counter) target \S/,
+    missingEngineSystem: 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)',
+  },
+  {
+    // A trigger body that names a target. Core resolves triggered abilities with
+    // an empty target list, so these cannot be compiled without the same decision
+    // seam "player choice during resolution" needs.
+    pattern: /^(?:when|whenever)\b.*\btarget\b/,
+    missingEngineSystem: 'targets chosen by a triggered ability',
+  },
+  {
+    pattern: /\bdraws? (?:a|two|three|\d+) cards? and (?:you )?loses? \d+ life/,
+    missingEngineSystem: 'compound "draw N and lose M" in one sentence',
+  },
 ]);
 
 /** Find the best explanation for an unimplementable clause. */

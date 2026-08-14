@@ -19,9 +19,9 @@
 import {
   applyAction,
   canPay,
-  emptyPool,
   generateLegalActions,
   isLand,
+  planManaPayment,
   type CardInstance,
   type EffectRegistry,
   type GameAction,
@@ -29,9 +29,10 @@ import {
   type GameState,
   type InstanceId,
   type ManaCost,
-  type ManaPool,
+  type ManaTapPlan,
   type PlayerId,
 } from '@jonny-boi/core';
+import { HOTSEAT_CONFIG } from './play-config.js';
 import {
   legalTargets,
   needsTarget,
@@ -100,9 +101,24 @@ export class GameSession {
     return this.state.winner;
   }
 
+  /**
+   * Lazily-computed derived views, memoized because a session is IMMUTABLE — every
+   * action returns a new `GameSession`, so anything derived from `state` is stable
+   * for this object's lifetime.
+   *
+   * This is not a micro-optimisation. `castOptions()` calls `legalActions()` once
+   * itself and again for every card in hand (affordability planning), and the
+   * React board re-derives both on every render, so an un-memoized session
+   * recomputed the engine's whole legal-action set a dozen times per frame — and
+   * `autoAdvancePriority` multiplies that by the number of windows it skips, which
+   * was enough to visibly freeze the tab.
+   */
+  private memoLegalActions?: readonly GameAction[];
+  private memoCastOptions?: CastOption[];
+
   /** Legal actions for the current priority-holder (the raw engine menu). */
   legalActions(): readonly GameAction[] {
-    return generateLegalActions(this.state);
+    return (this.memoLegalActions ??= generateLegalActions(this.state));
   }
 
   /**
@@ -148,9 +164,13 @@ export class GameSession {
     return this.submit({ kind: 'playLand', player: this.priorityPlayer, instanceId });
   }
 
-  /** Tap a single mana source the priority-holder controls. */
-  tapForMana(instanceId: InstanceId): SubmitResult {
-    return this.submit({ kind: 'tapForMana', player: this.priorityPlayer, instanceId });
+  /**
+   * Tap a single mana source the priority-holder controls. `mode` chooses which
+   * mana a MODAL source makes (an any-colour creature, a dual land); omit it for
+   * a single-mode source like a basic land.
+   */
+  tapForMana(instanceId: InstanceId, mode?: number): SubmitResult {
+    return this.submit({ kind: 'tapForMana', player: this.priorityPlayer, instanceId, mode });
   }
 
   /**
@@ -178,9 +198,9 @@ export class GameSession {
       const guard = this.state.battlefield.length + 1; // bound the loop
       let taps = 0;
       while (!canPay(working.state.players[player].manaPool, cost) && taps < guard) {
-        const source = working.untappedManaSource(player);
-        if (!source) break;
-        const tapped = working.tapForMana(source);
+        const next = working.nextTapToward(player, cost);
+        if (!next) break;
+        const tapped = working.tapForMana(next.instanceId, next.mode);
         if (tapped.rejected) break;
         working = tapped.session;
         taps += 1;
@@ -208,6 +228,52 @@ export class GameSession {
     return this.submit({ kind: 'declareBlockers', player: this.priorityPlayer, blocks });
   }
 
+  /**
+   * Does the priority-holder have a real decision to make right now?
+   *
+   * Pass-and-play gates every transfer of control behind a "hand the device over"
+   * screen, so a priority window with nothing in it is not neutral — it is a
+   * physical interruption. MTG gives both players priority in *every* step, which
+   * meant a handoff at upkeep, draw, each combat step and end step: ten-plus per
+   * turn, nearly all of them for a window where the player could do nothing at all.
+   *
+   * A window is meaningful when the player can play a land, cast something (now or
+   * after tapping), or make a combat declaration. Passing is not a choice, and
+   * neither is tapping for mana with nothing to spend it on — mana pools empty at
+   * end of step, so that mana is provably unspendable. When this returns false the
+   * UI passes for the player rather than stopping the game to ask.
+   */
+  hasMeaningfulChoice(): boolean {
+    for (const action of this.legalActions()) {
+      if (action.kind === 'passPriority' || action.kind === 'tapForMana') continue;
+      return true; // playLand / castSpell / declareAttackers / declareBlockers
+    }
+    // Nothing castable off the floating pool, but maybe castable after tapping.
+    return this.castOptions().length > 0;
+  }
+
+  /**
+   * Pass priority repeatedly while the holder has no meaningful choice, returning
+   * the session at the next window that actually needs a human (or the end of the
+   * game). Returns `this` unchanged when the current window is already meaningful,
+   * so a caller can set state unconditionally without causing a re-render loop.
+   *
+   * Bounded by `maxAutoAdvanceSteps`: a state where nobody ever has a choice (two
+   * empty boards passing turns at each other) must not spin the UI. Hitting the
+   * bound simply stops early and hands control back — the game stays legal.
+   */
+  autoAdvancePriority(maxPasses: number = HOTSEAT_CONFIG.maxAutoAdvanceSteps): GameSession {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let working: GameSession = this;
+    for (let i = 0; i < maxPasses; i++) {
+      if (working.gameOver || working.hasMeaningfulChoice()) break;
+      const result = working.passPriority();
+      if (result.rejected) break;
+      working = result.session;
+    }
+    return working;
+  }
+
   /** The lands in the priority-holder's hand they may currently play (engine-gated). */
   playableLands(): InstanceId[] {
     return this.legalActions()
@@ -223,6 +289,10 @@ export class GameSession {
    * turn shows up even before mana is floated.
    */
   castOptions(): CastOption[] {
+    return (this.memoCastOptions ??= this.computeCastOptions());
+  }
+
+  private computeCastOptions(): CastOption[] {
     const player = this.priorityPlayer;
     const hand = this.state.players[player].hand;
     const legal = this.legalActions();
@@ -232,7 +302,6 @@ export class GameSession {
         .filter((a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell')
         .map((a) => a.instanceId),
     );
-    const potential = this.potentialPool(player);
     const options: CastOption[] = [];
     for (const card of hand) {
       if (isLand(card.def)) continue;
@@ -247,7 +316,7 @@ export class GameSession {
       // for tap-to-afford we rely on the engine rejecting a bad-timing cast cleanly.
       const cost = card.def.cost;
       const affordableNow = castableNow.has(card.instanceId);
-      const affordableWithTap = cost ? canPay(potential, cost) : true;
+      const affordableWithTap = this.canAffordWithTaps(player, cost);
       // Only present a card whose timing the engine would currently allow. The engine
       // lists a card in `castSpell` only when timing is OK and the pool already pays;
       // when the pool doesn't yet pay we can't see timing directly, so we gate the
@@ -351,27 +420,29 @@ export class GameSession {
     return undefined;
   }
 
-  /** An untapped mana source the player controls (the next one to auto-tap), or null. */
-  private untappedManaSource(player: PlayerId): InstanceId | null {
-    for (const perm of this.state.battlefield) {
-      if (perm.controller === player && !perm.tapped && (perm.def.produces?.length ?? 0) > 0) {
-        return perm.instanceId;
-      }
-    }
-    return null;
+  /**
+   * The next tap toward paying `cost`, or null when the pool already covers it or
+   * the board cannot. Delegates to core's shared planner, which is also what the
+   * AI pilots use — so auto-tap picks the right COLOURS and stops as soon as the
+   * cost is met, instead of grabbing whatever permanent came first.
+   */
+  private nextTapToward(player: PlayerId, cost: ManaCost): ManaTapPlan | null {
+    const plan = planManaPayment(this.state, player, cost, this.legalActions());
+    return plan && plan.length > 0 ? (plan[0] as ManaTapPlan) : null;
   }
 
-  /** The mana pool the player COULD have after tapping every untapped source. */
-  private potentialPool(player: PlayerId): ManaPool {
-    const pool: ManaPool = { ...emptyPool(), ...this.state.players[player].manaPool };
-    for (const perm of this.state.battlefield) {
-      if (perm.controller === player && !perm.tapped) {
-        for (const color of perm.def.produces ?? []) {
-          pool[color] += 1;
-        }
-      }
-    }
-    return pool;
+  /**
+   * Can `player` pay `cost` by tapping what they have untapped right now?
+   *
+   * Asks the shared planner rather than approximating with a "potential pool".
+   * A pool cannot express a modal source — an any-colour Bird is one mana of a
+   * colour you choose, and summing its modes claims five. Planning answers the
+   * real question exactly, and respects summoning sickness because the candidate
+   * taps come from the engine's own legal actions.
+   */
+  private canAffordWithTaps(player: PlayerId, cost: ManaCost | undefined): boolean {
+    if (!cost) return true;
+    return planManaPayment(this.state, player, cost, this.legalActions()) !== undefined;
   }
 
   /** Whether the card's casting timing is allowed for `player` right now. */

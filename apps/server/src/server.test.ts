@@ -43,6 +43,18 @@ class FakeConnection implements Connection {
   }
 }
 
+/**
+ * Does a serialized message mention this exact instance id?
+ *
+ * The trailing `(?!\d)` is essential: a bare `includes('"instanceId":7')` also matches
+ * `"instanceId":75`, so the check used to report a leak whenever one seat's hand id was
+ * a digit-prefix of one of the opponent's. That went unnoticed only because the room
+ * used a hard-coded seed and therefore always dealt the same two hands.
+ */
+function mentionsInstanceId(wire: string, id: number): boolean {
+  return new RegExp(`"instanceId":${id}(?!\\d)`).test(wire);
+}
+
 /** A legal decklist drawn from the bundled gauntlet (guaranteed pool-valid). */
 function sampleDeck(index: number): DeckList {
   const d = SAMPLE_DECKS[index]!;
@@ -168,7 +180,7 @@ describe('game start', () => {
 
 describe('priority enforcement', () => {
   it('a submitAction from the non-priority seat → notYourTurn', () => {
-    const { a, b, router } = startedGame();
+    const { b, router } = startedGame();
     // A is on the play and holds priority at the start. B acting → notYourTurn.
     b.clear();
     const pass: GameAction = { kind: 'passPriority', player: 'B' };
@@ -203,15 +215,14 @@ describe('masked relay (anti-cheat)', () => {
     expect(bHandIds.length).toBeGreaterThan(0);
     const wireA = JSON.stringify(aState);
     for (const id of bHandIds) {
-      // Match the id as a JSON value to avoid coincidental substring hits.
-      expect(wireA.includes(`"instanceId":${id}`)).toBe(false);
+      expect(mentionsInstanceId(wireA, id)).toBe(false);
     }
 
     // Symmetric: B never sees A's hand ids.
     const aHandIds = aState.view.players.A.hand!.map((c) => c.instanceId);
     const wireB = JSON.stringify(bState);
     for (const id of aHandIds) {
-      expect(wireB.includes(`"instanceId":${id}`)).toBe(false);
+      expect(mentionsInstanceId(wireB, id)).toBe(false);
     }
   });
 

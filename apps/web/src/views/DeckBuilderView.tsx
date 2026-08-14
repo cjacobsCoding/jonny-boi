@@ -21,6 +21,7 @@ import { CardDetail } from '../components/CardDetail.js';
 import { ManaCurveChart } from '../components/ManaCurveChart.js';
 import { ImportDeckDialog } from '../components/ImportDeckDialog.js';
 import { deckToDecklist } from '../lib/proxy/deckToText.js';
+import { copyText } from '../lib/clipboard.js';
 
 /**
  * The Deck Builder: a card pool on the left (reusing the browser's toolbar +
@@ -211,14 +212,14 @@ function DeckPanel({
             <button
               type="button"
               className="btn btn--ghost"
-              onClick={() => navigator.clipboard?.writeText(exportJson)}
+              onClick={() => void copyText(exportJson)}
             >
               Copy JSON
             </button>
             <button
               type="button"
               className="btn btn--ghost"
-              onClick={() => navigator.clipboard?.writeText(deckToDecklist(active))}
+              onClick={() => void copyText(deckToDecklist(active))}
             >
               Copy decklist
             </button>

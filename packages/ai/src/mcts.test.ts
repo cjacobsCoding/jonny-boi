@@ -125,6 +125,56 @@ describe('mcts pilot — determinism', () => {
   });
 });
 
+// --- regression: no wall clock in the reproducible path ------------------------
+
+/**
+ * MCTS is the sim's DEFAULT pilot, so anything that makes it machine-dependent
+ * makes the lab's verdicts machine-dependent. `maxDecisionMillis` used to default
+ * to 1000 ms on the assumption that it "never trips before the count budget"; a
+ * timing probe on a real position measured decisions taking 2005 ms, i.e. the cap
+ * was firing routinely. A tripping clock means how many simulations a decision gets
+ * depends on how fast the machine happens to be at that instant — and in the paired
+ * A/B swap test the base and variant arms of the SAME seed can then receive
+ * different search budgets, which destroys the common-random-numbers premise the
+ * McNemar verdict rests on. The default is now `Infinity`, so `now()` is never
+ * consulted; termination comes from the finite `simulationsPerDecision` /
+ * `rolloutDepth` budgets, which never needed a clock.
+ */
+describe('mcts pilot — no wall clock in the reproducible path (regression)', () => {
+  it('ships configs whose decision budget is a count, never a duration', () => {
+    expect(Number.isFinite(DEFAULT_MCTS_CONFIG.maxDecisionMillis)).toBe(false);
+    expect(Number.isFinite(FAST_MCTS_CONFIG.maxDecisionMillis)).toBe(false);
+  });
+
+  it('a finite cap DOES change the chosen action — which is why the sim must not set one', () => {
+    // Same position, same seed, same count budget: only the clock differs. A cap
+    // that truncates the search picks a different action, demonstrating that a
+    // finite `maxDecisionMillis` is not the inert backstop it was assumed to be.
+    // A position with an obvious winning line: lethal burn to the face. Only a
+    // search that actually runs can find it.
+    const state = newGame(3);
+    intoMainPhase(state);
+    state.players.B.life = 3;
+    const [bolt] = giveHand(state, 'A', [burnDef('Bolt', 3, { R: 1 })]);
+    putOnBattlefield(state, 'A', [landDef('Mountain', 'R')]);
+    state.players.A.manaPool = { ...state.players.A.manaPool, R: 1 };
+    const legal = generateLegalActions(state);
+
+    const ctx = { view: state, legalActions: legal, registry: TEST_REGISTRY };
+    const searched = createMctsPilot(FAST_MCTS_CONFIG).chooseAction({ ...ctx, rng: createRng(123) });
+    const truncated = createMctsPilot({ ...FAST_MCTS_CONFIG, maxDecisionMillis: 0 }).chooseAction({
+      ...ctx,
+      rng: createRng(123),
+    });
+
+    expect(searched.kind).toBe('castSpell');
+    if (searched.kind === 'castSpell') expect(searched.instanceId).toBe(bolt!.instanceId);
+    // The clock-truncated search returns 0 simulations' worth of knowledge and
+    // falls back to a pass — the same seed, a different action.
+    expect(truncated.kind).toBe('passPriority');
+  });
+});
+
 describe('mcts pilot — strength sanity (scripted decisive position)', () => {
   it('takes the lethal burn line when it can win this turn', () => {
     const state = newGame(3);

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyAction,
+  canPay,
   createGame,
   createRng,
   generateLegalActions,
@@ -12,6 +14,7 @@ import { createHeuristicPilot, HEURISTIC_PILOT_ID } from './heuristic.js';
 import {
   addPool,
   burnDef,
+  createTestRegistry,
   creatureDef,
   destroyDef,
   giveHand,
@@ -392,5 +395,86 @@ describe('heuristic pilot — mana is tapped only as needed', () => {
     const action = choose(state);
     expect(action.kind).toBe('tapForMana');
     if (action.kind === 'tapForMana') expect(action.instanceId).toBe(forest!.instanceId);
+  });
+});
+
+// --- regression: hybrid mana costs (the livelock) -------------------------------
+
+describe('heuristic pilot — hybrid mana costs (regression)', () => {
+  /**
+   * `{1}{G/W}{G/W}` (Kitchen Finks). The pilot used to ignore `cost.hybrid`
+   * entirely, so it read this as a one-generic-mana spell, proposed a cast the
+   * engine rejected for insufficient mana, and — seeing the same state on its next
+   * decision — proposed the identical cast forever. That livelock burned the sim's
+   * whole action cap and banked a bogus timeout draw; roughly 60% of gauntlet games
+   * ended that way, poisoning every win-rate and A/B verdict built on them.
+   */
+  const hybridCost = { generic: 1, hybrid: [['G', 'W'], ['G', 'W']] } as const;
+  const finks = creatureDef('Finks', 3, 2, { cost: hybridCost });
+
+  it('never proposes a cast the engine refuses when a hybrid cost is unpayable', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    // One Forest + one floating G: nowhere near {1}{G/W}{G/W}.
+    putOnBattlefield(state, 'A', [landDef('Forest', 'G')]);
+    addPool(state, 'A', 'G', 1);
+    giveHand(state, 'A', [finks]);
+
+    // Whatever the pilot chooses, the engine must accept it — and re-choosing from
+    // the same position must not produce an ever-repeating rejected cast.
+    for (let i = 0; i < 3; i++) {
+      const action = choose(state);
+      expect(action.kind).not.toBe('castSpell');
+      const result = applyAction(state, action, undefined, createTestRegistry());
+      expect(result.events.some((e) => e.type === 'actionRejected')).toBe(false);
+    }
+  });
+
+  it('casts a hybrid spell once the pool genuinely covers it', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    // GGG pays {1}{G/W}{G/W} by spending two G on the hybrids and one on the {1}.
+    addPool(state, 'A', 'G', 3);
+    const [card] = giveHand(state, 'A', [finks]);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') expect(action.instanceId).toBe(card!.instanceId);
+  });
+
+  it('taps toward a hybrid cost instead of stalling', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'A', [landDef('F1', 'G'), landDef('F2', 'G'), landDef('P1', 'W')]);
+    giveHand(state, 'A', [finks]);
+    const action = choose(state);
+    expect(action.kind).toBe('tapForMana');
+  });
+
+  it("agrees with core's canPay on every hybrid pool (the invariant the pilot relies on)", () => {
+    // The pilot's payability test must be the engine's, or it proposes illegal
+    // casts. We assert the equivalence behaviourally: for each pool, the pilot
+    // casts iff core says the cost is payable.
+    const pools = [
+      { G: 0, W: 0, C: 0 },
+      { G: 1, W: 0, C: 0 },
+      { G: 2, W: 0, C: 0 },
+      { G: 3, W: 0, C: 0 },
+      { G: 0, W: 3, C: 0 },
+      { G: 1, W: 1, C: 0 },
+      { G: 1, W: 1, C: 1 },
+      { G: 0, W: 2, C: 1 },
+      { G: 0, W: 0, C: 3 },
+    ] as const;
+    for (const p of pools) {
+      const state = freshGame();
+      intoMainPhase(state);
+      addPool(state, 'A', 'G', p.G);
+      addPool(state, 'A', 'W', p.W);
+      addPool(state, 'A', 'C', p.C);
+      giveHand(state, 'A', [finks]);
+      const payable = canPay(state.players.A.manaPool, hybridCost);
+      const action = choose(state);
+      expect(action.kind === 'castSpell').toBe(payable);
+    }
   });
 });

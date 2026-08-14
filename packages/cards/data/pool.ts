@@ -23,12 +23,15 @@
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
+import { EXPANDED_CARD_POOL } from './expanded-pool.js';
 
 /**
- * A pool entry is just a `CardDefinition`. We keep them in one frozen array and
- * index by id/name in the loader.
+ * The hand-authored cards: written and reviewed against the engine directly,
+ * before the Oracle compiler existed. They stay authored (rather than being
+ * regenerated) because a few of them deliberately model the closest faithful
+ * subset of a card whose full text the engine cannot do — see `STUBBED_MECHANICS`.
  */
-export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
+export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
   // --- Basic lands (vanilla mana sources; zero custom effects) ----------------
   { id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99', name: 'Plains', types: ['land'], produces: ['W'] },
   { id: 'b2c6aa39-2d2a-459c-a555-fb48ba993373', name: 'Island', types: ['land'], produces: ['U'] },
@@ -369,4 +372,19 @@ export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
     // Loyalty abilities need a planeswalker/loyalty system the engine lacks. She
     // enters as a permanent (correct zone/cost); her abilities are the stub.
   },
+]);
+
+/**
+ * The whole playable pool: the hand-authored cards above plus every card the
+ * Oracle-text compiler could build faithfully from its real Scryfall text
+ * (`./expanded-pool.ts`, generated — see `../scripts/build-expansion.ts`).
+ *
+ * One list, one shape: a compiled card is a `CardDefinition` exactly like an
+ * authored one, so everything downstream (the loader, deck validation, the sim,
+ * the UI) treats them identically. Growing the pool is a DATA change — add names
+ * to `./expansion-candidates.json` and re-run the generator.
+ */
+export const CARD_POOL: readonly CardDefinition[] = Object.freeze([
+  ...CURATED_CARD_POOL,
+  ...EXPANDED_CARD_POOL,
 ]);
