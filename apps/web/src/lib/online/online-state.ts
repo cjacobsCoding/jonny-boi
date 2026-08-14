@@ -233,7 +233,10 @@ export function friendlyError(code: ErrorCode): string {
     case 'invalidDeck':
       return 'That deck is not legal for this game.';
     case 'protocolMismatch':
-      return 'Your client is out of date. Please refresh.';
+      // Either side can be the stale one, and the server is the side that usually
+      // lags (the web app auto-deploys; the game server is deployed by hand). Saying
+      // "refresh" would be actively wrong then — the user would refresh forever.
+      return 'This app and the game server are running different versions. Refresh to update the app; if that does not help, the game server needs updating.';
     case 'internal':
       return 'The server hit an unexpected error.';
     default:
