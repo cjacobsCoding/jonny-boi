@@ -42,6 +42,20 @@ export interface SimConfig {
    * case a state loops without advancing the turn counter (belt and braces).
    */
   readonly maxActionsPerGame: number;
+  /**
+   * How many times in a row the engine may reject a pilot's action before the
+   * harness steps in and passes priority for that seat instead.
+   *
+   * A pilot that proposes an action the engine refuses sees an unchanged state on
+   * its next decision, proposes the same action again, and livelocks — the game
+   * burns `maxActionsPerGame` and records a **bogus timeout draw** that silently
+   * poisons every win-rate and A/B verdict built on it. The action cap alone does
+   * not catch this honestly: it hides a pilot bug as a "draw". This guard breaks
+   * the loop deterministically (it reads only the game state), lets the game reach
+   * a real result, and surfaces the rejections in `MatchResult.rejectedActions`
+   * so a broken pilot is visible rather than laundered into the statistics.
+   */
+  readonly maxConsecutiveRejectedActions: number;
   /** Default number of games when the caller / CLI doesn't specify. */
   readonly defaultGames: number;
 }
@@ -53,6 +67,9 @@ export const DEFAULT_SIM_CONFIG: SimConfig = Object.freeze({
   // Each turn is a bounded number of priority passes / micro-actions; this cap is
   // generously above any legitimate game and only trips on a pathological loop.
   maxActionsPerGame: 20_000,
+  // A healthy pilot is rejected essentially never; a couple of rejections in a row
+  // is already pathological, so we intervene quickly rather than after thousands.
+  maxConsecutiveRejectedActions: 3,
   defaultGames: 100,
 });
 

@@ -75,6 +75,13 @@ export interface MatchResult {
   readonly turns: number;
   /** Total actions applied (a rough cost/complexity signal). */
   readonly actions: number;
+  /**
+   * How many of those actions the engine REJECTED. Zero on a healthy run; a
+   * non-zero count means a pilot proposed illegal moves, which the harness had to
+   * break out of (see `SimConfig.maxConsecutiveRejectedActions`). Surfaced rather
+   * than swallowed so a pilot bug can never masquerade as a legitimate draw.
+   */
+  readonly rejectedActions: number;
   /** Final life totals, handy for sanity-checking and the viewer. */
   readonly finalLife: Readonly<Record<PlayerId, number>>;
   /** Seed this game was played with. */
@@ -131,6 +138,12 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
   const decisions: TracedDecision[] | undefined = record ? [] : undefined;
 
   let actions = 0;
+  let rejectedActions = 0;
+  // Consecutive rejections at the *current* decision point. A pilot that keeps
+  // proposing a move the engine refuses would otherwise spin until the action cap
+  // and bank a fake timeout draw, so after `maxConsecutiveRejectedActions` we pass
+  // priority for it and let the game move on (deterministic — state only).
+  let consecutiveRejections = 0;
   // Bound the loop two independent ways so a pathological state can never hang.
   while (!state.gameOver && state.turnNumber <= sim.maxTurnsPerGame && actions < sim.maxActionsPerGame) {
     const legal = generateLegalActions(state, config);
@@ -142,18 +155,33 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
     // context so look-ahead pilots (MCTS) roll out hypothetical lines through the
     // *same* forward model the real game uses — spell effects resolve at full
     // fidelity, not as no-ops. Non-simulating pilots simply ignore these fields.
-    const action = pilot.chooseAction({
+    const chosen = pilot.chooseAction({
       view: state,
       legalActions: legal,
       rng: rngs[seat],
       registry: seats.registry,
       rulesConfig: config,
     });
+    // Stuck on rejections → take the one move that always advances the game.
+    const action: GameAction =
+      consecutiveRejections >= sim.maxConsecutiveRejectedActions
+        ? { kind: 'passPriority', player: seat }
+        : chosen;
     if (decisions) decisions.push({ player: seat, action });
 
     const result = applyAction(state, action, config, seats.registry);
     state = result.state;
-    if (events) for (const e of result.events) events.push(e);
+    let rejected = false;
+    for (const e of result.events) {
+      if (e.type === 'actionRejected') rejected = true;
+      if (events) events.push(e);
+    }
+    if (rejected) {
+      rejectedActions++;
+      consecutiveRejections++;
+    } else {
+      consecutiveRejections = 0;
+    }
     actions++;
   }
 
@@ -166,6 +194,7 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
     outcome,
     turns: state.turnNumber,
     actions,
+    rejectedActions,
     finalLife: { A: state.players.A.life, B: state.players.B.life },
     seed,
     startingPlayer,

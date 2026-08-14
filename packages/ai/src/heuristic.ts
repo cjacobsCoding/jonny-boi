@@ -32,6 +32,7 @@ import type {
   GameAction,
   GameState,
   InstanceId,
+  ManaColor,
   ManaCost,
   ManaPool,
   ManaProduction,
@@ -701,15 +702,68 @@ interface ManaTap {
 }
 
 /**
- * How far `pool` is from paying `cost`, in pips still unfunded. Zero means payable.
- * Used to rank candidate taps: a tap is only worth making if it strictly reduces
- * this distance, which is what stops the pilot tapping mana it cannot spend.
+ * How far `pool` is from paying `cost`, in pips still unfunded. Zero means payable
+ * — and `distanceToPayable(pool, cost) === 0` is exactly core's `canPay(pool, cost)`
+ * (pinned by a test), which is what keeps the pilot from ever proposing a cast the
+ * engine will reject. Used to rank candidate taps too: a tap is only worth making
+ * if it strictly reduces this distance, which is what stops the pilot tapping mana
+ * it cannot spend.
+ *
+ * Hybrid symbols (`{G/W}`) are resolved the way core's `payCost` resolves them —
+ * by trying every colour assignment and keeping the best — because a greedy choice
+ * can fail a cost that is genuinely payable. Ignoring `cost.hybrid` outright (as
+ * this once did) is far worse: a `{1}{G/W}{G/W}` creature read as a one-mana spell,
+ * so the pilot emitted a cast the engine rejected for insufficient mana, saw the
+ * same state again, and re-emitted the same cast forever — a livelock that burned
+ * the harness's entire action cap and recorded the game as a bogus timeout draw.
  */
 function distanceToPayable(pool: ManaPool, cost: ManaCost): number {
+  const hybrids = cost.hybrid;
+  if (!hybrids || hybrids.length === 0) return fixedDistance(pool, cost, NO_HYBRID_PIPS);
+  // One reusable scratch tally of "extra coloured pips this assignment demands".
+  const chosen: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+  return bestHybridDistance(pool, cost, hybrids, 0, chosen);
+}
+
+/** The zero tally used when a cost prints no hybrid symbols (the common case). */
+const NO_HYBRID_PIPS: ManaPool = Object.freeze({ W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 });
+
+/**
+ * The smallest `fixedDistance` over every assignment of colours to the remaining
+ * hybrid symbols. Exhaustive like core's payment search — printed costs carry at
+ * most a handful of hybrid symbols — and it short-circuits the moment an
+ * assignment is payable.
+ */
+function bestHybridDistance(
+  pool: ManaPool,
+  cost: ManaCost,
+  hybrids: readonly (readonly ManaColor[])[],
+  index: number,
+  chosen: ManaPool,
+): number {
+  if (index === hybrids.length) return fixedDistance(pool, cost, chosen);
+  let best = Infinity;
+  for (const color of hybrids[index] ?? []) {
+    chosen[color]++;
+    const distance = bestHybridDistance(pool, cost, hybrids, index + 1, chosen);
+    chosen[color]--;
+    if (distance < best) best = distance;
+    if (best === 0) break; // payable — no other assignment can beat it
+  }
+  return best;
+}
+
+/**
+ * `distanceToPayable` for a cost whose hybrid symbols have already been assigned
+ * to concrete colours (`extraPips`). Mirrors core's `payFixedCost`: coloured
+ * requirements come from their own colour, then the generic portion from whatever
+ * is spare.
+ */
+function fixedDistance(pool: ManaPool, cost: ManaCost, extraPips: ManaPool): number {
   let short = 0;
   let spare = 0;
   for (const color of MANA_COLORS) {
-    const need = cost[color] ?? 0;
+    const need = (cost[color] ?? 0) + extraPips[color];
     const have = pool[color];
     if (have < need) short += need - have;
     else spare += have - need;
