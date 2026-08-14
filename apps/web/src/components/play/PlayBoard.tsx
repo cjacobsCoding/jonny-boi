@@ -10,6 +10,7 @@ import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
+import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 
 /**
  * The in-game board for the player who currently holds priority (the `viewer`). It
@@ -47,6 +48,8 @@ export function PlayBoard({
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   // The attacker currently being assigned a blocker (click attacker, then blocker).
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
+  // A modal mana source the player tapped, awaiting the colour they want.
+  const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const resetTransient = (): void => {
@@ -54,6 +57,7 @@ export function PlayBoard({
     setChosenAttackers(new Set());
     setBlockAssign(new Map());
     setActiveBlockTarget(null);
+    setPendingManaTap(null);
   };
 
   const run = (fn: () => SubmitResult): void => {
@@ -73,6 +77,31 @@ export function PlayBoard({
   const isViewersPriority = session.priorityPlayer === viewer && !pendingChoice;
   const playableLands = isViewersPriority ? session.playableLands() : [];
   const castOptions = isViewersPriority ? session.castOptions() : [];
+
+  // --- manual mana tapping --------------------------------------------------------
+  // Auto-tap covers casting; this covers everything else a player does with mana by
+  // hand — floating it deliberately, and above all telling a MODAL source (Birds of
+  // Paradise, a dual land) which colour to make, which no planner can decide for them.
+  const tapMenu = useMemo(
+    () => manaTapMenu(session.state, isViewersPriority ? session.legalActions() : []),
+    [session, isViewersPriority],
+  );
+  const tappable = useMemo(
+    () => tappableIds(tapMenu, session.state, viewer),
+    [tapMenu, session, viewer],
+  );
+
+  const onTapForMana = (id: InstanceId): void => {
+    const options = tapMenu.get(id);
+    if (!options || options.length === 0) return;
+    // One mode is not a decision; more than one is, so ask rather than pick.
+    if (isModalTap(options)) {
+      setPendingManaTap(options);
+      return;
+    }
+    const only = options[0] as ManaTapOption;
+    run(() => session.tapForMana(only.instanceId, only.mode));
+  };
 
   // --- targeting -----------------------------------------------------------------
   const targetOptions: readonly TargetOption[] = pendingCast
@@ -170,6 +199,16 @@ export function PlayBoard({
     }
     // Spell targeting: allow clicking own creatures as targets.
     if (pendingCast) return targetInteraction(view.self.permanents.map((p) => p.instanceId));
+    // Otherwise your untapped mana sources are tappable by hand. Last in the chain
+    // so it never steals a click from combat selection or targeting.
+    if (tappable.size > 0) {
+      const markers = new Map<InstanceId, string>();
+      for (const id of tappable) {
+        const options = tapMenu.get(id) ?? [];
+        markers.set(id, isModalTap(options) ? 'tap: any' : `tap: ${options[0]?.label ?? ''}`);
+      }
+      return { selectableIds: tappable, selectedIds: new Set(), markers, onClick: onTapForMana };
+    }
     return undefined;
   }
 
@@ -308,6 +347,32 @@ export function PlayBoard({
           names={names}
           onAnswer={(answer) => run(() => session.answerChoice(answer))}
         />
+      )}
+
+      {/* Which colour should this modal source make? (Birds of Paradise, a dual land.) */}
+      {pendingManaTap && (
+        <div className="target-prompt" role="dialog" aria-label="Choose which mana to add">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">
+              Add which mana from {session.nameOf(pendingManaTap[0]?.instanceId ?? 0)}?
+            </div>
+            <div className="target-prompt__options">
+              {pendingManaTap.map((opt) => (
+                <button
+                  key={opt.mode ?? 0}
+                  type="button"
+                  className="btn"
+                  onClick={() => run(() => session.tapForMana(opt.instanceId, opt.mode))}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setPendingManaTap(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board). */}

@@ -73,7 +73,11 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
         tone: 'life',
       };
     case 'gainLife':
-      return { text: `${r.playerName(event.player)} gains ${event.amount} life.`, tone: 'life' };
+      // Every `gainLife` is emitted immediately after the `lifeChanged` for the
+      // same gain (see `changeLife` in packages/cards), so rendering both printed
+      // the line twice — "gains 2 life (now 22)" then "gains 2 life". `lifeChanged`
+      // is the strictly more informative of the pair, so this one is bookkeeping.
+      return null;
     case 'creatureDied':
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':

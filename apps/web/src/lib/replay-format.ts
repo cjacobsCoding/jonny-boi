@@ -75,7 +75,10 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
         tone: 'life',
       };
     case 'gainLife':
-      return { text: `Player ${event.player} gains ${event.amount} life.`, tone: 'life' };
+      // Paired with the `lifeChanged` that precedes it (see `changeLife` in
+      // packages/cards), so printing both duplicated every life-gain in the replay
+      // log. `lifeChanged` also carries the resulting total, so it wins.
+      return null;
     case 'creatureDied':
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':
