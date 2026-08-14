@@ -18,8 +18,10 @@
  * Determinism: every random choice (rollout policy tie-breaks, UCB1 ties, the final
  * pick among equally-visited children) is taken from the seeded `Rng` threaded in
  * via `DecisionContext`. Same seed ⇒ same action. No `Math.random`, no `Date.now`
- * inside the reproducible path (the wall-clock cap is a pure safety backstop that,
- * by config, stays inert on normal positions).
+ * inside the reproducible path: `MctsConfig.maxDecisionMillis` defaults to
+ * `Infinity`, so the clock is not consulted at all. A caller that sets a finite
+ * cap (an interactive UI bounding a turn) knowingly trades reproducibility for a
+ * real-time bound — never do that for the sim's statistics.
  *
  * Forward-model registry (IMPORTANT): rollouts call `applyAction`, which needs the
  * effect `registry` to resolve spells. The `ai` package does not depend on `cards`,

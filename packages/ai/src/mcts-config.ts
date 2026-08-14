@@ -22,13 +22,20 @@ export interface MctsConfig {
    */
   readonly simulationsPerDecision: number;
   /**
-   * A wall-clock safety cap (ms) per decision. Even with a generous sim budget a
-   * pathological position must never hang the sim, so we stop searching once this
-   * elapses and return the best action found so far. Determinism note: the *count*
-   * budget is what reproduces choices; the clock is only a backstop that, in
-   * practice, never trips before the count budget on normal positions. Set to a
-   * value comfortably above a normal decision's cost so it stays inert (and so
-   * runs stay reproducible). Use `Infinity` to disable.
+   * An OPTIONAL wall-clock cap (ms) per decision, for interactive callers that
+   * must bound a decision in real time. `Infinity` (the default) disables it.
+   *
+   * **A finite value makes the pilot non-deterministic** and must never be used
+   * for the sim's statistics. How many simulations a decision gets then depends on
+   * how fast the machine happens to be at that moment, so the same seed can pick a
+   * different action on a second run — and in the paired A/B swap test the base and
+   * variant arms can receive *different* search budgets, which breaks the
+   * "identical conditions" premise the whole verdict rests on. (Measured on a real
+   * position: decisions reached 2005 ms against a nominal 1000 ms cap, so the cap
+   * was tripping routinely rather than staying inert as it was once assumed to.)
+   *
+   * Termination never needed the clock: `simulationsPerDecision` and
+   * `rolloutDepth` are both finite, so a decision is bounded by construction.
    */
   readonly maxDecisionMillis: number;
 
@@ -103,7 +110,9 @@ export interface MctsConfig {
 export const DEFAULT_MCTS_CONFIG: MctsConfig = Object.freeze({
   // search budget
   simulationsPerDecision: 160,
-  maxDecisionMillis: 1000,
+  // Reproducibility beats real-time bounding for the lab's default: the count
+  // budget already bounds a decision, so no clock enters the decision path.
+  maxDecisionMillis: Infinity,
 
   // rollout
   rolloutDepth: 120,

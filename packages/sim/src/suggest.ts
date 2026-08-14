@@ -275,7 +275,26 @@ function compareCandidates(a: SwapCandidate, b: SwapCandidate): number {
   return a.inName < b.inName ? -1 : a.inName > b.inName ? 1 : 0;
 }
 
-/** The deck cards we may cut: each distinct entry, minus a basic-land floor. */
+/**
+ * Total copies of each card in the deck, keyed by resolved card id. Counting per
+ * CARD rather than per decklist line matters: one card can legitimately occupy two
+ * lines (a swap splits the line it cuts from), and per-line counting would both
+ * emit the same cut candidate twice and misjudge the basic-land floor. Insertion
+ * order is the decklist's, so downstream iteration stays deterministic.
+ */
+function copiesByCard(base: Deck, pool: CardPool): Map<string, { readonly def: CardDefinition; count: number }> {
+  const counts = new Map<string, { readonly def: CardDefinition; count: number }>();
+  for (const entry of base.cards) {
+    const def = pool.get(entry.cardId) ?? pool.getByName(entry.cardId);
+    if (!def) continue;
+    const tally = counts.get(def.id);
+    if (tally) tally.count += entry.count;
+    else counts.set(def.id, { def, count: entry.count });
+  }
+  return counts;
+}
+
+/** The deck cards we may cut: each distinct card, minus a basic-land floor. */
 function resolveCuttables(
   base: Deck,
   pool: CardPool,
@@ -285,12 +304,10 @@ function resolveCuttables(
 ): readonly CardDefinition[] {
   const allow = cutOnly ? new Set(cutOnly.map((s) => s.toLowerCase())) : undefined;
   const out: CardDefinition[] = [];
-  for (const entry of base.cards) {
-    const def = pool.get(entry.cardId) ?? pool.getByName(entry.cardId);
-    if (!def) continue;
+  for (const { def, count } of copiesByCard(base, pool).values()) {
     if (allow && !(allow.has(def.id.toLowerCase()) || allow.has(def.name.toLowerCase()))) continue;
     // Never cut a basic line that's already at/below the floor — it'd starve mana.
-    if (rules.unlimitedCopies.has(def.name) && entry.count <= config.minBasicLandsKept) continue;
+    if (rules.unlimitedCopies.has(def.name) && count <= config.minBasicLandsKept) continue;
     out.push(def);
   }
   return out;
@@ -305,10 +322,7 @@ function resolveAddables(
 ): readonly CardDefinition[] {
   const allow = inOnly ? new Set(inOnly.map((s) => s.toLowerCase())) : undefined;
   const counts = new Map<string, number>();
-  for (const entry of base.cards) {
-    const def = pool.get(entry.cardId) ?? pool.getByName(entry.cardId);
-    if (def) counts.set(def.id, (counts.get(def.id) ?? 0) + entry.count);
-  }
+  for (const [id, tally] of copiesByCard(base, pool)) counts.set(id, tally.count);
   const out: CardDefinition[] = [];
   for (const def of pool.cards) {
     if (allow && !(allow.has(def.id.toLowerCase()) || allow.has(def.name.toLowerCase()))) continue;
@@ -345,8 +359,12 @@ function compareEvaluations(a: SwapEvaluation, b: SwapEvaluation): number {
   if (b.delta !== a.delta) return b.delta - a.delta;
   // Tie on delta: the smaller p-value (stronger evidence) ranks higher.
   if (a.pValue !== b.pValue) return a.pValue - b.pValue;
-  // Final, fully-deterministic tiebreak on the swap key.
-  return swapKey(a).localeCompare(swapKey(b));
+  // Final tiebreak on the swap key, by CODE UNIT — not `localeCompare`, whose
+  // ordering depends on the host's locale and ICU build, so the "same inputs ⇒
+  // same ranking" guarantee would quietly hold on one machine and not another.
+  const keyA = swapKey(a);
+  const keyB = swapKey(b);
+  return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
 }
 
 function bucketFor(verdict: SwapVerdict): number {
@@ -393,6 +411,11 @@ export function suggestSwaps(base: Deck, options: SuggestOptions): SuggestionRep
   const candidates = generated.candidates;
   // Mutable: defensive 'illegal' skips from evaluation are appended here too.
   const illegalSkipped: SkippedCandidate[] = [...generated.skipped];
+  // Snapshot the generation total BEFORE evaluation can append to `illegalSkipped`.
+  // Deriving it afterwards counted a candidate that generated cleanly and then threw
+  // during evaluation twice, inflating the coverage figure the report is supposed to
+  // be honest about.
+  const candidatesGenerated = candidates.length + generated.skipped.length;
 
   // Bound the search: keep the top-K, record the rest as 'capped'.
   const evaluated = candidates.slice(0, config.maxCandidates);
@@ -424,7 +447,9 @@ export function suggestSwaps(base: Deck, options: SuggestOptions): SuggestionRep
         candidateSeed,
         options.pool,
         options.registry,
-        options.runOptions,
+        // Hand the SAME legality rules down that generated the candidates, so the
+        // variant isn't re-checked against the defaults and rejected.
+        { ...options.runOptions, deckRules: rules },
       );
     } catch (err) {
       // Defensive: a candidate that survived legality but still throws is recorded,
@@ -458,7 +483,7 @@ export function suggestSwaps(base: Deck, options: SuggestOptions): SuggestionRep
     totalGamesRun,
     elapsedSeconds: elapsedSeconds > 0 ? elapsedSeconds : undefined,
     gamesPerSecond: elapsedSeconds > 0 ? totalGamesRun / elapsedSeconds : undefined,
-    candidatesGenerated: candidates.length + illegalSkipped.length,
+    candidatesGenerated,
     cappedByBudget,
     fidelityCaveat: FIDELITY_CAVEAT,
   };
