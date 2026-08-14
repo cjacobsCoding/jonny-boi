@@ -11,6 +11,7 @@ import {
   playableLandIds,
   type CastChoice,
 } from '../../lib/online/legal-actions.js';
+import { isAwaitingChoiceAnswer, onlineChoiceOptions } from '../../lib/online/choice-actions.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
@@ -45,6 +46,15 @@ export function OnlineBoard({
   const attackTemplate = useMemo(() => declareAttackersAction(legalActions), [legalActions]);
   const blockTemplate = useMemo(() => declareBlockersAction(legalActions), [legalActions]);
   const pass = useMemo(() => passAction(legalActions), [legalActions]);
+  // A resolving card is asking this seat a question. The server's `MaskedGameView`
+  // carries no `pendingChoice`, so the question itself never reached us — but its
+  // legal ANSWERS did, and offering them is what keeps the game from dead-ending
+  // with an unplayable board (see lib/online/choice-actions.ts).
+  const awaitingChoice = useMemo(() => isAwaitingChoiceAnswer(legalActions), [legalActions]);
+  const choiceOptions = useMemo(
+    () => (awaitingChoice ? onlineChoiceOptions(legalActions, masked, names) : []),
+    [awaitingChoice, legalActions, masked, names],
+  );
 
   // Transient interaction state.
   const [pendingCast, setPendingCast] = useState<CastChoice | null>(null);
@@ -260,10 +270,46 @@ export function OnlineBoard({
                 Pass / advance
               </button>
             )}
-            <span className="action-bar__hint">{hintFor(step)}</span>
+            <span className="action-bar__hint">
+              {awaitingChoice ? 'Answer the question above to continue.' : hintFor(step)}
+            </span>
           </>
         )}
       </div>
+
+      {/*
+        A parked question. Until the protocol carries `pendingChoice`, we can offer
+        the engine's own legal answers but not the wording of the question — so the
+        panel says exactly that rather than inventing a prompt.
+      */}
+      {yourTurn && choiceOptions.length > 0 && (
+        <div className="choice-prompt" role="dialog" aria-modal="true" aria-label="A card is asking you a question">
+          <div className="choice-prompt__card">
+            <header className="choice-prompt__head">
+              <span className="choice-prompt__who">{names[masked.viewer]} must choose</span>
+              <h3 className="choice-prompt__title">A resolving card is asking you a question</h3>
+              <p className="choice-prompt__requirement">
+                This build's online mode can show the legal answers but not the question's wording.
+                {choiceOptions.some((o) => !o.fullyNamed) && ' Some options name cards this seat cannot see.'}
+              </p>
+            </header>
+            <div className="choice-prompt__options">
+              <div className="choice-prompt__list">
+                {choiceOptions.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    className="choice-option"
+                    onClick={() => submit(opt.action)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Target prompt: choose among the server's enumerated legal target sets. */}
       {pendingCast && (

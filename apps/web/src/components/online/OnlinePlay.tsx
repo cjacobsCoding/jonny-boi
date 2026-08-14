@@ -5,7 +5,7 @@ import { useOnlineGame } from '../../lib/online/useOnlineGame.js';
 import { deckChoiceToDeckList } from '../../lib/online/deck-list.js';
 import { buildDeckMenu } from '../../lib/online/deck-menu.js';
 import { friendlyError } from '../../lib/online/online-state.js';
-import { ERROR_TOAST_MS, ROOM_CODE_LENGTH } from '../../lib/online/online-config.js';
+import { ERROR_TOAST_MS, ROOM_CODE_LENGTH, resolveServerUrl } from '../../lib/online/online-config.js';
 import { validateChoice } from '../../lib/play/setup.js';
 import { HOTSEAT_CONFIG } from '../../lib/play/play-config.js';
 import { ConnectionIndicator } from './ConnectionIndicator.js';
@@ -24,6 +24,9 @@ export function OnlinePlay({ decks }: { decks: DecksApi }): ReactElement {
   const online = useOnlineGame();
   const { state } = online;
   const menu = useMemo(() => buildDeckMenu(decks), [decks]);
+  // Named so a failure can say WHICH host didn't answer — the single most useful
+  // thing to know when the server is a tunnel URL or a misconfigured build.
+  const serverUrl = useMemo(() => resolveServerUrl(), []);
 
   // Seat display names from the lobby (fallback to the seat letter).
   const names = useMemo<Record<PlayerId, string>>(() => {
@@ -66,11 +69,31 @@ export function OnlinePlay({ decks }: { decks: DecksApi }): ReactElement {
       case 'menu':
         return <MenuScreen online={online} menu={menu} />;
       case 'connecting':
+        // The socket has definitively failed (nothing listening, or we're offline).
+        // Waiting on a spinner forever is the wrong answer: the connection keeps
+        // retrying underneath, but the player is told the truth and given a way out
+        // instead of a hedge ("if this hangs…") that never resolves.
+        if (state.status === 'error') {
+          return (
+            <div className="online__waiting">
+              <p className="online__failed" role="alert">
+                Couldn't reach the game server.
+              </p>
+              <p className="online__hint">
+                {serverUrl} didn't answer — it may be offline, or this device may be. We'll keep
+                trying in the background.
+              </p>
+              <button type="button" className="btn btn--ghost" onClick={online.leave}>
+                Back
+              </button>
+            </div>
+          );
+        }
         return (
           <div className="online__waiting">
             <div className="spinner" aria-hidden="true" />
             <p>Contacting the game server…</p>
-            <p className="online__hint">If this hangs, the server may be offline.</p>
+            <p className="online__hint">Connecting to {serverUrl}…</p>
             <button type="button" className="btn btn--ghost" onClick={online.leave}>
               Back
             </button>

@@ -8,6 +8,9 @@ import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
+import { ChoicePrompt } from './ChoicePrompt.js';
+import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
+import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 
 /**
  * The in-game board for the player who currently holds priority (the `viewer`). It
@@ -45,6 +48,8 @@ export function PlayBoard({
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   // The attacker currently being assigned a blocker (click attacker, then blocker).
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
+  // A modal mana source the player tapped, awaiting the colour they want.
+  const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const resetTransient = (): void => {
@@ -52,6 +57,7 @@ export function PlayBoard({
     setChosenAttackers(new Set());
     setBlockAssign(new Map());
     setActiveBlockTarget(null);
+    setPendingManaTap(null);
   };
 
   const run = (fn: () => SubmitResult): void => {
@@ -65,9 +71,37 @@ export function PlayBoard({
     onSubmit(() => result);
   };
 
-  const isViewersPriority = session.priorityPlayer === viewer;
+  // A parked question preempts everything: while it stands the engine offers no
+  // other action, so the board's own controls must go quiet until it is answered.
+  const pendingChoice = session.pendingChoice;
+  const isViewersPriority = session.priorityPlayer === viewer && !pendingChoice;
   const playableLands = isViewersPriority ? session.playableLands() : [];
   const castOptions = isViewersPriority ? session.castOptions() : [];
+
+  // --- manual mana tapping --------------------------------------------------------
+  // Auto-tap covers casting; this covers everything else a player does with mana by
+  // hand — floating it deliberately, and above all telling a MODAL source (Birds of
+  // Paradise, a dual land) which colour to make, which no planner can decide for them.
+  const tapMenu = useMemo(
+    () => manaTapMenu(session.state, isViewersPriority ? session.legalActions() : []),
+    [session, isViewersPriority],
+  );
+  const tappable = useMemo(
+    () => tappableIds(tapMenu, session.state, viewer),
+    [tapMenu, session, viewer],
+  );
+
+  const onTapForMana = (id: InstanceId): void => {
+    const options = tapMenu.get(id);
+    if (!options || options.length === 0) return;
+    // One mode is not a decision; more than one is, so ask rather than pick.
+    if (isModalTap(options)) {
+      setPendingManaTap(options);
+      return;
+    }
+    const only = options[0] as ManaTapOption;
+    run(() => session.tapForMana(only.instanceId, only.mode));
+  };
 
   // --- targeting -----------------------------------------------------------------
   const targetOptions: readonly TargetOption[] = pendingCast
@@ -165,6 +199,16 @@ export function PlayBoard({
     }
     // Spell targeting: allow clicking own creatures as targets.
     if (pendingCast) return targetInteraction(view.self.permanents.map((p) => p.instanceId));
+    // Otherwise your untapped mana sources are tappable by hand. Last in the chain
+    // so it never steals a click from combat selection or targeting.
+    if (tappable.size > 0) {
+      const markers = new Map<InstanceId, string>();
+      for (const id of tappable) {
+        const options = tapMenu.get(id) ?? [];
+        markers.set(id, isModalTap(options) ? 'tap: any' : `tap: ${options[0]?.label ?? ''}`);
+      }
+      return { selectableIds: tappable, selectedIds: new Set(), markers, onClick: onTapForMana };
+    }
     return undefined;
   }
 
@@ -273,6 +317,13 @@ export function PlayBoard({
         session={session}
         viewer={viewer}
         step={step}
+        waitingText={
+          pendingChoice && !isChoiceForViewer(pendingChoice, viewer)
+            ? waitingForChoiceText(pendingChoice, names)
+            : pendingChoice
+              ? 'Answer the question above to continue.'
+              : undefined
+        }
         isViewersPriority={isViewersPriority}
         inBlockStep={inBlockStep}
         chosenAttackers={chosenAttackers}
@@ -282,6 +333,47 @@ export function PlayBoard({
         onDeclareAttackers={(ids) => run(() => session.declareAttackers(ids))}
         onDeclareBlockers={(blocks) => run(() => session.declareBlockers(blocks))}
       />
+
+      {/*
+        A question a resolving spell parked. Rendered ONLY for the seat it was
+        addressed to — its candidates can include cards the other seat may not see,
+        so the chooser check is a hidden-information guard, not just routing. The
+        hotseat handoff already gates the device on the engine moving priority to
+        the chooser, so in practice the viewer IS the chooser here.
+      */}
+      {pendingChoice && isChoiceForViewer(pendingChoice, viewer) && (
+        <ChoicePrompt
+          choice={pendingChoice}
+          names={names}
+          onAnswer={(answer) => run(() => session.answerChoice(answer))}
+        />
+      )}
+
+      {/* Which colour should this modal source make? (Birds of Paradise, a dual land.) */}
+      {pendingManaTap && (
+        <div className="target-prompt" role="dialog" aria-label="Choose which mana to add">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">
+              Add which mana from {session.nameOf(pendingManaTap[0]?.instanceId ?? 0)}?
+            </div>
+            <div className="target-prompt__options">
+              {pendingManaTap.map((opt) => (
+                <button
+                  key={opt.mode ?? 0}
+                  type="button"
+                  className="btn"
+                  onClick={() => run(() => session.tapForMana(opt.instanceId, opt.mode))}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setPendingManaTap(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board). */}
       {pendingCast && (
@@ -326,6 +418,7 @@ function ActionBar({
   chosenAttackers,
   blockAssign,
   eligibleAttackers,
+  waitingText,
   onPass,
   onDeclareAttackers,
   onDeclareBlockers,
@@ -333,6 +426,8 @@ function ActionBar({
   session: GameSession;
   viewer: PlayerId;
   step: string;
+  /** Overrides the generic "waiting for …" line (e.g. while a choice is parked). */
+  waitingText?: string;
   isViewersPriority: boolean;
   inBlockStep: boolean;
   chosenAttackers: Set<InstanceId>;
@@ -345,7 +440,9 @@ function ActionBar({
   if (!isViewersPriority) {
     return (
       <div className="action-bar">
-        <span className="action-bar__wait">Waiting for {session.names[session.priorityPlayer]}…</span>
+        <span className="action-bar__wait">
+          {waitingText ?? `Waiting for ${session.names[session.priorityPlayer]}…`}
+        </span>
       </div>
     );
   }

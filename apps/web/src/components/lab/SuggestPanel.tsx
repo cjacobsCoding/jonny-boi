@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
-import { ciStr, pct, signedPct, pValueStr, verdictDisplay } from '../../lib/sim-format.js';
+import { ciStr, pct, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 
 /**
@@ -137,7 +137,7 @@ export function SuggestPanel({
           <p className="lab-throughput">
             {report.notes.totalGamesRun.toLocaleString()} games
             {report.notes.gamesPerSecond !== undefined && (
-              <> · {report.notes.gamesPerSecond.toFixed(0)} games/sec</>
+              <> · {throughputText(report.notes.gamesPerSecond)}</>
             )}{' '}
             · seed {seed}
           </p>

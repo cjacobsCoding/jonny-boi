@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { WinRateBar } from '../WinRateBar.js';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
-import { ciStr, signedPct, pValueStr, verdictDisplay } from '../../lib/sim-format.js';
+import { ciStr, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
 import { VERDICT_ALPHA } from '../../lib/lab-config.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 import type { CardOption } from './panel-types.js';
@@ -187,7 +187,7 @@ export function SwapPanel({
           </table>
 
           <p className="lab-throughput">
-            {(e.nGames * 2).toLocaleString()} matches · {result.gamesPerSecond.toFixed(0)} games/sec
+            {(e.nGames * 2).toLocaleString()} matches · {throughputText(result.gamesPerSecond)}
             · seed {seed}
           </p>
           <FidelityNote />
