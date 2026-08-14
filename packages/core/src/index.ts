@@ -60,6 +60,7 @@ export {
   isPermanentType,
   isManaSource,
   manaModesOf,
+  manaColorsOffered,
   bestManaYield,
   castTiming,
 } from './card.js';
@@ -125,6 +126,11 @@ export type {
   DeclareBlockersAction,
 } from './actions.js';
 export { DEFAULT_MANA_MODE } from './actions.js';
+
+// Mana payment planning — shared by the AI pilots and the hotseat/online auto-tap
+// so "which lands do I tap" has exactly one implementation.
+export type { ManaTapPlan } from './mana-plan.js';
+export { planManaPayment, distanceToPayable } from './mana-plan.js';
 
 // Engine
 export type { DeckList, GameSetup, EngineResult, Engine } from './engine.js';
