@@ -85,23 +85,32 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
  * repeated at each call site.
  *
  * ## It is the HEURISTIC, and that is a measured decision — do not flip it back
- * without a fresh head-to-head. `mcts` was the default on the theory that
- * look-ahead must out-play a one-action-deep policy. Two independent measurements
+ * without a fresh head-to-head. `mcts` held this slot on the theory that engine
+ * rollouts must out-play a one-action-deep policy. Two independent measurements
  * say it is currently both slower AND worse:
  *
- *   - **Throughput**: ~29 s per game in Node and ~66 s per game in the browser
- *     worker. The Lab's default run is 100 games × 6 opponents = 600 games, i.e.
- *     *hours* — the signature "swap a card, get a verdict" loop stops being
- *     interactive at all. The heuristic runs the same gauntlet in seconds.
- *   - **Play quality**: MCTS left 1.76 mana tapped-and-unspent per turn against
- *     the heuristic's 0.01 — 176× the waste, and visible to a watching user as
- *     "it tapped a Sol Ring and did nothing". Deeper search does not help when the
- *     nodes it searches are mostly mana it will never spend.
+ *   - **Play quality**: over three Mono-Red vs UW Control games, counting
+ *     `manaPoolEmptied` events (mana a pilot tapped and then never spent),
  *
- * MCTS stays fully SELECTABLE (`--pilot mcts`, the Lab's picker) so the comparison
- * can be re-run at any time; it is simply not what a user gets by default. The
- * default is pinned by a test in `index.test.ts`, because this constant has been
- * silently flipped back by a merge once already.
+ *         heuristic:   1 wasted-mana event  / 107 turns  = 0.01 per turn
+ *         mcts:      202 wasted-mana events / 115 turns  = 1.76 per turn
+ *
+ *     — 176× more waste. Watching a replay that reads exactly as the user
+ *     reported it: a player taps a Sol Ring and does nothing with the mana. A
+ *     search shallow enough that a wasted tap costs nothing inside its rollout
+ *     horizon will happily make wasted taps.
+ *   - **Throughput**: ~29 s per game in Node and ~66 s per game in the browser
+ *     worker (11 minutes for those three games). The Lab's default run is
+ *     100 games × 6 opponents = 600 games, i.e. *hours* — the signature "swap a
+ *     card, get a verdict" loop stops being interactive at all. The heuristic
+ *     runs the same gauntlet in seconds.
+ *
+ * MCTS remains registered and SELECTABLE ({@link SELECTABLE_PILOT_IDS}, `--pilot
+ * mcts`, the Lab's picker) so the comparison can be re-run at any time; it should
+ * return here only with a budget that beats the heuristic head-to-head, not on the
+ * theory that it ought to. Pinned by tests in `index.test.ts` and by
+ * `pilot-quality.test.ts` (same waste metric), because this constant has already
+ * been silently flipped back by a merge once.
  */
 export const DEFAULT_PILOT_ID = HEURISTIC_PILOT_ID;
 

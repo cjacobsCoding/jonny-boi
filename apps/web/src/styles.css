@@ -895,6 +895,15 @@ button {
 
 .deck-issue--error { color: var(--color-error); }
 .deck-issue--warning { color: var(--color-warning); }
+/* A legal card the engine can't play yet — informational, not a rules problem. */
+.deck-issue--unsupported { color: var(--color-fg-muted); }
+
+.deck-entry__unsupported {
+  padding: 0 var(--space-1);
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+  cursor: help;
+}
 
 .saved-decks {
   display: flex;
@@ -1573,11 +1582,101 @@ button {
 }
 .replay-side__zones {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--space-3);
   margin-top: var(--space-2);
   font-size: var(--text-xs);
   color: var(--color-fg-muted);
 }
+
+/* --- Revealed zones (hand / library / graveyard) --------------------------- */
+
+/* The card list pops OVER the board rather than pushing it down, so expanding a
+   zone never reflows the thing you are watching. */
+.replay-zone {
+  position: relative;
+}
+
+.replay-zone > summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.replay-zone > summary:hover {
+  color: var(--color-accent-soft);
+}
+
+.replay-zone--empty {
+  opacity: 0.6;
+}
+
+.replay-zone__list {
+  position: absolute;
+  z-index: 5;
+  max-height: 20rem;
+  overflow-y: auto;
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  list-style: decimal inside;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-raised, #161c22);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.replay-zone__list li {
+  white-space: nowrap;
+  padding: 1px 0;
+}
+
+.replay-zone__card {
+  color: var(--color-fg);
+}
+
+.replay-zone__top {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft, #2b6cb0);
+  color: #fff;
+  font-size: 0.85em;
+}
+
+.replay-skip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* --- Mana pool ------------------------------------------------------------- */
+
+.replay-mana {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.replay-mana__pip {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-sunken, #0d1117);
+  border: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--color-fg);
+}
+
+.replay-mana__pip--W { color: #f5f0dc; }
+.replay-mana__pip--U { color: #7fb3e8; }
+.replay-mana__pip--B { color: #b39ddb; }
+.replay-mana__pip--R { color: #ef8b7a; }
+.replay-mana__pip--G { color: #86c58a; }
+.replay-mana__pip--C { color: var(--color-fg-muted); }
 
 .replay-board {
   display: flex;
@@ -2533,6 +2632,12 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  /* A 60-card list with a long problem list is TALLER than the viewport. Without
+     these two lines the card names — the whole point of the review — render
+     off-screen with no way to scroll to them, and the commit button goes with
+     them. Cap the height and let the dialog scroll. */
+  max-height: min(90vh, 60rem);
+  overflow-y: auto;
   padding: var(--space-5);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);

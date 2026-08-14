@@ -64,6 +64,30 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-14 DESKTOP-90PJPM4: `fix/import-and-replay-visibility` PUSHED (apps/web + packages/ai +
+  packages/sim test). Merged latest main (incl. the new core choice system) — **1099 tests, build exit
+  0, suite now 61s**. Three user-reported bugs, all found by watching a game:
+  1. **Import returned a crippled deck.** Unsupported cards were dropped silently with only a count.
+     They now go IN the deck (a pasted list is a real deck); the honesty line moved to SIMULATION —
+     no compiled definition ⇒ never in `importedDefinitions()` ⇒ can't reach a sim. The Lab refuses
+     by NAME instead of `unknown card "<uuid>"`. Not-found names are listed too (usually typos).
+     Also: `.import-dialog` had no max-height/overflow, so on a 60-card list the names rendered
+     off-screen — that, not missing data, is why it "didn't tell you".
+  2. **DEFAULT_PILOT_ID was MCTS and it plays badly.** Measured `manaPoolEmptied` (mana tapped and
+     never spent): heuristic 0.01/turn vs **mcts 1.76/turn** — 176× — at ~100× the wall clock. That
+     is the reported "tapped a Sol Ring and did nothing". Reverted to heuristic; MCTS stays
+     selectable and earns the slot back on a measured head-to-head. New `pilot-quality.test.ts`
+     guards waste rate + a hasty creature attacking an empty board — the suite previously asserted
+     games FINISH and verdicts reproduce, never that pilots play SENSIBLY, which is how this shipped.
+  3. **Watch a Game showed only counts.** Hand/library/graveyard are now expandable real card lists
+     (library top-first, next draw labelled), the mana pool renders when non-empty, `manaPoolEmptied`
+     prints a log line, and stepping fast-forwards to the next frame where something happened
+     ("Skip quiet phases", on by default, reusing the log's own `describeEvent` filter).
+  ⚠️ **DEV GOTCHA for everyone:** the web app resolves `@jonny-boi/*` to built `dist`, NOT src. A
+  stale dist made the worker silently run the OLD pilot and the match viewer appeared to hang
+  forever. Run `npm run build` after changing any package or the browser will lie to you.
+  (Integrator)
+
 - 2026-08-13 DESKTOP-90PJPM4: `feat/import-formats` ✅ (apps/web/src/lib/scryfall + decklist/resolve) —
   **two real deck-import bugs, found by importing the user's actual Modern lists.** The *parser* was
   never at fault: both a Boros Energy list and a Goryo's Vengeance list parsed 60 main + 15 sideboard

@@ -8,6 +8,7 @@
  */
 import type { NormalizedCard } from '@jonny-boi/data-tools';
 import { getCard, isBasicLand, primaryType } from './cards.js';
+import { unsupportedReason } from './decklist/importedCards.js';
 import {
   MAX_COPIES_PER_CARD,
   MIN_DECK_SIZE,
@@ -197,16 +198,51 @@ export function manaCurve(deck: Deck): ManaCurveBar[] {
   }));
 }
 
-/** A validation issue: a human-readable message and whether it blocks play. */
+/**
+ * A validation issue: a human-readable message and how much it blocks.
+ *
+ * `unsupported` is its own severity because it is neither a rules violation nor
+ * a nit: the deck is perfectly legal, it just contains a card our engine cannot
+ * play yet. It blocks simulation only, and it names the card and the missing
+ * system so the gap is actionable rather than mysterious.
+ */
 export interface DeckIssue {
   message: string;
-  severity: 'error' | 'warning';
+  severity: 'error' | 'warning' | 'unsupported';
+}
+
+/** Join names for prose: "a", "a and b", "a, b, and c". */
+function formatList(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+/** True when a deck contains a card the engine cannot simulate yet. */
+export function hasUnsupportedCards(deck: Deck): boolean {
+  return deck.cards.some((entry) => unsupportedReason(entry.cardId) !== undefined);
+}
+
+/** The unsupported cards in a deck, by name — for gates that must explain why. */
+export function unsupportedCardNames(deck: Deck): string[] {
+  const names: string[] = [];
+  for (const entry of deck.cards) {
+    if (!unsupportedReason(entry.cardId)) continue;
+    const card = getCard(entry.cardId);
+    if (card && !names.includes(card.name)) names.push(card.name);
+  }
+  return names.sort();
 }
 
 /**
  * Validate a deck against the curated-pool rules: the per-card 4-of limit
- * (basics exempt) and the minimum deck size. Pure; returns a list of issues
- * (empty when the deck is legal).
+ * (basics exempt), the minimum deck size, and whether every card can actually be
+ * simulated. Pure; returns a list of issues (empty when the deck is legal).
+ *
+ * An imported card the engine cannot play yet is reported BY NAME with the
+ * system it needs. It is a legal card in a legal deck — you can edit it, print
+ * it, and count it — it just blocks the Lab, and you should never have to guess
+ * which of your 60 cards is the one holding you up.
  */
 export function validateDeck(deck: Deck): DeckIssue[] {
   const issues: DeckIssue[] = [];
@@ -218,6 +254,17 @@ export function validateDeck(deck: Deck): DeckIssue[] {
         severity: 'warning',
       });
       continue;
+    }
+
+    const missing = unsupportedReason(entry.cardId);
+    if (missing) {
+      const systems = [...new Set(missing.map((gap) => gap.missingEngineSystem))];
+      issues.push({
+        message: systems.length
+          ? `${card.name} can't be simulated yet — the engine needs ${formatList(systems)}.`
+          : `${card.name} can't be simulated yet.`,
+        severity: 'unsupported',
+      });
     }
     const limit = maxCopiesFor(card);
     if (entry.count > limit) {

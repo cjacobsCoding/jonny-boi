@@ -183,7 +183,12 @@ export function ImportDeckDialog({
                   className="btn btn--primary"
                   onClick={handleCommit}
                   disabled={
-                    !importer.jsonDeck && (importer.plan?.counts.playable ?? 0) === 0
+                    !importer.jsonDeck &&
+                    // Anything Scryfall identified can be imported — a deck made
+                    // entirely of not-yet-supported cards is still your deck.
+                    (importer.plan?.counts.playable ?? 0) +
+                      (importer.plan?.counts.blocked ?? 0) ===
+                      0
                   }
                 >
                   Create deck
@@ -276,9 +281,10 @@ function ReviewPanel({
       ) : (
         <>
           <p className="import-note">
-            The playable cards will be imported. These will be left out, because the engine would
-            have to guess at their rules — and a guessed card would skew every win-rate the lab
-            reports:
+            The whole deck is imported, including the cards below. Ones marked{' '}
+            <em>needs engine support</em> go in the deck and are yours to edit and print — they just
+            can’t be simulated yet, so the Lab will name them instead of running. Cards marked{' '}
+            <em>not found</em> are the only ones left out, because there is no card to add:
           </p>
           <ul className="import-problem-list">
             {problems.map((line) => (
@@ -329,17 +335,53 @@ function ImportSummary({
         Imported <strong>{result.imported}</strong> cards into “{result.deck.name}”.
         {result.newCards > 0 && ` ${result.newCards} new cards were added to your pool.`}
       </p>
-      <ul className="import-problem-list">
-        {result.skippedBlocked > 0 && (
-          <li>{result.skippedBlocked} copies skipped — not yet implementable in the engine.</li>
-        )}
-        {result.skippedNotFound > 0 && (
-          <li>{result.skippedNotFound} copies skipped — no such card on Scryfall.</li>
-        )}
-        {result.skippedSideboard > 0 && (
+
+      {result.unsupportedCards.length > 0 && (
+        <>
+          <p className="import-note">
+            <strong>{result.unsupported}</strong> of those can’t be simulated yet — they are in the
+            deck and you can edit and print them, but the Lab won’t run until they’re replaced or
+            the engine catches up:
+          </p>
+          <ul className="import-problem-list">
+            {result.unsupportedCards.map((card) => (
+              <li key={card.name}>
+                <span className="import-problem__name">
+                  {card.qty}× {card.name}
+                </span>
+                {card.systems.length > 0 && (
+                  <span className="import-problem__reason">needs {card.systems.join('; ')}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {result.notFoundNames.length > 0 && (
+        <>
+          <p className="import-note">
+            <strong>{result.skippedNotFound}</strong>{' '}
+            {result.skippedNotFound === 1 ? 'copy was' : 'copies were'} left out — Scryfall has no
+            card by {result.notFoundNames.length === 1 ? 'this name' : 'these names'}. A typo or an
+            odd export format is the usual cause, so it’s worth a second look:
+          </p>
+          <ul className="import-problem-list">
+            {result.notFoundNames.map((name) => (
+              <li key={name}>
+                <span className="import-problem__name">{name}</span>
+                <span className="import-problem__status">Not found</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {result.skippedSideboard > 0 && (
+        <ul className="import-problem-list">
           <li>{result.skippedSideboard} copies skipped — sideboard (decks here are maindeck only).</li>
-        )}
-      </ul>
+        </ul>
+      )}
       <button type="button" className="btn btn--primary" onClick={onClose}>
         Done
       </button>

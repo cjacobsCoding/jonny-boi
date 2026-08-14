@@ -93,6 +93,15 @@ export function PlaybackControls({
             </button>
           ))}
         </div>
+
+        <label className="replay-skip-toggle" title="Jump straight to the next frame where something actually happens, instead of stopping on every priority pass.">
+          <input
+            type="checkbox"
+            checked={playback.skipQuiet}
+            onChange={(event) => playback.setSkipQuiet(event.target.checked)}
+          />
+          Skip quiet phases
+        </label>
       </div>
 
       <div className="replay-scrub">

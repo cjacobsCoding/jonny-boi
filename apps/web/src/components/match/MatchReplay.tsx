@@ -35,7 +35,7 @@ const STEP_LABELS: Readonly<Record<string, string>> = {
  * come from `findKeyMoments` over the same log.
  */
 export function MatchReplay({ trace }: { trace: MatchTrace }): ReactElement {
-  const playback = useReplayPlayback(trace.frames.length);
+  const playback = useReplayPlayback(trace.frames.length, trace);
   const frame: ReplayFrame | undefined = trace.frames[playback.index];
 
   const nameOf = useMemo(
@@ -108,6 +108,7 @@ export function MatchReplay({ trace }: { trace: MatchTrace }): ReactElement {
             side={frame.sides[player]}
             active={frame.activePlayer === player}
             winner={frame.gameOver ? frame.winner : null}
+            nameOf={nameOf}
           />
         ))}
       </div>
@@ -140,6 +141,72 @@ export function MatchReplay({ trace }: { trace: MatchTrace }): ReactElement {
   );
 }
 
+/**
+ * One zone as an expandable list: the count always visible, the actual cards one
+ * click away.
+ *
+ * A count alone cannot answer the question this viewer exists to answer — "is
+ * the engine doing the right thing?" Seven cards in hand tells you nothing;
+ * seven LANDS in hand tells you the pilot is flooded and explains the whole
+ * game. The library is listed top-first, so the next draw is the first row.
+ */
+function ZoneReveal({
+  label,
+  ids,
+  nameOf,
+  topLabel,
+}: {
+  label: string;
+  ids: readonly number[];
+  nameOf: (id: number) => string;
+  /** Marks the first entry (used for the library's top card). */
+  topLabel?: string;
+}): ReactElement {
+  if (ids.length === 0) {
+    return <span className="replay-zone replay-zone--empty">{label} 0</span>;
+  }
+  return (
+    <details className="replay-zone">
+      <summary>
+        {label} {ids.length}
+      </summary>
+      <ol className="replay-zone__list">
+        {ids.map((id, index) => (
+          <li key={`${id}-${index}`}>
+            <span className="replay-zone__card">{nameOf(id)}</span>
+            {topLabel && index === 0 && <span className="replay-zone__top">{topLabel}</span>}
+          </li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+/** Mana symbols in the canonical WUBRG+C display order. */
+const POOL_ORDER: readonly string[] = ['W', 'U', 'B', 'R', 'G', 'C'];
+
+/**
+ * Unspent mana in the pool. Rendered only when there IS mana, so it reads as an
+ * event rather than a permanent zero — and mana still sitting here when a turn
+ * ends is mana a pilot wasted.
+ */
+function ManaPool({ pool }: { pool: Readonly<Record<string, number>> }): ReactElement {
+  const symbols = POOL_ORDER.filter((symbol) => (pool[symbol] ?? 0) > 0);
+  if (symbols.length === 0) return <></>;
+  const total = symbols.reduce((sum, symbol) => sum + (pool[symbol] ?? 0), 0);
+  return (
+    <span className="replay-mana" aria-label={`${total} unspent mana in pool`}>
+      Pool
+      {symbols.map((symbol) => (
+        <span key={symbol} className={`replay-mana__pip replay-mana__pip--${symbol}`}>
+          {pool[symbol]}
+          {symbol}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** One player's panel: identity, life, zone counts, and the board. */
 function SidePanel({
   player,
@@ -148,6 +215,7 @@ function SidePanel({
   side,
   active,
   winner,
+  nameOf,
 }: {
   player: PlayerId;
   deckName: string;
@@ -155,6 +223,7 @@ function SidePanel({
   side: ReplaySide;
   active: boolean;
   winner: PlayerId | null;
+  nameOf: (id: number) => string;
 }): ReactElement {
   const lowLife = side.life <= 5;
   const isWinner = winner === player;
@@ -175,9 +244,10 @@ function SidePanel({
       </div>
 
       <div className="replay-side__zones">
-        <span>Hand {side.handCount}</span>
-        <span>Library {side.libraryCount}</span>
-        <span>Grave {side.graveyardCount}</span>
+        <ZoneReveal label="Hand" ids={side.hand} nameOf={nameOf} />
+        <ZoneReveal label="Library" ids={side.library} nameOf={nameOf} topLabel="top" />
+        <ZoneReveal label="Grave" ids={side.graveyard} nameOf={nameOf} />
+        <ManaPool pool={side.manaPool} />
       </div>
 
       <div className="replay-board">

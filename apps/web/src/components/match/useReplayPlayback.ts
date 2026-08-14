@@ -13,6 +13,8 @@ import {
   speedById,
   STEP_SIZE,
 } from '../../lib/replay-config.js';
+import { nextNotableFrame } from '../../lib/replay-skip.js';
+import type { MatchTrace } from '../../lib/replay-types.js';
 
 export interface ReplayPlayback {
   /** Current frame index (0 = opening, frameCount-1 = end). */
@@ -21,6 +23,9 @@ export interface ReplayPlayback {
   readonly speedId: string;
   readonly atStart: boolean;
   readonly atEnd: boolean;
+  /** When on, stepping and playback fast-forward past frames where nothing happened. */
+  readonly skipQuiet: boolean;
+  setSkipQuiet: (skip: boolean) => void;
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -37,10 +42,31 @@ function clampIndex(index: number, frameCount: number): number {
   return Math.max(0, Math.min(index, frameCount - 1));
 }
 
-export function useReplayPlayback(frameCount: number): ReplayPlayback {
+/**
+ * @param frameCount Number of frames in the trace.
+ * @param trace The trace itself, used to find the next frame worth stopping on.
+ *   Optional so the hook stays usable (and testable) without one — with no trace
+ *   every frame is treated as notable and stepping is one-at-a-time.
+ */
+export function useReplayPlayback(
+  frameCount: number,
+  trace?: MatchTrace,
+): ReplayPlayback {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speedId, setSpeedId] = useState<string>(DEFAULT_PLAYBACK_SPEED_ID);
+  // On by default: most frames in a real game are a pilot passing priority, and
+  // stopping on each one buries the plays you are trying to watch.
+  const [skipQuiet, setSkipQuiet] = useState(true);
+
+  /** One step in `direction`, honoring the skip toggle. */
+  const advance = useCallback(
+    (current: number, direction: 1 | -1): number => {
+      if (skipQuiet && trace) return nextNotableFrame(trace, current, direction);
+      return clampIndex(current + direction * STEP_SIZE, frameCount);
+    },
+    [skipQuiet, trace, frameCount],
+  );
 
   const atStart = index <= 0;
   const atEnd = frameCount <= 0 || index >= frameCount - 1;
@@ -55,14 +81,8 @@ export function useReplayPlayback(frameCount: number): ReplayPlayback {
     (next: number) => setIndex(clampIndex(next, frameCount)),
     [frameCount],
   );
-  const stepForward = useCallback(
-    () => setIndex((i) => clampIndex(i + STEP_SIZE, frameCount)),
-    [frameCount],
-  );
-  const stepBack = useCallback(
-    () => setIndex((i) => clampIndex(i - STEP_SIZE, frameCount)),
-    [frameCount],
-  );
+  const stepForward = useCallback(() => setIndex((i) => advance(i, 1)), [advance]);
+  const stepBack = useCallback(() => setIndex((i) => advance(i, -1)), [advance]);
   const restart = useCallback(() => {
     setIndex(0);
     setPlaying(false);
@@ -82,12 +102,14 @@ export function useReplayPlayback(frameCount: number): ReplayPlayback {
     const tickMs = speedById(speedId).tickMs;
     tickRef.current = setInterval(() => {
       setIndex((i) => {
-        const next = i + STEP_SIZE;
+        // Auto-advance uses the same skip rule as stepping, so playback doesn't
+        // crawl through the quiet frames the step button jumps over.
+        const next = advance(i, 1);
         if (next >= frameCount - 1) {
           setPlaying(false);
           return clampIndex(frameCount - 1, frameCount);
         }
-        return clampIndex(next, frameCount);
+        return next;
       });
     }, tickMs);
     return () => {
@@ -102,6 +124,8 @@ export function useReplayPlayback(frameCount: number): ReplayPlayback {
     speedId,
     atStart,
     atEnd,
+    skipQuiet,
+    setSkipQuiet,
     play,
     pause,
     toggle,
