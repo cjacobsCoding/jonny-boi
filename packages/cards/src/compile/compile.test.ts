@@ -58,12 +58,11 @@ const STUBBED_NAMES = new Set(STUBBED_MECHANICS.map((entry) => entry.card));
  */
 const HUMAN_APPROXIMATIONS: Readonly<Record<string, string>> = Object.freeze({
   Tarmogoyf: 'dynamic power/toughness (characteristic-defining */*)',
-  // Birds of Paradise taps for ONE mana of any color. Core's `produces` is a
-  // fixed list and `applyTapForMana` adds one of EACH listed color, so the
-  // authored `['W','U','B','R','G']` makes Birds tap for FIVE mana. The
-  // compiler refuses to reproduce that; a faithful Birds needs a mana ability
-  // whose color is chosen on activation.
-  'Birds of Paradise': 'mana abilities that produce a chosen color',
+  // Birds of Paradise used to live here: "{T}: Add one mana of any color" had no
+  // faithful form, because a fixed `produces` bundle adds one of EACH colour and
+  // would have made Birds tap for five mana. Core's modal `producesOptions` (one
+  // tap = one chosen mode) closed that gap, so the compiler now reproduces the
+  // authored Birds exactly and the card is held to the full ground-truth check.
 });
 
 /** True when the compiler is expected to be stricter than the authored pool. */
@@ -96,6 +95,9 @@ describe('compileCard — ground truth against the hand-authored pool', () => {
         expect([...(definition.produces ?? [])].sort()).toEqual(
           [...(authored.produces ?? [])].sort(),
         );
+        // Modal sources (a dual land, Birds of Paradise) carry their modes
+        // instead — one tap yields one of them, so the mode LIST must match too.
+        expect(definition.producesOptions ?? []).toEqual(authored.producesOptions ?? []);
       }
 
       // Printed P/T must match — unless it is characteristic-defining (`*`),
@@ -359,7 +361,10 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(result.definition.produces).toEqual(['U']);
   });
 
-  it('still reports a dual land whose mana ability offers a choice', () => {
+  // A tapped dual land is three printed abilities at once (enters tapped, a
+  // modal mana ability, an ETB trigger) and every one of them is modelled, so
+  // the whole card is genuinely playable.
+  it('compiles a tapped dual land whose mana ability offers a choice', () => {
     const result = compileCard(
       makeCard({
         name: 'Dismal Backwater',
@@ -372,12 +377,96 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    // "Enters tapped" is implemented now; the choice of {U} or {B} is not.
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
     expect(result.definition.entersTapped).toBe(true);
+    // ONE tap is worth one mana of either colour — two modes, never a bundle.
+    expect(result.definition.producesOptions).toEqual([{ U: 1 }, { B: 1 }]);
+    expect(result.definition.produces).toBeUndefined();
+    expect(result.definition.triggers?.[0]?.effects).toEqual([
+      { primitive: 'gainLife', params: { amount: 1 } },
+    ]);
+  });
+
+  it('compiles "add one mana of any color" as five single-colour modes', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Manalith',
+        typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+        manaCost: { generic: 3, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+        oracleText: '{T}: Add one mana of any color.',
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.producesOptions).toEqual([
+      { W: 1 },
+      { U: 1 },
+      { B: 1 },
+      { R: 1 },
+      { G: 1 },
+    ]);
+  });
+
+  it('still reports a mana ability whose colours depend on the board', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Board-Dependent Land',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add one mana of any color that a land you control could produce.',
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
       'mana abilities that produce a chosen color',
     );
+  });
+
+  it('compiles a self-pumping cast trigger (the printed prowess template)', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Kiln Fiend',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Elemental'] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: 1,
+        toughness: 1,
+        oracleText:
+          'Whenever you cast an instant or sorcery spell, Kiln Fiend gets +3/+0 until end of turn.',
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers).toHaveLength(2); // one per spell type
+    for (const trigger of result.definition.triggers!) {
+      expect(trigger.effects).toEqual([
+        { primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0 } },
+      ]);
+    }
+  });
+
+  // A triggered ability resolves with NO chosen targets in core, so a body that
+  // needs one would fire and do nothing. The compiler must report the card
+  // rather than ship a creature whose "removal" ETB is silently blank.
+  it.each([
+    ['When Blocked Kavu enters, Blocked Kavu deals 4 damage to target creature.', 'ETB damage'],
+    ['When Blocked Mage enters, destroy target creature.', 'ETB removal'],
+    ['Whenever Blocked Mage attacks, target creature gets +2/+2 until end of turn.', 'attack pump'],
+  ])('refuses a trigger whose body needs a chosen target (%s)', (oracleText) => {
+    const name = oracleText.startsWith('When Blocked Kavu') ? 'Blocked Kavu' : 'Blocked Mage';
+    const result = compileCard(
+      makeCard({
+        name,
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
+        manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: 2,
+        toughness: 2,
+        oracleText,
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    // …and it certainly must not have emitted a trigger that does nothing.
+    expect(result.definition.triggers ?? []).toHaveLength(0);
   });
 });
 

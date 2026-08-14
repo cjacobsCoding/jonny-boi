@@ -89,8 +89,14 @@ export interface ClauseContribution {
   readonly effects?: readonly import('@jonny-boi/core').EffectRef[];
   /** Triggered abilities appended to the card. */
   readonly triggers?: readonly import('@jonny-boi/core').TriggeredAbility[];
-  /** Mana this permanent taps for (merged into `produces`). */
+  /** Mana this permanent taps for as a FIXED bundle (merged into `produces`). */
   readonly produces?: readonly import('@jonny-boi/core').ManaColor[];
+  /**
+   * Mana modes this permanent taps for when the printed ability offers a CHOICE
+   * ("{T}: Add {W} or {U}") — merged into `producesOptions`, where one activation
+   * adds exactly one mode.
+   */
+  readonly producesOptions?: readonly import('@jonny-boi/core').ManaProduction[];
   /** Keyword flags granted to the card itself. */
   readonly keywords?: CardDefinition['keywords'];
   /** Set when the printed text says this permanent enters the battlefield tapped. */
@@ -105,6 +111,13 @@ export interface CompileRule {
   readonly description: string;
   /** Matched against the normalized clause text (lowercased, `~` for the name). */
   readonly pattern: RegExp;
+  /**
+   * True when the effect this rule builds only works if a TARGET was chosen when
+   * the spell was cast. Such a rule is unusable inside a triggered ability, since
+   * core resolves triggers with an empty target list — the effect would silently
+   * no-op. The compiler refuses those bodies instead (see `RuleContext`).
+   */
+  readonly needsChosenTarget?: boolean;
   /**
    * Build the contribution from the regex match. Returning `null` means "this
    * rule recognized the shape but cannot faithfully implement this instance"
@@ -121,6 +134,13 @@ export interface RuleContext {
    * Compile a nested clause (a trigger's body) with the same effect rules.
    * Returns the effects, or `null` when the body itself is unsupported — which
    * makes the whole trigger unsupported rather than silently empty.
+   *
+   * Pass `targetFree` when the clause will run somewhere no target can be chosen
+   * (a triggered ability); rules flagged {@link CompileRule.needsChosenTarget}
+   * are then rejected rather than compiled into a no-op.
    */
-  compileEffectClause(text: string): readonly import('@jonny-boi/core').EffectRef[] | null;
+  compileEffectClause(
+    text: string,
+    options?: { readonly targetFree?: boolean },
+  ): readonly import('@jonny-boi/core').EffectRef[] | null;
 }
