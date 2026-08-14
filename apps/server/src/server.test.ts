@@ -180,7 +180,7 @@ describe('game start', () => {
 
 describe('priority enforcement', () => {
   it('a submitAction from the non-priority seat → notYourTurn', () => {
-    const { a, b, router } = startedGame();
+    const { b, router } = startedGame();
     // A is on the play and holds priority at the start. B acting → notYourTurn.
     b.clear();
     const pass: GameAction = { kind: 'passPriority', player: 'B' };
