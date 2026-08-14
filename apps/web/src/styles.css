@@ -591,6 +591,10 @@ button {
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
+  /* The art wrapper (.card-tile__art) is positioned and comes LATER in the DOM,
+     so with `z-index: auto` it painted over this badge and the in-deck count was
+     invisible. Lift the badge above the art. */
+  z-index: 1;
   background: var(--color-accent);
   color: var(--color-accent-contrast);
   font-weight: 800;
@@ -2145,6 +2149,14 @@ button {
   font-size: var(--text-sm);
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-3);
+}
+
+/* Honest note when a very large quantity was capped for the preview. */
+.proxies-truncated {
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  margin-top: var(--space-2);
+  line-height: 1.4;
 }
 
 .proxies-attribution {

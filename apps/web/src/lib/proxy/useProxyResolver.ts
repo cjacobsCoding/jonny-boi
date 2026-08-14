@@ -58,7 +58,9 @@ export function useProxyResolver(): ProxyResolverState {
       for (const card of cards) {
         const hit = getResolved(cache, card.name);
         if (hit) {
-          const key = normalizeName(card.name);
+          // Key on the RESOLVED card so a card asked for by two spellings (a
+          // DFC's front face and its combined name) is cached-in once.
+          const key = normalizeName(hit.name);
           if (!seenCached.has(key)) {
             cached.push(hit);
             seenCached.add(key);

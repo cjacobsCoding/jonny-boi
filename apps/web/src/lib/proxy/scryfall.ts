@@ -95,6 +95,33 @@ function normalizeName(name: string): string {
 }
 
 /**
+ * The separator Scryfall uses between the faces of a multi-faced card's full
+ * name ("Delver of Secrets // Insectile Aberration"). Matched tolerantly so a
+ * hand-typed "Front//Back" splits the same way as the canonical spacing.
+ */
+const FACE_NAME_SEPARATOR = /\s*\/\/\s*/;
+
+/**
+ * Every normalized name a resolved card should answer to.
+ *
+ * Decklists write multi-faced cards by their FRONT face ("4 Delver of Secrets"),
+ * but Scryfall echoes the combined "Front // Back" name on the card it returns.
+ * Keying resolved cards only by the echoed name made every double-faced card
+ * come back as "couldn't find" and never print. Indexing by the full name *and*
+ * each face name keeps both spellings working (and a plain single-faced name is
+ * simply its own only alias).
+ */
+export function nameAliases(name: string): string[] {
+  const full = normalizeName(name);
+  const aliases = [full];
+  for (const face of full.split(FACE_NAME_SEPARATOR)) {
+    const normalized = normalizeName(face);
+    if (normalized.length > 0 && !aliases.includes(normalized)) aliases.push(normalized);
+  }
+  return aliases;
+}
+
+/**
  * The browser Scryfall client. Enforces the rate-limit floor and batches name
  * lookups through the collection endpoint. Never throws on a partial failure —
  * a failed batch records its names as unresolved and the run continues so
@@ -147,7 +174,9 @@ export class ProxyScryfallClient {
       const resolvedCard: ResolvedProxyCard = { name: raw.name, imageUrl: images.front };
       if (raw.set) resolvedCard.set = raw.set;
       if (images.back) resolvedCard.backImageUrl = images.back;
-      byNormName.set(normalizeName(raw.name), resolvedCard);
+      // Index under the combined name AND each face, so a decklist that asked
+      // for the front face ("Delver of Secrets") still finds this card.
+      for (const alias of nameAliases(raw.name)) byNormName.set(alias, resolvedCard);
     }
 
     // De-duplicated identifier order drives the result order below.
@@ -163,9 +192,11 @@ export class ProxyScryfallClient {
     const seen = new Set<string>();
     for (const id of uniqueIdentifiers) {
       const hit = byNormName.get(normalizeName(id.name));
-      if (hit && !seen.has(normalizeName(id.name))) {
+      // De-dupe on the RESOLVED card, not the requested spelling: a list that
+      // names a card by both its front face and its combined name is one card.
+      if (hit && !seen.has(normalizeName(hit.name))) {
         resolved.push(hit);
-        seen.add(normalizeName(id.name));
+        seen.add(normalizeName(hit.name));
       } else if (!hit && !unresolved.some((u) => normalizeName(u) === normalizeName(id.name))) {
         unresolved.push(id.name);
       }
@@ -186,7 +217,11 @@ export function toCountedProxies(
   includeBacks: boolean,
 ): CountedProxyCard[] {
   const byName = new Map<string, ResolvedProxyCard>();
-  for (const r of resolved) byName.set(normalizeName(r.name), r);
+  // Same aliasing as resolution: a list that says "2 Delver of Secrets" must
+  // match the card Scryfall named "Delver of Secrets // Insectile Aberration".
+  for (const r of resolved) {
+    for (const alias of nameAliases(r.name)) byName.set(alias, r);
+  }
 
   const out: CountedProxyCard[] = [];
   for (const card of parsed) {

@@ -73,6 +73,17 @@ export function perPageFor(density: GridDensity): number {
   return density.columns * density.rows;
 }
 
+/**
+ * Ceiling on how many physical proxy cards the preview will build at once.
+ *
+ * Every copy is a real DOM node with its own `<img>`, so an unbounded quantity
+ * is a main-thread hazard: a mistyped `2000 Mountain` froze the tab for several
+ * seconds *per keystroke* while React laid out hundreds of sheets. 360 cards is
+ * 40 sheets at the standard 3×3 — far more than anyone prints in one pass — and
+ * anything beyond it is reported honestly rather than silently dropped.
+ */
+export const MAX_PROXY_CARDS = 360;
+
 /** Page margin around the card grid (millimeters) — keeps cards off the edge. */
 export const PAGE_MARGIN_MM = 6;
 
