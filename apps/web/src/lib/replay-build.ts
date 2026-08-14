@@ -32,6 +32,7 @@ import {
   indexContinuous,
   isCreature,
   isLand,
+  MANA_COLORS,
 } from '@jonny-boi/core';
 import type { EffectRegistry } from '@jonny-boi/core';
 import type { Pilot } from '@jonny-boi/ai';
@@ -92,8 +93,22 @@ function snapSide(state: GameState, player: PlayerId): ReplaySide {
     handCount: p.hand.length,
     libraryCount: p.library.length,
     graveyardCount: p.graveyard.length,
+    hand: p.hand.map((inst) => inst.instanceId),
+    library: p.library.map((inst) => inst.instanceId),
+    graveyard: p.graveyard.map((inst) => inst.instanceId),
+    manaPool: snapManaPool(p.manaPool),
     board,
   };
+}
+
+/** Copy the pool as a plain record, dropping zeroes so the UI shows only mana. */
+function snapManaPool(pool: Readonly<Record<string, number>>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const symbol of MANA_COLORS) {
+    const amount = pool[symbol] ?? 0;
+    if (amount > 0) out[symbol] = amount;
+  }
+  return out;
 }
 
 /** Capture a full frame (both sides + turn/step) at the current state. */
@@ -144,7 +159,14 @@ export function buildMatchTrace(input: TraceMatchInput, seed: number, maxEvents:
       cardIds[inst.instanceId] = inst.def.id;
     }
     for (const player of ['A', 'B'] as const) {
-      for (const zone of [s.players[player].hand, s.players[player].graveyard, s.players[player].exile]) {
+      // The library is indexed too: the viewer reveals it, so every card in the
+      // deck needs a name from the very first frame, not just once it is drawn.
+      for (const zone of [
+        s.players[player].hand,
+        s.players[player].library,
+        s.players[player].graveyard,
+        s.players[player].exile,
+      ]) {
         for (const inst of zone) {
           names[inst.instanceId] = inst.def.name;
           cardIds[inst.instanceId] = inst.def.id;
