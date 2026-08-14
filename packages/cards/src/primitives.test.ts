@@ -9,13 +9,23 @@ import { describe, expect, it } from 'vitest';
 import type {
   CardDefinition,
   CardInstance,
+  ChoiceAnswer,
   EffectContext,
+  EffectRef,
   GameEvent,
   GameState,
   InstanceId,
+  PendingChoice,
   PlayerId,
 } from '@jonny-boi/core';
-import { PLUS_ONE_COUNTER, effectiveToughness, effectivePower } from '@jonny-boi/core';
+import {
+  PLUS_ONE_COUNTER,
+  defaultAnswerFor,
+  effectiveToughness,
+  effectivePower,
+  normalizeChoiceRequest,
+  validateChoiceAnswer,
+} from '@jonny-boi/core';
 import {
   addMana,
   counterSpell,
@@ -23,7 +33,6 @@ import {
   dealDamage,
   destroyAll,
   destroyTarget,
-  discardCard,
   drawCards,
   exileTarget,
   gainLife,
@@ -31,9 +40,20 @@ import {
   loseLife,
   makeToken,
   pumpUntilEndOfTurn,
-  returnFromGraveyard,
   tapTarget,
 } from './primitives.js';
+import {
+  discardCard,
+  mayShuffleLibrary,
+  modal,
+  putFromHandOnTop,
+  reorderTopOfLibrary,
+  returnFromGraveyard,
+  returnToHand,
+  revealTopCard,
+  searchLibrary,
+  tapPermanents,
+} from './choice-primitives.js';
 
 // --- minimal fixtures ----------------------------------------------------------
 
@@ -90,8 +110,19 @@ function ctxFor(
   source: CardInstance,
   params: Record<string, unknown>,
   targets: ReadonlyArray<InstanceId | PlayerId> = [],
-): { ctx: EffectContext; events: GameEvent[] } {
+  /** Scripted answers: return one for a parked question, or omit for the default. */
+  answer?: (choice: PendingChoice) => ChoiceAnswer | undefined,
+): {
+  ctx: EffectContext;
+  events: GameEvent[];
+  asked: PendingChoice[];
+  enqueued: EffectRef[];
+  shuffled: PlayerId[];
+} {
   const events: GameEvent[] = [];
+  const asked: PendingChoice[] = [];
+  const enqueued: EffectRef[] = [];
+  const shuffled: PlayerId[] = [];
   const ctx: EffectContext = {
     state,
     source,
@@ -141,8 +172,51 @@ function ctxFor(
       events.push({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });
       return instanceId;
     },
+    // Mirror the engine's CHOICE channel (choices.ts) so a primitive that asks a
+    // question can be unit-tested without a game: every request is normalised
+    // exactly as the engine normalises it, then answered by the test's script —
+    // or, with no script, by the same safe default the engine falls back to.
+    ask(request) {
+      const choice = normalizeChoiceRequest(request, {
+        id: asked.length,
+        sourceInstanceId: source.instanceId,
+        sourceName: source.def.name,
+      });
+      if (!choice) return undefined;
+      asked.push(choice);
+      const scripted = answer?.(choice);
+      const value = scripted ?? defaultAnswerFor(choice);
+      const validation = validateChoiceAnswer(choice, value);
+      if (!validation.ok) throw new Error(`scripted answer is illegal: ${validation.reason}`);
+      return value;
+    },
+    chooseCards(request) {
+      const a = ctx.ask({ ...request, kind: 'selectCards', chooser: request.chooser ?? source.controller });
+      return a && a.kind === 'selectCards' ? a.instanceIds : undefined;
+    },
+    choosePlayers(request) {
+      const a = ctx.ask({ ...request, kind: 'selectPlayers', chooser: request.chooser ?? source.controller });
+      return a && a.kind === 'selectPlayers' ? a.players : undefined;
+    },
+    chooseModes(request) {
+      const a = ctx.ask({ ...request, kind: 'chooseModes', chooser: request.chooser ?? source.controller });
+      return a && a.kind === 'chooseModes' ? a.modeIds : undefined;
+    },
+    confirm(request) {
+      const a = ctx.ask({ ...request, kind: 'confirm', chooser: request.chooser ?? source.controller });
+      return a && a.kind === 'confirm' ? a.yes : undefined;
+    },
+    enqueueEffects(refs) {
+      enqueued.push(...refs);
+    },
+    shuffleLibrary(player) {
+      // Deterministic stand-in for the engine's seeded shuffle: reverse the
+      // library, which is observable ("it moved") without any RNG.
+      state.players[player].library.reverse();
+      shuffled.push(player);
+    },
   };
-  return { ctx, events };
+  return { ctx, events, asked, enqueued, shuffled };
 }
 
 /** Effective P/T reading the draft's continuous layer for a given instance. */
@@ -420,14 +494,267 @@ describe('counterSpell', () => {
 // --- discardCard ---------------------------------------------------------------
 
 describe('discardCard', () => {
-  it('moves a card from the targeted player hand to graveyard', () => {
+  const island: CardDefinition = { id: 'isl', name: 'Island', types: ['land'] };
+
+  it('moves the CHOSEN card from the targeted player hand to graveyard', () => {
+    const s = emptyState();
+    s.players.B.hand.push(inst(bear, 'B', 'hand'), inst(bigGuy, 'B', 'hand'));
+    const big = s.players.B.hand[1]!;
+    const src = inst({ id: 'seize', name: 'Thoughtseize', types: ['sorcery'] }, 'A', 'stack');
+    const { ctx, asked } = ctxFor(s, src, { count: 1 }, ['B'], () => ({
+      kind: 'selectCards',
+      instanceIds: [big.instanceId],
+    }));
+
+    discardCard(ctx);
+
+    expect(asked).toHaveLength(1);
+    expect(s.players.B.graveyard.map((c) => c.def.name)).toEqual(['Big']);
+    expect(s.players.B.hand.map((c) => c.def.name)).toEqual(['Bear']);
+  });
+
+  it('asks the VICTIM by default (a loss they answer) and the CASTER on demand', () => {
     const s = emptyState();
     s.players.B.hand.push(inst(bear, 'B', 'hand'));
     const src = inst({ id: 'seize', name: 'Thoughtseize', types: ['sorcery'] }, 'A', 'stack');
-    const { ctx } = ctxFor(s, src, { count: 1 }, ['B']);
+
+    const self = ctxFor(s, src, { count: 1 }, ['B']);
+    discardCard(self.ctx);
+    expect(self.asked[0]!.chooser).toBe('B');
+    expect(self.asked[0]!.valence).toBe('loss');
+
+    const s2 = emptyState();
+    s2.players.B.hand.push(inst(bear, 'B', 'hand'));
+    const byCaster = ctxFor(s2, src, { count: 1, chosenBy: 'controller' }, ['B']);
+    discardCard(byCaster.ctx);
+    expect(byCaster.asked[0]!.chooser).toBe('A');
+    expect(byCaster.asked[0]!.valence).toBe('gain');
+  });
+
+  it('honours the filter: a hand of only lands offers nothing and discards nothing', () => {
+    const s = emptyState();
+    s.players.B.hand.push(inst(island, 'B', 'hand'), inst(island, 'B', 'hand'));
+    const src = inst({ id: 'seize', name: 'Thoughtseize', types: ['sorcery'] }, 'A', 'stack');
+    const { ctx, asked } = ctxFor(s, src, { count: 1, chosenBy: 'controller', filter: { noneOfTypes: ['land'] } }, ['B']);
+
     discardCard(ctx);
-    expect(s.players.B.hand).toHaveLength(0);
-    expect(s.players.B.graveyard).toHaveLength(1);
+
+    expect(asked[0]!.kind === 'selectCards' && asked[0]!.candidates).toHaveLength(0);
+    expect(s.players.B.hand).toHaveLength(2);
+    expect(s.players.B.graveyard).toHaveLength(0);
+  });
+});
+
+// --- the choice-driven library primitives ---------------------------------------
+
+describe('putFromHandOnTop', () => {
+  it('puts the chosen cards back IN THE CHOSEN ORDER, first choice on top', () => {
+    const s = emptyState();
+    const a = inst({ id: 'a', name: 'A', types: ['instant'] }, 'A', 'hand');
+    const b = inst({ id: 'b', name: 'B', types: ['instant'] }, 'A', 'hand');
+    const c = inst({ id: 'c', name: 'C', types: ['instant'] }, 'A', 'hand');
+    s.players.A.hand.push(a, b, c);
+    const src = inst({ id: 'bs', name: 'Brainstorm', types: ['instant'] }, 'A', 'stack');
+    const { ctx, asked } = ctxFor(s, src, { count: 2 }, [], () => ({
+      kind: 'selectCards',
+      instanceIds: [c.instanceId, a.instanceId],
+    }));
+
+    putFromHandOnTop(ctx);
+
+    expect(asked[0]!.kind === 'selectCards' && asked[0]!.ordered).toBe(true);
+    expect(s.players.A.library.map((x) => x.def.name)).toEqual(['C', 'A']);
+    expect(s.players.A.hand.map((x) => x.def.name)).toEqual(['B']);
+  });
+});
+
+describe('reorderTopOfLibrary', () => {
+  it('re-seats the top cards in the chosen order and leaves the rest alone', () => {
+    const s = emptyState();
+    const names = ['one', 'two', 'three', 'four'];
+    for (const n of names) s.players.A.library.push(inst({ id: n, name: n, types: ['land'] }, 'A', 'library'));
+    const top = s.players.A.library.slice(0, 3);
+    const src = inst({ id: 'ponder', name: 'Ponder', types: ['sorcery'] }, 'A', 'stack');
+    const { ctx } = ctxFor(s, src, { count: 3 }, [], () => ({
+      kind: 'selectCards',
+      instanceIds: [top[2]!.instanceId, top[0]!.instanceId, top[1]!.instanceId],
+    }));
+
+    reorderTopOfLibrary(ctx);
+
+    expect(s.players.A.library.map((c) => c.def.name)).toEqual(['three', 'one', 'two', 'four']);
+  });
+});
+
+describe('mayShuffleLibrary', () => {
+  it('shuffles on yes and does nothing on no', () => {
+    const s = emptyState();
+    const src = inst({ id: 'ponder', name: 'Ponder', types: ['sorcery'] }, 'A', 'stack');
+
+    const yes = ctxFor(s, src, {}, [], () => ({ kind: 'confirm', yes: true }));
+    mayShuffleLibrary(yes.ctx);
+    expect(yes.shuffled).toEqual(['A']);
+
+    const no = ctxFor(s, src, {}, [], () => ({ kind: 'confirm', yes: false }));
+    mayShuffleLibrary(no.ctx);
+    expect(no.shuffled).toEqual([]);
+    // The steer says "you just arranged this — don't throw it away".
+    expect(no.asked[0]!.valence).toBe('loss');
+  });
+});
+
+describe('searchLibrary', () => {
+  const plains: CardDefinition = { id: 'pl', name: 'Plains', types: ['land'] };
+  const wrath: CardDefinition = { id: 'wr', name: 'Wrath of God', types: ['sorcery'] };
+
+  function libraryOf(state: GameState): void {
+    state.players.A.library.push(inst(wrath, 'A', 'library'), inst(plains, 'A', 'library'));
+  }
+
+  it('declining the optional search moves nothing and shuffles nothing', () => {
+    const s = emptyState();
+    libraryOf(s);
+    const src = inst({ id: 'path', name: 'Path to Exile', types: ['instant'] }, 'A', 'stack');
+    const { ctx, shuffled } = ctxFor(s, src, { optional: true, who: 'controller' }, [], () => ({
+      kind: 'confirm',
+      yes: false,
+    }));
+
+    searchLibrary(ctx);
+
+    expect(s.players.A.library).toHaveLength(2);
+    expect(shuffled).toEqual([]);
+  });
+
+  it('accepting it puts the chosen card onto the battlefield tapped, then shuffles', () => {
+    const s = emptyState();
+    libraryOf(s);
+    const land = s.players.A.library[1]!;
+    const src = inst({ id: 'path', name: 'Path to Exile', types: ['instant'] }, 'A', 'stack');
+    const { ctx, shuffled } = ctxFor(
+      s,
+      src,
+      {
+        optional: true,
+        who: 'controller',
+        filter: { anyOfTypes: ['land'] },
+        nameAnyOf: ['Plains'],
+        destination: 'battlefield',
+        tapped: true,
+      },
+      [],
+      (choice) =>
+        choice.kind === 'confirm'
+          ? { kind: 'confirm', yes: true }
+          : { kind: 'selectCards', instanceIds: [land.instanceId] },
+    );
+
+    searchLibrary(ctx);
+
+    const fetched = s.battlefield.find((c) => c.instanceId === land.instanceId);
+    expect(fetched).toBeDefined();
+    expect(fetched!.tapped).toBe(true);
+    expect(s.players.A.library).toHaveLength(1);
+    expect(shuffled).toEqual(['A']);
+  });
+
+  it('only offers cards matching BOTH the filter and the name list', () => {
+    const s = emptyState();
+    libraryOf(s);
+    const src = inst({ id: 'path', name: 'Path to Exile', types: ['instant'] }, 'A', 'stack');
+    const { ctx, asked } = ctxFor(s, src, {
+      who: 'controller',
+      filter: { anyOfTypes: ['land'] },
+      nameAnyOf: ['Plains'],
+    });
+
+    searchLibrary(ctx);
+
+    const choice = asked[0]!;
+    expect(choice.kind === 'selectCards' && choice.candidates.map((c) => c.name)).toEqual(['Plains']);
+  });
+});
+
+describe('revealTopCard', () => {
+  const plains: CardDefinition = { id: 'pl', name: 'Plains', types: ['land'] };
+
+  it('moves the revealed card to hand only when it matches the filter', () => {
+    const s = emptyState();
+    s.players.B.library.push(inst(plains, 'B', 'library'), inst(bear, 'B', 'library'));
+    const src = inst({ id: 'gg', name: 'Goblin Guide', types: ['creature'] }, 'A', 'battlefield');
+    const { ctx } = ctxFor(s, src, { who: 'opponent', filter: { anyOfTypes: ['land'] } });
+
+    revealTopCard(ctx); // top is the land → into their hand
+    expect(s.players.B.hand.map((c) => c.def.name)).toEqual(['Plains']);
+
+    revealTopCard(ctx); // top is now a creature → stays put
+    expect(s.players.B.hand).toHaveLength(1);
+    expect(s.players.B.library.map((c) => c.def.name)).toEqual(['Bear']);
+  });
+});
+
+describe('modal', () => {
+  const MODES = [
+    { id: 'counter', label: 'Counter target spell', requires: 'targetSpell', effects: [{ primitive: 'counterSpell' }] },
+    { id: 'draw', label: 'Draw a card', effects: [{ primitive: 'drawCards', params: { count: 1 } }] },
+    { id: 'tapAll', label: 'Tap all', effects: [{ primitive: 'tapPermanents' }] },
+  ];
+
+  it('enqueues the chosen modes in PRINTED order, not answer order', () => {
+    const s = emptyState();
+    const src = inst({ id: 'cc', name: 'Cryptic Command', types: ['instant'] }, 'A', 'stack');
+    const { ctx, enqueued } = ctxFor(s, src, { count: 2, modes: MODES }, [], () => ({
+      kind: 'chooseModes',
+      modeIds: ['tapAll', 'draw'],
+    }));
+
+    modal(ctx);
+
+    expect(enqueued.map((r) => r.primitive)).toEqual(['drawCards', 'tapPermanents']);
+  });
+
+  it('does not offer a mode whose target is not legal for this cast', () => {
+    const s = emptyState();
+    const src = inst({ id: 'cc', name: 'Cryptic Command', types: ['instant'] }, 'A', 'stack');
+    const { ctx, asked } = ctxFor(s, src, { count: 2, modes: MODES }); // no targets at all
+
+    modal(ctx);
+
+    const choice = asked[0]!;
+    expect(choice.kind === 'chooseModes' && choice.modes.map((m) => m.id)).toEqual(['draw', 'tapAll']);
+  });
+});
+
+describe('returnToHand', () => {
+  it('returns the targeted permanent to its owner hand', () => {
+    const s = emptyState();
+    const target = inst(bear, 'B');
+    s.battlefield.push(target);
+    const src = inst({ id: 'cc', name: 'Cryptic Command', types: ['instant'] }, 'A', 'stack');
+    const { ctx } = ctxFor(s, src, {}, [target.instanceId]);
+
+    returnToHand(ctx);
+
+    expect(s.battlefield).toHaveLength(0);
+    expect(s.players.B.hand.map((c) => c.def.name)).toEqual(['Bear']);
+  });
+});
+
+describe('tapPermanents', () => {
+  it('taps only the opponent creatures, leaving your own board untapped', () => {
+    const s = emptyState();
+    const mine = inst(bear, 'A');
+    const theirs = inst(bigGuy, 'B');
+    const theirLand = inst({ id: 'l', name: 'Island', types: ['land'] }, 'B');
+    s.battlefield.push(mine, theirs, theirLand);
+    const src = inst({ id: 'cc', name: 'Cryptic Command', types: ['instant'] }, 'A', 'stack');
+    const { ctx } = ctxFor(s, src, { who: 'opponent', types: ['creature'] });
+
+    tapPermanents(ctx);
+
+    expect(mine.tapped).toBe(false);
+    expect(theirs.tapped).toBe(true);
+    expect(theirLand.tapped).toBe(false);
   });
 });
 
@@ -463,14 +790,42 @@ describe('tapTarget', () => {
 // --- returnFromGraveyard -------------------------------------------------------
 
 describe('returnFromGraveyard', () => {
-  it('returns the most recent graveyard card to hand, skipping the source', () => {
+  it('returns the CHOSEN graveyard card to hand, never the source itself', () => {
     const s = emptyState();
+    const bolt = inst({ id: 'bolt', name: 'Lightning Bolt', types: ['instant'] }, 'A', 'graveyard');
     const dead = inst(bear, 'A', 'graveyard');
-    s.players.A.graveyard.push(dead);
     const src = inst({ id: 'witness', name: 'Eternal Witness', types: ['creature'] }, 'A', 'battlefield');
-    const { ctx } = ctxFor(s, src, { count: 1 });
+    // The source sits in the graveyard too — it must not be offered.
+    s.players.A.graveyard.push(bolt, dead, { ...src, zone: 'graveyard' });
+
+    const { ctx, asked } = ctxFor(s, src, { count: 1 }, [], () => ({
+      kind: 'selectCards',
+      instanceIds: [bolt.instanceId],
+    }));
     returnFromGraveyard(ctx);
-    expect(s.players.A.hand).toHaveLength(1);
-    expect(s.players.A.graveyard).toHaveLength(0);
+
+    const choice = asked[0]!;
+    expect(choice.kind === 'selectCards' && choice.candidates.map((c) => c.name)).toEqual([
+      'Lightning Bolt',
+      'Bear',
+    ]);
+    expect(choice.valence).toBe('gain');
+    expect(s.players.A.hand.map((c) => c.def.name)).toEqual(['Lightning Bolt']);
+  });
+
+  it('"you may" (optional) lets the chooser return nothing', () => {
+    const s = emptyState();
+    s.players.A.graveyard.push(inst(bear, 'A', 'graveyard'));
+    const src = inst({ id: 'witness', name: 'Eternal Witness', types: ['creature'] }, 'A', 'battlefield');
+    const { ctx, asked } = ctxFor(s, src, { count: 1, optional: true }, [], () => ({
+      kind: 'selectCards',
+      instanceIds: [],
+    }));
+
+    returnFromGraveyard(ctx);
+
+    expect(asked[0]!.min).toBe(0);
+    expect(s.players.A.hand).toHaveLength(0);
+    expect(s.players.A.graveyard).toHaveLength(1);
   });
 });

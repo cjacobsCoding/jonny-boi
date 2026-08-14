@@ -17,7 +17,12 @@
  * Targeting model: core resolves targets at cast time and passes them as
  * `ctx.targets` — an array of `InstanceId` (a battlefield permanent) and/or
  * `PlayerId` (`'A'`/`'B'`). Primitives that target read `ctx.targets[i]` and
- * classify it with the helpers below.
+ * classify it with the helpers in `./effect-helpers`.
+ *
+ * This module holds the primitives that decide everything themselves. The ones
+ * that must ASK a player something mid-resolution (discard *which* card, put these
+ * back in *what* order, do you *want* to search) live in `./choice-primitives`
+ * and are merged into the same {@link CORE_PRIMITIVES} registry below.
  */
 
 import type {
@@ -26,88 +31,26 @@ import type {
   EffectContext,
   EffectPrimitive,
   EffectRegistry,
-  GameState,
-  InstanceId,
-  KeywordFlags,
-  PlayerId,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import { PLUS_ONE_COUNTER, effectivePower, isCreature } from '@jonny-boi/core';
-
-// --- param reading (typed, defaulted — no magic numbers leak in) ---------------
-
-/** Read a non-negative integer param by key, falling back to `fallback`. */
-function intParam(ctx: EffectContext, key: string, fallback: number): number {
-  const v = ctx.params[key];
-  return typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback;
-}
-
-/** Read a string param by key, or `undefined` if absent/ill-typed. */
-function strParam(ctx: EffectContext, key: string): string | undefined {
-  const v = ctx.params[key];
-  return typeof v === 'string' ? v : undefined;
-}
-
-/** Read a string-array param by key (e.g. token colors / produced mana). */
-function strArrayParam(ctx: EffectContext, key: string): readonly string[] {
-  const v = ctx.params[key];
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-}
-
-/**
- * Read a `keywords` param (a `KeywordFlags`-shaped object, e.g. `{ trample: true }`)
- * keeping only the boolean-true flags. Used by `grantKeywordUntilEndOfTurn`. A
- * missing/ill-typed param yields an empty grant (safe no-op).
- */
-function keywordsParam(ctx: EffectContext): KeywordFlags {
-  const v = ctx.params.keywords;
-  if (typeof v !== 'object' || v === null) return {};
-  const src = v as Record<string, unknown>;
-  const out: Record<string, boolean> = {};
-  for (const key in src) {
-    if (src[key] === true) out[key] = true;
-  }
-  return out as KeywordFlags;
-}
-
-// --- target helpers ------------------------------------------------------------
-
-/** A target is a player when it is one of the two player ids. */
-function isPlayerTarget(t: InstanceId | PlayerId): t is PlayerId {
-  return t === 'A' || t === 'B';
-}
-
-/** Find a battlefield permanent by instance id, or undefined. */
-function permanentById(state: GameState, id: InstanceId): CardInstance | undefined {
-  return state.battlefield.find((c) => c.instanceId === id);
-}
-
-/** The first player target among `ctx.targets`, if any. */
-function firstPlayerTarget(ctx: EffectContext): PlayerId | undefined {
-  for (const t of ctx.targets) if (isPlayerTarget(t)) return t;
-  return undefined;
-}
-
-/** The first creature/permanent target among `ctx.targets`, if any. */
-function firstPermanentTarget(ctx: EffectContext): CardInstance | undefined {
-  for (const t of ctx.targets) {
-    if (!isPlayerTarget(t)) {
-      const perm = permanentById(ctx.state, t);
-      if (perm) return perm;
-    }
-  }
-  return undefined;
-}
-
-// --- life-total mutation (single funnel so events stay consistent) -------------
-
-/** Apply a life delta to a player and emit `lifeChanged`. Pure on the draft. */
-function changeLife(ctx: EffectContext, player: PlayerId, delta: number): void {
-  if (delta === 0) return;
-  const p = ctx.state.players[player];
-  p.life += delta;
-  ctx.emit({ type: 'lifeChanged', player, delta, to: p.life });
-}
+import {
+  changeLife,
+  firstPermanentTarget,
+  firstPlayerTarget,
+  intParam,
+  isEmptyKeywords,
+  isPlayerTarget,
+  keywordsParam,
+  manaValueOf,
+  movePermanentTo,
+  otherPlayer,
+  permanentById,
+  selfIfCreature,
+  strArrayParam,
+  strParam,
+} from './effect-helpers.js';
+import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -326,7 +269,7 @@ export const exileTarget: EffectPrimitive = (ctx) => {
       ctx.emit({ type: 'gainLife', player: target.controller, amount: power });
     }
   }
-  removePermanentTo(ctx, target, 'exile');
+  movePermanentTo(ctx, target, 'exile');
 };
 
 /**
@@ -382,25 +325,6 @@ export const counterSpell: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `discardCard` — a player discards `params.count` cards (default 1). Defaults to
- * the first player target (Thoughtseize: opponent), else the controller. With no
- * AI choice yet, discards the last card in hand deterministically. Empty hand →
- * no-op.
- */
-export const discardCard: EffectPrimitive = (ctx) => {
-  const count = intParam(ctx, 'count', 1);
-  const who = firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller);
-  const hand = ctx.state.players[who].hand;
-  for (let i = 0; i < count; i++) {
-    const card = hand.pop();
-    if (!card) return;
-    card.zone = 'graveyard';
-    ctx.state.players[card.owner].graveyard.push(card);
-    ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'hand', to: 'graveyard' });
-  }
-};
-
-/**
  * `createToken` — put `params.count` (default 1) creature tokens onto the
  * battlefield under the controller. Token P/T/name/keywords come from params so
  * there are no magic numbers. Used by token-makers (when a trigger system lands;
@@ -442,46 +366,7 @@ export const tapTarget: EffectPrimitive = (ctx) => {
   ctx.emit({ type: 'tapped', instanceId: target.instanceId });
 };
 
-/**
- * `returnFromGraveyard` — return `params.count` (default 1) card(s) from the
- * controller's graveyard to hand. Used by Eternal Witness ETB. With no chooser
- * yet, returns the most-recently-added card(s). Empty graveyard → no-op. Skips
- * the source card itself so an ETB can't grab the creature that just entered.
- */
-export const returnFromGraveyard: EffectPrimitive = (ctx) => {
-  const count = intParam(ctx, 'count', 1);
-  const player = ctx.state.players[ctx.controller];
-  let returned = 0;
-  for (let i = player.graveyard.length - 1; i >= 0 && returned < count; i--) {
-    const card = player.graveyard[i];
-    if (!card || card.instanceId === ctx.source.instanceId) continue;
-    player.graveyard.splice(i, 1);
-    card.zone = 'hand';
-    player.hand.push(card);
-    ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'graveyard', to: 'hand' });
-    returned++;
-  }
-};
-
 // --- shared internals ----------------------------------------------------------
-
-function otherPlayer(p: PlayerId): PlayerId {
-  return p === 'A' ? 'B' : 'A';
-}
-
-/** The source as a creature target (for self-pumps / self-grants), or undefined. */
-function selfIfCreature(ctx: EffectContext): CardInstance | undefined {
-  const self = permanentById(ctx.state, ctx.source.instanceId);
-  return self && isCreature(self.def) ? self : undefined;
-}
-
-/** Whether a keyword flag object has no true flags. */
-function isEmptyKeywords(k: KeywordFlags): boolean {
-  for (const key in k) {
-    if ((k as Record<string, unknown>)[key]) return false;
-  }
-  return true;
-}
 
 /**
  * A copy of `def` with every triggered ability whose effects invoke `persistReturn`
@@ -516,55 +401,24 @@ function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean 
   }
   const maxMv = ctx.params.maxManaValue;
   if (typeof maxMv === 'number') {
-    if (manaValue(target) > maxMv) return false;
+    if (manaValueOf(target.def) > maxMv) return false;
   }
   return true;
 }
 
-/** Converted mana value of a permanent's definition (0 if free/land). */
-function manaValue(inst: CardInstance): number {
-  const c = inst.def.cost;
-  if (!c) return 0;
-  const rec = c as Record<string, number | undefined>;
-  return (
-    (rec.generic ?? 0) +
-    (rec.W ?? 0) +
-    (rec.U ?? 0) +
-    (rec.B ?? 0) +
-    (rec.R ?? 0) +
-    (rec.G ?? 0) +
-    (rec.C ?? 0)
-  );
-}
-
 /** Destroy a creature: move it to its owner's graveyard and emit `creatureDied`. */
 function destroyCreature(ctx: EffectContext, creature: CardInstance): void {
-  removePermanentTo(ctx, creature, 'graveyard');
+  movePermanentTo(ctx, creature, 'graveyard');
   ctx.emit({ type: 'creatureDied', instanceId: creature.instanceId, name: creature.def.name });
-}
-
-/** Move a battlefield permanent to a destination owner-zone, emitting zoneChange. */
-function removePermanentTo(ctx: EffectContext, perm: CardInstance, to: 'graveyard' | 'exile'): void {
-  const idx = ctx.state.battlefield.findIndex((c) => c.instanceId === perm.instanceId);
-  if (idx < 0) return;
-  ctx.state.battlefield.splice(idx, 1);
-  perm.zone = to;
-  // Reset transient per-object state so it re-enters clean if it ever returns.
-  perm.tapped = false;
-  perm.damageMarked = 0;
-  perm.markedByDeathtouch = false;
-  perm.summoningSick = false;
-  perm.counters = {};
-  const dest = to === 'graveyard' ? ctx.state.players[perm.owner].graveyard : ctx.state.players[perm.owner].exile;
-  dest.push(perm);
-  ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
 }
 
 // --- the canonical primitive id registry ---------------------------------------
 
 /**
  * Every primitive keyed by its stable id (the `EffectRef.primitive` value cards
- * reference). Adding a primitive = adding one entry here + the data that uses it.
+ * reference) — the primitives above plus the choice-driven half from
+ * `./choice-primitives`. Adding a primitive = adding one entry to one of those two
+ * maps + the data that uses it; there is still exactly ONE registry to register.
  */
 export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   dealDamage,
@@ -580,10 +434,9 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   destroyAll,
   addMana,
   counterSpell,
-  discardCard,
   createToken,
   tapTarget,
-  returnFromGraveyard,
+  ...CHOICE_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */
