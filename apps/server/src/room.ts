@@ -34,8 +34,31 @@ import {
   type ServerMessage,
 } from '@jonny-boi/protocol';
 import { loadDeck, type Deck, type LoadedDeck } from '@jonny-boi/sim';
-import { randomBytes } from 'node:crypto';
-import { DEFAULT_GAME_SEED, RECONNECT_TOKEN_BYTES } from './config.js';
+import { randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import {
+  GAME_SEED_SPACE,
+  MAX_DECK_ENTRIES,
+  MAX_DECK_TOTAL_CARDS,
+  MAX_MULLIGANS_PER_GAME,
+  MAX_SPECTATORS_PER_ROOM,
+  RECONNECT_TOKEN_BYTES,
+} from './config.js';
+
+/**
+ * A fresh, unpredictable per-room seed. Shuffles MUST NOT be derivable by a client:
+ * with a fixed seed, replaying the same decklist teaches you your own library order
+ * — and the opponent's, since one RNG stream shuffles both.
+ */
+export function randomGameSeed(): number {
+  return randomInt(GAME_SEED_SPACE);
+}
+
+/** Compare two reconnect tokens without leaking their contents through timing. */
+function tokensMatch(expected: string, received: string): boolean {
+  const a = Buffer.from(expected, 'utf8');
+  const b = Buffer.from(received, 'utf8');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /** The transport-free sink a `Room` writes `ServerMessage`s to. */
 export interface Connection {
@@ -48,6 +71,13 @@ export interface Connection {
 /** What we track per seat. A seat may be empty, connected, or disconnected. */
 interface Seat {
   readonly id: PlayerId;
+  /**
+   * Whether a player holds this seat (connected OR dropped-but-reclaimable). Seat
+   * occupancy is tracked explicitly rather than inferred from `name !== ''`, so a
+   * blank/hostile display name can never make an occupied seat look vacant and let a
+   * stranger overwrite the sitting player.
+   */
+  claimed: boolean;
   name: string;
   /** The live connection occupying this seat, or `null` if vacant/disconnected. */
   connection: Connection | null;
@@ -93,7 +123,7 @@ export class Room {
   /** Monotonic seed so each rematch is a fresh, still-reproducible game. */
   private nextSeed: number;
 
-  constructor(code: string, config: RulesConfig = DEFAULT_RULES, seed: number = DEFAULT_GAME_SEED) {
+  constructor(code: string, config: RulesConfig = DEFAULT_RULES, seed: number = randomGameSeed()) {
     this.code = code;
     this.config = config;
     this.pool = getPool();
@@ -107,6 +137,7 @@ export class Room {
   private makeSeat(id: PlayerId): Seat {
     return {
       id,
+      claimed: false,
       name: '',
       connection: null,
       deck: null,
@@ -119,7 +150,17 @@ export class Room {
 
   /** True when both seats are filled by a (currently or previously) connected player. */
   private bothSeatsClaimed(): boolean {
-    return PLAYER_IDS.every((id) => this.seats[id].name !== '');
+    return PLAYER_IDS.every((id) => this.seats[id].claimed);
+  }
+
+  /**
+   * Release a seat completely and invalidate its reconnect token. Only ever called
+   * before a game exists (see `handleDisconnect`): once cards are dealt, a seat holds
+   * hidden information and may be re-entered ONLY by its token holder.
+   */
+  private vacate(seatId: PlayerId): void {
+    this.seats[seatId] = this.makeSeat(seatId);
+    if (this.phase === 'deckSelect' && !this.bothSeatsClaimed()) this.phase = 'waiting';
   }
 
   /** Whether the room has no remaining live connections (eligible for cleanup). */
@@ -136,23 +177,36 @@ export class Room {
    */
   createSeat(conn: Connection, name: string, deck?: DeckList): JoinResult & { token: string } {
     const seat = this.seats.A;
+    seat.claimed = true;
     seat.name = name;
     seat.connection = conn;
     if (deck) this.tryChooseDeck('A', deck, conn);
-    conn.send({ t: 'roomJoined', code: this.code, yourSeat: 'A', spectator: false });
+    conn.send({
+      t: 'roomJoined',
+      code: this.code,
+      yourSeat: 'A',
+      spectator: false,
+      reconnectToken: seat.reconnectToken,
+    });
     this.refreshPhaseFromLobby();
     this.broadcastLobby();
     return { seat: 'A', spectator: false, token: seat.reconnectToken };
   }
 
   /**
-   * Join an existing room. Seats the player as B if B is open; otherwise the
-   * connection becomes a spectator. Returns the join result (+ token when seated).
+   * Join an existing room. Seats the player in the first UNCLAIMED seat; otherwise the
+   * connection becomes a spectator (up to the per-room cap). Returns the join result
+   * (+ the seat's reconnect token when seated).
    */
-  join(conn: Connection, name: string, deck?: DeckList): JoinResult & { token?: string } {
-    const open = PLAYER_IDS.find((id) => this.seats[id].name === '');
+  join(conn: Connection, name: string, deck?: DeckList): JoinResult & { token?: string; refused?: boolean } {
+    const open = PLAYER_IDS.find((id) => !this.seats[id].claimed);
     if (!open) {
-      // Both seats taken → spectator.
+      // Both seats taken → spectator, but only while there is room for one. An
+      // unbounded spectator set turns every action into N extra state serializations.
+      if (this.spectators.size >= MAX_SPECTATORS_PER_ROOM) {
+        conn.send({ t: 'error', code: 'roomFull', message: 'this room has no free seat and no spectator slot' });
+        return { seat: null, spectator: false, refused: true };
+      }
       this.spectators.add(conn);
       conn.send({ t: 'roomJoined', code: this.code, yourSeat: null, spectator: true });
       // A spectator joining mid-game should see the current board.
@@ -161,10 +215,17 @@ export class Room {
       return { seat: null, spectator: true };
     }
     const seat = this.seats[open];
+    seat.claimed = true;
     seat.name = name;
     seat.connection = conn;
     if (deck) this.tryChooseDeck(open, deck, conn);
-    conn.send({ t: 'roomJoined', code: this.code, yourSeat: open, spectator: false });
+    conn.send({
+      t: 'roomJoined',
+      code: this.code,
+      yourSeat: open,
+      spectator: false,
+      reconnectToken: seat.reconnectToken,
+    });
     this.refreshPhaseFromLobby();
     this.broadcastLobby();
     return { seat: open, spectator: false, token: seat.reconnectToken };
@@ -188,6 +249,21 @@ export class Room {
 
   /** Validate + record a deck choice for a seat; replies with an error on failure. */
   private tryChooseDeck(seatId: PlayerId, deck: DeckList, conn: Connection): boolean {
+    // Bound the decklist before the loader expands it. `loadDeck` materializes one
+    // library entry per copy (`for i < count`), so an absurd `count` — or an absurd
+    // number of entries — is an out-of-memory kill for the WHOLE process, every room
+    // on it included. `validate.ts` already refuses these at the wire boundary; this
+    // second check keeps the room safe for any other caller (a test, a future
+    // transport) that hands it a decklist directly.
+    const totalCards = deck.cards.reduce((n, c) => n + (Number.isInteger(c.count) ? c.count : 0), 0);
+    if (deck.cards.length > MAX_DECK_ENTRIES || totalCards > MAX_DECK_TOTAL_CARDS) {
+      conn.send({ t: 'error', code: 'invalidDeck', message: 'decklist exceeds the allowed size' });
+      return false;
+    }
+    if (deck.cards.some((c) => !Number.isInteger(c.count) || c.count < 1)) {
+      conn.send({ t: 'error', code: 'invalidDeck', message: 'every decklist entry needs a positive whole count' });
+      return false;
+    }
     const asDeck: Deck = {
       name: deck.name,
       archetype: 'online',
@@ -310,7 +386,10 @@ export class Room {
     const seat = this.seats[seatId];
     if (seat.mulliganSettled) return; // already decided; ignore duplicates.
 
-    if (keep) {
+    // A "no keep" is free work the client asks the server to do (reshuffle + redraw +
+    // a fresh prompt), so it MUST be bounded: an unbounded stream of them is a CPU and
+    // bandwidth amplifier. At the cap the seat is force-settled with the hand it holds.
+    if (keep || seat.mulligansTaken >= MAX_MULLIGANS_PER_GAME) {
       seat.mulliganSettled = true;
     } else {
       this.redrawHand(seatId);
@@ -334,9 +413,12 @@ export class Room {
       player.library.push(card);
     }
     player.hand = [];
-    // Deterministic reshuffle from a seed that varies per mulligan so the new hand
-    // differs but the room stays reproducible.
-    this.shuffleLibrary(seatId, this.nextSeed ^ (this.seats[seatId].mulligansTaken + 1));
+    // Reshuffle from a seed that varies per mulligan AND per seat. Mixing the seat in
+    // matters: with a shared seed, two players on the same decklist would mulligan into
+    // identical hands, and either could read the other's library order from their own.
+    const seatSalt = PLAYER_IDS.indexOf(seatId) + 1;
+    const mulliganSalt = this.seats[seatId].mulligansTaken + 1;
+    this.shuffleLibrary(seatId, this.nextSeed ^ Math.imul(mulliganSalt, 0x9e3779b1) ^ Math.imul(seatSalt, 0x85ebca6b));
     for (let i = 0; i < this.config.startingHandSize; i++) {
       const top = player.library.shift();
       if (!top) break;
@@ -394,9 +476,12 @@ export class Room {
       conn.send({ t: 'error', code: 'illegalAction', message: 'the game is not in progress' });
       return;
     }
-    // A client may only act for its own seat, and only when it holds priority.
+    // A client may only act for its own seat, and only when it holds priority. This
+    // is fail-CLOSED: every `GameAction` carries a `player`, so an action that omits
+    // it (or names the opponent) is refused here rather than relying on each engine
+    // handler to notice. Authorization is the server's job, not the rules engine's.
     const act = action as { kind?: string; player?: PlayerId };
-    if (act.player !== undefined && act.player !== seatId) {
+    if (act.player !== seatId) {
       conn.send({ t: 'error', code: 'notYourTurn', message: 'you may only act for your own seat' });
       return;
     }
@@ -405,7 +490,21 @@ export class Room {
       return;
     }
 
-    const result = applyAction(this.state, action as never, this.config, this.registry);
+    // The engine is handed attacker-controlled data. It rejects illegal actions
+    // cleanly, but a THROW (an engine bug reached by a shape we didn't anticipate)
+    // must degrade to an error for this one client — never escape and disturb the
+    // room, the other rooms, or the process. `applyAction` works on a defensive
+    // clone, so a throw leaves `this.state` untouched and the game playable.
+    let result: ReturnType<typeof applyAction>;
+    try {
+      result = applyAction(this.state, action as never, this.config, this.registry);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(`[room ${this.code}] action threw:`, err);
+      conn.send({ t: 'error', code: 'illegalAction', message: 'that action could not be applied' });
+      this.sendStateTo(conn, seatId);
+      return;
+    }
     const rejected = result.events.some((e) => e.type === 'actionRejected');
     if (rejected) {
       const reason = result.events.find((e) => e.type === 'actionRejected');
@@ -472,6 +571,11 @@ export class Room {
     if (this.phase === 'finished') return;
     const winner: PlayerId = seatId === 'A' ? 'B' : 'A';
     this.phase = 'finished';
+    // Record the result in the authoritative state too, so any state sent afterwards
+    // (a late resync, a spectator joining) reports the game as over rather than live.
+    this.state.players[seatId].hasLost = true;
+    this.state.winner = winner;
+    this.state.gameOver = true;
     this.broadcastToAll({ t: 'gameOver', winner, reason: `${seatId} conceded.` });
     this.broadcastLobby();
   }
@@ -487,8 +591,20 @@ export class Room {
       conn.send({ t: 'error', code: 'illegalAction', message: 'can only rematch after a game ends' });
       return;
     }
-    // New seed so the shuffle differs; still deterministic/reproducible.
-    this.nextSeed = (this.nextSeed + 1) >>> 0;
+    // Both seats must be present and decked. Restarting into an absent opponent used
+    // to wedge the room permanently: the new game entered the mulligan phase, the
+    // missing seat could never settle its mulligan, and play could never begin.
+    const bothPresent = PLAYER_IDS.every((id) => {
+      const s = this.seats[id];
+      return s.connection !== null && s.deck !== null;
+    });
+    if (!bothPresent) {
+      conn.send({ t: 'error', code: 'illegalAction', message: 'both players must be connected to rematch' });
+      return;
+    }
+    // A fresh unpredictable seed — a rematch must not deal a shuffle either player
+    // could derive from the game they just watched.
+    this.nextSeed = randomGameSeed();
     this.phase = 'deckSelect';
     for (const id of PLAYER_IDS) this.seats[id].ready = false;
     this.startGame();
@@ -506,6 +622,12 @@ export class Room {
     const seatId = this.seatOf(conn);
     if (!seatId) return;
     this.seats[seatId].connection = null;
+    // Before any cards are dealt, a dropped player leaves NOTHING behind worth
+    // protecting, so free the seat — otherwise a lobby drop stranded the remaining
+    // player in a room nobody could ever join. Once a game exists the seat holds
+    // hidden information and may only be re-entered by its reconnect-token holder.
+    const holdsHiddenInfo = this.state !== null && this.phase !== 'waiting' && this.phase !== 'deckSelect';
+    if (!holdsHiddenInfo) this.vacate(seatId);
     const opponent = seatId === 'A' ? 'B' : 'A';
     const oppConn = this.seats[opponent].connection;
     if (oppConn) oppConn.send({ t: 'opponentDisconnected' });
@@ -518,10 +640,19 @@ export class Room {
    */
   reconnect(conn: Connection, seatId: PlayerId, token: string): PlayerId | null {
     const seat = this.seats[seatId];
-    if (seat.name === '' || seat.reconnectToken !== token) return null;
+    if (!seat.claimed) return null;
+    // Constant-time compare on equal-length tokens; a length mismatch is an instant
+    // no. The token is the ONLY thing standing between a stranger and a seat's hand.
+    if (!tokensMatch(seat.reconnectToken, token)) return null;
     if (seat.connection !== null) return null; // seat is already live.
     seat.connection = conn;
-    conn.send({ t: 'roomJoined', code: this.code, yourSeat: seatId, spectator: false });
+    conn.send({
+      t: 'roomJoined',
+      code: this.code,
+      yourSeat: seatId,
+      spectator: false,
+      reconnectToken: seat.reconnectToken,
+    });
     this.broadcastLobby();
     // Resend the player's view so the client resyncs after the drop.
     if (this.state) this.sendStateTo(conn, seatId);
@@ -542,7 +673,7 @@ export class Room {
 
   /** The lobby snapshot (phase + both seated players). */
   private lobbyPlayers(): LobbyPlayer[] {
-    return PLAYER_IDS.filter((id) => this.seats[id].name !== '').map((id) => {
+    return PLAYER_IDS.filter((id) => this.seats[id].claimed).map((id) => {
       const s = this.seats[id];
       return { seat: id, name: s.name, ready: s.ready, hasDeck: s.deck !== null };
     });

@@ -5,9 +5,9 @@
  * else routes to the connection's current `Room` directly.
  */
 
-import type { Connection, JoinResult, Room } from './room.js';
+import type { Connection, Room } from './room.js';
 import { Room as RoomImpl } from './room.js';
-import { MAX_ROOMS, ROOM_CODE_MAX_ATTEMPTS } from './config.js';
+import { EMPTY_ROOM_GRACE_MS, MAX_ROOMS, ROOM_CODE_MAX_ATTEMPTS } from './config.js';
 import { generateUniqueRoomCode } from './room-code.js';
 
 /** What a successful create returns: the room, the seat, and its reconnect token. */
@@ -19,6 +19,8 @@ export interface CreateResult {
 
 export class RoomManager {
   private readonly rooms = new Map<string, Room>();
+  /** When each currently-empty room became empty (absent = the room has occupants). */
+  private readonly emptySince = new Map<string, number>();
 
   /** Number of live rooms (for tests / diagnostics). */
   get size(): number {
@@ -35,6 +37,9 @@ export class RoomManager {
    * error); the creator's connection is sent `roomJoined`/`lobby` by the room.
    */
   create(conn: Connection, name: string, deck?: Parameters<Room['createSeat']>[2]): CreateResult | null {
+    // Reclaim anything already abandoned before declaring the server full, so a burst
+    // of short-lived rooms can never leave capacity permanently consumed.
+    if (this.rooms.size >= MAX_ROOMS) this.pruneEmpty();
     if (this.rooms.size >= MAX_ROOMS) return null;
     const code = generateUniqueRoomCode(new Set(this.rooms.keys()), ROOM_CODE_MAX_ATTEMPTS);
     if (!code) return null;
@@ -53,7 +58,7 @@ export class RoomManager {
     code: string,
     name: string,
     deck?: Parameters<Room['join']>[2],
-  ): { room: Room; result: JoinResult & { token?: string } } | null {
+  ): { room: Room; result: ReturnType<Room['join']> } | null {
     const room = this.get(code);
     if (!room) return null;
     const result = room.join(conn, name, deck);
@@ -62,13 +67,31 @@ export class RoomManager {
 
   /** Remove a room (called once it has no live connections). */
   remove(code: string): void {
-    this.rooms.delete(code.toUpperCase());
+    const key = code.toUpperCase();
+    this.rooms.delete(key);
+    this.emptySince.delete(key);
   }
 
-  /** Drop any rooms that have gone fully empty (no seated nor spectating sockets). */
-  pruneEmpty(): void {
+  /**
+   * Drop rooms that have had no seated nor spectating socket for longer than the
+   * grace period. The grace window is what makes reconnect possible when BOTH players
+   * drop at once (a shared-network blip would otherwise destroy the match instantly);
+   * the periodic sweep in the WS layer guarantees the room is still reaped afterwards,
+   * so retention stays bounded. `now` is injectable so tests need no timers.
+   */
+  pruneEmpty(now: number = Date.now()): void {
     for (const [code, room] of this.rooms) {
-      if (room.isEmpty()) this.rooms.delete(code);
+      if (!room.isEmpty()) {
+        this.emptySince.delete(code);
+        continue;
+      }
+      const since = this.emptySince.get(code) ?? now;
+      if (now - since >= EMPTY_ROOM_GRACE_MS) {
+        this.rooms.delete(code);
+        this.emptySince.delete(code);
+      } else {
+        this.emptySince.set(code, since);
+      }
     }
   }
 }

@@ -145,6 +145,18 @@ export interface LobbyPlayer {
 export type ClientMessage =
   | { readonly t: 'createRoom'; readonly protocolVersion: number; readonly name: string; readonly deck?: DeckList }
   | { readonly t: 'joinRoom'; readonly protocolVersion: number; readonly code: string; readonly name: string; readonly deck?: DeckList }
+  /**
+   * Reclaim a seat after a dropped socket, using the `reconnectToken` the server
+   * issued in `roomJoined`. Added in PROTOCOL_VERSION 1 as a new tag: a client that
+   * never sends it behaves exactly as before, so this is backward-compatible.
+   */
+  | {
+      readonly t: 'reconnect';
+      readonly protocolVersion: number;
+      readonly code: string;
+      readonly seat: PlayerId;
+      readonly token: string;
+    }
   | { readonly t: 'chooseDeck'; readonly deck: DeckList }
   | { readonly t: 'setReady'; readonly ready: boolean }
   | { readonly t: 'mulligan'; readonly keep: boolean }
@@ -160,7 +172,19 @@ export type ClientMessageTag = ClientMessage['t'];
 // ---------------------------------------------------------------------------
 
 export type ServerMessage =
-  | { readonly t: 'roomJoined'; readonly code: string; readonly yourSeat: PlayerId | null; readonly spectator: boolean }
+  | {
+      readonly t: 'roomJoined';
+      readonly code: string;
+      readonly yourSeat: PlayerId | null;
+      readonly spectator: boolean;
+      /**
+       * Secret that lets THIS client reclaim THIS seat after a drop (see the
+       * `reconnect` client message). Present only for a seated player — never for a
+       * spectator, and never for the opposing seat. Optional so older clients, which
+       * simply ignore it, keep working unchanged.
+       */
+      readonly reconnectToken?: string;
+    }
   | { readonly t: 'lobby'; readonly code: string; readonly phase: RoomPhase; readonly players: readonly LobbyPlayer[] }
   | { readonly t: 'gameStarted'; readonly yourSeat: PlayerId }
   | { readonly t: 'mulliganPrompt'; readonly hand: readonly CardInstance[]; readonly mulligansTaken: number }
