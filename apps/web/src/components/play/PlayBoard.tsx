@@ -8,6 +8,7 @@ import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
+import './action-bar.css';
 
 /**
  * The in-game board for the player who currently holds priority (the `viewer`). It

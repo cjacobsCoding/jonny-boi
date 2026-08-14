@@ -1,0 +1,34 @@
+/*
+ * Keeps the play action bar reachable.
+ *
+ * The board is taller than a laptop viewport (roughly 1080px against a 720px
+ * window), and the action bar is the LAST element in the document — so "Pass /
+ * advance", the control the game cannot proceed without, sat below the fold and
+ * had to be scrolled to on every single priority window.
+ *
+ * Sticking it to the bottom of the viewport keeps it in reach without changing
+ * the board's layout or scroll behaviour. Lives in its own file rather than in
+ * styles.css so it does not collide with other in-flight work there.
+ */
+
+.action-bar {
+  position: sticky;
+  bottom: 0;
+  /* Above the board content it scrolls over, below the modal target prompt
+     (.target-prompt uses z-index 50) so a prompt is never obscured. */
+  z-index: 20;
+  /* The shared rule sets a surface background already; make it opaque against
+     whatever scrolls beneath, and lift it off the content with a shadow. */
+  box-shadow: 0 -6px 16px rgb(0 0 0 / 28%);
+}
+
+/*
+ * On very short viewports a sticky bar eats scarce vertical space, and the page
+ * scrolls fine there anyway — release it rather than cover the board.
+ */
+@media (max-height: 420px) {
+  .action-bar {
+    position: static;
+    box-shadow: none;
+  }
+}

@@ -99,6 +99,16 @@ export function needsTarget(def: CardDefinition): boolean {
   return targetRequirement(def).count > 0;
 }
 
+/**
+ * The state a target search actually reads: the public battlefield and stack.
+ * Narrower than `GameState` so the ONLINE client — which only ever holds a
+ * redacted view — can enumerate targets with the same code the hotseat uses.
+ */
+export interface TargetableView {
+  readonly battlefield: readonly CardInstance[];
+  readonly stack: readonly GameState['stack'][number][];
+}
+
 /** A legal target option presented to the player: a creature, a player, or a spell. */
 export type TargetOption =
   | { readonly kind: 'creature'; readonly instanceId: InstanceId; readonly name: string; readonly controller: PlayerId }
@@ -112,7 +122,7 @@ export type TargetOption =
  */
 export function legalTargets(
   req: TargetRequirement,
-  state: GameState,
+  state: TargetableView,
   playerNames: Readonly<Record<PlayerId, string>>,
 ): readonly TargetOption[] {
   const options: TargetOption[] = [];
