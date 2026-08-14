@@ -138,6 +138,36 @@ export function pumpDef(
   };
 }
 
+/** A hard counterspell (the real `counterSpell` primitive id). */
+export function counterDef(id: string, cost: ManaCost = { U: 2 }): CardDefinition {
+  return { id, name: id, types: ['instant'], timing: 'instant', cost, effects: [{ primitive: 'counterSpell' }] };
+}
+
+/** A symmetric board sweeper (the real `destroyAll` primitive id). */
+export function sweeperDef(id: string, cost: ManaCost = { generic: 2, W: 2 }): CardDefinition {
+  return { id, name: id, types: ['sorcery'], timing: 'sorcery', cost, effects: [{ primitive: 'destroyAll' }] };
+}
+
+/**
+ * Shrink-removal: the pool writes "target creature gets -2/-2" as a NEGATIVE
+ * `pumpUntilEndOfTurn`, which is a removal spell wearing a combat trick's clothes.
+ */
+export function shrinkDef(
+  id: string,
+  power: number,
+  toughness: number,
+  cost: ManaCost = { B: 1 },
+): CardDefinition {
+  return {
+    id,
+    name: id,
+    types: ['instant'],
+    timing: 'instant',
+    cost,
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power, toughness } }],
+  };
+}
+
 // --- state placement (deterministic positions) ---------------------------------
 
 /**
