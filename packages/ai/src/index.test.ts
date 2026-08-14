@@ -10,11 +10,14 @@ import {
 import {
   createDefaultAiRegistry,
   createAiRegistry,
+  DEFAULT_PILOT_ID,
   getPilot,
   HEURISTIC_PILOT_ID,
+  MCTS_PILOT_ID,
   PACKAGE_NAME,
   RANDOM_PILOT_ID,
   registerBuiltInPilots,
+  SELECTABLE_PILOT_IDS,
   createHeuristicPilot,
 } from './index.js';
 import { burnDef, creatureDef, landDef } from './test-support.js';
@@ -22,6 +25,32 @@ import { burnDef, creatureDef, landDef } from './test-support.js';
 describe('@jonny-boi/ai package', () => {
   it('exposes its package name placeholder', () => {
     expect(PACKAGE_NAME).toBe('ai');
+  });
+});
+
+/**
+ * A guard, not a preference. `DEFAULT_PILOT_ID` decides what every consumer runs
+ * — the CLI sim, the in-browser Lab, the match viewer — and it has already been
+ * silently flipped to `mcts` by a merge once, which made the Lab's default 600-game
+ * gauntlet take hours (~29 s/game in Node, ~66 s/game in the browser worker) while
+ * measurably playing WORSE (1.76 mana tapped-and-unspent per turn vs 0.01). The
+ * reasoning lives on the constant itself; this pins it so the next merge cannot
+ * undo it quietly. Changing it should mean changing this test, with a fresh
+ * head-to-head measurement in the commit message.
+ */
+describe('the default pilot', () => {
+  it('is the heuristic — the throughput path users actually get', () => {
+    expect(DEFAULT_PILOT_ID).toBe(HEURISTIC_PILOT_ID);
+  });
+
+  it('still offers MCTS as a selectable choice', () => {
+    expect(SELECTABLE_PILOT_IDS).toContain(MCTS_PILOT_ID);
+    expect(getPilot(MCTS_PILOT_ID)?.id).toBe(MCTS_PILOT_ID);
+  });
+
+  it('offers every selectable id from the default registry', () => {
+    const registry = createDefaultAiRegistry();
+    for (const id of SELECTABLE_PILOT_IDS) expect(registry.getPilot(id)?.id).toBe(id);
   });
 });
 

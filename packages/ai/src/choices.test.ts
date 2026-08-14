@@ -35,13 +35,14 @@ import {
   type PendingChoice,
 } from '@jonny-boi/core';
 import { createEffectRegistry } from '@jonny-boi/core';
+import type { EffectRef, ResolutionFrame } from '@jonny-boi/core';
 import { answerChoiceHeuristically, cardValue, safeFallbackAction } from './choices.js';
 import { createHeuristicPilot } from './heuristic.js';
 import { createMctsPilot } from './mcts.js';
 import { FAST_MCTS_CONFIG } from './mcts-config.js';
 import { createRandomPilot } from './random.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
-import { creatureDef, giveHand, landDef } from './test-support.js';
+import { creatureDef, giveHand, landDef, putOnBattlefield, putOnStack } from './test-support.js';
 
 const WEIGHTS = DEFAULT_HEURISTIC_WEIGHTS;
 const SOURCE = { id: 7, sourceInstanceId: 1, sourceName: 'Test Card' };
@@ -170,6 +171,10 @@ describe('the heuristic answers every choice kind sensibly', () => {
   function handChoice(valence: 'gain' | 'loss' | 'neutral', min = 1, max = min, ordered = false) {
     const state = newGame().state;
     state.players.A.hand = [];
+    // A BUILT mana base, which is what makes "the land is the worst card in hand"
+    // true. (Short of mana the ranking deliberately inverts — see the board-aware
+    // ranking tests below.)
+    putOnBattlefield(state, 'A', Array.from({ length: WEIGHTS.choiceLandsWanted }, () => ISLAND));
     const cards = giveHand(state, 'A', [BEAR, ISLAND, DRAGON]);
     const choice = park({
       kind: 'selectCards',
@@ -292,6 +297,227 @@ describe('the heuristic answers every choice kind sensibly', () => {
         }
       }
     }
+  });
+});
+
+// --- modal spells: the pilot EVALUATES each mode ------------------------------------
+
+/**
+ * Cryptic Command's real four modes, authored exactly as the pool authors them
+ * (registered primitive ids + params). The pilot must reach the right pick from
+ * this data alone — it has no idea what "Cryptic Command" is.
+ */
+const CRYPTIC_MODES = [
+  { id: 'counter', label: 'Counter target spell', effects: [{ primitive: 'counterSpell' }] },
+  {
+    id: 'bounce',
+    label: "Return target permanent to its owner's hand",
+    effects: [{ primitive: 'returnToHand' }],
+  },
+  {
+    id: 'tapAll',
+    label: 'Tap all creatures your opponents control',
+    effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
+  },
+  { id: 'draw', label: 'Draw a card', effects: [{ primitive: 'drawCards', params: { count: 1 } }] },
+] as const;
+
+const CRYPTIC_DEF: CardDefinition = freeInstant('Cryptic Command', [
+  { primitive: 'modal', params: { count: 2, modes: CRYPTIC_MODES } },
+]);
+
+/**
+ * Park a modal spell mid-resolution: the suspended frame carries the `modal` ref
+ * (with its authored modes) and the targets the cast locked in, exactly as the
+ * engine leaves it while the chooser is on the clock.
+ */
+function parkModal(
+  state: GameState,
+  opts: {
+    readonly offer: readonly string[];
+    readonly targets?: readonly (InstanceId | 'A' | 'B')[];
+    /** A real modal spell says "choose exactly N", so `count` sets both bounds. */
+    readonly count?: number;
+    readonly min?: number;
+    readonly max?: number;
+    readonly valence?: 'gain' | 'loss' | 'neutral';
+  },
+): PendingChoice {
+  const [card] = giveHand(state, 'A', [CRYPTIC_DEF]);
+  const modalRef = (CRYPTIC_DEF.effects as readonly EffectRef[])[0] as EffectRef;
+  const frame: ResolutionFrame = {
+    origin: 'spell',
+    controller: 'A',
+    targets: [...(opts.targets ?? [])],
+    effects: [modalRef],
+    next: 0,
+    answers: [],
+    askCount: 0,
+    card: card!,
+    resolvesTo: 'graveyard',
+  };
+  state.resolution = frame;
+  const count = opts.count ?? 2;
+  const choice = park({
+    kind: 'chooseModes',
+    chooser: 'A',
+    prompt: 'Choose two —',
+    modes: CRYPTIC_MODES.filter((m) => opts.offer.includes(m.id)).map((m) => ({ id: m.id, label: m.label })),
+    min: opts.min ?? count,
+    max: opts.max ?? count,
+    valence: opts.valence ?? 'gain',
+  });
+  state.pendingChoice = choice;
+  return choice;
+}
+
+/** The mode ids the pilot picks for a parked modal choice. */
+function chosenModes(state: GameState, choice: PendingChoice): readonly string[] {
+  const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+  if (action.kind !== 'answerChoice' || action.answer.kind !== 'chooseModes') throw new Error('wrong shape');
+  expect(validateChoiceAnswer(choice, action.answer).ok).toBe(true);
+  return action.answer.modeIds;
+}
+
+describe('choosing modal-spell modes (scripted positions)', () => {
+  it('DRAWS instead of bouncing a permanent that is not worth bouncing', () => {
+    // The old pilot took the first two printed modes and bounced a Forest while
+    // never drawing a card. Here: a land is the only bounce target, and the
+    // opponent has a board worth tapping — so the two real modes are tap + draw.
+    const state = newGame().state;
+    const [forest] = putOnBattlefield(state, 'B', [landDef('Forest', 'G')]);
+    putOnBattlefield(state, 'B', [BEAR, BEAR]);
+    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [forest!.instanceId] });
+    const picked = chosenModes(state, choice);
+    expect(picked).toContain('draw');
+    expect(picked).not.toContain('bounce');
+  });
+
+  it('BOUNCES instead of drawing when the target is a real threat', () => {
+    const state = newGame().state;
+    const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [angel!.instanceId] });
+    expect(chosenModes(state, choice)).toEqual(['bounce', 'draw']);
+  });
+
+  it('COUNTERS the opponent’s spell and still draws (never bounces nothing)', () => {
+    const state = newGame().state;
+    const dragon = putOnStack(state, 'B', DRAGON);
+    const choice = parkModal(state, { offer: ['counter', 'tapAll', 'draw'], targets: [dragon.instanceId] });
+    expect(chosenModes(state, choice)).toEqual(['counter', 'draw']);
+  });
+
+  it('never points a mode at its OWN board', () => {
+    const state = newGame().state;
+    const [mine] = putOnBattlefield(state, 'A', [creatureDef('My Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    putOnBattlefield(state, 'B', [BEAR, BEAR]);
+    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [mine!.instanceId] });
+    const picked = chosenModes(state, choice);
+    expect(picked).not.toContain('bounce');
+    expect(picked).toEqual(['tapAll', 'draw']);
+  });
+
+  it('never counters its OWN spell', () => {
+    const state = newGame().state;
+    const own = putOnStack(state, 'A', DRAGON);
+    putOnBattlefield(state, 'B', [BEAR]);
+    const choice = parkModal(state, { offer: ['counter', 'tapAll', 'draw'], targets: [own.instanceId] });
+    expect(chosenModes(state, choice)).toEqual(['tapAll', 'draw']);
+  });
+
+  it('refuses to draw off a library that cannot pay (decking itself)', () => {
+    const state = newGame().state;
+    state.players.A.library = [];
+    putOnBattlefield(state, 'B', [BEAR]);
+    const choice = parkModal(state, { offer: ['tapAll', 'draw'], targets: [], count: 1 });
+    expect(chosenModes(state, choice)).toEqual(['tapAll']);
+  });
+
+  it('takes FEWER modes than allowed when the extra ones would do nothing at all', () => {
+    // Nothing on either board and nothing targeted: only "draw" does anything, so a
+    // "choose up to two" takes exactly the one mode that is real.
+    const state = newGame().state;
+    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], min: 0, max: 2 });
+    expect(chosenModes(state, choice)).toEqual(['draw']);
+  });
+
+  it('still names the required number of modes when every mode is bad', () => {
+    const state = newGame().state;
+    state.players.A.library = [];
+    const [mine] = putOnBattlefield(state, 'A', [BEAR]);
+    const choice = parkModal(state, { offer: ['bounce', 'draw'], targets: [mine!.instanceId], count: 2 });
+    expect(chosenModes(state, choice)).toHaveLength(2);
+  });
+
+  it('on a LOSS valence it picks the WORST modes, and as few as allowed', () => {
+    const state = newGame().state;
+    const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    const choice = parkModal(state, {
+      offer: ['bounce', 'tapAll', 'draw'],
+      targets: [angel!.instanceId],
+      count: 1,
+      valence: 'loss',
+    });
+    // Tapping an already-untapped-but-worthless board is the emptiest of the three
+    // (the Angel is the only creature, and bouncing/drawing both do real work).
+    expect(chosenModes(state, choice)).toEqual(['tapAll']);
+  });
+
+  it('is deterministic: the same position always yields the same modes', () => {
+    const build = () => {
+      const state = newGame().state;
+      const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+      return { state, choice: parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [angel!.instanceId] }) };
+    };
+    const first = build();
+    const second = build();
+    expect(chosenModes(second.state, second.choice)).toEqual(chosenModes(first.state, first.choice));
+  });
+
+  it('produces a LEGAL answer for every count and valence, with or without card data', () => {
+    for (const valence of ['gain', 'loss', 'neutral'] as const) {
+      for (let count = 0; count <= 3; count++) {
+        const state = newGame().state;
+        putOnBattlefield(state, 'B', [BEAR]);
+        const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], count, valence });
+        expect(chosenModes(state, choice).length).toBeGreaterThanOrEqual(choice.min);
+        // A choice whose card data cannot be read must still answer legally.
+        state.resolution = null;
+        expect(chosenModes(state, choice).length).toBeGreaterThanOrEqual(choice.min);
+      }
+    }
+  });
+});
+
+// --- the card ranking is board-aware ------------------------------------------------
+
+describe('what "my worst card" means depends on the board', () => {
+  function discardFrom(defs: readonly CardDefinition[], landsInPlay: number): string {
+    const state = newGame().state;
+    state.players.A.hand = [];
+    if (landsInPlay > 0) putOnBattlefield(state, 'A', Array.from({ length: landsInPlay }, () => ISLAND));
+    giveHand(state, 'A', defs);
+    const choice = park({
+      kind: 'selectCards',
+      chooser: 'A',
+      prompt: 'discard',
+      candidates: collectCardOptions(state, 'hand', { controller: 'A' }),
+      valence: 'loss',
+    });
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectCards') throw new Error('wrong shape');
+    const picked = action.answer.instanceIds[0];
+    return state.players.A.hand.find((c) => c.instanceId === picked)!.def.name;
+  }
+
+  const CHEAP_SPELL = freeInstant('Cantrip', [{ primitive: 'drawCards', params: { count: 1 } }]);
+
+  it('keeps the land and pitches a cheap spell while still short of mana', () => {
+    expect(discardFrom([ISLAND, CHEAP_SPELL, DRAGON], 0)).toBe('Cantrip');
+  });
+
+  it('pitches the land once the mana is built', () => {
+    expect(discardFrom([ISLAND, CHEAP_SPELL, DRAGON], WEIGHTS.choiceLandsWanted)).toBe('Island');
   });
 });
 

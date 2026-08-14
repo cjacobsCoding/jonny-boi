@@ -14,6 +14,7 @@ import { createHeuristicPilot, HEURISTIC_PILOT_ID } from './heuristic.js';
 import {
   addPool,
   burnDef,
+  counterDef,
   createTestRegistry,
   creatureDef,
   destroyDef,
@@ -21,6 +22,9 @@ import {
   landDef,
   pumpDef,
   putOnBattlefield,
+  putOnStack,
+  shrinkDef,
+  sweeperDef,
 } from './test-support.js';
 
 /** A deck stub good enough to start a game; tests override hand/board directly. */
@@ -121,6 +125,26 @@ describe('heuristic pilot — removal & burn', () => {
     }
   });
 
+  it('burns the FACE instead of a blocker once the opponent is nearly dead', () => {
+    // The same board, the same Bolt, a different life total: at 20 killing the
+    // creature is right, at 6 the game is two spells away and the creature is
+    // irrelevant. A flat "chip the face" score could not tell those apart, so an
+    // aggro deck answered creatures until it ran out of cards.
+    const play = (life: number) => {
+      const state = freshGame();
+      intoMainPhase(state);
+      state.players.B.life = life;
+      putOnBattlefield(state, 'B', [creatureDef('Bear', 2, 2, { cost: { R: 2 } })]);
+      giveHand(state, 'A', [burnDef('Bolt', 3, { R: 1 })]);
+      addPool(state, 'A', 'R', 1);
+      const action = choose(state);
+      if (action.kind !== 'castSpell') throw new Error('expected a cast');
+      return action.targets;
+    };
+    expect(play(20)).not.toEqual(['B']); // healthy: kill the blocker
+    expect(play(6)).toEqual(['B']); // low: race
+  });
+
   it('targets the BIGGEST killable threat with removal', () => {
     const state = freshGame();
     intoMainPhase(state);
@@ -156,6 +180,92 @@ describe('heuristic pilot — removal & burn', () => {
     // No opposing creatures → removal has no target → should just pass.
     const action = choose(state);
     expect(action.kind).toBe('passPriority');
+  });
+});
+
+describe('heuristic pilot — reactive spells are not blank cards', () => {
+  it('holds a counterspell while the stack is empty', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    giveHand(state, 'A', [counterDef('Counterspell')]);
+    addPool(state, 'A', 'U', 2);
+    // Casting it now would resolve as a no-op that ate a card.
+    expect(choose(state).kind).toBe('passPriority');
+  });
+
+  it('counters the opponent’s spell on the stack, naming it as the target', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    state.priorityPlayer = 'A';
+    const threat = putOnStack(state, 'B', creatureDef('Dragon', 6, 6, { cost: { generic: 6 } }));
+    const [counter] = giveHand(state, 'A', [counterDef('Counterspell')]);
+    addPool(state, 'A', 'U', 2);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') {
+      expect(action.instanceId).toBe(counter!.instanceId);
+      expect(action.targets).toEqual([threat.instanceId]);
+    }
+  });
+
+  it('does not stack a second counter on its own answer', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnStack(state, 'B', creatureDef('Dragon', 6, 6, { cost: { generic: 6 } }));
+    putOnStack(state, 'A', counterDef('Counterspell')); // our answer, already on top
+    giveHand(state, 'A', [counterDef('Counterspell')]);
+    addPool(state, 'A', 'U', 2);
+    expect(choose(state).kind).toBe('passPriority');
+  });
+
+  it('holds a sweeper that would cost it more than the opponent', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'A', [creatureDef('Ours', 4, 4, { cost: { W: 3 } })]);
+    putOnBattlefield(state, 'B', [creatureDef('Theirs', 1, 1, { cost: { B: 1 } })]);
+    giveHand(state, 'A', [sweeperDef('Wrath of God')]);
+    addPool(state, 'A', 'W', 4);
+    expect(choose(state).kind).toBe('passPriority');
+  });
+
+  it('fires a sweeper into a board that is all theirs', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'B', [
+      creatureDef('A1', 3, 3, { cost: { B: 2 } }),
+      creatureDef('A2', 3, 3, { cost: { B: 2 } }),
+    ]);
+    const [wrath] = giveHand(state, 'A', [sweeperDef('Wrath of God')]);
+    addPool(state, 'A', 'W', 4);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') expect(action.instanceId).toBe(wrath!.instanceId);
+  });
+
+  it('reads a NEGATIVE pump as removal and points it at the biggest thing it kills', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    const [small] = putOnBattlefield(state, 'B', [creatureDef('Rat', 1, 1, { cost: { B: 1 } })]);
+    const [mid] = putOnBattlefield(state, 'B', [creatureDef('Knight', 2, 2, { cost: { B: 2 } })]);
+    putOnBattlefield(state, 'B', [creatureDef('Ogre', 4, 4, { cost: { B: 3 } })]); // survives -2/-2
+    const [disfigure] = giveHand(state, 'A', [shrinkDef('Disfigure', -2, -2)]);
+    addPool(state, 'A', 'B', 1);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') {
+      expect(action.instanceId).toBe(disfigure!.instanceId);
+      expect(action.targets).toEqual([mid!.instanceId]);
+      expect(action.targets).not.toEqual([small!.instanceId]);
+    }
+  });
+
+  it('holds shrink-removal that would kill nothing', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'B', [creatureDef('Ogre', 4, 4, { cost: { B: 3 } })]);
+    giveHand(state, 'A', [shrinkDef('Disfigure', -2, -2)]);
+    addPool(state, 'A', 'B', 1);
+    expect(choose(state).kind).toBe('passPriority');
   });
 });
 

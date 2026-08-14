@@ -24,22 +24,25 @@ export interface SuggestConfig {
    */
   readonly defaultGamesPerCandidate: number;
   /**
-   * The minimum copies of a basic land the suggester will leave in a deck when
-   * proposing to cut one. Cutting basics to "oblivion" makes the deck unplayable
-   * (no mana); we keep the deck legal/playable, a NAMED constraint (the task's
-   * "keep the deck legal" rule), not an inline literal.
+   * The minimum copies of ONE basic-land line the suggester will leave in a deck
+   * when proposing to cut from it. Cutting basics to "oblivion" makes the deck
+   * unplayable (no mana); we keep the deck legal/playable, a NAMED constraint (the
+   * task's "keep the deck legal" rule), not an inline literal.
    */
   readonly minBasicLandsKept: number;
 }
 
 export const DEFAULT_SUGGEST_CONFIG: SuggestConfig = Object.freeze({
-  // ~6 candidates × a 4-deck gauntlet × 40 games ≈ a few thousand games — a
+  // ~6 candidates × a 7-deck gauntlet × 60 games ≈ a few thousand games — a
   // single tractable CLI run. Raise it for a deeper (slower) search.
   maxCandidates: 12,
   defaultGamesPerCandidate: 60,
-  // A deck below this many of a given basic clearly can't cast its spells; we
-  // never propose a cut that would drop a basic-land line under it.
-  minBasicLandsKept: 18,
+  // A deck below this many of a given basic clearly can't cast the spells of that
+  // colour. It is a per-LINE floor, so it has to be read against the smallest line
+  // a real deck runs, not against a mono-coloured deck's total: the gauntlet's
+  // two-colour decks run eight to ten of each basic, and a floor above that would
+  // silently make every land in every two-colour deck uncuttable.
+  minBasicLandsKept: 8,
 });
 
 /**

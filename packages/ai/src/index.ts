@@ -84,16 +84,29 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
  * the strength of AI play is a single data decision rather than a default
  * repeated at each call site.
  *
- * It is the LOOK-AHEAD pilot: the heuristic is one action deep and cannot plan a
- * turn, let alone several, so games piloted by it read as "tap everything, dump
- * the hand". MCTS searches real engine rollouts instead. It is materially slower
- * per decision (see `MctsConfig.simulationsPerDecision`) — that cost buys the
- * play quality, and `FAST_MCTS_CONFIG` exists for speed-sensitive callers.
+ * ## It is the HEURISTIC, and that is a measured decision — do not flip it back
+ * without a fresh head-to-head. `mcts` was the default on the theory that
+ * look-ahead must out-play a one-action-deep policy. Two independent measurements
+ * say it is currently both slower AND worse:
+ *
+ *   - **Throughput**: ~29 s per game in Node and ~66 s per game in the browser
+ *     worker. The Lab's default run is 100 games × 6 opponents = 600 games, i.e.
+ *     *hours* — the signature "swap a card, get a verdict" loop stops being
+ *     interactive at all. The heuristic runs the same gauntlet in seconds.
+ *   - **Play quality**: MCTS left 1.76 mana tapped-and-unspent per turn against
+ *     the heuristic's 0.01 — 176× the waste, and visible to a watching user as
+ *     "it tapped a Sol Ring and did nothing". Deeper search does not help when the
+ *     nodes it searches are mostly mana it will never spend.
+ *
+ * MCTS stays fully SELECTABLE (`--pilot mcts`, the Lab's picker) so the comparison
+ * can be re-run at any time; it is simply not what a user gets by default. The
+ * default is pinned by a test in `index.test.ts`, because this constant has been
+ * silently flipped back by a merge once already.
  */
-export const DEFAULT_PILOT_ID = MCTS_PILOT_ID;
+export const DEFAULT_PILOT_ID = HEURISTIC_PILOT_ID;
 
 /** The pilot ids a consumer may select from data (CLI flag, UI picker). */
-export const SELECTABLE_PILOT_IDS: readonly string[] = [MCTS_PILOT_ID, HEURISTIC_PILOT_ID, RANDOM_PILOT_ID];
+export const SELECTABLE_PILOT_IDS: readonly string[] = [HEURISTIC_PILOT_ID, MCTS_PILOT_ID, RANDOM_PILOT_ID];
 
 /**
  * Convenience: resolve a pilot by id from a fresh default registry. For one-off
