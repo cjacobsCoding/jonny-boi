@@ -107,15 +107,14 @@ const RESTRICTION_MEMO = new WeakMap<CardDefinition, TargetRestriction | null>()
 export function targetRestrictionOf(def: CardDefinition): TargetRestriction | undefined {
   const memoized = RESTRICTION_MEMO.get(def);
   if (memoized !== undefined) return memoized ?? undefined;
+  // Only a restriction NARROWER than the default is enforceable, so an explicit
+  // `targets: 'any'` reads the same as declaring nothing at all (see above).
   let found: TargetRestriction | null = null;
   for (const ref of def.effects ?? []) {
     const declared = ref.params?.[TARGET_RESTRICTION_PARAM];
-    if (!isTargetRestriction(declared)) continue;
-    if (declared !== DEFAULT_TARGET_RESTRICTION) {
-      found = declared;
-      break; // already as narrow as it gets
-    }
-    found ??= declared;
+    if (!isTargetRestriction(declared) || declared === DEFAULT_TARGET_RESTRICTION) continue;
+    found = declared;
+    break;
   }
   RESTRICTION_MEMO.set(def, found);
   return found ?? undefined;

@@ -34,8 +34,10 @@ import {
   effectiveToughness,
   generateLegalActions,
   indexContinuous,
+  legalTargetsFor,
   manaModesOf,
   NO_MOD,
+  targetRestrictionOf,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
 import { CARD_POOL } from '../data/pool.js';
@@ -586,7 +588,13 @@ describe('every compiled card resolves in a real game', () => {
       floodMana(s);
       // Targets come from the card's own data, exactly as the game UI derives
       // them — never from a per-card special case.
+      // A card that declares a printed target restriction is targeted THROUGH the
+      // engine's own legality seam — the same one `generateLegalActions` and
+      // `applyCastSpell` use — so this test cannot drift from what the engine
+      // considers legal. Only the unrestricted leftovers fall back to reading
+      // primitive ids.
       const refs = [...(card.effects ?? [])];
+      const restriction = targetRestrictionOf(card);
       const wantsPlayer = refs.some(
         (ref) => ref.primitive === 'dealDamage' || ref.primitive === 'loseLife',
       );
@@ -595,11 +603,18 @@ describe('every compiled card resolves in a real game', () => {
           ref.primitive,
         ),
       );
-      const targets: Array<InstanceId | PlayerId> = wantsPermanent
-        ? [dummyId]
-        : wantsPlayer
-          ? ['B']
-          : [];
+      const targets: Array<InstanceId | PlayerId> =
+        restriction !== undefined
+          ? [legalTargetsFor(s, restriction).find((t) => t === dummyId || t === 'B') ?? dummyId]
+          : wantsPermanent
+            ? [dummyId]
+            : wantsPlayer
+              ? ['B']
+              : [];
+      // A restricted spell with no legal target cannot be cast at all (a
+      // counterspell with an empty stack) — skip it rather than assert a
+      // rejection the engine is right to make.
+      if (restriction !== undefined && legalTargetsFor(s, restriction).length === 0) continue;
       drive({ kind: 'castSpell', player: 'A', instanceId: id, targets });
       settle();
       cast += 1;
@@ -666,9 +681,16 @@ describe('every compiled card resolves in a real game', () => {
     let steps = 0;
     while (!s.gameOver && steps++ < MAX_ACTIONS) {
       const legal = generateLegalActions(s, DEFAULT_RULES);
+      // "First castSpell offered" is no longer crude-but-harmless: the engine now
+      // offers a restricted spell once per LEGAL target, and your own creatures are
+      // legal targets for removal. A policy that took the first offer would Murder
+      // its own board every time, so it prefers a cast aimed at the other side —
+      // still the dumbest policy that plays the cards, just not a suicidal one.
+      const castsAtOpponent = legal.filter((a) => a.kind === 'castSpell' && !aimedAtOwnSide(s, a));
       const choice =
         legal.find((a) => a.kind === 'playLand') ??
         legal.find((a) => a.kind === 'tapForMana') ??
+        castsAtOpponent[0] ??
         legal.find((a) => a.kind === 'castSpell') ??
         legal.find((a) => a.kind === 'declareAttackers' && a.attackers.length > 0) ??
         legal[0];
@@ -681,15 +703,19 @@ describe('every compiled card resolves in a real game', () => {
     expect(s.gameOver, `game did not finish in ${MAX_ACTIONS} actions`).toBe(true);
     expect(s.winner === 'A' || s.winner === 'B').toBe(true);
     expect(events.map((e) => e.type)).not.toContain('effectUnsupported');
-    // Won by DAMAGE, not by the loser decking out — the cards did the work, and
-    // both libraries still have cards left.
+    // Every family of card in these two decks did its job in this one game:
+    // spells resolved, damage landed, life moved, and REMOVAL genuinely killed
+    // things. That last one is the assertion that would have failed before target
+    // legality existed: a bare `castSpell` of Murder or Last Gasp carried no
+    // target, so the spell resolved into nothing and the removal half of the Dimir
+    // deck was blank. Now it kills — which is also why this game is a grind rather
+    // than a race, and why the winner is no longer required to win on damage.
     const loser = s.winner === 'A' ? 'B' : 'A';
-    expect(s.players[loser].life).toBeLessThanOrEqual(0);
-    expect(s.players.A.library.length).toBeGreaterThan(0);
-    expect(s.players.B.library.length).toBeGreaterThan(0);
-    // The cards genuinely did things: spells resolved, damage landed, life moved.
+    const startingLife = s.players[loser].life;
     expect(events.filter((e) => e.type === 'spellCast').length).toBeGreaterThan(0);
     expect(events.filter((e) => e.type === 'damageDealt').length).toBeGreaterThan(0);
+    expect(events.filter((e) => e.type === 'creatureDied').length).toBeGreaterThan(0);
+    expect(startingLife).toBeLessThan(DEFAULT_RULES.startingLife);
   });
 
   it('every compiled mana source is worth exactly one activation of its best mode', () => {
@@ -710,3 +736,17 @@ describe('every compiled card resolves in a real game', () => {
     }
   });
 });
+
+/**
+ * Whether a cast aims at something the caster controls (their own creature, or
+ * their own face). Used only by the self-driving game's policy — see the comment
+ * at its call site.
+ */
+function aimedAtOwnSide(state: GameState, action: GameAction): boolean {
+  if (action.kind !== 'castSpell') return false;
+  return (action.targets ?? []).some(
+    (target) =>
+      target === action.player ||
+      state.battlefield.some((c) => c.instanceId === target && c.controller === action.player),
+  );
+}
