@@ -5,6 +5,7 @@
  * so an AI can enumerate, score, and pick one against a read-only view.
  */
 
+import type { ChoiceAnswer } from './choices.js';
 import type { InstanceId, PlayerId } from './state.js';
 
 /** Pass priority. The single always-legal action when you hold priority. */
@@ -70,6 +71,25 @@ export interface DeclareBlockersAction {
   readonly blocks: ReadonlyArray<{ readonly blocker: InstanceId; readonly attacker: InstanceId }>;
 }
 
+/**
+ * Answer the question a resolving spell/ability parked in `GameState.pendingChoice`
+ * (see choices.ts). It is an ordinary action deliberately: the sim's pilots, the
+ * hotseat UI, and the online server all already know how to enumerate, choose, and
+ * submit actions, so a question needs no separate transport, no callback, and no
+ * change to any consumer's loop.
+ *
+ * `choiceId` must name the choice actually outstanding — a stale answer (a slow
+ * client replying to a question that has already been resolved) is rejected rather
+ * than misapplied to whatever is open now.
+ */
+export interface AnswerChoiceAction {
+  readonly kind: 'answerChoice';
+  /** Must equal `pendingChoice.chooser` — the engine enforces WHO answers. */
+  readonly player: PlayerId;
+  readonly choiceId: number;
+  readonly answer: ChoiceAnswer;
+}
+
 /** The union of all player actions. */
 export type GameAction =
   | PassPriorityAction
@@ -77,7 +97,8 @@ export type GameAction =
   | TapForManaAction
   | CastSpellAction
   | DeclareAttackersAction
-  | DeclareBlockersAction;
+  | DeclareBlockersAction
+  | AnswerChoiceAction;
 
 /** A discriminator helper for exhaustiveness. */
 export type ActionKind = GameAction['kind'];

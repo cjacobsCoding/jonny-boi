@@ -36,6 +36,7 @@ import type {
   ManaCost,
   ManaPool,
   ManaProduction,
+  PendingChoice,
   PlayerId,
 } from '@jonny-boi/core';
 import {
@@ -52,6 +53,7 @@ import {
   productionTotal,
   remainingToughness,
 } from '@jonny-boi/core';
+import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
@@ -96,8 +98,10 @@ export function createHeuristicPilot(weights: HeuristicWeights = DEFAULT_HEURIST
       try {
         return decide(ctx, weights);
       } catch {
-        // Robustness: never throw on a weird state. Fall back to passing.
-        return passAction(ctx.view);
+        // Robustness: never throw on a weird state. Fall back to the one move the
+        // engine is guaranteed to accept — which is NOT always passing: while a
+        // choice is parked, passing is rejected and only an answer moves the game.
+        return safeFallbackAction(ctx.view as unknown as GameState);
       }
     },
   };
@@ -108,6 +112,16 @@ export function createHeuristicPilot(weights: HeuristicWeights = DEFAULT_HEURIST
 function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
+
+  // A resolving spell is asking somebody a question. That preempts everything —
+  // it is the only thing the game will accept — and it is answered on its own
+  // terms (pick what is best for the chooser), not by scoring board plays.
+  // (The cast strips the view's DeepReadonly wrapper; the answerer only reads.)
+  const pending = view.pendingChoice as PendingChoice | null | undefined;
+  if (pending) {
+    const answer = answerChoiceHeuristically(view as unknown as GameState, pending, weights);
+    return emit(ctx, answer, `answering "${pending.prompt}"`);
+  }
 
   // Nothing offered, or only passing is possible → pass.
   if (legalActions.length === 0) return emit(ctx, passAction(view), 'no legal actions — passing');

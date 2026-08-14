@@ -16,6 +16,8 @@ import type {
   CombatState,
 } from '../state.js';
 import { PLAYER_IDS } from '../state.js';
+import type { PendingChoice, ResolutionFrame } from '../choices.js';
+import { cloneChoiceAnswer } from '../choices.js';
 
 function cloneInstance(inst: CardInstance): CardInstance {
   return {
@@ -83,6 +85,34 @@ function cloneCombat(c: CombatState | null): CombatState | null {
   };
 }
 
+/**
+ * Deep-copy a parked choice. Choices are treated as immutable once raised, so this
+ * is only about breaking ALIASING: after a clone, nothing the caller still holds
+ * can observe (or be observed through) the copy's arrays.
+ */
+function clonePendingChoice(choice: PendingChoice): PendingChoice {
+  switch (choice.kind) {
+    case 'selectCards':
+      return { ...choice, candidates: choice.candidates.map((c) => ({ ...c })) };
+    case 'selectPlayers':
+      return { ...choice, candidates: [...choice.candidates] };
+    case 'chooseModes':
+      return { ...choice, modes: choice.modes.map((m) => ({ ...m })) };
+    default:
+      return { ...choice };
+  }
+}
+
+/** Deep-copy a suspended resolution, including the card caught mid-resolution. */
+function cloneResolution(frame: ResolutionFrame): ResolutionFrame {
+  return {
+    ...frame,
+    effects: frame.effects.map((e) => ({ ...e })),
+    answers: frame.answers.map(cloneChoiceAnswer),
+    ...(frame.card ? { card: cloneInstance(frame.card) } : {}),
+  };
+}
+
 /** Deep-clone the mutable parts of a GameState; share immutable card defs. */
 export function cloneState(state: GameState): GameState {
   const players = {} as Record<PlayerId, PlayerState>;
@@ -105,5 +135,10 @@ export function cloneState(state: GameState): GameState {
     consecutivePasses: state.consecutivePasses,
     seed: state.seed,
     rngState: state.rngState,
+    // Only pay for the choice machinery when a choice is actually in flight — the
+    // overwhelming majority of clones (every action of every sim game) see two
+    // null checks and nothing else.
+    ...(state.pendingChoice ? { pendingChoice: clonePendingChoice(state.pendingChoice) } : {}),
+    ...(state.resolution ? { resolution: cloneResolution(state.resolution) } : {}),
   };
 }

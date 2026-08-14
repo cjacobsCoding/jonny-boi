@@ -81,6 +81,28 @@ export function paddedDeck(
  * removes shuffle flakiness ("is the card I need in my opening hand?").
  */
 export function giveHand(state: GameState, player: PlayerId, defs: readonly CardDefinition[]): CardInstance[] {
+  return placeInZone(state, player, 'hand', defs, (inst) => state.players[player].hand.push(inst));
+}
+
+/**
+ * Deterministically REPLACE a player's library with fresh instances of `defs`, in
+ * order — `defs[0]` ends up on top. Mutates the given state directly, like
+ * {@link giveHand}: a test that asserts "the card I put back is now on top" needs
+ * to know exactly what the library holds, which a shuffle cannot give it.
+ */
+export function giveLibrary(state: GameState, player: PlayerId, defs: readonly CardDefinition[]): CardInstance[] {
+  state.players[player].library = [];
+  return placeInZone(state, player, 'library', defs, (inst) => state.players[player].library.push(inst));
+}
+
+/** Shared instance-minting for the zone-stuffing test helpers above. */
+function placeInZone(
+  state: GameState,
+  player: PlayerId,
+  zone: CardInstance['zone'],
+  defs: readonly CardDefinition[],
+  place: (inst: CardInstance) => void,
+): CardInstance[] {
   const created: CardInstance[] = [];
   for (const def of defs) {
     const inst: CardInstance = {
@@ -88,14 +110,14 @@ export function giveHand(state: GameState, player: PlayerId, defs: readonly Card
       def,
       controller: player,
       owner: player,
-      zone: 'hand',
+      zone,
       tapped: false,
       summoningSick: true,
       damageMarked: 0,
       markedByDeathtouch: false,
       counters: {},
     };
-    state.players[player].hand.push(inst);
+    place(inst);
     created.push(inst);
   }
   return created;

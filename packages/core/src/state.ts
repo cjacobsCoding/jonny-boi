@@ -17,11 +17,21 @@ import type { CardDefinition } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
+import type { PendingChoice, ResolutionFrame } from './choices.js';
 
 /** Opaque, stable identity for a player. */
 export type PlayerId = 'A' | 'B';
 
 export const PLAYER_IDS: readonly PlayerId[] = ['A', 'B'];
+
+/**
+ * The other seat. One accessor so "my opponent" is spelled the same everywhere —
+ * card effects that put a choice to the OPPONENT (targeted discard) reach for this
+ * constantly.
+ */
+export function opponentOf(player: PlayerId): PlayerId {
+  return player === 'A' ? 'B' : 'A';
+}
 
 /** Opaque per-object id assigned to every card instance and stack object. */
 export type InstanceId = number;
@@ -205,6 +215,23 @@ export interface GameState {
   readonly seed: number;
   /** Current RNG cursor, snapshotted into state for serialization. */
   rngState: number;
+  /**
+   * A question a resolving spell/ability is waiting on (DESIGN §3.11 "player
+   * choice during resolution"). While it is set, `pendingChoice.chooser` — who may
+   * be the OPPONENT of the spell's controller — is the only seat that may act, and
+   * the only action they may take is `answerChoice`.
+   *
+   * Optional so that every existing state literal (and every serialized state
+   * written before choices existed) stays valid: absent and `null` both mean "no
+   * question outstanding", and a game containing no choice-asking card never
+   * touches these two fields at all.
+   */
+  pendingChoice?: PendingChoice | null;
+  /**
+   * The half-finished resolution the pending choice belongs to — the bookmark that
+   * lets the spell finish resolving after the answer. Set only while suspended.
+   */
+  resolution?: ResolutionFrame | null;
 }
 
 /** Build a fresh, empty player. */
