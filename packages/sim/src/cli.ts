@@ -21,7 +21,7 @@
 import { performance } from 'node:perf_hooks';
 import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
 import type { CardPool } from '@jonny-boi/cards';
-import { createDefaultAiRegistry, HEURISTIC_PILOT_ID, RANDOM_PILOT_ID } from '@jonny-boi/ai';
+import { createDefaultAiRegistry, DEFAULT_PILOT_ID, SELECTABLE_PILOT_IDS } from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
 import type { EffectRegistry } from '@jonny-boi/core';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
@@ -42,13 +42,16 @@ const USAGE = `${PROGRAM} — headless MTG gauntlet / A-B card-swap lab
 
 Usage:
   npm run sim -- decks
-  npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot heuristic|random]
-  npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot heuristic|random]
+  npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot mcts|heuristic|random]
+  npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot mcts|heuristic|random]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S] [--pilot id]
 
 Notes:
   • Decks and cards may be given by NAME (quote names with spaces) or by id.
+  • --pilot defaults to "${DEFAULT_PILOT_ID}", the look-ahead pilot: it searches real
+    engine rollouts per decision, so it plays far better but is MUCH slower than
+    "heuristic". Use --pilot heuristic for large runs where throughput matters.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
   • suggest: --cut may repeat to focus the cards considered for cutting; omit for
     auto mode (top ${DEFAULT_SUGGEST_CONFIG.maxCandidates} candidates by a cheap color/curve heuristic).
@@ -179,9 +182,9 @@ function loadOrThrow(deck: Deck, pool: CardPool): LoadedDeck {
 }
 
 function resolvePilots(flags: Flags): MatchupPilots {
-  const id = flags.pilot ?? HEURISTIC_PILOT_ID;
+  const id = flags.pilot ?? DEFAULT_PILOT_ID;
   const registry = createDefaultAiRegistry();
-  const known = new Set([HEURISTIC_PILOT_ID, RANDOM_PILOT_ID]);
+  const known = new Set(SELECTABLE_PILOT_IDS);
   if (!known.has(id)) {
     throw new CliError(`unknown pilot "${id}". Available: ${[...known].map((p) => `"${p}"`).join(', ')}`);
   }

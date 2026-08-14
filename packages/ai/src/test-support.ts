@@ -102,7 +102,14 @@ export function burnDef(id: string, amount: number, cost: ManaCost = { R: 1 }): 
   };
 }
 
-/** A sorcery-speed creature-destruction spell (conventional `destroy` primitive). */
+/**
+ * A sorcery-speed creature-destruction spell.
+ *
+ * The primitive id MUST match the one `cards` actually registers (`destroyTarget`)
+ * — these fixtures previously said `destroy`, which no real card uses, so the
+ * pilot's removal tests passed against a vocabulary that did not exist while every
+ * real removal spell fell through to "generic spell" and fizzled untargeted.
+ */
 export function destroyDef(id: string, cost: ManaCost = { B: 1, generic: 1 }): CardDefinition {
   return {
     id,
@@ -110,7 +117,24 @@ export function destroyDef(id: string, cost: ManaCost = { B: 1, generic: 1 }): C
     types: ['sorcery'],
     timing: 'sorcery',
     cost,
-    effects: [{ primitive: 'destroy', params: { what: 'creature' } }],
+    effects: [{ primitive: 'destroyTarget', params: { what: 'creature' } }],
+  };
+}
+
+/** An instant-speed +X/+Y combat trick (the real `pumpUntilEndOfTurn` primitive). */
+export function pumpDef(
+  id: string,
+  power: number,
+  toughness: number,
+  cost: ManaCost = { G: 1 },
+): CardDefinition {
+  return {
+    id,
+    name: id,
+    types: ['instant'],
+    timing: 'instant',
+    cost,
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power, toughness } }],
   };
 }
 

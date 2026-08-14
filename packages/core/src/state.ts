@@ -158,6 +158,16 @@ export interface CombatState {
   attackers: InstanceId[];
   /** Blocker assignment: blocker instanceId -> the attacker it blocks. */
   blocks: Record<InstanceId, InstanceId>;
+  /**
+   * Whether the declare step has HAPPENED — which is not the same as whether it
+   * produced anything. Declaring no attackers (or no blockers) is a legal, common
+   * choice, so emptiness cannot stand in for "not yet declared": without these
+   * flags an empty declaration is accepted forever, and because declaring resets
+   * the consecutive-pass counter, the step can never end. A pilot that searches
+   * its options (rather than passing by convention) falls straight into that loop.
+   */
+  attackersDeclared: boolean;
+  blockersDeclared: boolean;
 }
 
 /** The whole game world as one plain-data object. */

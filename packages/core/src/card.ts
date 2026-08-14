@@ -15,7 +15,8 @@
  * just a definition whose `types` includes `'creature'`.
  */
 
-import type { ManaCost } from './mana.js';
+import type { ManaCost, ManaProduction } from './mana.js';
+import { MANA_COLORS } from './mana.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
 export type CardType = 'land' | 'creature' | 'instant' | 'sorcery' | 'artifact' | 'enchantment' | 'planeswalker';
@@ -72,10 +73,24 @@ export interface CardDefinition {
    */
   readonly effects?: readonly EffectRef[];
   /**
-   * For mana sources: the mana produced by tapping this permanent for mana. If
-   * present, core exposes a "tap for mana" action. Omit for non-sources.
+   * For *fixed-bundle* mana sources: tapping adds one mana of **each** listed
+   * color at once. `['G']` is a Forest; `['C', 'C']` is Sol Ring's {C}{C}.
+   *
+   * This form cannot express a *choice*, so a source that adds "one mana of any
+   * color" must NOT be written as `['W','U','B','R','G']` — that would produce
+   * all five at once. Use {@link producesOptions} for modal sources instead.
    */
   readonly produces?: readonly import('./mana.js').ManaColor[];
+  /**
+   * For *modal* mana sources: tapping adds the mana of exactly **one** of these
+   * modes, chosen by the controller (`TapForManaAction.mode` indexes this list).
+   * Birds of Paradise is the five single-color modes; a dual land is two.
+   *
+   * Supersedes {@link produces}, which is the single-mode shorthand: when both
+   * are present this wins. Core normalises the two into one mode list, so a
+   * fixed bundle is simply a source with exactly one mode.
+   */
+  readonly producesOptions?: readonly import('./mana.js').ManaProduction[];
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -109,6 +124,74 @@ export function isPermanentType(def: CardDefinition): boolean {
 
 export function isCreature(def: CardDefinition): boolean {
   return hasType(def, 'creature');
+}
+
+/** No mana modes — shared frozen empty list so the hot path allocates nothing. */
+const NO_MANA_MODES: readonly ManaProduction[] = Object.freeze([]);
+
+/**
+ * Memo for the legacy-form normalisation below. Card definitions are immutable and
+ * shared (the pool is frozen and every instance points at the same object), so the
+ * folded mode list can be computed once per definition and reused forever.
+ *
+ * This matters: `manaModesOf` is called for every permanent on every
+ * `generateLegalActions`, which is the engine's hottest read and runs millions of
+ * times across a sim. Folding `['C','C']` into `{C:2}` on each call allocated a
+ * fresh object every time and measurably cut sim throughput. A WeakMap keyed on
+ * the definition keeps it allocation-free without pinning definitions in memory.
+ */
+const MANA_MODE_MEMO = new WeakMap<CardDefinition, readonly ManaProduction[]>();
+
+/**
+ * The mana-ability modes of a definition, as ONE normalised list regardless of
+ * which authoring form was used: `producesOptions` verbatim when present, else
+ * the legacy `produces` bundle folded into a single mode (`['C','C']` → one mode
+ * of `{ C: 2 }`). A non-source yields an empty list.
+ *
+ * Every consumer (legal-action generation, payment, the AI's mana math) reads
+ * modes through here, so "how many mana is one tap worth" has exactly one
+ * answer in the codebase.
+ */
+export function manaModesOf(def: CardDefinition): readonly ManaProduction[] {
+  if (def.producesOptions && def.producesOptions.length > 0) return def.producesOptions;
+  const bundle = def.produces;
+  if (!bundle || bundle.length === 0) return NO_MANA_MODES;
+  const memoized = MANA_MODE_MEMO.get(def);
+  if (memoized) return memoized;
+  const single: Partial<Record<string, number>> = {};
+  for (const color of bundle) single[color] = (single[color] ?? 0) + 1;
+  const modes: readonly ManaProduction[] = Object.freeze([single as ManaProduction]);
+  MANA_MODE_MEMO.set(def, modes);
+  return modes;
+}
+
+/** Whether tapping this permanent for mana is a thing it can do at all. */
+export function isManaSource(def: CardDefinition): boolean {
+  return manaModesOf(def).length > 0;
+}
+
+/** Memo for {@link bestManaYield} — same immutability argument as the mode memo. */
+const MANA_YIELD_MEMO = new WeakMap<CardDefinition, number>();
+
+/**
+ * The most mana ONE activation of this source can add — i.e. what tapping it is
+ * worth. A modal source is worth its BEST mode, never the sum of its modes: an
+ * any-colour source yields one mana, not five.
+ *
+ * Memoized because AI mana math reads this for every permanent on every decision,
+ * which put it squarely on the sim's hot path.
+ */
+export function bestManaYield(def: CardDefinition): number {
+  const memoized = MANA_YIELD_MEMO.get(def);
+  if (memoized !== undefined) return memoized;
+  let best = 0;
+  for (const mode of manaModesOf(def)) {
+    let total = 0;
+    for (const color of MANA_COLORS) total += mode[color] ?? 0;
+    if (total > best) best = total;
+  }
+  MANA_YIELD_MEMO.set(def, best);
+  return best;
 }
 
 /** Resolve a definition's casting timing, defaulting to sorcery-speed. */
