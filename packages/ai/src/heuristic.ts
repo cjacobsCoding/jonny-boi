@@ -46,10 +46,13 @@ import {
   effectiveToughness,
   isCreature,
   isLand,
+  isLegalTarget,
   MANA_COLORS,
   planManaPayment,
   remainingToughness,
+  targetRestrictionOf,
 } from '@jonny-boi/core';
+import type { TargetRestriction } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -233,7 +236,13 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
 
     const intent = classifySpell(def);
     const goal = scoreSpell(view, opp, card, intent, weights);
-    if (goal) scored.push(goal);
+    // A spell that prints a target restriction is only a goal if we can point it
+    // somewhere legal. This runs on EVERY goal, not just the ones the scorer
+    // understands, so a restricted card the scorer classifies as 'other' (and
+    // would therefore cast with no target at all) still gets a legal target
+    // instead of being rejected by the engine and retried forever.
+    const legal = goal ? withLegalTargets(view, opp, goal) : undefined;
+    if (legal) scored.push(legal);
   }
 
   // Best-first, but only a goal we can genuinely fund. Planning is the expensive
@@ -244,6 +253,48 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
     if (plan) return { goal, plan };
   }
   return undefined;
+}
+
+/**
+ * Enforce the spell's printed TARGET RESTRICTION on a scored goal (core's
+ * `targetRestrictionOf`): keep the scorer's own choice when it is legal, otherwise
+ * substitute the least-bad legal target, and give up on the goal entirely when the
+ * board offers none.
+ *
+ * Why the pilot needs this at all when the engine already rejects illegal targets:
+ * the heuristic builds its cast action itself rather than picking one the engine
+ * offered, so without this it would happily aim a creature-only spell at a face
+ * (or a player-only spell at a creature), have the cast rejected, and re-choose
+ * the same action on the next pass — a live-lock. It is also simply better play:
+ * a burn spell that cannot hit players should never be scored as reach.
+ */
+function withLegalTargets(view: PilotView, opp: PlayerId, goal: SpellGoal): SpellGoal | undefined {
+  const restriction = targetRestrictionOf(goal.card.def);
+  if (restriction === undefined) return goal; // unrestricted — the scorer's choice stands
+  const state = view as GameState;
+  for (const target of goal.targets) {
+    if (!isLegalTarget(state, restriction, target)) continue;
+    return goal.targets.length === 1 ? goal : { ...goal, targets: [target] };
+  }
+  const fallback = defaultLegalTarget(view, opp, restriction);
+  return fallback === undefined ? undefined : { ...goal, targets: [fallback] };
+}
+
+/**
+ * The target to use for a restricted spell the scorer didn't target itself: the
+ * opponent's face when the spell may hit a player, otherwise their biggest
+ * creature. A creature-only spell with no enemy creature is NOT redirected onto
+ * one of our own — it is simply not cast.
+ */
+function defaultLegalTarget(
+  view: PilotView,
+  opp: PlayerId,
+  restriction: TargetRestriction,
+): InstanceId | PlayerId | undefined {
+  if (restriction === 'player') return opp;
+  const biggest = biggestThreat(creaturesControlledBy(view, opp));
+  if (biggest) return biggest.instanceId;
+  return restriction === 'any' ? opp : undefined;
 }
 
 /**

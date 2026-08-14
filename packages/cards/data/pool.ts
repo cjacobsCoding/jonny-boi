@@ -17,10 +17,16 @@
  * resolution script, `def.triggers` as triggered abilities, and lets a resolving
  * effect ASK its controller (or its victim) a question mid-resolution — so
  * "choose", "you may", "in any order", "search your library" and modal "choose
- * two" are all played for real, not approximated. What it still has no system for
- * is transform, planeswalker loyalty, dynamic P/T, flash/flashback, activated
- * abilities and target-legality (fizzling). Cards whose identity needs one of
- * those are authored as the closest faithful subset (documented per-card); their
+ * two" are all played for real, not approximated. A spell that prints a target
+ * restriction declares it as data (`params.targets`) and the engine enforces it
+ * when the cast is offered, when it is applied, and again when it resolves — so
+ * "target creature", "target player" and "target spell" mean what they say, and a
+ * spell with no legal target cannot be cast. What it still has no system for is
+ * transform, planeswalker loyalty, dynamic P/T, flash/flashback, activated
+ * abilities, and target restrictions finer than those three (an opponent-only
+ * target, "nonblack creature" as a legality rather than a resolution-time fizzle).
+ * Cards whose identity needs one of those are authored as the closest faithful
+ * subset (documented per-card); their
  * vanilla body (P/T, keywords, mana production) is always correct so they play on
  * the battlefield. See `STUBBED_MECHANICS`.
  */
@@ -111,7 +117,7 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Giant Growth',
     types: ['instant'],
     cost: { G: 1 },
-    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 3 } }],
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 3, targets: 'creature' } }],
   },
 
   // --- Removal -----------------------------------------------------------------
@@ -121,7 +127,7 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 1, B: 1 },
     // Destroy target nonblack creature.
-    effects: [{ primitive: 'destroyTarget', params: { notColor: 'B' } }],
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', notColor: 'B' } }],
   },
   {
     id: '16437a83-be52-44cd-a768-a767c9347eb2',
@@ -131,7 +137,7 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     // Destroy target creature with mana value ≤ 2. (Revolt's ≤4 mode needs a
     // "permanent left the battlefield this turn" tracker the engine lacks; we
     // model the base mode faithfully.)
-    effects: [{ primitive: 'destroyTarget', params: { maxManaValue: 2 } }],
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', maxManaValue: 2 } }],
   },
   {
     id: 'd683d985-9888-4d21-8b5f-69e69ce4a03b',
@@ -144,7 +150,7 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     // controller* (usually the opponent), and it only happens when the creature
     // really was exiled (`requiresTargetInZone`).
     effects: [
-      { primitive: 'exileTarget' },
+      { primitive: 'exileTarget', params: { targets: 'creature' } },
       {
         primitive: 'searchLibrary',
         params: {
@@ -166,7 +172,7 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { W: 1 },
     // Exile target creature; its controller gains life equal to its power.
-    effects: [{ primitive: 'exileTarget', params: { gainLifeEqualPower: true } }],
+    effects: [{ primitive: 'exileTarget', params: { gainLifeEqualPower: true, targets: 'creature' } }],
   },
   {
     id: '34515b16-c9a4-4f98-8c77-416a7a523407',
@@ -211,7 +217,7 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Counterspell',
     types: ['instant'],
     cost: { U: 2 },
-    effects: [{ primitive: 'counterSpell' }],
+    effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
   },
   {
     id: 'a3e51a35-09df-4189-b131-08a21e6a557d',
@@ -365,19 +371,21 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 2,
     keywords: { haste: true },
-    // Prowess: whenever you cast a noncreature spell, +1/+1 until end of turn.
-    // Modelled as cast-triggers on instant + sorcery (the noncreature spells in the
-    // pool) that pump the source itself via the until-EOT continuous layer.
+    // Prowess: whenever you cast a NONCREATURE spell, +1/+1 until end of turn —
+    // modelled as the negative filter it is printed as, pumping the source itself
+    // through the until-EOT continuous layer.
+    //
+    // It used to be two positive triggers (instant + sorcery), on the assumption
+    // that those are "the noncreature spells in the pool". They are not: Sol Ring,
+    // Manalith, Worn Powerstone, Ur-Golem's Eye, the five Diamonds and Liliana of
+    // the Veil are all noncreature spells that left Swiftspear flat — the card
+    // played measurably WEAKER than printed, which biases a verdict exactly as
+    // badly as playing stronger.
     triggers: [
       {
-        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
         effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
-        label: 'Prowess (instant): +1/+1 until end of turn',
-      },
-      {
-        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
-        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
-        label: 'Prowess (sorcery): +1/+1 until end of turn',
+        label: 'Prowess: +1/+1 until end of turn',
       },
     ],
   },

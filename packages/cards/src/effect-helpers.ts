@@ -20,8 +20,17 @@ import type {
   InstanceId,
   KeywordFlags,
   PlayerId,
+  TargetRestriction,
 } from '@jonny-boi/core';
-import { convertedManaCost, entersTapped, isCreature } from '@jonny-boi/core';
+import {
+  convertedManaCost,
+  DEFAULT_TARGET_RESTRICTION,
+  entersTapped,
+  isCreature,
+  isPlayerTarget,
+  isTargetRestriction,
+  TARGET_RESTRICTION_PARAM,
+} from '@jonny-boi/core';
 
 // --- param reading (typed, defaulted — no magic numbers leak in) ---------------
 
@@ -80,9 +89,21 @@ export function otherPlayer(p: PlayerId): PlayerId {
   return p === 'A' ? 'B' : 'A';
 }
 
-/** A target is a player when it is one of the two player ids. */
-export function isPlayerTarget(t: InstanceId | PlayerId): t is PlayerId {
-  return t === 'A' || t === 'B';
+/**
+ * A target is a player when it is one of the two player ids. Re-exported from core
+ * rather than re-implemented: core's targeting layer decides target legality, and
+ * two copies of "is this a player?" is how the two halves start disagreeing.
+ */
+export { isPlayerTarget } from '@jonny-boi/core';
+
+/**
+ * Read an effect's declared {@link TargetRestriction} (`params.targets`), falling
+ * back to the unrestricted default so an effect that declares nothing behaves
+ * exactly as it always has. One reader, shared by every targeting primitive.
+ */
+export function restrictionParam(ctx: EffectContext): TargetRestriction {
+  const declared = ctx.params[TARGET_RESTRICTION_PARAM];
+  return isTargetRestriction(declared) ? declared : DEFAULT_TARGET_RESTRICTION;
 }
 
 /** Find a battlefield permanent by instance id, or undefined. */
