@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { ChoiceAnswer, PendingChoice, PlayerId } from '@jonny-boi/core';
 import {
   choicePromptView,
@@ -39,13 +39,22 @@ export function ChoicePrompt({
   onAnswer: (answer: ChoiceAnswer) => void;
 }): ReactElement {
   const [draft, setDraft] = useState<ChoiceDraft>(() => emptyDraft(choice));
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The live choice, read inside the effect below so the effect depends on the
+  // choice ID ALONE — a re-render with an equivalent choice object must not wipe a
+  // half-built selection, only a genuinely new question may.
+  const currentChoice = useRef(choice);
+  currentChoice.current = choice;
 
   // A follow-up question (a modal spell asking its second question) replaces the
-  // choice in place, so the draft must reset with it — keyed on the choice id
-  // because that is what uniquely identifies a question.
+  // choice in place, so the draft resets with it — keyed on the choice id, which
+  // is what uniquely identifies a question.
   useEffect(() => {
-    setDraft(emptyDraft(choice));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setDraft(emptyDraft(currentChoice.current));
+    // The dialog is mandatory (there is no Escape out of a rules obligation), so
+    // move focus INTO it: a keyboard player must not have to tab out of whatever
+    // they last touched on the board to reach a question that is blocking the game.
+    cardRef.current?.querySelector('button')?.focus();
   }, [choice.id]);
 
   const view = useMemo(() => choicePromptView(choice, names), [choice, names]);
@@ -66,7 +75,7 @@ export function ChoicePrompt({
 
   return (
     <div className="choice-prompt" role="dialog" aria-modal="true" aria-label={`${view.sourceName}: ${view.prompt}`}>
-      <div className="choice-prompt__card">
+      <div className="choice-prompt__card" ref={cardRef}>
         <header className="choice-prompt__head">
           <span className="choice-prompt__who">{view.chooserName} must choose</span>
           <h3 className="choice-prompt__title">{view.prompt}</h3>

@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { WinRateBar } from '../WinRateBar.js';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
-import { ciStr, pct } from '../../lib/sim-format.js';
+import { ciStr, pct, throughputText } from '../../lib/sim-format.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 
 /**
@@ -110,7 +110,7 @@ export function GauntletPanel({
 
           <p className="lab-throughput">
             {result.result.totalGames.toLocaleString()} games ·{' '}
-            {result.gamesPerSecond.toFixed(0)} games/sec
+            {throughputText(result.gamesPerSecond)}
             {result.result.totalDraws > 0 && <> · {result.result.totalDraws} timeout draws</>} ·
             seed {seed}
           </p>
