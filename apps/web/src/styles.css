@@ -1766,6 +1766,29 @@ button {
   .app__header {
     gap: var(--space-3);
     padding: 0 var(--space-3);
+    /* The header must never be wider than the phone. Without this the six nav
+       links laid out at their natural 439px and dragged the WHOLE app into a
+       584px horizontal scroll, so every screen drifted sideways and the last
+       two tabs sat off the edge. */
+    min-width: 0;
+  }
+  /* The nav becomes its own scroll strip instead of stretching the page: the
+     tabs stay on one line, reachable by swiping the header, and `main` keeps
+     the full viewport width. */
+  .app__nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app__nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-link {
+    flex: 0 0 auto;
+    padding: var(--space-2) var(--space-3);
+    white-space: nowrap;
   }
   .app__main {
     padding: var(--space-3);
