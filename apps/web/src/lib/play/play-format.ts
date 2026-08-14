@@ -93,6 +93,26 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
         text: event.winner ? `${r.playerName(event.winner)} wins the game!` : 'The game is a draw.',
         tone: 'win',
       };
+    // --- player choices (DESIGN §3.11) ------------------------------------------
+    // The log is shared by BOTH seats in hotseat, so these lines say that a question
+    // was asked and answered WITHOUT naming the cards involved: a choice's candidate
+    // list can contain hidden cards (the victim's hand), and the answer's summary is
+    // raw instance ids. Naming them here would leak through the log what the masked
+    // board view is careful not to show.
+    case 'choiceAsked':
+      return { text: `${r.playerName(event.chooser)} is asked: ${event.prompt}`, tone: 'trigger' };
+    case 'choiceAnswered': {
+      // A yes/no is the one answer that carries no card identity, so it is safe (and
+      // useful) to say out loud; every other kind logs only that it was answered.
+      const said = event.answer.kind === 'confirm' ? ` — ${event.answer.yes ? 'yes' : 'no'}` : '';
+      return { text: `${r.playerName(event.chooser)} answers${said}.`, tone: 'trigger' };
+    }
+    case 'choiceAutoAnswered':
+      // Only surfaced when the engine had to step in for a reason the players can
+      // act on; a single-legal-answer auto-answer is bookkeeping, not narrative.
+      return null;
+    case 'choiceAbandoned':
+      return { text: `${r.name(event.sourceInstanceId)} could not finish — ${event.reason}.`, tone: 'trigger' };
     case 'actionRejected':
       // Surfaced separately in the UI (a toast), not in the running narrative.
       return null;

@@ -23,6 +23,7 @@ import {
   isLand,
   planManaPayment,
   type CardInstance,
+  type ChoiceAnswer,
   type EffectRegistry,
   type GameAction,
   type GameEvent,
@@ -30,6 +31,7 @@ import {
   type InstanceId,
   type ManaCost,
   type ManaTapPlan,
+  type PendingChoice,
   type PlayerId,
 } from '@jonny-boi/core';
 import { HOTSEAT_CONFIG } from './play-config.js';
@@ -229,6 +231,33 @@ export class GameSession {
   }
 
   /**
+   * The question a resolving spell/ability is waiting on, or null. While this is
+   * set the engine has already moved priority to `pendingChoice.chooser` and the
+   * ONLY legal action is answering it, so the UI can key its whole prompt off this
+   * one getter without re-deriving who may act.
+   */
+  get pendingChoice(): PendingChoice | null {
+    return this.state.pendingChoice ?? null;
+  }
+
+  /**
+   * Answer the outstanding choice. Goes through the ordinary `answerChoice` action
+   * so the engine — not the client — validates the answer, names the choice by id
+   * (a stale answer is refused, not misapplied), and resumes the half-finished
+   * resolution. Rejected cleanly when nothing is pending.
+   */
+  answerChoice(answer: ChoiceAnswer): SubmitResult {
+    const choice = this.pendingChoice;
+    if (!choice) return { session: this, rejected: 'no choice is awaiting an answer', events: [] };
+    return this.submit({
+      kind: 'answerChoice',
+      player: choice.chooser,
+      choiceId: choice.id,
+      answer,
+    });
+  }
+
+  /**
    * Does the priority-holder have a real decision to make right now?
    *
    * Pass-and-play gates every transfer of control behind a "hand the device over"
@@ -244,6 +273,9 @@ export class GameSession {
    * UI passes for the player rather than stopping the game to ask.
    */
   hasMeaningfulChoice(): boolean {
+    // A parked question is ALWAYS a real decision — and the only legal action is
+    // answering it, so auto-advance must stop here rather than try to pass.
+    if (this.pendingChoice) return true;
     for (const action of this.legalActions()) {
       if (action.kind === 'passPriority' || action.kind === 'tapForMana') continue;
       return true; // playLand / castSpell / declareAttackers / declareBlockers

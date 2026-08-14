@@ -8,6 +8,8 @@ import { SeatPanel, type PermInteraction } from './SeatPanel.js';
 import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
+import { ChoicePrompt } from './ChoicePrompt.js';
+import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 
 /**
  * The in-game board for the player who currently holds priority (the `viewer`). It
@@ -65,7 +67,10 @@ export function PlayBoard({
     onSubmit(() => result);
   };
 
-  const isViewersPriority = session.priorityPlayer === viewer;
+  // A parked question preempts everything: while it stands the engine offers no
+  // other action, so the board's own controls must go quiet until it is answered.
+  const pendingChoice = session.pendingChoice;
+  const isViewersPriority = session.priorityPlayer === viewer && !pendingChoice;
   const playableLands = isViewersPriority ? session.playableLands() : [];
   const castOptions = isViewersPriority ? session.castOptions() : [];
 
@@ -273,6 +278,13 @@ export function PlayBoard({
         session={session}
         viewer={viewer}
         step={step}
+        waitingText={
+          pendingChoice && !isChoiceForViewer(pendingChoice, viewer)
+            ? waitingForChoiceText(pendingChoice, names)
+            : pendingChoice
+              ? 'Answer the question above to continue.'
+              : undefined
+        }
         isViewersPriority={isViewersPriority}
         inBlockStep={inBlockStep}
         chosenAttackers={chosenAttackers}
@@ -282,6 +294,21 @@ export function PlayBoard({
         onDeclareAttackers={(ids) => run(() => session.declareAttackers(ids))}
         onDeclareBlockers={(blocks) => run(() => session.declareBlockers(blocks))}
       />
+
+      {/*
+        A question a resolving spell parked. Rendered ONLY for the seat it was
+        addressed to — its candidates can include cards the other seat may not see,
+        so the chooser check is a hidden-information guard, not just routing. The
+        hotseat handoff already gates the device on the engine moving priority to
+        the chooser, so in practice the viewer IS the chooser here.
+      */}
+      {pendingChoice && isChoiceForViewer(pendingChoice, viewer) && (
+        <ChoicePrompt
+          choice={pendingChoice}
+          names={names}
+          onAnswer={(answer) => run(() => session.answerChoice(answer))}
+        />
+      )}
 
       {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board). */}
       {pendingCast && (
@@ -326,6 +353,7 @@ function ActionBar({
   chosenAttackers,
   blockAssign,
   eligibleAttackers,
+  waitingText,
   onPass,
   onDeclareAttackers,
   onDeclareBlockers,
@@ -333,6 +361,8 @@ function ActionBar({
   session: GameSession;
   viewer: PlayerId;
   step: string;
+  /** Overrides the generic "waiting for …" line (e.g. while a choice is parked). */
+  waitingText?: string;
   isViewersPriority: boolean;
   inBlockStep: boolean;
   chosenAttackers: Set<InstanceId>;
@@ -345,7 +375,9 @@ function ActionBar({
   if (!isViewersPriority) {
     return (
       <div className="action-bar">
-        <span className="action-bar__wait">Waiting for {session.names[session.priorityPlayer]}…</span>
+        <span className="action-bar__wait">
+          {waitingText ?? `Waiting for ${session.names[session.priorityPlayer]}…`}
+        </span>
       </div>
     );
   }
