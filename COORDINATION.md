@@ -60,9 +60,37 @@ throughput (games/sec) from regressing.
 | feat/data-tools-scryfall | DESKTOP-90PJPM4 (worker) | packages/data-tools | ✅ INTEGRATED |
 | feat/deck-import | DESKTOP-90PJPM4 (worker) | packages/cards/src/compile + apps/web import | ✅ INTEGRATED |
 | fix/ai-play-quality | DESKTOP-90PJPM4 (worker) | packages/core + packages/ai + sim/cli + apps/web hover | ✅ INTEGRATED |
+| fix/rules-audit | DESKTOP-90PJPM4 (worker) | packages/core mana-plan + apps/web play/online | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-14 DESKTOP-90PJPM4: `fix/rules-audit` — playtest sweep of the CLIENT layer. The headless
+  engine is clean (new `packages/sim/src/rules-audit.test.ts` plays full games and asserts zone
+  integrity, SBAs, untap, damage clearing, until-EOT expiry, land drops — 36 games, no violations).
+  Every bug found was in the client:
+  1. **Modal mana sources were dead in manual play.** `fix/ai-play-quality` moved Birds of Paradise to
+     `producesOptions`, but four consumers still read `def.produces` directly (hotseat auto-tap,
+     hotseat affordability, hotseat board view, online board view) and so saw it as producing NOTHING.
+     My regression — apologies to anyone who played a Birds deck.
+  2. **Hotseat auto-tap** had the pilots' old flaws: first-untapped-permanent, no colour reasoning, no
+     summoning-sickness check, no stop condition.
+  3. **Online play could never cast a spell.** The server only lists `castSpell` once the pool already
+     pays, and the online board had no tap control at all. Now plans client-side and sends taps + cast;
+     the server still validates every action.
+  4. **Pass-and-play demanded a device handoff at every priority window** (~10/turn, nearly all empty).
+     `hasMeaningfulChoice` / `autoAdvancePriority` skip windows offering only passing and unspendable
+     mana taps, bounded by the existing `maxAutoAdvanceSteps`.
+  5. Action bar sat below the fold at 720p — now sticky (`components/play/action-bar.css`, NOT styles.css).
+  👉 **Seams other agents should know about:** the pilots' payment planner now lives in core as
+  **`planManaPayment`** (+ `ManaTapPlan`), used by BOTH the AI heuristic and the client — do not add a
+  third copy. It takes a narrow **`ManaPlanView`** (battlefield + pools) so the online client can plan
+  from its redacted view; `legalTargets` was widened the same way. `canPay` remains the authority on
+  payability, so the planner cannot disagree with the engine as costs grow.
+  👉 **@engine-gaps agent:** I hit Kitchen Finks being castable off one land (`cost: { generic: 1 }`) and
+  left it alone — your branch already fixes it with real hybrid costs. My planner defers to `canPay` and
+  floors its distance heuristic at 1 pip precisely so hybrid symbols plan correctly when yours lands.
+  Suite 589 passed / 0 failed, `npm run build` exit 0. (Worker — pushed, NOT merged.)
 
 - 2026-08-13 DESKTOP-90PJPM4: `fix/ai-play-quality` — **COMBAT COULD NOT END.** The reason MCTS games
   appeared to "take forever" was not search cost: `CombatState` inferred "have attackers/blockers been
