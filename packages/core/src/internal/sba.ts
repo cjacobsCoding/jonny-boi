@@ -16,7 +16,7 @@ import type { GameEvent } from '../events.js';
 import { isCreature } from '../card.js';
 import { effectiveToughness, remainingToughness } from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
-import { indexContinuous, NO_MOD } from './continuous.js';
+import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
 
 /** Run all pending SBAs until a fixpoint. Mutates the draft; emits events. */
 export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) => void): void {
@@ -57,6 +57,13 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
     // If exactly one player remains, the other wins.
     if (resolveWinner(state, emit)) changed = true;
   }
+
+  // A temporary modification only exists while its permanent is on the battlefield.
+  // Dropping orphans only at cleanup left a window in which a permanent could leave
+  // (die, be bounced) and COME BACK inside the same turn still carrying its old
+  // "until end of turn" pump — a re-cast 2/2 read as a 5/5. SBAs run at every point
+  // a permanent can have just changed zones, so this is the right place to let go.
+  pruneOrphanContinuousEffects(state);
 }
 
 /** Mark a player as having lost, emitting the event. */

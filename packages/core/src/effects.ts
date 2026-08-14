@@ -12,6 +12,7 @@
 import type { CardInstance, GameState, PlayerId, InstanceId } from './state.js';
 import type { GameEvent } from './events.js';
 import type { CardDefinition, EffectRef } from './card.js';
+import { entersTapped } from './card.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 
 /**
@@ -170,8 +171,9 @@ function createTokenInState(
     controller,
     owner: controller,
     zone: 'battlefield',
-    // Tokens obey the same "enters tapped" rule as printed permanents.
-    tapped: def.entersTapped === true,
+    // Tokens obey the same "enters tapped" rule as printed permanents — asked
+    // through the one shared accessor so every entry path agrees.
+    tapped: entersTapped(def),
     summoningSick: isCreatureToken ? !hasHaste : false,
     damageMarked: 0,
     markedByDeathtouch: false,
@@ -182,5 +184,9 @@ function createTokenInState(
   // A token entering is a zoneChange into the battlefield — this is what ETB
   // triggers (its own and others') observe, keeping one mechanism for "enters".
   emit({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });
+  // Say it out loud for the event log — a replay folds entering permanents as
+  // untapped, so a token that arrives tapped must emit the same `tapped` event
+  // every other battlefield-entry path emits.
+  if (token.tapped) emit({ type: 'tapped', instanceId });
   return instanceId;
 }
