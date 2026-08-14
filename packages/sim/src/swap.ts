@@ -24,7 +24,7 @@ import { loadDeck } from './deck.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
 import { runMatch } from './match.js';
-import { DEFAULT_STATS_CONFIG } from './config.js';
+import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG } from './config.js';
 import {
   mcNemarTest,
   wilsonInterval,
@@ -160,8 +160,12 @@ export function evaluateSwap(
   const stats = opts.stats ?? DEFAULT_STATS_CONFIG;
 
   const variantDeck = applySwap(baseDeck, swap, pool);
-  const baseLoaded = loadDeck(baseDeck, pool);
-  const variantLoaded = loadDeck(variantDeck, pool);
+  // Load under the CALLER's legality rules. Falling back to the defaults here would
+  // reject a variant the caller's own rules (and its candidate generator) called
+  // legal — the suggestion engine would then report every candidate as illegal.
+  const deckRules = opts.deckRules ?? DEFAULT_DECK_RULES;
+  const baseLoaded = loadDeck(baseDeck, pool, deckRules);
+  const variantLoaded = loadDeck(variantDeck, pool, deckRules);
 
   const outDef = resolve(pool, swap.out);
   const inDef = resolve(pool, swap.in);

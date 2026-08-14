@@ -18,7 +18,7 @@ import type { EffectRegistry } from '@jonny-boi/core';
 import type { LoadedDeck } from './deck.js';
 import { runMatch, type MatchResult, type MatchSeats } from './match.js';
 import { DEFAULT_SIM_CONFIG, type SimConfig } from './config.js';
-import { DEFAULT_STATS_CONFIG, type StatsConfig } from './config.js';
+import { DEFAULT_STATS_CONFIG, type DeckRules, type StatsConfig } from './config.js';
 import { wilsonInterval, type ProportionCI } from './stats.js';
 
 /** The pilots driving each deck (selected by id upstream, resolved to instances). */
@@ -32,6 +32,14 @@ export interface RunOptions {
   readonly config?: RulesConfig;
   readonly sim?: SimConfig;
   readonly stats?: StatsConfig;
+  /**
+   * Deck-legality rules for runs that LOAD a deck themselves (`evaluateSwap`
+   * builds and loads the variant). Callers that vet legality with custom rules
+   * must hand the same rules down, or the variant is re-checked against the
+   * defaults and a deck their rules called legal is rejected. Matchup/gauntlet
+   * runs take already-loaded decks and ignore this.
+   */
+  readonly deckRules?: DeckRules;
 }
 
 /** The aggregate of an n-game matchup from deck A's perspective. */
