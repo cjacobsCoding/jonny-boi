@@ -175,6 +175,29 @@ export function putOnBattlefield(
   return created;
 }
 
+/**
+ * Put a fresh instance of `def` on the stack as a spell a player is casting — the
+ * position a counterspell (or a counter MODE) has to be scored against. Returns the
+ * created instance so a test can target it.
+ */
+export function putOnStack(
+  state: GameState,
+  player: PlayerId,
+  def: CardDefinition,
+  targets: ReadonlyArray<InstanceId | PlayerId> = [],
+): CardInstance {
+  const inst = newInstance(state, def, player, 'stack');
+  state.stack.push({
+    kind: 'spell',
+    instanceId: inst.instanceId,
+    card: inst,
+    controller: player,
+    resolvesTo: 'battlefield',
+    targets,
+  });
+  return inst;
+}
+
 /** Add floating mana of one color to a player's pool (so a spell is affordable). */
 export function addPool(state: GameState, player: PlayerId, color: ManaColor, amount: number): void {
   state.players[player].manaPool = addMana(state.players[player].manaPool, color, amount);
