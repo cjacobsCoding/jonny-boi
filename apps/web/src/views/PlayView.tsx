@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
 import type { DecksApi } from '../lib/useDecks.js';
 import { GameSession, type SubmitResult } from '../lib/play/session.js';
@@ -244,6 +244,23 @@ function LocalPlay({ decks }: { decks: DecksApi }): ReactElement {
     },
     [],
   );
+
+  // Auto-pass priority windows where the holder provably has no decision.
+  //
+  // MTG hands both players priority in every step. In pass-and-play each such
+  // window costs a physical device handoff, so without this the players spend the
+  // game confirming "I have nothing to do" — at upkeep, at draw, at every combat
+  // step, at end of turn. We pass for them ONLY when the session reports no
+  // meaningful choice (see `hasMeaningfulChoice`), so no real decision is ever
+  // skipped. Each pass re-renders and re-runs this, walking the game forward to
+  // the next window that actually needs a human.
+  useEffect(() => {
+    if (phase.kind !== 'play' || !session || session.gameOver) return;
+    const advanced = session.autoAdvancePriority();
+    // Identity-equal when nothing was skipped, so React bails out and this cannot
+    // become a render loop.
+    if (advanced !== session) setSession(advanced);
+  }, [phase, session]);
 
   const concede = useCallback((): void => {
     // A concede ends the game: the conceding player (the current viewer) loses.

@@ -20,6 +20,7 @@ import {
   effectiveToughness,
   isCreature,
   isLand,
+  manaColorsOffered,
   NO_MOD,
   type CardInstance,
   type PlayerId,
@@ -64,8 +65,9 @@ function boardPermanent(inst: CardInstance): BoardPermanent {
     toughness: creature ? effectiveToughness(inst, NO_MOD) : 0,
     damageMarked: inst.damageMarked,
     keywords: effectiveKeywords(inst, NO_MOD),
-    producesIfTapped:
-      !inst.tapped && (inst.def.produces?.length ?? 0) > 0 ? [...inst.def.produces!] : [],
+    // Normalised modes, not the legacy `produces` list — see the hotseat
+    // view-model for why (modal sources would otherwise render as non-sources).
+    producesIfTapped: inst.tapped ? [] : manaColorsOffered(inst.def),
   };
 }
 

@@ -15,7 +15,7 @@
  * just a definition whose `types` includes `'creature'`.
  */
 
-import type { ManaCost, ManaProduction } from './mana.js';
+import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
@@ -180,6 +180,23 @@ export function manaModesOf(def: CardDefinition): readonly ManaProduction[] {
 /** Whether tapping this permanent for mana is a thing it can do at all. */
 export function isManaSource(def: CardDefinition): boolean {
   return manaModesOf(def).length > 0;
+}
+
+/**
+ * The distinct mana colours this source could produce, across all of its modes —
+ * what a UI shows as "this can make {G}" / "this can make any colour".
+ *
+ * Derived from normalised modes, so it is correct for both authoring forms. A UI
+ * reading `produces` directly renders a modal source as producing nothing at all.
+ */
+export function manaColorsOffered(def: CardDefinition): ManaColor[] {
+  const seen = new Set<ManaColor>();
+  for (const mode of manaModesOf(def)) {
+    for (const color of MANA_COLORS) {
+      if ((mode[color] ?? 0) > 0) seen.add(color);
+    }
+  }
+  return [...seen];
 }
 
 /** Memo for {@link bestManaYield} — same immutability argument as the mode memo. */

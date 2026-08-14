@@ -1,0 +1,140 @@
+/**
+ * Mana PAYMENT PLANNING — "which sources do I tap, in which colour, to pay this?"
+ *
+ * This lives in core because *every* seat needs the same answer: the AI pilots
+ * fund their chosen spell with it, and the hotseat/online UI auto-taps with it.
+ * Two implementations would drift, and they already had — the UI's auto-tap
+ * grabbed the first untapped permanent with no colour reasoning, so a two-colour
+ * board could fail to cast a spell it could obviously afford.
+ *
+ * The plan is built from the engine's OWN offered `tapForMana` actions, so it can
+ * only ever contain legal activations (summoning-sick creatures are already
+ * excluded upstream) and each carries the chosen colour as its `mode`.
+ */
+
+import type { GameAction } from './actions.js';
+import { manaModesOf } from './card.js';
+import type { ManaCost, ManaPool, ManaProduction } from './mana.js';
+import { canPay, MANA_COLORS } from './mana.js';
+import type { GameState, InstanceId, PlayerId } from './state.js';
+
+/** One activation in a funding plan: which permanent to tap, in which mode. */
+export interface ManaTapPlan {
+  readonly instanceId: InstanceId;
+  readonly mode: number;
+  /** The mana this activation adds — handy for logs and UI hints. */
+  readonly production: ManaProduction;
+}
+
+/**
+ * A cheap, allocation-free estimate of how far `pool` is from paying `cost`,
+ * counted in pips still unfunded.
+ *
+ * This RANKS candidate taps (it runs for every source × mode on every step of the
+ * plan, so it must not allocate); it is deliberately NOT the authority on whether
+ * a cost is payable. `canPay` is, and the planner defers to it — a cost model can
+ * grow symbols this simple per-colour subtraction doesn't understand (hybrid
+ * symbols payable by either of two colours being the live example), and a second
+ * opinion baked in here would silently disagree with the engine.
+ */
+export function distanceToPayable(pool: ManaPool, cost: ManaCost): number {
+  let short = 0;
+  let spare = 0;
+  for (const color of MANA_COLORS) {
+    const need = cost[color] ?? 0;
+    const have = pool[color];
+    if (have < need) short += need - have;
+    else spare += have - need;
+  }
+  const generic = cost.generic ?? 0;
+  return short + Math.max(0, generic - spare);
+}
+
+/**
+ * Plan the taps that fund `cost`, or undefined when this board cannot pay it.
+ *
+ * An EMPTY plan means the floating pool already covers the cost — i.e. stop
+ * tapping. That distinction is the whole point: without it a caller keeps tapping
+ * past what it needs and strands the excess (pools empty at end of step).
+ *
+ * One tap at a time, always the one that closes the most of the remaining
+ * shortfall, breaking ties toward the LEAST flexible source (spend the Forest,
+ * keep the any-colour Bird) and then the smallest producer (don't crack a 2-mana
+ * rock for a single pip). Tapping a permanent removes it from the candidate pool,
+ * so the loop always terminates.
+ */
+export function planManaPayment(
+  state: GameState,
+  player: PlayerId,
+  cost: ManaCost,
+  legalActions: readonly GameAction[],
+): ManaTapPlan[] | undefined {
+  let pool: ManaPool = { ...state.players[player].manaPool };
+  // `canPay` is the authority on "done"; the distance heuristic only orders taps.
+  if (canPay(pool, cost)) return [];
+
+  // Group the offered activations by permanent: the modes of one source are
+  // alternatives, and tapping it spends the whole permanent.
+  const candidates = new Map<InstanceId, ManaTapPlan[]>();
+  for (const action of legalActions) {
+    if (action.kind !== 'tapForMana' || action.player !== player) continue;
+    const perm = state.battlefield.find((c) => c.instanceId === action.instanceId);
+    if (!perm) continue;
+    const production = manaModesOf(perm.def)[action.mode ?? 0];
+    if (!production) continue;
+    const tap: ManaTapPlan = { instanceId: action.instanceId, mode: action.mode ?? 0, production };
+    const list = candidates.get(action.instanceId);
+    if (list) list.push(tap);
+    else candidates.set(action.instanceId, [tap]);
+  }
+
+  const plan: ManaTapPlan[] = [];
+  // One reusable scratch pool: this inner loop runs for every source × mode on
+  // every step of the plan, and the AI calls it on its hot path.
+  const scratch: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+
+  while (!canPay(pool, cost)) {
+    // At least one pip is still owed (canPay said so). Flooring at 1 matters when
+    // the heuristic can't see the shortfall — a hybrid symbol reads as satisfied
+    // by either colour — so a useful tap is still accepted instead of the planner
+    // concluding the cost is unpayable.
+    const current = Math.max(distanceToPayable(pool, cost), 1);
+    let best: ManaTapPlan | undefined;
+    let bestDistance = current;
+    let bestFlexibility = Infinity;
+    let bestSize = Infinity;
+
+    for (const taps of candidates.values()) {
+      const flexibility = taps.length; // how many colours this source could have made
+      for (const tap of taps) {
+        let size = 0;
+        for (const color of MANA_COLORS) {
+          const add = tap.production[color] ?? 0;
+          scratch[color] = pool[color] + add;
+          size += add;
+        }
+        const distance = distanceToPayable(scratch, cost);
+        if (distance >= current) continue; // buys us nothing — never make this tap
+        const better =
+          distance < bestDistance ||
+          (distance === bestDistance && flexibility < bestFlexibility) ||
+          (distance === bestDistance && flexibility === bestFlexibility && size < bestSize);
+        if (better) {
+          best = tap;
+          bestDistance = distance;
+          bestFlexibility = flexibility;
+          bestSize = size;
+        }
+      }
+    }
+
+    if (!best) return undefined; // nothing left that helps — the cost is unpayable
+    candidates.delete(best.instanceId);
+    const chosen = best;
+    const next: ManaPool = { ...pool };
+    for (const color of MANA_COLORS) next[color] += chosen.production[color] ?? 0;
+    pool = next;
+    plan.push(chosen);
+  }
+  return plan;
+}

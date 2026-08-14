@@ -32,15 +32,13 @@ import type {
   GameAction,
   GameState,
   InstanceId,
-  ManaColor,
   ManaCost,
-  ManaPool,
   ManaProduction,
   PendingChoice,
+  ManaTapPlan,
   PlayerId,
 } from '@jonny-boi/core';
 import {
-  addProduction,
   bestManaYield,
   castTiming,
   convertedManaCost,
@@ -49,8 +47,7 @@ import {
   isCreature,
   isLand,
   MANA_COLORS,
-  manaModesOf,
-  productionTotal,
+  planManaPayment,
   remainingToughness,
 } from '@jonny-boi/core';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
@@ -189,7 +186,7 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
  */
 interface FundedGoal {
   readonly goal: SpellGoal;
-  readonly plan: readonly ManaTap[];
+  readonly plan: readonly ManaTapPlan[];
 }
 
 /**
@@ -233,7 +230,7 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
   // step, so it runs on ranked candidates and stops at the first payable one.
   scored.sort((a, b) => b.score - a.score);
   for (const goal of scored) {
-    const plan = planManaTaps(view, me, goal.cost, ctx.legalActions);
+    const plan = planManaPayment(view as GameState, me, goal.cost, ctx.legalActions);
     if (plan) return { goal, plan };
   }
   return undefined;
@@ -706,168 +703,6 @@ function totalAvailableMana(view: PilotView, player: PlayerId): number {
   return total;
 }
 
-// --- mana planning --------------------------------------------------------------
-
-/** One activation in a funding plan: which permanent to tap, in which mode. */
-interface ManaTap {
-  readonly instanceId: InstanceId;
-  readonly mode: number;
-  readonly production: ManaProduction;
-}
-
-/**
- * How far `pool` is from paying `cost`, in pips still unfunded. Zero means payable
- * — and `distanceToPayable(pool, cost) === 0` is exactly core's `canPay(pool, cost)`
- * (pinned by a test), which is what keeps the pilot from ever proposing a cast the
- * engine will reject. Used to rank candidate taps too: a tap is only worth making
- * if it strictly reduces this distance, which is what stops the pilot tapping mana
- * it cannot spend.
- *
- * Hybrid symbols (`{G/W}`) are resolved the way core's `payCost` resolves them —
- * by trying every colour assignment and keeping the best — because a greedy choice
- * can fail a cost that is genuinely payable. Ignoring `cost.hybrid` outright (as
- * this once did) is far worse: a `{1}{G/W}{G/W}` creature read as a one-mana spell,
- * so the pilot emitted a cast the engine rejected for insufficient mana, saw the
- * same state again, and re-emitted the same cast forever — a livelock that burned
- * the harness's entire action cap and recorded the game as a bogus timeout draw.
- */
-function distanceToPayable(pool: ManaPool, cost: ManaCost): number {
-  const hybrids = cost.hybrid;
-  if (!hybrids || hybrids.length === 0) return fixedDistance(pool, cost, NO_HYBRID_PIPS);
-  // One reusable scratch tally of "extra coloured pips this assignment demands".
-  const chosen: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
-  return bestHybridDistance(pool, cost, hybrids, 0, chosen);
-}
-
-/** The zero tally used when a cost prints no hybrid symbols (the common case). */
-const NO_HYBRID_PIPS: ManaPool = Object.freeze({ W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 });
-
-/**
- * The smallest `fixedDistance` over every assignment of colours to the remaining
- * hybrid symbols. Exhaustive like core's payment search — printed costs carry at
- * most a handful of hybrid symbols — and it short-circuits the moment an
- * assignment is payable.
- */
-function bestHybridDistance(
-  pool: ManaPool,
-  cost: ManaCost,
-  hybrids: readonly (readonly ManaColor[])[],
-  index: number,
-  chosen: ManaPool,
-): number {
-  if (index === hybrids.length) return fixedDistance(pool, cost, chosen);
-  let best = Infinity;
-  for (const color of hybrids[index] ?? []) {
-    chosen[color]++;
-    const distance = bestHybridDistance(pool, cost, hybrids, index + 1, chosen);
-    chosen[color]--;
-    if (distance < best) best = distance;
-    if (best === 0) break; // payable — no other assignment can beat it
-  }
-  return best;
-}
-
-/**
- * `distanceToPayable` for a cost whose hybrid symbols have already been assigned
- * to concrete colours (`extraPips`). Mirrors core's `payFixedCost`: coloured
- * requirements come from their own colour, then the generic portion from whatever
- * is spare.
- */
-function fixedDistance(pool: ManaPool, cost: ManaCost, extraPips: ManaPool): number {
-  let short = 0;
-  let spare = 0;
-  for (const color of MANA_COLORS) {
-    const need = (cost[color] ?? 0) + extraPips[color];
-    const have = pool[color];
-    if (have < need) short += need - have;
-    else spare += have - need;
-  }
-  const generic = cost.generic ?? 0;
-  return short + Math.max(0, generic - spare);
-}
-
-/**
- * Plan the taps that would fund `cost`, or undefined if this board cannot pay it.
- * An empty plan means the floating pool already covers the cost — i.e. **stop
- * tapping**, which is the case the old pilot had no way to express.
- *
- * Candidates come from the engine's own offered `tapForMana` actions, so the plan
- * can only ever contain legal activations (summoning-sick sources are already
- * excluded upstream) and each carries its chosen colour as `mode`. We take one tap
- * at a time, always the one that closes the most of the remaining shortfall,
- * breaking ties toward the LEAST flexible source (spend the Forest, keep the
- * any-colour Bird) and then the smallest producer (don't crack a 2-mana rock for a
- * single pip). Tapping a permanent removes it from the pool of candidates, so the
- * loop always terminates.
- */
-function planManaTaps(
-  view: PilotView,
-  me: PlayerId,
-  cost: ManaCost,
-  legalActions: readonly GameAction[],
-): ManaTap[] | undefined {
-  let pool: ManaPool = { ...view.players[me].manaPool };
-  // `distanceToPayable === 0` is exactly `canPay`, without payCost's pool copy.
-  if (distanceToPayable(pool, cost) === 0) return [];
-
-  // Group the offered activations by permanent: the modes of one source are
-  // alternatives, and tapping it spends the whole permanent.
-  const candidates = new Map<InstanceId, ManaTap[]>();
-  for (const action of legalActions) {
-    if (action.kind !== 'tapForMana') continue;
-    const perm = findInstance(view, action.instanceId);
-    if (!perm) continue;
-    const modes = manaModesOf(perm.def);
-    const mode = action.mode ?? 0;
-    const production = modes[mode];
-    if (!production) continue;
-    const list = candidates.get(action.instanceId);
-    const tap: ManaTap = { instanceId: action.instanceId, mode, production };
-    if (list) list.push(tap);
-    else candidates.set(action.instanceId, [tap]);
-  }
-
-  const plan: ManaTap[] = [];
-  // One reusable scratch pool for candidate evaluation. This inner loop runs for
-  // every source × mode on every planning pass, and it is on the sim's hot path
-  // (MCTS calls the heuristic once per rollout ply) — materialising a fresh pool
-  // per candidate cost real throughput, so we copy into scratch instead.
-  const scratch: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
-  let current = distanceToPayable(pool, cost);
-  while (current > 0) {
-    let best: ManaTap | undefined;
-    let bestDistance = current;
-    let bestFlexibility = Infinity;
-    let bestSize = Infinity;
-
-    for (const taps of candidates.values()) {
-      const flexibility = taps.length; // how many colours this source could have made
-      for (const tap of taps) {
-        for (const color of MANA_COLORS) scratch[color] = pool[color] + (tap.production[color] ?? 0);
-        const distance = distanceToPayable(scratch, cost);
-        if (distance >= current) continue; // this tap buys us nothing — never make it
-        const size = productionTotal(tap.production);
-        const better =
-          distance < bestDistance ||
-          (distance === bestDistance && flexibility < bestFlexibility) ||
-          (distance === bestDistance && flexibility === bestFlexibility && size < bestSize);
-        if (better) {
-          best = tap;
-          bestDistance = distance;
-          bestFlexibility = flexibility;
-          bestSize = size;
-        }
-      }
-    }
-
-    if (!best) return undefined; // nothing left that helps — the cost is unpayable
-    candidates.delete(best.instanceId);
-    pool = addProduction(pool, best.production);
-    current = bestDistance;
-    plan.push(best);
-  }
-  return plan;
-}
 
 
 /** Creatures a player controls on the battlefield. */
