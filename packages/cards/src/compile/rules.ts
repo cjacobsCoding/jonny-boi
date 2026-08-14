@@ -596,6 +596,58 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
   { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'activated abilities with costs' },
+  // --- below here: patterns that only refine the DEFAULT explanation. Nothing
+  // above changes; these exist so "this card didn't compile" names a buildable
+  // engine feature instead of shrugging. They are ordered specific → general,
+  // and each one was written because a batch of real cards landed on it (see
+  // `../../data/expansion-report.json`).
+  {
+    pattern: /\bcascade\b|\bevoke\b|\bsuspend\b|\bbattle cry\b|\binvestigate\b|fateful hour/,
+    missingEngineSystem: 'named keyword mechanics with their own subsystem',
+  },
+  {
+    pattern: /damage to each (?:creature|player|opponent)|to each of|damage to you\b/,
+    missingEngineSystem: 'effects that hit several targets at once (each creature / each opponent)',
+  },
+  {
+    pattern: /return target .* to (?:its|their) owner'?s hand/,
+    missingEngineSystem: 'returning a permanent to its owner’s hand (bounce)',
+  },
+  {
+    pattern: /gain control of target/,
+    missingEngineSystem: 'gaining control of another player’s permanent',
+  },
+  { pattern: /\bfights?\b/, missingEngineSystem: 'creatures fighting each other' },
+  {
+    pattern: /unless (?:its controller|that player|you) pays?/,
+    missingEngineSystem: 'optional payment during resolution ("unless its controller pays")',
+  },
+  {
+    pattern: /leaves the battlefield/,
+    missingEngineSystem: 'leaves-the-battlefield triggers',
+  },
+  {
+    pattern: /(?:other )?creatures you control (?:get|have)|as long as you control|creatures? you control gets?/,
+    missingEngineSystem: 'static continuous effects (anthems and conditional buffs)',
+  },
+  {
+    // "Destroy target artifact or creature", "Counter target creature spell",
+    // "Destroy target nonlegendary creature" — the effect exists, the FILTER on
+    // what may be chosen does not.
+    pattern: /^(?:destroy|exile|counter) target \S/,
+    missingEngineSystem: 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)',
+  },
+  {
+    // A trigger body that names a target. Core resolves triggered abilities with
+    // an empty target list, so these cannot be compiled without the same decision
+    // seam "player choice during resolution" needs.
+    pattern: /^(?:when|whenever)\b.*\btarget\b/,
+    missingEngineSystem: 'targets chosen by a triggered ability',
+  },
+  {
+    pattern: /\bdraws? (?:a|two|three|\d+) cards? and (?:you )?loses? \d+ life/,
+    missingEngineSystem: 'compound "draw N and lose M" in one sentence',
+  },
 ]);
 
 /** Find the best explanation for an unimplementable clause. */

@@ -22,6 +22,7 @@ import { CARD_POOL } from '../../data/pool.js';
 import { STUBBED_MECHANICS } from '../index.js';
 import { CORE_PRIMITIVE_IDS } from '../primitives.js';
 import { compileCard, compileCards } from './compile.js';
+import { explainUnsupported } from './rules.js';
 import type { CompilableCard } from './types.js';
 
 /** The normalized Scryfall index the pool joins to (produced by data-tools). */
@@ -99,6 +100,9 @@ describe('compileCard — ground truth against the hand-authored pool', () => {
         // instead — one tap yields one of them, so the mode LIST must match too.
         expect(definition.producesOptions ?? []).toEqual(authored.producesOptions ?? []);
       }
+      // The tapped-entry drawback is a whole turn of tempo — a dual land that
+      // forgot it would make every deck containing it simulate too fast.
+      expect(definition.entersTapped ?? false).toBe(authored.entersTapped ?? false);
 
       // Printed P/T must match — unless it is characteristic-defining (`*`),
       // where the pool authored a fixed guess and the compiler declines to.
@@ -467,6 +471,38 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(result.status).toBe('incomplete');
     // …and it certainly must not have emitted a trigger that does nothing.
     expect(result.definition.triggers ?? []).toHaveLength(0);
+  });
+});
+
+/**
+ * The rejection message is a product surface twice over: the import dialog shows
+ * it to the user, and `data/expansion-report.json` groups by it to rank what
+ * engine work would unlock the most real cards. "A rules template the compiler
+ * does not recognize yet" tells nobody anything, so the common printed shapes
+ * must each name a buildable feature.
+ */
+describe('explainUnsupported — every common rejection names a real engine feature', () => {
+  const DEFAULT_EXPLANATION = 'a rules template the compiler does not recognize yet';
+
+  it.each([
+    ['pyroclasm deals 2 damage to each creature', 'effects that hit several targets at once (each creature / each opponent)'],
+    ['when ~ enters, return target creature to its owner\'s hand', 'returning a permanent to its owner’s hand (bounce)'],
+    ['destroy target artifact or enchantment', 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)'],
+    ['counter target noncreature spell', 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)'],
+    ['counter target spell unless its controller pays {3}', 'optional payment during resolution ("unless its controller pays")'],
+    ['other creatures you control get +1/+1', 'static continuous effects (anthems and conditional buffs)'],
+    ['gain control of target creature until end of turn', 'gaining control of another player’s permanent'],
+    ['target creature you control fights target creature you don\'t control', 'creatures fighting each other'],
+    ['when ~ leaves the battlefield, create a 3/3 green beast creature token', 'leaves-the-battlefield triggers'],
+    ['cascade', 'named keyword mechanics with their own subsystem'],
+    ['when ~ enters, it deals 4 damage to target creature', 'targets chosen by a triggered ability'],
+    ['you draw two cards and lose 2 life', 'compound "draw N and lose M" in one sentence'],
+  ])('explains %s', (clause, expected) => {
+    expect(explainUnsupported(clause)).toBe(expected);
+  });
+
+  it('still falls back to the generic explanation for genuinely novel text', () => {
+    expect(explainUnsupported('do a barrel roll')).toBe(DEFAULT_EXPLANATION);
   });
 });
 

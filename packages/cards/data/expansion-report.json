@@ -7,49 +7,16 @@
     {
       "missingEngineSystem": "a rules template the compiler does not recognize yet",
       "cards": [
-        "Acidic Slime",
-        "Act of Treason",
-        "Benalish Marshal",
         "Blade Splicer",
-        "Bloodbraid Elf",
         "Boros Charm",
-        "Carnophage",
-        "Cast Down",
-        "Char",
         "Diabolic Edict",
-        "Disenchant",
-        "Essence Scatter",
-        "Flametongue Kavu",
-        "Gather the Townsfolk",
-        "Go for the Throat",
-        "Guttersnipe",
         "Incinerate",
         "Juggernaut",
-        "Kird Ape",
-        "Man-o'-War",
-        "Mana Leak",
-        "Mulldrifter",
-        "Naturalize",
-        "Negate",
-        "Nekrataal",
-        "Night's Whisper",
         "Pacifism",
-        "Plummet",
-        "Prey Upon",
-        "Putrefy",
-        "Pyroclasm",
         "Rancor",
-        "Rift Bolt",
-        "Serendib Efreet",
         "Shivan Dragon",
-        "Sign in Blood",
-        "Signal Pest",
         "Thieving Magpie",
-        "Thraben Inspector",
-        "Thragtusk",
-        "Unsummon",
-        "Vampire Lacerator",
-        "Viashino Pyromancer"
+        "Vampire Lacerator"
       ]
     },
     {
@@ -64,6 +31,30 @@
         "Mind Rot",
         "Solemn Simulacrum",
         "Wild Mongrel"
+      ]
+    },
+    {
+      "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)",
+      "cards": [
+        "Cast Down",
+        "Disenchant",
+        "Essence Scatter",
+        "Go for the Throat",
+        "Naturalize",
+        "Negate",
+        "Plummet",
+        "Putrefy"
+      ]
+    },
+    {
+      "missingEngineSystem": "named keyword mechanics with their own subsystem",
+      "cards": [
+        "Bloodbraid Elf",
+        "Gather the Townsfolk",
+        "Mulldrifter",
+        "Rift Bolt",
+        "Signal Pest",
+        "Thraben Inspector"
       ]
     },
     {
@@ -84,6 +75,24 @@
         "Read the Bones",
         "Sea Gate Oracle",
         "Temple of Enlightenment"
+      ]
+    },
+    {
+      "missingEngineSystem": "targets chosen by a triggered ability",
+      "cards": [
+        "Acidic Slime",
+        "Flametongue Kavu",
+        "Nekrataal",
+        "Viashino Pyromancer"
+      ]
+    },
+    {
+      "missingEngineSystem": "effects that hit several targets at once (each creature / each opponent)",
+      "cards": [
+        "Char",
+        "Guttersnipe",
+        "Pyroclasm",
+        "Serendib Efreet"
       ]
     },
     {
@@ -127,6 +136,34 @@
       ]
     },
     {
+      "missingEngineSystem": "static continuous effects (anthems and conditional buffs)",
+      "cards": [
+        "Benalish Marshal",
+        "Kird Ape"
+      ]
+    },
+    {
+      "missingEngineSystem": "optional payment during resolution (\"unless its controller pays\")",
+      "cards": [
+        "Carnophage",
+        "Mana Leak"
+      ]
+    },
+    {
+      "missingEngineSystem": "returning a permanent to its owner’s hand (bounce)",
+      "cards": [
+        "Man-o'-War",
+        "Unsummon"
+      ]
+    },
+    {
+      "missingEngineSystem": "compound \"draw N and lose M\" in one sentence",
+      "cards": [
+        "Night's Whisper",
+        "Sign in Blood"
+      ]
+    },
+    {
       "missingEngineSystem": "auras and equipment attachment",
       "cards": [
         "Pacifism",
@@ -148,6 +185,12 @@
       ]
     },
     {
+      "missingEngineSystem": "gaining control of another player’s permanent",
+      "cards": [
+        "Act of Treason"
+      ]
+    },
+    {
       "missingEngineSystem": "variable ({X}) and derived values",
       "cards": [
         "Gray Merchant of Asphodel"
@@ -158,6 +201,18 @@
       "cards": [
         "Mother of Runes"
       ]
+    },
+    {
+      "missingEngineSystem": "creatures fighting each other",
+      "cards": [
+        "Prey Upon"
+      ]
+    },
+    {
+      "missingEngineSystem": "leaves-the-battlefield triggers",
+      "cards": [
+        "Thragtusk"
+      ]
     }
   ],
   "cards": [
@@ -166,7 +221,7 @@
       "missing": [
         {
           "text": "When ~ enters, destroy target artifact, enchantment, or land.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targets chosen by a triggered ability"
         }
       ]
     },
@@ -175,7 +230,7 @@
       "missing": [
         {
           "text": "Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "gaining control of another player’s permanent"
         }
       ]
     },
@@ -202,7 +257,7 @@
       "missing": [
         {
           "text": "Other creatures you control get +1/+1.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "static continuous effects (anthems and conditional buffs)"
         }
       ]
     },
@@ -220,7 +275,7 @@
       "missing": [
         {
           "text": "Cascade",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "named keyword mechanics with their own subsystem"
         }
       ]
     },
@@ -250,7 +305,7 @@
       "missing": [
         {
           "text": "At the beginning of your upkeep, tap ~ unless you pay 1 life.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "optional payment during resolution (\"unless its controller pays\")"
         }
       ]
     },
@@ -259,7 +314,7 @@
       "missing": [
         {
           "text": "Destroy target nonlegendary creature.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -268,7 +323,7 @@
       "missing": [
         {
           "text": "~ deals 4 damage to any target and 2 damage to you.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "effects that hit several targets at once (each creature / each opponent)"
         }
       ]
     },
@@ -325,7 +380,7 @@
       "missing": [
         {
           "text": "Destroy target artifact or enchantment.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -352,7 +407,7 @@
       "missing": [
         {
           "text": "Counter target creature spell.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -370,7 +425,7 @@
       "missing": [
         {
           "text": "When ~ enters, it deals 4 damage to target creature.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targets chosen by a triggered ability"
         }
       ]
     },
@@ -379,7 +434,7 @@
       "missing": [
         {
           "text": "Fateful hour — If you have 5 or less life, create five of those tokens instead.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "named keyword mechanics with their own subsystem"
         }
       ]
     },
@@ -388,7 +443,7 @@
       "missing": [
         {
           "text": "Destroy target nonartifact creature.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -424,7 +479,7 @@
       "missing": [
         {
           "text": "Whenever you cast an instant or sorcery spell, ~ deals 2 damage to each opponent.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "effects that hit several targets at once (each creature / each opponent)"
         }
       ]
     },
@@ -455,7 +510,7 @@
       "missing": [
         {
           "text": "~ gets +1/+2 as long as you control a Forest.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "static continuous effects (anthems and conditional buffs)"
         }
       ]
     },
@@ -482,7 +537,7 @@
       "missing": [
         {
           "text": "When ~ enters, return target creature to its owner's hand.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "returning a permanent to its owner’s hand (bounce)"
         }
       ]
     },
@@ -491,7 +546,7 @@
       "missing": [
         {
           "text": "Counter target spell unless its controller pays {3}.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "optional payment during resolution (\"unless its controller pays\")"
         }
       ]
     },
@@ -536,7 +591,7 @@
       "missing": [
         {
           "text": "Evoke {2}{U}",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "named keyword mechanics with their own subsystem"
         }
       ]
     },
@@ -545,7 +600,7 @@
       "missing": [
         {
           "text": "Destroy target artifact or enchantment.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -554,7 +609,7 @@
       "missing": [
         {
           "text": "Counter target noncreature spell.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -563,7 +618,7 @@
       "missing": [
         {
           "text": "When ~ enters, destroy target nonartifact, nonblack creature. That creature can't be regenerated.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targets chosen by a triggered ability"
         }
       ]
     },
@@ -572,7 +627,7 @@
       "missing": [
         {
           "text": "You draw two cards and lose 2 life.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "compound \"draw N and lose M\" in one sentence"
         }
       ]
     },
@@ -621,7 +676,7 @@
       "missing": [
         {
           "text": "Destroy target creature with flying.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -630,7 +685,7 @@
       "missing": [
         {
           "text": "Target creature you control fights target creature you don't control.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "creatures fighting each other"
         }
       ]
     },
@@ -639,7 +694,7 @@
       "missing": [
         {
           "text": "Destroy target artifact or creature.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)"
         }
       ]
     },
@@ -648,7 +703,7 @@
       "missing": [
         {
           "text": "~ deals 2 damage to each creature.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "effects that hit several targets at once (each creature / each opponent)"
         }
       ]
     },
@@ -692,7 +747,7 @@
       "missing": [
         {
           "text": "Suspend 1—{R}",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "named keyword mechanics with their own subsystem"
         }
       ]
     },
@@ -746,7 +801,7 @@
       "missing": [
         {
           "text": "At the beginning of your upkeep, ~ deals 1 damage to you.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "effects that hit several targets at once (each creature / each opponent)"
         }
       ]
     },
@@ -773,7 +828,7 @@
       "missing": [
         {
           "text": "Target player draws two cards and loses 2 life.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "compound \"draw N and lose M\" in one sentence"
         }
       ]
     },
@@ -782,7 +837,7 @@
       "missing": [
         {
           "text": "Battle cry",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "named keyword mechanics with their own subsystem"
         },
         {
           "text": "~ can't be blocked except by creatures with flying or reach.",
@@ -835,7 +890,7 @@
       "missing": [
         {
           "text": "When ~ enters, investigate.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "named keyword mechanics with their own subsystem"
         }
       ]
     },
@@ -844,7 +899,7 @@
       "missing": [
         {
           "text": "When ~ leaves the battlefield, create a 3/3 green Beast creature token.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "leaves-the-battlefield triggers"
         }
       ]
     },
@@ -853,7 +908,7 @@
       "missing": [
         {
           "text": "Return target creature to its owner's hand.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "returning a permanent to its owner’s hand (bounce)"
         }
       ]
     },
@@ -871,7 +926,7 @@
       "missing": [
         {
           "text": "When ~ enters, it deals 2 damage to target player or planeswalker.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
+          "missingEngineSystem": "targets chosen by a triggered ability"
         }
       ]
     },

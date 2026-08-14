@@ -32,7 +32,11 @@ import type { CardDefinition } from '@jonny-boi/core';
 import { createFetchHttpClient, ScryfallClient } from '../../data-tools/src/client.js';
 import { normalizeCard } from '../../data-tools/src/normalize.js';
 import type { NormalizedCard } from '../../data-tools/src/types.js';
-import { CARD_POOL } from '../data/pool.js';
+// Only the HAND-AUTHORED half is read here, never `CARD_POOL`. The full pool
+// already contains this script's own previous output, so de-duplicating against
+// it would make the generator skip every card it produced last time and emit an
+// empty module — a re-run has to be idempotent.
+import { CURATED_CARD_POOL } from '../data/pool.js';
 import { compileCard } from '../src/compile/index.js';
 import type { CompilableCard, UnsupportedClause } from '../src/compile/index.js';
 
@@ -186,8 +190,8 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
 
 async function buildExpansion(): Promise<void> {
   const scratch = await readJson<{ cards: NormalizedCard[] }>(SCRATCH_INDEX_PATH);
-  const curatedIds = new Set(CARD_POOL.map((card) => card.id));
-  const curatedNames = new Set(CARD_POOL.map((card) => card.name));
+  const curatedIds = new Set(CURATED_CARD_POOL.map((card) => card.id));
+  const curatedNames = new Set(CURATED_CARD_POOL.map((card) => card.name));
 
   const accepted: Array<{ card: NormalizedCard; definition: CardDefinition }> = [];
   const rejected: RejectedCard[] = [];
@@ -234,7 +238,10 @@ async function buildExpansion(): Promise<void> {
   // pool — no more (the browser would offer unplayable cards) and no fewer (the
   // UI would have no art for a card you can deck).
   const starter = await readJson<{ description: string; names: string[] }>(STARTER_LIST_PATH);
-  const poolNames = [...CARD_POOL.map((card) => card.name), ...accepted.map((e) => e.card.name)];
+  const poolNames = [
+    ...CURATED_CARD_POOL.map((card) => card.name),
+    ...accepted.map((entry) => entry.card.name),
+  ];
   await writeJson(STARTER_LIST_PATH, {
     ...starter,
     names: [...new Set(poolNames)].sort((a, b) => a.localeCompare(b)),
