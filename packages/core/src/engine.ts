@@ -457,6 +457,11 @@ function resolveTopOfStack(
     card.summoningSick = isCreature(card.def) ? !(card.def.keywords?.haste ?? false) : false;
     state.battlefield.push(card);
     emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'battlefield' });
+    // The event log is the replay/inspector source (DESIGN §2), and a consumer
+    // folding it starts every entering permanent untapped — so arriving tapped has
+    // to be SAID, not just stored. `playLand` already emits this; without the same
+    // emission here a resolved "enters tapped" permanent replayed as untapped.
+    if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
   } else {
     // Spell → graveyard.
     card.zone = 'graveyard';
@@ -800,6 +805,16 @@ function applyDeclareAttackers(
   if (!state.combat) return rejectWith(prevState, 'not in combat');
   if (state.combat.attackersDeclared) return rejectWith(prevState, 'attackers already declared');
 
+  // A creature attacks at most ONCE. `combat.attackers` is a flat list the damage
+  // step iterates, so a repeated id would have the same creature deal its damage
+  // once per occurrence — a caller passing `[id, id]` hit for double power. Reject
+  // the malformed declaration rather than silently doubling combat damage.
+  const declaredAttackers = new Set<InstanceId>();
+  for (const id of action.attackers) {
+    if (declaredAttackers.has(id)) return rejectWith(prevState, `attacker ${id} was declared more than once`);
+    declaredAttackers.add(id);
+  }
+
   // Validate each attacker. Read EFFECTIVE keywords (printed OR continuous grants)
   // so an until-EOT haste/defender grant is honored for attack legality (DESIGN §3.9).
   const cont = indexContinuous(state);
@@ -843,6 +858,16 @@ function applyDeclareBlockers(
   // grant is honored for block legality, matching the damage step which builds the same
   // index (DESIGN §3.9). Build it once and thread it into every canBlock check.
   const cont = indexContinuous(state);
+  // `combat.blocks` is a blocker→attacker map, so a blocker named twice would have
+  // all but its LAST assignment silently discarded — turning "I block both" into
+  // "one attacker is unblocked" without telling the player. A creature blocks one
+  // attacker in this MVP, so a repeated blocker is an illegal declaration: reject it
+  // instead of quietly rewriting the defender's choice.
+  const declaredBlockers = new Set<InstanceId>();
+  for (const { blocker } of action.blocks) {
+    if (declaredBlockers.has(blocker)) return rejectWith(prevState, `blocker ${blocker} was assigned more than once`);
+    declaredBlockers.add(blocker);
+  }
   for (const { blocker, attacker } of action.blocks) {
     const b = findOnBattlefield(state, blocker);
     const a = findOnBattlefield(state, attacker);

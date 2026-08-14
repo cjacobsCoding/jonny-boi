@@ -41,7 +41,12 @@ export function remainingToughness(inst: CardInstance, mod: AggregatedMod = NO_M
 
 /**
  * Effective keyword set: the printed keywords OR-ed with any granted by continuous
- * effects. Returns a fresh object so callers never mutate the def or an aggregate.
+ * effects.
+ *
+ * The result is READ-ONLY and must never be mutated: with nothing granted this is
+ * the definition's own (shared, immutable) keyword object, returned as-is because
+ * this runs for every creature in every combat/legality pass and allocating a copy
+ * there is pure waste. `KeywordFlags` is declared readonly for exactly that reason.
  */
 export function effectiveKeywords(inst: CardInstance, mod: AggregatedMod = NO_MOD): KeywordFlags {
   const printed = inst.def.keywords;
