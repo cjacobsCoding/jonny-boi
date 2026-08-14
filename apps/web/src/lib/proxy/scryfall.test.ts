@@ -3,6 +3,7 @@ import {
   ProxyScryfallClient,
   bestPrintImage,
   extractImages,
+  nameAliases,
   toCountedProxies,
   type FetchLike,
   type RawScryfallCard,
@@ -36,6 +37,26 @@ describe('extractImages', () => {
       ],
     };
     expect(extractImages(card)).toEqual({ front: 'front.png', back: 'back.jpg' });
+  });
+});
+
+describe('nameAliases', () => {
+  it('gives a single-faced card exactly one alias', () => {
+    expect(nameAliases('Lightning Bolt')).toEqual(['lightning bolt']);
+  });
+
+  it('gives a double-faced card its combined name and each face', () => {
+    expect(nameAliases('Delver of Secrets // Insectile Aberration')).toEqual([
+      'delver of secrets // insectile aberration',
+      'delver of secrets',
+      'insectile aberration',
+    ]);
+  });
+
+  it('tolerates missing spaces around the face separator', () => {
+    expect(nameAliases('Delver of Secrets//Insectile Aberration')).toContain(
+      'delver of secrets',
+    );
   });
 });
 
@@ -138,6 +159,49 @@ describe('ProxyScryfallClient.resolve', () => {
       backImageUrl: 'back.png',
     });
   });
+
+  // Regression: Scryfall echoes a DFC's COMBINED name ("Front // Back") even
+  // when asked for the front face, which is how every decklist writes it.
+  // Matching on the echoed name alone reported the card as "couldn't find".
+  it('resolves a double-faced card requested by its front-face name', async () => {
+    const { fetchImpl } = fakeFetch({
+      data: [
+        {
+          name: 'Delver of Secrets // Insectile Aberration',
+          card_faces: [
+            { name: 'Delver of Secrets', image_uris: { png: 'front.png' } },
+            { name: 'Insectile Aberration', image_uris: { png: 'back.png' } },
+          ],
+        },
+      ],
+    });
+    const client = new ProxyScryfallClient(fetchImpl, { minIntervalMs: 0 });
+    const result = await client.resolve([{ name: 'Delver of Secrets', qty: 4 }]);
+    expect(result.unresolved).toEqual([]);
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0]).toMatchObject({ imageUrl: 'front.png', backImageUrl: 'back.png' });
+  });
+
+  it('counts a card asked for by both its face and combined name only once', async () => {
+    const { fetchImpl } = fakeFetch({
+      data: [
+        {
+          name: 'Delver of Secrets // Insectile Aberration',
+          card_faces: [
+            { name: 'Delver of Secrets', image_uris: { png: 'front.png' } },
+            { name: 'Insectile Aberration', image_uris: { png: 'back.png' } },
+          ],
+        },
+      ],
+    });
+    const client = new ProxyScryfallClient(fetchImpl, { minIntervalMs: 0 });
+    const result = await client.resolve([
+      { name: 'Delver of Secrets', qty: 2 },
+      { name: 'Delver of Secrets // Insectile Aberration', qty: 2 },
+    ]);
+    expect(result.resolved).toHaveLength(1);
+    expect(result.unresolved).toEqual([]);
+  });
 });
 
 describe('toCountedProxies', () => {
@@ -167,5 +231,25 @@ describe('toCountedProxies', () => {
   it('skips cards that did not resolve', () => {
     const counted = toCountedProxies([{ name: 'Ghost', qty: 1 }], resolved, false);
     expect(counted).toHaveLength(0);
+  });
+
+  // Regression: the resolved card carries Scryfall's combined DFC name, while
+  // the decklist line carries only the front face — they must still join.
+  it('joins a front-face decklist line to a combined-name resolved card', () => {
+    const counted = toCountedProxies(
+      [{ name: 'Delver of Secrets', qty: 3 }],
+      [
+        {
+          name: 'Delver of Secrets // Insectile Aberration',
+          imageUrl: 'front.png',
+          backImageUrl: 'back.png',
+        },
+      ],
+      true,
+    );
+    expect(counted.map((c) => ({ url: c.imageUrl, qty: c.qty }))).toEqual([
+      { url: 'front.png', qty: 3 },
+      { url: 'back.png', qty: 3 },
+    ]);
   });
 });
