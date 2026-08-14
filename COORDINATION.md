@@ -64,6 +64,30 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-13 DESKTOP-90PJPM4: `feat/import-formats` ✅ (apps/web/src/lib/scryfall + decklist/resolve) —
+  **two real deck-import bugs, found by importing the user's actual Modern lists.** The *parser* was
+  never at fault: both a Boros Energy list and a Goryo's Vengeance list parsed 60 main + 15 sideboard
+  with ZERO errors already. Both failures were in the Scryfall lookup:
+  1. **`/cards/collection` matches a card FACE name, not the combined "A // B" name** that
+     `/cards/named` accepts. Asking it for "Wear // Tear" is a miss; asking for "Wear" returns the
+     whole card. Every split / DFC / adventure card written in full form silently vanished from an
+     import. `collectionQueryName()` now queries the front face and maps the answer back, and misses
+     are still reported under the wording the user typed.
+  2. **Universes Beyond printings are filed under their licensed name.** "Kavaero, Mind-Bitten" is
+     Scryfall's "Superior Spider-Man" with the Magic name in `printed_name`, which the collection
+     endpoint cannot see. Added a second-chance pass: for names that missed, one
+     `/cards/search?include_multilingual=true&q=!"…"` each. Anchored with the `!` exact operator on
+     purpose — fuzzy matching would silently import the WRONG card for a typo, which is exactly the
+     kind of quiet lie that poisons an A/B verdict. Costs zero requests on a list that resolves clean.
+     `CollectionResult.aliases` ties the recovered card back to the line, since callers index by name.
+  Result: both lists now resolve **75/75 cards, 0 not-found** (was 74/75 each).
+  ⚠️ **Resolving is not playing.** Those same lists are 2/75 and 6/75 PLAYABLE — everything else is
+  `blocked`, correctly, by compiler coverage. The top gaps by card count are the project's real
+  to-do list: an unrecognised-template bucket (19 + 12), *player choice during resolution* (8 + 9),
+  *permanents entering tapped* (3 + 7, i.e. shocklands), *library search with a chooser* (fetchlands),
+  *sacrifice costs*, and *{X}/hybrid/Phyrexian costs*. Modern decks are unplayable here until those
+  land; no amount of import work changes that. (Worker — branch pushed.)
+
 - 2026-08-13 DESKTOP-90PJPM4: `fix/ai-play-quality` — **COMBAT COULD NOT END.** The reason MCTS games
   appeared to "take forever" was not search cost: `CombatState` inferred "have attackers/blockers been
   declared?" from whether the list was NON-EMPTY. But declaring *no* attackers (or no blockers) is a
