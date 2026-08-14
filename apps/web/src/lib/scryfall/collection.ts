@@ -25,7 +25,7 @@ import {
 /** A minimal structural subset of the global `fetch` we depend on. */
 export type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
+  init: { method: string; headers: Record<string, string>; body?: string },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 /** One card identifier for the collection endpoint. */
@@ -41,6 +41,13 @@ export interface CollectionResult {
   readonly cards: readonly unknown[];
   /** Names Scryfall could not find, verbatim as requested. */
   readonly notFound: readonly string[];
+  /**
+   * Cards that only matched under a different name, as
+   * `normalized requested name → the card's canonical Scryfall name`. Callers
+   * index results by card name, so they need this to tie the card back to the
+   * line the user typed (see {@link recoverAlternateNames}).
+   */
+  readonly aliases: ReadonlyMap<string, string>;
 }
 
 /** Progress reporting while a large list resolves (one call per batch). */
@@ -79,6 +86,84 @@ export function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/** How exporters join the two halves of a split / double-faced / adventure card. */
+const FACE_SEPARATOR = ' // ';
+
+/**
+ * The name to actually ask Scryfall for.
+ *
+ * `/cards/collection` matches a **face** name, unlike `/cards/named`, which also
+ * accepts the combined one: asking the collection endpoint for "Wear // Tear"
+ * comes back as a miss, while "Wear" returns the whole card. Exporters write
+ * both forms (Arena writes the front face, Moxfield and MTGO often write the
+ * pair), so we always query the front face and map the answer back to whatever
+ * the user typed.
+ */
+export function collectionQueryName(name: string): string {
+  const front = name.split(FACE_SEPARATOR)[0]?.trim();
+  return front && front.length > 0 ? front : name.trim();
+}
+
+/** Scryfall's search endpoint, used only for the second-chance lookup below. */
+const SCRYFALL_SEARCH_PATH = '/cards/search';
+
+/** Shape of Scryfall's `/cards/search` response we read. */
+interface SearchResponse {
+  data?: Array<{ name?: string }>;
+}
+
+/**
+ * Second-chance lookup for names `/cards/collection` could not match.
+ *
+ * A Universes Beyond printing carries its Magic-universe name in `printed_name`
+ * while Scryfall files the card under the licensed one, so a decklist line
+ * reading "Kavaero, Mind-Bitten" has to end up at "Superior Spider-Man". The
+ * collection endpoint never matches those names; search does, but only with
+ * `include_multilingual` (the same field also carries non-English printings).
+ *
+ * The query is anchored with Scryfall's `!"…"` exact-name operator, so this
+ * recovers alternate *names* without degrading into fuzzy matching that could
+ * silently import the wrong card for a typo.
+ *
+ * Costs one request per miss, so a list that resolves cleanly pays nothing.
+ */
+async function recoverAlternateNames(
+  missing: readonly string[],
+  fetchImpl: FetchLike,
+  throttle: () => Promise<void>,
+): Promise<{ cards: unknown[]; aliases: Map<string, string>; stillMissing: string[] }> {
+  const cards: unknown[] = [];
+  const aliases = new Map<string, string>();
+  const stillMissing: string[] = [];
+
+  for (const name of missing) {
+    try {
+      await throttle();
+      const query = encodeURIComponent(`!"${name.replace(/"/g, '')}"`);
+      const response = await fetchImpl(
+        `${SCRYFALL_API_BASE}${SCRYFALL_SEARCH_PATH}?include_multilingual=true&unique=cards&q=${query}`,
+        { method: 'GET', headers: { 'User-Agent': SCRYFALL_USER_AGENT, Accept: 'application/json' } },
+      );
+      if (!response.ok) {
+        stillMissing.push(name);
+        continue;
+      }
+      const payload = (await response.json()) as SearchResponse;
+      const card = payload.data?.[0];
+      if (!card?.name) {
+        stillMissing.push(name);
+        continue;
+      }
+      cards.push(card);
+      aliases.set(normalizeName(name), card.name);
+    } catch {
+      stillMissing.push(name);
+    }
+  }
+
+  return { cards, aliases, stillMissing };
+}
+
 /**
  * Fetch full card objects for the given identifiers.
  *
@@ -95,24 +180,37 @@ export async function fetchCardCollection(
   const batchSize = options.batchSize ?? COLLECTION_BATCH_SIZE;
 
   // De-duplicate: a decklist repeats a name once per stack, and the endpoint
-  // charges us per identifier, not per copy.
+  // charges us per identifier, not per copy. Keying on the *queried* name also
+  // collapses "Wear" and "Wear // Tear" into the single request they are.
   const unique = new Map<string, CardIdentifier>();
+  /** Queried name → the name the user actually typed, for miss reporting. */
+  const requestedAs = new Map<string, string>();
   for (const identifier of identifiers) {
-    const key = `${normalizeName(identifier.name)}|${identifier.set ?? ''}`;
-    if (!unique.has(key)) unique.set(key, identifier);
+    const queryName = collectionQueryName(identifier.name);
+    const key = `${normalizeName(queryName)}|${identifier.set ?? ''}`;
+    if (unique.has(key)) continue;
+    unique.set(key, identifier.set ? { name: queryName, set: identifier.set } : { name: queryName });
+    requestedAs.set(normalizeName(queryName), identifier.name);
   }
   const list = [...unique.values()];
+  /** Report a miss under the user's own wording, not our rewritten query. */
+  const asRequested = (name: string): string => requestedAs.get(normalizeName(name)) ?? name;
 
   const cards: unknown[] = [];
   const notFound: string[] = [];
   let lastRequestAt = 0;
   let done = 0;
 
+  /** Hold Scryfall's minimum request interval across every call we make. */
+  const throttle = async (): Promise<void> => {
+    const elapsed = Date.now() - lastRequestAt;
+    if (elapsed < minIntervalMs) await delay(minIntervalMs - elapsed);
+    lastRequestAt = Date.now();
+  };
+
   for (const batch of chunk(list, batchSize)) {
     try {
-      const elapsed = Date.now() - lastRequestAt;
-      if (elapsed < minIntervalMs) await delay(minIntervalMs - elapsed);
-      lastRequestAt = Date.now();
+      await throttle();
 
       const response = await fetchImpl(`${SCRYFALL_API_BASE}${SCRYFALL_COLLECTION_PATH}`, {
         method: 'POST',
@@ -127,20 +225,25 @@ export async function fetchCardCollection(
       });
 
       if (!response.ok) {
-        notFound.push(...batch.map((id) => id.name));
+        notFound.push(...batch.map((id) => asRequested(id.name)));
       } else {
         const payload = (await response.json()) as CollectionResponse;
         cards.push(...(payload.data ?? []));
         for (const miss of payload.not_found ?? []) {
-          if (miss.name) notFound.push(miss.name);
+          if (miss.name) notFound.push(asRequested(miss.name));
         }
       }
     } catch {
-      notFound.push(...batch.map((id) => id.name));
+      notFound.push(...batch.map((id) => asRequested(id.name)));
     }
     done += batch.length;
     options.onProgress?.({ done, total: list.length });
   }
 
-  return { cards, notFound };
+  if (notFound.length === 0) return { cards, notFound, aliases: new Map() };
+
+  // Anything still missing may be a card Scryfall files under another name.
+  const recovered = await recoverAlternateNames(notFound, fetchImpl, throttle);
+  cards.push(...recovered.cards);
+  return { cards, notFound: recovered.stillMissing, aliases: recovered.aliases };
 }

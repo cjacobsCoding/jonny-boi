@@ -118,6 +118,12 @@ export async function resolveDecklist(
       const front = card.name.split(' // ')[0];
       if (front) fetched.set(normalizeName(front), card);
     }
+    // A card filed under a different name than the decklist used (a Universes
+    // Beyond printing, say) also has to answer to the name the user typed.
+    for (const [requested, canonical] of result.aliases) {
+      const card = fetched.get(normalizeName(canonical));
+      if (card) fetched.set(requested, card);
+    }
     for (const miss of result.notFound) notFound.add(normalizeName(miss));
   }
 
