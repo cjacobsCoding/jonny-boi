@@ -76,13 +76,26 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
  * the strength of AI play is a single data decision rather than a default
  * repeated at each call site.
  *
- * It is the LOOK-AHEAD pilot: the heuristic is one action deep and cannot plan a
- * turn, let alone several, so games piloted by it read as "tap everything, dump
- * the hand". MCTS searches real engine rollouts instead. It is materially slower
- * per decision (see `MctsConfig.simulationsPerDecision`) — that cost buys the
- * play quality, and `FAST_MCTS_CONFIG` exists for speed-sensitive callers.
+ * THIS IS THE HEURISTIC, AND THE REASON IS MEASURED. MCTS held this slot on the
+ * theory that engine rollouts buy play quality over a one-action-deep heuristic.
+ * At its current budget they do not: over three Mono-Red vs UW Control games,
+ * counting `manaPoolEmptied` events (mana a pilot tapped and then never spent),
+ *
+ *     heuristic:   1 wasted-mana event  / 107 turns  = 0.01 per turn
+ *     mcts:      202 wasted-mana events / 115 turns  = 1.76 per turn
+ *
+ * — 176× more waste, at roughly a hundred times the wall clock (11 minutes for
+ * those three games). Watching a replay, that reads exactly as reported: a
+ * player taps a Sol Ring and does nothing with the mana. A search shallow enough
+ * that a wasted tap costs it nothing inside the rollout horizon will happily
+ * make wasted taps.
+ *
+ * MCTS remains registered and selectable ({@link SELECTABLE_PILOT_IDS}); it
+ * should return here only with a budget that beats the heuristic on a measured
+ * head-to-head, not on the theory that it ought to.
+ * `pilot-quality.test.ts` guards this with the same waste metric.
  */
-export const DEFAULT_PILOT_ID = MCTS_PILOT_ID;
+export const DEFAULT_PILOT_ID = HEURISTIC_PILOT_ID;
 
 /** The pilot ids a consumer may select from data (CLI flag, UI picker). */
 export const SELECTABLE_PILOT_IDS: readonly string[] = [MCTS_PILOT_ID, HEURISTIC_PILOT_ID, RANDOM_PILOT_ID];
