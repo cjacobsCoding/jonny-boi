@@ -11,7 +11,9 @@ import {
   playableLandIds,
   type CastChoice,
 } from '../../lib/online/legal-actions.js';
-import { isAwaitingChoiceAnswer, onlineChoiceOptions } from '../../lib/online/choice-actions.js';
+import { answerChoiceAction, onlineChoiceView } from '../../lib/online/pending-choice.js';
+import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
+import { ChoicePrompt } from '../play/ChoicePrompt.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
@@ -46,24 +48,30 @@ export function OnlineBoard({
   const attackTemplate = useMemo(() => declareAttackersAction(legalActions), [legalActions]);
   const blockTemplate = useMemo(() => declareBlockersAction(legalActions), [legalActions]);
   const pass = useMemo(() => passAction(legalActions), [legalActions]);
-  // A resolving card is asking this seat a question. The server's `MaskedGameView`
-  // carries no `pendingChoice`, so the question itself never reached us — but its
-  // legal ANSWERS did, and offering them is what keeps the game from dead-ending
-  // with an unplayable board (see lib/online/choice-actions.ts).
-  const awaitingChoice = useMemo(() => isAwaitingChoiceAnswer(legalActions), [legalActions]);
-  const choiceOptions = useMemo(
-    () => (awaitingChoice ? onlineChoiceOptions(legalActions, masked, names) : []),
-    [awaitingChoice, legalActions, masked, names],
+  // A resolving card parked a question. The server masks it per seat, so the board
+  // either has the real question to render or only a line naming who is answering.
+  const { answerable: ownChoice, waitingText } = useMemo(
+    () => onlineChoiceView(masked, names),
+    [masked, names],
   );
+
+  // Manual mana tapping, from the SAME pure menu the hotseat board uses. Without a
+  // way to tap, the server never offers a `castSpell` (it only lists spells the
+  // floating pool already covers), so online play could not cast anything at all —
+  // and a card that asks a question could never be reached.
+  const tapMenu = useMemo(() => manaTapMenu(masked, legalActions), [masked, legalActions]);
+  const tappable = useMemo(() => tappableIds(tapMenu, masked, masked.viewer), [tapMenu, masked]);
 
   // Transient interaction state.
   const [pendingCast, setPendingCast] = useState<CastChoice | null>(null);
+  const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   const [chosenAttackers, setChosenAttackers] = useState<Set<InstanceId>>(new Set());
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
 
   const reset = (): void => {
     setPendingCast(null);
+    setPendingManaTap(null);
     setChosenAttackers(new Set());
     setBlockAssign(new Map());
     setActiveBlockTarget(null);
@@ -86,6 +94,19 @@ export function OnlineBoard({
   const commitCast = (targets: ReadonlyArray<InstanceId | PlayerId>): void => {
     if (!pendingCast) return;
     submit({ kind: 'castSpell', player: masked.viewer, instanceId: pendingCast.instanceId, targets });
+  };
+
+  // --- mana ------------------------------------------------------------------------
+  const onTapForMana = (id: InstanceId): void => {
+    const options = tapMenu.get(id);
+    if (!options || options.length === 0) return;
+    // One mode is not a decision; more than one is, so ask rather than pick.
+    if (isModalTap(options)) {
+      setPendingManaTap(options);
+      return;
+    }
+    const only = options[0] as ManaTapOption;
+    submit({ kind: 'tapForMana', player: masked.viewer, instanceId: only.instanceId, mode: only.mode });
   };
 
   // --- combat: attacker / blocker selection from the server templates -----------
@@ -140,6 +161,15 @@ export function OnlineBoard({
         markers,
         onClick: onBlockBoardClick,
       };
+    }
+    // Outside a combat declaration, clicking your own untapped source taps it. The
+    // marker shows what it makes so a player knows before committing.
+    if (yourTurn && tappable.size > 0) {
+      const markers = new Map<InstanceId, string>();
+      for (const [id, options] of tapMenu) {
+        if (tappable.has(id)) markers.set(id, isModalTap(options) ? 'any' : (options[0]?.label ?? ''));
+      }
+      return { selectableIds: tappable, selectedIds: new Set(), markers, onClick: onTapForMana };
     }
     return undefined;
   })();
@@ -234,7 +264,10 @@ export function OnlineBoard({
       {/* Action bar. */}
       <div className="action-bar">
         {!yourTurn ? (
-          <span className="action-bar__wait">Waiting for {names[view.priorityPlayer]}…</span>
+          <span className="action-bar__wait">
+            {/* Names the asker and the card, never a candidate — the summary carries no more. */}
+            {waitingText ?? `Waiting for ${names[view.priorityPlayer]}…`}
+          </span>
         ) : (
           <>
             {inAttackStep && (
@@ -271,42 +304,54 @@ export function OnlineBoard({
               </button>
             )}
             <span className="action-bar__hint">
-              {awaitingChoice ? 'Answer the question above to continue.' : hintFor(step)}
+              {ownChoice ? 'Answer the question above to continue.' : hintFor(step)}
             </span>
           </>
         )}
       </div>
 
       {/*
-        A parked question. Until the protocol carries `pendingChoice`, we can offer
-        the engine's own legal answers but not the wording of the question — so the
-        panel says exactly that rather than inventing a prompt.
+        The parked question, rendered by the SAME `ChoicePrompt` the hotseat uses —
+        one choice UI, not two. It appears only for the seat the server addressed the
+        choice to, which is also the only seat that was sent its candidates.
       */}
-      {yourTurn && choiceOptions.length > 0 && (
-        <div className="choice-prompt" role="dialog" aria-modal="true" aria-label="A card is asking you a question">
-          <div className="choice-prompt__card">
-            <header className="choice-prompt__head">
-              <span className="choice-prompt__who">{names[masked.viewer]} must choose</span>
-              <h3 className="choice-prompt__title">A resolving card is asking you a question</h3>
-              <p className="choice-prompt__requirement">
-                This build's online mode can show the legal answers but not the question's wording.
-                {choiceOptions.some((o) => !o.fullyNamed) && ' Some options name cards this seat cannot see.'}
-              </p>
-            </header>
-            <div className="choice-prompt__options">
-              <div className="choice-prompt__list">
-                {choiceOptions.map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    className="choice-option"
-                    onClick={() => submit(opt.action)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+      {ownChoice && (
+        <ChoicePrompt
+          choice={ownChoice}
+          names={names}
+          onAnswer={(answer) => submit(answerChoiceAction(masked.viewer, ownChoice, answer))}
+        />
+      )}
+
+      {/* Which colour should this modal source make? (Birds of Paradise, a dual land.) */}
+      {pendingManaTap && (
+        <div className="target-prompt" role="dialog" aria-label="Choose which mana to add">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">
+              Add which mana from {nameOfPerm(view, pendingManaTap[0]?.instanceId ?? 0)}?
             </div>
+            <div className="target-prompt__options">
+              {pendingManaTap.map((opt) => (
+                <button
+                  key={opt.mode ?? 0}
+                  type="button"
+                  className="btn"
+                  onClick={() =>
+                    submit({
+                      kind: 'tapForMana',
+                      player: masked.viewer,
+                      instanceId: opt.instanceId,
+                      mode: opt.mode,
+                    })
+                  }
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setPendingManaTap(null)}>
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -381,7 +426,7 @@ function hintFor(step: string): string {
   switch (step) {
     case 'precombatMain':
     case 'postcombatMain':
-      return 'Play a land or cast a spell from your hand, or pass to advance.';
+      return 'Play a land, tap your sources for mana, then cast from your hand — or pass to advance.';
     case 'declareAttackers':
       return 'Tap your creatures to attack, then confirm — or attack with none.';
     case 'declareBlockers':
