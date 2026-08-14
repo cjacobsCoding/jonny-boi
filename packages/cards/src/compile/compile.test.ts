@@ -57,7 +57,6 @@ const STUBBED_NAMES = new Set(STUBBED_MECHANICS.map((entry) => entry.card));
  * one mana. The compiler reports the hybrid cost instead of shipping that.
  */
 const HUMAN_APPROXIMATIONS: Readonly<Record<string, string>> = Object.freeze({
-  'Kitchen Finks': 'variable, hybrid, and Phyrexian mana costs',
   Tarmogoyf: 'dynamic power/toughness (characteristic-defining */*)',
   // Birds of Paradise taps for ONE mana of any color. Core's `produces` is a
   // fixed list and `applyTapForMana` adds one of EACH listed color, so the
@@ -303,8 +302,30 @@ describe('compileCard — templated cards outside the curated pool', () => {
 
     expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'variable, hybrid, and Phyrexian mana costs',
+      'variable ({X}), Phyrexian, and monocolour hybrid mana costs',
     );
+  });
+
+  it('compiles a colour/colour hybrid cost the mana system can pay', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Hybrid Bear',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Bear'] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: ['G/W', 'G/W'] },
+        power: 3,
+        toughness: 2,
+        oracleText: '',
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.cost).toEqual({
+      generic: 1,
+      hybrid: [
+        ['G', 'W'],
+        ['G', 'W'],
+      ],
+    });
   });
 
   it('reports an unmodelled keyword rather than dropping the ability', () => {
@@ -324,7 +345,21 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(result.missing.some((gap) => /menace/i.test(gap.text))).toBe(true);
   });
 
-  it('reports a land that enters tapped instead of playing it untapped', () => {
+  it('compiles "enters tapped" onto the definition', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Simple Tapland',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: 'Simple Tapland enters tapped.\n{T}: Add {U}.',
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.entersTapped).toBe(true);
+    expect(result.definition.produces).toEqual(['U']);
+  });
+
+  it('still reports a dual land whose mana ability offers a choice', () => {
     const result = compileCard(
       makeCard({
         name: 'Dismal Backwater',
@@ -338,8 +373,10 @@ describe('compileCard — templated cards outside the curated pool', () => {
     );
 
     expect(result.status).toBe('incomplete');
+    // "Enters tapped" is implemented now; the choice of {U} or {B} is not.
+    expect(result.definition.entersTapped).toBe(true);
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'permanents entering the battlefield tapped',
+      'mana abilities that produce a chosen color',
     );
   });
 });

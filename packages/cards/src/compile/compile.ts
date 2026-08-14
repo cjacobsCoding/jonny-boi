@@ -37,6 +37,7 @@ import {
   KEYWORD_ABILITY_BUILDERS,
   KEYWORD_FLAGS,
   MANA_RULES,
+  STATIC_RULES,
   TRIGGER_RULES,
   explainUnsupported,
   isVacuousClause,
@@ -83,15 +84,38 @@ const KEYWORD_ABILITY_TEXT: Readonly<Record<string, string>> = Object.freeze({
   prowess: 'whenever you cast a noncreature spell, target creature gets +1/+1 until end of turn',
 });
 
+/**
+ * A color/color hybrid symbol as the Scryfall parser leaves it in `other`
+ * (e.g. `G/W`). Monocolour hybrid (`2/W`) and Phyrexian (`W/P`) deliberately do
+ * not match — the engine cannot pay those, so they must stay reported.
+ */
+const HYBRID_SYMBOL = /^([WUBRGC])\/([WUBRGC])$/;
+
+/** Split `other` cost symbols into payable hybrids and genuinely unpayable ones. */
+function partitionOtherSymbols(symbols: readonly string[]): {
+  hybrid: ManaColor[][];
+  unpayable: string[];
+} {
+  const hybrid: ManaColor[][] = [];
+  const unpayable: string[] = [];
+  for (const symbol of symbols) {
+    const match = HYBRID_SYMBOL.exec(symbol.toUpperCase());
+    if (match) hybrid.push([match[1] as ManaColor, match[2] as ManaColor]);
+    else unpayable.push(symbol);
+  }
+  return { hybrid, unpayable };
+}
+
 /** Convert a data-tools mana cost to the core cost shape (omitting zeroes). */
-function toCoreCost(card: CompilableCard): ManaCost | undefined {
+function toCoreCost(card: CompilableCard, hybrid: readonly (readonly ManaColor[])[]): ManaCost | undefined {
   const source = card.manaCost;
-  const cost: Record<string, number> = {};
+  const cost: Record<string, unknown> = {};
   if (source.generic > 0) cost.generic = source.generic;
   for (const color of ['W', 'U', 'B', 'R', 'G', 'C'] as const) {
     const count = source[color];
     if (count > 0) cost[color] = count;
   }
+  if (hybrid.length > 0) cost.hybrid = hybrid;
   return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
 }
 
@@ -118,6 +142,7 @@ interface Assembly {
   readonly triggers: TriggeredAbility[];
   readonly produces: ManaColor[];
   keywords: Record<string, boolean>;
+  entersTapped: boolean;
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -130,6 +155,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.keywords) {
     assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
   }
+  if (contribution.entersTapped) assembly.entersTapped = true;
   assembly.matchedRules.push(ruleId);
 }
 
@@ -212,6 +238,13 @@ function compileAbilityLine(
     return;
   }
 
+  // Card-level static properties ("~ enters tapped").
+  const staticRule = applyRules(STATIC_RULES, clause, ctx);
+  if (staticRule) {
+    absorb(assembly, staticRule.contribution, staticRule.ruleId);
+    return;
+  }
+
   if (isSpell) {
     // Whole-line first (compound idioms like "…deals 3 damage… You gain 3 life"),
     // then sentence-by-sentence for plain sequences of effects.
@@ -251,6 +284,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     triggers: [],
     produces: [],
     keywords: {},
+    entersTapped: false,
     matchedRules: [],
     missing: [],
   };
@@ -291,15 +325,18 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
 
   // --- mana cost -------------------------------------------------------------
-  // `other` holds symbols the payment system cannot express: {X}, hybrid,
-  // Phyrexian. A card whose cost we cannot pay correctly is never complete.
-  if (card.manaCost.other.length > 0) {
+  // Colour/colour hybrid symbols are payable now (the mana system tries each
+  // assignment). What remains in `other` — {X}, Phyrexian, monocolour hybrid,
+  // snow — genuinely cannot be paid, and a card we would mis-cost is never
+  // complete.
+  const { hybrid, unpayable } = partitionOtherSymbols(card.manaCost.other);
+  if (unpayable.length > 0) {
     assembly.missing.push({
-      text: card.manaCost.other.join(''),
-      missingEngineSystem: 'variable, hybrid, and Phyrexian mana costs',
+      text: unpayable.map((symbol) => `{${symbol}}`).join(''),
+      missingEngineSystem: 'variable ({X}), Phyrexian, and monocolour hybrid mana costs',
     });
   }
-  const cost = toCoreCost(card);
+  const cost = toCoreCost(card, hybrid);
 
   // --- power / toughness -----------------------------------------------------
   const isCreatureCard = types.includes('creature');
@@ -356,7 +393,10 @@ export function compileCard(card: CompilableCard): CompileResult {
       assembly.keywords = { ...assembly.keywords, [field]: true };
       continue;
     }
-    if (KEYWORD_ABILITY_TEXT[word]) continue; // handled from the printed line
+    // Keywords with a real implementation are compiled from the printed line
+    // (prowess via its template, persist via a direct builder) — Scryfall
+    // listing them again is not a second, unmodelled ability.
+    if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
     if (!assembly.missing.some((m) => m.text.toLowerCase().includes(word))) {
       assembly.missing.push({
         text: keyword,
@@ -376,6 +416,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(isCreatureCard && card.power !== null ? { power: card.power } : {}),
     ...(isCreatureCard && card.toughness !== null ? { toughness: card.toughness } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
+    ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(assembly.produces.length > 0 ? { produces: assembly.produces } : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),

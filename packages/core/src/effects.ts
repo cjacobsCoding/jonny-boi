@@ -170,7 +170,8 @@ function createTokenInState(
     controller,
     owner: controller,
     zone: 'battlefield',
-    tapped: false,
+    // Tokens obey the same "enters tapped" rule as printed permanents.
+    tapped: def.entersTapped === true,
     summoningSick: isCreatureToken ? !hasHaste : false,
     damageMarked: 0,
     markedByDeathtouch: false,

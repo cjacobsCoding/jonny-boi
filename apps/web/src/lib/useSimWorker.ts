@@ -11,6 +11,7 @@
  * state (idle / running / done / error) — never a blank screen.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { importedDefinitions } from './decklist/importedCards.js';
 import type {
   SimRequest,
   SimResponse,
@@ -91,7 +92,11 @@ export function useSimWorker(): SimWorkerApi {
         terminate();
       };
 
-      worker.postMessage(request);
+      // The worker builds its own card pool, so every run must carry the
+      // definitions for cards outside the curated set. Injecting it here — the
+      // single chokepoint every run goes through — means no Lab feature can
+      // forget it and silently fail to load an imported deck.
+      worker.postMessage({ ...request, importedCards: importedDefinitions() });
     },
     [terminate],
   );

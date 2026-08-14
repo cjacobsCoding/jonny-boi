@@ -11,13 +11,8 @@
  * network (CLAUDE.md: pure-core + mandatory tests).
  */
 
-import {
-  COLLECTION_BATCH_SIZE,
-  MIN_REQUEST_INTERVAL_MS,
-  SCRYFALL_API_BASE,
-  SCRYFALL_COLLECTION_PATH,
-  SCRYFALL_USER_AGENT,
-} from './config.js';
+import { COLLECTION_BATCH_SIZE, MIN_REQUEST_INTERVAL_MS } from './config.js';
+import { fetchCardCollection, type FetchLike } from '../scryfall/collection.js';
 import type { CountedProxyCard } from './paginate.js';
 import type { ParsedCard } from './parseDecklist.js';
 
@@ -40,21 +35,12 @@ export interface RawScryfallCard {
   layout?: string;
 }
 
-/** Scryfall's collection response shape. */
-interface CollectionResponse {
-  data?: RawScryfallCard[];
-  not_found?: Array<{ name?: string }>;
-}
-
 /**
- * A minimal structural subset of the global `fetch` we depend on. `body` is
- * optional so the client can issue both `POST /cards/collection` (with a body)
- * and `GET /cards/search` (a bare GET — a GET request must not carry a body).
+ * The `fetch` shape this client needs, re-exported from the shared Scryfall
+ * client so there is one definition. `body` is optional so callers can issue
+ * both `POST /cards/collection` and a bare `GET /cards/search`.
  */
-export type FetchLike = (
-  url: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
-) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
+export type { FetchLike };
 
 /** A resolved card ready to print: its best print image (+ optional DFC back). */
 export interface ResolvedProxyCard {
@@ -103,18 +89,6 @@ export function extractImages(
   return { front, back };
 }
 
-/** Delay helper for the rate-limit floor. */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** Split an array into chunks of at most `size`. */
-function chunk<T>(items: readonly T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
-
 /** Normalize a name for cache-keying / matching (case- and space-insensitive). */
 function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -130,7 +104,6 @@ export class ProxyScryfallClient {
   private readonly fetchImpl: FetchLike;
   private readonly minIntervalMs: number;
   private readonly batchSize: number;
-  private lastRequestAt = 0;
 
   constructor(
     fetchImpl: FetchLike,
@@ -141,72 +114,54 @@ export class ProxyScryfallClient {
     this.batchSize = options.batchSize ?? COLLECTION_BATCH_SIZE;
   }
 
-  /** Block until at least `minIntervalMs` has elapsed since the last request. */
-  private async throttle(): Promise<void> {
-    const elapsed = Date.now() - this.lastRequestAt;
-    if (elapsed < this.minIntervalMs) await delay(this.minIntervalMs - elapsed);
-    this.lastRequestAt = Date.now();
-  }
-
   /**
    * Resolve parsed decklist cards to print images. Deduplicates by name+set,
    * batches ≤{@link COLLECTION_BATCH_SIZE} identifiers per request, and returns
    * both the resolved cards and the names Scryfall couldn't find.
+   *
+   * The fetching itself — batching, the rate-limit floor, the descriptive
+   * User-Agent, and continuing past a failed batch — lives in the shared
+   * `lib/scryfall/collection.ts` client that deck import also uses, so there is
+   * one implementation of Scryfall etiquette in the app. This method keeps only
+   * what is specific to printing proxies: choosing the best print image and
+   * handling double-faced backs.
    */
   async resolve(cards: readonly ParsedCard[]): Promise<ResolveResult> {
-    // Deduplicate the identifiers we ask Scryfall for (qty is applied later).
-    const identifierMap = new Map<string, { name: string; set?: string }>();
-    for (const card of cards) {
-      const key = `${normalizeName(card.name)}|${card.set ?? ''}`;
-      if (!identifierMap.has(key)) {
-        identifierMap.set(key, card.set ? { name: card.name, set: card.set } : { name: card.name });
-      }
-    }
-    const identifiers = [...identifierMap.values()];
+    const identifiers = cards.map((card) =>
+      card.set ? { name: card.name, set: card.set } : { name: card.name },
+    );
+
+    const { cards: rawCards, notFound } = await fetchCardCollection(
+      identifiers,
+      this.fetchImpl,
+      { minIntervalMs: this.minIntervalMs, batchSize: this.batchSize },
+    );
 
     const byNormName = new Map<string, ResolvedProxyCard>();
-    const unresolved: string[] = [];
+    const unresolved: string[] = [...notFound];
 
-    for (const batch of chunk(identifiers, this.batchSize)) {
-      try {
-        await this.throttle();
-        const response = await this.fetchImpl(
-          `${SCRYFALL_API_BASE}${SCRYFALL_COLLECTION_PATH}`,
-          {
-            method: 'POST',
-            headers: {
-              'User-Agent': SCRYFALL_USER_AGENT,
-              Accept: 'application/json',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ identifiers: batch }),
-          },
-        );
-        if (!response.ok) {
-          unresolved.push(...batch.map((id) => id.name));
-          continue;
-        }
-        const payload = (await response.json()) as CollectionResponse;
-        for (const raw of payload.data ?? []) {
-          const images = extractImages(raw);
-          if (!images.front) continue; // No usable image → treat as a miss below.
-          const resolvedCard: ResolvedProxyCard = { name: raw.name, imageUrl: images.front };
-          if (raw.set) resolvedCard.set = raw.set;
-          if (images.back) resolvedCard.backImageUrl = images.back;
-          byNormName.set(normalizeName(raw.name), resolvedCard);
-        }
-        for (const miss of payload.not_found ?? []) {
-          if (miss.name) unresolved.push(miss.name);
-        }
-      } catch {
-        unresolved.push(...batch.map((id) => id.name));
-      }
+    for (const card of rawCards) {
+      const raw = card as RawScryfallCard;
+      const images = extractImages(raw);
+      if (!images.front) continue; // No usable image → treated as a miss below.
+      const resolvedCard: ResolvedProxyCard = { name: raw.name, imageUrl: images.front };
+      if (raw.set) resolvedCard.set = raw.set;
+      if (images.back) resolvedCard.backImageUrl = images.back;
+      byNormName.set(normalizeName(raw.name), resolvedCard);
     }
+
+    // De-duplicated identifier order drives the result order below.
+    const identifierMap = new Map<string, { name: string; set?: string }>();
+    for (const identifier of identifiers) {
+      const key = `${normalizeName(identifier.name)}|${identifier.set ?? ''}`;
+      if (!identifierMap.has(key)) identifierMap.set(key, identifier);
+    }
+    const uniqueIdentifiers = [...identifierMap.values()];
 
     // Map back to the requested-name order and flag any that didn't resolve.
     const resolved: ResolvedProxyCard[] = [];
     const seen = new Set<string>();
-    for (const id of identifiers) {
+    for (const id of uniqueIdentifiers) {
       const hit = byNormName.get(normalizeName(id.name));
       if (hit && !seen.has(normalizeName(id.name))) {
         resolved.push(hit);

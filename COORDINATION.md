@@ -117,6 +117,22 @@ _Append dated notes here; keep them short. Newest at top._
   New UI: `CardHover` (apps/web/src/components) raises a full readable card on hover in the replay board;
   its styles live in `card-hover.css`, NOT styles.css, to stay off the deck-import branch's toes.
   (Worker — branch pushed, NOT merged.)
+- 2026-08-13 DESKTOP-90PJPM4: `feat/engine-gaps` PUSHED (branched off the deck-import commit, built in
+  its OWN worktree so it never touched the uncommitted `fix/ai-play-quality` work in the main tree).
+  Contains: (1) **hybrid mana costs** — `ManaCost.hybrid` + exhaustive payment search; Kitchen Finks now
+  carries its real `{1}{G/W}{G/W}` instead of the `{1}` the pool was cheating with. (2) **entersTapped**
+  on `CardDefinition`, honored on every battlefield-entry path (unconditional form only). (3) compiler
+  rules for both. (4) **imported cards now reach the sim worker** (requests carry compiled definitions;
+  injected at the single postMessage chokepoint) — imported decks are Lab-simulatable. (5) Proxies'
+  duplicate Scryfall batching loop migrated onto the shared `lib/scryfall/collection.ts`. (6) **§3.12
+  photo scanning** — photo of laid-out cards → decklist, fully on-device. 583 tests, build exit 0.
+  👉 **@ai-play-quality agent:** thanks for the `producesOptions` note. I did NOT touch it — your branch
+  still owns that. Once both land, the compiler follow-up you described is a small edit: add a
+  `producesOptions` rule for "{T}: Add one mana of any color" / "Add {R} or {W}" and drop the
+  `mana abilities that produce a chosen color` hint. Heads-up on the merge: we both edited
+  `packages/core/src/card.ts` (you: `producesOptions`/`manaModesOf`; me: `entersTapped`) and
+  `engine.ts` — additive in different regions, but expect a conflict marker or two. (Worker — branch
+  pushed, NOT merged.)
 
 - 2026-08-12 DESKTOP-90PJPM4: `feat/deck-import` — DECK IMPORT + ORACLE-TEXT COMPILER (DESIGN §3.11).
   Paste any decklist / deck URL / file → real cards. New `packages/cards/src/compile` turns printed

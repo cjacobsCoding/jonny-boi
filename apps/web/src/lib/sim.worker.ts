@@ -27,7 +27,7 @@ import {
   DEFAULT_PILOT_ID,
 } from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
-import type { EffectRegistry } from '@jonny-boi/core';
+import type { CardDefinition, EffectRegistry } from '@jonny-boi/core';
 import {
   SAMPLE_DECKS,
   loadDeck,
@@ -70,9 +70,15 @@ interface Lab {
   readonly pilots: MatchupPilots;
 }
 
-function makeLab(): Lab {
+/**
+ * Build the sim context for one request. `importedCards` are the compiled
+ * definitions the user's imported decks depend on; they join the curated pool
+ * through the same `extraCards` seam the main thread uses, so a deck loads
+ * identically here and there.
+ */
+function makeLab(importedCards: readonly CardDefinition[] = []): Lab {
   // Silence pool validation warnings (stubbed mechanics are intentional, not noise).
-  const pool = loadCardPool({ onWarn: () => {} });
+  const pool = loadCardPool({ onWarn: () => {}, extraCards: importedCards });
   const registry = buildRegistry();
   const aiRegistry = createDefaultAiRegistry();
   const pilotA = aiRegistry.getPilot(DEFAULT_PILOT_ID);
@@ -344,7 +350,7 @@ function runMatchJob(req: Extract<SimRequest, { kind: 'match' }>, lab: Lab): voi
 ctx.onmessage = (event: MessageEvent<SimRequest>): void => {
   const req = event.data;
   try {
-    const lab = makeLab();
+    const lab = makeLab(req.importedCards ?? []);
     switch (req.kind) {
       case 'gauntlet':
         runGauntletJob(req, lab);

@@ -18,7 +18,8 @@
     "@jonny-boi/protocol": "*",
     "@jonny-boi/sim": "*",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

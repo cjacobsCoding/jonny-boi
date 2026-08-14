@@ -22,10 +22,14 @@ import {
   SCRYFALL_USER_AGENT,
 } from '../proxy/config.js';
 
-/** A minimal structural subset of the global `fetch` we depend on. */
+/**
+ * A minimal structural subset of the global `fetch` we depend on. `body` is
+ * optional so the same type serves both this POST client and callers that issue
+ * bare GETs (a GET must not carry a body).
+ */
 export type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body: string },
+  init: { method: string; headers: Record<string, string>; body?: string },
 ) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;
 
 /** One card identifier for the collection endpoint. */

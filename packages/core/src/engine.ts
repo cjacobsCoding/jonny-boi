@@ -56,7 +56,7 @@ import {
   hasAnyFirstStrike,
   tapAttackers,
 } from './internal/combat.js';
-import { isCreature } from './card.js';
+import { entersTapped, isCreature } from './card.js';
 
 /** A deck list: an ordered array of card definitions (the library, pre-shuffle). */
 export interface DeckList {
@@ -450,7 +450,7 @@ function resolveTopOfStack(
     card.zone = 'stack'; // moveToZone will set it
     // Stack objects aren't in a player zone; place directly on battlefield.
     card.zone = 'battlefield';
-    card.tapped = false;
+    card.tapped = entersTapped(card.def);
     card.damageMarked = 0;
     card.markedByDeathtouch = false;
     // Summoning sickness: a creature is sick unless it has haste.
@@ -660,8 +660,9 @@ function applyPlayLand(
 
   moveToZone(state, card, 'battlefield', emit, action.player);
   card.controller = action.player;
-  card.tapped = false;
+  card.tapped = entersTapped(card.def);
   card.summoningSick = false; // lands aren't affected by summoning sickness
+  if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.

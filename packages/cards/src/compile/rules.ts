@@ -408,6 +408,18 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 
 // --- mana abilities -------------------------------------------------------------
 
+/** Card-level static properties printed as their own ability line. */
+export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'enters-tapped',
+    description: '"~ enters tapped" (the unconditional form only)',
+    pattern: /^~ enters(?: the battlefield)? tapped$/,
+    build() {
+      return { entersTapped: true };
+    },
+  },
+]);
+
 export const MANA_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'tap-for-mana',
