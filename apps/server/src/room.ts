@@ -27,6 +27,7 @@ import {
 } from '@jonny-boi/core';
 import {
   maskStateForSeat,
+  maskStateForSpectator,
   PROTOCOL_VERSION,
   type DeckList,
   type LobbyPlayer,
@@ -755,8 +756,9 @@ export class Room {
 
   /**
    * Send one masked `state` message to a connection. `seat === null` means a
-   * spectator: we mask from seat A's perspective then strip BOTH hands so a
-   * spectator sees no hidden information at all. `legalActions`/`yourTurn` are only
+   * spectator, whose view the protocol builds itself (`maskStateForSpectator`) —
+   * assembling one here out of a seat's view is what made a spectator inherit
+   * whatever that seat was entitled to see. `legalActions`/`yourTurn` are only
    * populated for the seat that actually holds priority.
    */
   private sendStateTo(conn: Connection, seat: PlayerId | null, log: readonly string[] = []): void {
@@ -765,17 +767,13 @@ export class Room {
     const legalActions = yourTurn ? generateLegalActions(this.state, this.config) : [];
 
     if (seat === null) {
-      // Spectator: take A's masked view and blank out the (still-present) own hand
-      // so a spectator never sees any hand contents.
-      const view = maskStateForSeat(this.state, 'A');
-      const spectatorView = {
-        ...view,
-        players: {
-          A: { ...view.players.A, hand: null },
-          B: { ...view.players.B, hand: null },
-        },
-      };
-      conn.send({ t: 'state', view: spectatorView, legalActions: [], yourTurn: false, log });
+      conn.send({
+        t: 'state',
+        view: maskStateForSpectator(this.state),
+        legalActions: [],
+        yourTurn: false,
+        log,
+      });
       return;
     }
 

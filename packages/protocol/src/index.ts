@@ -16,14 +16,22 @@ import type {
   PlayerState,
   PlayerId,
   CardInstance,
+  ChoiceKind,
+  PendingChoice,
   StackObject,
   CombatState,
   Step,
   GameAction,
 } from '@jonny-boi/core';
 
-/** Bumped on any breaking change to the message shapes below; checked at handshake. */
-export const PROTOCOL_VERSION = 1;
+/**
+ * Bumped on any breaking change to the message shapes below; checked at handshake.
+ *
+ * 2 — `MaskedGameView.pendingChoice`: the server now tells a seat what question a
+ * resolving card asked it. Before this, an online client saw its legal menu
+ * collapse to opaque `answerChoice` actions with no prompt, which is a dead end.
+ */
+export const PROTOCOL_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Decklists carried over the wire (so the server can build ANY deck — including
@@ -61,6 +69,74 @@ export interface PublicPlayerView {
   readonly hand: readonly CardInstance[] | null;
 }
 
+// ---------------------------------------------------------------------------
+// The parked question (`GameState.pendingChoice`), masked per seat.
+// ---------------------------------------------------------------------------
+
+/**
+ * A pending choice as a seat that is NOT answering it is entitled to see it: who
+ * was asked, by which card, and what SHAPE the question has — never its payload.
+ *
+ * The payload is the whole point of the redaction. A `PendingChoice`'s
+ * `candidates` are a snapshot the engine deliberately hands to exactly one seat,
+ * and for a card like Thoughtseize those candidates ARE the opponent's hand: the
+ * card entitles the caster to see them, and nobody else. `prompt` is dropped for
+ * the same reason — an effect is free to write the cards it is asking about into
+ * its prompt text, so it is payload too, not chrome.
+ *
+ * What survives is what the board is already showing anyway: the spell that asked
+ * is on the (public) stack, and whose turn it is to act is public by construction.
+ */
+export interface RedactedPendingChoice {
+  /**
+   * Discriminant. A client narrows on this rather than sniffing for a missing
+   * field, so a summary can never be mistaken for a full question (or vice versa)
+   * by a client that guessed the shape wrong.
+   */
+  readonly redacted: true;
+  readonly id: number;
+  readonly chooser: PlayerId;
+  readonly sourceName: string;
+  readonly kind: ChoiceKind;
+}
+
+/**
+ * What `MaskedGameView.pendingChoice` carries: the FULL question for the seat that
+ * must answer it, a {@link RedactedPendingChoice} summary for anyone else.
+ */
+export type MaskedPendingChoice = PendingChoice | RedactedPendingChoice;
+
+/** Reduce a choice to the summary a non-chooser may see. */
+export function redactPendingChoice(choice: PendingChoice): RedactedPendingChoice {
+  return {
+    redacted: true,
+    id: choice.id,
+    chooser: choice.chooser,
+    sourceName: choice.sourceName,
+    kind: choice.kind,
+  };
+}
+
+/**
+ * Narrow a masked choice to the summary form. The negative branch is the full
+ * `PendingChoice`, which is what the choice UI needs — so a client that renders a
+ * prompt has to pass this guard first, and cannot render one from a summary.
+ */
+export function isRedactedChoice(choice: MaskedPendingChoice): choice is RedactedPendingChoice {
+  return (choice as RedactedPendingChoice).redacted === true;
+}
+
+/**
+ * The pending choice as `seat` may see it (`null` for a spectator, who is never
+ * anyone's chooser). This is the masking rule in one line: you get the question
+ * only if you are the one being asked.
+ */
+function maskPendingChoiceForSeat(state: GameState, seat: PlayerId | null): MaskedPendingChoice | null {
+  const choice = state.pendingChoice;
+  if (!choice) return null;
+  return seat !== null && choice.chooser === seat ? choice : redactPendingChoice(choice);
+}
+
 /** A serializable snapshot of `GameState` redacted for one seat. */
 export interface MaskedGameView {
   readonly viewer: PlayerId;
@@ -75,6 +151,13 @@ export interface MaskedGameView {
   readonly combat: CombatState | null;
   readonly winner: PlayerId | null;
   readonly gameOver: boolean;
+  /**
+   * The question a resolving card parked, or `null`. Full for the seat that must
+   * answer; a {@link RedactedPendingChoice} summary for the other seat and for
+   * spectators. Without this an online client sees its legal menu collapse to
+   * opaque `answerChoice` actions and the game dead-ends.
+   */
+  readonly pendingChoice: MaskedPendingChoice | null;
 }
 
 /**
@@ -112,7 +195,76 @@ export function maskStateForSeat(state: GameState, seat: PlayerId): MaskedGameVi
     combat: state.combat,
     winner: state.winner,
     gameOver: state.gameOver,
+    pendingChoice: maskPendingChoiceForSeat(state, seat),
   };
+}
+
+/**
+ * The view a SPECTATOR is entitled to: no seat's hand, and only the summary of any
+ * parked question. It lives here, beside `maskStateForSeat`, so masking stays a
+ * single chokepoint — a spectator view assembled by the server out of a seat's view
+ * would silently inherit whatever that seat was entitled to see next time a field
+ * is added, which is exactly how `pendingChoice` would have leaked.
+ *
+ * `viewer` is seat A only because the shape demands a value; nothing seat-specific
+ * survives the blanking below.
+ */
+export function maskStateForSpectator(state: GameState): MaskedGameView {
+  const view = maskStateForSeat(state, PLAYER_IDS[0] as PlayerId);
+  const players = {} as Record<PlayerId, PublicPlayerView>;
+  for (const id of PLAYER_IDS) players[id] = { ...view.players[id], hand: null };
+  return {
+    ...view,
+    players,
+    pendingChoice: maskPendingChoiceForSeat(state, null),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Anti-cheat assertion tooling.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every `instanceId` reachable anywhere in a value, at any depth — the STRUCTURAL
+ * way to ask "does this message mention that card?".
+ *
+ * Text scanning is the tempting version and it is wrong in both directions: a
+ * substring/regex over the serialized JSON hits the digits of unrelated numbers
+ * (life totals, counts, a longer id that starts with a shorter one), and it misses
+ * an id that a future field carries under another name. Walking the structure and
+ * collecting the values of every `instanceId` key is exact.
+ *
+ * Exported because it is the assertion the masking chokepoint has to be provable
+ * with, and every consumer that ships a new view field needs the same check.
+ */
+export function collectInstanceIds(value: unknown): Set<number> {
+  const found = new Set<number>();
+  const seen = new Set<object>();
+  const walk = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return; // a cycle must not wedge the walk
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (key === 'instanceId' && typeof child === 'number') found.add(child);
+      walk(child);
+    }
+  };
+  walk(value);
+  return found;
+}
+
+/**
+ * Which of `forbidden` a value mentions — empty means "nothing leaked". Returning
+ * the offenders rather than a boolean is what makes a failing anti-cheat test say
+ * WHICH card escaped.
+ */
+export function leakedInstanceIds(value: unknown, forbidden: Iterable<number>): number[] {
+  const present = collectInstanceIds(value);
+  return [...forbidden].filter((id) => present.has(id));
 }
 
 // ---------------------------------------------------------------------------
