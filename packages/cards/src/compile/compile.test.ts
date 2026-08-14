@@ -252,28 +252,147 @@ describe('compileCard — templated cards outside the curated pool', () => {
     ]);
   });
 
-  // Modern burn spells print "target player or planeswalker" rather than the
-  // older "target player". The engine has no planeswalkers, so that choice can
-  // only resolve to the player — the spell is fully implementable.
+  // GROUND TRUTH for the target restriction. The printed target phrase is not
+  // decoration: "to target creature" and "to target player or planeswalker" are
+  // different cards from "to any target", and compiling all three to the same
+  // unrestricted `dealDamage` is exactly what made Flame Slash a 1-mana 4-damage
+  // any-target spell and let Lava Spike kill creatures.
+  //
+  // "or planeswalker" collapses onto the non-planeswalker half because the engine
+  // has no planeswalkers — vacuous, not approximated. 'any' is omitted from the
+  // params because it IS the default, so an unrestricted card compiles to exactly
+  // the data it always did.
   it.each([
-    'target player or planeswalker',
-    'any target',
-    'target creature or player',
-    'target creature, player, or planeswalker',
-  ])('compiles a damage spell targeting "%s"', (targetPhrase) => {
+    ['any target', undefined],
+    ['target creature or player', undefined],
+    ['target creature, player, or planeswalker', undefined],
+    ['target player or planeswalker', 'player'],
+    ['target player', 'player'],
+    ['target creature', 'creature'],
+    ['target creature or planeswalker', 'creature'],
+  ])('compiles a damage spell targeting "%s" as targets=%s', (targetPhrase, restriction) => {
     const result = compileCard(
       makeCard({
-        name: 'Lava Spike',
+        name: 'Test Spike',
         typeLine: { supertypes: [], types: ['Sorcery'], subtypes: ['Arcane'] },
         manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
-        oracleText: `Lava Spike deals 3 damage to ${targetPhrase}.`,
+        oracleText: `Test Spike deals 3 damage to ${targetPhrase}.`,
       }),
     );
 
     expect(result.status, JSON.stringify(result.missing)).toBe('complete');
     expect(result.definition.effects).toEqual([
-      { primitive: 'dealDamage', params: { amount: 3 } },
+      {
+        primitive: 'dealDamage',
+        params: restriction === undefined ? { amount: 3 } : { amount: 3, targets: restriction },
+      },
     ]);
+  });
+
+  // The same restriction has to survive the two-clause "damage AND you gain life"
+  // template, in BOTH its printed spellings — otherwise Sorin's Vengeance (a
+  // player-only 10-damage sorcery) compiles back into an any-target spell.
+  it.each([
+    'Test Helix deals 3 damage to target player or planeswalker and you gain 3 life.',
+    'Test Helix deals 3 damage to target player or planeswalker. You gain 3 life.',
+  ])('keeps the restriction through the damage-and-lifegain template (%s)', (oracleText) => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Helix',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 0, W: 1, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        oracleText,
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: 3, targets: 'player' } },
+      { primitive: 'gainLife', params: { amount: 3 } },
+    ]);
+  });
+
+  // "Target opponent" is narrower than any restriction the engine can express
+  // (it has no "a player who isn't you"), so the compiler must refuse it rather
+  // than flatten it to 'player' and let the spell be aimed at its own caster.
+  it('refuses a damage spell restricted to an opponent', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Sting',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+        oracleText: 'Test Sting deals 2 damage to target opponent.',
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
+      'targeting restricted to an opponent (a "player who isn’t you" target)',
+    );
+  });
+
+  // Removal, combat tricks and counterspells were never aimed wrongly — their
+  // primitives already refuse the wrong kind of object. What they lacked was
+  // MTG's "a spell with no legal target cannot be cast", which is what made
+  // "Counter target spell. You gain 3 life." a free three life on an empty stack.
+  it.each([
+    ['Destroy target creature.', 'destroyTarget', 'creature'],
+    ['Exile target creature.', 'exileTarget', 'creature'],
+    ['Tap target creature.', 'tapTarget', 'creature'],
+    ['Counter target spell.', 'counterSpell', 'spell'],
+  ])('restricts %s to targets=%s', (oracleText, primitive, restriction) => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Removal',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
+        oracleText,
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.effects?.[0]?.primitive).toBe(primitive);
+    expect(result.definition.effects?.[0]?.params?.targets).toBe(restriction);
+  });
+
+  it('restricts a targeted pump to a creature', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Growth',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
+        oracleText: 'Target creature gets +3/+3 until end of turn.',
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.effects).toEqual([
+      { primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 3, targets: 'creature' } },
+    ]);
+  });
+
+  // Prowess prints a NEGATIVE type filter. Compiling it as the positive pair
+  // instant+sorcery quietly dropped every artifact/enchantment/planeswalker, so
+  // Monastery Swiftspear failed to grow off ten cards in this very pool.
+  it('compiles "noncreature spell" as a negative trigger filter, not instant+sorcery', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Prowess',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Monk'] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: 1,
+        toughness: 2,
+        oracleText: 'Whenever you cast a noncreature spell, Test Prowess gets +1/+1 until end of turn.',
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers).toHaveLength(1);
+    expect(result.definition.triggers![0]!.condition).toEqual({
+      on: 'castSpell',
+      who: 'you',
+      spellTypeNoneOf: ['creature'],
+    });
   });
 
   it('strips reminder text rather than reporting it as unsupported', () => {

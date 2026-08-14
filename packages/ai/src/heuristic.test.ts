@@ -461,7 +461,7 @@ describe('heuristic pilot — mana is tapped only as needed', () => {
 
     // Drive the pilot forward until it casts, counting the taps it makes.
     let taps = 0;
-    let s = state;
+    const s = state;
     for (let i = 0; i < 10; i++) {
       const action = choose(s);
       if (action.kind === 'castSpell') break;

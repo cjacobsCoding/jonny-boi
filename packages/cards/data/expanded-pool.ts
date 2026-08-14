@@ -26,7 +26,10 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Absorb',
     types: ['instant'],
     cost: { W: 1, U: 2 },
-    effects: [{ primitive: 'counterSpell' }, { primitive: 'gainLife', params: { amount: 3 } }],
+    effects: [
+      { primitive: 'counterSpell', params: { targets: 'spell' } },
+      { primitive: 'gainLife', params: { amount: 3 } },
+    ],
   },
   // Flying, vigilance, lifelink
   {
@@ -212,7 +215,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Cancel',
     types: ['instant'],
     cost: { generic: 1, U: 2 },
-    effects: [{ primitive: 'counterSpell' }],
+    effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
   },
   // Create three 1/1 white Soldier creature tokens.
   {
@@ -346,7 +349,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Disfigure',
     types: ['instant'],
     cost: { B: 1 },
-    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -2, toughness: -2 } }],
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -2, toughness: -2, targets: 'creature' } }],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -372,7 +375,10 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Dismiss',
     types: ['instant'],
     cost: { generic: 2, U: 2 },
-    effects: [{ primitive: 'counterSpell' }, { primitive: 'drawCards', params: { count: 1 } }],
+    effects: [
+      { primitive: 'counterSpell', params: { targets: 'spell' } },
+      { primitive: 'drawCards', params: { count: 1 } },
+    ],
   },
   // Draw two cards.
   {
@@ -458,7 +464,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Flame Slash',
     types: ['sorcery'],
     cost: { R: 1 },
-    effects: [{ primitive: 'dealDamage', params: { amount: 4 } }],
+    effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creature' } }],
   },
   // {T}: Add {G}.
   {
@@ -539,7 +545,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Grasp of Darkness',
     types: ['instant'],
     cost: { B: 2 },
-    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -4, toughness: -4 } }],
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -4, toughness: -4, targets: 'creature' } }],
   },
   {
     id: '14c8f55d-d177-4c25-a931-ebeb9e6062a0',
@@ -656,7 +662,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Last Gasp',
     types: ['instant'],
     cost: { generic: 1, B: 1 },
-    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -3 } }],
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -3, targets: 'creature' } }],
   },
   // Lava Spike deals 3 damage to target player or planeswalker.
   {
@@ -664,7 +670,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Lava Spike',
     types: ['sorcery'],
     cost: { R: 1 },
-    effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
+    effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'player' } }],
   },
   // {T}: Add {B}.
   {
@@ -780,7 +786,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Might of Oaks',
     types: ['instant'],
     cost: { generic: 3, G: 1 },
-    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 7, toughness: 7 } }],
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 7, toughness: 7, targets: 'creature' } }],
   },
   // This artifact enters tapped.
   // {T}: Add {G}.
@@ -798,7 +804,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Murder',
     types: ['instant'],
     cost: { generic: 1, B: 2 },
-    effects: [{ primitive: 'destroyTarget', params: {  } }],
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
   },
   {
     id: 'e876d1fc-3acd-41a3-a34b-2bfa83204393',
@@ -1050,7 +1056,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 4, B: 3 },
     effects: [
-      { primitive: 'dealDamage', params: { amount: 10 } },
+      { primitive: 'dealDamage', params: { amount: 10, targets: 'player' } },
       { primitive: 'gainLife', params: { amount: 10 } },
     ],
   },
@@ -1097,7 +1103,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Terminate',
     types: ['instant'],
     cost: { B: 1, R: 1 },
-    effects: [{ primitive: 'destroyTarget', params: {  } }],
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1130,7 +1136,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Titanic Growth',
     types: ['instant'],
     cost: { generic: 1, G: 1 },
-    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 4, toughness: 4 } }],
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 4, toughness: 4, targets: 'creature' } }],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1298,7 +1304,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Wring Flesh',
     types: ['instant'],
     cost: { B: 1 },
-    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -1 } }],
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: -3, toughness: -1, targets: 'creature' } }],
   },
   // First strike
   {

@@ -143,7 +143,7 @@ describe('casting and the stack', () => {
   /** Game where A has, in hand, a Forest + the given extra cards (deterministic). */
   function gameWithHand(seed: number, extras: Parameters<typeof giveHand>[2]) {
     const g = createGame({ seed, decks: { A: lib(), B: lib() } });
-    let s = advanceToStep(g.state, 'precombatMain');
+    const s = advanceToStep(g.state, 'precombatMain');
     const [forest, ...rest] = giveHand(s, 'A', [FOREST, ...extras]);
     return { s, forest: forest!, rest };
   }
@@ -197,7 +197,7 @@ describe('casting and the stack', () => {
   it('unknown effect primitive is a safe no-op with an effectUnsupported event', () => {
     const Mystery = spellDef('Mystery', 'instant', [{ primitive: 'no-such-primitive' }], { generic: 0 });
     const g = createGame({ seed: 13, decks: { A: lib(), B: lib() } });
-    let s = advanceToStep(g.state, 'precombatMain');
+    const s = advanceToStep(g.state, 'precombatMain');
     const [card] = giveHand(s, 'A', [Mystery]);
     const r1 = applyAction(s, { kind: 'castSpell', player: 'A', instanceId: card!.instanceId });
     const r2 = applyAction(r1.state, { kind: 'passPriority', player: 'A' });

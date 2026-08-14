@@ -33,9 +33,10 @@ import type {
   EffectRegistry,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { PLUS_ONE_COUNTER, effectivePower, isCreature } from '@jonny-boi/core';
+import { PLUS_ONE_COUNTER, effectivePower, isCreature, isLegalTarget } from '@jonny-boi/core';
 import {
   changeLife,
+  restrictionParam,
   firstPermanentTarget,
   firstPlayerTarget,
   intParam,
@@ -55,16 +56,29 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 // --- the primitives ------------------------------------------------------------
 
 /**
- * `dealDamage` — deal `amount` damage to the chosen target (a creature or a
- * player; "any target" in MTG terms). Reads `params.amount`. A creature target
- * gets marked damage (SBAs destroy it if lethal); a player target loses life.
- * No valid target → safe no-op. Used by Lightning Bolt (amount 3).
+ * `dealDamage` — deal `amount` damage to the chosen target. Reads `params.amount`
+ * and `params.targets`, the {@link TargetRestriction} naming what the printed card
+ * may point at:
+ *
+ *   - `'any'` (the default) — "any target": a creature or a player. Lightning Bolt.
+ *   - `'creature'` — "target creature" only. Flame Slash, which must NEVER be able
+ *     to point four damage at a face for one mana.
+ *   - `'player'` — "target player or planeswalker" only. Lava Spike, which must
+ *     never kill a creature.
+ *
+ * A creature target gets marked damage (SBAs destroy it if lethal); a player target
+ * loses life. The restriction is already enforced when the cast is offered and when
+ * it is applied (core's targeting.ts); it is re-checked HERE because a target can
+ * stop being legal between cast and resolution — and because a primitive that
+ * quietly ignores its own restriction would make the whole guarantee depend on
+ * every caller remembering it. No valid target → safe no-op.
  */
 export const dealDamage: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const target = ctx.targets[0];
   if (target === undefined) return;
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target)) return; // illegal → fizzle
 
   if (isPlayerTarget(target)) {
     changeLife(ctx, target, -amount);

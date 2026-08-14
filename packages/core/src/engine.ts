@@ -55,6 +55,7 @@ import {
   PLAYER_IDS,
   STEP_ORDER,
 } from './state.js';
+import { illegalTargetReason, legalTargetsFor, targetRestrictionOf } from './targeting.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
@@ -1030,6 +1031,14 @@ function applyCastSpell(
     return rejectWith(prevState, 'this spell can only be cast at sorcery speed (your main phase, empty stack)');
   }
 
+  // Target legality (targeting.ts). A spell whose printed text restricts what it
+  // may point at ("to target creature", "to target player or planeswalker") is
+  // rejected here when handed an illegal target — the engine, not the caller, is
+  // the authority, so a pilot or a UI that builds its own action cannot play a
+  // card as strictly better than printed.
+  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? []);
+  if (targetProblem) return rejectWith(prevState, targetProblem);
+
   // Pay the mana cost from the floating pool.
   const cost = card.def.cost;
   if (cost) {
@@ -1224,13 +1233,28 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   }
 
   // Cast spells you can afford at the appropriate timing.
+  //
+  // A spell that declares a TARGET RESTRICTION (targeting.ts) is offered once per
+  // LEGAL target instead of once bare, so a consumer that only picks from this
+  // menu physically cannot choose an illegal target — and a restricted spell with
+  // no legal target on the board is not offered at all, because a spell with no
+  // legal target cannot be cast. Unrestricted spells keep their single bare offer:
+  // their targets (a stack object, the source itself, none) are chosen by the
+  // caller, and enumerating them here would change every consumer's action space.
   for (const card of player.hand) {
     if (isLand(card.def)) continue;
     const timing = castTiming(card.def);
     const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
     if (!timingOk) continue;
     if (card.def.cost && !canPay(player.manaPool, card.def.cost)) continue;
-    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
+    const restriction = targetRestrictionOf(card.def);
+    if (restriction === undefined) {
+      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
+      continue;
+    }
+    for (const target of legalTargetsFor(state, restriction)) {
+      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
+    }
   }
 
   // Declare attackers: a single composite action listing all eligible attackers.

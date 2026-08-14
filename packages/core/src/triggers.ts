@@ -48,6 +48,19 @@ export interface TriggerCondition {
   readonly who?: TriggerWho;
   /** For `castSpell`: only fire when the cast spell has this type. */
   readonly spellType?: CardType;
+  /**
+   * For `castSpell`: only fire when the cast spell has **none** of these types —
+   * the negative filter printed as "non<type> spell".
+   *
+   * Prowess is why this exists. It reads "whenever you cast a **noncreature**
+   * spell", and modelling that as the positive pair `instant`/`sorcery` silently
+   * dropped every artifact, enchantment and planeswalker in the pool: Monastery
+   * Swiftspear failed to grow off Sol Ring, the five Diamonds, Manalith, Worn
+   * Powerstone, Ur-Golem's Eye and Liliana of the Veil. That is a card playing
+   * *weaker* than printed, which biases an A/B verdict exactly as badly as one
+   * playing stronger.
+   */
+  readonly spellTypeNoneOf?: readonly CardType[];
 }
 
 /**
@@ -112,6 +125,7 @@ export function conditionMatches(
       if (event.type !== 'spellCast') return false;
       if (!whoMatches(condition.who, event.player, sourceController)) return false;
       if (condition.spellType && !event.castTypes.includes(condition.spellType)) return false;
+      if (condition.spellTypeNoneOf?.some((type) => event.castTypes.includes(type))) return false;
       return true;
     }
     case 'upkeep': {

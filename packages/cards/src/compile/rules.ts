@@ -19,8 +19,11 @@ import type {
   EffectRef,
   ManaColor,
   ManaProduction,
+  TargetRestriction,
+  TriggerCondition,
   TriggeredAbility,
 } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, parseCount } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
@@ -39,16 +42,77 @@ const MANA_SYMBOL_TO_COLOR: Readonly<Record<string, ManaColor>> = Object.freeze(
 const TOKEN_DEFAULT_COUNT = 1;
 
 /**
- * The target phrases a single-target damage spell can print, all of which the
- * engine's one-target `dealDamage` implements exactly.
+ * The target phrases a single-target damage spell can print, mapped to the
+ * {@link TargetRestriction} that reproduces each one exactly.
  *
- * Note the "or planeswalker" variants: the engine has no planeswalkers at all,
- * so "target player or planeswalker" can only ever resolve to the player — the
- * choice is vacuous, not approximated. If planeswalkers are ever implemented,
- * these variants must move to a targeting-aware rule.
+ * This table is the whole reason Lava Spike and Flame Slash are honest cards. The
+ * compiler used to accept every phrase here and emit the SAME unrestricted
+ * `dealDamage`, so "deals 4 damage to target **creature**" for one mana played as
+ * a one-mana four-damage any-target spell, and "deals 3 damage to target
+ * **player** or planeswalker" could kill creatures. Both played strictly better
+ * than printed, which silently corrupts every A/B verdict that includes them.
+ *
+ * The "or planeswalker" variants collapse onto the non-planeswalker half because
+ * the engine has no planeswalkers at all: the choice is vacuous, not approximated.
+ * If planeswalkers are ever implemented, these entries need a third target kind.
+ *
+ * Deliberately ABSENT: "target **opponent**". `TargetRestriction` can say "a
+ * player" but not "a player who isn't you", so an opponent-only spell would be
+ * offered pointing at its own caster. That is a (harmless-looking) infidelity, and
+ * the rule is faithful or not at all — those cards fall through to `missing`.
  */
-const DAMAGE_TARGET_PHRASE =
-  '(?:any target|target creature|target player|target opponent|target creature or player|target player or planeswalker|target creature or planeswalker|target creature, player,? or planeswalker)';
+const DAMAGE_TARGET_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  'any target': 'any',
+  'target creature': 'creature',
+  'target player': 'player',
+  'target creature or player': 'any',
+  'target player or planeswalker': 'player',
+  'target creature or planeswalker': 'creature',
+  'target creature, player, or planeswalker': 'any',
+  'target creature, player or planeswalker': 'any',
+});
+
+/**
+ * The capturing alternation of the phrases above, longest-first so a phrase is
+ * never truncated to a shorter one that happens to prefix it ("target creature"
+ * inside "target creature or player"). Built FROM the table so the patterns and
+ * the restrictions they mean cannot drift apart.
+ */
+const DAMAGE_TARGET_PHRASE = `(${Object.keys(DAMAGE_TARGET_RESTRICTIONS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * The restriction a printed target phrase means, or `null` if it is not one we
+ * can reproduce. Never guesses: an unrecognised phrase rejects the whole rule.
+ */
+function damageRestriction(phrase: string): TargetRestriction | null {
+  return DAMAGE_TARGET_RESTRICTIONS[phrase.trim().toLowerCase()] ?? null;
+}
+
+/**
+ * The params for a targeted damage effect. `targets` is OMITTED when the phrase is
+ * the unrestricted default, so an "any target" card compiles to exactly the data it
+ * always did (and the hand-authored Lightning Bolt still matches byte for byte).
+ */
+function damageParams(amount: number, restriction: TargetRestriction): Record<string, unknown> {
+  return restriction === DEFAULT_TARGET_RESTRICTION ? { amount } : { amount, targets: restriction };
+}
+
+/**
+ * The two non-damage {@link TargetRestriction}s the rule table emits, named so the
+ * printed phrase they stand for is obvious at every use site.
+ *
+ * They matter for a different reason than the damage ones. Removal and combat
+ * tricks were never *aimed* wrongly — their primitives already refuse a
+ * non-creature. What they lacked was MTG's rule that **a spell with no legal
+ * target cannot be cast**: "Destroy target creature" was castable into an empty
+ * board and simply evaporated, and — worse — "Counter target spell. You gain 3
+ * life." was castable with an empty stack for a free three life, i.e. strictly
+ * better than the printed card.
+ */
+const CREATURE_TARGET: TargetRestriction = 'creature';
+const SPELL_TARGET: TargetRestriction = 'spell';
 
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
@@ -119,21 +183,53 @@ function keywordFlag(word: string): Record<string, boolean> | null {
 }
 
 /**
- * Expand a printed spell-type restriction into the concrete card types the
- * trigger system filters on. Core's `spellType` takes ONE `CardType`, so a
- * restriction covering several types becomes several triggers — exactly how the
- * hand-authored pool models prowess and Young Pyromancer.
+ * The trigger CONDITIONS a printed spell-type restriction compiles to, or `null`
+ * when the phrase is not one we model.
+ *
+ * Two shapes, because Oracle prints two:
+ *   - a POSITIVE list ("instant or sorcery spell") — core's `spellType` takes one
+ *     `CardType`, so a multi-type list becomes one trigger per type. This is how
+ *     the hand-authored pool has always modelled Young Pyromancer and Kiln Fiend.
+ *   - a NEGATIVE list ("**non**creature spell" — prowess) — one trigger carrying
+ *     `spellTypeNoneOf`. Flattening this into the positive pair instant+sorcery is
+ *     what made Monastery Swiftspear miss every artifact and planeswalker in the
+ *     pool, so the negative form is compiled as a negative filter, not guessed at.
  */
-function spellTypesFor(restriction: string): readonly CardType[] | null {
+function spellFiltersFor(restriction: string): readonly TriggerCondition[] | null {
   const text = restriction.trim().toLowerCase();
-  if (text === 'noncreature') return ['instant', 'sorcery'];
-  if (text === 'instant or sorcery') return ['instant', 'sorcery'];
-  if (text === 'instant') return ['instant'];
-  if (text === 'sorcery') return ['sorcery'];
-  if (text === 'creature') return ['creature'];
-  if (text === 'artifact') return ['artifact'];
-  if (text === 'enchantment') return ['enchantment'];
-  return null;
+  const negated = /^non(.+)$/.exec(text);
+  if (negated) {
+    const excluded = SPELL_TYPE_WORDS[negated[1] ?? ''];
+    return excluded ? [{ on: 'castSpell', who: 'you', spellTypeNoneOf: [excluded] }] : null;
+  }
+  const positive = text === 'instant or sorcery' ? (['instant', 'sorcery'] as const) : positiveSpellTypes(text);
+  return positive === null
+    ? null
+    : positive.map((spellType) => ({ on: 'castSpell', who: 'you', spellType }));
+}
+
+/** A single printed type word → the `CardType` it names. */
+const SPELL_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  instant: 'instant',
+  sorcery: 'sorcery',
+  creature: 'creature',
+  artifact: 'artifact',
+  enchantment: 'enchantment',
+  land: 'land',
+  planeswalker: 'planeswalker',
+});
+
+/** The single-word positive form, as a one-element list. */
+function positiveSpellTypes(text: string): readonly CardType[] | null {
+  const type = SPELL_TYPE_WORDS[text];
+  return type ? [type] : null;
+}
+
+/** How a compiled cast-trigger filter reads in its debug label. */
+function describeSpellFilter(condition: TriggerCondition): string {
+  if (condition.spellType) return condition.spellType;
+  const excluded = condition.spellTypeNoneOf ?? [];
+  return excluded.length > 0 ? `non${excluded.join('/')}` : 'spell';
 }
 
 /** Parse a run of mana symbols ("{b}{b}{b}") into a color list. */
@@ -161,12 +257,15 @@ function effects(...refs: EffectRef[]): ClauseContribution {
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-any-target',
-    description: '"~ deals N damage to any target / target creature / target player"',
+    description:
+      '"~ deals N damage to any target / target creature / target player [or planeswalker]" — the printed target phrase becomes the effect\'s `targets` restriction',
     pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}$`),
     needsChosenTarget: true,
     build(match) {
       const amount = parseCount(match[1]);
-      return amount === null ? null : effects({ primitive: 'dealDamage', params: { amount } });
+      const restriction = damageRestriction(match[2] ?? '');
+      if (amount === null || restriction === null) return null;
+      return effects({ primitive: 'dealDamage', params: damageParams(amount, restriction) });
     },
   },
   {
@@ -178,13 +277,15 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     ),
     needsChosenTarget: true,
     build(match) {
-      // The pattern has two alternations ("… and you gain" / "…. You gain"), so
-      // read whichever pair of capture groups actually matched.
-      const damage = parseCount(match[1] ?? match[3]);
-      const life = parseCount(match[2] ?? match[4]);
-      if (damage === null || life === null) return null;
+      // The pattern has two alternations ("… and you gain" / "…. You gain"), each
+      // carrying three groups (count, target phrase, life), so read whichever
+      // triple actually matched.
+      const damage = parseCount(match[1] ?? match[4]);
+      const restriction = damageRestriction(match[2] ?? match[5] ?? '');
+      const life = parseCount(match[3] ?? match[6]);
+      if (damage === null || life === null || restriction === null) return null;
       return effects(
-        { primitive: 'dealDamage', params: { amount: damage } },
+        { primitive: 'dealDamage', params: damageParams(damage, restriction) },
         { primitive: 'gainLife', params: { amount: life } },
       );
     },
@@ -217,15 +318,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // "target opponent" is deliberately NOT accepted here, for the same reason it
+    // is absent from DAMAGE_TARGET_RESTRICTIONS: the engine can restrict a spell
+    // to a player, but not to a player who isn't you.
     id: 'target-player-loses-life',
-    description: '"Target player/opponent loses N life"',
-    pattern: new RegExp(`^target (?:player|opponent) loses ${COUNT_TOKEN} life$`),
+    description: '"Target player loses N life"',
+    pattern: new RegExp(`^target player loses ${COUNT_TOKEN} life$`),
     needsChosenTarget: true,
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null
         ? null
-        : effects({ primitive: 'loseLife', params: { amount, targetPlayer: true } });
+        : effects({
+            primitive: 'loseLife',
+            // Without the restriction this spell could be "targeted" at a creature,
+            // where `loseLife` finds no player target and falls back to the
+            // controller — i.e. the caster would lose the life. The restriction is
+            // what makes the printed target the only thing it can be pointed at.
+            params: { amount, targetPlayer: true, targets: 'player' },
+          });
     },
   },
   {
@@ -236,7 +347,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     ),
     needsChosenTarget: true,
     build(match) {
-      const params: Record<string, unknown> = {};
+      const params: Record<string, unknown> = { targets: CREATURE_TARGET };
       if (match[1]) {
         const color = COLOR_WORDS[match[1].trim().replace('non', '')];
         if (!color) return null;
@@ -264,7 +375,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^exile target creature$/,
     needsChosenTarget: true,
     build() {
-      return effects({ primitive: 'exileTarget' });
+      return effects({ primitive: 'exileTarget', params: { targets: CREATURE_TARGET } });
     },
   },
   {
@@ -273,7 +384,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^exile target creature\. its controller gains life equal to its power$/,
     needsChosenTarget: true,
     build() {
-      return effects({ primitive: 'exileTarget', params: { gainLifeEqualPower: true } });
+      return effects({
+        primitive: 'exileTarget',
+        params: { gainLifeEqualPower: true, targets: CREATURE_TARGET },
+      });
     },
   },
   {
@@ -282,7 +396,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^counter target spell$/,
     needsChosenTarget: true,
     build() {
-      return effects({ primitive: 'counterSpell' });
+      return effects({ primitive: 'counterSpell', params: { targets: SPELL_TARGET } });
     },
   },
   {
@@ -294,7 +408,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const power = Number.parseInt(match[1] ?? '', 10);
       const toughness = Number.parseInt(match[2] ?? '', 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
-      return effects({ primitive: 'pumpUntilEndOfTurn', params: { power, toughness } });
+      return effects({
+        primitive: 'pumpUntilEndOfTurn',
+        params: { power, toughness, targets: CREATURE_TARGET },
+      });
     },
   },
   {
@@ -325,8 +442,8 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const keywords = keywordFlag(match[3] ?? '');
       if (!Number.isFinite(power) || !Number.isFinite(toughness) || !keywords) return null;
       return effects(
-        { primitive: 'pumpUntilEndOfTurn', params: { power, toughness } },
-        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords } },
+        { primitive: 'pumpUntilEndOfTurn', params: { power, toughness, targets: CREATURE_TARGET } },
+        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords, targets: CREATURE_TARGET } },
       );
     },
   },
@@ -339,7 +456,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const keywords = keywordFlag(match[1] ?? '');
       return keywords === null
         ? null
-        : effects({ primitive: 'grantKeywordUntilEndOfTurn', params: { keywords } });
+        : effects({
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords, targets: CREATURE_TARGET },
+          });
     },
   },
   {
@@ -348,7 +468,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^tap target creature$/,
     needsChosenTarget: true,
     build() {
-      return effects({ primitive: 'tapTarget' });
+      return effects({ primitive: 'tapTarget', params: { targets: CREATURE_TARGET } });
     },
   },
   {
@@ -486,7 +606,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build() {
       return effects(
-        { primitive: 'exileTarget' },
+        { primitive: 'exileTarget', params: { targets: CREATURE_TARGET } },
         {
           primitive: 'searchLibrary',
           params: {
@@ -574,16 +694,15 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     description: '"Whenever you cast a(n) TYPE spell, BODY" (incl. prowess-style text)',
     pattern: /^whenever you cast an? ([a-z ]+?) spell, (.+)$/,
     build(match, ctx) {
-      const types = spellTypesFor(match[1] ?? '');
-      if (!types) return null;
+      const conditions = spellFiltersFor(match[1] ?? '');
+      if (!conditions) return null;
       const body = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
       if (body === null || body.length === 0) return null;
-      // One trigger per concrete card type — core filters on a single CardType.
       return {
-        triggers: types.map((spellType) => ({
-          condition: { on: 'castSpell' as const, who: 'you' as const, spellType },
+        triggers: conditions.map((condition) => ({
+          condition,
           effects: body,
-          label: `Cast ${spellType}: ${match[2] ?? ''}`,
+          label: `Cast ${describeSpellFilter(condition)}: ${match[2] ?? ''}`,
         })),
       };
     },
@@ -776,6 +895,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'gaining control of another player’s permanent',
   },
   { pattern: /\bfights?\b/, missingEngineSystem: 'creatures fighting each other' },
+  {
+    // The effect is implementable; the TARGET is not. A `TargetRestriction` can say
+    // "a player", never "a player who isn't you", so an opponent-only spell would be
+    // offered pointing at its own caster — strictly more permissive than printed.
+    pattern: /\btarget opponent\b/,
+    missingEngineSystem: 'targeting restricted to an opponent (a "player who isn’t you" target)',
+  },
   {
     pattern: /unless (?:its controller|that player|you) pays?/,
     missingEngineSystem: 'optional payment during resolution ("unless its controller pays")',

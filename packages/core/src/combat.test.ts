@@ -11,7 +11,7 @@ import {
   type PlayerId,
 } from './index.js';
 import { createEffectRegistry } from './effects.js';
-import { creatureDef, deck, deckOf, landDef } from './test-fixtures.js';
+import { creatureDef, deckOf, landDef } from './test-fixtures.js';
 
 const ISLAND = landDef('Island', 'U');
 

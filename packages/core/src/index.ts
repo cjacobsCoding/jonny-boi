@@ -66,6 +66,22 @@ export {
   entersTapped,
 } from './card.js';
 
+// Target legality (targeting.ts): what a spell is ALLOWED to point at, declared
+// as data on the effect ref (`params.targets`) and enforced when actions are
+// offered, when a cast is applied, and again when the effect resolves.
+export type { TargetRestriction } from './targeting.js';
+export {
+  TARGET_RESTRICTION_PARAM,
+  DEFAULT_TARGET_RESTRICTION,
+  isTargetRestriction,
+  targetRestrictionOf,
+  isPlayerTarget,
+  isLegalTarget,
+  legalTargetsFor,
+  illegalTargetReason,
+  describeRestriction,
+} from './targeting.js';
+
 // Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.
 export type {
   TriggeredAbility,
