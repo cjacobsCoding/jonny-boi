@@ -19,11 +19,22 @@ import {
   MANA_COLORS,
   type CardInstance,
   type GameAction,
-  type GameState,
   type InstanceId,
   type ManaColor,
   type PlayerId,
 } from '@jonny-boi/core';
+
+/**
+ * The slice of the board this module reads. Typed as its own minimal shape rather
+ * than as `GameState` so ONLINE play can pass the server's `MaskedGameView`: the
+ * battlefield and the priority holder are public information, present verbatim in
+ * both. Manual tapping is then one implementation for both seats' UIs instead of a
+ * second, drift-prone answer to "what can this permanent make right now?".
+ */
+export interface ManaTapBoard {
+  readonly battlefield: readonly CardInstance[];
+  readonly priorityPlayer: PlayerId;
+}
 
 /** One way to tap one permanent: which mode, and what it makes. */
 export interface ManaTapOption {
@@ -40,7 +51,7 @@ export interface ManaTapOption {
 export type ManaTapMenu = ReadonlyMap<InstanceId, readonly ManaTapOption[]>;
 
 /** Find a battlefield permanent by id (mana sources are always on the battlefield). */
-function permanentById(state: GameState, id: InstanceId): CardInstance | undefined {
+function permanentById(state: ManaTapBoard, id: InstanceId): CardInstance | undefined {
   return state.battlefield.find((c) => c.instanceId === id);
 }
 
@@ -70,7 +81,7 @@ function labelForColors(colors: readonly ManaColor[]): string {
  * any (the engine only generates actions for them), so nothing here needs to
  * re-check whose turn it is.
  */
-export function manaTapMenu(state: GameState, actions: readonly GameAction[]): ManaTapMenu {
+export function manaTapMenu(state: ManaTapBoard, actions: readonly GameAction[]): ManaTapMenu {
   const menu = new Map<InstanceId, ManaTapOption[]>();
   for (const action of actions) {
     if (action.kind !== 'tapForMana') continue;
@@ -105,7 +116,7 @@ export function isModalTap(options: readonly ManaTapOption[]): boolean {
  */
 export function tappableIds(
   menu: ManaTapMenu,
-  state: GameState,
+  state: ManaTapBoard,
   viewer: PlayerId,
 ): ReadonlySet<InstanceId> {
   if (state.priorityPlayer !== viewer) return new Set();

@@ -290,9 +290,20 @@ export function isChoiceForViewer(choice: PendingChoice, viewer: PlayerId): bool
   return choice.chooser === viewer;
 }
 
+/**
+ * The only two fields the waiting line needs. Typed as its own minimal shape rather
+ * than as a whole `PendingChoice` because the seat that is NOT answering must never
+ * be handed the full question: online it is sent a redacted summary carrying exactly
+ * these two fields, and this signature is what lets the same copy render from it.
+ */
+export interface ChoiceWaitInfo {
+  readonly chooser: PlayerId;
+  readonly sourceName: string;
+}
+
 /** The waiting line shown to the seat that is NOT answering (leaks nothing). */
 export function waitingForChoiceText(
-  choice: PendingChoice,
+  choice: ChoiceWaitInfo,
   names: Readonly<Record<PlayerId, string>>,
 ): string {
   return `Waiting for ${names[choice.chooser] ?? choice.chooser} to answer ${choice.sourceName}…`;
