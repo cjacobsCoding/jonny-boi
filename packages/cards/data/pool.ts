@@ -13,17 +13,40 @@
  * Effect-ref params carry every tunable value (damage amount, P/T delta, card
  * count, produced mana). The primitive ids referenced live in `../src/primitives`.
  *
- * Implementation honesty: the MVP engine (§3.1) resolves `def.effects` as a
- * spell's resolution script (instants/sorceries) or a permanent's ETB script.
- * It has NO triggered-ability system, no transform, no planeswalker loyalty, no
- * "until end of turn" expiry layer, and no in-resolution player choice. Cards
- * whose identity needs one of those are authored as the closest faithful subset
- * (documented per-card); their vanilla body (P/T, keywords, mana production) is
- * always correct so they play on the battlefield. See `STUBBED_MECHANICS`.
+ * Implementation honesty: the engine resolves `def.effects` as a spell's
+ * resolution script, `def.triggers` as triggered abilities, and lets a resolving
+ * effect ASK its controller (or its victim) a question mid-resolution — so
+ * "choose", "you may", "in any order", "search your library" and modal "choose
+ * two" are all played for real, not approximated. What it still has no system for
+ * is transform, planeswalker loyalty, dynamic P/T, flash/flashback, activated
+ * abilities and target-legality (fizzling). Cards whose identity needs one of
+ * those are authored as the closest faithful subset (documented per-card); their
+ * vanilla body (P/T, keywords, mana production) is always correct so they play on
+ * the battlefield. See `STUBBED_MECHANICS`.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
 import { EXPANDED_CARD_POOL } from './expanded-pool.js';
+
+/**
+ * The five basic lands, by name — the DATA behind "search your library for a
+ * **basic** land card" (Path to Exile). A `CardFilter` has no supertype field, so
+ * a card that means "basic" carries the names it means (`params.nameAnyOf`) rather
+ * than any primitive hard-coding a list of card names.
+ */
+export const BASIC_LAND_NAMES: readonly string[] = Object.freeze([
+  'Plains',
+  'Island',
+  'Swamp',
+  'Mountain',
+  'Forest',
+]);
+
+/** "Nonland card", as a reusable `CardFilter` (Thoughtseize's discard filter). */
+const NONLAND = Object.freeze({ noneOfTypes: Object.freeze(['land']) });
+
+/** "A land card", as a reusable `CardFilter` (Goblin Guide's reveal, Path's fetch). */
+const LAND = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
 
 /**
  * The hand-authored cards: written and reviewed against the engine directly,
@@ -115,9 +138,27 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Path to Exile',
     types: ['instant'],
     cost: { W: 1 },
-    // Exile target creature. (The land-search compensation needs a search/choice
-    // the engine lacks; the core effect — exile — is faithful.)
-    effects: [{ primitive: 'exileTarget' }],
+    // "Exile target creature. Its controller MAY search their library for a basic
+    // land card, put that card onto the battlefield tapped, then shuffle." Both
+    // halves are real: the search is a yes/no + a selection put to the *creature's
+    // controller* (usually the opponent), and it only happens when the creature
+    // really was exiled (`requiresTargetInZone`).
+    effects: [
+      { primitive: 'exileTarget' },
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'targetController',
+          requiresTargetInZone: 'exile',
+          optional: true,
+          count: 1,
+          filter: LAND,
+          nameAnyOf: BASIC_LAND_NAMES,
+          destination: 'battlefield',
+          tapped: true,
+        },
+      },
+    ],
   },
   {
     id: 'b1544f21-7e98-461b-aed5-e748b0168c52',
@@ -141,18 +182,27 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Brainstorm',
     types: ['instant'],
     cost: { U: 1 },
-    // Draw three. (The "put two back" needs hand-ordering choice; net card flow
-    // here is +3 then a real Brainstorm puts 2 back → we model the draw.)
-    effects: [{ primitive: 'drawCards', params: { count: 3 } }],
+    // "Draw three cards, then put two cards from your hand on top of your library
+    // in any order." The order really is chosen: `putFromHandOnTop` asks an
+    // ORDERED selection, and the first card named ends up on top.
+    effects: [
+      { primitive: 'drawCards', params: { count: 3 } },
+      { primitive: 'putFromHandOnTop', params: { count: 2 } },
+    ],
   },
   {
     id: '02090581-61aa-4348-ad57-451be8ee91c2',
     name: 'Ponder',
     types: ['sorcery'],
     cost: { U: 1 },
-    // Look at top 3 / reorder / optional shuffle, then draw 1. The selection
-    // needs a chooser; we model the guaranteed draw.
-    effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+    // "Look at the top three cards of your library, then put them back in any
+    // order. You may shuffle. Then draw a card." Three clauses, three effects —
+    // the reorder is an ordered selection, the shuffle is a real yes/no.
+    effects: [
+      { primitive: 'reorderTopOfLibrary', params: { count: 3 } },
+      { primitive: 'mayShuffleLibrary' },
+      { primitive: 'drawCards', params: { count: 1 } },
+    ],
   },
 
   // --- Counters ----------------------------------------------------------------
@@ -168,11 +218,41 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Cryptic Command',
     types: ['instant'],
     cost: { generic: 1, U: 3 },
-    // "Choose two" modal; the engine has no modal chooser. We author the most
-    // common competitive line — counter target spell + draw a card.
+    // "Choose two —": all four printed modes, chosen for real. A mode whose target
+    // is not legal for this cast is not offered (MTG's own rule), so a Cryptic cast
+    // with nothing to counter still plays as the best legal version of itself.
+    // Chosen modes run in PRINTED order, as MTG resolves a modal spell.
     effects: [
-      { primitive: 'counterSpell' },
-      { primitive: 'drawCards', params: { count: 1 } },
+      {
+        primitive: 'modal',
+        params: {
+          count: 2,
+          modes: [
+            {
+              id: 'counter',
+              label: 'Counter target spell',
+              requires: 'targetSpell',
+              effects: [{ primitive: 'counterSpell' }],
+            },
+            {
+              id: 'bounce',
+              label: "Return target permanent to its owner's hand",
+              requires: 'targetPermanent',
+              effects: [{ primitive: 'returnToHand' }],
+            },
+            {
+              id: 'tapAll',
+              label: 'Tap all creatures your opponents control',
+              effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
+            },
+            {
+              id: 'draw',
+              label: 'Draw a card',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          ],
+        },
+      },
     ],
   },
 
@@ -191,11 +271,16 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Thoughtseize',
     types: ['sorcery'],
     cost: { B: 1 },
-    // Target player discards a (nonland) card; you lose 2 life. No reveal/choice
-    // engine, so the discard is deterministic and the "nonland" filter is elided;
-    // the life loss is exact.
+    // "Target player reveals their hand. You choose a nonland card from it. That
+    // player discards that card. You lose 2 life." The choice is put to the CASTER
+    // (`chosenBy: 'controller'`) over the victim's nonland cards — which is both
+    // the reveal and the pick — so the opponent loses the card you took, not the
+    // one they would have given away.
     effects: [
-      { primitive: 'discardCard', params: { count: 1 } },
+      {
+        primitive: 'discardCard',
+        params: { count: 1, who: 'targetPlayer', chosenBy: 'controller', filter: NONLAND },
+      },
       { primitive: 'loseLife', params: { amount: 2 } },
     ],
   },
@@ -235,9 +320,18 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 2 },
     power: 2,
     toughness: 1,
-    // ETB: return a card from your graveyard to hand. (Real card targets; we
-    // return the most-recent graveyard card since there's no chooser yet.)
-    effects: [{ primitive: 'returnFromGraveyard', params: { count: 1 } }],
+    // "When Eternal Witness enters the battlefield, return target card from your
+    // graveyard to your hand." Authored as an `etb` TRIGGER (not a resolution
+    // script) so it fires on every entry — including a later blink/return — and
+    // the card that comes back is CHOSEN by its controller, not whichever card
+    // happened to be on top of the graveyard.
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'returnFromGraveyard', params: { count: 1, optional: true } }],
+        label: 'ETB: you may return a chosen card from your graveyard to your hand',
+      },
+    ],
   },
 
   // --- Vanilla / keyword creatures (zero custom effects; combat is data) -------
@@ -249,17 +343,17 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     keywords: { haste: true },
-    // "Whenever Goblin Guide attacks, the DEFENDING player reveals the top card of
-    // their library; if it's a land they put it into their hand." The engine has no
-    // reveal/look-then-conditionally-draw primitive, so we approximate the real
-    // card's net effect — the opponent gets a card off the top — with the closest
-    // available primitive: an opponent draw on attack. (Faithful in spirit; the
-    // conditional "only if a land" filter is the documented approximation.)
+    // "Whenever Goblin Guide attacks, the defending player reveals the top card of
+    // their library. If it's a land card, that player puts it into their hand."
+    // Exactly that: `revealTopCard` moves the top card only when it matches the
+    // filter and otherwise leaves it where it is. (The reveal itself is not in the
+    // event log — the engine has no `cardsRevealed` event — but every mechanical
+    // consequence of it is.)
     triggers: [
       {
         condition: { on: 'attacks' },
-        effects: [{ primitive: 'drawCards', params: { count: 1, whichPlayer: 'opponent' } }],
-        label: 'Attacks: defending player draws (approx. of reveal-top-land)',
+        effects: [{ primitive: 'revealTopCard', params: { who: 'opponent', filter: LAND } }],
+        label: 'Attacks: defending player reveals the top card; a land goes to their hand',
       },
     ],
   },

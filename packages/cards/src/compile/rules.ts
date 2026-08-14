@@ -23,6 +23,7 @@ import type {
 } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, parseCount } from './text.js';
+import { BASIC_LAND_NAMES } from '../../data/pool.js';
 
 /** Mana symbols as they appear in normalized (lowercased) Oracle text. */
 const MANA_SYMBOL_TO_COLOR: Readonly<Record<string, ManaColor>> = Object.freeze({
@@ -82,6 +83,34 @@ const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
   red: 'R',
   green: 'G',
 });
+
+/**
+ * "A land card", as the `CardFilter` both a reveal and a search use. One object so
+ * the compiler and the hand-authored pool cannot drift apart on what "land" means.
+ */
+const LAND_FILTER = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
+
+/**
+ * The printed restrictions a "you choose a ___ card from it" discard may carry,
+ * mapped to the `CardFilter` implementing each. Anything outside this table is a
+ * restriction the filter cannot express, so the rule declines rather than
+ * discarding the wrong kind of card.
+ */
+const DISCARD_RESTRICTIONS: Readonly<Record<string, { readonly noneOfTypes?: readonly string[]; readonly anyOfTypes?: readonly string[] }>> =
+  Object.freeze({
+    nonland: { noneOfTypes: Object.freeze(['land']) },
+    noncreature: { noneOfTypes: Object.freeze(['creature']) },
+    creature: { anyOfTypes: Object.freeze(['creature']) },
+    land: { anyOfTypes: Object.freeze(['land']) },
+  });
+
+/** The regex alternation of the discard restrictions above. */
+const DISCARD_RESTRICTION_TOKEN = Object.keys(DISCARD_RESTRICTIONS).join('|');
+
+/** The filter implementing a printed discard restriction, or null if unexpressible. */
+function discardFilterFor(word: string): (typeof DISCARD_RESTRICTIONS)[string] | null {
+  return DISCARD_RESTRICTIONS[word.trim().toLowerCase()] ?? null;
+}
 
 /** Build a `KeywordFlags` object from a printed keyword word. */
 function keywordFlag(word: string): Record<string, boolean> | null {
@@ -360,6 +389,120 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return colors === null ? null : effects({ primitive: 'addMana', params: { mana: [...colors] } });
     },
   },
+
+  // --- templates that ASK the player something (DESIGN §3.11) -------------------
+  // These compile to the choice-driven primitives in `../choice-primitives.ts`.
+  // They are here for the same reason as every other rule: the engine can now play
+  // the printed clause exactly, so refusing it would be the dishonest answer.
+  {
+    id: 'draw-then-put-back-on-top',
+    description: '"Draw N cards, then put M cards from your hand on top of your library in any order" (Brainstorm)',
+    pattern: new RegExp(
+      `^draw ${COUNT_TOKEN} cards?, then put ${COUNT_TOKEN} cards? from your hand on top of your library in any order$`,
+    ),
+    build(match) {
+      const drawn = parseCount(match[1]);
+      const putBack = parseCount(match[2]);
+      if (drawn === null || putBack === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count: drawn } },
+        { primitive: 'putFromHandOnTop', params: { count: putBack } },
+      );
+    },
+  },
+  {
+    id: 'look-at-top-and-reorder',
+    description: '"Look at the top N cards of your library, then put them back in any order" (Ponder)',
+    pattern: new RegExp(`^look at the top ${COUNT_TOKEN} cards? of your library, then put them back in any order$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      return count === null ? null : effects({ primitive: 'reorderTopOfLibrary', params: { count } });
+    },
+  },
+  {
+    id: 'may-shuffle',
+    description: '"You may shuffle"',
+    pattern: /^you may shuffle(?: your library)?$/,
+    build() {
+      return effects({ primitive: 'mayShuffleLibrary' });
+    },
+  },
+  {
+    id: 'reveal-hand-caster-chooses-discard',
+    description:
+      '"Target player reveals their hand. You choose a RESTRICTION card from it. That player discards that card." (+ the "You lose N life" rider — Thoughtseize)',
+    pattern: new RegExp(
+      `^target player reveals their hand\\. you choose a (${DISCARD_RESTRICTION_TOKEN}) card from it\\. that player discards that card(?:\\. you lose ${COUNT_TOKEN} life)?$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const filter = discardFilterFor(match[1] ?? '');
+      if (!filter) return null;
+      const discard: EffectRef = {
+        primitive: 'discardCard',
+        // The CASTER chooses — that is what "you choose a card from it" means, and
+        // it is the whole difference between Thoughtseize and a random discard.
+        params: { count: 1, who: 'targetPlayer', chosenBy: 'controller', filter },
+      };
+      const lifeLoss = parseCount(match[2]);
+      if (match[2] === undefined) return effects(discard);
+      return lifeLoss === null
+        ? null
+        : effects(discard, { primitive: 'loseLife', params: { amount: lifeLoss } });
+    },
+  },
+  {
+    id: 'return-target-card-from-graveyard',
+    description: '"[You may] return target card from your graveyard to your hand" (Eternal Witness)',
+    // No `needsChosenTarget`: the card to return is picked by a CHOICE at
+    // resolution, not by a target chosen at cast — which is exactly why this may
+    // also be the body of a triggered ability.
+    pattern: /^(you may )?return target card from your graveyard to your hand$/,
+    build(match) {
+      const params: Record<string, unknown> = { count: 1 };
+      if (match[1]) params.optional = true;
+      return effects({ primitive: 'returnFromGraveyard', params });
+    },
+  },
+  {
+    id: 'defending-player-reveals-top-land',
+    description:
+      '"Defending player reveals the top card of their library. If it\'s a land card, that player puts it into their hand." (Goblin Guide)',
+    pattern:
+      /^defending player reveals the top card of their library\. if it'?s a land card, that player puts it into their hand$/,
+    build() {
+      return effects({ primitive: 'revealTopCard', params: { who: 'opponent', filter: LAND_FILTER } });
+    },
+  },
+  {
+    id: 'exile-creature-controller-may-fetch-basic',
+    description:
+      '"Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle." (Path to Exile)',
+    // Compiled as ONE template rather than two clauses because the compensation
+    // belongs to the exile: it is the exiled creature's controller who searches,
+    // and only when the creature really was exiled.
+    pattern:
+      /^exile target creature\. its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle$/,
+    needsChosenTarget: true,
+    build() {
+      return effects(
+        { primitive: 'exileTarget' },
+        {
+          primitive: 'searchLibrary',
+          params: {
+            who: 'targetController',
+            requiresTargetInZone: 'exile',
+            optional: true,
+            count: 1,
+            filter: LAND_FILTER,
+            nameAnyOf: BASIC_LAND_NAMES,
+            destination: 'battlefield',
+            tapped: true,
+          },
+        },
+      );
+    },
+  },
 ]);
 
 // --- trigger rules --------------------------------------------------------------
@@ -580,8 +723,23 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'mana abilities that produce a chosen color',
   },
   { pattern: /\benters tapped\b/, missingEngineSystem: 'permanents entering the battlefield tapped' },
-  { pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/, missingEngineSystem: 'player choice during resolution' },
-  { pattern: /\bsearch your library\b/, missingEngineSystem: 'library search (tutoring) with a chooser' },
+  {
+    // Modal cards are the one choice shape still genuinely missing a system: the
+    // engine picks a spell's targets at cast with no modes declared, so a mode
+    // that needs its own target can only be offered when the cast happens to have
+    // one. (Everything else a "choose / you may" clause needs — the question, the
+    // ordering, the search — the engine has; see `../choice-primitives.ts`.)
+    pattern: /^choose (?:one|two|three|up to)\b|^choose one or both\b/,
+    missingEngineSystem: 'modal spells (modes chosen at cast, with their own targets)',
+  },
+  {
+    pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
+    missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
+  },
+  {
+    pattern: /\bsearch your library\b|\bsearch their library\b/,
+    missingEngineSystem: 'a library-search template the compiler does not recognize yet',
+  },
   { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'looking at and reordering library cards' },
   { pattern: /\bloyalty\b|^[+-]\d+:/, missingEngineSystem: 'planeswalker loyalty abilities' },
   { pattern: /\btransform\b|\bflip\b|double-faced/, missingEngineSystem: 'transform / double-faced cards' },
