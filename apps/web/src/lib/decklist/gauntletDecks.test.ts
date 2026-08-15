@@ -118,7 +118,7 @@ describe('gauntlet decks are selectable as the Lab hero', () => {
     for (const hero of heroes) {
       expect(isGauntletDeckId(hero.id), `${hero.name} needs a gauntlet id`).toBe(true);
       // A hero must be a real, complete deck or the Lab refuses to run it. These
-      // are the two conditions LabView's `validateHero` gates on.
+      // are the two conditions `lib/heroValidation.ts` gates on.
       expect(deckSize(hero), `${hero.name} is not a full deck`).toBeGreaterThanOrEqual(60);
       expect(
         unsupportedCardNames(hero),

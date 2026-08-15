@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactElement } from 'react';
-import { SAMPLE_DECKS, validateDeck as validateSimDeck, type Deck as SimDeck } from '@jonny-boi/sim';
-import { loadCardPool } from '../lib/sim-pool.js';
-import { deckSize, type Deck } from '../lib/deck.js';
+import { SAMPLE_DECKS } from '@jonny-boi/sim';
+import { deckSize } from '../lib/deck.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
+import { validateHero } from '../lib/heroValidation.js';
 import type { SimWorkerApi } from '../lib/useSimWorker.js';
 import {
   DEFAULT_REPLAY_SEED,
@@ -27,7 +27,7 @@ export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }
 
   const hero = decks.decks.find((d) => d.id === heroId) ?? decks.activeDeck ?? decks.decks[0] ?? null;
 
-  const heroProblems = useMemo(() => (hero ? validateHero(hero) : ['No deck selected.']), [hero]);
+  const heroProblems = useMemo(() => validateHero(hero), [hero]);
   const heroLegal = heroProblems.length === 0;
 
   const eligibleOpponents = useMemo(
@@ -170,12 +170,6 @@ export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }
       </div>
     </div>
   );
-}
-
-/** Validate the hero through the sim's pool + rules (authoritative check). */
-function validateHero(hero: Deck): string[] {
-  const pool = loadCardPool();
-  return validateSimDeck(toSimPayload(hero) as SimDeck, pool);
 }
 
 /** Shown when there are no real saved decks to watch. */
