@@ -100,5 +100,17 @@ export const PING_INTERVAL_MS = 20_000;
 /** How long an `error` toast stays on screen before auto-dismissing (ms). */
 export const ERROR_TOAST_MS = 4_000;
 
-/** Length of the room code the UI expects (display/validation only — server is authoritative). */
-export const ROOM_CODE_LENGTH = 6;
+/**
+ * Room-code shape, re-exported from the shared PROTOCOL package.
+ *
+ * This used to be its own literal — `6` — while the server generated codes of
+ * length `5`. The Join button gates on it, so every genuine room code left the
+ * button greyed out and online play could not be joined at all. Two constants
+ * for one concept is the bug; importing the shared one is the fix.
+ */
+export {
+  ROOM_CODE_LENGTH,
+  MAX_ROOM_CODE_LENGTH,
+  isPlausibleRoomCode,
+  normalizeRoomCode,
+} from '@jonny-boi/protocol';

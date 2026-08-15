@@ -51,6 +51,58 @@ export const PROTOCOL_VERSION = 2;
 export const MIN_COMPATIBLE_PROTOCOL_VERSION = 1;
 
 // ---------------------------------------------------------------------------
+// Room codes.
+//
+// These live HERE, in the shared contract, because a room code is something the
+// server issues and the client types back — the definition of a value both ends
+// must agree on. They used to be defined twice, and the two copies drifted: the
+// server generated FIVE characters while the web client only enabled its "Join
+// room" button at exactly SIX. Every real code left the button greyed out, so
+// joining an online game was impossible, and nothing failed loudly enough to
+// notice — the button just sat there.
+// ---------------------------------------------------------------------------
+
+/**
+ * Number of characters in a generated room code. The client validates against
+ * this and the server generates to it; importing the same constant is what stops
+ * them drifting apart again.
+ */
+export const ROOM_CODE_LENGTH = 5;
+
+/**
+ * Characters a generated code may contain — uppercase, with the shapes that get
+ * misread out loud or on a phone screen (I, O, 0, 1) deliberately absent, since
+ * these get read aloud and re-typed.
+ */
+export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/**
+ * Longest code the wire accepts. Deliberately looser than
+ * {@link ROOM_CODE_LENGTH} so the server can keep honouring codes it issued
+ * under an older, differently-sized scheme; validation bounds the string, it
+ * does not pin it to today's length.
+ */
+export const MAX_ROOM_CODE_LENGTH = 16;
+
+/**
+ * Normalize a typed room code for comparison: trim surrounding space and fold to
+ * uppercase, matching how the server looks a room up. A phone keyboard that
+ * autocapitalises differently, or a code pasted with a trailing space, then
+ * still finds the room.
+ */
+export function normalizeRoomCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
+/**
+ * Whether a typed code is worth sending to the server. Length only — the server
+ * remains the authority on whether the room exists.
+ */
+export function isPlausibleRoomCode(code: string): boolean {
+  return normalizeRoomCode(code).length === ROOM_CODE_LENGTH;
+}
+
+// ---------------------------------------------------------------------------
 // Decklists carried over the wire (so the server can build ANY deck — including
 // the user's custom decks — from the shared card pool, then validate it).
 // ---------------------------------------------------------------------------

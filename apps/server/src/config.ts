@@ -8,14 +8,19 @@
 export const DEFAULT_PORT = 8787;
 
 /**
- * Room-code alphabet: uppercase letters + digits with the visually ambiguous
- * characters removed (no O/0, I/1, etc.) so a code is unambiguous when read aloud
- * or typed. DRY: the code generator and any validation derive length/charset here.
+ * Room-code shape comes from the shared PROTOCOL package, not from here.
+ *
+ * It is re-exported so existing server imports keep working, but the values are
+ * owned by `@jonny-boi/protocol` — a room code is issued by this server and
+ * typed back by the client, so both ends must read one definition. When the two
+ * were declared separately they drifted (server 5, client 6) and joining a game
+ * became impossible.
  */
-export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-/** Number of characters in a generated room code. */
-export const ROOM_CODE_LENGTH = 5;
+export {
+  ROOM_CODE_ALPHABET,
+  ROOM_CODE_LENGTH,
+  MAX_ROOM_CODE_LENGTH,
+} from '@jonny-boi/protocol';
 
 /**
  * How many distinct codes we'll try to generate before giving up (defends against
@@ -43,9 +48,6 @@ export const MAX_FRAME_BYTES = 256 * 1024;
 
 /** Longest accepted display name; longer names are rejected at the parse boundary. */
 export const MAX_NAME_LENGTH = 32;
-
-/** Longest accepted room code on the wire (generated codes are `ROOM_CODE_LENGTH`). */
-export const MAX_ROOM_CODE_LENGTH = 16;
 
 /** Longest accepted deck name. */
 export const MAX_DECK_NAME_LENGTH = 64;

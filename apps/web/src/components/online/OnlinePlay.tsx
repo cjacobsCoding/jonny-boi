@@ -5,7 +5,13 @@ import { useOnlineGame } from '../../lib/online/useOnlineGame.js';
 import { deckChoiceToDeckList } from '../../lib/online/deck-list.js';
 import { buildDeckMenu } from '../../lib/online/deck-menu.js';
 import { friendlyError } from '../../lib/online/online-state.js';
-import { ERROR_TOAST_MS, ROOM_CODE_LENGTH, resolveServerUrl } from '../../lib/online/online-config.js';
+import {
+  ERROR_TOAST_MS,
+  ROOM_CODE_LENGTH,
+  isPlausibleRoomCode,
+  normalizeRoomCode,
+  resolveServerUrl,
+} from '../../lib/online/online-config.js';
 import { validateChoice } from '../../lib/play/setup.js';
 import { HOTSEAT_CONFIG } from '../../lib/play/play-config.js';
 import { ConnectionIndicator } from './ConnectionIndicator.js';
@@ -169,7 +175,7 @@ function MenuScreen({
 }): ReactElement {
   const [name, setName] = useState('Player');
   const [code, setCode] = useState('');
-  const codeOk = code.trim().length === ROOM_CODE_LENGTH;
+  const codeOk = isPlausibleRoomCode(code);
 
   return (
     <div className="online-menu">
@@ -218,11 +224,21 @@ function MenuScreen({
               style={{ textTransform: 'uppercase', letterSpacing: '0.2em' }}
             />
           </label>
+          {/* A disabled button must say WHY. This one silently refused every
+              real room code for the entire life of the feature, and with no
+              message there was nothing on screen to suggest the length was the
+              problem — it just looked broken. */}
+          {!codeOk && code.trim().length > 0 && (
+            <p className="online__hint" role="status">
+              A room code is {ROOM_CODE_LENGTH} characters — you have{' '}
+              {normalizeRoomCode(code).length}.
+            </p>
+          )}
           <button
             type="button"
             className="btn btn--primary"
             disabled={!codeOk}
-            onClick={() => online.joinRoom(code, name.trim() || 'Player')}
+            onClick={() => online.joinRoom(normalizeRoomCode(code), name.trim() || 'Player')}
           >
             Join room
           </button>
