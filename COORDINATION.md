@@ -80,6 +80,26 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: **`fix/hint-accuracy` MERGED + DEPLOYED** (Deploy PWA green, live
+  site HTTP 200). main = **1864 tests, build exit 0**.
+  👉 **The unsupported queue was advertising TWELVE solved systems.** UNSUPPORTED-MECHANICS.md is
+  generated from the `missingEngineSystem` strings, so a stale one sends the next agent to rebuild
+  finished work. These had all shipped since the text was written: activated abilities, sacrifice
+  costs, enters-tapped, chosen-colour mana, modal spells, counters, library look/reorder, graveyard
+  retrieval, filtered targeting, leaves-the-battlefield triggers, compound draw/lose, static buffs.
+  A hint fires only when NO rule matched, so once a system exists the honest message is **"a <kind>
+  template the compiler does not recognize yet"** — the engine can do it, the compiler just cannot
+  read that sentence. **Treat the hint text as part of shipping a mechanic**: implement the system,
+  reword its hint in the same commit, and update the assertion in `compile.test.ts`.
+  📋 **The real remaining queue** (these keep their original wording because they are genuinely
+  missing): planeswalker loyalty · transform/DFC · flashback · ward and protection-from ·
+  alternative/additional costs ({X}, kicker, suspend, spectacle) · variable {X} and derived values ·
+  blocking restrictions beyond evasion · gaining control · targets chosen by a triggered ability ·
+  optional payment during resolution · named keyword subsystems.
+  ⛔ Still-open blocker noted earlier: **gaining control** needs an `effectiveController()` threaded
+  through combat/priority/legality before it can be done safely — not a corner of another branch.
+  (Integrator)
+
 - 2026-08-15 DESKTOP-90PJPM4: `fix/hero-validation` ✅ INTEGRATED to main (apps/web only).
   One `lib/heroValidation.ts` now serves both the Lab and the Match viewer. `validateHero` was
   defined twice and the copies had DRIFTED: the Lab named the unsupported imported cards, the Match
