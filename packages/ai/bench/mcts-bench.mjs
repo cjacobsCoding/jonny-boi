@@ -132,7 +132,11 @@ function fingerprint(picks) {
 
 if (mode === 'decisions') {
   const positions = collectPositions(count);
-  const pilot = createMctsPilot(DEFAULT_MCTS_CONFIG);
+  // BENCH_CONFIG overrides knobs for attribution runs (e.g. a cheaper rollout
+  // policy, or half the depth) — the delta against the default isolates what a
+  // given piece of the search costs. Never used for the headline numbers.
+  const config = { ...DEFAULT_MCTS_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') };
+  const pilot = createMctsPilot(config);
   playDecisions(pilot, positions.slice(0, 1)); // warm the JIT
   global.gc?.();
   await flush();
