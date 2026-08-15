@@ -83,12 +83,39 @@ export function planManaPayment(
   cost: ManaCost,
   legalActions: readonly GameAction[],
 ): ManaTapPlan[] | undefined {
-  let pool: ManaPool = { ...view.players[player].manaPool };
+  // ALLOCATION NOTE. This is the hottest function in the sim profile (8.7% of self
+  // time), and it is dominated by the cheap cases rather than the hard ones: the
+  // recorded corpus of real games is 44% "no untapped sources at all" and mean 1.4
+  // sources. So both trivial answers are returned before anything is allocated —
+  // no pool copy, no Map, no per-mode objects. The planning below is unchanged.
+  const current: ManaPool = view.players[player].manaPool;
   // `canPay` is the authority on "done"; the distance heuristic only orders taps.
-  if (canPay(pool, cost)) return [];
+  // Checked against the LIVE pool: `canPay` only reads, so the copy can wait until
+  // we know we are going to mutate one.
+  if (canPay(current, cost)) return [];
+
+  // Nothing to tap ⇒ nothing can change ⇒ unpayable. Returning here skips the
+  // grouping pass entirely for nearly half of all calls.
+  let hasTap = false;
+  for (const action of legalActions) {
+    if (action.kind === 'tapForMana' && action.player === player) {
+      hasTap = true;
+      break;
+    }
+  }
+  if (!hasTap) return undefined;
+
+  let pool: ManaPool = { ...current };
 
   // Group the offered activations by permanent: the modes of one source are
   // alternatives, and tapping it spends the whole permanent.
+  //
+  // The lookup stays a linear `find` ON PURPOSE. Indexing the battlefield into a
+  // Map first was tried and is a net LOSS at this size: real games offer a mean of
+  // 1.4 tappable sources against a battlefield of ~10-20, so building the index
+  // costs more inserts than the scans it saves — the same trap the WASM spike
+  // recorded when 23 typed arrays lost to a deep copy. Measure before "optimising"
+  // a scan away at this scale.
   const candidates = new Map<InstanceId, ManaTapPlan[]>();
   for (const action of legalActions) {
     if (action.kind !== 'tapForMana' || action.player !== player) continue;
