@@ -454,8 +454,25 @@ interface FundedGoal {
  * Returns undefined if nothing is worth casting or nothing is payable.
  */
 function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedGoal | undefined {
-  const { view } = ctx;
-  const explain = ctx.trace !== undefined;
+  const scored = scoredSpellGoals(ctx.view, weights, ctx.trace !== undefined);
+  // Best-first, but only a goal we can genuinely fund. Planning is the expensive
+  // step, so it runs on ranked candidates and stops at the first payable one.
+  const me = ctx.view.priorityPlayer;
+  for (const goal of scored) {
+    const plan = planManaPayment(ctx.view as GameState, me, goal.cost, ctx.legalActions);
+    if (plan) return { goal, plan };
+  }
+  return undefined;
+}
+
+/**
+ * Every spell in hand that is legal to cast right now, scored and targeted, best
+ * first. Funding is deliberately NOT considered here — that is the caller's job,
+ * because the two consumers want different things from it: {@link bestSpellGoal}
+ * plans only until it finds one payable goal (cheapest possible), while the search
+ * policy ({@link policyCandidates}) plans every goal so it can search them all.
+ */
+function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: boolean): SpellGoal[] {
   const me = view.priorityPlayer;
   const opp = otherPlayer(me);
   const hand = view.players[me].hand;
@@ -496,14 +513,8 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
     if (legal) scored.push(legal);
   }
 
-  // Best-first, but only a goal we can genuinely fund. Planning is the expensive
-  // step, so it runs on ranked candidates and stops at the first payable one.
   scored.sort((a, b) => b.score - a.score);
-  for (const goal of scored) {
-    const plan = planManaPayment(view as GameState, me, goal.cost, ctx.legalActions);
-    if (plan) return { goal, plan };
-  }
-  return undefined;
+  return scored;
 }
 
 /**
@@ -1362,6 +1373,296 @@ function numberParam(params: Readonly<Record<string, unknown>> | undefined, key:
 function stringParam(params: Readonly<Record<string, unknown>> | undefined, key: string, fallback: string): string {
   const v = params?.[key];
   return typeof v === 'string' ? v : fallback;
+}
+
+// --- the policy seam a search consumes -------------------------------------------
+
+/**
+ * One STRATEGIC option the policy offers a search, and the whole point of Phase 2
+ * of `docs/plans/superhuman-ai-program.md`.
+ *
+ * `plies` is the **atomic** sequence of engine actions that carries the option out
+ * — the mana taps that fund a spell *and* the cast itself, together. That is the
+ * measured defect this fixes. The old search taps a land in one action and casts
+ * in another, so it evaluates "tap" through rollouts in which the heuristic later
+ * spends that mana, while the real next mover treats it as sunk and declines: 0.71
+ * wasted mana per turn against the heuristic's 0.00 (DESIGN §3.4). A search that
+ * can only ever choose "tap AND cast" or "neither" cannot make that mistake,
+ * because the option it prices is the option it takes.
+ *
+ * Funding runs through core's `planManaPayment` — the SAME planner the heuristic
+ * itself pays with — so there is exactly one answer to "which lands fund this" in
+ * the codebase and the search cannot drift from the pilot.
+ */
+export interface PolicyCandidate {
+  /** The engine actions that carry this option out, in order. Never empty. */
+  readonly plies: readonly GameAction[];
+  /** The heuristic's score for the option — the raw prior a search softmaxes. */
+  readonly score: number;
+  /** A short human-readable label (empty unless a caller asked for reasons). */
+  readonly label: string;
+}
+
+/**
+ * Enumerate the strategic options at this decision, scored by the heuristic's own
+ * MTG knowledge (brief §57: "do NOT remove the current heuristic engine — turn its
+ * knowledge into reusable policy components").
+ *
+ * This is the policy half of the brief's §29–31 evaluator interface: the search
+ * asks the existing heuristic "what would you consider, and how much do you like
+ * each?" and then does its own thinking about the answer. Nothing here decides
+ * anything — ranking is advisory, and a search is free to (and does) explore
+ * options this function ranked last.
+ *
+ * `explain` is off by default because building the reason strings costs several
+ * allocations per candidate and a search calls this at every node it expands.
+ */
+export function policyCandidates(
+  view: PilotView,
+  legalActions: readonly GameAction[],
+  weights: HeuristicWeights = DEFAULT_HEURISTIC_WEIGHTS,
+  explain = false,
+): PolicyCandidate[] {
+  const out: PolicyCandidate[] = [];
+  const me = view.priorityPlayer;
+  const state = view as GameState;
+
+  // A parked question is not a strategic decision — it is the only thing the game
+  // will accept, and the heuristic answers it on its own terms. Level 0 of the
+  // brief's action hierarchy: resolve, never search.
+  const pending = view.pendingChoice as PendingChoice | null | undefined;
+  if (pending) {
+    return [{ plies: [answerChoiceHeuristically(state, pending, weights)], score: 0, label: NO_REASON }];
+  }
+
+  if (view.step === 'declareAttackers' && me === view.activePlayer) {
+    collectAttackCandidates(view, legalActions, weights, explain, out);
+  } else if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
+    collectBlockCandidates(view, weights, explain, out);
+  } else {
+    collectPriorityCandidates(view, legalActions, weights, explain, out);
+  }
+
+  // Passing is ALWAYS on the menu. "Hold interaction / do nothing this window" is
+  // a real MTG line the brief names explicitly (§4), and a search that could not
+  // decline every play would be forced to make one.
+  //
+  // It is CONSTRUCTED rather than looked up, exactly as the heuristic constructs
+  // it: at `declareAttackers` the engine offers the composite declaration and the
+  // pass is the same "declare nothing" move the pilot already makes there. It is
+  // legal in every window this function can reach, because a parked choice — the
+  // one situation where passing is rejected — returned above.
+  out.push({
+    plies: [{ kind: 'passPriority', player: me }],
+    score: weights.passScore,
+    label: explain ? 'pass' : NO_REASON,
+  });
+  return out;
+}
+
+/**
+ * Attack options. NOT every subset of eligible attackers — that is `2^n` and the
+ * brief (§39) is explicit that combat must be classified before it is searched.
+ * Three lines cover the decision that actually matters: the heuristic's own
+ * value-judged attack, the all-in alpha strike (which the value judgement refuses
+ * and which is nevertheless right whenever racing beats trading), and no attack.
+ */
+function collectAttackCandidates(
+  view: PilotView,
+  legalActions: readonly GameAction[],
+  weights: HeuristicWeights,
+  explain: boolean,
+  out: PolicyCandidate[],
+): void {
+  const offered = legalActions.find((a) => a.kind === 'declareAttackers') as
+    | Extract<GameAction, { kind: 'declareAttackers' }>
+    | undefined;
+  if (!offered || offered.attackers.length === 0) return;
+  const me = view.activePlayer;
+  const opp = otherPlayer(me);
+  const enemyBlockers = creaturesControlledBy(view, opp).filter((c) => !c.tapped);
+
+  const profitable: InstanceId[] = [];
+  for (const id of offered.attackers) {
+    const attacker = findInstance(view, id);
+    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights)) profitable.push(id);
+  }
+  if (profitable.length > 0) {
+    out.push({
+      plies: [{ kind: 'declareAttackers', player: me, attackers: profitable }],
+      score: weights.attackValueThreshold,
+      label: explain ? `attack with ${profitable.length}` : NO_REASON,
+    });
+  }
+  if (offered.attackers.length !== profitable.length) {
+    out.push({
+      plies: [{ kind: 'declareAttackers', player: me, attackers: [...offered.attackers] }],
+      // Scored BELOW the value-judged attack so the prior prefers the sober line;
+      // search is what gets to disagree, which is exactly the division of labour
+      // the brief asks for.
+      score: weights.attackValueThreshold - 1,
+      label: explain ? `alpha strike ×${offered.attackers.length}` : NO_REASON,
+    });
+  }
+}
+
+/** Block options: the heuristic's assignment, and taking the damage. */
+function collectBlockCandidates(
+  view: PilotView,
+  weights: HeuristicWeights,
+  explain: boolean,
+  out: PolicyCandidate[],
+): void {
+  const me = defendingPlayer(view);
+  const combat = view.combat;
+  if (!combat || combat.attackers.length === 0) return;
+  if (Object.keys(combat.blocks).length > 0) return; // already declared
+
+  const myLife = view.players[me].life;
+  const incoming = totalIncomingDamage(view, combat.attackers);
+  const desperate = incoming >= myLife || myLife <= weights.desperateLifeThreshold;
+  const available = creaturesControlledBy(view, me).filter((c) => !c.tapped);
+  const attackers = [...combat.attackers]
+    .map((id) => findInstance(view, id))
+    .filter((c): c is CardInstance => c !== undefined)
+    .sort((a, b) => effectivePower(b) - effectivePower(a));
+
+  // Both the value-judged block and the survival block, when they differ: under
+  // pressure "chump to live" and "only trade profitably" are genuinely different
+  // plans, and which is right is precisely what a search can work out.
+  for (const mode of desperate ? [true] : [false, true]) {
+    const used = new Set<InstanceId>();
+    const blocks: { blocker: InstanceId; attacker: InstanceId }[] = [];
+    for (const attacker of attackers) {
+      const blocker = pickBlocker(attacker, available, used, mode, weights);
+      if (blocker) {
+        blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
+        used.add(blocker.instanceId);
+      }
+    }
+    if (blocks.length === 0) continue;
+    out.push({
+      plies: [{ kind: 'declareBlockers', player: me, blocks }],
+      score: mode === desperate ? weights.blockValueThreshold : weights.blockValueThreshold - 1,
+      label: explain ? `block ×${blocks.length}${mode ? ' (survive)' : ''}` : NO_REASON,
+    });
+  }
+}
+
+/**
+ * Priority-window options, each as an ATOMIC macro: land drops, every castable
+ * spell bundled with the taps that fund it, fetchland activations, and equips.
+ */
+function collectPriorityCandidates(
+  view: PilotView,
+  legalActions: readonly GameAction[],
+  weights: HeuristicWeights,
+  explain: boolean,
+  out: PolicyCandidate[],
+): void {
+  const me = view.priorityPlayer;
+  const state = view as GameState;
+
+  // Land drops. One candidate per DISTINCT land, because playing either of two
+  // Mountains from hand is the same decision (brief §4 Level 1).
+  const seenLands = new Set<string>();
+  for (const action of legalActions) {
+    if (action.kind !== 'playLand') continue;
+    const card = view.players[me].hand.find((c) => c.instanceId === action.instanceId);
+    const name = card?.def.name ?? String(action.instanceId);
+    if (seenLands.has(name)) continue;
+    seenLands.add(name);
+    out.push({ plies: [action], score: weights.playLandScore, label: explain ? `play ${name}` : NO_REASON });
+  }
+
+  // Fetchland-style abilities the heuristic understands. Offered by the engine
+  // already fully payable, so they need no funding plan.
+  for (const action of legalActions) {
+    if (action.kind !== 'activateAbility') continue;
+    const source = findInstance(view, action.instanceId);
+    const ability = source?.def.activated?.[action.abilityIndex];
+    if (!ability || !fetchesALand(ability)) continue;
+    out.push({
+      plies: [action],
+      score: weights.playLandScore,
+      label: explain ? `activate ${ability.label}` : NO_REASON,
+    });
+  }
+
+  // THE ATOMIC CASTS. Every legal, scored spell, each bundled with its funding.
+  for (const goal of scoredSpellGoals(view, weights, explain)) {
+    const plan = planManaPayment(state, me, goal.cost, legalActions);
+    if (!plan) continue; // cannot be funded from this board — not an option at all
+    const plies: GameAction[] = [];
+    for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });
+    plies.push({
+      kind: 'castSpell',
+      player: me,
+      instanceId: goal.card.instanceId,
+      targets: goal.targets.length > 0 ? goal.targets : undefined,
+    });
+    out.push({ plies, score: goal.score, label: goal.reason });
+  }
+
+  // Equipping, funded the same way (it is an activated ability with a mana cost,
+  // so the engine will not offer it until the pool already pays — see the note on
+  // `bestEquipPlay`, which is why this plans rather than reads the offered list).
+  const equip = bestEquipMacro(view, legalActions, weights, explain);
+  if (equip) out.push(equip);
+}
+
+/**
+ * The best equip play as ONE atomic macro (taps + activation), mirroring
+ * {@link bestEquipPlay} but returning the whole sequence rather than only the next
+ * micro-step. Same recognition rules, so the two cannot classify differently.
+ */
+function bestEquipMacro(
+  view: PilotView,
+  legalActions: readonly GameAction[],
+  weights: HeuristicWeights,
+  explain: boolean,
+): PolicyCandidate | undefined {
+  const me = view.priorityPlayer;
+  const sorcerySpeedOpen =
+    me === view.activePlayer &&
+    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
+    view.stack.length === 0;
+  if (!sorcerySpeedOpen) return undefined;
+
+  let hosts: readonly (InstanceId | PlayerId)[] | undefined;
+  let best: PolicyCandidate | undefined;
+  const battlefield = view.battlefield;
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
+    const abilities = perm.def.activated;
+    if (abilities === undefined || perm.controller !== me) continue;
+    const modifies = perm.def.attachment?.modifies;
+    if (!modifies) continue;
+    for (let index = 0; index < abilities.length; index++) {
+      const ability = abilities[index]!;
+      if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
+      const mana = ability.cost.mana;
+      if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
+      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me);
+      const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
+      if (!host) continue;
+      const score = scoreEquip(modifies, host, weights);
+      if (score === undefined || (best !== undefined && score <= best.score)) continue;
+      const plan = planManaPayment(view as GameState, me, mana, legalActions);
+      if (!plan) continue;
+      const plies: GameAction[] = [];
+      for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });
+      plies.push({
+        kind: 'activateAbility',
+        player: me,
+        instanceId: perm.instanceId,
+        abilityIndex: index,
+        targets: [host.instanceId],
+      });
+      best = { plies, score, label: explain ? `${ability.label} onto ${host.def.name}` : NO_REASON };
+    }
+  }
+  return best;
 }
 
 /** Emit an optional trace and return the action (keeps decision sites terse). */

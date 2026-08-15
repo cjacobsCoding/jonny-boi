@@ -6,11 +6,30 @@
  *        packages/ai/bench/mcts-bench.mjs <mode> [n]
  *
  * Modes
+ *   instrument       PHASE 1 of the superhuman-AI program brief (§2, §65): the
+ *                    whole measured table — branching factors, tree depth,
+ *                    simulations/sec, decision time, the per-call cost of every
+ *                    engine primitive the search leans on, the rollout-depth cost
+ *                    model, and the measured sources of redundant search. Every
+ *                    micro-measurement is INTERLEAVED across rounds and reported
+ *                    as a median, because wall clock on this box drifts ~19%
+ *                    between runs of identical code and sequential comparisons
+ *                    have already produced a wrong answer here once.
  *   decisions        Replay a heuristic game, snapshot real decision positions,
  *                    then run the MCTS pilot on each with the REAL config.
  *                    Reports ms/decision AND allocated bytes/decision.
  *   profile          Same workload, with the V8 sampling heap profiler on, and
  *                    prints the top allocating functions.
+ *   hybrid-strength  HEURISTIC vs HYBRID over n seeded games with seat AND play
+ *                    rotated — win rate, Wilson CI, mean/p95 decision time, and
+ *                    ELO/ms. The brief's §47/§59-61 metric: strength per
+ *                    millisecond, not simulations per second.
+ *   scaling          The user's stated success metric: hybrid vs heuristic at
+ *                    increasing simulation budgets. More search time MUST make
+ *                    measurably stronger play, or it is not a search.
+ *   modes            Every selectable mode (RANDOM / VANILLA_MCTS / HYBRID) against
+ *                    the same heuristic baseline on the same seeds, one command.
+ *                    ⚠️ VANILLA_MCTS is ~2000x the heuristic's cost — keep n small.
  *   games            End-to-end games/sec (mcts vs heuristic).
  *   heuristic-games  End-to-end games/sec for the heuristic (the contrast).
  *
@@ -38,8 +57,21 @@ import { Session } from 'node:inspector';
 import { createHash } from 'node:crypto';
 import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
 import { SAMPLE_DECKS, loadDeck, makeSeats, runMatch, gameSeedFor, onPlayFor } from '@jonny-boi/sim';
-import { createHeuristicPilot, createMctsPilot, DEFAULT_MCTS_CONFIG } from '@jonny-boi/ai';
-import { cloneState, DEFAULT_RULES, createRng } from '@jonny-boi/core';
+import {
+  createHeuristicPilot,
+  createMctsPilot,
+  DEFAULT_MCTS_CONFIG,
+  createCollectingStatsSink,
+  countEquivalentActions,
+} from '@jonny-boi/ai';
+import {
+  cloneState,
+  DEFAULT_RULES,
+  createRng,
+  generateLegalActions,
+  applyActionInPlace,
+  planManaPayment,
+} from '@jonny-boi/core';
 
 const MB = 1024 * 1024;
 /** Must match `--max-semi-space-size` on the command line above. */
@@ -56,8 +88,13 @@ const count = Number(process.argv[3] ?? 24);
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
-const deckA = loadDeck(SAMPLE_DECKS[0], pool);
-const deckB = loadDeck(SAMPLE_DECKS[1], pool);
+// Which two decks the bench plays. Defaults to the first two sample decks so every
+// number stays comparable with the ones already on record, but a strength claim
+// measured on ONE matchup is a claim about that matchup — `BENCH_DECKS=4,6` (indices
+// into SAMPLE_DECKS) re-runs it somewhere else to check the result generalises.
+const [DECK_A_INDEX, DECK_B_INDEX] = (process.env.BENCH_DECKS ?? '0,1').split(',').map(Number);
+const deckA = loadDeck(SAMPLE_DECKS[DECK_A_INDEX], pool);
+const deckB = loadDeck(SAMPLE_DECKS[DECK_B_INDEX], pool);
 
 // --- GC accounting ---------------------------------------------------------
 // PerformanceObserver delivers entries on a later tick, so every read is behind
@@ -128,6 +165,179 @@ function playDecisions(pilot, positions, perPosition) {
 /** A stable hash of the chosen action sequence — the bit-identity check. */
 function fingerprint(picks) {
   return createHash('sha256').update(picks.map((a) => JSON.stringify(a)).join('|')).digest('hex').slice(0, 16);
+}
+
+// --- Phase 1: the instrumented table ---------------------------------------
+/**
+ * Median of an array of numbers. Medians, not means, everywhere in `instrument`:
+ * a single thermal stall inflates a mean and leaves no trace, while a median over
+ * interleaved rounds simply ignores it.
+ */
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Measure a set of labelled thunks INTERLEAVED: every round runs every thunk, so
+ * a machine that speeds up or slows down mid-measurement affects all of them
+ * equally instead of flattering whichever ran while it was cool. Reports the
+ * median round for time, and total allocation / total calls for bytes (allocation
+ * is a property of the code and needs no such defence, but it is quantised to
+ * ~1 MB by the scavenge counter, so it is only summed at the end).
+ */
+async function interleavedMicro(entries, reps, rounds) {
+  const times = new Map(entries.map(([label]) => [label, []]));
+  const bytes = new Map(entries.map(([label]) => [label, 0]));
+  for (const [, fn] of entries) fn(); // warm every one before timing any
+  for (let r = 0; r < rounds; r++) {
+    for (const [label, fn] of entries) {
+      global.gc?.();
+      await flush();
+      const s0 = scavenges;
+      const t0 = performance.now();
+      for (let i = 0; i < reps; i++) fn();
+      const ms = performance.now() - t0;
+      await flush();
+      times.get(label).push((ms / reps) * 1000); // µs/call
+      bytes.set(label, bytes.get(label) + (scavenges - s0) * SEMI_SPACE_MB * MB);
+    }
+  }
+  return entries.map(([label]) => ({
+    label,
+    us: median(times.get(label)),
+    bytesPerCall: bytes.get(label) / (reps * rounds),
+  }));
+}
+
+if (mode === 'instrument') {
+  const rounds = Number(process.env.BENCH_ROUNDS ?? 5);
+  const positions = collectPositions(count);
+  const config = { ...DEFAULT_MCTS_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') };
+
+  // 1. TREE SHAPE + THROUGHPUT — the search reporting on itself.
+  const sink = createCollectingStatsSink();
+  const instrumented = createMctsPilot(config, sink);
+  playDecisions(instrumented, positions.slice(0, 1)); // warm
+  sink.decisions.length = 0;
+  global.gc?.();
+  await flush();
+  const s0 = scavenges;
+  const per = [];
+  const { ms } = playDecisions(instrumented, positions, per);
+  await flush();
+  const n = positions.length;
+  const shape = sink.summary();
+  const sorted = [...per].sort((a, b) => a - b);
+  const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
+  const allocPerDecision = ((scavenges - s0) * SEMI_SPACE_MB * MB) / n;
+
+  console.log(`\n=== PHASE 1 · search shape (n=${n} real mid-game positions, ${config.simulationsPerDecision} sims × depth ${config.rolloutDepth}) ===`);
+  console.log(`  root branching (mean / max)      ${shape.meanRootBranching.toFixed(1)} / ${shape.maxRootBranching}`);
+  console.log(`  node branching (mean / max)      ${shape.meanBranching.toFixed(1)} / ${shape.maxBranching}`);
+  console.log(`  root redundancy (equivalent)     ${(shape.rootRedundancyRate * 100).toFixed(1)}%`);
+  console.log(`  tree depth (mean / max edges)    ${shape.meanTreeDepth.toFixed(1)} / ${shape.maxTreeDepth}`);
+  console.log(`  tree nodes per decision (mean)   ${shape.meanNodes.toFixed(0)}`);
+  console.log(`  plies per simulation (mean)      ${shape.meanPliesPerSimulation.toFixed(1)}  (tree ${(shape.totalTreePlies / shape.totalSimulations).toFixed(2)} + rollout ${(shape.totalRolloutPlies / shape.totalSimulations).toFixed(1)})`);
+  console.log(`  rollouts reaching a terminal     ${(shape.terminalRate * 100).toFixed(1)}%`);
+  console.log(`  decision time (mean / p95)       ${(ms / n).toFixed(0)} ms / ${p95.toFixed(0)} ms`);
+  console.log(`  simulations / sec                ${(shape.totalSimulations / (ms / 1000)).toFixed(0)}`);
+  console.log(`  engine plies / sec               ${((shape.totalTreePlies + shape.totalRolloutPlies) / (ms / 1000)).toFixed(0)}`);
+  console.log(`  allocation / decision            ${(allocPerDecision / MB).toFixed(2)} MB`);
+  console.log(`  clones / decision                ${(shape.totalClones / n).toFixed(0)}`);
+
+  // 2. PER-CALL COST of every primitive the search leans on. Interleaved.
+  const heuristic = createHeuristicPilot();
+  const reps = Number(process.env.BENCH_REPS ?? 3000);
+  const sample = cloneState(positions[Math.floor(positions.length / 2)].state);
+  const sampleLegal = generateLegalActions(sample, DEFAULT_RULES);
+  const passAction = { kind: 'passPriority', player: sample.priorityPlayer };
+  const spellCost = { generic: 1, R: 1 };
+  const micro = await interleavedMicro(
+    [
+      ['cloneState', () => cloneState(sample)],
+      ['generateLegalActions', () => generateLegalActions(sample, DEFAULT_RULES)],
+      ['heuristic.chooseAction (policy)', () => heuristic.chooseAction({ view: sample, legalActions: sampleLegal, rng: createRng(1) })],
+      ['planManaPayment', () => planManaPayment(sample, sample.priorityPlayer, spellCost, sampleLegal)],
+      ['countEquivalentActions', () => countEquivalentActions(sample, sampleLegal)],
+      ['clone + applyActionInPlace', () => applyActionInPlace(cloneState(sample), passAction, DEFAULT_RULES, registry)],
+    ],
+    reps,
+    rounds,
+  );
+  console.log(`\n=== PHASE 1 · per-call cost (median of ${rounds} interleaved rounds × ${reps} reps) ===`);
+  for (const m of micro) {
+    console.log(`  ${m.label.padEnd(34)} ${m.us.toFixed(2).padStart(8)} µs   ${(m.bytesPerCall / 1024).toFixed(2).padStart(8)} KB`);
+  }
+  const clone = micro.find((m) => m.label === 'cloneState');
+  const cloneApply = micro.find((m) => m.label === 'clone + applyActionInPlace');
+  console.log(`  ${'applyActionInPlace (derived)'.padEnd(34)} ${(cloneApply.us - clone.us).toFixed(2).padStart(8)} µs   ${((cloneApply.bytesPerCall - clone.bytesPerCall) / 1024).toFixed(2).padStart(8)} KB`);
+
+  // 3. ROLLOUT COST MODEL — is cost linear in rollout depth, and what is the
+  //    intercept (tree + clone + node allocation) versus the slope (per rollout
+  //    ply)? This is the number that says whether a strong leaf evaluator is the
+  //    highest-leverage change, so it is measured rather than argued.
+  const depths = (process.env.BENCH_DEPTHS ?? '1,15,30,60,120').split(',').map(Number);
+  const shortPositions = positions.slice(0, Math.min(positions.length, 12));
+  const depthRows = [];
+  for (let r = 0; r < Math.max(2, Math.min(rounds, 3)); r++) {
+    for (const depth of depths) {
+      const p = createMctsPilot({ ...config, rolloutDepth: depth });
+      playDecisions(p, shortPositions.slice(0, 1));
+      global.gc?.();
+      await flush();
+      const d0 = scavenges;
+      const t0 = performance.now();
+      playDecisions(p, shortPositions);
+      const dms = performance.now() - t0;
+      await flush();
+      depthRows.push({
+        depth,
+        ms: dms / shortPositions.length,
+        mb: ((scavenges - d0) * SEMI_SPACE_MB * MB) / shortPositions.length / MB,
+      });
+    }
+  }
+  console.log(`\n=== PHASE 1 · rollout-depth cost model (n=${shortPositions.length} positions) ===`);
+  for (const depth of depths) {
+    const rows = depthRows.filter((x) => x.depth === depth);
+    console.log(`  depth ${String(depth).padStart(3)}   ${median(rows.map((x) => x.ms)).toFixed(0).padStart(6)} ms/decision   ${median(rows.map((x) => x.mb)).toFixed(2).padStart(7)} MB/decision`);
+  }
+
+  // 4. REDUNDANT / FORCED DECISIONS over a REAL GAME, not a sampled position set.
+  //    Two separate wins are quantified here, and they are the two Phase-2 items:
+  //    decisions that have exactly one sensible answer (Level 0, forced) and
+  //    offered actions that collapse onto each other (Level 1, equivalent).
+  let decisions = 0;
+  let forced = 0;
+  let onlyPass = 0;
+  let offeredTotal = 0;
+  let distinctTotal = 0;
+  const base = createHeuristicPilot();
+  const counting = {
+    id: base.id,
+    description: base.description,
+    chooseAction(ctx) {
+      decisions++;
+      const nonPass = ctx.legalActions.filter((a) => a.kind !== 'passPriority');
+      if (ctx.legalActions.length <= 1) forced++;
+      else if (nonPass.length === 0) onlyPass++;
+      const eq = countEquivalentActions(ctx.view, ctx.legalActions);
+      offeredTotal += eq.offered;
+      distinctTotal += eq.distinct;
+      return base.chooseAction(ctx);
+    },
+  };
+  const countSeats = makeSeats(deckA, deckB, { pilotA: counting, pilotB: counting }, registry);
+  const GAMES = Number(process.env.BENCH_GAMES ?? 20);
+  for (let g = 0; g < GAMES; g++) runMatch(countSeats, gameSeedFor(POSITION_SEED, g), { startingPlayer: onPlayFor(g) });
+  console.log(`\n=== PHASE 1 · redundant search (${GAMES} full heuristic-vs-heuristic games, ${decisions} decisions) ===`);
+  console.log(`  decisions with a single legal action   ${((forced / decisions) * 100).toFixed(1)}%`);
+  console.log(`  decisions offering only 'pass'         ${((onlyPass / decisions) * 100).toFixed(1)}%`);
+  console.log(`  => decisions a search need never see   ${(((forced + onlyPass) / decisions) * 100).toFixed(1)}%`);
+  console.log(`  offered actions collapsing (mana etc.) ${(((offeredTotal - distinctTotal) / offeredTotal) * 100).toFixed(1)}%  (${offeredTotal} offered → ${distinctTotal} distinct)`);
+  console.log('');
 }
 
 if (mode === 'decisions') {
@@ -224,7 +434,6 @@ if (mode === 'breakdown') {
     const perCall = ((scavenges - s0) * SEMI_SPACE_MB * MB) / reps;
     console.log(`  ${label.padEnd(34)} ${(perCall / 1024).toFixed(2).padStart(9)} KB/call  ${((ms / reps) * 1000).toFixed(1).padStart(8)} us/call`);
   };
-  const { generateLegalActions, applyActionInPlace } = await import('@jonny-boi/core');
   for (const p of positions.slice(0, 4)) {
     console.log(`position: step=${p.state.step} legal=${p.legalActions.length} bf=${p.state.battlefield.length}`);
     const s = cloneState(p.state);
@@ -244,7 +453,7 @@ if (mode === 'breakdown') {
 if (mode === 'strength') {
   // The question perf alone cannot answer: does the look-ahead pilot actually
   // PLAY BETTER? Head-to-head, alternating who is on the play, fixed seeds.
-  const { wilsonInterval } = await import('@jonny-boi/sim');
+  const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
   const config = { ...DEFAULT_MCTS_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') };
   const mcts = createMctsPilot(config);
   const heuristic = createHeuristicPilot();
@@ -271,13 +480,142 @@ if (mode === 'strength') {
       console.log(`  ${g + 1}/${count}: mcts ${mctsWins} wins, ${draws} draws @${((performance.now() - t0) / 60000).toFixed(1)}min`);
     }
   }
-  const ci = wilsonInterval(mctsWins, count);
+  const ci = wilsonInterval(mctsWins, count, DEFAULT_STATS_CONFIG.z);
   console.log(
-    `[strength] mcts vs heuristic, deck "${SAMPLE_DECKS[0].name}" vs "${SAMPLE_DECKS[1].name}", n=${count}: ` +
+    `[strength] mcts vs heuristic, deck "${deckA.name}" vs "${deckB.name}", n=${count}: ` +
       `mctsWins=${mctsWins} draws=${draws} winRate=${(ci.p * 100).toFixed(1)}% ` +
       `95%CI=[${(ci.low * 100).toFixed(1)}%, ${(ci.high * 100).toFixed(1)}%] ` +
       `totalMin=${((performance.now() - t0) / 60000).toFixed(1)}`,
   );
+}
+
+// --- HEURISTIC vs HYBRID, the metric that actually matters -------------------
+/**
+ * The brief's §47/§59–61 measurement: not "is the search faster" but "is the
+ * play stronger, per millisecond of decision time".
+ *
+ * Both seats are timed, so the report can state what each pilot actually spent
+ * rather than what its budget nominally allowed. Seat AND play are rotated on a
+ * four-way cycle so neither which deck nor who goes first is confounded with the
+ * pilot — the same rotation the existing `strength` mode uses, kept identical so
+ * the numbers are comparable with the 40.8% already on record for vanilla MCTS.
+ *
+ * Determinism note: every arm here runs a `simulations` budget, never a `millis`
+ * one. A wall-clock budget would make the two arms' searches machine-dependent
+ * and the comparison unreproducible — see `SearchBudget`.
+ */
+function timedPilot(pilot, sink) {
+  return {
+    id: pilot.id,
+    description: pilot.description,
+    chooseAction(ctx) {
+      const t0 = performance.now();
+      const action = pilot.chooseAction(ctx);
+      sink.push(performance.now() - t0);
+      return action;
+    },
+  };
+}
+
+function eloFromWinRate(p) {
+  if (p <= 0) return -Infinity;
+  if (p >= 1) return Infinity;
+  return -400 * Math.log10(1 / p - 1);
+}
+
+async function headToHead(makeChallenger, label, games, seedBase) {
+  // `wilsonInterval` REQUIRES the z multiplier — omitting it yields NaN bounds,
+  // which is what the older `strength` mode below was silently doing. The 95%
+  // two-sided value is named data in the sim's own config, so it is read from
+  // there rather than restated as a literal.
+  const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
+  const challengerTimes = [];
+  const baselineTimes = [];
+  let wins = 0;
+  let draws = 0;
+  const t0 = performance.now();
+  for (let g = 0; g < games; g++) {
+    const challenger = timedPilot(makeChallenger(), challengerTimes);
+    const baseline = timedPilot(createHeuristicPilot(), baselineTimes);
+    const isA = g % 2 === 0;
+    const seats = makeSeats(
+      deckA,
+      deckB,
+      { pilotA: isA ? challenger : baseline, pilotB: isA ? baseline : challenger },
+      registry,
+    );
+    const r = runMatch(seats, gameSeedFor(seedBase, g), { startingPlayer: g % 4 < 2 ? 'A' : 'B' });
+    if (r.outcome.kind === 'timeout') draws++;
+    else if ((r.outcome.winner === 'A') === isA) wins++;
+  }
+  const wall = performance.now() - t0;
+  const ci = wilsonInterval(wins, games, DEFAULT_STATS_CONFIG.z);
+  const sortedC = [...challengerTimes].sort((a, b) => a - b);
+  const meanC = challengerTimes.reduce((a, b) => a + b, 0) / challengerTimes.length;
+  const p95C = sortedC[Math.min(sortedC.length - 1, Math.floor(sortedC.length * 0.95))];
+  const meanB = baselineTimes.reduce((a, b) => a + b, 0) / baselineTimes.length;
+  const elo = eloFromWinRate(ci.p);
+  return {
+    label,
+    games,
+    wins,
+    draws,
+    p: ci.p,
+    low: ci.low,
+    high: ci.high,
+    meanMs: meanC,
+    p95Ms: p95C,
+    baselineMeanMs: meanB,
+    elo,
+    eloPerMs: elo / meanC,
+    wallSec: wall / 1000,
+    decisions: challengerTimes.length,
+  };
+}
+
+function printHeadToHead(r) {
+  console.log(
+    `  ${r.label.padEnd(26)} ${String(r.wins).padStart(4)}/${r.games}  ` +
+      `winRate=${(r.p * 100).toFixed(1)}% CI=[${(r.low * 100).toFixed(1)}%, ${(r.high * 100).toFixed(1)}%]  ` +
+      `elo=${r.elo.toFixed(0).padStart(5)}  ` +
+      `decision mean=${r.meanMs.toFixed(2)}ms p95=${r.p95Ms.toFixed(2)}ms  ` +
+      `(heuristic ${r.baselineMeanMs.toFixed(3)}ms)  elo/ms=${r.eloPerMs.toFixed(1)}  ${r.wallSec.toFixed(0)}s`,
+  );
+}
+
+if (mode === 'hybrid-strength') {
+  const { createHybridPilot, DEFAULT_HYBRID_CONFIG } = await import('@jonny-boi/ai');
+  const overrides = JSON.parse(process.env.BENCH_CONFIG ?? '{}');
+  const config = { ...DEFAULT_HYBRID_CONFIG, ...overrides };
+  console.log(`\n=== HEURISTIC vs HYBRID (${deckA.name} vs ${deckB.name}, seat+play rotated) ===`);
+  console.log(`  budget: ${JSON.stringify(config.budget)}  leafRolloutDepth=${config.leafRolloutDepth}`);
+  printHeadToHead(await headToHead(() => createHybridPilot(config), 'hybrid', count, GAMES_SEED));
+  console.log('');
+}
+
+if (mode === 'scaling') {
+  // The user's stated success metric: does MORE SEARCH TIME make it measurably
+  // STRONGER? A hybrid that does not scale is not a search, it is a constant.
+  const { createHybridPilot, DEFAULT_HYBRID_CONFIG } = await import('@jonny-boi/ai');
+  const budgets = (process.env.BENCH_BUDGETS ?? '16,64,256,1024').split(',').map(Number);
+  console.log(`\n=== SCALING: hybrid vs heuristic at increasing search budgets (n=${count} each) ===`);
+  for (const simulations of budgets) {
+    const config = { ...DEFAULT_HYBRID_CONFIG, budget: { kind: 'simulations', simulations } };
+    printHeadToHead(await headToHead(() => createHybridPilot(config), `sims=${simulations}`, count, GAMES_SEED));
+  }
+  console.log('');
+}
+
+if (mode === 'modes') {
+  // Every selectable mode against the same baseline, on the same seeds, so the
+  // comparison the brief asks for (§59) is one command.
+  const { createHybridPilot, createMctsPilot: mkMcts, DEFAULT_MCTS_CONFIG: MC, createRandomPilot } =
+    await import('@jonny-boi/ai');
+  console.log(`\n=== MODES vs HEURISTIC (n=${count} each, identical seeds) ===`);
+  printHeadToHead(await headToHead(() => createRandomPilot(), 'RANDOM', count, GAMES_SEED));
+  printHeadToHead(await headToHead(() => mkMcts(MC), 'VANILLA_MCTS', count, GAMES_SEED));
+  printHeadToHead(await headToHead(() => createHybridPilot(), 'HYBRID', count, GAMES_SEED));
+  console.log('');
 }
 
 if (mode === 'waste') {

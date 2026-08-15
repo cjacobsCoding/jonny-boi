@@ -9,7 +9,9 @@
  *   swap <deck> --out X --in Y [opts]       the paired A/B single-card-swap verdict
  *   suggest <deck> [opts]                   rank candidate swaps that improve the deck
  *
- * Common options: --games N, --seed S, --pilot <id> (heuristic|random).
+ * Common options: --games N, --seed S, --pilot <id>. The accepted ids are read
+ * from `SELECTABLE_PILOT_IDS`, so a new pilot appears in the usage text and in
+ * validation without editing this file (that list is the single source of truth).
  * Decks and cards are accepted by NAME or id. The CLI is robust: a bad arg or an
  * unknown deck/card prints a clear one-line error and exits non-zero — never a
  * raw stack trace. `--help` (and no args) prints usage.
@@ -44,18 +46,23 @@ const USAGE = `${PROGRAM} — headless MTG gauntlet / A-B card-swap lab
 
 Usage:
   npm run sim -- decks
-  npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot mcts|heuristic|random]
-  npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot mcts|heuristic|random]
+  npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}]
+  npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot ${SELECTABLE_PILOT_IDS.join('|')}]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
                                [--pilot id] [--history <file>] [--no-adaptive]
 
 Notes:
   • Decks and cards may be given by NAME (quote names with spaces) or by id.
-  • --pilot defaults to "${DEFAULT_PILOT_ID}". "mcts" is the look-ahead pilot: it
-    searches real engine rollouts per decision, so it plays better but is MUCH
-    slower — and it reasons over hidden library contents, which switches off the
-    suggestion engine's identical-game optimisation. Use it for quality, not scale.
+  • --pilot defaults to "${DEFAULT_PILOT_ID}". The look-ahead pilots search real
+    engine rollouts per decision, so they are MUCH slower — and they reason over
+    hidden library contents, which switches off the suggestion engine's
+    identical-game optimisation. Use them for quality, not scale.
+      hybrid — policy-guided PUCT search over atomic funded plays. Measured 60.0%
+               against "heuristic" over 120 seeded games (95% CI 51.1%-68.3%).
+      mcts   — the vanilla UCB1 research control. Measured 40.8% (CI 32.5%-49.8%)
+               on the same protocol, i.e. WORSE than the heuristic it rolls out
+               with, and ~5x the hybrid's decision cost. See DESIGN §3.4/§3.4a.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
   • swap --scope controls HOW MANY copies move (default "${DEFAULT_SWAP_SCOPE}"):
       playset — replace every copy: "does this card belong in the deck at all?"

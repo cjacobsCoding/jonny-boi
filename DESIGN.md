@@ -110,6 +110,59 @@ machine-dependent and destroys the common-random-numbers property the paired A/B
 / push lethal) rather than cast blind, and mana is tapped from a **funding plan** so the pilot stops
 tapping once a cost is covered.
 
+### 3.4a The `hybrid` search pilot — ✅ done  *(Phases 1–4 of the superhuman-AI program)*
+`docs/plans/superhuman-ai-program.md` §58 phases 1–4, built **on measurement, not on intuition**. The
+NO-GO above was about *naive MCTS as a drop-in pilot*, not about search. Re-asking the question properly
+reverses the result.
+
+**Phase 1 — instrumented first** (`packages/ai/src/search-stats.ts`, `bench/mcts-bench.mjs instrument`).
+The vanilla search reports its own shape now; the numbers said where the problem was:
+
+| measured on vanilla `mcts`, 24 real mid-game positions | value |
+|---|---|
+| root branching, mean / max | **4.8 / 9** — branching was never the problem |
+| engine plies per simulation | **105.8** = 5.0 in-tree + **100.8 rollout** → **95% of all work is rollout** |
+| rollouts that reach a terminal | **25%** — the other 75% pay 100 plies and get a positional guess anyway |
+| cost vs `rolloutDepth` | **linear**: 0.75 MB/decision at 1 → 18.9 MB at 120 |
+| offered actions that are strategically duplicate | **41.6%** (42,806 → 25,015 over 20 real games) |
+| decisions with a single legal action | **25.7%** |
+| decision time, mean / p95 | **39 ms / 160 ms** |
+
+**Phases 2–4 — what changed, each aimed at a measured number.**
+- **Atomic action space** (`policyCandidates` in `heuristic.ts`). A search candidate is a whole funded
+  play — the taps *and* the cast — planned through core's `planManaPayment`, the same planner the
+  heuristic pays with. A naked `tapForMana` is **not in the search space at all**, so the recorded
+  tap-and-don't-spend failure has no representation. Equivalent actions collapse via
+  `actionEquivalenceKey` (five Islands ⇒ one option), and a position whose policy offers one option is
+  auto-resolved with no search node.
+- **PUCT + progressive widening + policy prior** (`hybrid.ts`). `P(s,a) ∝ exp(score/temperature)` from the
+  heuristic's own scoring, with a **floor prior** so the heuristic can make an option unlikely but never
+  impossible. Rewards back up **adversarially** — an opponent node minimises them, where vanilla MCTS
+  maximised the decider's reward at every node.
+- **Leaf evaluation instead of playouts** (`evaluator.ts`, the brief's §30 `evaluateState` /
+  `evaluatePolicy` seam, initially heuristic-backed so a learned model drops in later). Life, board, card
+  advantage, mana development, untapped mana, body count and lethal-board, each a named tunable weight —
+  explicitly *not* "life total + card count".
+
+**Measured result — HYBRID vs HEURISTIC, 120 seeded games, seat and play both rotated** (the identical
+protocol that produced the 40.8% above):
+
+| pilot | win rate vs heuristic | 95% CI | mean decision |
+|---|---|---|---|
+| `mcts` (vanilla) | 40.8% | [32.5%, 49.8%] | 39 ms |
+| **`hybrid`** | **60.0%** | **[51.1%, 68.3%]** | **7.07 ms** (p95 66 ms) |
+
+The interval excludes 50%: the hybrid is **stronger than the policy it takes its prior from**, at ~1/5 of
+vanilla MCTS's decision cost. `DEFAULT_PILOT_ID` **stays `heuristic`** — the hybrid is still ~1400× the
+heuristic's per-decision cost, and re-defaulting is a separate decision that needs a gauntlet-wide
+throughput case, not a head-to-head win.
+
+⚠️ **Two budget policies, deliberately not unified** (`SearchBudget`). `simulations` is deterministic and
+is the **only** kind the Lab's evaluation path may use; `millis` (`PLAY_HYBRID_CONFIG`) is for interactive
+play only. A wall-clock budget makes the search machine-dependent and destroys the common-random-numbers
+property the paired A/B verdict rests on — the same trap `MctsConfig.maxDecisionMillis` documents. Pinned
+by a test.
+
 ### 3.5 Sim harness + statistics — ✅ done
 Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B
 single-card-swap** test (paired / common-random-numbers + **McNemar's test**) that returns a significance

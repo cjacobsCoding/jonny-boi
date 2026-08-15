@@ -76,9 +76,73 @@ throughput (games/sec) from regressing.
 | feat/card-index-truth | worker | apps/web/src/data + apps/web/scripts + web card docs | ✅ INTEGRATED |
 | perf/mcts-usable | worker | packages/ai | ✅ INTEGRATED (NO-GO: mcts slower AND weaker) |
 | feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
+| feat/hybrid-search | worker | packages/ai (new: search-stats/evaluator/hybrid/hybrid-config + heuristic policy seam + bench), DESIGN §3.4a | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/hybrid-search` 🚧 PUSHED — **the MCTS NO-GO is reversed, and the reversal is
+  measured.** Phases 1–4 of `docs/plans/superhuman-ai-program.md` §58. `packages/ai` only, plus DESIGN §3.4a.
+  👉 **HYBRID beats the heuristic 60.0% over 120 seeded games, 95% CI [51.1%, 68.3%]** — seat AND play
+  rotated, the *identical* protocol that measured vanilla MCTS at **40.8% [32.5%, 49.8%]**. The interval
+  excludes 50% in both cases, in opposite directions. Mean decision **7.07 ms** vs vanilla's **39 ms**, so
+  it is simultaneously ~19 points stronger and ~5× cheaper. `DEFAULT_PILOT_ID` is untouched.
+  ⚠️ **The old NO-GO was correct about naive MCTS and wrong as a verdict on search.** Do not cite it as
+  "search doesn't work here". What was broken was the QUESTION: the search's action space.
+  👉 **PHASE 1 FIRST, and the numbers redirected the plan** (`bench/mcts-bench.mjs instrument`, and the
+  search now reports its own shape through the optional `SearchStatsSink` — zero cost when absent):
+  root branching mean **4.8** / max **9** (branching was never the problem); **105.8 engine plies per
+  simulation of which 100.8 are ROLLOUT** — 95% of all work; only **25% of rollouts reach a terminal**, so
+  three-quarters pay 100 plies and then fall back on a positional guess anyway; cost **linear** in rollout
+  depth (0.75 MB/decision at 1 → 18.9 MB at 120); **41.6%** of offered actions are strategically duplicate
+  (42,806 → 25,015 over 20 real games); **25.7%** of decisions have a single legal action.
+  👉 **THE FIX IS STRUCTURAL, NOT A TUNING.** A search candidate is now an ATOMIC funded play — the taps
+  *and* the cast, planned through core's `planManaPayment` (the same planner the heuristic pays with). A
+  naked `tapForMana` is **not in the search space at all**, so the recorded tap-and-don't-spend failure has
+  no representation to express. `MctsConfig.evalWastedManaPenalty` priced that symptom and cost 11.6 points
+  of win rate; removing the representation costs nothing and gains 19.
+  ⚠️ **Atomicity inside the tree is only HALF the fix and this trap is easy to miss.** The engine still
+  asks one action at a time, so a pilot that re-searched after each tap could pick a *different* macro next
+  time and strand the mana it just made — the same bug, re-entering through the front door. The pilot
+  therefore COMMITS to its chosen macro and carries it out, re-validating every ply against the live legal
+  actions (and turn/step/priority) before playing it, so a stale plan can never be forced through. It is
+  also a ~4× speedup: a three-mana spell costs one search instead of four.
+  👉 **NEW SEAMS other agents can use** (all additive, `packages/ai`): `policyCandidates(view, legal,
+  weights)` — the heuristic's own scoring exposed as candidate STRATEGIC actions, which is the reusable
+  form of "the heuristic knows MTG things the search doesn't"; `StateEvaluator` = `evaluateState` /
+  `evaluatePolicy` (brief §30), heuristic-backed today so a learned model is a different ARGUMENT, not a
+  different search; `actionEquivalenceKey` / `countEquivalentActions`, which both MEASURE redundancy and
+  REMOVE it, so a claimed saving can't be fiction; `SearchStatsSink` for any future search.
+  ⚠️ **TWO BUDGET POLICIES, DELIBERATELY NOT UNIFIED — do not "simplify" this.** `SearchBudget` is a
+  discriminated union: `simulations` (deterministic, the ONLY kind the Lab's evaluation path may use) and
+  `millis` (`PLAY_HYBRID_CONFIG`, interactive play only). A wall-clock budget makes the search
+  machine-dependent, so the base and variant arms of a paired A/B swap can get DIFFERENT budgets on the
+  same seed and the common-random-numbers premise dies. Making the kind explicit means nobody can become
+  time-based by accident. Pinned by a test, including one that freezes `performance.now` and asserts the
+  default budget's answer is unchanged.
+  👉 **The evaluator is deliberately NOT "life + card count"** (brief §9): life, board stats, body count,
+  card advantage, mana development, untapped mana, and a lethal-board bonus, each a named tunable weight.
+  Regression tests pin the three blind spots the old life-and-board leaf eval had.
+  ⚠️ **RULE 7 — heuristic path is UNCHANGED, and that is proven by output, not by timing.** `npm run sim --
+  gauntlet "Mono-Red Aggro" --games 40 --seed 99` is **byte-identical** between `main` and this branch on
+  every line except the throughput line. The only heuristic edit was extracting `scoredSpellGoals` out of
+  `bestSpellGoal` (same code, same order); everything else is new files the heuristic never calls.
+  ⚠️ **I found and fixed a real measurement bug in the existing bench.** `wilsonInterval(successes, n)` —
+  `z` is a REQUIRED third argument, so the `strength` mode has been printing `95%CI=[NaN%, NaN%]` all
+  along. It now reads `DEFAULT_STATS_CONFIG.z`. If you have an old strength result with NaN bounds, that
+  is why.
+  ❌ **What I did NOT build, and why** — brief §11 tactical solver, §12 opponent-threat search, §13–17
+  belief model / determinization, §18–22 transposition tables and tree reuse, §31 learned policy. The brief
+  itself says do not build it all at once, and each of those is a branch. The measured order still holds:
+  the next-largest win is tree reuse between decisions, because the pilot currently throws its tree away
+  after every macro. ⚠️ Also NOT done: re-defaulting. The hybrid is ~1400× the heuristic's per-decision
+  cost, so the Lab's stock gauntlet would go from seconds to hours; that needs a throughput case, not a
+  head-to-head win. The previous `mcts` flip shipped on exactly that reasoning gap.
+  ⛔ **`packages/core` untouched, but ONE change is wanted there** (reported, not made — core is hot-path
+  and other branches are live in it): `planManaPayment` re-scans `view.battlefield` with a `.find()` per
+  offered `tapForMana` action, i.e. O(sources × battlefield) per call, and the hybrid calls it once per
+  castable card per node. An index built once per call would make it O(sources + battlefield). It is the
+  single hottest thing the new policy does.
 
 - 2026-08-15 worker: `feat/attachments` 🚧 PUSHED — **auras + equipment, as ONE seam.** Suite **1856
   passed / 0 failed** (baseline 1822 + 34), `npm run verify` exit 0, `npm run build` exit 0, lint 0 errors.

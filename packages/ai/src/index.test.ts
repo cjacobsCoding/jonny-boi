@@ -52,6 +52,20 @@ describe('the default pilot', () => {
     const registry = createDefaultAiRegistry();
     for (const id of SELECTABLE_PILOT_IDS) expect(registry.getPilot(id)?.id).toBe(id);
   });
+
+  /**
+   * The `hybrid` search pilot beat the heuristic 60.0% over 120 seeded games
+   * (95% CI [51.1%, 68.3%], DESIGN §3.4a) — a real, significant strength win, and
+   * still NOT grounds to re-default. It costs ~7 ms per decision against the
+   * heuristic's ~0.004 ms, so the Lab's stock gauntlet would go from seconds to
+   * hours; re-defaulting needs a throughput case, not only a head-to-head. The
+   * previous flip to `mcts` shipped on exactly that reasoning gap.
+   */
+  it('offers the hybrid search pilot as a selectable choice, but not as the default', () => {
+    expect(SELECTABLE_PILOT_IDS).toContain('hybrid');
+    expect(getPilot('hybrid')?.id).toBe('hybrid');
+    expect(DEFAULT_PILOT_ID).not.toBe('hybrid');
+  });
 });
 
 describe('AI registry seam', () => {

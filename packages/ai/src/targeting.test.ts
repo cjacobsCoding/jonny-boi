@@ -33,6 +33,8 @@ import {
 import { createHeuristicPilot } from './heuristic.js';
 import { createMctsPilot } from './mcts.js';
 import { FAST_MCTS_CONFIG } from './mcts-config.js';
+import { createHybridPilot } from './hybrid.js';
+import { FAST_HYBRID_CONFIG } from './hybrid-config.js';
 import { addPool, createTestRegistry, creatureDef, giveHand, landDef, putOnBattlefield } from './test-support.js';
 
 /** Burn that may only hit a player — Lava Spike. */
@@ -166,6 +168,11 @@ describe('every action a pilot returns is a target the engine accepts', () => {
   it.each([
     ['heuristic', () => createHeuristicPilot()],
     ['mcts', () => createMctsPilot(FAST_MCTS_CONFIG)],
+    // The hybrid is the sharpest case for this guard. It returns the FIRST ply of
+    // a multi-action macro and then carries the rest out from memory, so a plan
+    // that went stale would show up here as a rejected action — and a rejected
+    // action leaves the position unchanged, which is how a match loop spins.
+    ['hybrid', () => createHybridPilot(FAST_HYBRID_CONFIG)],
   ])('%s: never has a cast rejected over many real positions', (_name, makePilot) => {
     const pilot = makePilot();
     const rng = createRng(909);

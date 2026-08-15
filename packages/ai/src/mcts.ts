@@ -90,6 +90,8 @@ import { DEFAULT_MCTS_CONFIG } from './mcts-config.js';
 import { createRandomPilot } from './random.js';
 import { createHeuristicPilot } from './heuristic.js';
 import { safeFallbackAction } from './choices.js';
+import type { SearchStatsSink, StatsAccumulator } from './search-stats.js';
+import { countEquivalentActions, createStatsAccumulator, finishStats } from './search-stats.js';
 
 /** The id the MCTS pilot registers under and is selected by from data. */
 export const MCTS_PILOT_ID = 'mcts';
@@ -97,8 +99,15 @@ export const MCTS_PILOT_ID = 'mcts';
 /**
  * Build the MCTS pilot with the given (tunable) config. A factory matching the
  * registry's factory model; the pilot is otherwise stateless between decisions.
+ *
+ * `stats` is an OPTIONAL instrumentation sink (see `search-stats.ts`). It exists
+ * so the search's real shape — branching factor, tree depth, how many engine plies
+ * go to the tree versus to rollouts — can be MEASURED rather than guessed, which
+ * is what `docs/plans/superhuman-ai-program.md` §2/§65 demands before any
+ * optimisation. When it is absent (every shipped call site) the search allocates
+ * nothing for it and takes no extra branch inside a loop.
  */
-export function createMctsPilot(config: MctsConfig = DEFAULT_MCTS_CONFIG): Pilot {
+export function createMctsPilot(config: MctsConfig = DEFAULT_MCTS_CONFIG, stats?: SearchStatsSink): Pilot {
   // Reuse the existing pilots as the rollout default policy (DRY — no bespoke
   // playout logic). Both are stateless, so we build them once.
   const rolloutPilot = config.rolloutPolicy === 'heuristic' ? createHeuristicPilot() : createRandomPilot();
@@ -113,7 +122,7 @@ export function createMctsPilot(config: MctsConfig = DEFAULT_MCTS_CONFIG): Pilot
       'Monte-Carlo Tree Search (UCB1 selection + engine rollouts, tunable budget). Research option: ~2000x slower than the heuristic and, at the shipped budget, measurably weaker (40.8% over 120 seeded games).',
     chooseAction(ctx: DecisionContext): GameAction {
       try {
-        return search(ctx, config, policy);
+        return search(ctx, config, policy, stats);
       } catch {
         // Robustness: never throw on an odd state. Fall back to a safe, legal move.
         return safeFallback(ctx);
@@ -174,7 +183,12 @@ interface ChildEdge {
   totalReward: number;
 }
 
-function search(ctx: DecisionContext, config: MctsConfig, policy: RolloutPolicy): GameAction {
+function search(
+  ctx: DecisionContext,
+  config: MctsConfig,
+  policy: RolloutPolicy,
+  stats?: SearchStatsSink,
+): GameAction {
   const { view, legalActions, rng } = ctx;
   const decider = view.priorityPlayer;
 
@@ -225,11 +239,20 @@ function search(ctx: DecisionContext, config: MctsConfig, policy: RolloutPolicy)
   // its input and returns a fresh state, so each simulation derives its own line
   // from `view` without us copying state ourselves.
   const rootState = view as GameState;
+  const acc = stats ? createStatsAccumulator() : undefined;
+  if (acc) {
+    const equivalence = countEquivalentActions(rootState, root.untried);
+    acc.rootBranching = equivalence.offered;
+    acc.rootDistinct = equivalence.distinct;
+    noteBranching(acc, root.untried.length);
+    acc.nodes = 1;
+  }
   const scratch: SimScratch = {
     path: [],
     edges: [],
     wasted: 0,
     rolloutCtx: { view: rootState, legalActions: EMPTY_ACTIONS, rng },
+    acc,
   };
   const deadline = config.maxDecisionMillis === Infinity ? Infinity : now() + config.maxDecisionMillis;
 
@@ -239,6 +262,7 @@ function search(ctx: DecisionContext, config: MctsConfig, policy: RolloutPolicy)
     if (deadline !== Infinity && (i & 0x7) === 0 && now() >= deadline) break;
     runSimulation(root, rootState, decider, config, rulesConfig, registry, policy, rng, scratch);
   }
+  if (acc && stats) stats.decision(finishStats(acc));
 
   // Pick the most-visited root child (robust child) — the standard MCTS final move
   // choice, less noisy than highest mean reward. RNG breaks ties for determinism.
@@ -275,6 +299,11 @@ function runSimulation(
   // makes: the shared `rootState` — which is the real, live game view — is never
   // touched, and every ply after this one costs no copy at all.
   let state: GameState = cloneState(rootState);
+  const acc = scratch.acc;
+  if (acc) {
+    acc.simulations++;
+    acc.clones++;
+  }
   // The visited path and its edges are rebuilt every simulation and dropped at
   // the end of it, so they are REUSED scratch rather than two fresh arrays per
   // simulation. Safe because nothing outside this function ever sees them: the
@@ -295,6 +324,7 @@ function runSimulation(
     const edge = selectUcb1(node, config, rng);
     if (!edge) break;
     state = step(state, edge.action, rulesConfig, registry, decider, scratch);
+    if (acc) acc.treePlies++;
     node = edge.node;
     path.push(node);
     edges.push(edge);
@@ -302,6 +332,7 @@ function runSimulation(
     if (!node.enumerated) {
       pushLegalAt(node.untried, state, rulesConfig);
       node.enumerated = true;
+      if (acc) noteBranching(acc, node.untried.length);
     }
   }
 
@@ -311,6 +342,10 @@ function runSimulation(
     const idx = rng.nextInt(node.untried.length);
     const action = node.untried.splice(idx, 1)[0] as GameAction;
     state = step(state, action, rulesConfig, registry, decider, scratch);
+    if (acc) {
+      acc.treePlies++;
+      acc.nodes++;
+    }
     // The child's legal actions are enumerated lazily on its first later descent.
     const child: SearchNode = { untried: [], children: [], visits: 0, enumerated: false };
     const edge: ChildEdge = { action, node: child, totalReward: 0 };
@@ -326,6 +361,15 @@ function runSimulation(
   // --- BACKPROP: every visited node gets a visit; every edge accumulates reward.
   for (let i = 0; i < path.length; i++) (path[i] as SearchNode).visits++;
   for (let i = 0; i < edges.length; i++) (edges[i] as ChildEdge).totalReward += reward;
+  // `path` includes the root, so its length is the edge count + 1.
+  if (acc && path.length - 1 > acc.maxTreeDepth) acc.maxTreeDepth = path.length - 1;
+}
+
+/** Fold one node's legal-action count into the branching-factor statistics. */
+function noteBranching(acc: StatsAccumulator, count: number): void {
+  acc.branchingSum += count;
+  acc.branchingCount++;
+  if (count > acc.maxBranching) acc.maxBranching = count;
 }
 
 /**
@@ -356,6 +400,12 @@ interface SimScratch {
   wasted: number;
   /** The rollout policy's decision context, rewritten per ply (see `rollout`). */
   readonly rolloutCtx: MutableDecisionContext;
+  /**
+   * The optional instrumentation accumulator. `undefined` on every shipped call
+   * site, which is what keeps measurement free: each counter site is one
+   * already-loaded reference compare, and no stats object is ever built.
+   */
+  readonly acc: StatsAccumulator | undefined;
 }
 
 /**
@@ -428,6 +478,12 @@ function rollout(
     const action = policy.pilot.chooseAction(ctxScratch as DecisionContext);
     s = step(s, action, rulesConfig, registry, decider, scratch);
     plies++;
+  }
+  const acc = scratch.acc;
+  if (acc) {
+    acc.rolloutPlies += plies;
+    if (s.gameOver) acc.terminalEvaluations++;
+    else acc.leafEvaluations++;
   }
   return evaluate(s, decider, config, plies, scratch.wasted);
 }

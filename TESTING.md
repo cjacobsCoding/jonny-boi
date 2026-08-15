@@ -77,6 +77,9 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 |---|---|
 | `heuristic.test.ts` | Land drops, removal targeting, combat tricks, **mana tapped only as needed** |
 | `mcts.test.ts` | Determinism, legality, strength vs the other pilots |
+| `hybrid.test.ts` | The hybrid search: determinism, the **atomic** action space (a naked mana tap is not a searchable option), macro commitment, forced-decision compression, progressive widening, and the **two budget policies** — only the interactive config may read the clock |
+| `evaluator.test.ts` | The `evaluateState`/`evaluatePolicy` seam is zero-sum and symmetric, and sees card advantage / mana development / lethal boards that a life-and-board evaluator cannot |
+| `search-stats.test.ts` | Action equivalence (five Islands are one decision, a Bird is not an Island) and that instrumentation never changes what a search chooses |
 | `targeting.test.ts` | Pilots only construct legal targets |
 | `choices.test.ts` | Pilots answer parked choices |
 | `random.test.ts` | The baseline pilot stays legal |
