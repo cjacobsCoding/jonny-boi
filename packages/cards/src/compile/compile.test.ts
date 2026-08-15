@@ -325,10 +325,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'targeting restricted to an opponent (a "player who isn’t you" target)',
-    );
+    // The engine now HAS a "player who isn't you" restriction, so this card is
+    // implementable and must actually be implemented — refusing it would be the
+    // compiler being stricter than the engine requires.
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: 2, targets: 'opponent' } },
+    ]);
   });
 
   // Removal, combat tricks and counterspells were never aimed wrongly — their

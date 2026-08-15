@@ -81,7 +81,9 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   if (amount <= 0) return;
   const target = ctx.targets[0];
   if (target === undefined) return;
-  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target)) return; // illegal → fizzle
+  // `ctx.controller` is passed so an "opponent-only" restriction can be judged —
+  // without it the check cannot tell the caster apart from their opponent.
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller)) return; // illegal → fizzle
 
   if (isPlayerTarget(target)) {
     changeLife(ctx, target, -amount);
@@ -266,9 +268,13 @@ export const persistReturn: EffectPrimitive = (ctx) => {
  */
 export const destroyTarget: EffectPrimitive = (ctx) => {
   const target = firstPermanentTarget(ctx);
-  if (!target || !isCreature(target.def)) return;
+  if (!target) return;
+  // Which permanents this may destroy comes from the DECLARED restriction, not a
+  // hard-coded creature check — otherwise "destroy target artifact" would find a
+  // legal artifact target and then silently do nothing to it.
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target.instanceId, ctx.controller)) return;
   if (!passesDestroyFilter(ctx, target)) return;
-  destroyCreature(ctx, target);
+  destroyPermanent(ctx, target);
 };
 
 /**
@@ -296,7 +302,7 @@ export const exileTarget: EffectPrimitive = (ctx) => {
  */
 export const destroyAll: EffectPrimitive = (ctx) => {
   const creatures = ctx.state.battlefield.filter((c) => isCreature(c.def));
-  for (const creature of creatures) destroyCreature(ctx, creature);
+  for (const creature of creatures) destroyPermanent(ctx, creature);
 };
 
 /**
@@ -559,10 +565,18 @@ export const addCounters: EffectPrimitive = (ctx) => {
   });
 };
 
-/** Destroy a creature: move it to its owner's graveyard and emit `creatureDied`. */
-function destroyCreature(ctx: EffectContext, creature: CardInstance): void {
-  movePermanentTo(ctx, creature, 'graveyard');
-  ctx.emit({ type: 'creatureDied', instanceId: creature.instanceId, name: creature.def.name });
+/**
+ * Destroy a permanent: move it to its owner's graveyard.
+ *
+ * `creatureDied` is emitted only for an actual creature — it is what death
+ * triggers key off, and firing it for a destroyed artifact would make a "when a
+ * creature dies" ability trigger on something that never was one.
+ */
+function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
+  movePermanentTo(ctx, permanent, 'graveyard');
+  if (isCreature(permanent.def)) {
+    ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
+  }
 }
 
 // --- the canonical primitive id registry ---------------------------------------

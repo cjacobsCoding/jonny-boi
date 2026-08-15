@@ -241,3 +241,27 @@ describe('+1/+1 counters', () => {
     expect(result.status).toBe('incomplete');
   });
 });
+
+describe('targeting filters — artifact and opponent-only', () => {
+  it('compiles "Destroy target artifact"', () => {
+    const result = compileCard(
+      card({ name: 'Naturalize-ish', oracleText: 'Destroy target artifact.' }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'destroyTarget',
+      params: { targets: 'artifact' },
+    });
+  });
+
+  it('compiles "Target opponent loses N life" with an opponent-only restriction', () => {
+    const result = compileCard(
+      card({ name: 'Drain', oracleText: 'Target opponent loses 2 life.' }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'loseLife',
+      params: { amount: 2, targetPlayer: true, targets: 'opponent' },
+    });
+  });
+});

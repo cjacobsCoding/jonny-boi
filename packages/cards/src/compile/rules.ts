@@ -56,15 +56,17 @@ const TOKEN_DEFAULT_COUNT = 1;
  * the engine has no planeswalkers at all: the choice is vacuous, not approximated.
  * If planeswalkers are ever implemented, these entries need a third target kind.
  *
- * Deliberately ABSENT: "target **opponent**". `TargetRestriction` can say "a
- * player" but not "a player who isn't you", so an opponent-only spell would be
- * offered pointing at its own caster. That is a (harmless-looking) infidelity, and
- * the rule is faithful or not at all — those cards fall through to `missing`.
+ * "target **opponent**" now maps to its own `'opponent'` restriction, which the
+ * engine evaluates against the caster. It used to be absent here because
+ * `TargetRestriction` could say "a player" but not "a player who isn't you", and
+ * flattening it to `'player'` would have let the spell be aimed at its own
+ * caster — strictly more permissive than printed.
  */
 const DAMAGE_TARGET_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
   'any target': 'any',
   'target creature': 'creature',
   'target player': 'player',
+  'target opponent': 'opponent',
   'target creature or player': 'any',
   'target player or planeswalker': 'player',
   'target creature or planeswalker': 'creature',
@@ -114,6 +116,8 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
 const CREATURE_TARGET: TargetRestriction = 'creature';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
+const ARTIFACT_TARGET: TargetRestriction = 'artifact';
+const OPPONENT_TARGET: TargetRestriction = 'opponent';
 
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
@@ -381,6 +385,31 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^destroy all creatures$/,
     build() {
       return effects({ primitive: 'destroyAll' });
+    },
+  },
+  {
+    id: 'destroy-target-artifact',
+    description: '"Destroy target artifact"',
+    pattern: /^destroy target artifact$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'destroyTarget', params: { targets: ARTIFACT_TARGET } });
+    },
+  },
+  {
+    id: 'target-opponent-loses-life',
+    description: '"Target opponent loses N life"',
+    // Now expressible: `TargetRestriction` can say "a player who isn't you", so
+    // the spell can no longer be offered pointing at its own caster.
+    pattern: new RegExp(`^target opponent loses ${COUNT_TOKEN} life$`),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'loseLife',
+        params: { amount, targetPlayer: true, targets: OPPONENT_TARGET },
+      });
     },
   },
   {
@@ -1112,11 +1141,11 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   { pattern: /\bfights?\b/, missingEngineSystem: 'a fight template the compiler does not recognize yet' },
   {
-    // The effect is implementable; the TARGET is not. A `TargetRestriction` can say
-    // "a player", never "a player who isn't you", so an opponent-only spell would be
-    // offered pointing at its own caster — strictly more permissive than printed.
+    // `TargetRestriction` CAN now say "a player who isn't you" ('opponent'), so
+    // what still lands here is an opponent-targeting template with no rule yet —
+    // not a missing engine capability.
     pattern: /\btarget opponent\b/,
-    missingEngineSystem: 'targeting restricted to an opponent (a "player who isn’t you" target)',
+    missingEngineSystem: 'an opponent-targeting template the compiler does not recognize yet',
   },
   {
     pattern: /unless (?:its controller|that player|you) pays?/,
