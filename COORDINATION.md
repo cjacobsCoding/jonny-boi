@@ -75,9 +75,92 @@ throughput (games/sec) from regressing.
 | feat/pool-adaptive-wire | worker | apps/web + packages/sim | ✅ INTEGRATED |
 | feat/card-index-truth | worker | apps/web/src/data + apps/web/scripts + web card docs | ✅ INTEGRATED |
 | perf/mcts-usable | worker | packages/ai | ✅ INTEGRATED (NO-GO: mcts slower AND weaker) |
+| feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/attachments` 🚧 PUSHED — **auras + equipment, as ONE seam.** Suite **1856
+  passed / 0 failed** (baseline 1822 + 34), `npm run verify` exit 0, `npm run build` exit 0, lint 0 errors.
+  👉 **The seam is a RELATIONSHIP, not two systems.** `CardInstance.attachedTo` + a data
+  `CardDefinition.attachment` (host filter, `PermanentModification`, `whenIllegal`). An Aura and an
+  Equipment differ in exactly two places, both DATA: how they attach (a spell script vs an `Equip {N}`
+  activated ability — both the same `attachToTarget` primitive) and what the SBAs do when they are not
+  legally attached (CR 704.5m to the graveyard / 704.5n just unattach). Core never asks "is this an aura".
+  👉 **The buff is DERIVED, never stored** — the same choice `statics.ts` made, and it pays off the same
+  way: an attachment's grant is re-read from `state.battlefield` on every effective-P/T read, so it
+  vanishes the instant the attachment leaves play with zero bookkeeping. It folds into `indexContinuous`
+  as layer 3a beside statics (3b), so attachments, anthems, +1/+1 counters and until-EOT pumps all stack
+  additively through ONE path. A 2/2 with a counter, an anthem, an Equipment and a pump reads 9/8.
+  👉 **`isLegallyAttached` is one predicate covering all three SBA cases** (host left play / host no
+  longer matches the printed line / attached to nothing), and `attachTo` asks the SAME function before
+  forming a relationship — so the engine cannot create a board the SBAs immediately undo.
+  ⚠️ **The brief asked for "hexproof gained after attaching → aura falls off". That is NOT the rule and
+  I did not implement it.** Hexproof/shroud stop a permanent being TARGETED (a cast-time rule); only
+  PROTECTION makes an already-attached Aura illegal (CR 704.5m + 303.4c), and this engine has no
+  protection. Dropping the Aura there would make every Aura strictly worse than printed. There is a test
+  pinning the correct behaviour so nobody "fixes" it.
+  👉 **New core API:** `TargetRestriction` gained `'creatureYouControl'` (what every printed Equip aims
+  at — offering the whole table would let a pilot equip the opponent's board); `restrictionOfEffects` is
+  now exported from the core index; `StaticAbility` now extends a shared `PermanentModification` and
+  `staticIsInert` is a thin wrapper over `modificationIsInert` (no behaviour change).
+  ⚠️ **`CardInstance.attachedTo` is OPTIONAL in the type and always WRITTEN by every mint/clone path.**
+  Deliberate: gameplay instances keep one object shape, while hand-built literals in other packages'
+  tests (apps/web has four) and any older serialized state still compile and read as unattached. Every
+  reader tests `!= null`, never `!== null`. Making it required broke the apps/web build; making it
+  optional touches nothing outside my packages.
+  ⚠️ **I touched ONE line outside my packages: `packages/sim/src/paired-arms-config.ts`** adds
+  `'attachToTarget'` to `LIBRARY_SAFE_PRIMITIVES`. Its own test asserts the two sets cover the whole
+  registry, so ANY new primitive fails the sim suite until it is classified — this is that test doing its
+  job, not a scope grab. Integrator: expect a trivial conflict there if another branch adds a primitive.
+  👉 **Cards ship through the IMPORTER, not the pool, and that was forced.** `packages/data-tools/data/
+  card-index.json` (156 cards) contains **zero** Auras and **zero** Equipment, and
+  `apps/web/src/data/card-index.test.ts` requires every pool card to have a display row with art. So a
+  curated-pool playset needs a Scryfall re-fetch (data-tools) plus a web index regeneration — both
+  outside this branch. Verified faithful from real printed Oracle text instead: **Unholy Strength, Dead
+  Weight, Flight, Bonesplitter, Loxodon Warhammer**. Anyone importing those today gets a real card.
+  👉 **The pilot genuinely plays them, proven by BEHAVIOUR not by tests passing**
+  (`packages/cards/src/attachments-play.test.ts` plays real games): an Aura lands on the pilot's OWN
+  creature and its power really goes up; Dead Weight is aimed at the OPPONENT and kills the creature; the
+  Equip ability is activated and the sword ends up attached. ⚠️ **The first version of the equip pilot
+  looked perfect and equipped exactly never**: the engine only OFFERS an activated ability whose mana
+  cost the floating pool already covers, and the pilot never floats mana speculatively, so reading
+  `legalActions` found nothing. It now plans equip through the same `planManaPayment` a spell uses.
+  Anyone wiring a future mana-costed ability into a pilot will hit this.
+  ⚠️ **PERF (rule 7) — read this before you re-measure anything on this box.** Two measurements, and
+  they DISAGREE, so both are reported:
+  · **`packages/core/bench/engine-alloc-bench.ts` (the repo's own noise-immune measure — its header says
+    wall clock here "is close to worthless"): PARITY or better.** 10.71 µs/action vs base 10.92;
+    122.6 vs 120.2 games/sec; `cloneState` 4156 ns vs 4128 (34.6 vs 34.4 ns per cloned instance).
+  · **Gauntlet wall clock: −3.6%, consistent.** Golgari Midrange, 300 games/opponent (2,100 games),
+    seed 99, INTERLEAVED base/branch four times: branch 240/239/238/235 vs base 244/248/247/249.
+    The games are **byte-identical** (`sim gauntlet` output diffs clean), so it is pure overhead, not
+    different play.
+  👉 **I could not attribute the 3.6% to any single change, and the bisect is recorded so nobody repeats
+  it.** Reverting each of these individually recovered NOTHING beyond noise: `packages/core` entirely
+  (core alone measures at parity), `targeting.ts`, the attachment SBA scan, the pilot's equip scan,
+  `pool.ts`. It is diffuse — six one-comparison additions spread across `indexContinuous`,
+  `checkStateBasedActions`, `isLegalTarget`/`legalTargetsFor`, the clone and the pilot.
+  👉 **The remaining lever, if the integrator wants it:** a monotone `GameState.hasAttachment` flag set
+  on battlefield entry, so a game whose decks contain no Aura or Equipment skips the attachment work
+  entirely. I did NOT do it: it is a second structure that can desync from the truth (miss one entry
+  path and an unattached Aura silently stops dying), and I was not willing to take that trade at the end
+  of a session for ~1% on a benchmark whose noise floor is ±2.5%.
+  ⚠️ **Measurement discipline:** this box drifts 332→346 games/sec on IDENTICAL code within minutes
+  (thermal), and my first three comparisons were sequential and therefore worthless — one of them
+  "proved" a change was free that a proper interleaved run later showed cost 4%. Alternate the variants
+  inside one shell invocation, use ≥2,000 games, and prefer the allocation bench.
+  👉 **Two real hot-path traps found and avoided, both worth knowing:** a helper returning
+  `{ statics, attachments }` allocated an object on EVERY `indexContinuous` call (it runs several times
+  per action) — the discovery is inlined instead; and the attachment SBA originally re-walked the
+  battlefield once per FIXPOINT PASS — nothing enters the battlefield during SBAs, so the set is
+  collected once per call and is `null` (one reference compare per pass) on every board without an
+  attachment.
+  👉 **Stale-hint fix:** the compiler's unsupported hint for `equip|attach|enchant` no longer says the
+  whole system is missing; it now names the missing TEMPLATE. Separately: **`statics.ts` exists in core
+  but NO compile rule reaches it**, so anthems still cannot be imported — that is a genuine gap and I
+  left it alone because `feat/static-effects` is in flight on the same files.
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-15 integrator: **`npm run lint` had been red on `main` for a long time — 259 errors — and
   nobody noticed because nothing ran it.** Now green (0 errors) and wired into a new root

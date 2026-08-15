@@ -176,6 +176,20 @@ export interface CardDefinition {
    * bookkeeping. Omit for cards with none (the overwhelming majority).
    */
   readonly statics?: readonly import('./statics.js').StaticAbility[];
+  /**
+   * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
+   * data: what it may be attached to, what it does to its host while attached, and
+   * what the state-based actions do when it is not legally attached. See
+   * `attachments.ts`; the two printed forms differ only in that data, so core has
+   * one attachment system rather than an aura one and an equipment one.
+   *
+   * How it BECOMES attached is not declared here, because it is already
+   * expressible: an Aura carries `effects: [{ primitive: 'attachToTarget' }]` (its
+   * spell targets a creature and attaches on resolution), and an Equipment carries
+   * the same ref inside an `activated` ability — which is exactly what "Equip {N}"
+   * abbreviates.
+   */
+  readonly attachment?: import('./attachments.js').AttachmentSpec;
 }
 
 /**

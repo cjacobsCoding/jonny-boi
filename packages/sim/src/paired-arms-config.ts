@@ -116,6 +116,8 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'mill',
   // Battlefield-only: reads and writes creatures, never a library.
   'fight',
+  // Attaching an Aura/Equipment reads only the battlefield permanent it targets.
+  'attachToTarget',
   'dealDamageToEach',
   'addCounters',
   'gainLife',

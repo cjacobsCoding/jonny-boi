@@ -103,6 +103,22 @@ export interface ClauseContribution {
   readonly entersTapped?: boolean;
   /** Set when the text gives a BOARD condition for entering untapped. */
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
+  /** Activated abilities this clause prints ("Equip {2}"). */
+  readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
+  /**
+   * The half of an attachment that says WHAT it attaches to and what happens when
+   * it isn't legally attached — the printed "Enchant creature" / "Equip {N}" line.
+   */
+  readonly attachesAs?: Pick<
+    import('@jonny-boi/core').AttachmentSpec,
+    'attachesTo' | 'whenIllegal' | 'label'
+  >;
+  /**
+   * The other half: what the host gets while attached ("Enchanted creature gets
+   * +2/+0 and has trample"). Kept separate from {@link attachesAs} because a real
+   * card prints them as two ability lines, and either may be absent.
+   */
+  readonly attachmentModifies?: import('@jonny-boi/core').PermanentModification;
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

@@ -43,7 +43,7 @@ function cloneCounters(counters: Record<string, number>): Record<string, number>
 }
 
 function cloneInstance(inst: CardInstance): CardInstance {
-  return {
+  const copy: CardInstance = {
     instanceId: inst.instanceId,
     def: inst.def, // immutable — shared by reference
     controller: inst.controller,
@@ -55,6 +55,15 @@ function cloneInstance(inst: CardInstance): CardInstance {
     markedByDeathtouch: inst.markedByDeathtouch,
     counters: cloneCounters(inst.counters),
   };
+  // Written only when the instance is actually attached to something, which is a
+  // handful of permanents in a game that has any attachments at all and NONE in a
+  // game that has none. Cloning is the engine's single hottest allocation — a whole
+  // library and a whole hand copied on every action — so an unconditional tenth
+  // property measured as a real (~4%) throughput regression across the gauntlet for
+  // a field that is almost always null. Copying it conditionally keeps the ordinary
+  // instance byte-for-byte the object it has always been.
+  if (inst.attachedTo != null) copy.attachedTo = inst.attachedTo;
+  return copy;
 }
 
 function cloneInstances(list: readonly CardInstance[]): CardInstance[] {

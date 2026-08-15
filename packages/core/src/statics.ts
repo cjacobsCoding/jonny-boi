@@ -83,20 +83,34 @@ export interface StaticAffects extends CardFilter {
 }
 
 /**
+ * WHAT a continuous modification does to a permanent, with no statement about
+ * *which* permanents receive it or for *how long*.
+ *
+ * Split out because three lifetimes now say the same thing: a static ability
+ * ("creatures you control get +1/+1"), an attachment's grant to its host
+ * ("enchanted creature gets +2/+0 and has trample" — see `attachments.ts`), and an
+ * until-end-of-turn `ContinuousEffect`. They differ only in scope and lifetime, so
+ * the *modification* is one shape and one inertness test rather than three that can
+ * drift apart.
+ */
+export interface PermanentModification {
+  /** Power delta added to every affected permanent. Omit for none. */
+  readonly power?: number;
+  /** Toughness delta added to every affected permanent. Omit for none. */
+  readonly toughness?: number;
+  /** Keyword abilities granted to every affected permanent. Omit for none. */
+  readonly keywords?: KeywordFlags;
+}
+
+/**
  * One static ability on a card: what it affects, and how it modifies it.
  *
  * A card may declare several (a lord that pumps AND grants a keyword to a different
  * set is two entries), and each is evaluated independently.
  */
-export interface StaticAbility {
+export interface StaticAbility extends PermanentModification {
   /** Which permanents this modifies. */
   readonly affects: StaticAffects;
-  /** Power delta added to every matching permanent. Omit for none. */
-  readonly power?: number;
-  /** Toughness delta added to every matching permanent. Omit for none. */
-  readonly toughness?: number;
-  /** Keyword abilities granted to every matching permanent. Omit for none. */
-  readonly keywords?: KeywordFlags;
   /**
    * Optional human-readable label for the inspector / event log ("Anthem: creatures
    * you control get +1/+1"). Never read by the rules.
@@ -136,15 +150,24 @@ export function staticAppliesTo(ability: StaticAbility, source: CardInstance, ca
 }
 
 /**
- * Whether a static actually changes anything — a declaration of `{}` (no delta, no
- * keywords) is inert and can be skipped without changing behavior.
+ * Whether a modification actually changes anything — a declaration of `{}` (no
+ * delta, no keywords) is inert and can be skipped without changing behavior.
+ *
+ * Shared by statics and by attachments, which is the point: an aura that grants
+ * nothing and an anthem that grants nothing cost the layering pass the same
+ * nothing.
  */
-export function staticIsInert(ability: StaticAbility): boolean {
-  if ((ability.power ?? 0) !== 0 || (ability.toughness ?? 0) !== 0) return false;
-  const kw = ability.keywords;
+export function modificationIsInert(mod: PermanentModification): boolean {
+  if ((mod.power ?? 0) !== 0 || (mod.toughness ?? 0) !== 0) return false;
+  const kw = mod.keywords;
   if (!kw) return true;
   for (const key in kw) {
     if ((kw as Record<string, unknown>)[key]) return false;
   }
   return true;
+}
+
+/** Whether a static ability changes anything. See {@link modificationIsInert}. */
+export function staticIsInert(ability: StaticAbility): boolean {
+  return modificationIsInert(ability);
 }

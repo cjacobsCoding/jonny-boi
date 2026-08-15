@@ -82,6 +82,29 @@ export interface CardInstance {
    * rather than silently aliasing two states together.
    */
   counters: Record<string, number>;
+  /**
+   * The permanent this one is ATTACHED TO (an Aura's enchanted creature, an
+   * Equipment's equipped creature), or `null` when it is attached to nothing —
+   * which is every card in the game except the handful that are attachments.
+   *
+   * Stored as one forward reference and no reverse index, deliberately. The
+   * reverse direction ("what is attached to me") is needed only inside the
+   * continuous-layering pass, which already walks the whole battlefield once, so
+   * it is derived there for free (`internal/continuous.ts`) rather than being a
+   * second structure that can fall out of sync with this one.
+   *
+   * OPTIONAL in the type, and always WRITTEN by every path that mints an instance
+   * (`makeInstance`, token creation, `cloneInstance`). Those two facts together are
+   * deliberate: real gameplay instances all carry the field, so they keep one
+   * object shape on the engine's hottest reads, while a state serialized before
+   * this field existed — or a hand-built literal in another package's test — still
+   * type-checks and reads as "attached to nothing" instead of failing to compile
+   * or, worse, being mistaken for an attachment with an undefined host. Every
+   * reader therefore tests `!= null`, never `!== null`.
+   *
+   * See `attachments.ts` for the relationship's rules.
+   */
+  attachedTo?: InstanceId | null;
 }
 
 /**

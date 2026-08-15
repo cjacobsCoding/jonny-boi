@@ -6,8 +6,12 @@
  *   - A player at ≤0 life loses.
  *   - A player who attempted to draw from an empty library loses (flagged at draw).
  *
- * SBAs loop until none apply (one death can't currently cascade, but the loop
- * keeps the contract correct as effects grow).
+ *   - An attachment (Aura / Equipment) that is not legally attached does what its
+ *     data says — see {@link checkAttachments}.
+ *
+ * SBAs loop until none apply, which is what makes the cascades right: an Aura's
+ * host dies, the Aura falls into the graveyard on the next pass, and a creature
+ * that only that Aura's +0/+2 was keeping alive dies on the pass after.
  */
 
 import type { CardInstance, GameState, PlayerId } from '../state.js';
@@ -17,12 +21,31 @@ import { isCreature } from '../card.js';
 import { effectiveToughness, remainingToughness } from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
 import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
+import { detachFromHost, isLegallyAttached } from '../attachments.js';
 
 /** Run all pending SBAs until a fixpoint. Mutates the draft; emits events. */
 export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) => void): void {
+  // The attachments on the battlefield are discovered ONCE per call, not once per
+  // fixpoint pass. Nothing ENTERS the battlefield while state-based actions run, so
+  // the set can only shrink — and this is the difference between one extra walk of
+  // the battlefield per SBA check and one per pass, on a check that runs after every
+  // resolution, every draw and every combat-damage step. A board with no attachment
+  // (the overwhelmingly common case, and the one the sim spends its life in) gets
+  // `null` back and every pass below costs it nothing at all.
+  const attachments = collectAttachments(state);
   let changed = true;
   while (changed && !state.gameOver) {
     changed = false;
+
+    // Attachments first (CR 704.5m/n). An Aura falling off changes what its host
+    // is, so this must settle BEFORE the death check reads effective toughness —
+    // otherwise a creature kept alive by an Aura whose own host just died would be
+    // judged against a buff that no longer exists. When anything changed we restart
+    // the pass rather than continuing on a stale index.
+    if (attachments !== null && checkAttachments(state, attachments, emit)) {
+      changed = true;
+      continue;
+    }
 
     // Effective toughness/damage are read through the continuous layer so an
     // until-EOT pump that raises toughness keeps a creature alive, and a negative
@@ -82,6 +105,76 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
   // "until end of turn" pump — a re-cast 2/2 read as a 5/5. SBAs run at every point
   // a permanent can have just changed zones, so this is the right place to let go.
   pruneOrphanContinuousEffects(state);
+}
+
+/**
+ * The attachment state-based actions (CR 704.5m / 704.5n): a permanent with an
+ * {@link AttachmentSpec} that is **not legally attached** does what its data says —
+ * an Aura is put into its owner's graveyard, an Equipment simply becomes unattached.
+ *
+ * "Not legally attached" is deliberately ONE question ({@link isLegallyAttached}),
+ * because the three ways it happens are the three ways this rule is usually got
+ * wrong, and they all have the same answer:
+ *   - the host left the battlefield (died, bounced, exiled);
+ *   - it is attached to nothing at all (an Aura whose target was gone on
+ *     resolution, an Equipment nobody has equipped yet);
+ *   - the host no longer satisfies the printed "Enchant …" line.
+ *
+ * Returns true when it changed anything, so the caller can rebuild the continuous
+ * index before judging creature deaths against it.
+ *
+ * Cost: the early return is what keeps this off the sim's hot path — a board with
+ * no attachment pays one property read per permanent and allocates nothing.
+ */
+function checkAttachments(
+  state: GameState,
+  attachments: readonly CardInstance[],
+  emit: (e: GameEvent) => void,
+): boolean {
+  let changed = false;
+  for (let i = 0; i < attachments.length; i++) {
+    const inst = attachments[i] as CardInstance;
+    // Already dealt with on an earlier pass (it is in a graveyard now). Skipping by
+    // ZONE rather than by rebuilding the list is what keeps this loop from
+    // re-reporting the same Aura forever.
+    if (inst.zone !== 'battlefield') continue;
+    const spec = inst.def.attachment as NonNullable<CardInstance['def']['attachment']>;
+    if (isLegallyAttached(state, inst)) continue;
+    if (spec.whenIllegal === 'toGraveyard') {
+      detachFromHost(inst, emit);
+      emit({ type: 'attachmentPutIntoGraveyard', instanceId: inst.instanceId, name: inst.def.name });
+      moveToZone(state, inst, 'graveyard', emit, inst.owner);
+      resetInstanceForNewZone(inst);
+      changed = true;
+      continue;
+    }
+    // `detach` — it stays on the battlefield as an ordinary permanent. Only a
+    // change when it was actually attached to something.
+    if (inst.attachedTo != null) {
+      detachFromHost(inst, emit);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/**
+ * Every permanent on the battlefield that declares an attachment, or `null` when
+ * there are none.
+ *
+ * `null` rather than an empty array is the entire performance story: it lets the
+ * fixpoint loop skip the attachment rule with a single reference comparison on the
+ * boards that have no Aura and no Equipment, which is nearly all of them. (The same
+ * shape, and the same reason, as `indexContinuous`'s static-source discovery.)
+ */
+function collectAttachments(state: GameState): CardInstance[] | null {
+  let found: CardInstance[] | null = null;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.def.attachment !== undefined) (found ??= []).push(perm);
+  }
+  return found;
 }
 
 /** Mark a player as having lost, emitting the event. */
