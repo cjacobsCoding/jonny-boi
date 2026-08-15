@@ -147,6 +147,11 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   reach: 'reach',
   defender: 'defender',
   lifelink: 'lifelink',
+  // Timing and targeting keywords, not combat ones, but flags all the same:
+  // core reads `flash` in `castTiming` and hexproof/shroud in `isLegalTarget`.
+  flash: 'flash',
+  hexproof: 'hexproof',
+  shroud: 'shroud',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
@@ -1138,7 +1143,10 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'looking at and reordering library cards' },
   { pattern: /\bloyalty\b|^[+-]\d+:/, missingEngineSystem: 'planeswalker loyalty abilities' },
   { pattern: /\btransform\b|\bflip\b|double-faced/, missingEngineSystem: 'transform / double-faced cards' },
-  { pattern: /\bflashback\b|\bflash\b/, missingEngineSystem: 'flash timing and graveyard recasting' },
+  // Flash is now a real timing flag (`castTiming` reads it), so only FLASHBACK —
+  // recasting from the graveyard — is still missing. Matching bare "flash" here
+  // would send a flash creature to the queue for a mechanic it already has.
+  { pattern: /\bflashback\b/, missingEngineSystem: 'recasting a spell from the graveyard (flashback)' },
   { pattern: /\bequip\b|\battach\b|\benchant\b/, missingEngineSystem: 'auras and equipment attachment' },
   { pattern: /\bsacrifice\b/, missingEngineSystem: 'sacrifice costs and activated abilities' },
   { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'persistent counters beyond +1/+1 pumps' },
@@ -1151,7 +1159,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a mill template the compiler does not recognize yet',
   },
   { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
-  { pattern: /\bward\b|\bhexproof\b|\bshroud\b|\bprotection from\b/, missingEngineSystem: 'targeting restrictions (hexproof / ward / protection)' },
+  {
+    // Hexproof and shroud are implemented keyword flags now. Ward (pay a cost to
+    // target) and protection (a bundle of can't-be-blocked/damaged/enchanted
+    // rules) are genuinely still missing, so the hint names only those.
+    pattern: /\bward\b|\bprotection from\b/,
+    missingEngineSystem: 'ward and protection-from (cost-to-target and the protection bundle)',
+  },
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
   { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'activated abilities with costs' },

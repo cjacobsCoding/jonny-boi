@@ -37,6 +37,22 @@ export interface KeywordFlags {
   readonly reach?: boolean;
   readonly defender?: boolean;
   readonly lifelink?: boolean;
+  /**
+   * Flash — this card may be cast whenever its controller could cast an instant.
+   * A timing rule rather than a combat one, read by {@link castTiming}.
+   */
+  readonly flash?: boolean;
+  /**
+   * Hexproof — this permanent can't be the target of spells or abilities your
+   * OPPONENTS control. Its controller may still target it, which is why the
+   * legality check needs to know who is casting.
+   */
+  readonly hexproof?: boolean;
+  /**
+   * Shroud — this permanent can't be the target of ANY spell or ability,
+   * including its own controller's. Strictly stronger than hexproof.
+   */
+  readonly shroud?: boolean;
 }
 
 /**
@@ -411,6 +427,11 @@ function conditionMet(
 /** Resolve a definition's casting timing, defaulting to sorcery-speed. */
 export function castTiming(def: CardDefinition): CastTiming {
   if (def.timing) return def.timing;
+  // Flash IS a timing rule — "you may cast this any time you could cast an
+  // instant" — so a creature with flash is instant-speed exactly like one whose
+  // data declares `timing: 'instant'`. Reading it here means every consumer of
+  // `castTiming` (legality, the AI, the hotseat UI) inherits it for free.
+  if (def.keywords?.flash === true) return 'instant';
   // Instants are instant-speed by type; everything else is sorcery-speed.
   return hasType(def, 'instant') ? 'instant' : 'sorcery';
 }
