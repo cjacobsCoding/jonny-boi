@@ -53,6 +53,16 @@ function spawnWorker(): Worker {
   return new Worker(new URL('../sim.worker.ts', import.meta.url), { type: 'module' });
 }
 
+export interface SimWorkerPoolOptions {
+  /**
+   * How a worker is created. Injectable because the parts of this class most
+   * worth testing — queueing, retry after a worker dies, cancel-rejects-
+   * everything — are exactly the parts that need a worker to misbehave on cue,
+   * which a real `Worker` will not do. Defaults to the real sim worker.
+   */
+  readonly spawn?: () => Worker;
+}
+
 export class SimWorkerPool implements ShardRunner {
   readonly workerCount: number;
 
@@ -60,17 +70,23 @@ export class SimWorkerPool implements ShardRunner {
   private readonly queue: Task[] = [];
   /** Every task not yet settled, so `dispose` can reject them all. */
   private readonly live = new Map<number, Task>();
+  private readonly spawn: () => Worker;
   private nextTaskId = 1;
   private disposed = false;
 
-  constructor(workerCount: number, private readonly importedCards: readonly CardDefinition[]) {
+  constructor(
+    workerCount: number,
+    private readonly importedCards: readonly CardDefinition[],
+    options: SimWorkerPoolOptions = {},
+  ) {
     this.workerCount = Math.max(1, workerCount);
+    this.spawn = options.spawn ?? spawnWorker;
     for (let i = 0; i < this.workerCount; i++) this.slots.push(this.createSlot());
   }
 
   /** Spawn a worker, wire its handlers, and hand it the shared card definitions. */
   private createSlot(): Slot {
-    const slot: Slot = { worker: spawnWorker(), task: null };
+    const slot: Slot = { worker: this.spawn(), task: null };
     this.attach(slot);
     const init: MainToWorkerMessage = { type: 'init', importedCards: this.importedCards };
     slot.worker.postMessage(init);
@@ -94,42 +110,32 @@ export class SimWorkerPool implements ShardRunner {
           this.pump();
           return;
         case 'shard-error':
+          // The worker is alive — it caught the error and reported it — so it
+          // keeps its slot and only the task is settled.
           slot.task = null;
-          this.failTask(task, new ShardFailure(message.message, message.permanent), slot);
+          this.failTask(task, new ShardFailure(message.message, message.permanent));
           return;
       }
     };
     // A worker that dies outright (an import failure, an OOM kill, a browser
-    // reclaiming a background tab) reports here with no job context — so we treat
-    // whatever it was holding as a transient failure and replace the worker.
+    // reclaiming a background tab) reports here with no job context. Whatever it
+    // was holding is treated as a TRANSIENT failure — the shard itself was
+    // probably fine — so it is retried, on a replacement worker.
     slot.worker.onerror = (event: ErrorEvent) => {
-      const task = slot.task;
-      slot.task = null;
-      this.replaceWorker(slot);
-      if (task) {
-        this.failTask(
-          task,
-          new ShardFailure(event.message || 'a simulation worker crashed', false),
-          slot,
-        );
-      } else {
-        this.pump();
-      }
+      this.onWorkerDied(slot, event.message || 'a simulation worker crashed');
     };
     slot.worker.onmessageerror = () => {
-      const task = slot.task;
-      slot.task = null;
-      this.replaceWorker(slot);
-      if (task) {
-        this.failTask(
-          task,
-          new ShardFailure('a simulation worker sent an unreadable message', false),
-          slot,
-        );
-      } else {
-        this.pump();
-      }
+      this.onWorkerDied(slot, 'a simulation worker sent an unreadable message');
     };
+  }
+
+  /** A worker is gone: replace it, then retry (or fail) whatever it was holding. */
+  private onWorkerDied(slot: Slot, message: string): void {
+    const task = slot.task;
+    slot.task = null;
+    this.replaceWorker(slot);
+    if (task) this.failTask(task, new ShardFailure(message, false));
+    else this.pump();
   }
 
   /** Terminate a slot's worker and give it a fresh one (used after a crash). */
@@ -140,7 +146,7 @@ export class SimWorkerPool implements ShardRunner {
     } catch {
       // Already gone; nothing to clean up.
     }
-    slot.worker = spawnWorker();
+    slot.worker = this.spawn();
     this.attach(slot);
     const init: MainToWorkerMessage = { type: 'init', importedCards: this.importedCards };
     slot.worker.postMessage(init);
@@ -155,15 +161,12 @@ export class SimWorkerPool implements ShardRunner {
    * A shard attempt failed. Retry transient failures on a fresh worker; surface
    * permanent ones (and exhausted retries) to the caller.
    */
-  private failTask(task: Task, error: ShardFailure, slot: Slot): void {
+  private failTask(task: Task, error: ShardFailure): void {
     if (this.disposed) {
       this.settle(task, () => task.reject(new RunCancelled()));
       return;
     }
     if (!error.permanent && task.attempts < MAX_SHARD_ATTEMPTS) {
-      // The worker that dropped it may be sick; replace it before re-queueing so
-      // the retry does not land straight back on the same broken worker.
-      this.replaceWorker(slot);
       this.queue.push(task);
       this.pump();
       return;

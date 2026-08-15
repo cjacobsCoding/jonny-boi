@@ -36,6 +36,7 @@ import {
   SAMPLE_DECKS,
   type Deck,
   type LoadedDeck,
+  type SuggestionReport,
 } from '@jonny-boi/sim';
 import { createSimContext, executeShard, type SimContext } from './execute.js';
 import { resolveOpponentNames } from './opponents.js';
@@ -296,8 +297,8 @@ describe('a parallel suggestions search', () => {
   }
 
   /** Timings differ run to run; equality is about the numbers, not the clock. */
-  function withoutTimings<T extends { notes: Record<string, unknown> }>(report: T): unknown {
-    const { elapsedSeconds: _e, gamesPerSecond: _g, ...notes } = report.notes;
+  function withoutTimings(report: SuggestionReport): unknown {
+    const { elapsedSeconds: _elapsed, gamesPerSecond: _throughput, ...notes } = report.notes;
     return { ...report, notes };
   }
 
