@@ -10,7 +10,12 @@
  */
 
 import { PLAYER_IDS, PLAYER_IDS as _PLAYER_IDS, type GameAction, type PlayerId } from '@jonny-boi/core';
-import { PROTOCOL_VERSION, type DeckList, type ServerMessage } from '@jonny-boi/protocol';
+import {
+  MIN_COMPATIBLE_PROTOCOL_VERSION,
+  PROTOCOL_VERSION,
+  type DeckList,
+  type ServerMessage,
+} from '@jonny-boi/protocol';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import { describe, expect, it } from 'vitest';
 import { MessageRouter } from './handlers.js';
@@ -118,6 +123,33 @@ describe('lobby flow', () => {
     router.handle(a, { t: 'createRoom', protocolVersion: PROTOCOL_VERSION + 1, name: 'Alice' });
     expect(a.last('error')!.code).toBe('protocolMismatch');
     expect(a.has('roomJoined')).toBe(false);
+  });
+
+  it('ACCEPTS an older client down to the compatibility floor', () => {
+    // The server used to compare `===`, which made compatibility one-directional:
+    // a new client could talk down to an old server, but an old CLIENT was locked
+    // out of a new server — and it has no downgrade logic to recover with, because
+    // that shipped in the newer version it doesn't have. Restarting the NAS onto a
+    // newer bundle would then black out every stale cached PWA. Pin both ends.
+    const manager = new RoomManager();
+    const router = new MessageRouter(manager);
+    for (let v = MIN_COMPATIBLE_PROTOCOL_VERSION; v <= PROTOCOL_VERSION; v++) {
+      const conn = new FakeConnection(`v${v}`);
+      router.handle(conn, { t: 'createRoom', protocolVersion: v, name: `V${v}` });
+      expect(conn.has('roomJoined'), `protocol v${v} must be served`).toBe(true);
+      expect(conn.has('error')).toBe(false);
+    }
+  });
+
+  it('rejects versions outside the compatible range, including non-integers', () => {
+    const manager = new RoomManager();
+    const router = new MessageRouter(manager);
+    for (const bad of [MIN_COMPATIBLE_PROTOCOL_VERSION - 1, PROTOCOL_VERSION + 1, 1.5, NaN]) {
+      const conn = new FakeConnection(`bad${bad}`);
+      router.handle(conn, { t: 'createRoom', protocolVersion: bad, name: 'Nope' });
+      expect(conn.last('error')?.code, `v${bad} must be refused`).toBe('protocolMismatch');
+      expect(conn.has('roomJoined')).toBe(false);
+    }
   });
 
   it('a third connection becomes a spectator (roomFull → spectator)', () => {
