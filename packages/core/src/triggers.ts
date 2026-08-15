@@ -174,7 +174,8 @@ export function matchTriggers(
   event: GameEvent,
 ): readonly PendingTrigger[] {
   let pending: PendingTrigger[] | null = null;
-  for (const src of sources) {
+  for (let s = 0; s < sources.length; s++) {
+    const src = sources[s] as TriggerSource;
     // An indexed loop rather than `forEach`: the callback closes over `src` and
     // `event`, so it was an allocation per source per event on the hot path.
     const abilities = src.triggers;

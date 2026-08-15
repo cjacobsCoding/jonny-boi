@@ -61,7 +61,7 @@ export type ManaProduction = Readonly<Partial<Record<ManaColor, number>>>;
  */
 export function productionTotal(production: ManaProduction): number {
   let total = 0;
-  for (const color of MANA_COLORS) total += production[color] ?? 0;
+  for (let i = 0; i < MANA_COLORS.length; i++) total += production[MANA_COLORS[i] as ManaColor] ?? 0;
   return total;
 }
 
@@ -80,7 +80,7 @@ export function emptyPool(): ManaPool {
 /** Total mana in a pool. */
 export function poolTotal(pool: ManaPool): number {
   let total = 0;
-  for (const color of MANA_COLORS) total += pool[color];
+  for (let i = 0; i < MANA_COLORS.length; i++) total += pool[MANA_COLORS[i] as ManaColor];
   return total;
 }
 
@@ -179,6 +179,12 @@ function payWithHybrids(
   );
 }
 
+/**
+ * The order generic mana is spent in: colourless first, then WUBRG. Fixed (and
+ * hoisted to module scope, not rebuilt per payment) so sims reproduce exactly.
+ */
+const GENERIC_SPEND_ORDER: readonly ManaColor[] = ['C', 'W', 'U', 'B', 'R', 'G'];
+
 /** Pay a cost with no hybrid symbols — the original fixed-symbol algorithm. */
 function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
   const remaining = { ...pool };
@@ -187,7 +193,8 @@ function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
   // `MANA_COLORS` (which is W,U,B,R,G,C — the same order this always used) rather
   // than building a fresh array of [color, need] pairs: that array plus its six
   // tuples were seven allocations on every payment attempt.
-  for (const color of MANA_COLORS) {
+  for (let i = 0; i < MANA_COLORS.length; i++) {
+    const color = MANA_COLORS[i] as ManaColor;
     const need = cost[color] ?? 0;
     if (need <= 0) continue;
     if (remaining[color] < need) {
@@ -198,9 +205,9 @@ function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
 
   // 2. Pay generic from leftover mana, spending colorless first, then WUBRG.
   let generic = cost.generic ?? 0;
-  const genericOrder: readonly ManaColor[] = ['C', 'W', 'U', 'B', 'R', 'G'];
-  for (const color of genericOrder) {
+  for (let i = 0; i < GENERIC_SPEND_ORDER.length; i++) {
     if (generic <= 0) break;
+    const color = GENERIC_SPEND_ORDER[i] as ManaColor;
     const take = Math.min(generic, remaining[color]);
     remaining[color] -= take;
     generic -= take;
@@ -247,7 +254,11 @@ function canPayFixed(
   extra: Partial<Record<ManaColor, number>> | undefined,
 ): boolean {
   let spare = 0;
-  for (const color of MANA_COLORS) {
+  // Indexed rather than `for...of`: V8 does not always elide the array-iterator
+  // object here, and `generateLegalActions` asks this once per card in hand on
+  // every decision — the iterators alone were a measurable slice of its garbage.
+  for (let i = 0; i < MANA_COLORS.length; i++) {
+    const color = MANA_COLORS[i] as ManaColor;
     const need = (cost[color] ?? 0) + (extra?.[color] ?? 0);
     const have = pool[color];
     if (have < need) return false;

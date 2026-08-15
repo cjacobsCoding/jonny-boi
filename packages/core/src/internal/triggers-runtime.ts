@@ -74,7 +74,9 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
    * existing key would not move it and we no longer re-set at all.
    */
   const rememberSources = (): void => {
-    for (const inst of state.battlefield) {
+    const battlefield = state.battlefield;
+    for (let i = 0; i < battlefield.length; i++) {
+      const inst = battlefield[i] as (typeof battlefield)[number];
       const triggers = inst.def.triggers;
       if (triggers === undefined || triggers.length === 0) continue;
       const known = seenSources?.get(inst.instanceId);

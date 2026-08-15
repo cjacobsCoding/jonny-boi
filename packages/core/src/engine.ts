@@ -1415,8 +1415,17 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // action per mode, so choosing the color is part of the action an AI scores
   // rather than a hidden engine default. Summoning-sick creature sources are
   // excluded (rule 302.6 — see `canActivateManaAbility`).
+  //
+  // Every array walk in this function is indexed rather than `for...of`. That is
+  // not style: V8 does not reliably elide the array-iterator object here, and this
+  // function runs once per decision for the whole game — the iterators alone were
+  // the largest remaining source of per-action garbage once cloning is out of the
+  // picture. Confined to this function and the mana helpers it calls, which are
+  // the only places it has ever measured.
   let manaCont: ReturnType<typeof indexContinuous> | undefined;
-  for (const perm of state.battlefield) {
+  const battlefield = state.battlefield;
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me || perm.tapped) continue;
     const modes = manaModesOf(perm.def);
     if (modes.length === 0) continue;
@@ -1435,7 +1444,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
 
   // Play a land (sorcery-speed, land plays remaining).
   if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
-    for (const card of player.hand) {
+    for (let h = 0; h < player.hand.length; h++) {
+      const card = player.hand[h] as CardInstance;
       if (isLand(card.def)) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId });
       }
@@ -1451,7 +1461,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // legal target cannot be cast. Unrestricted spells keep their single bare offer:
   // their targets (a stack object, the source itself, none) are chosen by the
   // caller, and enumerating them here would change every consumer's action space.
-  for (const card of player.hand) {
+  for (let h = 0; h < player.hand.length; h++) {
+    const card = player.hand[h] as CardInstance;
     if (isLand(card.def)) continue;
     const timing = castTiming(card.def);
     const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
@@ -1471,7 +1482,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // rules above: timing is checked, the whole cost must be payable, and an
   // ability with a target restriction is offered once per LEGAL target (and not
   // at all when there is none), so this menu can only contain playable actions.
-  for (const perm of state.battlefield) {
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me) continue;
     const abilities = perm.def.activated;
     if (!abilities || abilities.length === 0) continue;
@@ -1508,7 +1520,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // One pass building the id list directly. `filter(...).map(...)` allocated two
     // closures and an intermediate array of instances that was thrown away.
     const eligible: InstanceId[] = [];
-    for (const c of state.battlefield) {
+    for (let b = 0; b < battlefield.length; b++) {
+      const c = battlefield[b] as CardInstance;
       if (c.controller !== me || !isCreature(c.def) || c.tapped) continue;
       const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
       if ((c.summoningSick && !kw.haste) || kw.defender) continue;
