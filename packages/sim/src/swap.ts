@@ -24,7 +24,7 @@ import { loadDeck } from './deck.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
 import { runMatch } from './match.js';
-import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, type SwapScope } from './config.js';
+import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, type StatsConfig, type SwapScope } from './config.js';
 import {
   mcNemarTest,
   wilsonInterval,
@@ -198,11 +198,10 @@ export function evaluateSwap(
     : 1;
   const copiesSwapped = scope === 'playset' ? outCount : 1;
 
-  let baseWins = 0;
-  let variantWins = 0;
-  let n = 0;
 
   // Paired 2x2 table accumulators (a "win" here = the hero won; timeout = no win).
+  // The two arms' win counts and the game count are the table's margins, so the
+  // table alone is a sufficient statistic — `summarizePairedSwap` derives them.
   let bothWon = 0;
   let baseOnly = 0;
   let variantOnly = 0;
@@ -225,31 +224,74 @@ export function evaluateSwap(
       const baseWon = baseResult.outcome.kind === 'win' && baseResult.outcome.winner === 'A';
       const variantWon = variantResult.outcome.kind === 'win' && variantResult.outcome.winner === 'A';
 
-      if (baseWon) baseWins++;
-      if (variantWon) variantWins++;
       if (baseWon && variantWon) bothWon++;
       else if (baseWon && !variantWon) baseOnly++;
       else if (!baseWon && variantWon) variantOnly++;
       else neither++;
-      n++;
     }
   }
 
-  const paired: PairedTable = { bothWon, baseOnly, variantOnly, neither };
-  const mcNemar = mcNemarTest(paired);
-
-  const baseWinRate = wilsonInterval(baseWins, n, stats.z);
-  const variantWinRate = wilsonInterval(variantWins, n, stats.z);
-  const delta = variantWinRate.p - baseWinRate.p;
-
-  const verdict = decideVerdict(delta, mcNemar.pValue, n, stats.alpha, stats.minGamesForVerdict);
-
-  return {
-    baseDeck: baseDeck.name,
-    variantDeck: variantDeck.name,
+  return summarizePairedSwap({
+    baseDeckName: baseDeck.name,
+    variantDeckName: variantDeck.name,
     swap,
     outName: outDef?.name ?? swap.out,
     inName: inDef?.name ?? swap.in,
+    paired: { bothWon, baseOnly, variantOnly, neither },
+    stats,
+    scope,
+    copiesSwapped,
+  });
+}
+
+/** Everything `summarizePairedSwap` needs beyond the paired 2x2 table itself. */
+export interface PairedSwapSummaryInput {
+  readonly baseDeckName: string;
+  readonly variantDeckName: string;
+  readonly swap: CardSwap;
+  readonly outName: string;
+  readonly inName: string;
+  /** The paired 2x2 table accumulated over the games actually played. */
+  readonly paired: PairedTable;
+  readonly stats?: StatsConfig;
+  /** How many copies the swap moved — one, or the whole playset. */
+  readonly scope?: SwapScope;
+  /** The copy count that scope worked out to, so a result self-describes. */
+  readonly copiesSwapped?: number;
+}
+
+/**
+ * Turn a paired 2x2 table into the full `SwapEvaluation` — win-rates, Wilson CIs,
+ * McNemar, delta and verdict.
+ *
+ * This is the ONE place the verdict is computed, shared by the fixed-budget
+ * `evaluateSwap` above and the adaptive suggestion engine's wave scheduler
+ * (`paired-arms.ts`), so the two paths can never drift into computing a verdict
+ * two subtly different ways. The table's margins ARE the two arms' win counts —
+ * base won `bothWon + baseOnly`, the variant won `bothWon + variantOnly`, over
+ * `bothWon + baseOnly + variantOnly + neither` paired games — so no extra
+ * bookkeeping is needed to reconstruct them (a timeout draw is a non-win for both
+ * and lands in `neither`, exactly as the loop counts it).
+ */
+export function summarizePairedSwap(input: PairedSwapSummaryInput): SwapEvaluation {
+  const stats = input.stats ?? DEFAULT_STATS_CONFIG;
+  const paired = input.paired;
+  const n = paired.bothWon + paired.baseOnly + paired.variantOnly + paired.neither;
+  const baseWins = paired.bothWon + paired.baseOnly;
+  const variantWins = paired.bothWon + paired.variantOnly;
+
+  const mcNemar = mcNemarTest(paired);
+  const baseWinRate = wilsonInterval(baseWins, n, stats.z);
+  const variantWinRate = wilsonInterval(variantWins, n, stats.z);
+  const delta = variantWinRate.p - baseWinRate.p;
+  const verdict = decideVerdict(delta, mcNemar.pValue, n, stats.alpha, stats.minGamesForVerdict);
+
+  return {
+    baseDeck: input.baseDeckName,
+    variantDeck: input.variantDeckName,
+    swap: input.swap,
+    outName: input.outName,
+    inName: input.inName,
     baseWinRate,
     variantWinRate,
     delta,
@@ -259,8 +301,8 @@ export function evaluateSwap(
     mcNemar,
     verdict,
     nGames: n,
-    scope,
-    copiesSwapped,
+    scope: input.scope ?? DEFAULT_SWAP_SCOPE,
+    copiesSwapped: input.copiesSwapped ?? 1,
   };
 }
 

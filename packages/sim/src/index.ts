@@ -40,8 +40,15 @@ export { loadDeck, validateDeck, DeckLoadError } from './deck.js';
 export { SAMPLE_DECKS } from '../data/decks/index.js';
 
 // Statistics (pure).
-export type { ProportionCI, PairedTable, McNemarResult } from './stats.js';
-export { wilsonInterval, mcNemarTest, chiSquare1dfUpperTail, normalCdf } from './stats.js';
+export type { ProportionCI, PairedTable, McNemarResult, MultipleComparisonsMethod } from './stats.js';
+export {
+  wilsonInterval,
+  wilsonUpperBound,
+  mcNemarTest,
+  chiSquare1dfUpperTail,
+  normalCdf,
+  adjustPValues,
+} from './stats.js';
 
 // Single game.
 export type {
@@ -62,29 +69,86 @@ export type { GauntletResult } from './gauntlet.js';
 export { runGauntlet } from './gauntlet.js';
 
 // The A/B single-card-swap test.
-export type { CardSwap, SwapVerdict, SwapEvaluation } from './swap.js';
-export { evaluateSwap, applySwap, decideVerdict } from './swap.js';
+export type { CardSwap, SwapVerdict, SwapEvaluation, PairedSwapSummaryInput } from './swap.js';
+export { evaluateSwap, applySwap, decideVerdict, summarizePairedSwap } from './swap.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE } from './config.js';
+
+// The incremental paired-arm runner (shared base arm + provably-identical games).
+export type {
+  PairedArmRunner,
+  PairedArmsOptions,
+  PairedArmsUsage,
+  PairedSlot,
+  SwapArm,
+  ArmHandle,
+} from './paired-arms.js';
+export { createPairedArmRunner, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
+export {
+  HERO_SEAT,
+  LIBRARY_READING_PRIMITIVES,
+  LIBRARY_SAFE_PRIMITIVES,
+  PILOTS_THAT_READ_HIDDEN_LIBRARY,
+} from './paired-arms-config.js';
 
 // The suggestion engine (DESIGN §3.6) — ranked single-card-swap recommendations.
 export type {
   SuggestConfig,
   HeuristicWeights,
+  AdaptiveSearchConfig,
+  ExplorationWeights,
 } from './suggest-config.js';
 export {
   DEFAULT_SUGGEST_CONFIG,
   DEFAULT_HEURISTIC_WEIGHTS,
+  DEFAULT_ADAPTIVE_CONFIG,
+  DEFAULT_EXPLORATION_WEIGHTS,
 } from './suggest-config.js';
 export type {
   SwapCandidate,
   SkippedCandidate,
   RankedSwap,
+  EliminationNote,
+  EliminatedSwap,
+  WaveReport,
+  MultipleComparisonsReport,
   SuggestionReport,
   SuggestionNotes,
   SuggestOptions,
 } from './suggest.js';
-export { suggestSwaps, generateCandidates, rankEvaluations, scoreCandidate } from './suggest.js';
+export { suggestSwaps, generateCandidates, rankEvaluations, scoreCandidate, traitsOf } from './suggest.js';
+
+// The adaptive scheduler (pure — plan, eliminate, explore).
+export type {
+  WaveSpec,
+  ArmStanding,
+  EliminatedArm,
+  EliminationReason,
+  CandidateTraits,
+  SchedulableCandidate,
+  PriorEvidence,
+  PrioritisedCandidate,
+} from './suggest-schedule.js';
+export {
+  planWaves,
+  selectSurvivors,
+  selectOffspring,
+  prioritiseCandidates,
+  pairedAdvantage,
+  relatedness,
+} from './suggest-schedule.js';
+
+// The cross-run search record the caller persists (web Lab / CLI --history).
+export type { SuggestionHistory, CandidateHistory, HistoryUpdate } from './suggest-history.js';
+export {
+  SUGGESTION_HISTORY_VERSION,
+  emptyHistory,
+  acceptHistory,
+  mergeHistory,
+  deckFingerprint,
+  candidateKey,
+  isSettled,
+} from './suggest-history.js';
 
 // Reporter registry (the §2 seam).
 export type { Reporter, ReporterFactory, ReporterRegistry, MetricRow } from './reporters.js';

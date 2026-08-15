@@ -19,6 +19,7 @@
  */
 
 import { performance } from 'node:perf_hooks';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
 import type { CardPool } from '@jonny-boi/cards';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID, SELECTABLE_PILOT_IDS } from '@jonny-boi/ai';
@@ -31,6 +32,7 @@ import { makeSeats, runMatchup, type MatchupPilots, type MatchupResult } from '.
 import { runGauntlet, type GauntletResult } from './gauntlet.js';
 import { evaluateSwap, type SwapEvaluation } from './swap.js';
 import { suggestSwaps, type SuggestionReport } from './suggest.js';
+import type { SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
 import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, FIDELITY_CAVEAT, type SwapScope } from './config.js';
 import type { ProportionCI } from './stats.js';
@@ -45,7 +47,8 @@ Usage:
   npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot mcts|heuristic|random]
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot mcts|heuristic|random]
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset]
-  npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S] [--pilot id]
+  npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
+                               [--pilot id] [--history <file>] [--no-adaptive]
 
 Notes:
   • Decks and cards may be given by NAME (quote names with spaces) or by id.
@@ -58,10 +61,21 @@ Notes:
       one     — replace a single copy: "is the last copy earning its slot?"
     They answer different questions; "one" is a much smaller effect and needs far
     more games before it can clear significance.
+  • suggest searches ADAPTIVELY: every candidate gets a cheap scout batch, then the
+    budget concentrates on the ones still plausibly better and clear losers are
+    dropped early, so only finalists are played to full depth. Verdicts are
+    corrected for multiple comparisons (testing many cards at once otherwise
+    manufactures ~1 false "better" in 20).
   • suggest: --cut may repeat to focus the cards considered for cutting; omit for
-    auto mode (top ${DEFAULT_SUGGEST_CONFIG.maxCandidates} candidates by a cheap color/curve heuristic).
-    --max-candidates K caps how many swaps are simulated (default ${DEFAULT_SUGGEST_CONFIG.maxCandidates}).
-    Per-candidate games default to ${DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate} for suggest.
+    auto mode (a scout roster of ${DEFAULT_SUGGEST_CONFIG.maxCandidates} by a cheap color/curve heuristic).
+    --max-candidates K sets that roster size (default ${DEFAULT_SUGGEST_CONFIG.maxCandidates}).
+    --games N is the depth a FINALIST reaches (default ${DEFAULT_SUGGEST_CONFIG.defaultGamesPerCandidate}), not what everyone gets.
+  • --history <file> makes the search PROGRESSIVE: it reads what earlier runs
+    already covered, skips settled losers, spends the budget on untried candidates,
+    and writes the updated record back. Without it, every run re-tests the same
+    shortlist and prints the same answer.
+  • --no-adaptive runs the legacy fixed-budget sweep (every candidate, same games)
+    for comparison.
   • Fidelity (DESIGN §3.9, done): the engine models triggered abilities & "until
     end of turn" effects. A few advanced mechanics remain unimplemented (transform/
     DFC, dynamic P/T, planeswalker loyalty, flash/flashback) — cards using them play
@@ -81,6 +95,10 @@ interface Flags {
   readonly cut: readonly string[];
   /** suggest: cap on candidate swaps simulated. */
   readonly maxCandidates?: number;
+  /** suggest: file the cross-run search record is read from and written back to. */
+  readonly history?: string;
+  /** suggest: use the legacy fixed-budget sweep instead of the adaptive search. */
+  readonly noAdaptive: boolean;
   readonly help: boolean;
 }
 
@@ -97,6 +115,8 @@ function parseFlags(args: readonly string[]): Flags {
   let inCard: string | undefined;
   const cut: string[] = [];
   let maxCandidates: number | undefined;
+  let history: string | undefined;
+  let noAdaptive = false;
   let help = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -135,13 +155,19 @@ function parseFlags(args: readonly string[]): Flags {
       case '--max-candidates':
         maxCandidates = parseIntFlag(arg, args[++i]);
         break;
+      case '--history':
+        history = requireValue(arg, args[++i]);
+        break;
+      case '--no-adaptive':
+        noAdaptive = true;
+        break;
       default:
         if (arg.startsWith('--')) throw new CliError(`unknown option "${arg}"`);
         positionals.push(arg);
     }
   }
 
-  return { positionals, games, seed, pilot, scope, out, in: inCard, cut, maxCandidates, help };
+  return { positionals, games, seed, pilot, scope, out, in: inCard, cut, maxCandidates, history, noAdaptive, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -392,6 +418,8 @@ function cmdSuggest(flags: Flags): number {
     loadOrThrow(d, lab.pool),
   );
 
+  const priorHistory = flags.history ? readHistoryFile(flags.history) : undefined;
+
   let report: SuggestionReport;
   try {
     report = suggestSwaps(baseDeck, {
@@ -403,61 +431,148 @@ function cmdSuggest(flags: Flags): number {
       gamesPerCandidate: games,
       suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates },
       cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
+      adaptive: !flags.noAdaptive,
+      ...(priorHistory ? { history: priorHistory } : {}),
     });
   } catch (err) {
     if (err instanceof DeckLoadError) throw new CliError(err.message);
     throw new CliError(err instanceof Error ? err.message : String(err));
   }
 
+  const n = report.notes;
+  const mode = flags.noAdaptive ? 'fixed-budget' : 'adaptive';
   console.log(
     `Suggestions for "${report.baseDeck}" vs ${gauntletDecks.length} decks — ` +
-      `${games} games/candidate, seed ${seed}`,
+      `${mode} search, up to ${games} games/matchup, seed ${seed}`,
+  );
+  console.log(
+    `Run #${(n.runIndex ?? 0) + 1} for this deck` +
+      (priorHistory ? ` (continuing a search that already covered ${priorHistory.candidates.length} candidates)` : '') +
+      (n.historyRejected ? ` — supplied history IGNORED (${n.historyRejected})` : ''),
   );
   console.log(`Base gauntlet win rate: ${ciStr(report.baseGauntletWinRate)}\n`);
 
   if (report.suggestions.length === 0) {
-    console.log('No candidate swaps were evaluated (none legal, or all capped).');
+    console.log('No candidate swaps were evaluated (none legal, all settled, or all capped).');
   } else {
     console.log(
       table(
-        ['#', 'Out → In', 'Base%', 'Variant%', 'Delta', 'p-value', 'Verdict'],
+        ['#', 'Out → In', 'Games', 'Base%', 'Variant%', 'Delta', 'p (raw)', 'p (adj)', 'Verdict', 'Note'],
         report.suggestions.map((s) => {
           const e = s.evaluation;
           const sign = e.delta >= 0 ? '+' : '';
           return [
             String(s.rank),
             `${s.outName} → ${s.inName}`,
+            String(s.gamesPlayed ?? s.evaluation.nGames),
             pct(e.baseWinRate.p),
             pct(e.variantWinRate.p),
             `${sign}${pct(e.delta)}`,
-            e.pValue.toExponential(2),
+            (s.rawPValue ?? e.pValue).toExponential(2),
+            (s.adjustedPValue ?? e.pValue).toExponential(2),
             e.verdict.toUpperCase(),
+            s.elimination ? `dropped w${s.elimination.wave}: ${s.elimination.reason}` : 'full depth',
           ];
         }),
       ),
     );
   }
 
-  const n = report.notes;
+  // The waves: what each one played, dropped and pulled in. No silent scheduling.
+  const waves = report.waves ?? [];
+  if (waves.length > 0) {
+    console.log('\nSearch waves (successive halving — budget concentrates on survivors):');
+    console.log(
+      table(
+        ['Wave', 'Games/cand', 'Played', 'Survived', 'Dropped', 'New leads'],
+        waves.map((w) => [
+          String(w.wave),
+          String(w.cumulativeGames),
+          String(w.candidatesPlayed),
+          String(w.survivors),
+          String(w.eliminated.length),
+          w.offspring.length > 0 ? w.offspring.join('; ') : '-',
+        ]),
+      ),
+    );
+    const futile = waves.flatMap((w) => w.eliminated).filter((e) => e.reason === 'futile');
+    for (const e of futile.slice(0, MAX_FUTILITY_LINES_PRINTED)) {
+      console.log(`  dropped early: ${e.outName} → ${e.inName} — ${e.detail}`);
+    }
+    if (futile.length > MAX_FUTILITY_LINES_PRINTED) {
+      console.log(`  …and ${futile.length - MAX_FUTILITY_LINES_PRINTED} more dropped by the futility rule.`);
+    }
+  }
+
+  const mc = report.multipleComparisons;
+  if (mc)
+    console.log(
+    `\nMultiple comparisons: ${mc.method} correction over a family of ${mc.familySize} ` +
+      `(${mc.testedThisRun} tested this run` +
+      (mc.familySize > mc.testedThisRun ? `, ${mc.familySize - mc.testedThisRun} from previous runs` : '') +
+      `). ${mc.demotedByCorrection} verdict(s) demoted to INCONCLUSIVE by the correction.`,
+  );
+
   console.log(
     `\nEvaluated ${report.candidatesEvaluated} of ${n.candidatesGenerated} candidates` +
-      (n.cappedByBudget ? ` (capped at ${maxCandidates})` : ''),
+      (n.cappedByBudget ? ` (roster capped at ${maxCandidates})` : ''),
   );
   if (report.skipped.length > 0) {
-    const illegal = report.skipped.filter((s) => s.reason === 'illegal').length;
-    const capped = report.skipped.filter((s) => s.reason === 'capped').length;
+    const counts = { illegal: 0, capped: 0, settled: 0 };
+    for (const s of report.skipped) counts[s.reason]++;
     const parts: string[] = [];
-    if (capped > 0) parts.push(`${capped} capped for budget`);
-    if (illegal > 0) parts.push(`${illegal} skipped (illegal variant)`);
+    if (counts.capped > 0) parts.push(`${counts.capped} never tried (budget)`);
+    if (counts.settled > 0) parts.push(`${counts.settled} settled by earlier runs`);
+    if (counts.illegal > 0) parts.push(`${counts.illegal} skipped (illegal variant)`);
     console.log(`Coverage: ${parts.join(', ')}.`);
   }
+
   const gps = n.gamesPerSecond;
   console.log(
-    `${n.totalGamesRun} games` +
+    `${n.totalGamesRun} games (${n.baseGamesPlayed ?? 0} base + ${n.variantGamesPlayed ?? 0} variant)` +
       (n.elapsedSeconds ? ` in ${n.elapsedSeconds.toFixed(2)}s → ${gps ? gps.toFixed(0) : '?'} games/sec` : ''),
   );
+  console.log(
+    `Saved ${n.gamesAvoided ?? 0} games vs a fixed sweep of the same candidates at the same depths` +
+      ((n.variantGamesSkipped ?? 0) > 0
+        ? `; ${n.variantGamesSkipped} variant games were provably identical to the base game and were not replayed`
+        : '') +
+      (n.identicalGameSkipEnabled ? '' : ` (identical-game skip off: ${n.identicalGameSkipDisabledReason ?? 'n/a'})`) +
+      '.',
+  );
+
+  if (flags.history && report.history) {
+    writeHistoryFile(flags.history, report.history);
+    console.log(
+      `Search record written to ${flags.history} (${report.history.candidates.length} candidates known). ` +
+        'Pass --history again to continue exploring instead of repeating this run.',
+    );
+  }
   console.log(FIDELITY_NOTE);
   return 0;
+}
+
+/** Futility lines printed before the rest are summarised — output stays readable. */
+const MAX_FUTILITY_LINES_PRINTED = 5;
+
+/**
+ * Read a previously-written search record. A missing file is the normal "first
+ * run" case, and a corrupt one degrades to "no history" with a warning rather than
+ * killing a long run (CLAUDE.md rule 6).
+ */
+function readHistoryFile(path: string): SuggestionHistory | undefined {
+  if (!existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as SuggestionHistory;
+  } catch (err) {
+    console.warn(`warning: could not read history "${path}" (${err instanceof Error ? err.message : String(err)}); starting fresh`);
+    return undefined;
+  }
+}
+
+/** Persist the record for the next run. */
+function writeHistoryFile(path: string, history: SuggestionHistory): void {
+  writeFileSync(path, `${JSON.stringify(history, null, 2)}\n`, 'utf8');
 }
 
 // --- entry ---------------------------------------------------------------------
