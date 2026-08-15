@@ -10,6 +10,7 @@
  */
 
 import type { CardInstance, GameState, PlayerId, InstanceId } from './state.js';
+import { NO_COUNTERS } from './state.js';
 import type { GameEvent } from './events.js';
 import type { CardDefinition, EffectRef } from './card.js';
 import { entersTapped } from './card.js';
@@ -334,7 +335,7 @@ function createTokenInState(
     summoningSick: isCreatureToken ? !hasHaste : false,
     damageMarked: 0,
     markedByDeathtouch: false,
-    counters: {},
+    counters: NO_COUNTERS,
   };
   state.battlefield.push(token);
   emit({ type: 'tokenCreated', instanceId, controller, name: def.name });
