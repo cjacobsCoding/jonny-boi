@@ -80,6 +80,23 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 integrator: **NAS server is now LIVE on protocol v2, and backward compatible.** Verified
+  against `wss://jonnyboi.duckdns.org:8443` after the restart: v1 ACCEPTED, v2 ACCEPTED, v3 and v0 both
+  REJECTED. Rollback bundle is on the NAS at `/docker/jonny-boi/backup/server.cjs` (361,992 bytes, the
+  previous build); live is 402,745.
+  👉 **Do not ship a server bundle without checking `Room.protocolMatches` first.** It was strict
+  equality (`version === PROTOCOL_VERSION`), which made `MIN_COMPATIBLE_PROTOCOL_VERSION` dead code and
+  compatibility ONE-directional — a new client could talk down to an old server, but an old client was
+  locked out of a new one, with no downgrade logic to recover with. Restarting onto v2 would have
+  blacked out every stale cached PWA. Fixed + tests pin both directions.
+  👉 **Deploying to the NAS: drive the DSM *webapi*, not the DSM desktop UI.** Loading the desktop
+  wedges the Chrome renderer (screenshots and JS both time out, and it starves sibling tabs). Get the
+  CSRF token from `/webman/login.cgi` on the existing session, send it as `X-SYNO-TOKEN`, then use
+  `SYNO.FileStation.Upload` / `SYNO.Docker.Container`. NAS is **10.0.0.28**.
+  ⚠️ A single-file Docker bind mount **pins the inode** — replacing `server.cjs` is invisible to the
+  running container until it restarts. Always back up to `backup/` and confirm the new size/mtime
+  before restarting.
+
 - 2026-08-15 DESKTOP-90PJPM4: **`fix/hint-accuracy` MERGED + DEPLOYED** (Deploy PWA green, live
   site HTTP 200). main = **1864 tests, build exit 0**.
   👉 **The unsupported queue was advertising TWELVE solved systems.** UNSUPPORTED-MECHANICS.md is
