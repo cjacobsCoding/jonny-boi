@@ -52,6 +52,7 @@ import type {
 import {
   createPlayer,
   MAIN_STEPS,
+  NO_COUNTERS,
   PLAYER_IDS,
   STEP_ORDER,
 } from './state.js';
@@ -140,7 +141,7 @@ function makeInstance(state: GameState, def: CardDefinition, owner: PlayerId): C
     summoningSick: true,
     damageMarked: 0,
     markedByDeathtouch: false,
-    counters: {},
+    counters: NO_COUNTERS,
   };
 }
 
@@ -550,7 +551,7 @@ function frameSource(state: GameState, frame: ResolutionFrame): CardInstance {
       summoningSick: false,
       damageMarked: 0,
       markedByDeathtouch: false,
-      counters: {},
+      counters: NO_COUNTERS,
     }
   );
 }

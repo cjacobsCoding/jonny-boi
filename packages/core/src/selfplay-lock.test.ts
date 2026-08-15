@@ -22,6 +22,7 @@ import {
 } from './test-fixtures.js';
 import { applyAction, applyActionInPlace, createGame, generateLegalActions } from './engine.js';
 import { cloneState } from './internal/clone.js';
+import { resetInstanceForNewZone } from './internal/zones.js';
 import { serializeState } from './serialize.js';
 import { createRng } from './rng.js';
 import type { GameAction } from './actions.js';
@@ -132,6 +133,48 @@ describe('applyAction purity', () => {
       pure = pureResult.state;
       inPlace = inPlaceResult.state;
     }
+  });
+});
+
+/**
+ * `CardInstance.counters` is shared (as one frozen empty record) whenever an
+ * instance has none — which is what makes it safe to skip an allocation per
+ * instance per clone. The contract that buys that is "replace, never mutate in
+ * place", and these tests are what keep it honest.
+ */
+describe('the empty-counters contract', () => {
+  const decks = selfPlayDecks();
+
+  it('refuses an in-place write, loudly, instead of aliasing two states', () => {
+    const state = createGame({ seed: 3, decks }).state;
+    const card = state.players.A.hand[0] as { counters: Record<string, number> };
+    expect(Object.isFrozen(card.counters)).toBe(true);
+    expect(() => {
+      card.counters['+1/+1'] = 1;
+    }).toThrow();
+  });
+
+  it('gives an instance that DOES carry counters a private copy per clone', () => {
+    const state = createGame({ seed: 4, decks }).state;
+    const original = state.players.A.hand[0] as { counters: Record<string, number> };
+    // The supported way to add a counter: replace the record.
+    original.counters = { ...original.counters, '+1/+1': 2 };
+
+    const copy = cloneState(state);
+    const copied = copy.players.A.hand[0] as { counters: Record<string, number> };
+    expect(copied.counters).toEqual({ '+1/+1': 2 });
+    expect(copied.counters).not.toBe(original.counters);
+    copied.counters['+1/+1'] = 99;
+    expect(original.counters['+1/+1']).toBe(2);
+  });
+
+  it('clears counters back to the shared empty record when a card changes zone', () => {
+    const state = createGame({ seed: 5, decks }).state;
+    const card = state.players.A.hand[0] as { counters: Record<string, number> };
+    card.counters = { '+1/+1': 1 };
+    resetInstanceForNewZone(card as never);
+    expect(card.counters).toEqual({});
+    expect(Object.isFrozen(card.counters)).toBe(true);
   });
 });
 

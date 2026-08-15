@@ -7,7 +7,7 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from '../state.js';
-import { playerZone, PLAYER_IDS } from '../state.js';
+import { NO_COUNTERS, playerZone, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
 
 /**
@@ -125,5 +125,5 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   inst.damageMarked = 0;
   inst.markedByDeathtouch = false;
   inst.summoningSick = false;
-  inst.counters = {};
+  inst.counters = NO_COUNTERS;
 }
