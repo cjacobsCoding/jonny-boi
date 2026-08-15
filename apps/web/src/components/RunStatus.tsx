@@ -33,7 +33,7 @@ export function RunStatus({
               {progress.elapsedSeconds.toFixed(1)}s{eta ? ` · ${eta}` : ''}
             </>
           ) : (
-            'spinning up the worker…'
+            'spinning up the workers…'
           )}
         </span>
       </div>
