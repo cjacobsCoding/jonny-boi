@@ -29,6 +29,38 @@ const UNPLAYABLE_CARD = {
   missing: [{ text: 'Do something the engine cannot do.', missingEngineSystem: 'a rules template' }],
 } as unknown as Parameters<typeof registerImportedCards>[0][number];
 
+/** Scryfall ids are uuids; the old failure surfaced these instead of names. */
+const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** Build an imported-card fixture with a uuid id, as a real import has. */
+function importedFixture(
+  id: string,
+  name: string,
+  playable: boolean,
+): Parameters<typeof registerImportedCards>[0][number] {
+  const base = {
+    card: { ...UNPLAYABLE_CARD.card, id, name },
+    ...(playable
+      ? { definition: { id, name, types: ['Land'], produces: ['R'] } }
+      : { missing: [{ text: `${name} does something new.`, missingEngineSystem: 'a rules template' }] }),
+  };
+  return base as unknown as Parameters<typeof registerImportedCards>[0][number];
+}
+
+/** The four entries the live app answered for with bare uuids. */
+const UNPLAYABLE_IMPORTS = [
+  importedFixture('2588f348-d7a3-46c8-9ace-dca53ed5ef99', 'Ajani, Nacatl Pariah', false),
+  importedFixture('3407eb6e-b74d-4159-a801-d7163937953c', "Phlage, Titan of Fire's Fury", false),
+  importedFixture('37108cd4-bbab-4ce3-9ed6-f60e8422e703', 'Ragavan, Nimble Pilferer', false),
+  importedFixture('45181cb8-2090-4471-ba90-e5a8f04d525f', 'Sacred Foundry', false),
+];
+
+/** Imports from the same deck that DID compile — they must not be blamed. */
+const PLAYABLE_IMPORTS = [
+  importedFixture('c5acf2a5-40f4-433d-a74d-1cb56c521464', 'Arid Mesa', true),
+  importedFixture('dab520d0-20b4-4273-ba6b-eb07f85ea433', 'Marsh Flats', true),
+];
+
 /** A legal 60-card gauntlet deck, exactly as the views offer it as a hero. */
 function healthyDeck(): Deck {
   return gauntletHeroDecks()[0]!;
@@ -83,5 +115,32 @@ describe('validateHero', () => {
     const deck = deckWithUnplayableCard();
 
     expect(validateHero(deck)).toEqual(validateHero(deck));
+  });
+
+  it('names EVERY unplayable card in a real imported deck, and no uuids', () => {
+    // The shape actually captured from the app: a Modern Boros list imported
+    // live produced a 7-entry deck of which four entries had no definition, and
+    // the Match viewer answered with four bare uuids and nothing else. Scryfall
+    // ids are uuids, so "contains no uuid" is the precise regression assertion.
+    registerImportedCards([...UNPLAYABLE_IMPORTS, ...PLAYABLE_IMPORTS]);
+    const deck: Deck = {
+      ...healthyDeck(),
+      cards: [
+        ...UNPLAYABLE_IMPORTS.map((c) => ({ cardId: c.card.id, count: 4 })),
+        ...PLAYABLE_IMPORTS.map((c) => ({ cardId: c.card.id, count: 4 })),
+      ],
+    };
+
+    const problems = validateHero(deck);
+
+    expect(problems).toHaveLength(1);
+    for (const imported of UNPLAYABLE_IMPORTS) {
+      expect(problems[0]).toContain(imported.card.name);
+    }
+    expect(problems[0]).not.toMatch(UUID_PATTERN);
+    // A card the engine CAN play must not be blamed alongside them.
+    for (const playable of PLAYABLE_IMPORTS) {
+      expect(problems[0]).not.toContain(playable.card.name);
+    }
   });
 });

@@ -75,6 +75,21 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: `fix/hero-validation` (apps/web only) — REPRODUCED LIVE, then pinned.
+  Ran the dev server and imported a real Modern Boros list. The Match viewer answered:
+  `unknown card "2588f348-…"` x4 and nothing else — four raw Scryfall uuids, shown nowhere else in
+  the UI, so you cannot tell which of your cards is the problem. Cause: `validateHero` was copied
+  into LabView and MatchView and the copies drifted; only the Lab's checked for unsupported imports,
+  so the Match viewer fell through to the sim's id-level validator. Now one `lib/heroValidation.ts`
+  (net -38/+8 in the views). Tests assert the NAMES appear and no uuid does, at the exact shape
+  captured from the app (4 unplayable + 2 playable imports); removing the fix fails 3 of the 6.
+  ⚠️ FOR WHOEVER OWNS `packages/cards/src/compile` (feat/card-mechanics): a split card is
+  mis-diagnosed. "Wear // Tear" reports THREE bogus blockers — `“//” — needs the "//" card type`
+  (the type line "Instant // Instant" is being split into a literal `//` type), and
+  `“Wear // Tear” — needs transform / double-faced cards` (a split card is not a DFC; `layout` is
+  `split`, not `transform`). Only `Fuse` and the targeting clause are real. Not fixed here: that
+  package is yours and was uncommitted-dirty at the time. (Worker)
+
 - 2026-08-15 DESKTOP-90PJPM4: `fix/hero-validation` ✅ (apps/web views + lib only) — **the Match viewer
   would not tell you which card broke your deck.** `validateHero` had been copied into BOTH `LabView`
   and `MatchView`, and the copies had drifted: the Lab's named unsupported imported cards first, the
