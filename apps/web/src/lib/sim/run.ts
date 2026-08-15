@@ -206,7 +206,13 @@ export async function runSwap(
   const context = contextFor(request.hero, opponentNames, request.seed);
   const jobs = planPairedShards(
     context,
-    { outCardId: request.outCardId, inCardId: request.inCardId },
+    {
+      outCardId: request.outCardId,
+      inCardId: request.inCardId,
+      // Carried from the user's choice in the A/B panel. Dropping it here would
+      // not fail — it would quietly answer the OTHER question.
+      swapScope: request.swapScope,
+    },
     request.gamesPerOpponent,
     runner.workerCount,
     request.seed,

@@ -120,10 +120,56 @@ export function normalizeClause(text: string): string {
  * needs (a trigger's body may itself contain several sentences).
  */
 export function splitAbilities(oracleText: string): string[] {
-  return oracleText
+  const lines = oracleText
     .split(/\r?\n+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+  return joinModalBlocks(lines);
+}
+
+/** A modal header: "Choose one —", "Choose two —", "Choose one or both —". */
+const MODAL_HEADER = /^choose\s+(?:one|two|three|one or both|up to \w+)\s*[—-]\s*$/i;
+
+/** A printed mode line, which Oracle text bullets. */
+const MODE_BULLET = /^[•·]\s*/;
+
+/**
+ * Fold a modal block into ONE ability line.
+ *
+ * A modal card prints its header and each mode on separate lines, so the plain
+ * newline split hands the compiler "Choose one —" with no modes attached and
+ * then a series of orphan bullets. Neither half means anything alone. Joining
+ * them lets a single rule see the header and its modes together, which is the
+ * only way to build the mode list the `modal` primitive needs.
+ *
+ * Modes are joined with their bullet retained as the separator, so the rule can
+ * split them back apart unambiguously — a mode's own text may contain anything
+ * else, but never a bullet.
+ */
+function joinModalBlocks(lines: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    if (!MODAL_HEADER.test(line)) {
+      out.push(line);
+      continue;
+    }
+    const modes: string[] = [];
+    let j = i + 1;
+    while (j < lines.length && MODE_BULLET.test(lines[j]!)) {
+      modes.push(lines[j]!.replace(MODE_BULLET, '').trim());
+      j += 1;
+    }
+    // A header with no bullets is not a modal block — leave it exactly as found
+    // so it reports as unrecognized rather than compiling to an empty choice.
+    if (modes.length === 0) {
+      out.push(line);
+      continue;
+    }
+    out.push(`${line} ${modes.map((mode) => `• ${mode}`).join(' ')}`);
+    i = j - 1;
+  }
+  return out;
 }
 
 /**

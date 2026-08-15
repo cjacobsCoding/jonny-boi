@@ -31,6 +31,7 @@ import type { Pilot } from '@jonny-boi/ai';
 import type { CardDefinition, EffectRegistry } from '@jonny-boi/core';
 import {
   DEFAULT_SUGGEST_CONFIG,
+  DEFAULT_SWAP_SCOPE,
   SAMPLE_DECKS,
   applySwap,
   gameSeedFor,
@@ -42,6 +43,7 @@ import {
   type Deck,
   type LoadedDeck,
   type MatchupPilots,
+  type SwapScope,
 } from '@jonny-boi/sim';
 import type { SimDeckPayload } from '../sim-protocol.js';
 import { candidateSeedSalt } from './plan.js';
@@ -203,11 +205,15 @@ export function runPairedShard(
   onGame?: OnGamePlayed,
 ): PairedShardResult {
   const base = heroDeck(job.context.hero);
-  // `applySwap` resolves out/in by id or name and rewrites the cut card IN PLACE,
-  // which is what keeps the two shuffled libraries one slot apart. Reusing it (and
-  // `loadDeck`) means the variant this shard plays is the same deck `evaluateSwap`
-  // would have built.
-  const variant = applySwap(base, { out: job.outCardId, in: job.inCardId }, context.pool);
+  // `applySwap` resolves out/in by id or name and rewrites the cut card(s) IN
+  // PLACE, which is what keeps the two shuffled libraries differing only at the
+  // swapped slots. Reusing it (and `loadDeck`) means the variant this shard plays
+  // is the same deck `evaluateSwap` would have built — including the SCOPE, which
+  // decides whether one copy or the whole playset moved. Defaulting it here rather
+  // than letting each call site guess is what stops a Lab run quietly answering a
+  // different question than the user asked.
+  const scope: SwapScope = job.swapScope ?? DEFAULT_SWAP_SCOPE;
+  const variant = applySwap(base, { out: job.outCardId, in: job.inCardId }, context.pool, scope);
   const baseLoaded = loadDeck(base, context.pool);
   const variantLoaded = loadDeck(variant, context.pool);
   const opponent = opponentAt(context, job.context, job.opponentIndex);
@@ -248,6 +254,16 @@ export function runPairedShard(
   const outDef = context.pool.get(job.outCardId) ?? context.pool.getByName(job.outCardId);
   const inDef = context.pool.get(job.inCardId) ?? context.pool.getByName(job.inCardId);
 
+  // How many copies actually moved — read off the base decklist exactly as
+  // `evaluateSwap` reads it, so a merged verdict reports the same number the
+  // single-threaded one would.
+  const outCount = outDef
+    ? (base.cards.find((entry) => {
+        const resolved = context.pool.get(entry.cardId) ?? context.pool.getByName(entry.cardId);
+        return resolved?.id === outDef.id;
+      })?.count ?? 1)
+    : 1;
+
   return {
     kind: 'paired-shard',
     opponentIndex: job.opponentIndex,
@@ -260,6 +276,8 @@ export function runPairedShard(
     inName: inDef?.name ?? job.inCardId,
     outCardId: job.outCardId,
     inCardId: job.inCardId,
+    scope,
+    copiesSwapped: scope === 'playset' ? outCount : 1,
     n,
     baseWins,
     variantWins,

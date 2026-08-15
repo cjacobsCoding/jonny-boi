@@ -18,6 +18,7 @@
  *
  * No literals: every bound comes from `pool-config.ts`.
  */
+import type { SwapScope } from '@jonny-boi/sim';
 import { MIN_GAMES_PER_SHARD, SHARDS_PER_WORKER } from './pool-config.js';
 import type {
   GameRange,
@@ -97,7 +98,12 @@ export function planGauntletShards(
  */
 export function planPairedShards(
   context: ShardContext,
-  swap: { readonly outCardId: string; readonly inCardId: string },
+  swap: {
+    readonly outCardId: string;
+    readonly inCardId: string;
+    /** One copy or the whole playset; undefined means the sim's default. */
+    readonly swapScope?: SwapScope;
+  },
   gamesPerOpponent: number,
   workerCount: number,
   swapSeed: number,
@@ -113,6 +119,10 @@ export function planPairedShards(
         opponentIndex,
         outCardId: swap.outCardId,
         inCardId: swap.inCardId,
+        // Stamped on EVERY shard from the one plan-level value: the scope picks
+        // which variant deck gets built, so shards that disagreed would average
+        // two different experiments into one verdict.
+        swapScope: swap.swapScope,
         swapSeed,
         candidateIndex,
         ...range,
@@ -148,6 +158,10 @@ export function planSuggestShards(
     jobs.push(
       ...planPairedShards(
         context,
+        // No `swapScope`: the suggestion engine does not expose one, so its
+        // candidates are evaluated at the sim's `DEFAULT_SWAP_SCOPE` — the same
+        // default `suggestSwaps` gets, which is what keeps the parallel search's
+        // ranking equal to the headless one.
         { outCardId: candidate.outId, inCardId: candidate.inId },
         gamesPerCandidate,
         workerCount,

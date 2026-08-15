@@ -28,6 +28,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SUGGEST_CONFIG,
+  DEFAULT_SWAP_SCOPE,
   evaluateSwap,
   generateCandidates,
   loadDeck,
@@ -37,6 +38,8 @@ import {
   type Deck,
   type LoadedDeck,
   type SuggestionReport,
+  type SwapEvaluation,
+  type SwapScope,
 } from '@jonny-boi/sim';
 import { createSimContext, executeShard, type SimContext } from './execute.js';
 import { resolveOpponentNames } from './opponents.js';
@@ -115,6 +118,8 @@ const GAUNTLET_GAMES = 6;
 const SWAP_GAMES = 5;
 const SUGGEST_GAMES = 3;
 const SUGGEST_CANDIDATES = 2;
+/** Enough candidates to be sure a multi-copy cut is among them (no games run). */
+const MANY_CANDIDATES = 200;
 /** Progress ticks are irrelevant to equality; emit them freely and ignore them. */
 const NO_THROTTLE = 0;
 
@@ -129,6 +134,18 @@ function opponents(names: readonly string[]): LoadedDeck[] {
 /** Two opponents keeps the run cheap while still exercising per-opponent seeding. */
 const TWO_OPPONENTS = resolveOpponentNames([], HERO.name).slice(0, 2);
 const ONE_OPPONENT = TWO_OPPONENTS.slice(0, 1);
+
+/** Copies of a card in the hero decklist, resolving ids the way the sim does. */
+function copiesInHero(cardId: string): number {
+  const def = context.pool.get(cardId) ?? context.pool.getByName(cardId);
+  if (!def) return 0;
+  return (
+    HERO.cards.find((entry) => {
+      const resolved = context.pool.get(entry.cardId) ?? context.pool.getByName(entry.cardId);
+      return resolved?.id === def.id;
+    })?.count ?? 0
+  );
+}
 
 function collect(): { sink: (p: SimProgress) => void; seen: SimProgress[] } {
   const seen: SimProgress[] = [];
@@ -197,26 +214,38 @@ describe('a parallel gauntlet', () => {
 // --- A/B swap ------------------------------------------------------------------
 
 describe('a parallel A/B swap test', () => {
+  // Pick a candidate whose OUT card the deck runs more than once, so 'one' and
+  // 'playset' genuinely build different variants — a scope test against a 1-of
+  // would pass no matter how badly the scope were plumbed.
   const candidate = generateCandidates(HERO, context.pool, {
     ...DEFAULT_SUGGEST_CONFIG,
-    maxCandidates: 1,
-  }).candidates[0];
-  if (!candidate) throw new Error('the hero deck produced no legal swap candidates');
+    maxCandidates: MANY_CANDIDATES,
+  }).candidates.find((c) => copiesInHero(c.outId) > 1);
+  if (!candidate) throw new Error('the hero deck produced no multi-copy swap candidates');
 
-  const request: SwapRequest = {
-    kind: 'swap',
-    hero: HERO,
-    opponentNames: [...TWO_OPPONENTS],
-    outCardId: candidate.outId,
-    inCardId: candidate.inId,
-    gamesPerOpponent: SWAP_GAMES,
-    seed: SEED,
-  };
+  function requestFor(scope?: SwapScope): SwapRequest {
+    return {
+      kind: 'swap',
+      hero: HERO,
+      opponentNames: [...TWO_OPPONENTS],
+      outCardId: candidate!.outId,
+      inCardId: candidate!.inId,
+      gamesPerOpponent: SWAP_GAMES,
+      seed: SEED,
+      swapScope: scope,
+    };
+  }
 
-  async function runAt(workers: number, completion: 'forward' | 'reverse'): Promise<unknown> {
+  const request = requestFor();
+
+  async function runRequest(
+    req: SwapRequest,
+    workers: number,
+    completion: 'forward' | 'reverse',
+  ): Promise<SwapEvaluation> {
     const { sink } = collect();
     const payload = await runSwap(
-      request,
+      req,
       new LocalShardRunner(workers, context, completion),
       sink,
       NO_THROTTLE,
@@ -224,6 +253,9 @@ describe('a parallel A/B swap test', () => {
     if (payload.kind !== 'swap') throw new Error('wrong payload kind');
     return payload.result;
   }
+
+  const runAt = (workers: number, completion: 'forward' | 'reverse'): Promise<SwapEvaluation> =>
+    runRequest(request, workers, completion);
 
   it('gives an identical verdict at 1 worker and at 12', async () => {
     expect(await runAt(12, 'forward')).toEqual(await runAt(1, 'forward'));
@@ -248,6 +280,41 @@ describe('a parallel A/B swap test', () => {
       context.registry,
     );
     expect(await runAt(12, 'reverse')).toEqual(reference);
+  });
+
+  // The scope decides which variant deck is built, so a plan that dropped it
+  // would not fail — it would quietly answer the OTHER question, at full
+  // confidence. Both scopes are pinned against the sim's own evaluation.
+  for (const scope of ['one', 'playset'] as const) {
+    it(`carries swapScope '${scope}' through every shard, matching evaluateSwap`, async () => {
+      const reference = evaluateSwap(
+        HERO,
+        { out: candidate.outId, in: candidate.inId },
+        opponents(TWO_OPPONENTS),
+        context.pilots,
+        SWAP_GAMES,
+        SEED,
+        context.pool,
+        context.registry,
+        { swapScope: scope },
+      );
+      const parallel = await runRequest(requestFor(scope), 12, 'reverse');
+      expect(parallel).toEqual(reference);
+      expect(parallel.scope).toBe(scope);
+      expect(parallel.copiesSwapped).toBe(scope === 'playset' ? copiesInHero(candidate.outId) : 1);
+    });
+  }
+
+  it('actually tests a different deck for each scope (the plumbing is load-bearing)', async () => {
+    const one = await runRequest(requestFor('one'), 12, 'forward');
+    const playset = await runRequest(requestFor('playset'), 12, 'forward');
+    expect(one.variantDeck).not.toBe(playset.variantDeck);
+    expect(one.copiesSwapped).toBeLessThan(playset.copiesSwapped);
+  });
+
+  it('defaults to the sim’s DEFAULT_SWAP_SCOPE when the request omits one', async () => {
+    const omitted = await runRequest(requestFor(undefined), 12, 'forward');
+    expect(omitted.scope).toBe(DEFAULT_SWAP_SCOPE);
   });
 
   it('keeps the self-swap sanity check exact when sharded', async () => {

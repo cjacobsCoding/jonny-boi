@@ -1,0 +1,20 @@
+{
+  "name": "@jonny-boi/wasm-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PERF SPIKE (not shipped): measures whether compiling the rules-engine hot path to WebAssembly is worth it. Deliberately OUTSIDE the npm workspaces globs and the root vitest include so it cannot affect `npm run build` or `npm test`.",
+  "scripts": {
+    "install:spike": "npm install --no-save",
+    "build:wasm": "asc assembly/payment.ts --target release --outFile build/payment.wasm --textFile build/payment.wat",
+    "build:ts": "node build.mjs",
+    "build": "npm run build:wasm && npm run build:ts",
+    "profile": "node --cpu-prof --cpu-prof-dir results --cpu-prof-name heuristic.cpuprofile build/run-workload.js --pilot heuristic --games 40",
+    "corpus": "node build/capture-corpus.js",
+    "verify": "node build/verify.js",
+    "bench": "node build/bench.js"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.27.31"
+  }
+}

@@ -17,6 +17,7 @@ export function SuggestPanel({
   chosenOpponents,
   seed,
   sim,
+  onApplySwap,
   gamesConfig,
   maxCandidatesConfig,
 }: PanelProps & { gamesConfig: GamesConfig; maxCandidatesConfig: GamesConfig }): ReactElement {
@@ -102,6 +103,8 @@ export function SuggestPanel({
                   <th>Delta</th>
                   <th>p-value</th>
                   <th>Verdict</th>
+                  {/* Acting on the ranking is the point of producing it. */}
+                  <th aria-label="Apply this swap" />
                 </tr>
               </thead>
               <tbody>
@@ -120,6 +123,20 @@ export function SuggestPanel({
                       <td className="lab-table__num">{pValueStr(ev.pValue)}</td>
                       <td>
                         <span className={`verdict-tag verdict-tag--${v.tone}`}>{v.label}</span>
+                      </td>
+                      <td>
+                        {onApplySwap && (
+                          <button
+                            type="button"
+                            className="btn btn--ghost lab-table__apply"
+                            onClick={() =>
+                              onApplySwap(ev.swap.out, ev.swap.in, ev.copiesSwapped)
+                            }
+                            title={`Swap ${ev.copiesSwapped}× ${s.outName} for ${s.inName} in your deck`}
+                          >
+                            Apply
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

@@ -50,7 +50,24 @@ import { PLAYER_IDS } from './state.js';
  *   spell. You gain 3 life." was castable into an empty stack for a free three
  *   life, which is strictly better than the printed card.
  */
-export type TargetRestriction = 'any' | 'creature' | 'player' | 'spell';
+export type TargetRestriction =
+  | 'any'
+  | 'creature'
+  | 'player'
+  | 'spell'
+  /** "target artifact" — an artifact permanent, never a creature or a face. */
+  | 'artifact'
+  /**
+   * "target opponent" — a player who ISN'T the caster.
+   *
+   * This one is unlike the others: legality depends on WHO is casting, not only
+   * on the board. Every checker therefore takes an optional `controller`, and
+   * when it is absent an opponent-target is treated as ILLEGAL rather than
+   * guessed. Being unable to cast is a safe failure; letting a spell point at
+   * its own caster would make it strictly more permissive than printed, which is
+   * the exact infidelity this module exists to prevent.
+   */
+  | 'opponent';
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -68,7 +85,14 @@ export const DEFAULT_TARGET_RESTRICTION: TargetRestriction = 'any';
 
 /** Whether an arbitrary value is a valid restriction word. */
 export function isTargetRestriction(value: unknown): value is TargetRestriction {
-  return value === 'any' || value === 'creature' || value === 'player' || value === 'spell';
+  return (
+    value === 'any' ||
+    value === 'creature' ||
+    value === 'player' ||
+    value === 'spell' ||
+    value === 'artifact' ||
+    value === 'opponent'
+  );
 }
 
 /**
@@ -128,16 +152,25 @@ export function isLegalTarget(
   state: GameState,
   restriction: TargetRestriction,
   target: InstanceId | PlayerId,
+  controller?: PlayerId,
 ): boolean {
-  if (isPlayerTarget(target)) return restriction === 'any' || restriction === 'player';
-  if (restriction === 'player') return false;
+  if (isPlayerTarget(target)) {
+    if (restriction === 'opponent') {
+      // Unknown caster ⇒ illegal, never "probably fine" (see the type's note).
+      return controller !== undefined && target !== controller;
+    }
+    return restriction === 'any' || restriction === 'player';
+  }
+  if (restriction === 'player' || restriction === 'opponent') return false;
   if (restriction === 'spell') {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".
     return state.stack.some((object) => object.kind === 'spell' && object.instanceId === target);
   }
   const permanent = state.battlefield.find((c) => c.instanceId === target);
-  return permanent !== undefined && isCreature(permanent.def);
+  if (!permanent) return false;
+  if (restriction === 'artifact') return permanent.def.types.includes('artifact');
+  return isCreature(permanent.def);
 }
 
 /**
@@ -150,15 +183,28 @@ export function isLegalTarget(
 export function legalTargetsFor(
   state: GameState,
   restriction: TargetRestriction,
+  controller?: PlayerId,
 ): readonly (InstanceId | PlayerId)[] {
   if (restriction === 'spell') {
     return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
   }
   const targets: (InstanceId | PlayerId)[] = [];
   if (restriction === 'any' || restriction === 'player') targets.push(...PLAYER_IDS);
+  if (restriction === 'opponent') {
+    // With no caster there is no such thing as "an opponent", so nothing is
+    // offered and the spell simply cannot be cast — the safe direction.
+    if (controller !== undefined) {
+      targets.push(...PLAYER_IDS.filter((player) => player !== controller));
+    }
+  }
   if (restriction === 'any' || restriction === 'creature') {
     for (const permanent of state.battlefield) {
       if (isCreature(permanent.def)) targets.push(permanent.instanceId);
+    }
+  }
+  if (restriction === 'artifact') {
+    for (const permanent of state.battlefield) {
+      if (permanent.def.types.includes('artifact')) targets.push(permanent.instanceId);
     }
   }
   return targets;
@@ -177,6 +223,7 @@ export function illegalTargetReason(
   state: GameState,
   def: CardDefinition,
   targets: ReadonlyArray<InstanceId | PlayerId>,
+  controller?: PlayerId,
 ): string | undefined {
   const restriction = targetRestrictionOf(def);
   if (restriction === undefined) return undefined; // unrestricted — not policed
@@ -184,7 +231,7 @@ export function illegalTargetReason(
     return `${def.name} targets exactly one ${describeRestriction(restriction)}`;
   }
   const target = targets[0]!;
-  if (!isLegalTarget(state, restriction, target)) {
+  if (!isLegalTarget(state, restriction, target, controller)) {
     return `${def.name} can only target ${describeRestriction(restriction)}`;
   }
   return undefined;
@@ -203,13 +250,14 @@ export function illegalTargetReasonForEffects(
   label: string,
   effects: readonly EffectRef[],
   targets: ReadonlyArray<InstanceId | PlayerId>,
+  controller?: PlayerId,
 ): string | undefined {
   const restriction = restrictionOfEffects(effects);
   if (restriction === undefined) return undefined; // unrestricted — not policed
   if (targets.length !== 1) {
     return `${label} targets exactly one ${describeRestriction(restriction)}`;
   }
-  if (!isLegalTarget(state, restriction, targets[0]!)) {
+  if (!isLegalTarget(state, restriction, targets[0]!, controller)) {
     return `${label} can only target ${describeRestriction(restriction)}`;
   }
   return undefined;
@@ -236,6 +284,10 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a player';
     case 'spell':
       return 'a spell on the stack';
+    case 'artifact':
+      return 'an artifact';
+    case 'opponent':
+      return 'an opponent';
     case 'any':
       return 'any target (a creature or a player)';
   }

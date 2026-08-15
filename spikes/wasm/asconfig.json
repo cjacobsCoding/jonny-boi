@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/assemblyscript/std/assembly.json",
+  "targets": {
+    "release": {
+      "outFile": "build/payment.wasm",
+      "textFile": "build/payment.wat",
+      "optimizeLevel": 3,
+      "shrinkLevel": 0,
+      "converge": true,
+      "noAssert": true,
+      "runtime": "minimal",
+      "exportRuntime": false
+    }
+  },
+  "options": {
+    "bindings": "raw"
+  }
+}

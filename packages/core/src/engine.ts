@@ -52,6 +52,7 @@ import type {
 import {
   createPlayer,
   MAIN_STEPS,
+  NO_COUNTERS,
   PLAYER_IDS,
   STEP_ORDER,
 } from './state.js';
@@ -76,6 +77,19 @@ import {
   tapAttackers,
 } from './internal/combat.js';
 import { entersTapped, isCreature } from './card.js';
+
+/**
+ * The registry a caller that supplied none gets.
+ *
+ * Built once at module load rather than per action. `createEffectRegistry()` makes
+ * a Map and four closures, and `applyAction` was calling it on EVERY registry-free
+ * action — which is every action of every test and every look-ahead rollout that
+ * doesn't thread the pool through. Sharing one is safe because it never escapes:
+ * the registry is only ever READ (`applyEffectRef` calls `get`), it is not part of
+ * `EffectContext`, and nothing hands it back to a caller who could `register` into
+ * it. Callers that want a registry of their own still call `createEffectRegistry`.
+ */
+const NO_REGISTRY: EffectRegistry = createEffectRegistry();
 
 /** A deck list: an ordered array of card definitions (the library, pre-shuffle). */
 export interface DeckList {
@@ -127,7 +141,7 @@ function makeInstance(state: GameState, def: CardDefinition, owner: PlayerId): C
     summoningSick: true,
     damageMarked: 0,
     markedByDeathtouch: false,
-    counters: {},
+    counters: NO_COUNTERS,
   };
 }
 
@@ -537,7 +551,7 @@ function frameSource(state: GameState, frame: ResolutionFrame): CardInstance {
       summoningSick: false,
       damageMarked: 0,
       markedByDeathtouch: false,
-      counters: {},
+      counters: NO_COUNTERS,
     }
   );
 }
@@ -730,14 +744,30 @@ function createChoiceChannel(
 }
 
 
+/**
+ * The per-player zones this searches, in order, named once at module scope — the
+ * array literal used to be rebuilt (with a fresh `find` closure per zone) on every
+ * lookup.
+ */
+const ZONE_SEARCH_ORDER = ['graveyard', 'exile', 'hand', 'library', 'command'] as const;
+
+/** The instance with this id in a zone array, or undefined. */
+function instanceIn(zone: readonly CardInstance[], id: InstanceId): CardInstance | undefined {
+  for (let i = 0; i < zone.length; i++) {
+    const inst = zone[i] as CardInstance;
+    if (inst.instanceId === id) return inst;
+  }
+  return undefined;
+}
+
 /** Find an instance in any zone (battlefield/hand/grave/exile/stack), else undefined. */
 function findInstanceAnywhere(state: GameState, id: InstanceId): CardInstance | undefined {
   const bf = findOnBattlefield(state, id);
   if (bf) return bf;
   for (const pid of PLAYER_IDS) {
     const p = state.players[pid];
-    for (const zone of [p.graveyard, p.exile, p.hand, p.library, p.command]) {
-      const found = zone.find((c) => c.instanceId === id);
+    for (const zone of ZONE_SEARCH_ORDER) {
+      const found = instanceIn(p[zone], id);
       if (found) return found;
     }
   }
@@ -811,56 +841,23 @@ function applyActionToDraft(
   const collector = createTriggerCollector(state, baseEmit);
   const emit = collector.emit;
   // Thread the effect registry explicitly through the call chain (no module
-  // global). With none supplied, default to an empty registry: registry-free
+  // global). With none supplied, default to the shared empty registry: registry-free
   // actions (playLand/passPriority/combat) are unaffected; only spell resolution
   // needs primitives, and a bare call signals "no cards registered".
-  const effectRegistry = registry ?? createEffectRegistry();
+  const effectRegistry = registry ?? NO_REGISTRY;
 
   if (state.gameOver) {
     baseEmit({ type: 'actionRejected', reason: 'the game is already over' });
     return { state, events };
   }
 
-  const dispatch = (): EngineResult => {
-    // A parked question freezes the game for everyone else: while it stands, the
-    // only thing anybody may do is answer it. Without this a player could pass
-    // priority (or attack) "around" a half-resolved spell.
-    if (state.pendingChoice && action.kind !== 'answerChoice') {
-      return rejectWith(prevState, 'a choice is awaiting an answer');
-    }
-    switch (action.kind) {
-      case 'answerChoice':
-        return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
-      case 'passPriority': {
-        if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
-        onPassPriority(state, config, effectRegistry, emit);
-        return { state, events };
-      }
-      case 'playLand':
-        return applyPlayLand(state, prevState, action, config, emit, events);
-      case 'tapForMana':
-        return applyTapForMana(state, prevState, action, emit, events);
-      case 'castSpell':
-        return applyCastSpell(state, prevState, action, config, emit, events);
-      case 'activateAbility':
-        return applyActivateAbility(state, prevState, action, config, emit, events);
-      case 'declareAttackers':
-        return applyDeclareAttackers(state, prevState, action, emit, events);
-      case 'declareBlockers':
-        return applyDeclareBlockers(state, prevState, action, emit, events);
-      default: {
-        const _exhaustive: never = action;
-        void _exhaustive;
-        return rejectWith(prevState, 'unknown action');
-      }
-    }
-  };
-
-  const result = dispatch();
+  // Dispatch inline rather than through a local `dispatch()` closure: that arrow
+  // captured six locals and was allocated on every single action.
+  const result = dispatchAction(state, prevState, action, config, effectRegistry, emit, events);
   // On a clean (non-rejected) action, put any triggered abilities that fired onto
   // the stack and hand the active player priority over them. Rejections return a
   // fresh clone of prevState, so `result.state !== state`; we only flush our draft.
-  if (result.state === state && !result.events.some((e) => e.type === 'actionRejected')) {
+  if (result.state === state && !wasRejected(result.events)) {
     // A suspended resolution keeps the floor: a trigger that fired mid-resolution
     // goes on the stack and waits its turn, but the chooser must still answer first.
     if (collector.flush() > 0 && !state.gameOver && !state.pendingChoice) {
@@ -869,6 +866,61 @@ function applyActionToDraft(
     }
   }
   return result;
+}
+
+/** Route one validated-so-far action to its applier. Extracted from
+ * `applyActionToDraft` so the switch is a plain call rather than a closure
+ * allocated on every action. */
+function dispatchAction(
+  state: GameState,
+  prevState: GameState,
+  action: GameAction,
+  config: RulesConfig,
+  effectRegistry: EffectRegistry,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  // A parked question freezes the game for everyone else: while it stands, the
+  // only thing anybody may do is answer it. Without this a player could pass
+  // priority (or attack) "around" a half-resolved spell.
+  if (state.pendingChoice && action.kind !== 'answerChoice') {
+    return rejectWith(prevState, 'a choice is awaiting an answer');
+  }
+  switch (action.kind) {
+    case 'answerChoice':
+      return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
+    case 'passPriority': {
+      if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+      onPassPriority(state, config, effectRegistry, emit);
+      return { state, events };
+    }
+    case 'playLand':
+      return applyPlayLand(state, prevState, action, config, emit, events);
+    case 'tapForMana':
+      return applyTapForMana(state, prevState, action, emit, events);
+    case 'castSpell':
+      return applyCastSpell(state, prevState, action, config, emit, events);
+    case 'activateAbility':
+      return applyActivateAbility(state, prevState, action, config, emit, events);
+    case 'declareAttackers':
+      return applyDeclareAttackers(state, prevState, action, emit, events);
+    case 'declareBlockers':
+      return applyDeclareBlockers(state, prevState, action, emit, events);
+    default: {
+      const _exhaustive: never = action;
+      void _exhaustive;
+      return rejectWith(prevState, 'unknown action');
+    }
+  }
+}
+
+/** Whether an action's events report a rejection. A loop, not `.some()`, which
+ * allocated a predicate closure per action for a scan of two or three events. */
+function wasRejected(events: readonly GameEvent[]): boolean {
+  for (const event of events) {
+    if (event.type === 'actionRejected') return true;
+  }
+  return false;
 }
 
 function rejectWith(prevState: GameState, reason: string): EngineResult {
@@ -952,7 +1004,7 @@ function applyPlayLand(
   if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
-  const card = player.hand.find((c) => c.instanceId === action.instanceId);
+  const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
   if (!isLand(card.def)) return rejectWith(prevState, 'that card is not a land');
 
@@ -1039,7 +1091,7 @@ function applyCastSpell(
 ): EngineResult {
   if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
   const player = state.players[action.player];
-  const card = player.hand.find((c) => c.instanceId === action.instanceId);
+  const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
   if (isLand(card.def)) return rejectWith(prevState, 'lands are played, not cast');
 
@@ -1056,7 +1108,7 @@ function applyCastSpell(
   // rejected here when handed an illegal target — the engine, not the caller, is
   // the authority, so a pilot or a UI that builds its own action cannot play a
   // card as strictly better than printed.
-  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? []);
+  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? [], action.player);
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
   // Pay the mana cost from the floating pool.
@@ -1147,6 +1199,7 @@ function applyActivateAbility(
     `${source.def.name}'s ability`,
     ability.effects,
     action.targets ?? [],
+    action.player,
   );
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
@@ -1228,8 +1281,13 @@ function unpayableActivationReason(
 }
 
 function removeFromHand(player: GameState['players'][PlayerId], id: InstanceId): void {
-  const idx = player.hand.findIndex((c) => c.instanceId === id);
-  if (idx >= 0) player.hand.splice(idx, 1);
+  const hand = player.hand;
+  for (let i = 0; i < hand.length; i++) {
+    if ((hand[i] as CardInstance).instanceId === id) {
+      hand.splice(i, 1);
+      return;
+    }
+  }
 }
 
 function applyDeclareAttackers(
@@ -1358,8 +1416,17 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // action per mode, so choosing the color is part of the action an AI scores
   // rather than a hidden engine default. Summoning-sick creature sources are
   // excluded (rule 302.6 — see `canActivateManaAbility`).
+  //
+  // Every array walk in this function is indexed rather than `for...of`. That is
+  // not style: V8 does not reliably elide the array-iterator object here, and this
+  // function runs once per decision for the whole game — the iterators alone were
+  // the largest remaining source of per-action garbage once cloning is out of the
+  // picture. Confined to this function and the mana helpers it calls, which are
+  // the only places it has ever measured.
   let manaCont: ReturnType<typeof indexContinuous> | undefined;
-  for (const perm of state.battlefield) {
+  const battlefield = state.battlefield;
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me || perm.tapped) continue;
     const modes = manaModesOf(perm.def);
     if (modes.length === 0) continue;
@@ -1378,7 +1445,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
 
   // Play a land (sorcery-speed, land plays remaining).
   if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
-    for (const card of player.hand) {
+    for (let h = 0; h < player.hand.length; h++) {
+      const card = player.hand[h] as CardInstance;
       if (isLand(card.def)) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId });
       }
@@ -1394,7 +1462,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // legal target cannot be cast. Unrestricted spells keep their single bare offer:
   // their targets (a stack object, the source itself, none) are chosen by the
   // caller, and enumerating them here would change every consumer's action space.
-  for (const card of player.hand) {
+  for (let h = 0; h < player.hand.length; h++) {
+    const card = player.hand[h] as CardInstance;
     if (isLand(card.def)) continue;
     const timing = castTiming(card.def);
     const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
@@ -1405,7 +1474,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
       continue;
     }
-    for (const target of legalTargetsFor(state, restriction)) {
+    for (const target of legalTargetsFor(state, restriction, me)) {
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
     }
   }
@@ -1414,7 +1483,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // rules above: timing is checked, the whole cost must be payable, and an
   // ability with a target restriction is offered once per LEGAL target (and not
   // at all when there is none), so this menu can only contain playable actions.
-  for (const perm of state.battlefield) {
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
     if (perm.controller !== me) continue;
     const abilities = perm.def.activated;
     if (!abilities || abilities.length === 0) continue;
@@ -1428,7 +1498,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         actions.push({ kind: 'activateAbility', player: me, instanceId: perm.instanceId, abilityIndex: index });
         continue;
       }
-      for (const target of legalTargetsFor(state, restriction)) {
+      for (const target of legalTargetsFor(state, restriction, me)) {
         actions.push({
           kind: 'activateAbility',
           player: me,
@@ -1448,13 +1518,16 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // Effective keywords (printed OR continuous grants) so a haste/defender granted
     // by an until-EOT effect is reflected in the eligible-attacker set (DESIGN §3.9).
     const cont = indexContinuous(state);
-    const eligible = state.battlefield
-      .filter((c) => {
-        if (c.controller !== me || !isCreature(c.def) || c.tapped) return false;
-        const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
-        return (!c.summoningSick || Boolean(kw.haste)) && !kw.defender;
-      })
-      .map((c) => c.instanceId);
+    // One pass building the id list directly. `filter(...).map(...)` allocated two
+    // closures and an intermediate array of instances that was thrown away.
+    const eligible: InstanceId[] = [];
+    for (let b = 0; b < battlefield.length; b++) {
+      const c = battlefield[b] as CardInstance;
+      if (c.controller !== me || !isCreature(c.def) || c.tapped) continue;
+      const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
+      if ((c.summoningSick && !kw.haste) || kw.defender) continue;
+      eligible.push(c.instanceId);
+    }
     if (eligible.length > 0) {
       // Offer "attack with all eligible" as the canonical option; the AI may also
       // construct narrower subsets and pass them to applyAction directly.

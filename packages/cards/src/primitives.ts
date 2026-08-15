@@ -31,11 +31,14 @@ import type {
   EffectContext,
   EffectPrimitive,
   EffectRegistry,
+  PlayerId,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import { PLUS_ONE_COUNTER, effectivePower, isCreature, isLegalTarget } from '@jonny-boi/core';
 import {
+  boolParam,
   changeLife,
+  moveOwnedCard,
   restrictionParam,
   firstPermanentTarget,
   firstPlayerTarget,
@@ -78,7 +81,9 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   if (amount <= 0) return;
   const target = ctx.targets[0];
   if (target === undefined) return;
-  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target)) return; // illegal → fizzle
+  // `ctx.controller` is passed so an "opponent-only" restriction can be judged —
+  // without it the check cannot tell the caster apart from their opponent.
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller)) return; // illegal → fizzle
 
   if (isPlayerTarget(target)) {
     changeLife(ctx, target, -amount);
@@ -263,9 +268,13 @@ export const persistReturn: EffectPrimitive = (ctx) => {
  */
 export const destroyTarget: EffectPrimitive = (ctx) => {
   const target = firstPermanentTarget(ctx);
-  if (!target || !isCreature(target.def)) return;
+  if (!target) return;
+  // Which permanents this may destroy comes from the DECLARED restriction, not a
+  // hard-coded creature check — otherwise "destroy target artifact" would find a
+  // legal artifact target and then silently do nothing to it.
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target.instanceId, ctx.controller)) return;
   if (!passesDestroyFilter(ctx, target)) return;
-  destroyCreature(ctx, target);
+  destroyPermanent(ctx, target);
 };
 
 /**
@@ -293,7 +302,7 @@ export const exileTarget: EffectPrimitive = (ctx) => {
  */
 export const destroyAll: EffectPrimitive = (ctx) => {
   const creatures = ctx.state.battlefield.filter((c) => isCreature(c.def));
-  for (const creature of creatures) destroyCreature(ctx, creature);
+  for (const creature of creatures) destroyPermanent(ctx, creature);
 };
 
 /**
@@ -420,10 +429,154 @@ function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean 
   return true;
 }
 
-/** Destroy a creature: move it to its owner's graveyard and emit `creatureDied`. */
-function destroyCreature(ctx: EffectContext, creature: CardInstance): void {
-  movePermanentTo(ctx, creature, 'graveyard');
-  ctx.emit({ type: 'creatureDied', instanceId: creature.instanceId, name: creature.def.name });
+/**
+ * "Target player mills N cards" — move the top N of a library to its graveyard.
+ *
+ * Milling is a real clock (a decked player loses), so this moves cards through
+ * the same owned-zone path a draw does rather than deleting them: a milled card
+ * is in the graveyard, where graveyard effects can still see it.
+ *
+ * Params: `amount` (cards to mill), `self` (mill the controller instead of a
+ * target — the self-mill template).
+ */
+export const mill: EffectPrimitive = (ctx) => {
+  const amount = intParam(ctx, 'amount', 0);
+  if (amount <= 0) return;
+  const who = boolParam(ctx, 'self', false)
+    ? ctx.controller
+    : (firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller));
+  const player = ctx.state.players[who];
+  // A library with fewer cards than the mill amount empties; the loss is the
+  // engine's decking rule on the next draw, not something this primitive forces.
+  const count = Math.min(amount, player.library.length);
+  for (let i = 0; i < count; i++) {
+    const card = player.library[0];
+    if (!card) break;
+    moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
+  }
+  if (count > 0) ctx.emit({ type: 'cardsMilled', player: who, amount: count });
+};
+
+/**
+ * "~ fights target creature" — each deals damage equal to its power to the other,
+ * simultaneously.
+ *
+ * Simultaneity matters: a fight where the first death cancelled the second
+ * creature's damage would let a 3/3 kill a 4/4 and survive. Both damage amounts
+ * are read BEFORE either is applied, so a mutual kill kills both — which is what
+ * the printed card does.
+ */
+export const fight: EffectPrimitive = (ctx) => {
+  const self = selfIfCreature(ctx);
+  const other = firstPermanentTarget(ctx);
+  if (!self || !other || !isCreature(other.def)) return;
+  if (self.instanceId === other.instanceId) return; // a creature cannot fight itself
+
+  const selfPower = effectivePower(self);
+  const otherPower = effectivePower(other);
+
+  if (otherPower > 0) {
+    self.damageMarked += otherPower;
+    ctx.emit({
+      type: 'damageDealt',
+      source: other.instanceId,
+      target: self.instanceId,
+      amount: otherPower,
+      combat: false,
+    });
+  }
+  if (selfPower > 0) {
+    other.damageMarked += selfPower;
+    ctx.emit({
+      type: 'damageDealt',
+      source: self.instanceId,
+      target: other.instanceId,
+      amount: selfPower,
+      combat: false,
+    });
+  }
+  // Death is the engine's state-based check, exactly as with combat damage.
+};
+
+/**
+ * Damage split across a whole group at once — "deals N damage to each creature",
+ * "to each opponent", "to each creature and each player".
+ *
+ * One primitive rather than three because the printed templates differ only in
+ * WHO is hit, and that is data: `creatures` and `opponents`/`players` flags.
+ */
+export const dealDamageToEach: EffectPrimitive = (ctx) => {
+  const amount = intParam(ctx, 'amount', 0);
+  if (amount <= 0) return;
+
+  if (boolParam(ctx, 'creatures', false)) {
+    // Snapshot first: damage is dealt simultaneously, so a creature dying to it
+    // must not change who else gets hit.
+    for (const creature of [...ctx.state.battlefield].filter((c) => isCreature(c.def))) {
+      creature.damageMarked += amount;
+      ctx.emit({
+        type: 'damageDealt',
+        source: ctx.source.instanceId,
+        target: creature.instanceId,
+        amount,
+        combat: false,
+      });
+    }
+  }
+
+  const hitOpponents = boolParam(ctx, 'opponents', false);
+  const hitEveryPlayer = boolParam(ctx, 'players', false);
+  if (hitOpponents || hitEveryPlayer) {
+    const victims: PlayerId[] = hitEveryPlayer
+      ? [ctx.controller, otherPlayer(ctx.controller)]
+      : [otherPlayer(ctx.controller)];
+    for (const victim of victims) changeLife(ctx, victim, -amount);
+  }
+};
+
+/**
+ * "Put N +1/+1 counters on target creature" — a PERMANENT stat change, unlike
+ * `pumpUntilEndOfTurn`, which wears off at cleanup.
+ *
+ * Restricted to +1/+1 (and its negative, -1/-1) on purpose. Those are the two
+ * the stat layer genuinely reads, so they really change power and toughness. A
+ * charge or loyalty counter would be *stored* and read by nothing, producing a
+ * card that looks implemented and does nothing — so those keep reporting as
+ * unsupported instead.
+ *
+ * Params: `amount` (may be negative for -1/-1), `self` (counter the source
+ * rather than a target — the "enters with counters on it" template).
+ */
+export const addCounters: EffectPrimitive = (ctx) => {
+  const amount = intParam(ctx, 'amount', 0);
+  if (amount === 0) return;
+  const target = boolParam(ctx, 'self', false)
+    ? selfIfCreature(ctx)
+    : (firstPermanentTarget(ctx) ?? selfIfCreature(ctx));
+  if (!target || !isCreature(target.def)) return;
+
+  const current = target.counters[PLUS_ONE_COUNTER] ?? 0;
+  target.counters[PLUS_ONE_COUNTER] = current + amount;
+  ctx.emit({
+    type: 'counterAdded',
+    instanceId: target.instanceId,
+    kind: PLUS_ONE_COUNTER,
+    amount,
+  });
+};
+
+/**
+ * Destroy a permanent: move it to its owner's graveyard.
+ *
+ * `creatureDied` is emitted only for an actual creature — it is what death
+ * triggers key off, and firing it for a destroyed artifact would make a "when a
+ * creature dies" ability trigger on something that never was one.
+ */
+function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
+  movePermanentTo(ctx, permanent, 'graveyard');
+  if (isCreature(permanent.def)) {
+    ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
+  }
 }
 
 // --- the canonical primitive id registry ---------------------------------------
@@ -450,6 +603,10 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   counterSpell,
   createToken,
   tapTarget,
+  mill,
+  fight,
+  dealDamageToEach,
+  addCounters,
   ...CHOICE_PRIMITIVES,
 });
 

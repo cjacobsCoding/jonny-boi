@@ -7,6 +7,13 @@
 
 import type { CardDefinition, KeywordFlags } from './card.js';
 import type { DeckList } from './engine.js';
+import { applyAction, applyActionInPlace, createGame, generateLegalActions } from './engine.js';
+import type { GameAction } from './actions.js';
+import type { GameEvent } from './events.js';
+import type { RulesConfig } from './config.js';
+import { DEFAULT_RULES } from './config.js';
+import { createRng } from './rng.js';
+import { serializeState } from './serialize.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
 
 /** A basic land that taps for one of a given color. */
@@ -121,4 +128,162 @@ function placeInZone(
     created.push(inst);
   }
   return created;
+}
+
+// --- deterministic self-play (benchmarks + behaviour-lock tests) -----------------
+
+/**
+ * A whole game played by a fixed, seeded action-picker, reduced to a value that
+ * changes if ANY engine behaviour changes.
+ *
+ * The digest is the acceptance test for optimization work: a pure speedup must
+ * reproduce the same winner, the same turn/action counts, the same event log and
+ * the same final board, byte for byte. Counting is not enough — two engines can
+ * agree on "A won in 14 turns" while disagreeing about everything in between —
+ * so the log and the serialized final state are hashed in full.
+ */
+export interface SelfPlayResult {
+  readonly seed: number;
+  readonly winner: PlayerId | null;
+  readonly gameOver: boolean;
+  readonly turns: number;
+  readonly actions: number;
+  readonly events: number;
+  /** Hash of the complete event log, in order. */
+  readonly eventDigest: string;
+  /** Hash of the serialized final state (board, zones, life, pending choice). */
+  readonly stateDigest: string;
+}
+
+/** How long a self-play game may run before it is cut off as a draw. */
+export const SELF_PLAY_ACTION_CAP = 1500;
+
+/**
+ * The seeds the behaviour-lock test pins. Enough games to cover every branch the
+ * hot path takes — combat with and without blocks, decking, keyword grants, the
+ * action cap — while staying fast enough to run on every `npm test`.
+ */
+export const SELF_PLAY_LOCK_SEEDS: readonly number[] = [
+  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+];
+
+/**
+ * One self-play game reduced to a single comparable line. The lock test compares
+ * these strings rather than a structure so a failure prints exactly which field
+ * moved (winner? turn count? the log?) instead of an object diff.
+ */
+export function selfPlayLockLine(result: SelfPlayResult): string {
+  return [
+    result.seed,
+    result.winner ?? '-',
+    result.gameOver ? 'over' : 'cut',
+    result.turns,
+    result.actions,
+    result.events,
+    result.eventDigest,
+    result.stateDigest,
+  ].join('|');
+}
+
+/**
+ * FNV-1a over a string — a tiny, dependency-free, order-sensitive hash. Not
+ * cryptographic and not meant to be: it only has to change when the input does.
+ */
+function digest(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Play one full game with a seeded uniform action-picker on both seats.
+ *
+ * Deliberately NOT a smart pilot: the point is to exercise the engine's hot path
+ * (clone → legal actions → apply → events) over a long, varied game with no
+ * dependency on `@jonny-boi/ai`, which core must not import. Same seed and same
+ * decks ⇒ the same game, always.
+ */
+export function playSelfPlayGame(
+  decks: Readonly<Record<PlayerId, DeckList>>,
+  seed: number,
+  config: RulesConfig = DEFAULT_RULES,
+  /**
+   * Drive the game through `applyActionInPlace` instead of the cloning
+   * `applyAction`. Same game, same result — it is the same engine with the
+   * defensive copy removed — but it measures the hot path as a caller that OWNS
+   * its state sees it. Used by the benchmark to separate "cost of cloning" from
+   * "cost of everything else", since a caller that stops cloning stops paying the
+   * former entirely.
+   */
+  mutateInPlace = false,
+): SelfPlayResult {
+  const rng = createRng(seed);
+  const created = createGame({ seed, decks, config });
+  let state: GameState = created.state;
+  const events: GameEvent[] = [...created.events];
+  let actions = 0;
+
+  while (!state.gameOver && actions < SELF_PLAY_ACTION_CAP) {
+    const legal = generateLegalActions(state, config);
+    if (legal.length === 0) break;
+    const action = legal[rng.nextInt(legal.length)] as GameAction;
+    const result = mutateInPlace
+      ? applyActionInPlace(state, action, config)
+      : applyAction(state, action, config);
+    state = result.state;
+    for (const e of result.events) events.push(e);
+    actions += 1;
+  }
+
+  return {
+    seed,
+    winner: state.winner,
+    gameOver: state.gameOver,
+    turns: state.turnNumber,
+    actions,
+    events: events.length,
+    eventDigest: digest(JSON.stringify(events)),
+    stateDigest: digest(JSON.stringify(serializeState(state))),
+  };
+}
+
+/**
+ * A 60-card deck with a realistic land/creature/spell mix, built from the
+ * fixtures above so the benchmark and the behaviour-lock test share one board.
+ * `variant` shifts the mix so the two seats play different decks.
+ */
+export function selfPlayDeck(variant: 0 | 1): DeckList {
+  const color = variant === 0 ? 'R' : 'G';
+  const land = landDef(variant === 0 ? 'Mountain' : 'Forest', color);
+  const cards: CardDefinition[] = [];
+  for (let i = 0; i < SELF_PLAY_LANDS; i++) cards.push(land);
+  for (let i = 0; i < SELF_PLAY_CREATURES; i++) {
+    // A curve of small bodies, every fourth one carrying a keyword so combat,
+    // the continuous layer and the keyword predicates all stay on the hot path.
+    const size = 1 + (i % 3);
+    cards.push(
+      creatureDef(`${color}-creature-${size}-${i % 4}`, size, size, {
+        cost: { generic: size },
+        keywords: i % 4 === 0 ? { haste: true } : i % 4 === 1 ? { flying: true } : undefined,
+        name: `${color} Creature ${size}`,
+      }),
+    );
+  }
+  while (cards.length < SELF_PLAY_DECK_SIZE) {
+    cards.push(creatureDef(`${color}-vanilla`, 2, 2, { cost: { generic: 2 }, name: `${color} Vanilla` }));
+  }
+  return { cards };
+}
+
+/** Deck composition for {@link selfPlayDeck} — named, not sprinkled as literals. */
+const SELF_PLAY_DECK_SIZE = 60;
+const SELF_PLAY_LANDS = 24;
+const SELF_PLAY_CREATURES = 28;
+
+/** The two-seat deck pair every self-play benchmark and lock test uses. */
+export function selfPlayDecks(): Readonly<Record<PlayerId, DeckList>> {
+  return { A: selfPlayDeck(0), B: selfPlayDeck(1) };
 }

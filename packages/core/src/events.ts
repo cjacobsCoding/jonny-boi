@@ -47,6 +47,12 @@ export type GameEvent =
     }
   | { readonly type: 'manaPoolEmptied'; readonly player: PlayerId }
   | {
+      /** Cards moved from the top of a library to its graveyard (milling). */
+      readonly type: 'cardsMilled';
+      readonly player: PlayerId;
+      readonly amount: number;
+    }
+  | {
       /** A non-mana activated ability was activated and put on the stack. */
       readonly type: 'abilityActivated';
       readonly player: PlayerId;

@@ -172,6 +172,10 @@ export function mergePairedEvaluation(shards: readonly PairedShardResult[]): Swa
       DEFAULT_STATS_CONFIG.minGamesForVerdict,
     ),
     nGames: n,
+    // Every shard of a swap plays the same scope (the plan stamps it), so the
+    // canonical-first shard speaks for all of them.
+    scope: head.scope,
+    copiesSwapped: head.copiesSwapped,
   };
 }
 

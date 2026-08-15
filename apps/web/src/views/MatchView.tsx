@@ -4,7 +4,7 @@ import { loadCardPool } from '../lib/sim-pool.js';
 import { deckSize, type Deck } from '../lib/deck.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
-import { useSimWorker } from '../lib/useSimWorker.js';
+import type { SimWorkerApi } from '../lib/useSimWorker.js';
 import {
   DEFAULT_REPLAY_SEED,
   MAX_REPLAY_EVENTS,
@@ -19,12 +19,11 @@ import { MatchReplay } from '../components/match/MatchReplay.js';
  * game in the sim Web Worker and scrub through it turn by turn. Same worker/protocol
  * the rest of the Lab uses (DRY) — cancellable, never freezing the main thread.
  */
-export function MatchView({ decks }: { decks: DecksApi }): ReactElement {
+export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }): ReactElement {
   const [heroId, setHeroId] = useState<string | null>(decks.activeDeck?.id ?? null);
   const [opponentName, setOpponentName] = useState<string>('');
   const [seed, setSeed] = useState(DEFAULT_REPLAY_SEED);
 
-  const sim = useSimWorker();
 
   const hero = decks.decks.find((d) => d.id === heroId) ?? decks.activeDeck ?? decks.decks[0] ?? null;
 
@@ -191,3 +190,4 @@ function EmptyDecksPrompt(): ReactElement {
     </div>
   );
 }
+

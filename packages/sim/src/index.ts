@@ -64,6 +64,8 @@ export { runGauntlet } from './gauntlet.js';
 // The A/B single-card-swap test.
 export type { CardSwap, SwapVerdict, SwapEvaluation } from './swap.js';
 export { evaluateSwap, applySwap, decideVerdict } from './swap.js';
+export type { SwapScope } from './config.js';
+export { DEFAULT_SWAP_SCOPE } from './config.js';
 
 // The suggestion engine (DESIGN §3.6) — ranked single-card-swap recommendations.
 export type {

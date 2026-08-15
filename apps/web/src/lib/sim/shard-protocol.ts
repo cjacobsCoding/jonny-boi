@@ -23,6 +23,7 @@
  * functions, no `Map`/`Set`.
  */
 import type { CardDefinition } from '@jonny-boi/core';
+import type { SwapScope } from '@jonny-boi/sim';
 import type { SimDeckPayload } from '../sim-protocol.js';
 import type { MatchTrace } from '../replay-types.js';
 
@@ -83,6 +84,13 @@ export interface PairedShardJob extends GameRange {
   readonly outCardId: string;
   readonly inCardId: string;
   /**
+   * Replace one copy or the whole playset. Every shard of a swap carries the
+   * SAME scope, because it decides which variant deck is built — two shards
+   * disagreeing would silently average two different experiments. Omitted means
+   * the sim's `DEFAULT_SWAP_SCOPE`, which is what the suggestion engine uses.
+   */
+  readonly swapScope?: SwapScope;
+  /**
    * The base seed for THIS swap's paired run. For a standalone A/B test it is
    * the run seed; for a suggestion candidate it is the candidate's derived seed,
    * computed from the run seed and the candidate's stable key.
@@ -102,6 +110,10 @@ export interface PairedShardResult extends GameRange {
   readonly inName: string;
   readonly outCardId: string;
   readonly inCardId: string;
+  /** The scope this slice actually played, so the merged verdict is self-describing. */
+  readonly scope: SwapScope;
+  /** How many copies actually moved — 1, or the out card's full count. */
+  readonly copiesSwapped: number;
   /** Paired games played in this slice. */
   readonly n: number;
   readonly baseWins: number;
