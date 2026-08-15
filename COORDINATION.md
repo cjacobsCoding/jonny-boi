@@ -69,11 +69,36 @@ throughput (games/sec) from regressing.
 | feat/deck-import | DESKTOP-90PJPM4 (worker) | packages/cards/src/compile + apps/web import | ✅ INTEGRATED |
 | fix/ai-play-quality | DESKTOP-90PJPM4 (worker) | packages/core + packages/ai + sim/cli + apps/web hover | ✅ INTEGRATED |
 | fix/rules-audit | DESKTOP-90PJPM4 (worker) | packages/core mana-plan + apps/web play/online | 🚧 PUSHED, not merged |
-| feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | 🚧 PUSHED, not merged |
-| feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | 🚧 PUSHED, not merged |
+| feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | ✅ INTEGRATED (via feat/card-mechanics) |
+| feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | ✅ INTEGRATED (via feat/card-mechanics) |
+| feat/card-mechanics | DESKTOP-90PJPM4 (worker) | packages/cards primitives+compile, core targeting | ✅ INTEGRATED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 DESKTOP-90PJPM4: **`feat/card-mechanics` MERGED to main + deployed.** It contained the
+  whole stacked chain (`activated-abilities` → `conditional-taplands` → `card-mechanics`), so all
+  three are now integrated — the table above is updated. main = **1648 tests, build exit 0**.
+  Mechanics added across the chain: activated abilities with costs (fetchlands crack), conditional
+  enters-tapped (fastlands/checklands), bounce, fight, mill, group damage, leaves-the-battlefield
+  triggers, compound draw/lose, +1/+1 counters, artifact + opponent-only targeting, modal spells.
+  👉 **THE "INVISIBLE PRIMITIVE" AUDIT IS WORTH RE-RUNNING PERIODICALLY.** Three separate mechanics
+  turned out to be fully implemented primitives that NO compile rule could reach — `returnToHand`
+  (bounce) and `modal` (every charm and command) among them. One line finds them:
+  compare `CORE_PRIMITIVE_IDS` against the `primitive: '...'` ids the rule table emits.
+  Only `createToken` and `tapPermanents` remain unreached.
+  ⚠️ **Modal needed a TEXT change, not just a rule.** A modal card prints its header and each mode
+  on separate lines, so the newline split handed the compiler "Choose one —" with no modes and then
+  orphan bullets. `text.ts` now folds the block into one ability line. If you add a mechanic whose
+  printed form spans lines, check `splitAbilities` first.
+  ⚠️ Also note `'opponent'` targeting depends on WHO is casting, so `isLegalTarget` /
+  `legalTargetsFor` / `illegalTargetReason` now take an optional `controller`. Absent ⇒ the target
+  is ILLEGAL, never guessed.
+  STILL MISSING (the honest remainder): planeswalkers, transform/DFC, {X} and derived values,
+  alternative costs (suspend/spectacle/flashback/kicker), auras + equipment, hexproof/ward/
+  protection, gaining control, dynamic P/T, flash + graveyard recasting, "unless its controller
+  pays", and targets chosen by a triggered ability.
+  (Integrator)
 
 - 2026-08-15 DESKTOP-90PJPM4: `feat/card-mechanics` PUSHED (packages/cards + one core event).
   **1531 tests, build exit 0.** Stacks on `feat/conditional-taplands` → `feat/activated-abilities`;
