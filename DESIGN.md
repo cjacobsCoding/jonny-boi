@@ -144,18 +144,46 @@ The vanilla search reports its own shape now; the numbers said where the problem
   advantage, mana development, untapped mana, body count and lethal-board, each a named tunable weight —
   explicitly *not* "life total + card count".
 
-**Measured result — HYBRID vs HEURISTIC, 120 seeded games, seat and play both rotated** (the identical
-protocol that produced the 40.8% above):
+**Measured result — HYBRID vs HEURISTIC, seat and play both rotated** (the identical protocol that
+produced the 40.8% above). ⚠️ **Two matchups were measured, and they do not agree — read both:**
 
-| pilot | win rate vs heuristic | 95% CI | mean decision |
+| matchup | pilot | win rate vs heuristic | 95% CI | mean decision |
+|---|---|---|---|---|
+| Mono-Red Aggro vs Boros Aggro, n=120 | `mcts` (vanilla) | 40.8% | [32.5%, 49.8%] | 39 ms |
+| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** | **60.0%** | **[51.1%, 68.3%]** | 7.07 ms (p95 66 ms) |
+| UW Control vs Golgari Midrange, n=80 | `hybrid` | 53.8% | **[42.9%, 64.3%]** | 27.7 ms (p95 155 ms) |
+
+On the aggro matchup the interval **excludes 50%** — the hybrid is genuinely stronger than the policy it
+takes its prior from, which is what vanilla MCTS failed to be. On the slower control matchup the point
+estimate still favours the hybrid but the interval **includes 50%**: at n=80 that result is
+**inconclusive**, not a win. Do not quote the 60% as "the" number. The honest summary is *significantly
+stronger on fast, tactical boards; unproven on grindy ones*, and closing that needs more games (and,
+per §11–12 of the brief, a tactical solver the search does not yet have).
+
+Note also that decision cost is **board-size dependent**: 7 ms on aggro boards, 28 ms on control boards,
+because the policy scores every castable card and plans its funding at every node.
+
+**It SCALES — the property that says this is a search and not a constant.** Same matchup, same 120 seeded
+games, only the simulation budget varied (`bench/mcts-bench.mjs scaling`):
+
+| budget | win rate vs heuristic | 95% CI | mean decision |
 |---|---|---|---|
-| `mcts` (vanilla) | 40.8% | [32.5%, 49.8%] | 39 ms |
-| **`hybrid`** | **60.0%** | **[51.1%, 68.3%]** | **7.07 ms** (p95 66 ms) |
+| 16 sims | 48.3% | [39.6%, 57.2%] | 0.29 ms |
+| 64 sims | 53.3% | [44.4%, 62.0%] | 2.26 ms |
+| 256 sims | **60.0%** | **[51.1%, 68.3%]** | 16.8 ms |
 
-The interval excludes 50%: the hybrid is **stronger than the policy it takes its prior from**, at ~1/5 of
-vanilla MCTS's decision cost. `DEFAULT_PILOT_ID` **stays `heuristic`** — the hybrid is still ~1400× the
-heuristic's per-decision cost, and re-defaulting is a separate decision that needs a gauntlet-wide
-throughput case, not a head-to-head win.
+Monotone in the budget, and only the largest budget's interval clears 50%. At 16 simulations the pilot is
+indistinguishable from its own prior — which is the correct sanity check: with almost no search, a
+policy-guided search should reproduce the policy.
+
+`DEFAULT_PILOT_ID` **stays `heuristic`** — the hybrid is ~1400× the heuristic's per-decision cost, and
+re-defaulting is a separate decision that needs a gauntlet-wide throughput case, not a head-to-head win.
+
+⚠️ **A methodological finding for the Lab, worth knowing before anyone tunes a deck.** Running the whole
+gauntlet with `--pilot hybrid` (both seats) moved Mono-Red Aggro's win rate from **32.9% → 19.0%**. That
+is not a pilot bug and it is not a strength claim: when *both* sides play better, the aggro deck's edge
+against the field shrinks, because a large part of it was punishing weak blocking. **Deck verdicts are
+pilot-relative.** An A/B swap result is a statement about that card *at that level of play*.
 
 ⚠️ **Two budget policies, deliberately not unified** (`SearchBudget`). `simulations` is deterministic and
 is the **only** kind the Lab's evaluation path may use; `millis` (`PLAY_HYBRID_CONFIG`) is for interactive

@@ -83,10 +83,25 @@ _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-15 worker: `feat/hybrid-search` 🚧 PUSHED — **the MCTS NO-GO is reversed, and the reversal is
   measured.** Phases 1–4 of `docs/plans/superhuman-ai-program.md` §58. `packages/ai` only, plus DESIGN §3.4a.
-  👉 **HYBRID beats the heuristic 60.0% over 120 seeded games, 95% CI [51.1%, 68.3%]** — seat AND play
-  rotated, the *identical* protocol that measured vanilla MCTS at **40.8% [32.5%, 49.8%]**. The interval
-  excludes 50% in both cases, in opposite directions. Mean decision **7.07 ms** vs vanilla's **39 ms**, so
-  it is simultaneously ~19 points stronger and ~5× cheaper. `DEFAULT_PILOT_ID` is untouched.
+  👉 **HYBRID beats the heuristic 60.0% over 120 seeded games, 95% CI [51.1%, 68.3%]** on Mono-Red Aggro
+  vs Boros Aggro — seat AND play rotated, the *identical* protocol that measured vanilla MCTS at **40.8%
+  [32.5%, 49.8%]**. Both intervals exclude 50%, in opposite directions. `DEFAULT_PILOT_ID` is untouched.
+  ⚠️ **BUT A SECOND MATCHUP IS INCONCLUSIVE AND YOU SHOULD QUOTE BOTH.** UW Control vs Golgari Midrange,
+  n=80: **53.8%, 95% CI [42.9%, 64.3%]** — the interval INCLUDES 50%. The point estimate still favours the
+  hybrid, but on grindy boards the win is not proven. The honest one-liner is *significantly stronger on
+  fast tactical boards, unproven on slow ones*. Anyone quoting only the 60% is overclaiming.
+  ⚠️ **Decision cost is BOARD-SIZE dependent, not a constant:** 7.07 ms mean / 66 ms p95 on aggro boards,
+  27.7 ms / 155 ms p95 on control boards, because the policy scores every castable card and plans its
+  funding at every node. Budget accordingly.
+  👉 **IT SCALES, which is the property that makes it a search rather than a constant.** Same matchup,
+  same 120 seeded games, only the budget varied: **16 sims → 48.3%** [39.6, 57.2] · **64 → 53.3%**
+  [44.4, 62.0] · **256 → 60.0%** [51.1, 68.3]. Monotone, and only the largest clears 50%. That the tiny
+  budget lands at ~50% is the right sanity check, not a failure: with almost no search a policy-guided
+  search should reproduce its own policy, and it does.
+  👉 **METHODOLOGICAL FINDING FOR THE LAB.** Running the gauntlet with `--pilot hybrid` on BOTH seats moved
+  Mono-Red Aggro from **32.9% → 19.0%**. That is not a bug: when both sides play better, aggro's edge
+  shrinks because much of it was punishing weak blocking. **Deck verdicts are pilot-relative** — an A/B
+  swap answers "is this card better *at this level of play*". Worth stating in the Lab UI at some point.
   ⚠️ **The old NO-GO was correct about naive MCTS and wrong as a verdict on search.** Do not cite it as
   "search doesn't work here". What was broken was the QUESTION: the search's action space.
   👉 **PHASE 1 FIRST, and the numbers redirected the plan** (`bench/mcts-bench.mjs instrument`, and the
