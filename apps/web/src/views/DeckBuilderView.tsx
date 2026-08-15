@@ -15,6 +15,7 @@ import {
 import { MIN_DECK_SIZE } from '../lib/config.js';
 import { unsupportedReason } from '../lib/decklist/importedCards.js';
 import { assessDeckHealth, deckHealthBadge, describeDeckHealth } from '../lib/decklist/deckHealth.js';
+import { copyGauntletDeck, describeGauntletCopy, gauntletDecks } from '../lib/decklist/gauntletDecks.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { CardToolbar } from '../components/CardToolbar.js';
 import { CardGrid } from '../components/CardGrid.js';
@@ -25,6 +26,7 @@ import { AddCardDialog } from '../components/AddCardDialog.js';
 import { deckToDecklist } from '../lib/proxy/deckToText.js';
 import { copyText } from '../lib/clipboard.js';
 import './deck-health.css';
+import './gauntlet-decks.css';
 
 /**
  * The Deck Builder: a card pool on the left (reusing the browser's toolbar +
@@ -250,6 +252,7 @@ function DeckPanel({
       )}
 
       <SavedDecks decks={decks} />
+      <GauntletDecks decks={decks} />
 
       {importOpen && (
         <ImportDeckDialog decks={decks} onClose={() => setImportOpen(false)} />
@@ -287,6 +290,52 @@ function unsupportedSummary(cardId: string): string {
 }
 
 /** The saved-deck switcher (load / active highlight / delete). */
+/**
+ * The Lab's six gauntlet decks, browsable and copyable.
+ *
+ * These are bundled build data, so they are not editable in place — copying one
+ * gives you your own deck to tune, which is the whole premise of the lab: take a
+ * real meta list, change a card, and let the sim tell you if it got better.
+ * (To PLAY one directly, the Play setup already lists them alongside your decks.)
+ */
+function GauntletDecks({ decks }: { decks: DecksApi }): ReactElement {
+  const [note, setNote] = useState<string | null>(null);
+  const list = useMemo(() => gauntletDecks(), []);
+
+  const copy = (sample: (typeof list)[number]): void => {
+    const result = copyGauntletDeck(sample.deck);
+    decks.importDeck(result.deck);
+    setNote(describeGauntletCopy(result));
+  };
+
+  return (
+    <div className="gauntlet-decks">
+      <div className="section-label">Gauntlet decks</div>
+      <p className="gauntlet-decks__intro">
+        The meta decks the Lab tests against. Copy one to tune it as your own.
+      </p>
+      <div className="saved-decks">
+        {list.map((sample) => (
+          <div key={sample.name} className="saved-deck gauntlet-deck">
+            <span className="gauntlet-deck__name">{sample.name}</span>
+            <span className="gauntlet-deck__meta">
+              {sample.archetype} · {sample.size} cards
+            </span>
+            <button type="button" className="btn btn--ghost" onClick={() => copy(sample)}>
+              Copy to my decks
+            </button>
+          </div>
+        ))}
+      </div>
+      {note && (
+        <p className="gauntlet-decks__note" role="status">
+          {note}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SavedDecks({ decks }: { decks: DecksApi }): ReactElement {
   if (decks.decks.length <= 1) return <></>;
   return (
