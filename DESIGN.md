@@ -80,11 +80,25 @@ Robust to misses; respects Scryfall guidelines.
 ### 3.4 AI pilots — ✅ done
 The `chooseAction` interface + read-only game view + legal-action generator; a `random` baseline and a
 `heuristic` pilot good enough to play the meta decks competently. Tested against scripted scenarios.
-The look-ahead **`mcts`** pilot (UCB1 + engine rollouts, tunable `MctsConfig`) is now `DEFAULT_PILOT_ID`
-— every consumer that doesn't name a pilot gets it. It plays *far* better than the heuristic, which has
-no lookahead at all, but is **orders of magnitude slower**: pass `--pilot heuristic` (or lower
-`MctsConfig.maxDecisionMillis`) for runs where throughput matters. The heuristic remains MCTS's rollout
-policy, so its play quality still bounds the search's.
+**`DEFAULT_PILOT_ID` is `heuristic`.** The look-ahead **`mcts`** pilot (UCB1 + engine rollouts, tunable
+`MctsConfig`) remains *selectable* but is a research option, not a recommendation — and this paragraph
+used to claim the opposite, which is why the numbers are recorded here rather than an impression:
+
+- **Speed:** ~0.09 games/sec vs the heuristic's ~176 — a **2000×** gap. It is structural (`sims × depth`
+  engine plies per decision), not garbage, so allocation work does not reach it: a measured 19% cut in
+  MCTS-side allocation moved wall clock within run-to-run noise.
+- **Strength:** measured *worse*, not better. Over 120 seeded games with seat and play rotated it won
+  **40.8%** (95% CI **[32.5%, 49.8%]** — the interval excludes 50%) against the very heuristic it uses as
+  its rollout policy. It still wastes 0.71 mana/turn against the heuristic's 0.00.
+- **Diagnosis on file:** the search values tapping a land through rollouts where the *heuristic* later
+  spends that mana, while the real next mover treats it as sunk. `MctsConfig.evalWastedManaPenalty` fixes
+  the symptom (0.71 → 0.22/turn) but costs ~11.6 points of win rate, so it ships **off**. The real fix is
+  making tap-and-cast atomic in the search's action space via `planManaPayment`.
+
+⚠️ Do **not** re-default it without a fresh head-to-head; that has already shipped once and made the Lab's
+stock run a multi-hour job. Pinned by guard tests in `packages/ai`. Note also that lowering
+`MctsConfig.maxDecisionMillis` is NOT a valid throughput knob: a wall-clock budget makes the search
+machine-dependent and destroys the common-random-numbers property the paired A/B test rests on.
 *Play-quality fixes (2026-08):* pilots read effect primitives by **registered id** — a mismatched id
 (`destroy` vs `destroyTarget`) silently degrades a spell to an untargeted "generic" cast that no-ops, so
 `test-support.ts` fixtures must use the real ids. Pumps are scored as combat tricks (save / win the fight

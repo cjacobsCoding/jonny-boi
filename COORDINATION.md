@@ -435,8 +435,10 @@ _Append dated notes here; keep them short. Newest at top._
      condition. Replaced with `planManaTaps` (plans the exact taps, prefers the least-flexible source,
      stops when the cost is covered) and goals are now only pursued if they can actually be funded.
   Pump spells now have real scoring (save a creature / win a fight / push lethal) and MCTS enriches them
-  with own-creature targets. **`DEFAULT_PILOT_ID` (packages/ai) is now `mcts`** — per user decision, the
-  look-ahead pilot everywhere: CLI default + the web lab/replay worker. ⚠️ **Throughput warning below.**
+  with own-creature targets. ~~`DEFAULT_PILOT_ID` (packages/ai) is now `mcts`~~ — **REVERSED 2026-08-15.**
+  `DEFAULT_PILOT_ID` is `heuristic`. MCTS was measured 2000× slower *and* significantly weaker (40.8% win
+  rate over 120 seeded games, 95% CI [32.5%, 49.8%] — excludes 50%) against the very heuristic it uses as
+  its rollout policy. See DESIGN.md §3.4 for the full numbers and the diagnosis. Do not re-default it.
   Perf (rule 7): measured heuristic at **162.7 games/sec vs 161.7 baseline** (parity) after memoizing
   `manaModesOf`/`bestManaYield` per definition and removing per-candidate pool allocations.
   New UI: `CardHover` (apps/web/src/components) raises a full readable card on hover in the replay board;
