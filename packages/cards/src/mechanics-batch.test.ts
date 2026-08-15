@@ -265,3 +265,45 @@ describe('targeting filters — artifact and opponent-only', () => {
     });
   });
 });
+
+describe('modal spells — the primitive was built, the text never reached it', () => {
+  it('compiles "Choose one —" with both modes', () => {
+    const result = compileCard(
+      card({
+        name: 'Test Charm',
+        oracleText:
+          'Choose one —\n• Test Charm deals 3 damage to any target.\n• You gain 3 life.',
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    const effect = onlyEffect(result.definition);
+    expect(effect.primitive).toBe('modal');
+    const params = effect.params as { count: number; modes: Array<{ effects: unknown[] }> };
+    expect(params.count).toBe(1);
+    expect(params.modes).toHaveLength(2);
+    expect(params.modes[0]!.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: 3 } },
+    ]);
+    expect(params.modes[1]!.effects).toEqual([
+      { primitive: 'gainLife', params: { amount: 3 } },
+    ]);
+  });
+
+  it('rejects the WHOLE card when one mode is unimplementable', () => {
+    // Half a modal spell is not a modal spell — offering only the modes we happen
+    // to implement would silently change what the card can do.
+    const result = compileCard(
+      card({
+        name: 'Half Charm',
+        oracleText:
+          'Choose one —\n• You gain 3 life.\n• Transform Half Charm into something else.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('does not treat a bare "Choose one —" with no modes as modal', () => {
+    const result = compileCard(card({ name: 'Empty Choice', oracleText: 'Choose one —' }));
+    expect(result.status).toBe('incomplete');
+  });
+});

@@ -117,6 +117,14 @@ const CREATURE_TARGET: TargetRestriction = 'creature';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
+
+/** How many modes each printed header lets you choose. */
+const MODAL_COUNTS: Readonly<Record<string, number>> = Object.freeze({
+  one: 1,
+  two: 2,
+  // "one or both" is a range the mode chooser cannot express as a fixed count,
+  // so it is deliberately absent and those cards keep reporting.
+});
 const OPPONENT_TARGET: TargetRestriction = 'opponent';
 
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
@@ -385,6 +393,36 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^destroy all creatures$/,
     build() {
       return effects({ primitive: 'destroyAll' });
+    },
+  },
+  {
+    id: 'modal-choose',
+    description: '"Choose one — • MODE • MODE" (charms and commands)',
+    // `text.ts` folds the header and its bullets into one line, so this sees the
+    // whole block. Each mode compiles through the ordinary effect rules, which
+    // means a modal card can only ever offer modes the engine can really run.
+    pattern: /^choose\s+(one|two|one or both)\s*[—-]\s*(•.+)$/,
+    build(match, ctx) {
+      const count = MODAL_COUNTS[match[1]!.toLowerCase()];
+      if (count === undefined) return null;
+
+      const bodies = match[2]!
+        .split('•')
+        .map((mode) => mode.trim())
+        .filter((mode) => mode.length > 0);
+      if (bodies.length < 2) return null; // not really a choice
+
+      const modes: Array<{ id: string; label: string; effects: readonly EffectRef[] }> = [];
+      for (const [index, body] of bodies.entries()) {
+        // A mode the engine cannot run makes the WHOLE card unsupported. Half a
+        // modal spell is not a modal spell — offering only the modes we happen
+        // to implement would silently change what the card can do.
+        const effects = ctx.compileEffectClause(body);
+        if (!effects) return null;
+        modes.push({ id: `mode${index + 1}`, label: body, effects });
+      }
+
+      return { effects: [{ primitive: 'modal', params: { count, modes } }] };
     },
   },
   {
