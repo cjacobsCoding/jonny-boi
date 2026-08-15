@@ -73,6 +73,21 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: `fix/hero-validation` ✅ (apps/web views + lib only) — **the Match viewer
+  would not tell you which card broke your deck.** `validateHero` had been copied into BOTH `LabView`
+  and `MatchView`, and the copies had drifted: the Lab's named unsupported imported cards first, the
+  Match viewer's went straight to the sim's validator. So watching a game with a freshly imported deck
+  failed as `unknown card "<uuid>"` — true and useless, and the uuid appears nowhere in the UI, so
+  there was no way to work out which of your 60 cards it was.
+  Fix: one shared `apps/web/src/lib/heroValidation.ts`, used by both views; the per-view copies are
+  gone (DESIGN §1.3, one mechanism per concept). Behaviour is now identical on both surfaces, and an
+  unsupported card is still reported FIRST — fixing a deck-size complaint would not make such a deck
+  runnable. 5 tests in `heroValidation.test.ts` pin the ordering, the naming (asserts the uuid is NOT
+  leaked), and that both surfaces refuse identically.
+  Scope note: no `packages/**` touched. `deckHealth.ts` (used by DeckBuilderView) and
+  `unsupportedCardNames` (used here) still answer overlapping questions — NOT merged, because that is
+  a wider refactor across surfaces other agents are editing. Flagged, not started. (Worker)
+
 - 2026-08-15 DESKTOP-90PJPM4: `feat/card-alacarte` ✅ MERGED to main + deployed. Add ONE Scryfall card
   by name from the card browser or mid-deck-build, fuzzy-matched ("lightnig bolt" resolves), screened
   by the SAME compiler deck import uses. New files only, no edits to the compiler — safe alongside
