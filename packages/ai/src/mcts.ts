@@ -31,9 +31,31 @@
  *
  * Performance: we clone the root state ONCE per simulation and mutate that single
  * sim copy as we descend + roll out — never a deep clone per ply beyond what the
- * engine already does in `applyAction`. MCTS is much slower than the heuristic by
- * design (it plays ~`simulationsPerDecision` partial games per decision); the payoff
- * is fewer-but-better games / higher-confidence verdicts.
+ * engine already does in `applyAction`.
+ *
+ * WHAT THIS PILOT ACTUALLY COSTS AND BUYS (measured 2026-08, sample gauntlet,
+ * Mono-Red Aggro vs Boros Aggro — read this before proposing it as a default):
+ *
+ *   throughput     0.087 games/sec, vs the heuristic's 176 — about 2000x slower.
+ *                  The cost is structural, not garbage: a decision runs
+ *                  `simulationsPerDecision` x `rolloutDepth` engine plies, so a
+ *                  game plays on the order of a million times the engine work the
+ *                  heuristic does. Cutting ~18% of the search's allocation moved
+ *                  wall clock by ~5%, inside this machine's run-to-run noise.
+ *   strength       49 wins in 120 seeded games against the heuristic = 40.8%,
+ *                  95% CI [32.5%, 49.8%]. Seat and play were both rotated. That
+ *                  interval excludes 50%: at this budget the look-ahead pilot is
+ *                  measurably WORSE than the pilot whose policy it rolls out with,
+ *                  not better.
+ *   play quality   0.71 wasted-mana events per turn against the heuristic's 0.00
+ *                  (see `MctsConfig.evalWastedManaPenalty`, which fixes that but
+ *                  costs win rate, and so ships off).
+ *
+ * The premise this pilot was built on — "slower per game, but better games, so
+ * fewer are needed" — is therefore not currently true. It stays as a selectable,
+ * documented option and a research vehicle; it is not a default, and the guard
+ * tests in `index.test.ts` and the sim's `pilot-quality.test.ts` are correct to
+ * pin that. `packages/ai/bench/mcts-bench.mjs` reproduces every number above.
  */
 
 import type {
@@ -84,8 +106,11 @@ export function createMctsPilot(config: MctsConfig = DEFAULT_MCTS_CONFIG): Pilot
 
   return {
     id: MCTS_PILOT_ID,
+    // Honest, because this string is what a user picks from. The old wording
+    // ("plays the meta decks more realistically to cut sim-verdict noise")
+    // promised a benefit that measurement does not support — see the file header.
     description:
-      'Monte-Carlo Tree Search (UCB1 selection + engine rollouts, tunable budget). Plays the meta decks more realistically to cut sim-verdict noise.',
+      'Monte-Carlo Tree Search (UCB1 selection + engine rollouts, tunable budget). Research option: ~2000x slower than the heuristic and, at the shipped budget, measurably weaker (40.8% over 120 seeded games).',
     chooseAction(ctx: DecisionContext): GameAction {
       try {
         return search(ctx, config, policy);

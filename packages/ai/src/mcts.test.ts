@@ -296,26 +296,33 @@ function winRateVs(
 }
 
 /**
- * PLAY-QUALITY guard, and the reason `MctsConfig.evalWastedManaPenalty` exists.
+ * The wasted-mana story, pinned so it cannot be rediscovered from scratch a third
+ * time.
  *
  * MCTS was made the default pilot once and reverted because it tapped mana it
  * then never spent — 1.76 such events per turn against the heuristic's 0.01. The
- * cause was structural, not a bug: mana pools empty at the end of every step, so
- * floating mana is lost, and the search's evaluation (life + board) could not see
- * that. The tree valued "tap" through rollouts in which the *heuristic* rollout
- * policy went on to spend the mana, while the real next mover — another MCTS
- * search, for which the tapped mana is already sunk — declined to.
+ * cause is structural, not a bug: mana pools empty at the end of every step, so
+ * floating mana is lost, and the search's evaluation (life + board) cannot see
+ * that. The tree values "tap" through rollouts in which the *heuristic* rollout
+ * policy goes on to spend the mana, while the real next mover — another MCTS
+ * search, for which the tapped mana is already sunk — declines to.
  *
- * `manaPoolEmptied` is the engine's own signal for it, so this measures the play
- * rather than the pilot's reasoning: it would hold for any pilot.
+ * `MctsConfig.evalWastedManaPenalty` makes the search pay for it, and these tests
+ * prove BOTH halves of what was measured: the mechanism genuinely fixes the waste,
+ * and it is nonetheless OFF by default because it cost 11.6 points of win rate
+ * head-to-head (see the field's doc for the numbers). So the first test enables it
+ * explicitly rather than trusting the default — asserting the budget against the
+ * shipped config would be asserting something that is knowingly false.
+ *
+ * `manaPoolEmptied` is the engine's own signal, so this measures the play rather
+ * than the pilot's reasoning: it would hold for any pilot.
  */
-describe('mcts pilot — does not tap mana it never spends', () => {
+describe('mcts pilot — the wasted-mana penalty and what it costs', () => {
   /**
    * Wasted-mana budget for a whole self-played game, per turn. Not zero: holding
    * up an instant that never gets cast is legitimate play. This mirrors the sim's
-   * `pilot-quality.test.ts` budget for the default pilot, so a change that would
-   * disqualify MCTS from ever being the default fails HERE, in its own package,
-   * instead of being discovered downstream.
+   * `pilot-quality.test.ts` budget for the default pilot — the bar MCTS would have
+   * to clear to be eligible for that slot at all.
    */
   const MAX_WASTED_MANA_PER_TURN = 0.35;
   const WASTE_SEEDS: readonly number[] = [3, 11, 29];
@@ -329,9 +336,12 @@ describe('mcts pilot — does not tap mana it never spends', () => {
    * pool — 0.22/turn against the heuristic's 0.00 — and this is the cheapest
    * in-suite budget that guards the same property.
    */
+  /** The value the sweep settled on, where the waste curve flattens. */
+  const TUNED_WASTED_MANA_PENALTY = 0.1;
   const WASTE_TEST_CONFIG: MctsConfig = {
     ...DEFAULT_MCTS_CONFIG,
     simulationsPerDecision: DEFAULT_MCTS_CONFIG.simulationsPerDecision / 2,
+    evalWastedManaPenalty: TUNED_WASTED_MANA_PENALTY,
   };
 
   /** Play a self-play game, counting the engine's wasted-mana events. */
@@ -364,7 +374,7 @@ describe('mcts pilot — does not tap mana it never spends', () => {
     return { perTurn: wasted / Math.max(turns, 1), wasted, turns };
   }
 
-  it('stays within the wasted-mana budget the default pilot has to meet', () => {
+  it('with the penalty enabled, stays inside the budget a default pilot must meet', () => {
     const { perTurn, wasted, turns } = wasteRate(WASTE_TEST_CONFIG);
     expect(
       perTurn,
@@ -373,15 +383,16 @@ describe('mcts pilot — does not tap mana it never spends', () => {
     ).toBeLessThan(MAX_WASTED_MANA_PER_TURN);
   });
 
-  it('THE REGRESSION: waste-blind evaluation is measurably worse', () => {
-    // Pins the *cause*, not just the symptom. With the penalty switched off the
-    // search goes back to being unable to see wasted mana, and wastes strictly
-    // more of it — so nobody can quietly zero the knob and keep a green suite.
-    // Run at the cheap budget: the effect is largest where the search is
-    // noisiest, and this comparison needs two games, not one.
-    const withPenalty = wasteRate(FAST_MCTS_CONFIG);
-    const blind = wasteRate({ ...FAST_MCTS_CONFIG, evalWastedManaPenalty: 0 });
-    expect(blind.wasted).toBeGreaterThan(withPenalty.wasted);
+  it('the penalty is what does it — the shipped waste-blind default wastes more', () => {
+    // Pins the CAUSE, not just the symptom, in both directions: the mechanism is
+    // load-bearing (zero it and the waste comes back), and the shipped default
+    // really is the waste-blind one, so this test is also the honest record that
+    // MCTS as configured does NOT meet the budget above. Run at the cheap budget:
+    // the effect is largest where the search is noisiest, and this needs two runs.
+    const withPenalty = wasteRate({ ...FAST_MCTS_CONFIG, evalWastedManaPenalty: TUNED_WASTED_MANA_PENALTY });
+    const shipped = wasteRate(FAST_MCTS_CONFIG);
+    expect(DEFAULT_MCTS_CONFIG.evalWastedManaPenalty).toBe(0);
+    expect(shipped.wasted).toBeGreaterThan(withPenalty.wasted);
   });
 });
 

@@ -113,8 +113,30 @@ export interface MctsConfig {
    *
    * Terminal rollouts are deliberately NOT charged: once the game is decided,
    * how tidily it was played is irrelevant, and discounting a win would teach
-   * the search to avoid winning lines. Set to 0 to restore the older,
-   * waste-blind evaluation.
+   * the search to avoid winning lines.
+   *
+   * **It defaults to 0 — OFF — and that is a measured decision, not an
+   * oversight.** The mechanism does what it was built to do: at 0.1 the waste
+   * rate over eight seeded games falls from 0.709/turn to 0.217/turn, under the
+   * 0.35 budget the sim's play-quality guard puts on a default pilot. But it
+   * costs games. Head-to-head against the heuristic over the same 120 seeded
+   * games (Mono-Red Aggro vs Boros Aggro, seat and play both rotated):
+   *
+   *     penalty 0    (waste-blind)  49/120 = 40.8%  95% CI [32.5%, 49.8%]
+   *     penalty 0.1  (waste-aware)  35/120 = 29.2%  95% CI [21.8%, 37.9%]
+   *
+   * An 11.6-point drop, p ~= 0.06 — short of significant on its own, but pointing
+   * the wrong way, and turning it on cannot be justified by "it looks tidier".
+   * The likely mechanism is that the penalty prices the RISK of floating mana,
+   * not just the waste: a line that taps toward a spell is charged whenever the
+   * search later declines to cast, so the pilot buys mana discipline by simply
+   * doing less. Fixing that properly means making the tap and the cast atomic in
+   * the search's action space (fund a chosen spell through `planManaPayment`, the
+   * way the heuristic does) rather than pricing the symptom.
+   *
+   * Kept, tunable and tested, because the diagnosis is worth keeping: anyone
+   * demonstrating the pilot's mana behaviour, or trying that atomic-cast redesign,
+   * wants this knob and the measurement above.
    */
   readonly evalWastedManaPenalty: number;
   /**
@@ -155,14 +177,10 @@ export const DEFAULT_MCTS_CONFIG: MctsConfig = Object.freeze({
   evalLifeWeight: 1,
   evalBoardWeight: 1,
   evalScale: 12,
-  // Tuned, not guessed. Sweeping the knob against the wasted-mana rate over the
-  // sample gauntlet: 0.02 -> 0.45/turn, 0.04 -> 0.40, 0.10 -> 0.24, 0.20 -> 0.26,
-  // 0.40 -> 0.23 (baseline with no penalty at all: 0.80). The curve flattens at
-  // 0.10 — past that the remaining waste is the legitimate kind (an instant held
-  // up and never needed), so a bigger penalty only risks distorting real
-  // decisions for nothing. On the [0,1] reward scale 0.10 is worth roughly five
-  // life of positional advantage: enough to lose a tie against simply passing.
-  evalWastedManaPenalty: 0.1,
+  // OFF by default — see the field's doc. The mechanism works (0.71 -> 0.22
+  // wasted mana per turn at 0.1, where the sweep flattens) but measured 11.6
+  // points WORSE head-to-head over 120 seeded games, so it does not ship on.
+  evalWastedManaPenalty: 0,
 });
 
 /**
