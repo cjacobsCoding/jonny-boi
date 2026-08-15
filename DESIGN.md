@@ -134,13 +134,20 @@ event→state fold, the formatter, and the playback config are unit-tested; long
 honest truncation note; an illegal deck / worker error lands in a friendly state, never a blank screen.
 
 ### 3.8 Meta-deck gauntlet content — ✅ done
-Six curated, distinct 60-card meta decks (data) define the baseline gauntlet, each a well-constructed
-archetype built only from fully-supported pool cards (no fully-stubbed card is a deck's core): Mono-Red
-Aggro (burn), Izzet Prowess (spell-velocity go-wide), Mono-Green Ramp (resilient midrange), UW Control
-(removal + counters + a flying finisher), Golgari Midrange (discard + removal attrition), and Boros Aggro
-(removal-backed beatdown). Each passes `validateDeck` (legal size, 4-of, pool membership) and is
-registered in `SAMPLE_DECKS`. A heuristic-pilot round-robin (40 games/matchup) confirms no deck is
-degenerate — overall win-rates span ~27%–79% with no ~0%/~100% list. The decks double as the swap-candidate
+**Eight** curated, distinct 60-card meta decks (data) define the baseline gauntlet, each a
+well-constructed archetype built only from fully-supported pool cards (no fully-stubbed card is a deck's
+core): Mono-Red Aggro (burn), Boros Aggro (removal-backed beatdown), Rakdos Goblins (swarm), Izzet
+Prowess (spell-velocity go-wide), Golgari Midrange (discard + removal attrition), Orzhov Lifegain
+(lifelinking fliers + premium removal), Mono-Green Ramp (resilient midrange), and UW Control (removal +
+counters + a flying finisher). Each passes `validateDeck` (legal size, 4-of, pool membership) and is
+registered in `SAMPLE_DECKS`.
+
+The gauntlet was **retuned** after the engine-correctness wave (livelock fix, faithful Brainstorm / Path
+to Exile / Cryptic Command, target restrictions): the old lists were calibrated against a game that was
+quietly easier, and their spread had drifted to ~26%–75%. A heuristic-pilot round-robin (60
+games/matchup) now spans **~37%–60%** with no runaway deck, every list holding both a good and a bad
+matchup, and a **1.6% timeout-draw rate** (a high rate means games aren't finishing and the numbers are
+junk). `gauntlet-health.test.ts` pins those usability properties. The decks double as the swap-candidate
 baseline the §3.6 suggestion engine tunes against.
 
 ### 3.9 Core engine v2 — triggered abilities + continuous effects — ✅ done  *(quality gate for trustworthy sims)*
@@ -198,14 +205,31 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   path. (Only the unconditional printed form; conditional/pay-to-untap variants need player choice.)
 - ✅ *mana abilities that produce a chosen colour* — closed separately by `producesOptions` (§3.4
   play-quality work), which also fixed Birds of Paradise tapping for five mana.
+- ✅ *player choice during resolution* — closed end-to-end. `GameState.pendingChoice` parks a typed
+  question and an `answerChoice` action resumes the resolution; four composable kinds (`selectCards`,
+  `selectPlayers`, `chooseModes`, `confirm`) cover modal spells, targeted discard, "you may" and
+  library search. Deliberately **serializable state, not a callback**, so the same mechanism serves an
+  AI pilot, a hotseat human and a network peer: the AI answers by valence (`gain`/`loss` — on a forced
+  choice it sheds its *worst* card), the hotseat UI renders a prompt, and the server relays it as a
+  per-seat-masked `pendingChoice` (protocol v2 — the non-chooser gets a summary with no candidates,
+  because Thoughtseize's candidates ARE the opponent's hand). Brainstorm, Ponder, Thoughtseize,
+  Eternal Witness, Cryptic Command and Path to Exile now play as printed.
+- ✅ *library search* — closed with the above (`searchLibrary`, filtered, optional, with a seeded shuffle).
+- ✅ *target restrictions* — a card narrows its own aim with the reserved `targets` param
+  (`'any'|'creature'|'player'|'spell'`), enforced at offer, at cast, and again at resolution. A
+  fidelity audit of all 156 definitions found **19 cards that did not play as printed** and fixed them:
+  Lava Spike and Flame Slash were unrestricted damage, Absorb/Dismiss were castable into an empty stack
+  (a free cantrip), fifteen removal/pump spells were castable with no legal target, and Monastery
+  Swiftspear's prowess missed every noncreature spell that wasn't an instant or sorcery.
 Still open, roughly by how often they block a real decklist:
-- *player choice during resolution* — modal spells, targeted discard, "you may". The deepest of these:
-  it needs a decision to travel out to whoever controls the choice (AI pilot, hotseat player, or a
-  network peer), so it touches core, ai, sim, play and the online protocol together.
 - *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
   pool (fetchlands, mana rocks, sac outlets).
-- *library search* (needs a chooser), *alternative and additional costs* (suspend, spectacle, kicker),
-  *{X} and Phyrexian costs*, *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*.
+- *static / "anthem" continuous effects* — a permanent that continuously buffs others. Without it a
+  go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta the
+  lab measures — a bias in the verdicts themselves, not just missing cards.
+- *alternative and additional costs* (suspend, spectacle, kicker), *{X} and Phyrexian costs*,
+  *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*, *flash + casting from the graveyard*,
+  *revolt-style "a permanent left the battlefield this turn" trackers*.
 
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the physical cards out, take one photo, get a decklist — entirely on-device, no upload.
