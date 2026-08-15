@@ -761,7 +761,41 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       return { entersTapped: true };
     },
   },
+  {
+    id: 'enters-tapped-unless-few-lands',
+    description:
+      '"~ enters tapped unless you control two or fewer other lands" (the fastland cycle)',
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or fewer other lands$/,
+    build(match) {
+      const max = SMALL_NUMBER_WORDS[match[1]!];
+      if (max === undefined) return null; // an unexpected count — report it
+      return { entersTappedUnless: { maxOtherLands: max } };
+    },
+  },
+  {
+    id: 'enters-tapped-unless-controls-subtype',
+    description:
+      '"~ enters tapped unless you control a Mountain or a Plains" (the checkland cycle)',
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control an? (\w+)(?: or an? (\w+))?$/,
+    build(match) {
+      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      // Only LAND subtypes are expressible: "unless you control a creature"
+      // reads the same but means something this rule does not implement.
+      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      return { entersTappedUnless: { controlsSubtype: subtypes } };
+    },
+  },
 ]);
+
+/** Number words a printed "N or fewer" uses. */
+const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+});
 
 /** The colors "one mana of any color" may be taken as, in canonical order. */
 const ANY_COLOR: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];

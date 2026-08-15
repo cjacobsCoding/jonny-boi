@@ -70,6 +70,7 @@ throughput (games/sec) from regressing.
 | fix/ai-play-quality | DESKTOP-90PJPM4 (worker) | packages/core + packages/ai + sim/cli + apps/web hover | ✅ INTEGRATED |
 | fix/rules-audit | DESKTOP-90PJPM4 (worker) | packages/core mana-plan + apps/web play/online | 🚧 PUSHED, not merged |
 | feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | 🚧 PUSHED, not merged |
+| feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -95,6 +96,28 @@ _Append dated notes here; keep them short. Newest at top._
   ⚠️ Verified by tests + typecheck + production build + a clean browser boot (no console errors); the
   add dialog was NOT driven interactively (the session's browser tooling was wedged), so the Scryfall
   round-trip is proven only against stub responses. Worth a real click-through.
+- 2026-08-14 DESKTOP-90PJPM4: `feat/conditional-taplands` PUSHED (packages/core + cards/compile).
+  Merged latest main (incl. the a-la-carte card adder) — **1489 tests, build exit 0**.
+  Builds directly on `feat/activated-abilities`, so **merge that one first**.
+  - `CardDefinition.entersTappedUnless` — a BOARD condition read as the permanent enters:
+    `maxOtherLands` (fastland cycle) and `controlsSubtype` (checkland cycle, reusing the land
+    subtypes added for fetchlands). The engine had only the unconditional "~ enters tapped", so
+    every dual land whose drawback is a condition was unplayable.
+  - ⚠️ **Self-exclusion is the subtle part.** Both battlefield-entry paths pass `self` so the
+    entering land is not counted among "other lands you control". Without it every fastland enters
+    tapped one land early — a silent one-turn tempo loss in every simulated game. Tested at the
+    boundary (exactly the printed count, and one past it).
+  - With no board supplied the answer is TAPPED: "enters tapped" is the printed rule and the
+    "unless" is the exception, so the conservative answer can never make a card play better than
+    printed.
+  👉 **SHOCKLANDS ARE STILL UNSUPPORTED, on purpose.** "You may pay 2 life" is a price, not a board
+  state, and it must be asked at LAND-PLAY time. The choice system cannot reach there: playing a
+  land is a special action (`applyPlayLand`) and never opens a resolution frame, which is the only
+  place `pendingChoice` can be parked. Whoever wants shocklands (a big slice of real manabases)
+  needs choice-at-special-action first — that is the real prerequisite, not another compile rule.
+  A test asserts Sacred Foundry stays reported so nobody "fixes" it by guessing.
+  (Worker — pushed, NOT merged.)
+
 - 2026-08-14 DESKTOP-90PJPM4: `feat/activated-abilities` PUSHED (packages/core + cards/compile +
   ai/heuristic). Merged latest main incl. `fix/rules-audit` — **1451 tests, build exit 0**.
   **Measured** on a real Modern Burn list through the importer: **19/60 playable → 30/60**, and the

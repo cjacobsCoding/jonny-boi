@@ -112,6 +112,20 @@ export interface CardDefinition {
    * stay unimplemented rather than being flattened into always-tapped.
    */
   readonly entersTapped?: boolean;
+  /**
+   * A board condition that lets this permanent enter UNTAPPED — the "unless"
+   * half of the common dual lands: "enters tapped unless you control two or
+   * fewer other lands" (a fastland), "unless you control a Mountain or a
+   * Plains" (a checkland).
+   *
+   * Present ⇒ the permanent enters tapped whenever the condition is NOT met.
+   * Only conditions that read the board are expressible here; a land that
+   * charges a PRICE to enter untapped (a shockland's "you may pay 2 life") asks
+   * its controller a question at land-play time, which nothing in the engine
+   * can do yet, so those stay unimplemented rather than being flattened into
+   * always-tapped or always-untapped — either would misprice the card.
+   */
+  readonly entersTappedUnless?: EntersUntappedCondition;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -278,12 +292,81 @@ export function bestManaYield(def: CardDefinition): number {
 }
 
 /**
+ * A board condition under which a permanent enters UNTAPPED. Both forms are
+ * evaluated the instant the permanent enters, counting only OTHER permanents —
+ * the entering one is not yet on the battlefield when the check happens.
+ */
+export interface EntersUntappedCondition {
+  /**
+   * "unless you control two or fewer other lands" — a fastland. Satisfied when
+   * the controller's other lands number at most this.
+   */
+  readonly maxOtherLands?: number;
+  /**
+   * "unless you control a Mountain or a Plains" — a checkland. Satisfied when
+   * the controller has another permanent with any of these subtypes.
+   */
+  readonly controlsSubtype?: readonly string[];
+}
+
+/**
+ * The slice of the board an enters-tapped condition reads.
+ *
+ * Declared structurally rather than as `GameState` so `card.ts` stays free of a
+ * cycle back through `state.ts`, which imports this module.
+ */
+export interface EntersTappedContext {
+  readonly controller: string;
+  readonly battlefield: readonly {
+    readonly controller: string;
+    readonly def: CardDefinition;
+  }[];
+  /** The entering permanent, excluded from its own condition when present. */
+  readonly self?: unknown;
+}
+
+/**
  * Whether a permanent of this definition arrives tapped. One accessor so every
  * battlefield-entry path (resolving a permanent spell, playing a land, creating
  * a token) asks the same question the same way.
+ *
+ * `context` is required to answer a CONDITIONAL entry. Omitting it answers only
+ * the unconditional flag — which is correct for a token or a test fixture with
+ * no board, and deliberately conservative everywhere else.
  */
-export function entersTapped(def: CardDefinition): boolean {
-  return def.entersTapped === true;
+export function entersTapped(def: CardDefinition, context?: EntersTappedContext): boolean {
+  if (def.entersTapped === true) return true;
+  const condition = def.entersTappedUnless;
+  if (!condition) return false;
+  // With no board to read we cannot evaluate the condition. Entering tapped is
+  // the printed default (the "unless" is the exception), so that is the safe answer.
+  if (!context) return true;
+  return !conditionMet(condition, context);
+}
+
+/** Whether the "enters untapped" condition holds on the current board. */
+function conditionMet(
+  condition: EntersUntappedCondition,
+  context: EntersTappedContext,
+): boolean {
+  const others = context.battlefield.filter(
+    (permanent) => permanent.controller === context.controller && permanent !== context.self,
+  );
+
+  if (condition.maxOtherLands !== undefined) {
+    const lands = others.filter((permanent) => permanent.def.types.includes('land')).length;
+    if (lands > condition.maxOtherLands) return false;
+  }
+
+  if (condition.controlsSubtype !== undefined) {
+    const wanted = condition.controlsSubtype;
+    const has = others.some((permanent) =>
+      (permanent.def.subtypes ?? []).some((subtype) => wanted.includes(subtype)),
+    );
+    if (!has) return false;
+  }
+
+  return true;
 }
 
 /** Resolve a definition's casting timing, defaulting to sorcery-speed. */

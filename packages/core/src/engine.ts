@@ -612,7 +612,13 @@ function finishSpellResolution(
   if (resolvesTo === 'battlefield') {
     // Stack objects aren't in a player zone; place directly on battlefield.
     card.zone = 'battlefield';
-    card.tapped = entersTapped(card.def);
+    // Evaluated BEFORE the push below, so a conditional land ("unless you
+    // control two or fewer other lands") never counts itself among the others.
+    card.tapped = entersTapped(card.def, {
+      controller: card.controller,
+      battlefield: state.battlefield,
+      self: card,
+    });
     card.damageMarked = 0;
     card.markedByDeathtouch = false;
     // Summoning sickness: a creature is sick unless it has haste.
@@ -952,7 +958,13 @@ function applyPlayLand(
 
   moveToZone(state, card, 'battlefield', emit, action.player);
   card.controller = action.player;
-  card.tapped = entersTapped(card.def);
+  // `moveToZone` has already put the land on the battlefield, so `self` excludes
+  // it from its own "other lands you control" count.
+  card.tapped = entersTapped(card.def, {
+    controller: action.player,
+    battlefield: state.battlefield,
+    self: card,
+  });
   card.summoningSick = false; // lands aren't affected by summoning sickness
   if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
   player.landsPlayedThisTurn += 1;

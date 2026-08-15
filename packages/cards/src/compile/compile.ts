@@ -167,6 +167,7 @@ interface Assembly {
   readonly activated: ActivatedAbility[];
   keywords: Record<string, boolean>;
   entersTapped: boolean;
+  entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -181,6 +182,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
   }
   if (contribution.entersTapped) assembly.entersTapped = true;
+  if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   assembly.matchedRules.push(ruleId);
 }
 
@@ -597,6 +599,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       ? { subtypes: card.typeLine.subtypes.map((subtype) => subtype.toLowerCase()) }
       : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
+    ...(assembly.entersTappedUnless ? { entersTappedUnless: assembly.entersTappedUnless } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0
       ? { producesOptions: manaModes }
