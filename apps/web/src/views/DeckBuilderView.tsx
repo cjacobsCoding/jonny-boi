@@ -14,14 +14,17 @@ import {
 } from '../lib/deck.js';
 import { MIN_DECK_SIZE } from '../lib/config.js';
 import { unsupportedReason } from '../lib/decklist/importedCards.js';
+import { assessDeckHealth, deckHealthBadge, describeDeckHealth } from '../lib/decklist/deckHealth.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { CardToolbar } from '../components/CardToolbar.js';
 import { CardGrid } from '../components/CardGrid.js';
 import { CardDetail } from '../components/CardDetail.js';
 import { ManaCurveChart } from '../components/ManaCurveChart.js';
 import { ImportDeckDialog } from '../components/ImportDeckDialog.js';
+import { AddCardDialog } from '../components/AddCardDialog.js';
 import { deckToDecklist } from '../lib/proxy/deckToText.js';
 import { copyText } from '../lib/clipboard.js';
+import './deck-health.css';
 
 /**
  * The Deck Builder: a card pool on the left (reusing the browser's toolbar +
@@ -77,6 +80,7 @@ function DeckPanel({
   const active = decks.activeDeck;
   const [ioOpen, setIoOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [addCardOpen, setAddCardOpen] = useState(false);
 
   if (!active) {
     return (
@@ -91,6 +95,8 @@ function DeckPanel({
   const curve = manaCurve(active);
   const issues = validateDeck(active);
   const atTarget = size >= MIN_DECK_SIZE;
+  // Can this deck actually be PLAYED, as opposed to merely being legal?
+  const health = assessDeckHealth(active.cards.map((e) => ({ cardId: e.cardId, count: e.count })));
 
   const exportJson = JSON.stringify(toExport(active), null, 2);
 
@@ -109,6 +115,11 @@ function DeckPanel({
           </button>
           <button type="button" className="btn btn--primary" onClick={() => setImportOpen(true)}>
             Import deck
+          </button>
+          {/* The one-card path: needing a single card mid-build shouldn't send
+              you to a decklist paste box. */}
+          <button type="button" className="btn btn--ghost" onClick={() => setAddCardOpen(true)}>
+            + Card
           </button>
           <button
             type="button"
@@ -143,6 +154,17 @@ function DeckPanel({
         <div className="section-label">Mana curve</div>
         <ManaCurveChart bars={curve} />
       </div>
+
+      {/* Fidelity warning. A deck holding a card the engine can't play still
+          "works", which is exactly the danger: it would behave as if that card
+          were a blank and quietly skew any simulation. So it is called out
+          above the ordinary legality issues, by name. */}
+      {!health.playable && (
+        <div className="deck-health" role="alert">
+          <strong className="deck-health__badge">⚠ {deckHealthBadge(health)}</strong>
+          <p className="deck-health__detail">{describeDeckHealth(health)}</p>
+        </div>
+      )}
 
       {issues.length > 0 && (
         <ul className="deck-issues">
@@ -231,6 +253,15 @@ function DeckPanel({
 
       {importOpen && (
         <ImportDeckDialog decks={decks} onClose={() => setImportOpen(false)} />
+      )}
+
+      {/* Adding from here puts the card straight into the deck being built —
+          that is the whole reason to offer it inside the builder. */}
+      {addCardOpen && (
+        <AddCardDialog
+          onClose={() => setAddCardOpen(false)}
+          onAdded={(card) => decks.addCard(card)}
+        />
       )}
     </aside>
   );

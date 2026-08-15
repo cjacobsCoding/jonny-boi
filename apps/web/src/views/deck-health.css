@@ -1,0 +1,27 @@
+/*
+ * The deck fidelity warning. Visually louder than an ordinary legality issue,
+ * because "your deck is 3 cards over" is a rules nit the player can see, while
+ * "two of these cards do nothing when simulated" is invisible without being told.
+ *
+ * Own file (imported by DeckBuilderView) to stay clear of other work in styles.css.
+ */
+
+.deck-health {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px solid #d9a441;
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: rgb(217 164 65 / 10%);
+}
+
+.deck-health__badge {
+  display: block;
+  color: #d9a441;
+}
+
+.deck-health__detail {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-fg-muted);
+}

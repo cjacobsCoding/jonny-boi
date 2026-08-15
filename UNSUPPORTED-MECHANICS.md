@@ -1,0 +1,73 @@
+# Unsupported mechanics — the engine work queue
+
+This is where "the app couldn't play that card" turns into work someone can pick up.
+
+## The contract
+
+The Oracle-text compiler (`packages/cards/src/compile`) **never approximates**. A
+card either compiles to a definition whose every printed ability is genuinely
+implemented, or it is reported `incomplete` with the exact clause and the engine
+system it would need. A half-modelled card would behave as a blank and silently
+corrupt the A/B verdicts this whole project exists to produce, so a card we cannot
+play is kept, shown, and *marked* — never quietly downgraded.
+
+That honesty runs end to end:
+
+- **Card level** — adding a card à la carte reports precisely which systems its
+  text needs (`lib/cards/addSingleCard.ts`).
+- **Deck level** — a deck containing any such card is badged "N cards not
+  playable" and names them (`lib/decklist/deckHealth.ts`). One unplayable card
+  makes the whole deck unplayable; there is no "mostly fine".
+- **Simulation level** — an unplayable card never reaches `importedDefinitions()`,
+  so it physically cannot enter a sim.
+
+## Where the live list lives
+
+The app accumulates every gap it meets, grouped by the missing **system** (the
+unit of work — implement it once, unblock every card waiting on it), with the
+cards blocked and a verbatim clause to implement against.
+
+**To read it:** open the app → **Cards** → add any card that needs a missing
+system, or check the registry directly. Export it as Markdown with
+`formatUnsupportedReport()` from `apps/web/src/lib/cards/unsupportedRegistry.ts`
+and paste the result below.
+
+It is stored per-browser (localStorage), because it is driven by the cards *this
+user* actually tried to add. That is the point: the queue reflects real demand
+rather than a speculative wishlist.
+
+## Outstanding
+
+_Paste an exported report here when you triage. Format:_
+
+```
+## <missing engine system>
+
+- **Blocks N card(s):** Card A, Card B
+- **Occurrences:** N
+- **Example clause:** `the exact printed text`
+```
+
+### Known gaps already visible in the curated pool
+
+These are documented in the compiler's own tests
+(`packages/cards/src/compile/compile.test.ts`, `HUMAN_APPROXIMATIONS`) — the
+compiler refuses to reproduce them rather than fake them:
+
+| System | Example card | Note |
+|---|---|---|
+| dynamic power/toughness (`*/*`) | Tarmogoyf | Characteristic-defining ability |
+| transform / double-faced cards | Delver of Secrets | Needs a second face + transform |
+| planeswalker loyalty abilities | Liliana of the Veil | Loyalty costs, one activation per turn |
+| flash / flashback | Snapcaster Mage | Alternate timing + graveyard casting |
+
+## Picking one up
+
+1. Choose the system blocking the most cards.
+2. Implement the engine system in `packages/core` (a primitive, a rules hook, or
+   a new action) with tests — see [TESTING.md](TESTING.md) for where it belongs.
+3. Add the compiler rule in `packages/cards/src/compile/rules.ts` so real Oracle
+   text now matches.
+4. Add the blocked example card to the compiler test as ground truth, and drop it
+   from any approximation exemption list.
+5. Re-add the card in the app; it should now report as fully playable.

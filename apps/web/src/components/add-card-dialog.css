@@ -1,0 +1,74 @@
+/*
+ * Styles for the à-la-carte "Add a card" dialog. Kept in its own file (imported
+ * by AddCardDialog.tsx) rather than appended to styles.css, so this feature owns
+ * its styling and does not collide with other in-flight work there.
+ */
+
+.add-card__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60; /* above the target prompt (50), which can never co-occur */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 60%);
+  padding: var(--space-3);
+}
+
+.add-card {
+  width: min(34rem, 100%);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.add-card__title { margin: 0 0 var(--space-2); }
+.add-card__intro { margin: 0 0 var(--space-3); color: var(--color-fg-muted); font-size: var(--text-sm); }
+
+.add-card__form { display: flex; gap: var(--space-2); }
+.add-card__input {
+  flex: 1 1 auto;
+  min-width: 0; /* let it shrink inside the flex row instead of overflowing */
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.add-card__result {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--color-border);
+}
+.add-card__result--good { border-left-color: var(--color-accent-soft); }
+.add-card__result--warn { border-left-color: #d9a441; }
+.add-card__result--bad  { border-left-color: #d05c5c; }
+
+.add-card__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.add-card__blocked {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+.add-card__blocked ul { margin: var(--space-2) 0 0; padding-left: var(--space-4); }
+.add-card__blocked li { margin-bottom: var(--space-2); }
+.add-card__system { display: block; font-weight: 600; }
+.add-card__clause { display: block; color: var(--color-fg-muted); font-style: italic; }
+.add-card__queued { margin: var(--space-2) 0 0; color: var(--color-fg-faint); }
+
+.add-card__actions { display: flex; justify-content: flex-end; margin-top: var(--space-4); }
