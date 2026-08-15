@@ -13,6 +13,7 @@
  *  - Art:          downloadArt
  *  - Pipeline:     runPipeline, loadStarterCardNames
  *  - Paths:        cardIndexPath, imageCacheDir, … (package-relative resolvers)
+ *  - Accuracy:     checkCardIndex (offline invariants), verifyCards (vs a re-fetch)
  */
 
 export const PACKAGE_NAME = 'data-tools';
@@ -44,3 +45,19 @@ export {
   cacheDir,
   dataDir,
 } from './paths.js';
+export {
+  checkCard,
+  checkCardIndex,
+  formatViolations,
+  formatManaCost,
+  knownPipTotal,
+  type IndexViolation,
+} from './invariants.js';
+export {
+  diffCard,
+  verifyCards,
+  formatVerifyReport,
+  scryfallLookupName,
+  type FieldDiff,
+  type VerifyReport,
+} from './verify.js';
