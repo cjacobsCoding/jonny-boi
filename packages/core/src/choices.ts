@@ -38,6 +38,7 @@
  */
 
 import type { CardType, EffectRef } from './card.js';
+import { hasSubtype } from './card.js';
 import { convertedManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
@@ -55,6 +56,15 @@ export interface CardFilter {
   readonly anyOfTypes?: readonly CardType[];
   /** Drop cards with any of these types (this is how "nonland" is written). */
   readonly noneOfTypes?: readonly CardType[];
+  /**
+   * Keep only cards carrying at least one of these printed SUBTYPES. This is how
+   * "a Mountain or Plains card" and "Goblins" are written — it matches a dual land
+   * with those land types, exactly as the printed card does. Compared
+   * case-insensitively (see `hasSubtype`).
+   */
+  readonly anyOfSubtypes?: readonly string[];
+  /** Drop cards carrying any of these printed subtypes ("non-Goblin creature"). */
+  readonly noneOfSubtypes?: readonly string[];
   /** Exact card name match (case-sensitive, as printed). */
   readonly nameEquals?: string;
   /** Inclusive mana-value bounds. */
@@ -62,12 +72,24 @@ export interface CardFilter {
   readonly maxManaValue?: number;
 }
 
-/** Whether a card instance passes a filter. An absent filter matches everything. */
+/**
+ * Whether a card instance passes a filter. An absent filter matches everything.
+ *
+ * Written with explicit loops rather than `.some(...)`: static abilities
+ * (`statics.ts`) run this for every permanent on the battlefield inside the
+ * continuous-layering pass, which combat and every legality check drive, and a
+ * closure allocated per predicate per candidate showed up in the hot path.
+ */
 export function matchesCardFilter(card: CardInstance, filter?: CardFilter): boolean {
   if (!filter) return true;
   const def = card.def;
-  if (filter.anyOfTypes && !filter.anyOfTypes.some((t) => def.types.includes(t))) return false;
-  if (filter.noneOfTypes && filter.noneOfTypes.some((t) => def.types.includes(t))) return false;
+  // The helper forms are the allocation-free, case-insensitive ones — required by
+  // the statics pass that runs this for every permanent, and by subtype matching
+  // that must treat "Mountain" and "mountain" alike.
+  if (filter.anyOfTypes !== undefined && !hasAnyType(def.types, filter.anyOfTypes)) return false;
+  if (filter.noneOfTypes !== undefined && hasAnyType(def.types, filter.noneOfTypes)) return false;
+  if (filter.anyOfSubtypes !== undefined && !hasAnySubtype(def, filter.anyOfSubtypes)) return false;
+  if (filter.noneOfSubtypes !== undefined && hasAnySubtype(def, filter.noneOfSubtypes)) return false;
   if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
   if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
     const mv = def.cost ? convertedManaCost(def.cost) : 0;
@@ -75,6 +97,24 @@ export function matchesCardFilter(card: CardInstance, filter?: CardFilter): bool
     if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
   }
   return true;
+}
+
+/** Whether a type line carries any of `wanted`. Allocation-free (see above). */
+function hasAnyType(types: readonly CardType[], wanted: readonly CardType[]): boolean {
+  for (const want of wanted) {
+    for (const type of types) {
+      if (type === want) return true;
+    }
+  }
+  return false;
+}
+
+/** Whether a definition carries any of `wanted` as a printed subtype. */
+function hasAnySubtype(def: CardInstance['def'], wanted: readonly string[]): boolean {
+  for (const want of wanted) {
+    if (hasSubtype(def, want)) return true;
+  }
+  return false;
 }
 
 // --- options --------------------------------------------------------------------

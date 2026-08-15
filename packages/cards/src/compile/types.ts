@@ -101,6 +101,8 @@ export interface ClauseContribution {
   readonly keywords?: CardDefinition['keywords'];
   /** Set when the printed text says this permanent enters the battlefield tapped. */
   readonly entersTapped?: boolean;
+  /** Set when the text gives a BOARD condition for entering untapped. */
+  readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

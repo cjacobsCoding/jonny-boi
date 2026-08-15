@@ -62,6 +62,21 @@ export interface CardDefinition {
   readonly id: string;
   readonly name: string;
   readonly types: readonly CardType[];
+  /**
+   * Printed subtypes — creature types (`['Goblin', 'Warrior']`), land types
+   * (`['Mountain']`), and so on.
+   *
+   * Two features need them, which is why the field is load-bearing rather than
+   * decorative: tribal statics ("Goblins you control get +1/+1") select against
+   * them as DATA instead of a per-card rule, and a fetchland searches for "a
+   * Mountain or Plains card", which must find a DUAL land with those land types
+   * and not just a basic — matching by name there would play worse than printed.
+   *
+   * Case is not significant: every comparison goes through {@link hasSubtype},
+   * which folds both sides, so either as-printed (`'Mountain'`) or lower-cased
+   * (`'mountain'`) authoring works and a casing slip cannot silently break a lord.
+   */
+  readonly subtypes?: readonly string[];
   /** Mana cost. Absent for lands and other free-to-play cards. */
   readonly cost?: ManaCost;
   readonly power?: number;
@@ -103,6 +118,20 @@ export interface CardDefinition {
    * stay unimplemented rather than being flattened into always-tapped.
    */
   readonly entersTapped?: boolean;
+  /**
+   * A board condition that lets this permanent enter UNTAPPED — the "unless"
+   * half of the common dual lands: "enters tapped unless you control two or
+   * fewer other lands" (a fastland), "unless you control a Mountain or a
+   * Plains" (a checkland).
+   *
+   * Present ⇒ the permanent enters tapped whenever the condition is NOT met.
+   * Only conditions that read the board are expressible here; a land that
+   * charges a PRICE to enter untapped (a shockland's "you may pay 2 life") asks
+   * its controller a question at land-play time, which nothing in the engine
+   * can do yet, so those stay unimplemented rather than being flattened into
+   * always-tapped or always-untapped — either would misprice the card.
+   */
+  readonly entersTappedUnless?: EntersUntappedCondition;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -113,6 +142,84 @@ export interface CardDefinition {
    * cards with no triggers.
    */
   readonly triggers?: readonly import('./triggers.js').TriggeredAbility[];
+  /**
+   * Abilities the controller may ACTIVATE by paying a cost — the `Cost: Effect`
+   * line printed on fetchlands ("{T}, Pay 1 life, Sacrifice ~: Search…"),
+   * sacrifice outlets, and mana rocks with a second ability.
+   *
+   * Mana abilities are NOT here: a permanent that only taps for mana declares
+   * {@link produces}/{@link producesOptions} and resolves without using the
+   * stack, exactly as the rules require. Everything in this list uses the stack.
+   */
+  readonly activated?: readonly ActivatedAbility[];
+  /**
+   * Static ("anthem") abilities: continuous modifications this permanent applies to
+   * a *set* of other permanents for as long as it is on the battlefield — "creatures
+   * you control get +1/+1", "other Goblins you control have haste". Data, like
+   * triggers; see `statics.ts` for the shape and for why the lifetime needs no
+   * bookkeeping. Omit for cards with none (the overwhelming majority).
+   */
+  readonly statics?: readonly import('./statics.js').StaticAbility[];
+}
+
+/**
+ * What activating an ability costs. Every field is optional and they combine —
+ * a fetchland pays all three of tap, life, and sacrifice.
+ *
+ * Costs are PAID ON ACTIVATION, before the ability goes on the stack, and are
+ * not refunded if the ability is later countered or fizzles (rule 602.2).
+ */
+export interface ActivationCost {
+  /** Mana component, paid from the controller's floating pool. */
+  readonly mana?: ManaCost;
+  /** The `{T}` symbol: tap this permanent (and obey summoning sickness). */
+  readonly tap?: boolean;
+  /** "Sacrifice ~": this permanent goes to its owner's graveyard. */
+  readonly sacrificeSelf?: boolean;
+  /** "Pay N life". Payable only while the controller's life exceeds it. */
+  readonly life?: number;
+}
+
+/**
+ * One activated ability: a cost, the effects it puts on the stack, and when it
+ * may be activated.
+ *
+ * `timing` defaults to `'instant'` because that is the rules default — an
+ * activated ability may be activated whenever its controller has priority
+ * unless its text says otherwise (rule 602.2). A `'sorcery'` ability is the
+ * exception ("Activate only as a sorcery").
+ */
+export interface ActivatedAbility {
+  readonly cost: ActivationCost;
+  readonly effects: readonly EffectRef[];
+  readonly timing?: CastTiming;
+  /** Human-readable text for the log, the inspector, and the replay viewer. */
+  readonly label: string;
+}
+
+/**
+ * Memo of a definition's subtypes, lower-cased into a set for O(1) case-insensitive
+ * lookup. Same argument as the mana memos below: definitions are immutable and
+ * shared across every instance, and subtype matching runs inside the continuous
+ * layering pass that combat and legality checks drive.
+ */
+const SUBTYPE_SET_MEMO = new WeakMap<CardDefinition, ReadonlySet<string>>();
+
+/**
+ * Whether a definition has a printed subtype, compared case-insensitively.
+ *
+ * A card with no subtypes answers `false` without touching the memo, so the common
+ * board pays a single property check.
+ */
+export function hasSubtype(def: CardDefinition, subtype: string): boolean {
+  const printed = def.subtypes;
+  if (!printed || printed.length === 0) return false;
+  let set = SUBTYPE_SET_MEMO.get(def);
+  if (!set) {
+    set = new Set(printed.map((s) => s.toLowerCase()));
+    SUBTYPE_SET_MEMO.set(def, set);
+  }
+  return set.has(subtype.toLowerCase());
 }
 
 /** Convenience predicates over a definition's type line. */
@@ -224,12 +331,81 @@ export function bestManaYield(def: CardDefinition): number {
 }
 
 /**
+ * A board condition under which a permanent enters UNTAPPED. Both forms are
+ * evaluated the instant the permanent enters, counting only OTHER permanents —
+ * the entering one is not yet on the battlefield when the check happens.
+ */
+export interface EntersUntappedCondition {
+  /**
+   * "unless you control two or fewer other lands" — a fastland. Satisfied when
+   * the controller's other lands number at most this.
+   */
+  readonly maxOtherLands?: number;
+  /**
+   * "unless you control a Mountain or a Plains" — a checkland. Satisfied when
+   * the controller has another permanent with any of these subtypes.
+   */
+  readonly controlsSubtype?: readonly string[];
+}
+
+/**
+ * The slice of the board an enters-tapped condition reads.
+ *
+ * Declared structurally rather than as `GameState` so `card.ts` stays free of a
+ * cycle back through `state.ts`, which imports this module.
+ */
+export interface EntersTappedContext {
+  readonly controller: string;
+  readonly battlefield: readonly {
+    readonly controller: string;
+    readonly def: CardDefinition;
+  }[];
+  /** The entering permanent, excluded from its own condition when present. */
+  readonly self?: unknown;
+}
+
+/**
  * Whether a permanent of this definition arrives tapped. One accessor so every
  * battlefield-entry path (resolving a permanent spell, playing a land, creating
  * a token) asks the same question the same way.
+ *
+ * `context` is required to answer a CONDITIONAL entry. Omitting it answers only
+ * the unconditional flag — which is correct for a token or a test fixture with
+ * no board, and deliberately conservative everywhere else.
  */
-export function entersTapped(def: CardDefinition): boolean {
-  return def.entersTapped === true;
+export function entersTapped(def: CardDefinition, context?: EntersTappedContext): boolean {
+  if (def.entersTapped === true) return true;
+  const condition = def.entersTappedUnless;
+  if (!condition) return false;
+  // With no board to read we cannot evaluate the condition. Entering tapped is
+  // the printed default (the "unless" is the exception), so that is the safe answer.
+  if (!context) return true;
+  return !conditionMet(condition, context);
+}
+
+/** Whether the "enters untapped" condition holds on the current board. */
+function conditionMet(
+  condition: EntersUntappedCondition,
+  context: EntersTappedContext,
+): boolean {
+  const others = context.battlefield.filter(
+    (permanent) => permanent.controller === context.controller && permanent !== context.self,
+  );
+
+  if (condition.maxOtherLands !== undefined) {
+    const lands = others.filter((permanent) => permanent.def.types.includes('land')).length;
+    if (lands > condition.maxOtherLands) return false;
+  }
+
+  if (condition.controlsSubtype !== undefined) {
+    const wanted = condition.controlsSubtype;
+    const has = others.some((permanent) =>
+      (permanent.def.subtypes ?? []).some((subtype) => wanted.includes(subtype)),
+    );
+    if (!has) return false;
+  }
+
+  return true;
 }
 
 /** Resolve a definition's casting timing, defaulting to sorcery-speed. */

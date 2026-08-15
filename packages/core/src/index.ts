@@ -47,6 +47,10 @@ export {
 
 // Card model seam
 export type {
+  ActivatedAbility,
+  ActivationCost,
+  EntersUntappedCondition,
+  EntersTappedContext,
   CardDefinition,
   CardType,
   CastTiming,
@@ -55,6 +59,7 @@ export type {
 } from './card.js';
 export {
   hasType,
+  hasSubtype,
   isLand,
   isCreature,
   isPermanentType,
@@ -65,6 +70,15 @@ export {
   castTiming,
   entersTapped,
 } from './card.js';
+
+/**
+ * Static ("anthem") seam: how a `CardDefinition` declares a continuous modification
+ * to OTHER permanents that lasts exactly as long as it is on the battlefield.
+ * Aggregated through the same `indexContinuous` path as until-end-of-turn effects,
+ * so every consumer that already reads effective values gets statics for free.
+ */
+export type { StaticAbility, StaticAffects, StaticControllerScope } from './statics.js';
+export { DEFAULT_STATIC_SCOPE, staticsOf, staticAppliesTo, staticIsInert } from './statics.js';
 
 // Target legality (targeting.ts): what a spell is ALLOWED to point at, declared
 // as data on the effect ref (`params.targets`) and enforced when actions are
@@ -93,7 +107,9 @@ export type {
 } from './triggers.js';
 export { conditionMatches, matchTriggers, orderPendingTriggers } from './triggers.js';
 
-// Continuous-effects seam (DESIGN §3.9): "until end of turn" P/T buffs + keyword grants.
+// Continuous-effects seam (DESIGN §3.9): the ONE layering path. `indexContinuous`
+// aggregates both lifetimes — "until end of turn" P/T buffs / keyword grants AND the
+// statics radiating from permanents currently on the battlefield.
 export type {
   ContinuousEffect,
   ContinuousDuration,
@@ -146,6 +162,7 @@ export type {
   PassPriorityAction,
   PlayLandAction,
   TapForManaAction,
+  ActivateAbilityAction,
   CastSpellAction,
   DeclareAttackersAction,
   DeclareBlockersAction,

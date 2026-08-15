@@ -69,6 +69,8 @@ throughput (games/sec) from regressing.
 | feat/deck-import | DESKTOP-90PJPM4 (worker) | packages/cards/src/compile + apps/web import | ✅ INTEGRATED |
 | fix/ai-play-quality | DESKTOP-90PJPM4 (worker) | packages/core + packages/ai + sim/cli + apps/web hover | ✅ INTEGRATED |
 | fix/rules-audit | DESKTOP-90PJPM4 (worker) | packages/core mana-plan + apps/web play/online | 🚧 PUSHED, not merged |
+| feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | 🚧 PUSHED, not merged |
+| feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -94,6 +96,53 @@ _Append dated notes here; keep them short. Newest at top._
   ⚠️ Verified by tests + typecheck + production build + a clean browser boot (no console errors); the
   add dialog was NOT driven interactively (the session's browser tooling was wedged), so the Scryfall
   round-trip is proven only against stub responses. Worth a real click-through.
+- 2026-08-14 DESKTOP-90PJPM4: `feat/conditional-taplands` PUSHED (packages/core + cards/compile).
+  Merged latest main (incl. the a-la-carte card adder) — **1489 tests, build exit 0**.
+  Builds directly on `feat/activated-abilities`, so **merge that one first**.
+  - `CardDefinition.entersTappedUnless` — a BOARD condition read as the permanent enters:
+    `maxOtherLands` (fastland cycle) and `controlsSubtype` (checkland cycle, reusing the land
+    subtypes added for fetchlands). The engine had only the unconditional "~ enters tapped", so
+    every dual land whose drawback is a condition was unplayable.
+  - ⚠️ **Self-exclusion is the subtle part.** Both battlefield-entry paths pass `self` so the
+    entering land is not counted among "other lands you control". Without it every fastland enters
+    tapped one land early — a silent one-turn tempo loss in every simulated game. Tested at the
+    boundary (exactly the printed count, and one past it).
+  - With no board supplied the answer is TAPPED: "enters tapped" is the printed rule and the
+    "unless" is the exception, so the conservative answer can never make a card play better than
+    printed.
+  👉 **SHOCKLANDS ARE STILL UNSUPPORTED, on purpose.** "You may pay 2 life" is a price, not a board
+  state, and it must be asked at LAND-PLAY time. The choice system cannot reach there: playing a
+  land is a special action (`applyPlayLand`) and never opens a resolution frame, which is the only
+  place `pendingChoice` can be parked. Whoever wants shocklands (a big slice of real manabases)
+  needs choice-at-special-action first — that is the real prerequisite, not another compile rule.
+  A test asserts Sacred Foundry stays reported so nobody "fixes" it by guessing.
+  (Worker — pushed, NOT merged.)
+
+- 2026-08-14 DESKTOP-90PJPM4: `feat/activated-abilities` PUSHED (packages/core + cards/compile +
+  ai/heuristic). Merged latest main incl. `fix/rules-audit` — **1451 tests, build exit 0**.
+  **Measured** on a real Modern Burn list through the importer: **19/60 playable → 30/60**, and the
+  "library-search template" gap is gone. Fetchlands were 11 copies of dead card.
+  - `CardDefinition.activated` — a `COST: EFFECT` line with {T} / pay N life / sacrifice ~ / mana.
+    New `activateAbility` action. Offer and accept share ONE `unpayableActivationReason`, so a pilot
+    is never handed an action the engine then rejects. Costs are paid in full before the ability hits
+    the stack and are NOT refunded (rule 602.2). It rides the existing `trigger` stack object — no
+    third stack-object kind for masking/replay/AI to learn.
+  - **New seam worth knowing:** `CardDefinition.subtypes` (lowercased) + `CardFilter.anyOfSubtypes`.
+    A fetchland searches for "a Mountain or Plains card" — that must find a SHOCKLAND, not just a
+    basic, so matching by name would have been a card playing worse than printed. Any future
+    subtype-selecting card gets this for free.
+  - `targeting.ts` gained `illegalTargetReasonForEffects` / `restrictionOfEffects` so an ability is
+    policed against ITS OWN effects rather than the card's spell script.
+  - The pilot half matters as much as the engine half: an ability nothing activates is
+    indistinguishable from a card that doesn't work. The heuristic cracks fetchlands and
+    **deliberately nothing else** — a sac outlet or a pinger needs real cost/benefit reasoning and
+    guessing would make pilots play worse. If you add ability scoring, that is the seam.
+  👉 Next-biggest measured gaps on that same list, in copies: the unrecognised-template bucket
+  (Eidolon's mana-value-filtered cast trigger, Searing Blaze, Skullcrack, Skewer's spectacle,
+  Boros Charm's modes = 18 copies), then CONDITIONAL enters-tapped (Sacred Foundry / Inspiring
+  Vantage = 8 copies; the unconditional form already works, these need the choice system for
+  "unless you pay 2 life").
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-14 DESKTOP-90PJPM4: `fix/rules-audit` — playtest sweep of the CLIENT layer. The headless
   engine is clean (new `packages/sim/src/rules-audit.test.ts` plays full games and asserts zone
@@ -151,6 +200,24 @@ _Append dated notes here; keep them short. Newest at top._
   stale dist made the worker silently run the OLD pilot and the match viewer appeared to hang
   forever. Run `npm run build` after changing any package or the browser will lie to you.
   (Integrator)
+- 2026-08-14 DESKTOP-90PJPM4: `feat/import-smart-names` ✅ (apps/web/src/lib/decklist only) — a standing
+  regression guard on TWO REAL tournament lists (Boros Energy, Goryo's Vengeance) in
+  `real-decklists.test.ts`. The unit tests prove each import rule alone; this proves they still compose
+  on the lists that actually broke, offline, against a Scryfall fake that reproduces the one asymmetry
+  that matters: `/cards/collection` matches a card FACE name only, while `/cards/search` also sees
+  printed names. Covers "Wear // Tear", the Universes Beyond printing "Kavaero, Mind-Bitten"
+  (Scryfall files it as "Superior Spider-Man"), and DFCs named by their front face.
+  MEASURED against these lists on this commit: every name now resolves (0 not-found), but only
+  **2/75 and 6/75 copies are PLAYABLE**. The wall is not import — it is compiler/engine coverage:
+  • the biggest bucket is "a rules template the compiler does not recognize yet" (19 + 12 copies), and
+    it is a LONG TAIL of unrelated mechanics (Ascend, Mobilize, Rebound, Replicate, Warp, cost
+    reduction, counterspells, Blood Moon's static effect) — no single fix unlocks it.
+  • the one COHESIVE win is the mana base: fetchlands + shocklands are 15 copies in EACH list (20% of
+    the deck). ⚠️ Do not start that here — `feat/activated-abilities` is actively building it
+    (`cost: { tap, life, sacrificeSelf }`, an `activateAbility` action, fetchland tests). Shocklands
+    additionally need the "you may pay 2 life" choice, which `packages/core/src/card.ts` documents as
+    deliberately unimplemented pending the choice system that branch also owns.
+  No `packages/core` or `packages/cards` files touched, by design. (Worker)
 
 - 2026-08-13 DESKTOP-90PJPM4: `feat/import-formats` ✅ (apps/web/src/lib/scryfall + decklist/resolve) —
   **two real deck-import bugs, found by importing the user's actual Modern lists.** The *parser* was

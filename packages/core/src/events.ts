@@ -46,6 +46,15 @@ export type GameEvent =
       readonly amount: number;
     }
   | { readonly type: 'manaPoolEmptied'; readonly player: PlayerId }
+  | {
+      /** A non-mana activated ability was activated and put on the stack. */
+      readonly type: 'abilityActivated';
+      readonly player: PlayerId;
+      /** The permanent whose ability this is. */
+      readonly instanceId: InstanceId;
+      /** The ability's printed label, for the log and the replay viewer. */
+      readonly label: string;
+    }
   | { readonly type: 'tapped'; readonly instanceId: InstanceId }
   | {
       readonly type: 'effectApplied';

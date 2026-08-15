@@ -29,6 +29,7 @@
 import type {
   CardDefinition,
   CardInstance,
+  EffectRef,
   GameAction,
   GameState,
   InstanceId,
@@ -86,6 +87,8 @@ const PRIMITIVE = Object.freeze({
   destroyAll: 'destroyAll',
   gainLife: 'gainLife',
   drawCards: 'drawCards',
+  /** Library search. Recognised so a fetchland's ability can be identified. */
+  searchLibrary: 'searchLibrary',
 });
 
 /** What we think a spell *does*, derived from its effect primitives. */
@@ -171,6 +174,13 @@ interface SpellGoal {
 function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const { view, legalActions } = ctx;
 
+  // An activated ability that fixes mana (a fetchland) is checked before
+  // anything else: it costs no card from hand, and leaving it unused is the same
+  // mistake as leaving a land in hand — the deck simply never does what it was
+  // built to do.
+  const ability = bestAbility(ctx, weights);
+  if (ability) return ability;
+
   const canPlayLand = legalActions.some((a) => a.kind === 'playLand');
   const bestSpell = bestSpellGoal(ctx, weights);
 
@@ -190,6 +200,47 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
 
   // Nothing worth doing with our mana → pass.
   return emit(ctx, passAction(view), 'no profitable play — passing', weights.passScore);
+}
+
+/**
+ * Pick an activated ability worth using right now, or `undefined`.
+ *
+ * The engine only offers abilities whose cost is fully payable and whose targets
+ * are legal, so anything in `legalActions` is playable — the judgement here is
+ * whether it is WORTH playing.
+ *
+ * Deliberately narrow: it activates land-fetching abilities, and nothing else.
+ * A fetchland is unambiguous — it converts a land you already control into the
+ * land you actually need, it costs no card, and declining it is never right on
+ * an untapped board. Every other activated ability (a sacrifice outlet, a
+ * damage pinger) needs real cost/benefit reasoning against the board, and
+ * guessing at that would make pilots play worse, not better. Those are left
+ * unused until they can be scored honestly, which is visible and safe rather
+ * than confidently wrong.
+ */
+function bestAbility(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+  const { view, legalActions } = ctx;
+  for (const action of legalActions) {
+    if (action.kind !== 'activateAbility') continue;
+    const source = findInstance(view, action.instanceId);
+    const ability = source?.def.activated?.[action.abilityIndex];
+    if (!ability) continue;
+    if (!fetchesALand(ability)) continue;
+    return emit(ctx, action, `activate ${ability.label}`, weights.playLandScore);
+  }
+  return undefined;
+}
+
+/**
+ * Does this ability put a land onto the battlefield from the library? That is
+ * the fetchland shape, and the one activated ability this pilot understands.
+ */
+function fetchesALand(ability: { readonly effects: readonly EffectRef[] }): boolean {
+  return ability.effects.some(
+    (ref) =>
+      ref.primitive === PRIMITIVE.searchLibrary &&
+      ref.params?.destination === 'battlefield',
+  );
 }
 
 /**

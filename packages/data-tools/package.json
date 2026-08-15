@@ -18,7 +18,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "fetch": "npm run build && node dist/cli.js"
+    "fetch": "npm run build && node dist/cli.js",
+    "verify": "npm run build && node dist/verify-cli.js"
   },
   "devDependencies": {
     "@types/node": "^22.10.2"
