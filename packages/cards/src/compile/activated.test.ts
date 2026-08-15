@@ -96,3 +96,65 @@ describe('activated abilities — the fetchland', () => {
     expect(result.definition.activated ?? []).toHaveLength(0);
   });
 });
+
+describe('conditional enters-tapped — the real dual-land cycles', () => {
+  /** A land record with the given printed text. */
+  function land(name: string, oracleText: string, subtypes: string[] = []): CompilableCard {
+    return card({
+      name,
+      oracleText,
+      typeLine: { supertypes: [], types: ['Land'], subtypes },
+    });
+  }
+
+  it('compiles a fastland to a board condition, not a flat "enters tapped"', () => {
+    const result = compileCard(
+      land(
+        'Inspiring Vantage',
+        'Inspiring Vantage enters the battlefield tapped unless you control two or fewer other lands.\n{T}: Add {R} or {W}.',
+      ),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.entersTappedUnless).toEqual({ maxOtherLands: 2 });
+    // Crucially NOT the unconditional flag — that would make it always tapped.
+    expect(result.definition.entersTapped).toBeUndefined();
+  });
+
+  it('compiles a checkland to its land-subtype condition', () => {
+    const result = compileCard(
+      land(
+        'Clifftop Retreat',
+        'Clifftop Retreat enters the battlefield tapped unless you control a Mountain or a Plains.\n{T}: Add {R} or {W}.',
+      ),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.entersTappedUnless).toEqual({
+      controlsSubtype: ['mountain', 'plains'],
+    });
+  });
+
+  it('still reports a SHOCKLAND, whose condition is a price rather than a board state', () => {
+    // "You may pay 2 life" asks the controller a question at land-play time,
+    // which nothing in the engine can do yet. Guessing either way misprices the
+    // card, so it stays honestly unsupported.
+    const result = compileCard(
+      land(
+        'Sacred Foundry',
+        'As Sacred Foundry enters the battlefield, you may pay 2 life. If you don\u2019t, it enters the battlefield tapped.\n{T}: Add {R} or {W}.',
+        ['Mountain', 'Plains'],
+      ),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.entersTappedUnless).toBeUndefined();
+    expect(result.definition.entersTapped).toBeUndefined();
+  });
+
+  it('leaves an unconditional tapland exactly as it was', () => {
+    const result = compileCard(
+      land('Boros Guildgate', 'Boros Guildgate enters the battlefield tapped.\n{T}: Add {R} or {W}.'),
+    );
+    expect(result.status).toBe('complete');
+    expect(result.definition.entersTapped).toBe(true);
+    expect(result.definition.entersTappedUnless).toBeUndefined();
+  });
+});

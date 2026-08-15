@@ -49,6 +49,8 @@ export {
 export type {
   ActivatedAbility,
   ActivationCost,
+  EntersUntappedCondition,
+  EntersTappedContext,
   CardDefinition,
   CardType,
   CastTiming,
