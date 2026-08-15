@@ -598,6 +598,28 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'gain-control-until-eot',
+    description:
+      '"Gain control of target creature until end of turn. Untap it. It gains haste."',
+    // The riders are optional in the pattern but captured, because they change
+    // what the card DOES: without haste a stolen creature cannot attack, so a
+    // card that prints them and a card that does not are different cards.
+    pattern:
+      /^gain control of target creature until end of turn(?:\. untap it)?(?:\. it gains haste until end of turn|\. it gains haste)?$/,
+    needsChosenTarget: true,
+    build(match) {
+      const text = match[0];
+      return effects({
+        primitive: 'gainControl',
+        params: {
+          targets: CREATURE_TARGET,
+          ...(text.includes('untap it') ? { untap: true } : {}),
+          ...(text.includes('gains haste') ? { haste: true } : {}),
+        },
+      });
+    },
+  },
+  {
     id: 'exile-target-creature',
     description: '"Exile target creature"',
     pattern: /^exile target creature$/,
@@ -1371,7 +1393,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   // through to that hint names the real blocker instead of a solved one.
   {
     pattern: /gain control of target/,
-    missingEngineSystem: 'gaining control of another player’s permanent',
+    missingEngineSystem: 'a gain-control template the compiler does not recognize yet',
   },
   { pattern: /\bfights?\b/, missingEngineSystem: 'a fight template the compiler does not recognize yet' },
   {

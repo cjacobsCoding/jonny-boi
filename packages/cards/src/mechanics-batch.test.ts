@@ -353,3 +353,42 @@ describe('flash / hexproof / shroud compile from the printed keyword list', () =
     expect(result.status).toBe('incomplete');
   });
 });
+
+describe('gaining control', () => {
+  it('compiles the Act of Treason template with both riders', () => {
+    const result = compileCard(
+      card({
+        name: 'Act of Treason',
+        oracleText:
+          'Gain control of target creature until end of turn. Untap it. It gains haste until end of turn.',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'gainControl',
+      params: { targets: 'creature', untap: true, haste: true },
+    });
+  });
+
+  it('compiles the bare form without inventing the riders', () => {
+    // Without haste a stolen creature cannot attack, so a card that prints the
+    // riders and one that does not are genuinely different cards.
+    const result = compileCard(
+      card({
+        name: 'Bare Threaten',
+        oracleText: 'Gain control of target creature until end of turn.',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'gainControl',
+      params: { targets: 'creature' },
+    });
+  });
+
+  it('registers the primitive the rule names', () => {
+    expect(CORE_PRIMITIVE_IDS).toContain('gainControl');
+  });
+});

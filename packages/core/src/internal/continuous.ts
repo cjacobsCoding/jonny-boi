@@ -60,7 +60,7 @@
  * effective values — no map-iteration order or floating point is involved.
  */
 
-import type { CardInstance, GameState, InstanceId } from '../state.js';
+import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import type { KeywordFlags } from '../card.js';
 import type { GameEvent } from '../events.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
@@ -93,6 +93,18 @@ export interface ContinuousEffect {
   readonly toughness?: number;
   /** Keyword abilities granted while this effect is active. */
   readonly keywords?: KeywordFlags;
+  /**
+   * Set when this effect took control of its target, recording who had it
+   * before so expiry can hand it back. See {@link applyControlChange}.
+   */
+  readonly controlChange?: ControlChange;
+}
+
+/** Who controlled a permanent before an effect took it, and who took it. */
+export interface ControlChange {
+  readonly instanceId: InstanceId;
+  readonly from: PlayerId;
+  readonly to: PlayerId;
 }
 
 /** The aggregated continuous modification for one permanent. */
@@ -327,6 +339,73 @@ function findPermanent(state: GameState, instanceId: InstanceId): CardInstance |
 }
 
 /**
+ * Move a permanent to the effect source's controller, returning the record that
+ * lets expiry hand it back. Returns `undefined` when there is nothing to do.
+ *
+ * WHY THIS MUTATES `CardInstance.controller` INSTEAD OF BEING A LAYERED READ.
+ * Every other continuous modification (P/T, keywords) is applied by *reading*
+ * through `indexContinuous`, and control could have worked the same way — an
+ * `effectiveController()` that callers consult. It does not, deliberately:
+ * `.controller` is read in ~55 places across combat, priority, targeting,
+ * triggers, statics and attachments, and an accessor is only correct once EVERY
+ * one of them is converted. A partial conversion is the worst outcome — a
+ * creature that changes sides for targeting but still attacks for its old
+ * controller — and it fails silently. Writing the base field makes all 55 reads
+ * correct at once, with the revert being the only new thing that can go wrong,
+ * and it is covered by tests here.
+ *
+ * The limitation this accepts: control is not layered, so it cannot interact
+ * with dependency ordering the way MTG's layer 2 formally does. With two
+ * players and no card in the pool changing control of a control-change, that
+ * distinction has no observable effect.
+ *
+ * Rule 302.6 is honoured on the way in: a creature that just changed hands is
+ * summoning-sick for its new controller, so a stolen creature cannot attack
+ * unless the effect also grants haste (which is exactly what the printed
+ * "gain control … untap it, it gains haste" cards do).
+ */
+export function applyControlChange(
+  state: GameState,
+  targetInstanceId: InstanceId,
+  sourceInstanceId: InstanceId,
+  emit: (e: GameEvent) => void,
+): ControlChange | undefined {
+  const permanent = state.battlefield.find((c) => c.instanceId === targetInstanceId);
+  if (!permanent) return undefined;
+  const source = state.battlefield.find((c) => c.instanceId === sourceInstanceId);
+  // The stealing player is the source's controller; with no source on the
+  // battlefield (an instant that has already left) there is nobody to give it to.
+  const to = source?.controller;
+  if (to === undefined || to === permanent.controller) return undefined;
+
+  const from = permanent.controller;
+  permanent.controller = to;
+  permanent.summoningSick = true;
+  emit({ type: 'controlChanged', instanceId: permanent.instanceId, from, to });
+  return { instanceId: permanent.instanceId, from, to };
+}
+
+/**
+ * Hand a permanent back when its control-change effect ends.
+ *
+ * Only reverts when the permanent is still on the battlefield AND still under
+ * the controller this effect gave it to. If something else took control after
+ * us, that later effect owns the revert and we must not stomp it; if the
+ * permanent died or was exiled, there is nothing to hand back.
+ */
+function revertControlChange(
+  state: GameState,
+  change: ControlChange,
+  emit: (e: GameEvent) => void,
+): void {
+  const permanent = state.battlefield.find((c) => c.instanceId === change.instanceId);
+  if (!permanent || permanent.controller !== change.to) return;
+  permanent.controller = change.from;
+  permanent.summoningSick = true;
+  emit({ type: 'controlChanged', instanceId: permanent.instanceId, from: change.to, to: change.from });
+}
+
+/**
  * Remove all continuous effects of a given duration, emitting an expiry event per
  * removed effect (so the inspector/sim-log can show pumps wearing off). Returns the
  * number removed. Called from the cleanup step for `endOfTurn`.
@@ -338,9 +417,12 @@ export function expireContinuousEffects(
 ): number {
   let removed = 0;
   const kept: ContinuousEffect[] = [];
+  // Control changes unwind LIFO — see below.
+  const expiringControlChanges: ControlChange[] = [];
   for (const eff of state.continuous) {
     if (eff.duration === duration) {
       removed += 1;
+      if (eff.controlChange) expiringControlChanges.push(eff.controlChange);
       emit({
         type: 'continuousEffectExpired',
         targetInstanceId: eff.targetInstanceId,
@@ -352,6 +434,17 @@ export function expireContinuousEffects(
     }
   }
   state.continuous = kept;
+
+  // Control changes unwind in REVERSE order of application — last stolen, first
+  // returned. Reverting in insertion order strands the permanent with whoever
+  // held it in the middle of a chain: if A steals from B and then B steals it
+  // back, unwinding A first is a no-op (A no longer has it) and unwinding B then
+  // hands it to A — leaving it with the wrong player, permanently. Unwinding
+  // LIFO returns it through each hop and lands it back with its original
+  // controller, which is what ending both effects at once should do.
+  for (let i = expiringControlChanges.length - 1; i >= 0; i--) {
+    revertControlChange(state, expiringControlChanges[i]!, emit);
+  }
   return removed;
 }
 

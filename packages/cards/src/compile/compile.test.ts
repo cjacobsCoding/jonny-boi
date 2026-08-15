@@ -616,7 +616,7 @@ describe('explainUnsupported — every common rejection names a real engine feat
     ['counter target noncreature spell', 'a filtered-targeting template the compiler does not recognize yet'],
     ['counter target spell unless its controller pays {3}', 'optional payment during resolution ("unless its controller pays")'],
     ['other creatures you control get +1/+1', 'a static-buff template the compiler does not recognize yet'],
-    ['gain control of target creature until end of turn', 'gaining control of another player’s permanent'],
+    ['gain control of target creature until end of turn', 'a gain-control template the compiler does not recognize yet'],
     ['target creature you control fights target creature you don\'t control', 'a fight template the compiler does not recognize yet'],
     ['when ~ leaves the battlefield, create a 3/3 green beast creature token', 'a leaves-the-battlefield template the compiler does not recognize yet'],
     ['cascade', 'named keyword mechanics with their own subsystem'],

@@ -47,6 +47,13 @@ export type GameEvent =
     }
   | { readonly type: 'manaPoolEmptied'; readonly player: PlayerId }
   | {
+      /** A permanent changed controller (gained control, or handed back). */
+      readonly type: 'controlChanged';
+      readonly instanceId: InstanceId;
+      readonly from: PlayerId;
+      readonly to: PlayerId;
+    }
+  | {
       /** Cards moved from the top of a library to its graveyard (milling). */
       readonly type: 'cardsMilled';
       readonly player: PlayerId;

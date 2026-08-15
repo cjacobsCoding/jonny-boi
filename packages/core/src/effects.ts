@@ -16,6 +16,7 @@ import type { CardDefinition, EffectRef } from './card.js';
 import { entersTapped } from './card.js';
 import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
+import { applyControlChange } from './internal/continuous.js';
 import type {
   ChooseModesRequest,
   ChoiceAnswer,
@@ -158,6 +159,17 @@ export interface ContinuousModRequest {
   readonly power?: number;
   readonly toughness?: number;
   readonly keywords?: CardDefinition['keywords'];
+  /**
+   * Take control of the target permanent for this effect's duration ("Gain
+   * control of target creature until end of turn").
+   *
+   * Unlike the P/T and keyword fields, which are read THROUGH the continuous
+   * layer at every use, a control change is applied to `CardInstance.controller`
+   * directly when the effect is registered and reverted when it expires. See
+   * `applyControlChange` in `internal/continuous.ts` for why that is the safe
+   * shape here rather than an `effectiveController()` accessor.
+   */
+  readonly takeControl?: boolean;
 }
 
 /** A primitive: a small pure function mutating the draft via the context. */
@@ -315,6 +327,13 @@ function addContinuousEffectToState(
   const id = state.nextInstanceId++;
   const duration: ContinuousDuration = mod.duration ?? 'endOfTurn';
   const target = mod.target ?? sourceInstanceId;
+
+  // A control change is applied to the instance NOW (and recorded so expiry can
+  // revert it); every other field is a layered read left to the index.
+  const controlChange = mod.takeControl
+    ? applyControlChange(state, target, sourceInstanceId, emit)
+    : undefined;
+
   state.continuous.push({
     id,
     targetInstanceId: target,
@@ -323,6 +342,7 @@ function addContinuousEffectToState(
     power: mod.power,
     toughness: mod.toughness,
     keywords: mod.keywords,
+    ...(controlChange ? { controlChange } : {}),
   });
   emit({ type: 'continuousEffectAdded', targetInstanceId: target, sourceInstanceId, duration });
   return id;

@@ -633,7 +633,39 @@ export const attachToTarget: EffectPrimitive = (ctx) => {
  * `./choice-primitives`. Adding a primitive = adding one entry to one of those two
  * maps + the data that uses it; there is still exactly ONE registry to register.
  */
+/**
+ * "Gain control of target creature until end of turn" — the Act of Treason /
+ * Threaten template.
+ *
+ * The control change itself belongs to core: it is registered through the
+ * continuous layer so it reverts at end of turn, and reverts SAFELY if the
+ * creature dies, is exiled, or someone else takes it first. This primitive only
+ * decides what gets stolen and applies the two riders the printed cards carry.
+ *
+ * `untap` and `haste` are not decoration. A creature that just changed hands is
+ * summoning-sick for its new controller, so without haste it cannot attack —
+ * which is exactly why every card of this kind prints "Untap it. It gains haste."
+ * Omitting them would make the card look like it worked while doing nothing.
+ */
+export const gainControl: EffectPrimitive = (ctx) => {
+  const target = firstPermanentTarget(ctx);
+  if (!target || !isCreature(target.def)) return;
+
+  ctx.addContinuousEffect({
+    target: target.instanceId,
+    duration: 'endOfTurn',
+    takeControl: true,
+    ...(boolParam(ctx, 'haste', false) ? { keywords: { haste: true } } : {}),
+  });
+
+  if (boolParam(ctx, 'untap', false) && target.tapped) {
+    target.tapped = false;
+    ctx.emit({ type: 'untapped', instanceId: target.instanceId, player: target.controller });
+  }
+};
+
 export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
+  gainControl,
   dealDamage,
   drawCards,
   gainLife,
