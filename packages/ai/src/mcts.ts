@@ -203,6 +203,7 @@ function search(ctx: DecisionContext, config: MctsConfig, policy: RolloutPolicy)
   const scratch: SimScratch = {
     path: [],
     edges: [],
+    wasted: 0,
     rolloutCtx: { view: rootState, legalActions: EMPTY_ACTIONS, rng },
   };
   const deadline = config.maxDecisionMillis === Infinity ? Infinity : now() + config.maxDecisionMillis;
@@ -258,6 +259,7 @@ function runSimulation(
   const edges = scratch.edges;
   path.length = 0;
   edges.length = 0;
+  scratch.wasted = 0;
   path.push(root);
 
   let node = root;
@@ -267,7 +269,7 @@ function runSimulation(
   while (node.untried.length === 0 && node.children.length > 0 && !state.gameOver) {
     const edge = selectUcb1(node, config, rng);
     if (!edge) break;
-    state = step(state, edge.action, rulesConfig, registry);
+    state = step(state, edge.action, rulesConfig, registry, decider, scratch);
     node = edge.node;
     path.push(node);
     edges.push(edge);
@@ -283,7 +285,7 @@ function runSimulation(
   if (!state.gameOver && node.untried.length > 0) {
     const idx = rng.nextInt(node.untried.length);
     const action = node.untried.splice(idx, 1)[0] as GameAction;
-    state = step(state, action, rulesConfig, registry);
+    state = step(state, action, rulesConfig, registry, decider, scratch);
     // The child's legal actions are enumerated lazily on its first later descent.
     const child: SearchNode = { untried: [], children: [], visits: 0, enumerated: false };
     const edge: ChildEdge = { action, node: child, totalReward: 0 };
@@ -294,7 +296,7 @@ function runSimulation(
   }
 
   // --- ROLLOUT + EVALUATE from the leaf's state, in the deciding player's frame.
-  const reward = rollout(state, decider, config, rulesConfig, registry, policy, rng, scratch.rolloutCtx);
+  const reward = rollout(state, decider, config, rulesConfig, registry, policy, rng, scratch);
 
   // --- BACKPROP: every visited node gets a visit; every edge accumulates reward.
   for (let i = 0; i < path.length; i++) (path[i] as SearchNode).visits++;
@@ -321,6 +323,12 @@ function runSimulation(
 interface SimScratch {
   readonly path: SearchNode[];
   readonly edges: ChildEdge[];
+  /**
+   * How many times the deciding player's mana pool emptied with mana still in it
+   * during THIS simulation — see `MctsConfig.evalWastedManaPenalty`. Reset at the
+   * start of every simulation and read once by `evaluate`.
+   */
+  wasted: number;
   /** The rollout policy's decision context, rewritten per ply (see `rollout`). */
   readonly rolloutCtx: MutableDecisionContext;
 }
@@ -371,8 +379,9 @@ function rollout(
   registry: EffectRegistry,
   policy: RolloutPolicy,
   rng: Rng,
-  ctxScratch: MutableDecisionContext,
+  scratch: SimScratch,
 ): number {
+  const ctxScratch = scratch.rolloutCtx;
   let s = state;
   let plies = 0;
   for (let depth = 0; depth < config.rolloutDepth; depth++) {
@@ -392,10 +401,10 @@ function rollout(
     ctxScratch.legalActions = legal;
     ctxScratch.rng = rng;
     const action = policy.pilot.chooseAction(ctxScratch as DecisionContext);
-    s = step(s, action, rulesConfig, registry);
+    s = step(s, action, rulesConfig, registry, decider, scratch);
     plies++;
   }
-  return evaluate(s, decider, config, plies);
+  return evaluate(s, decider, config, plies, scratch.wasted);
 }
 
 /**
@@ -407,7 +416,13 @@ function rollout(
  *     board-presence differential, logistically squashed so it shares the [0,1]
  *     scale with the terminal rewards.
  */
-function evaluate(state: GameState, decider: PlayerId, config: MctsConfig, plies: number): number {
+function evaluate(
+  state: GameState,
+  decider: PlayerId,
+  config: MctsConfig,
+  plies: number,
+  wastedMana: number,
+): number {
   if (state.gameOver) {
     const discount = config.winSpeedDiscount * plies;
     if (state.winner === decider) {
@@ -424,7 +439,11 @@ function evaluate(state: GameState, decider: PlayerId, config: MctsConfig, plies
   const boardDiff = boardPresence(state, decider) - boardPresence(state, opp);
   const evalPoints = config.evalLifeWeight * lifeDiff + config.evalBoardWeight * boardDiff;
   // Logistic squash centred at 0 (even position ⇒ 0.5), `evalScale` sets steepness.
-  return 1 / (1 + Math.exp(-evalPoints / config.evalScale));
+  const positional = 1 / (1 + Math.exp(-evalPoints / config.evalScale));
+  // Charge the mana this line tapped and never spent. Clamped back into [0, 1]
+  // because UCB1's exploration term assumes rewards live on that scale.
+  const charged = positional - config.evalWastedManaPenalty * wastedMana;
+  return charged < 0 ? 0 : charged > 1 ? 1 : charged;
 }
 
 /** Board presence: summed (power + toughness) of a player's creatures. */
@@ -452,13 +471,35 @@ function boardPresence(state: GameState, player: PlayerId): number {
  * Robust: on any throw (shouldn't happen — the engine rejects bad input cleanly)
  * we keep the state as-is so a rollout can't crash the search.
  */
-function step(state: GameState, action: GameAction, config: RulesConfig, registry: EffectRegistry): GameState {
+function step(
+  state: GameState,
+  action: GameAction,
+  config: RulesConfig,
+  registry: EffectRegistry,
+  decider: PlayerId,
+  scratch: SimScratch,
+): GameState {
   try {
-    return applyActionInPlace(state, action, config, registry).state;
+    const result = applyActionInPlace(state, action, config, registry);
+    // The engine already built this event list for us; counting the deciding
+    // player's lost mana out of it is what lets `evaluate` see waste at all.
+    const events = result.events;
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i] as { type: string; player?: PlayerId };
+      if (event.type === MANA_POOL_EMPTIED && event.player === decider) scratch.wasted++;
+    }
+    return result.state;
   } catch {
     return state;
   }
 }
+
+/**
+ * The engine event that fires when a step ends with mana still floating — i.e.
+ * mana that was tapped and then lost. Named rather than inlined because it is
+ * the one signal the search has that a line wasted a resource.
+ */
+const MANA_POOL_EMPTIED = 'manaPoolEmptied';
 
 /**
  * Legal actions at a sim state, ENRICHED with targeted spell casts (see

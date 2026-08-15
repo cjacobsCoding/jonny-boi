@@ -233,6 +233,93 @@ if (mode === 'breakdown') {
   }
 }
 
+if (mode === 'strength') {
+  // The question perf alone cannot answer: does the look-ahead pilot actually
+  // PLAY BETTER? Head-to-head, alternating who is on the play, fixed seeds.
+  const { wilsonInterval } = await import('@jonny-boi/sim');
+  const config = { ...DEFAULT_MCTS_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') };
+  const mcts = createMctsPilot(config);
+  const heuristic = createHeuristicPilot();
+  let mctsWins = 0;
+  let draws = 0;
+  const t0 = performance.now();
+  for (let g = 0; g < count; g++) {
+    // Alternate which SEAT the MCTS pilot occupies as well as who is on the
+    // play, so neither the seat nor the play advantage can flatter either pilot.
+    // Four-way rotation so neither the SEAT (which deck) nor the PLAY (who goes
+    // first) is confounded with the pilot: MCTS takes each deck on the play and
+    // on the draw an equal number of times.
+    const mctsIsA = g % 2 === 0;
+    const seats = makeSeats(
+      deckA,
+      deckB,
+      { pilotA: mctsIsA ? mcts : heuristic, pilotB: mctsIsA ? heuristic : mcts },
+      registry,
+    );
+    const r = runMatch(seats, gameSeedFor(GAMES_SEED, g), { startingPlayer: g % 4 < 2 ? 'A' : 'B' });
+    if (r.outcome.kind === 'timeout') draws++;
+    else if ((r.outcome.winner === 'A') === mctsIsA) mctsWins++;
+    if ((g + 1) % 10 === 0) {
+      console.log(`  ${g + 1}/${count}: mcts ${mctsWins} wins, ${draws} draws @${((performance.now() - t0) / 60000).toFixed(1)}min`);
+    }
+  }
+  const ci = wilsonInterval(mctsWins, count);
+  console.log(
+    `[strength] mcts vs heuristic, deck "${SAMPLE_DECKS[0].name}" vs "${SAMPLE_DECKS[1].name}", n=${count}: ` +
+      `mctsWins=${mctsWins} draws=${draws} winRate=${(ci.p * 100).toFixed(1)}% ` +
+      `95%CI=[${(ci.low * 100).toFixed(1)}%, ${(ci.high * 100).toFixed(1)}%] ` +
+      `totalMin=${((performance.now() - t0) / 60000).toFixed(1)}`,
+  );
+}
+
+if (mode === 'waste') {
+  // The play-quality metric that got MCTS reverted last time: `manaPoolEmptied`
+  // fires only when a step ends with mana still floating, i.e. mana tapped and
+  // never spent. Mirrors packages/sim/src/pilot-quality.test.ts, same seeds,
+  // same both-seats-one-pilot setup, so the numbers are comparable to the ones
+  // on record (1.76/turn for mcts, 0.01/turn for the heuristic).
+  const seeds = (process.env.WASTE_SEEDS ?? '1,2,3').split(',').map(Number);
+  for (const [label, pilot] of [
+    ['heuristic', createHeuristicPilot()],
+    ['mcts', createMctsPilot({ ...DEFAULT_MCTS_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') })],
+  ]) {
+    let wasted = 0;
+    let turns = 0;
+    for (const seed of seeds) {
+      let n = 0;
+      const r = runMatch({ deckA, deckB, pilotA: pilot, pilotB: pilot, registry }, seed, {
+        onEvent: (e) => {
+          if (e.type === 'manaPoolEmptied') n++;
+        },
+      });
+      wasted += n;
+      turns += r.turns;
+    }
+    console.log(`[waste] ${label}: ${wasted} wasted-mana events over ${turns} turns = ${(wasted / turns).toFixed(3)}/turn`);
+  }
+}
+
+if (mode === 'waste-trace') {
+  // Diagnostic: print the decisions immediately before each wasted-mana event so
+  // the CAUSE is visible rather than inferred (did the pilot tap and then pass?
+  // tap toward a cast it then abandoned? tap in a window with nothing castable?).
+  const pilot = createMctsPilot({ ...DEFAULT_MCTS_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') });
+  const seed = Number(process.argv[3] ?? 1);
+  const log = [];
+  const r = runMatch({ deckA, deckB, pilotA: pilot, pilotB: pilot, registry }, seed, {
+    recordTrace: true,
+    onEvent: (e) => log.push(e),
+  });
+  let shown = 0;
+  for (let i = 0; i < log.length && shown < 8; i++) {
+    if (log[i].type !== 'manaPoolEmptied') continue;
+    shown++;
+    console.log(`--- wasted mana @event ${i}: ${JSON.stringify(log[i])}`);
+    for (let j = Math.max(0, i - 8); j <= i; j++) console.log(`    ${JSON.stringify(log[j])}`);
+  }
+  console.log(`turns=${r.turns} wasted=${log.filter((e) => e.type === 'manaPoolEmptied').length}`);
+}
+
 if (mode === 'games' || mode === 'heuristic-games') {
   const isMcts = mode === 'games';
   const pilotA = isMcts ? createMctsPilot() : createHeuristicPilot();

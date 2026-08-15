@@ -94,6 +94,30 @@ export interface MctsConfig {
   /** Weight per point of (power + toughness) of board presence differential. */
   readonly evalBoardWeight: number;
   /**
+   * Reward subtracted from a non-terminal evaluation for each time the DECIDING
+   * player's mana pool was emptied with mana still floating during the
+   * simulation — mana that was tapped and then never spent.
+   *
+   * Why the search needs to be told: mana pools empty at the end of every step,
+   * so floating mana is simply lost, and nothing else in the evaluation can see
+   * it (life and board presence are both unchanged by wasting a mana). That
+   * blind spot is not theoretical. Measured on the sample gauntlet, the pilot
+   * tapped and wasted mana on 0.80 of every turn against the heuristic's 0.00,
+   * and the trace showed exactly one shape: tap a land during an opponent's
+   * step, then pass. The tree valued "tap" through rollouts in which the
+   * *heuristic* policy went on to spend the mana, while the real next mover —
+   * another MCTS search, which by then treats the tapped mana as sunk — declined
+   * to. Charging the waste to the deciding player closes that gap from both
+   * ends: tapping speculatively costs something, and so does passing on mana
+   * already floating.
+   *
+   * Terminal rollouts are deliberately NOT charged: once the game is decided,
+   * how tidily it was played is irrelevant, and discounting a win would teach
+   * the search to avoid winning lines. Set to 0 to restore the older,
+   * waste-blind evaluation.
+   */
+  readonly evalWastedManaPenalty: number;
+  /**
    * The half-saturation constant for the logistic squash of the heuristic eval:
    * an advantage of this many "eval points" maps to roughly a 0.73 reward. Keeps
    * the non-terminal eval on the same [0, 1] scale as win/loss without any term
@@ -131,6 +155,14 @@ export const DEFAULT_MCTS_CONFIG: MctsConfig = Object.freeze({
   evalLifeWeight: 1,
   evalBoardWeight: 1,
   evalScale: 12,
+  // Tuned, not guessed. Sweeping the knob against the wasted-mana rate over the
+  // sample gauntlet: 0.02 -> 0.45/turn, 0.04 -> 0.40, 0.10 -> 0.24, 0.20 -> 0.26,
+  // 0.40 -> 0.23 (baseline with no penalty at all: 0.80). The curve flattens at
+  // 0.10 — past that the remaining waste is the legitimate kind (an instant held
+  // up and never needed), so a bigger penalty only risks distorting real
+  // decisions for nothing. On the [0,1] reward scale 0.10 is worth roughly five
+  // life of positional advantage: enough to lose a tie against simply passing.
+  evalWastedManaPenalty: 0.1,
 });
 
 /**
