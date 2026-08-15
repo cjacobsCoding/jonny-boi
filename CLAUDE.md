@@ -90,6 +90,10 @@ false-alarms on every Windows checkout.
 
 1. **Tests green** — the feature ships with tests and the full suite passes.
 2. **Marked off** — flip the feature's status in DESIGN.md §3 to ✅ done.
+2b. **Written up** — add a `CHANGELOG.md` entry tagged `*Roadmap: <section>*`, then regenerate with
+   `npm run changelog -w @jonny-boi/web`. This is **enforced**: marking a §3 feature ✅ with no entry
+   fails `apps/web/src/data/changelog.test.ts`. The app's "What's New" tab renders that file, and it
+   has to stay true no matter which agent or machine shipped the work.
 3. **Committed** — stage *your* feature's files (explicit paths, **never `git add -A`**) + the §3
    flip, with a clear message.
 4. **Pushed** — push the branch so the work isn't stranded. Workers do **not** merge to `main`;

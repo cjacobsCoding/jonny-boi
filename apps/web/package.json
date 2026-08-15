@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json && vite build",
     "icons": "node scripts/generate-icons.mjs",
     "cards:index": "node scripts/build-card-index.mjs",
+    "changelog": "node scripts/build-changelog.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

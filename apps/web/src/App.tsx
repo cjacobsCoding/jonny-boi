@@ -11,6 +11,7 @@ import { LabView } from './views/LabView.js';
 import { MatchView } from './views/MatchView.js';
 import { PlayView } from './views/PlayView.js';
 import { ProxiesView } from './views/ProxiesView.js';
+import { ChangelogView } from './views/ChangelogView.js';
 
 /** The top-level views the header navigates between. */
 const VIEWS = [
@@ -20,6 +21,7 @@ const VIEWS = [
   { id: 'lab', label: 'Lab' },
   { id: 'match', label: 'Watch a Game' },
   { id: 'proxies', label: 'Proxies' },
+  { id: 'changelog', label: "What's New" },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]['id'];
@@ -84,6 +86,7 @@ export function App(): ReactElement {
         {view === 'lab' && <LabView decks={decks} sim={labSim} selection={labSelection} />}
         {view === 'match' && <MatchView decks={decks} sim={matchSim} />}
         {view === 'proxies' && <ProxiesView decks={decks} />}
+        {view === 'changelog' && <ChangelogView />}
       </main>
 
       <footer className="app__footer">

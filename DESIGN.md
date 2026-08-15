@@ -302,6 +302,86 @@ unconfident, and lets any guess be re-picked or cleared; only then does the list
 importer, so scanned cards get the same Oracle-compiler treatment as typed ones. Tesseract is
 dynamically imported so its WASM core stays off the initial bundle.
 
+### 3.13 In-app changelog — ✅ done
+A **What's New** tab listing every feature actually in the build. `CHANGELOG.md` at the repo root is
+the single source of truth; `apps/web/scripts/build-changelog.mjs` derives the bundled
+`apps/web/src/data/changelog.json` (`npm run changelog -w @jonny-boi/web`).
+
+Kept honest by two gates in `apps/web/src/data/changelog.test.ts`, because several agents on several
+machines work this repo and a list maintained by good intentions goes stale immediately:
+**(1) complete** — every §3 section marked ✅ must have an entry tagged `*Roadmap: N*`, so flipping a
+status without writing the entry fails the suite and names the section; **(2) consistent** — the
+bundled JSON is re-derived and compared, the same drift guard the card index uses. Writing the entry
+is part of §7's definition of done.
+
+### 3.14 Optimize the gauntlet decks themselves — ⬜ not started
+Today gauntlet decks are selectable as the Lab hero but not editable
+(`LabView`: `canEditHero = !isGauntletDeckId(hero.id)`), so a suggestion can be found and never applied.
+
+⚠️ Do **not** simply make them mutable in place. The gauntlet IS the measuring stick: every A/B verdict
+and every historical win rate is relative to those exact lists, so editing one silently invalidates
+comparisons against every result recorded before the edit. The seam is **clone-to-mine**: copy the
+gauntlet deck into the user's decks and optimize the copy, leaving the baseline fixed. If tuning the
+baseline itself is ever wanted it needs an explicit versioned gauntlet, not an in-place edit.
+
+### 3.15 Suggestions that move single copies and touch the mana base — ⬜ not started
+Two separate defects, both confirmed by reading the code rather than inferred:
+- **Copy count.** `applySwap` and `SwapScope` already support `'single'`, and the Lab's manual swap
+  panel exposes it, but `DEFAULT_SWAP_SCOPE` is `'playset'` and the suggestion engine takes the default —
+  so an automated run only ever tries all-4-or-nothing. Candidate generation should explore both scopes
+  (a 4-of that should be a 2-of is an extremely common real improvement).
+- **Lands never surface.** They are *eligible* — `resolveAddables` walks the whole pool and
+  `resolveCuttables` keeps a basic-land floor — but `scoreCandidate` ranks on colour match + **curve
+  fit**, and a land has no mana value, so lands score near zero and never survive the top-K cut. This is
+  a **ranking** bug, not a missing capability: the mana base needs its own candidate lane with its own
+  score (colour requirements met, untapped sources, land count vs curve), not a spell heuristic.
+
+### 3.16 Pick a deck in the Proxies tab — ⬜ not started
+Proxies currently requires typing a decklist by hand. `ProxiesView` already receives the `decks` API,
+so this is a picker plus the existing paste box, not a new pipeline. Keep manual entry — it is useful
+for proxying cards you have not built a deck around.
+
+### 3.17 Hover any card name for a preview — ⬜ not started
+Anywhere the app names a card, hovering for ~1s shows the card. One shared component and one hook, used
+by every surface (deck lists, suggestion reports, the replay log, import results, blocked-card lists) —
+not a per-view reimplementation. Needs a deliberate delay, keyboard/touch equivalents, and to reuse the
+cached art the app already bundles rather than fetching per hover.
+
+### 3.18 Queue several test runs — ⬜ not started
+Line up multiple sims (different decks, swaps, or gauntlets) and let them run back to back instead of
+babysitting one at a time. The worker pool and resumable arm runner from §3.6 already support driving a
+run in slices; this is the queue and its UI on top.
+
+### 3.19 Auto-apply proven improvements and re-run until quiet — ⬜ not started
+A checkbox, **on by default**: when a suggestion comes back proven-better, apply it immediately, stop
+the current run, and restart against the improved deck — repeating until N consecutive passes find
+nothing. That makes the Lab a hill-climb rather than a one-shot query.
+
+Notes for whoever builds it: restarting is REQUIRED, not an optimization — once the deck changes, every
+in-flight paired arm is measuring a deck that no longer exists. Reuse `suggest-history.ts` so successive
+passes explore new ground instead of re-testing the same shortlist, and keep the applied changes as a
+visible, undoable list — an unattended loop that silently rewrites a deck is not something a user can
+trust. N (the quiet-pass count) is config, not a literal.
+
+### 3.20 Deck-building assistant — ⬜ not started
+While building, suggest cards *and counts* to add from what is already in the deck: popular cards for
+the colours in play, cards with real synergy with the current list, and staples for the archetype the
+deck appears to be. Distinct from §3.6, which optimizes a finished 60 by simulation — this is guidance
+for an incomplete deck, so it must be fast and heuristic rather than sim-backed.
+
+Hard constraints: never suggest a card that breaks §3.21 format legality, and never one the mana base
+cannot cast — if a suggestion needs colours the deck cannot produce, it must come with the mana-base
+change that supports it or not be offered at all.
+
+### 3.21 Formats, and guards against illegal decks — ⬜ not started
+Choose a format (Modern, Standard, Commander/EDH, …) per deck, and validate against it: deck size, copy
+limits (including the singleton rule and commander colour identity), set legality, and the **banned and
+restricted lists**. Everything that proposes cards — §3.6 suggestions, §3.19 auto-apply, §3.20 building
+help — must filter through it, so the tool can never walk a deck into an illegal state.
+
+Legality data comes from Scryfall (`legalities` is already on the card record the pipeline caches), so
+this is mostly a matter of carrying a field the app already has rather than curating ban lists by hand.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
@@ -325,5 +405,11 @@ dynamically imported so its WASM core stays off the initial bundle.
 - Claim work on `COORDINATION.md` before starting; pick a unique `feat/<slug>` branch.
 
 ## 7. Definition of done
-Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
+Tests green · status flipped in §3 · **`CHANGELOG.md` entry written** · committed with explicit paths ·
+pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).
+
+The changelog entry is not paperwork: flipping a §3 status to ✅ without one **fails the suite**
+(`apps/web/src/data/changelog.test.ts`), because the user's record of what shipped has to survive
+whichever agent on whichever machine did the work (§3.13). Tag it `*Roadmap: <section>*`, write it for
+someone using the app, then `npm run changelog -w @jonny-boi/web`.
