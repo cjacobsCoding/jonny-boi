@@ -1,25 +1,31 @@
 /**
- * `useSimWorker` — the single wrapper the Lab uses to drive the sim Web Worker
- * (DESIGN §1.6). One hook owns the worker lifecycle so the views never touch
- * `postMessage` directly (DRY): start a run, observe progress, get a typed result
- * or a friendly error, and cancel mid-run.
+ * `useSimWorker` — the single wrapper the Lab uses to drive the sim (DESIGN §1.6).
  *
- * Cancellation = terminate. The sim runs are long, synchronous loops inside the
- * worker, so a cooperative cancel flag couldn't interrupt them between games.
- * Terminating the worker stops the work immediately and cleanly; we lazily spin
- * up a fresh worker for the next run. The component is always left in a defined
- * state (idle / running / done / error) — never a blank screen.
+ * One hook owns the worker-pool lifecycle so the views never touch `postMessage`
+ * directly (DRY): start a run, observe progress, get a typed result or a friendly
+ * error, and cancel mid-run. Its public shape is unchanged from the days of a
+ * single worker — the views did not have to learn that the Lab now runs on every
+ * core.
+ *
+ * What DID change: a run is planned into shards, spread over
+ * `browserPoolWorkerCount()` workers, and merged back in canonical order (see
+ * `lib/sim/`). The pool size never affects a run's numbers, only how long it
+ * takes.
+ *
+ * Cancellation = terminate. Sim runs are long, synchronous loops inside the
+ * workers, so a cooperative cancel flag could not interrupt them between games.
+ * Disposing the pool terminates every worker immediately and rejects the run;
+ * the next run lazily builds a fresh pool. The component is always left in a
+ * defined state (idle / running / done / error) — never a blank screen.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { importedDefinitions } from './decklist/importedCards.js';
-import type {
-  SimRequest,
-  SimResponse,
-  SimProgress,
-  SimResultPayload,
-} from './sim-protocol.js';
+import { SimWorkerPool } from './sim/pool.js';
+import { isCancellation, runSimRequest } from './sim/run.js';
+import { PROGRESS_INTERVAL_SECONDS, browserPoolWorkerCount } from './sim/pool-config.js';
+import type { SimRequest, SimProgress, SimResultPayload } from './sim-protocol.js';
 
-/** The lifecycle phase of the worker, drives what the UI renders. */
+/** The lifecycle phase of the run, drives what the UI renders. */
 export type SimStatus = 'idle' | 'running' | 'done' | 'error';
 
 /** What the hook exposes to a view. */
@@ -28,17 +34,14 @@ export interface SimWorkerApi {
   readonly progress: SimProgress | null;
   readonly result: SimResultPayload | null;
   readonly error: string | null;
+  /** How many workers a run will use on this machine (surfaced in the UI). */
+  readonly workerCount: number;
   /** Kick off a run. Replaces any in-flight run (terminates it first). */
   run: (request: SimRequest) => void;
-  /** Cancel the current run (terminate the worker) and reset to idle. */
+  /** Cancel the current run (terminate every worker) and reset to idle. */
   cancel: () => void;
   /** Clear the last result/error back to idle (keeps any chosen inputs). */
   reset: () => void;
-}
-
-/** Construct a fresh module worker. Isolated so `run`/`cancel` share one path. */
-function spawnWorker(): Worker {
-  return new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
 }
 
 export function useSimWorker(): SimWorkerApi {
@@ -46,66 +49,75 @@ export function useSimWorker(): SimWorkerApi {
   const [progress, setProgress] = useState<SimProgress | null>(null);
   const [result, setResult] = useState<SimResultPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const workerRef = useRef<Worker | null>(null);
+  const poolRef = useRef<SimWorkerPool | null>(null);
+  /**
+   * Identifies the current run. A pool disposed mid-run still has promises
+   * unwinding, and without this a late rejection from the OLD run could stamp an
+   * error over a NEW run that had already started.
+   */
+  const runIdRef = useRef(0);
+  const [workerCount] = useState(() => browserPoolWorkerCount());
 
-  /** Tear down the live worker (used by cancel, replace-run, and unmount). */
-  const terminate = useCallback(() => {
-    if (workerRef.current) {
-      workerRef.current.terminate();
-      workerRef.current = null;
-    }
+  /** Tear down the live pool (used by cancel, replace-run, and unmount). */
+  const dispose = useCallback(() => {
+    poolRef.current?.dispose();
+    poolRef.current = null;
   }, []);
 
-  // Always clean up the worker when the Lab unmounts.
-  useEffect(() => () => terminate(), [terminate]);
+  // Always clean up the workers when the Lab unmounts.
+  useEffect(() => () => dispose(), [dispose]);
 
   const run = useCallback(
     (request: SimRequest) => {
-      terminate(); // replace any in-flight run cleanly.
+      dispose(); // replace any in-flight run cleanly.
+      const runId = ++runIdRef.current;
       setProgress(null);
       setResult(null);
       setError(null);
       setStatus('running');
 
-      const worker = spawnWorker();
-      workerRef.current = worker;
-
-      worker.onmessage = (event: MessageEvent<SimResponse>) => {
-        const message = event.data;
-        if (message.type === 'progress') {
-          setProgress(message);
-        } else if (message.type === 'result') {
-          setResult(message.payload);
-          setStatus('done');
-          terminate();
-        } else {
-          setError(message.message);
-          setStatus('error');
-          terminate();
-        }
-      };
-      // A worker that crashes outright (e.g. an import/parse failure) must still
-      // land us in a defined error state, never a silent hang or blank screen.
-      worker.onerror = (event: ErrorEvent) => {
-        setError(event.message || 'The simulation worker crashed unexpectedly.');
-        setStatus('error');
-        terminate();
-      };
-
-      // The worker builds its own card pool, so every run must carry the
+      // The workers build their own card pools, so every run must carry the
       // definitions for cards outside the curated set. Injecting it here — the
       // single chokepoint every run goes through — means no Lab feature can
       // forget it and silently fail to load an imported deck.
-      worker.postMessage({ ...request, importedCards: importedDefinitions() });
+      const pool = new SimWorkerPool(workerCount, importedDefinitions());
+      poolRef.current = pool;
+
+      runSimRequest(
+        request,
+        pool,
+        (message) => {
+          if (runIdRef.current !== runId) return;
+          setProgress(message);
+        },
+        PROGRESS_INTERVAL_SECONDS,
+      )
+        .then((payload) => {
+          if (runIdRef.current !== runId) return;
+          setResult(payload);
+          setStatus('done');
+          dispose();
+        })
+        .catch((err: unknown) => {
+          if (runIdRef.current !== runId) return;
+          // A cancel already left the UI idle — do not paint it as a failure.
+          if (isCancellation(err)) return;
+          setError(
+            err instanceof Error ? err.message : 'The simulation failed unexpectedly.',
+          );
+          setStatus('error');
+          dispose();
+        });
     },
-    [terminate],
+    [dispose, workerCount],
   );
 
   const cancel = useCallback(() => {
-    terminate();
+    runIdRef.current++;
+    dispose();
     setProgress(null);
     setStatus('idle');
-  }, [terminate]);
+  }, [dispose]);
 
   const reset = useCallback(() => {
     setProgress(null);
@@ -114,5 +126,5 @@ export function useSimWorker(): SimWorkerApi {
     setStatus('idle');
   }, []);
 
-  return { status, progress, result, error, run, cancel, reset };
+  return { status, progress, result, error, workerCount, run, cancel, reset };
 }

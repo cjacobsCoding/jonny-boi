@@ -1,35 +1,31 @@
 /**
- * The message protocol between the Lab UI (main thread) and the sim Web Worker.
+ * What the Lab UI can ASK FOR, and what it gets back — the request/result shapes
+ * shared by the views, the `useSimWorker` hook, and the parallel runner.
  *
  * The sim plays hundreds–thousands of games; running it on the main thread would
- * freeze the UI (DESIGN §1.6 / the Lab brief). So ALL sim execution lives in
- * `sim.worker.ts`; the UI posts a `SimRequest` and receives a stream of
- * `SimResponse`s (progress → result, or an error). This module owns the shared
- * shapes both sides import, so the contract has one definition (DRY).
+ * freeze the UI (DESIGN §1.6 / the Lab brief). So ALL sim execution lives in Web
+ * Workers. A request here is the WHOLE job the user asked for; `sim/plan.ts` cuts
+ * it into shards and `sim/shard-protocol.ts` describes those — keeping "what the
+ * user wants" and "how it is divided across cores" as two separate contracts.
  *
- * The worker imports `@jonny-boi/sim` (+ core/cards/ai) and reports results in
- * plain-data shapes that survive `postMessage` structured-clone — no class
- * instances, no functions, just the serializable fields the UI renders.
+ * Every shape is plain data that survives `postMessage` structured-clone — no
+ * class instances, no functions, just the serializable fields the UI renders.
  */
 import type {
   GauntletResult,
   SwapEvaluation,
   SuggestionReport,
 } from '@jonny-boi/sim';
-import type { CardDefinition } from '@jonny-boi/core';
 import type { MatchTrace } from './replay-types.js';
 
-/**
- * Fields every request carries. `importedCards` is how deck import reaches the
- * simulation: the worker builds its own card pool from scratch, so without
- * shipping the compiled definitions across the boundary an imported deck would
- * fail to load in the Lab even though it plays fine on the main thread. The
- * hook injects this automatically so no call site can forget it.
+/*
+ * Note on deck import: the compiled definitions for cards outside the curated
+ * pool do NOT ride on a request. Each worker builds its own card pool from
+ * scratch and a run dispatches hundreds of shards, so they are shipped once per
+ * worker in the pool's `init` message (`sim/shard-protocol.ts`) instead of once
+ * per shard. `useSimWorker` injects them when it builds the pool — the single
+ * chokepoint every run goes through, so no call site can forget them.
  */
-export interface SimRequestBase {
-  /** Compiled definitions for cards outside the curated pool (see `decklist/`). */
-  readonly importedCards?: readonly CardDefinition[];
-}
 
 /** A deck handed to the worker: the sim's `Deck` shape (id-or-name cardIds). */
 export interface SimDeckPayload {
@@ -39,7 +35,7 @@ export interface SimDeckPayload {
 }
 
 /** Run the hero against the chosen gauntlet decks (by sample-deck name). */
-export interface GauntletRequest extends SimRequestBase {
+export interface GauntletRequest {
   readonly kind: 'gauntlet';
   readonly hero: SimDeckPayload;
   /** Sample-deck names to test against (the worker resolves them to decks). */
@@ -49,7 +45,7 @@ export interface GauntletRequest extends SimRequestBase {
 }
 
 /** Evaluate a single-card swap (out → in) on the hero against the gauntlet. */
-export interface SwapRequest extends SimRequestBase {
+export interface SwapRequest {
   readonly kind: 'swap';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -60,7 +56,7 @@ export interface SwapRequest extends SimRequestBase {
 }
 
 /** Rank candidate single-card swaps that improve the hero (the suggestion loop). */
-export interface SuggestRequest extends SimRequestBase {
+export interface SuggestRequest {
   readonly kind: 'suggest';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -75,7 +71,7 @@ export interface SuggestRequest extends SimRequestBase {
  * sits in seat A, the opponent in seat B; the worker resolves the opponent by
  * sample-deck name. A `maxEvents` cap bounds a pathological game's trace.
  */
-export interface MatchRequest extends SimRequestBase {
+export interface MatchRequest {
   readonly kind: 'match';
   readonly hero: SimDeckPayload;
   /** Sample-deck name to play against (resolved by the worker). */
@@ -88,18 +84,26 @@ export interface MatchRequest extends SimRequestBase {
 /** Anything the UI can ask the worker to run. */
 export type SimRequest = GauntletRequest | SwapRequest | SuggestRequest | MatchRequest;
 
-/** Coarse progress so the UI can show a bar + throughput while a run is live. */
+/**
+ * Live progress for the whole run, aggregated across every worker.
+ *
+ * The unit is GAMES for all run kinds. Coarser units (opponents, candidates)
+ * looked fine on a single worker but lie once twelve run at once: eleven
+ * candidates can be 90% played and still show zero done. Games completed out of
+ * games planned is the one count that stays honest whatever the core count, so
+ * the bar, the throughput and the ETA all derive from it.
+ */
 export interface SimProgress {
   readonly type: 'progress';
-  /** Units completed so far (opponents, candidates, …) — units depend on `kind`. */
+  /** Games completed so far, summed over every worker. */
   readonly done: number;
-  /** Total units to complete. */
+  /** Games the run plans to play in total (0 while a run is still planning). */
   readonly total: number;
-  /** Individual games the sim has played so far (for games/sec). */
+  /** Same tally as `done`, kept for the games/sec readout. */
   readonly gamesRun: number;
   /** Wall-clock seconds since the run started. */
   readonly elapsedSeconds: number;
-  /** A short human label for what the worker is doing right now. */
+  /** A short human label for what the run is doing right now. */
   readonly label: string;
 }
 
@@ -110,17 +114,3 @@ export type SimResultPayload =
   | { readonly kind: 'suggest'; readonly result: SuggestionReport }
   | { readonly kind: 'match'; readonly result: MatchTrace };
 
-/** A successful result message. */
-export interface SimDone {
-  readonly type: 'result';
-  readonly payload: SimResultPayload;
-}
-
-/** A friendly, already-formatted error message (never a raw stack to the user). */
-export interface SimError {
-  readonly type: 'error';
-  readonly message: string;
-}
-
-/** Anything the worker can send back to the UI. */
-export type SimResponse = SimProgress | SimDone | SimError;
