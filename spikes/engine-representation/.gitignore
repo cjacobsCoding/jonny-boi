@@ -1,0 +1,8 @@
+# Spike-local AssemblyScript install (restored from the npm cache; see README §9).
+node_modules/
+
+# Build output — regenerate with `node codegen-layout.mjs && npm run build:wasm`.
+build/
+
+# V8 CPU profiles are large and were only used to find where arm B's time went.
+results/*.cpuprofile

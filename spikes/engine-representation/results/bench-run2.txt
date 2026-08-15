@@ -1,0 +1,53 @@
+==============================================================================
+ENGINE REPRESENTATION SPIKE — three arms, one model game, identical transcripts
+==============================================================================
+
+equivalence gate      30/30 seeded games byte-identical across A / B / C
+workload shape        150 games, 315 actions/game, branching 3.20, 14.9 turns/game, 150/150 decided
+flat state size       1716 i32 = 6.7 KiB   (fits in L1; the real engine has the same ~120 instances)
+wasm module           18.6 KiB uncompressed
+rounds                best-of-9, interleaved A/B/C, 3 warm-up rounds
+
+--- 1. FULL-GAME PLAYOUT (forward simulation only, no search) ---
+arm                  best ms   spread   games/sec   ns/action   vs A
+A  objects (TS)         54.7   1.25x       2742        1159   1.00x
+B  flat (TS)            78.6   1.57x       1907        1666   0.70x
+C  flat (WASM)          23.1   1.58x       6495         489   2.37x
+(B with the undo journal DISABLED: 51.0 ms — the journal costs 1.54x on a forward-only run)
+
+--- 2. ALLOCATION & GC (one 150-game playout per arm) ---
+arm                    GC events   GC ms   heap delta MB
+A  objects (TS)                0     0.0            0.45
+B  flat (TS)                   0     0.0            0.01
+C  flat (WASM)                 0     0.0            0.01
+
+--- 3. PER-OPERATION COST (fixed mid-game position, 60,000 iterations) ---
+operation                       A ns      B ns      C ns    B vs A   C vs A   C vs B
+legal-action generation          268       273        97     0.98x    2.77x    2.83x
+leaf evaluation                  101       177        65     0.57x    1.55x    2.74x
+UNDOABLE state transition       2398       352       102     6.81x   23.42x    3.44x
+policy decision (score menu)     866      1230       352     0.70x    2.46x    3.49x
+
+  arm A's transition decomposed: cloneState = 2524 ns (21.0 ns per cloned instance x 120 instances); the rest is the apply itself.
+
+--- 4. SEARCH (rollouts from a fixed position, ~12,000 transitions per cell) ---
+This is the decisive table: arm A must CLONE the root per rollout because an
+object graph cannot undo; arms B and C REWIND a journal.
+
+depth  rollouts |    A ms     B ms     C ms |  B vs A  C vs A  C vs B | A ns/tr  B ns/tr  C ns/tr
+    1     12000 |    34.4     12.7      3.5 |   2.71x   9.90x   3.65x |    2869     1058      290
+    2      6000 |    21.7      6.0      1.5 |   3.63x  14.41x   3.97x |    1807      498      125
+    4      3000 |    16.3     10.9      3.0 |   1.50x   5.39x   3.60x |    1359      908      252
+    8      1500 |     9.3      9.8      2.8 |   0.95x   3.34x   3.53x |     775      820      232
+   16       750 |     8.1      9.8      2.8 |   0.83x   2.90x   3.51x |     677      819      233
+   32       375 |     6.1      9.9      2.9 |   0.61x   2.09x   3.42x |     506      827      242
+   64       188 |     5.8      9.6      3.1 |   0.60x   1.84x   3.06x |     480      800      261
+
+--- 5. THE BOUNDARY (what a WASM recommendation lives or dies on) ---
+trivial JS->WASM call        5.33 ns   (identical JS call: 3.07 ns)
+copy whole state out of WASM 257 ns for 6864 bytes
+
+At arm C's 489 ns/action, ONE state copy-out per action would add 52% and one boundary call per action would add 1.1%.
+ONE crossing for all 150 games: 22.7 ms vs 23.1 ms for 150 crossings — the per-game crossing is not material.
+
+==============================================================================
