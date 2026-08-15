@@ -23,6 +23,35 @@ export const BASIC_LAND_NAMES: ReadonlySet<string> = new Set([
   'Forest',
 ]);
 
+/**
+ * How much of the out card an A/B swap replaces.
+ *
+ * This is the difference between two genuinely different questions, and a result
+ * is uninterpretable without knowing which was asked:
+ *
+ *   - `'one'` — replace a SINGLE copy. Asks "is the 4th copy of this card pulling
+ *     its weight?" A tiny effect, so it needs a lot of games to clear significance.
+ *   - `'playset'` — replace EVERY copy. Asks "does this card belong in the deck at
+ *     all?" Roughly four times the effect size on a 4-of, which is usually what a
+ *     person means when they ask whether card A beats card B.
+ *
+ * Lives here rather than in `swap.ts` so `matchup.ts`'s `RunOptions` can name it
+ * without importing the module that imports it.
+ */
+export type SwapScope = 'one' | 'playset';
+
+/**
+ * How much of a card an A/B swap replaces by default.
+ *
+ * `'playset'`: replacing every copy answers "does this card belong in the deck?",
+ * which is what a person almost always means when comparing two cards, and it
+ * carries roughly four times the effect size of a single copy on a 4-of — the
+ * difference between a verdict a few hundred games can reach and one it cannot.
+ * Swapping one copy is still available and answers the narrower question of
+ * whether the last copy earns its slot.
+ */
+export const DEFAULT_SWAP_SCOPE: SwapScope = 'playset';
+
 /** Default constructed-deck legality rules. */
 export const DEFAULT_DECK_RULES: DeckRules = Object.freeze({
   minDeckSize: 60,

@@ -1,0 +1,24 @@
+/*
+ * The swap-scope picker. Own file so it does not collide with other in-flight
+ * work in styles.css.
+ *
+ * It gets its own row above the run controls because it changes what the test
+ * MEANS, not merely how long it takes — a reader who misses it will misread the
+ * verdict, so it should not sit inline with the sliders.
+ */
+
+.lab-scope {
+  display: block;
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.lab-scope .select { width: 100%; max-width: 32rem; }
+
+.lab-scope__hint {
+  display: block;
+  margin-top: var(--space-1);
+  max-width: 40rem;
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}

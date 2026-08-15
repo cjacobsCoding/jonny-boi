@@ -32,7 +32,7 @@ import { runGauntlet, type GauntletResult } from './gauntlet.js';
 import { evaluateSwap, type SwapEvaluation } from './swap.js';
 import { suggestSwaps, type SuggestionReport } from './suggest.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
-import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, FIDELITY_CAVEAT } from './config.js';
+import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, FIDELITY_CAVEAT, type SwapScope } from './config.js';
 import type { ProportionCI } from './stats.js';
 
 const PROGRAM = 'jonny-boi sim';
@@ -44,7 +44,7 @@ Usage:
   npm run sim -- decks
   npm run sim -- match <deckA> <deckB> [--games N] [--seed S] [--pilot mcts|heuristic|random]
   npm run sim -- gauntlet <deck> [--games N] [--seed S] [--pilot mcts|heuristic|random]
-  npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id]
+  npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S] [--pilot id]
 
 Notes:
@@ -53,6 +53,11 @@ Notes:
     engine rollouts per decision, so it plays far better but is MUCH slower than
     "heuristic". Use --pilot heuristic for large runs where throughput matters.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
+  • swap --scope controls HOW MANY copies move (default "${DEFAULT_SWAP_SCOPE}"):
+      playset — replace every copy: "does this card belong in the deck at all?"
+      one     — replace a single copy: "is the last copy earning its slot?"
+    They answer different questions; "one" is a much smaller effect and needs far
+    more games before it can clear significance.
   • suggest: --cut may repeat to focus the cards considered for cutting; omit for
     auto mode (top ${DEFAULT_SUGGEST_CONFIG.maxCandidates} candidates by a cheap color/curve heuristic).
     --max-candidates K caps how many swaps are simulated (default ${DEFAULT_SUGGEST_CONFIG.maxCandidates}).
@@ -68,6 +73,8 @@ interface Flags {
   readonly games?: number;
   readonly seed?: number;
   readonly pilot?: string;
+  /** Swap one copy or the whole playset (A/B test). */
+  readonly scope?: SwapScope;
   readonly out?: string;
   readonly in?: string;
   /** suggest: cards to focus the cut on (repeatable). Empty = auto mode. */
@@ -85,6 +92,7 @@ function parseFlags(args: readonly string[]): Flags {
   let games: number | undefined;
   let seed: number | undefined;
   let pilot: string | undefined;
+  let scope: SwapScope | undefined;
   let out: string | undefined;
   let inCard: string | undefined;
   const cut: string[] = [];
@@ -107,6 +115,14 @@ function parseFlags(args: readonly string[]): Flags {
       case '--pilot':
         pilot = requireValue(arg, args[++i]);
         break;
+      case '--scope': {
+        const value = requireValue(arg, args[++i]);
+        if (value !== 'one' && value !== 'playset') {
+          throw new CliError(`option "--scope" must be "one" or "playset", got "${value}"`);
+        }
+        scope = value;
+        break;
+      }
       case '--out':
         out = requireValue(arg, args[++i]);
         break;
@@ -125,7 +141,7 @@ function parseFlags(args: readonly string[]): Flags {
     }
   }
 
-  return { positionals, games, seed, pilot, out, in: inCard, cut, maxCandidates, help };
+  return { positionals, games, seed, pilot, scope, out, in: inCard, cut, maxCandidates, help };
 }
 
 function requireValue(flag: string, value: string | undefined): string {
@@ -327,6 +343,7 @@ function cmdSwap(flags: Flags): number {
       seed,
       lab.pool,
       lab.registry,
+      { swapScope: flags.scope },
     );
   } catch (err) {
     if (err instanceof DeckLoadError) throw new CliError(err.message);
@@ -489,3 +506,5 @@ function main(): number {
 }
 
 process.exit(main());
+
+
