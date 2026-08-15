@@ -75,6 +75,31 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: `feat/card-mechanics` PUSHED (packages/cards + one core event).
+  **1531 tests, build exit 0.** Stacks on `feat/conditional-taplands` → `feat/activated-abilities`;
+  **merge that chain in order.** Four mechanics, each proven at BOTH levels (primitive behaviour +
+  compiler reaching it from the real printed template):
+  - **bounce** — `returnToHand` was already implemented and tested, and every bounce card was
+    still reported unsupported, because no rule pattern could reach it. **Worth checking for more
+    of these:** a primitive with no rule is invisible. Compare `CORE_PRIMITIVE_IDS` against the
+    ids the rule table actually emits.
+  - **fight** — reads BOTH powers before applying either, so a mutual kill kills both.
+  - **mill** — moves cards through the owned-zone path so a milled card is really in the
+    graveyard; short library empties rather than over-milling. Adds the `cardsMilled` event.
+  - **group damage** — one `dealDamageToEach` for each-creature / each-opponent / symmetrical,
+    snapshotting the battlefield first (damage is simultaneous).
+  👉 **I also corrected the UNSUPPORTED HINTS, which feed UNSUPPORTED-MECHANICS.md.** Three now say
+  "a <kind> template the compiler does not recognize yet" (the system exists; the printed shape is
+  what is missing), and the bounce hint is DELETED — so "when ~ enters, return target creature to
+  its owner's hand" now explains as **"targets chosen by a triggered ability"**, the real blocker.
+  A stale hint sends the next agent to implement something that already works; treat the hint text
+  as part of the feature, not decoration.
+  ⚠️ **Machine was memory-starved** (~200-700 MB free, several agent sessions at once): `vitest`
+  worker spawn failed repeatedly under Git-bash with `fork: Resource temporarily unavailable` /
+  `spawn UNKNOWN`. Running the same command through **PowerShell** worked. Stop any dev server you
+  are not using before a full-suite run.
+  (Worker — pushed, NOT merged.)
+
 - 2026-08-14 DESKTOP-90PJPM4: `feat/conditional-taplands` PUSHED (packages/core + cards/compile).
   Merged latest main (incl. the a-la-carte card adder) — **1489 tests, build exit 0**.
   Builds directly on `feat/activated-abilities`, so **merge that one first**.
