@@ -34,8 +34,24 @@ export { createAiRegistry } from './pilot.js';
 
 // Built-in pilots + their ids.
 export { RANDOM_PILOT_ID, createRandomPilot } from './random.js';
-export { HEURISTIC_PILOT_ID, createHeuristicPilot } from './heuristic.js';
+export { HEURISTIC_PILOT_ID, createHeuristicPilot, policyCandidates } from './heuristic.js';
+export type { PolicyCandidate } from './heuristic.js';
 export { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
+export { HYBRID_PILOT_ID, createHybridPilot } from './hybrid.js';
+
+/**
+ * The hybrid search's knobs and the evaluation seam (§29–31 of the program
+ * brief): `evaluateState` / `evaluatePolicy`, initially backed by the heuristic
+ * so a learned model can drop in later without the search changing.
+ */
+export type { HybridConfig, SearchBudget } from './hybrid-config.js';
+export { DEFAULT_HYBRID_CONFIG, FAST_HYBRID_CONFIG, PLAY_HYBRID_CONFIG } from './hybrid-config.js';
+export type { StateEvaluator, EvaluationWeights } from './evaluator.js';
+export {
+  createHeuristicEvaluator,
+  evaluatePosition,
+  DEFAULT_EVALUATION_WEIGHTS,
+} from './evaluator.js';
 
 // Tunable heuristic weights (data-driven, designer-tunable).
 export type { HeuristicWeights } from './weights.js';
@@ -53,11 +69,31 @@ export { answerChoiceHeuristically, answerAction, safeFallbackAction, cardValue 
 export type { MctsConfig } from './mcts-config.js';
 export { DEFAULT_MCTS_CONFIG, FAST_MCTS_CONFIG } from './mcts-config.js';
 
+/**
+ * SEARCH INSTRUMENTATION (`docs/plans/superhuman-ai-program.md` §2, §65).
+ * Optional observers a search pilot reports its measured shape into, plus the
+ * action-equivalence key that both MEASURES redundant search and (in the hybrid)
+ * REMOVES it. Exported so `packages/ai/bench` and tests can read the search's
+ * real branching/depth/ply counts instead of estimating them.
+ */
+export type {
+  DecisionStats,
+  SearchStatsSink,
+  CollectingStatsSink,
+  SearchStatsSummary,
+} from './search-stats.js';
+export {
+  actionEquivalenceKey,
+  countEquivalentActions,
+  createCollectingStatsSink,
+} from './search-stats.js';
+
 import type { AiRegistry } from './pilot.js';
 import { createAiRegistry } from './pilot.js';
 import { RANDOM_PILOT_ID, createRandomPilot } from './random.js';
 import { HEURISTIC_PILOT_ID, createHeuristicPilot } from './heuristic.js';
 import { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
+import { HYBRID_PILOT_ID, createHybridPilot } from './hybrid.js';
 
 /**
  * Build a registry pre-loaded with the built-in pilots. The sim/web call this to
@@ -76,6 +112,7 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
   registry.registerPilot(RANDOM_PILOT_ID, () => createRandomPilot());
   registry.registerPilot(HEURISTIC_PILOT_ID, () => createHeuristicPilot());
   registry.registerPilot(MCTS_PILOT_ID, () => createMctsPilot());
+  registry.registerPilot(HYBRID_PILOT_ID, () => createHybridPilot());
 }
 
 /**
@@ -114,8 +151,22 @@ export function registerBuiltInPilots(registry: AiRegistry): void {
  */
 export const DEFAULT_PILOT_ID = HEURISTIC_PILOT_ID;
 
-/** The pilot ids a consumer may select from data (CLI flag, UI picker). */
-export const SELECTABLE_PILOT_IDS: readonly string[] = [HEURISTIC_PILOT_ID, MCTS_PILOT_ID, RANDOM_PILOT_ID];
+/**
+ * The pilot ids a consumer may select from data (CLI flag, UI picker).
+ *
+ * These are the brief's §59 selectable MODES: `heuristic` (the fast policy
+ * baseline), `mcts` (VANILLA_MCTS — the research control the hybrid must beat),
+ * `hybrid` (policy prior + PUCT + heuristic leaf evaluation) and `random` (the
+ * determinism/sanity baseline). Having all four selectable from data is what
+ * makes "test every change against the previous best" a command rather than a
+ * code change.
+ */
+export const SELECTABLE_PILOT_IDS: readonly string[] = [
+  HEURISTIC_PILOT_ID,
+  HYBRID_PILOT_ID,
+  MCTS_PILOT_ID,
+  RANDOM_PILOT_ID,
+];
 
 /**
  * Convenience: resolve a pilot by id from a fresh default registry. For one-off

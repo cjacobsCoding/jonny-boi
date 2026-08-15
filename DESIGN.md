@@ -110,6 +110,95 @@ machine-dependent and destroys the common-random-numbers property the paired A/B
 / push lethal) rather than cast blind, and mana is tapped from a **funding plan** so the pilot stops
 tapping once a cost is covered.
 
+### 3.4a The `hybrid` search pilot — ✅ done  *(Phases 1–4 of the superhuman-AI program)*
+`docs/plans/superhuman-ai-program.md` §58 phases 1–4, built **on measurement, not on intuition**. The
+NO-GO above was about *naive MCTS as a drop-in pilot*, not about search. Re-asking the question properly
+reverses the result.
+
+**Phase 1 — instrumented first** (`packages/ai/src/search-stats.ts`, `bench/mcts-bench.mjs instrument`).
+The vanilla search reports its own shape now; the numbers said where the problem was:
+
+| measured on vanilla `mcts`, 24 real mid-game positions | value |
+|---|---|
+| root branching, mean / max | **4.8 / 9** — branching was never the problem |
+| engine plies per simulation | **105.8** = 5.0 in-tree + **100.8 rollout** → **95% of all work is rollout** |
+| rollouts that reach a terminal | **25%** — the other 75% pay 100 plies and get a positional guess anyway |
+| cost vs `rolloutDepth` | **linear**: 0.75 MB/decision at 1 → 18.9 MB at 120 |
+| offered actions that are strategically duplicate | **41.6%** (42,806 → 25,015 over 20 real games) |
+| decisions with a single legal action | **25.7%** |
+| decision time, mean / p95 | **39 ms / 160 ms** |
+
+**Phases 2–4 — what changed, each aimed at a measured number.**
+- **Atomic action space** (`policyCandidates` in `heuristic.ts`). A search candidate is a whole funded
+  play — the taps *and* the cast — planned through core's `planManaPayment`, the same planner the
+  heuristic pays with. A naked `tapForMana` is **not in the search space at all**, so the recorded
+  tap-and-don't-spend failure has no representation. Equivalent actions collapse via
+  `actionEquivalenceKey` (five Islands ⇒ one option), and a position whose policy offers one option is
+  auto-resolved with no search node.
+- **PUCT + progressive widening + policy prior** (`hybrid.ts`). `P(s,a) ∝ exp(score/temperature)` from the
+  heuristic's own scoring, with a **floor prior** so the heuristic can make an option unlikely but never
+  impossible. Rewards back up **adversarially** — an opponent node minimises them, where vanilla MCTS
+  maximised the decider's reward at every node.
+- **Leaf evaluation instead of playouts** (`evaluator.ts`, the brief's §30 `evaluateState` /
+  `evaluatePolicy` seam, initially heuristic-backed so a learned model drops in later). Life, board, card
+  advantage, mana development, untapped mana, body count and lethal-board, each a named tunable weight —
+  explicitly *not* "life total + card count".
+
+**Measured result — HYBRID vs HEURISTIC, seat and play both rotated** (the identical protocol that
+produced the 40.8% above). ⚠️ **Two matchups were measured, and they do not agree — read both:**
+
+| matchup | pilot | win rate vs heuristic | 95% CI | mean decision |
+|---|---|---|---|---|
+| Mono-Red Aggro vs Boros Aggro, n=120 | `mcts` (vanilla) | 40.8% | [32.5%, 49.8%] | 39 ms |
+| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** | **60.0%** | **[51.1%, 68.3%]** | 7.07 ms (p95 66 ms) |
+| UW Control vs Golgari Midrange, n=80 | `hybrid` | 53.8% | **[42.9%, 64.3%]** | 27.7 ms (p95 155 ms) |
+
+On the aggro matchup the interval **excludes 50%** — the hybrid is genuinely stronger than the policy it
+takes its prior from, which is what vanilla MCTS failed to be. On the slower control matchup the point
+estimate still favours the hybrid but the interval **includes 50%**: at n=80 that result is
+**inconclusive**, not a win. Do not quote the 60% as "the" number. The honest summary is *significantly
+stronger on fast, tactical boards; unproven on grindy ones*, and closing that needs more games (and,
+per §11–12 of the brief, a tactical solver the search does not yet have).
+
+Note also that decision cost is **board-size dependent**: 7 ms on aggro boards, 28 ms on control boards,
+because the policy scores every castable card and plans its funding at every node.
+
+**It SCALES — the property that says this is a search and not a constant.** Same matchup, same 120 seeded
+games, only the simulation budget varied (`bench/mcts-bench.mjs scaling`):
+
+| budget | n | win rate vs heuristic | 95% CI | mean decision |
+|---|---|---|---|---|
+| 16 sims | 120 | 48.3% | [39.6%, 57.2%] | 0.29 ms |
+| 64 sims | 120 | 53.3% | [44.4%, 62.0%] | 2.26 ms |
+| 256 sims | 120 | **60.0%** | **[51.1%, 68.3%]** | 16.8 ms |
+| 1024 sims | 60 | 61.7% | [49.0%, 72.9%] | 88.0 ms |
+
+Monotone in the budget. At 16 simulations the pilot is indistinguishable from its own prior, which is the
+correct sanity check — with almost no search a policy-guided search should reproduce the policy, and it
+does.
+
+⚠️ **It also PLATEAUS, and that is the more useful finding.** 16→256 buys **+11.7 points** for 16× the
+compute; 256→1024 buys **+1.7** for another 4×. Beyond a few hundred simulations the binding constraint
+stops being search depth and becomes **evaluator accuracy** — the search converges to the best line *its
+evaluation function can see*. So the next real gain is not a bigger budget: it is the brief's §11–12
+(tactical solver for lethal / anti-lethal / combat) and §31 (a learned value function), not more
+iterations of what is here.
+
+`DEFAULT_PILOT_ID` **stays `heuristic`** — the hybrid is ~1400× the heuristic's per-decision cost, and
+re-defaulting is a separate decision that needs a gauntlet-wide throughput case, not a head-to-head win.
+
+⚠️ **A methodological finding for the Lab, worth knowing before anyone tunes a deck.** Running the whole
+gauntlet with `--pilot hybrid` (both seats) moved Mono-Red Aggro's win rate from **32.9% → 19.0%**. That
+is not a pilot bug and it is not a strength claim: when *both* sides play better, the aggro deck's edge
+against the field shrinks, because a large part of it was punishing weak blocking. **Deck verdicts are
+pilot-relative.** An A/B swap result is a statement about that card *at that level of play*.
+
+⚠️ **Two budget policies, deliberately not unified** (`SearchBudget`). `simulations` is deterministic and
+is the **only** kind the Lab's evaluation path may use; `millis` (`PLAY_HYBRID_CONFIG`) is for interactive
+play only. A wall-clock budget makes the search machine-dependent and destroys the common-random-numbers
+property the paired A/B verdict rests on — the same trap `MctsConfig.maxDecisionMillis` documents. Pinned
+by a test.
+
 ### 3.5 Sim harness + statistics — ✅ done
 Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B
 single-card-swap** test (paired / common-random-numbers + **McNemar's test**) that returns a significance
