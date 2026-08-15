@@ -31,11 +31,14 @@ import type {
   EffectContext,
   EffectPrimitive,
   EffectRegistry,
+  PlayerId,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import { PLUS_ONE_COUNTER, effectivePower, isCreature, isLegalTarget } from '@jonny-boi/core';
 import {
+  boolParam,
   changeLife,
+  moveOwnedCard,
   restrictionParam,
   firstPermanentTarget,
   firstPlayerTarget,
@@ -420,6 +423,111 @@ function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean 
   return true;
 }
 
+/**
+ * "Target player mills N cards" — move the top N of a library to its graveyard.
+ *
+ * Milling is a real clock (a decked player loses), so this moves cards through
+ * the same owned-zone path a draw does rather than deleting them: a milled card
+ * is in the graveyard, where graveyard effects can still see it.
+ *
+ * Params: `amount` (cards to mill), `self` (mill the controller instead of a
+ * target — the self-mill template).
+ */
+export const mill: EffectPrimitive = (ctx) => {
+  const amount = intParam(ctx, 'amount', 0);
+  if (amount <= 0) return;
+  const who = boolParam(ctx, 'self', false)
+    ? ctx.controller
+    : (firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller));
+  const player = ctx.state.players[who];
+  // A library with fewer cards than the mill amount empties; the loss is the
+  // engine's decking rule on the next draw, not something this primitive forces.
+  const count = Math.min(amount, player.library.length);
+  for (let i = 0; i < count; i++) {
+    const card = player.library[0];
+    if (!card) break;
+    moveOwnedCard(ctx, who, card.instanceId, 'library', 'graveyard');
+  }
+  if (count > 0) ctx.emit({ type: 'cardsMilled', player: who, amount: count });
+};
+
+/**
+ * "~ fights target creature" — each deals damage equal to its power to the other,
+ * simultaneously.
+ *
+ * Simultaneity matters: a fight where the first death cancelled the second
+ * creature's damage would let a 3/3 kill a 4/4 and survive. Both damage amounts
+ * are read BEFORE either is applied, so a mutual kill kills both — which is what
+ * the printed card does.
+ */
+export const fight: EffectPrimitive = (ctx) => {
+  const self = selfIfCreature(ctx);
+  const other = firstPermanentTarget(ctx);
+  if (!self || !other || !isCreature(other.def)) return;
+  if (self.instanceId === other.instanceId) return; // a creature cannot fight itself
+
+  const selfPower = effectivePower(self);
+  const otherPower = effectivePower(other);
+
+  if (otherPower > 0) {
+    self.damageMarked += otherPower;
+    ctx.emit({
+      type: 'damageDealt',
+      source: other.instanceId,
+      target: self.instanceId,
+      amount: otherPower,
+      combat: false,
+    });
+  }
+  if (selfPower > 0) {
+    other.damageMarked += selfPower;
+    ctx.emit({
+      type: 'damageDealt',
+      source: self.instanceId,
+      target: other.instanceId,
+      amount: selfPower,
+      combat: false,
+    });
+  }
+  // Death is the engine's state-based check, exactly as with combat damage.
+};
+
+/**
+ * Damage split across a whole group at once — "deals N damage to each creature",
+ * "to each opponent", "to each creature and each player".
+ *
+ * One primitive rather than three because the printed templates differ only in
+ * WHO is hit, and that is data: `creatures` and `opponents`/`players` flags.
+ */
+export const dealDamageToEach: EffectPrimitive = (ctx) => {
+  const amount = intParam(ctx, 'amount', 0);
+  if (amount <= 0) return;
+
+  if (boolParam(ctx, 'creatures', false)) {
+    // Snapshot first: damage is dealt simultaneously, so a creature dying to it
+    // must not change who else gets hit.
+    for (const creature of [...ctx.state.battlefield].filter((c) => isCreature(c.def))) {
+      creature.damageMarked += amount;
+      ctx.emit({
+        type: 'damageDealt',
+        source: ctx.source.instanceId,
+        target: creature.instanceId,
+        amount,
+        combat: false,
+      });
+    }
+  }
+
+  const hitOpponents = boolParam(ctx, 'opponents', false);
+  const hitEveryPlayer = boolParam(ctx, 'players', false);
+  if (hitOpponents || hitEveryPlayer) {
+    const victims: PlayerId[] = hitEveryPlayer
+      ? [ctx.controller, otherPlayer(ctx.controller)]
+      : [otherPlayer(ctx.controller)];
+    for (const victim of victims) changeLife(ctx, victim, -amount);
+  }
+};
+
 /** Destroy a creature: move it to its owner's graveyard and emit `creatureDied`. */
 function destroyCreature(ctx: EffectContext, creature: CardInstance): void {
   movePermanentTo(ctx, creature, 'graveyard');
@@ -450,6 +558,9 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   counterSpell,
   createToken,
   tapTarget,
+  mill,
+  fight,
+  dealDamageToEach,
   ...CHOICE_PRIMITIVES,
 });
 

@@ -113,6 +113,7 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
 const SPELL_TARGET: TargetRestriction = 'spell';
+const PLAYER_TARGET: TargetRestriction = 'player';
 
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
@@ -380,6 +381,81 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^destroy all creatures$/,
     build() {
       return effects({ primitive: 'destroyAll' });
+    },
+  },
+  {
+    id: 'return-target-permanent-to-hand',
+    description: '"Return target creature to its owner\'s hand" (bounce)',
+    pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
+    needsChosenTarget: true,
+    build() {
+      // `returnToHand` has existed in the primitive library the whole time with
+      // no rule able to reach it — bounce was reported unsupported purely for
+      // want of this pattern.
+      return effects({ primitive: 'returnToHand', params: { targets: CREATURE_TARGET } });
+    },
+  },
+  {
+    id: 'creature-fights',
+    description: '"~ fights target creature"',
+    pattern: /^~ fights target creature$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'fight', params: { targets: CREATURE_TARGET } });
+    },
+  },
+  {
+    id: 'target-player-mills',
+    description: '"Target player mills N cards"',
+    pattern: new RegExp(`^target (player|opponent) mills ${COUNT_TOKEN} cards?$`),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = parseCount(match[2]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'mill', params: { amount, targets: PLAYER_TARGET } });
+    },
+  },
+  {
+    id: 'self-mill',
+    description: '"You mill N cards" / "Mill N cards"',
+    pattern: new RegExp(`^(?:you )?mills? ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'mill', params: { amount, self: true } });
+    },
+  },
+  {
+    id: 'damage-to-each-creature',
+    description: '"~ deals N damage to each creature"',
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each creature$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'dealDamageToEach', params: { amount, creatures: true } });
+    },
+  },
+  {
+    id: 'damage-to-each-opponent',
+    description: '"~ deals N damage to each opponent"',
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each opponent$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'dealDamageToEach', params: { amount, opponents: true } });
+    },
+  },
+  {
+    id: 'damage-to-each-creature-and-player',
+    description: '"~ deals N damage to each creature and each player"',
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each creature and each player$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'dealDamageToEach',
+        params: { amount, creatures: true, players: true },
+      });
     },
   },
   {

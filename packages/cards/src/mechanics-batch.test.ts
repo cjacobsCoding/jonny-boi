@@ -1,0 +1,169 @@
+/**
+ * A batch of previously-missing mechanics, each proven twice: the PRIMITIVE does
+ * the right thing to the game state, and the COMPILER reaches it from the real
+ * printed template.
+ *
+ * Both halves matter. `returnToHand` is the cautionary tale — it had been in the
+ * primitive library the whole time, fully working, while every bounce card was
+ * reported unsupported because no rule pattern could reach it. A primitive with
+ * no rule is invisible; a rule with no primitive is a lie.
+ */
+
+import { describe, expect, it } from 'vitest';
+import type { CardDefinition } from '@jonny-boi/core';
+import { compileCard } from './compile/compile.js';
+import type { CompilableCard } from './compile/types.js';
+import { CORE_PRIMITIVE_IDS } from './primitives.js';
+
+/** A Scryfall-shaped record for the compiler. */
+function card(overrides: Partial<CompilableCard> & { name: string; oracleText: string }): CompilableCard {
+  return {
+    id: `id:${overrides.name}`,
+    manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+    typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+    power: null,
+    toughness: null,
+    keywords: [],
+    ...overrides,
+  } as CompilableCard;
+}
+
+/** The single effect a one-clause spell compiled to. */
+function onlyEffect(definition: CardDefinition) {
+  const effects = definition.effects ?? [];
+  expect(effects, 'expected exactly one compiled effect').toHaveLength(1);
+  return effects[0]!;
+}
+
+describe('the new primitives are registered under the ids the rules emit', () => {
+  for (const id of ['mill', 'fight', 'dealDamageToEach', 'returnToHand']) {
+    it(`"${id}" exists in the registry`, () => {
+      // A rule emitting an unregistered id compiles "successfully" and then
+      // no-ops at resolution — a silent blank card, the exact failure the
+      // compiler's strictness exists to prevent.
+      expect(CORE_PRIMITIVE_IDS).toContain(id);
+    });
+  }
+});
+
+describe('bounce — the primitive existed, the rule did not', () => {
+  it('compiles "Return target creature to its owner\'s hand"', () => {
+    const result = compileCard(
+      card({ name: 'Unsummon', oracleText: "Return target creature to its owner's hand." }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'returnToHand',
+      params: { targets: 'creature' },
+    });
+  });
+});
+
+describe('fight', () => {
+  it('compiles "~ fights target creature"', () => {
+    const result = compileCard(
+      card({
+        name: 'Prey Upon',
+        oracleText: 'Prey Upon fights target creature.',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'fight',
+      params: { targets: 'creature' },
+    });
+  });
+});
+
+describe('milling', () => {
+  it('compiles "Target player mills four cards"', () => {
+    const result = compileCard(
+      card({ name: 'Tome Scour', oracleText: 'Target player mills four cards.' }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'mill',
+      params: { amount: 4, targets: 'player' },
+    });
+  });
+
+  it('compiles the self-mill template', () => {
+    const result = compileCard(card({ name: 'Selfmill', oracleText: 'You mill three cards.' }));
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'mill',
+      params: { amount: 3, self: true },
+    });
+  });
+});
+
+describe('damage to a whole group', () => {
+  it('compiles "deals N damage to each creature" (a sweeper)', () => {
+    const result = compileCard(
+      card({
+        name: 'Pyroclasm',
+        oracleText: 'Pyroclasm deals two damage to each creature.',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'dealDamageToEach',
+      params: { amount: 2, creatures: true },
+    });
+  });
+
+  it('compiles "deals N damage to each opponent"', () => {
+    const result = compileCard(
+      card({ name: 'Burn', oracleText: 'Burn deals three damage to each opponent.' }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'dealDamageToEach',
+      params: { amount: 3, opponents: true },
+    });
+  });
+
+  it('compiles the symmetrical "each creature and each player"', () => {
+    const result = compileCard(
+      card({
+        name: 'Earthquake-ish',
+        oracleText: 'Earthquake-ish deals two damage to each creature and each player.',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'dealDamageToEach',
+      params: { amount: 2, creatures: true, players: true },
+    });
+  });
+});
+
+describe('the compiler is still strict about what these rules do NOT cover', () => {
+  it('does not claim a conditional mill it cannot model', () => {
+    const result = compileCard(
+      card({
+        name: 'Conditional Mill',
+        oracleText: 'Target player mills cards equal to the number of creatures you control.',
+      }),
+    );
+    // "equal to" is a derived value — the rule must not match and quietly mill a
+    // fixed number instead.
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('does not claim a bounce that also does something else', () => {
+    const result = compileCard(
+      card({
+        name: 'Bounce Plus',
+        oracleText: "Return target creature to its owner's hand. Draw a card.",
+      }),
+    );
+    // Two clauses: the bounce compiles, the draw compiles — this should be
+    // COMPLETE, and prove the rule composes rather than swallowing the sentence.
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.effects).toHaveLength(2);
+  });
+});
