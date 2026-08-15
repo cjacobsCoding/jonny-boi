@@ -50,7 +50,6 @@
 import type { CardInstance, GameState, InstanceId } from '../state.js';
 import type { KeywordFlags } from '../card.js';
 import type { GameEvent } from '../events.js';
-import type { StaticAbility } from '../statics.js';
 import { staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 
 /**
@@ -107,23 +106,39 @@ const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'lifelink',
 ];
 
-/** The mutable accumulator an aggregation pass folds into before freezing. */
+/**
+ * The accumulator an aggregation pass folds into. Structurally an `AggregatedMod`
+ * with the readonly-ness dropped, so the SAME object can be built up in place and
+ * then handed out as the final immutable value — the index is built once, not
+ * built-then-copied. That halved the allocations on a board carrying an anthem,
+ * where every affected creature needs an entry.
+ */
 interface MutableMod {
   power: number;
   toughness: number;
-  keywords: Record<string, boolean>;
+  keywords: KeywordFlags;
 }
 
-/** Fold one effect's keyword grants into a mutable accumulator. */
-function mergeKeywords(into: Record<string, boolean>, grant: KeywordFlags | undefined): void {
+/**
+ * The keyword object an accumulator starts with. Shared and frozen: the vast
+ * majority of modifications are P/T-only, so allocating a fresh `{}` per affected
+ * creature was pure waste. {@link grantInto} replaces it with a real object the
+ * first time a keyword is actually granted (copy-on-write).
+ */
+const NO_KEYWORDS: KeywordFlags = Object.freeze({});
+
+/** Fold one keyword grant into an accumulator, allocating only if something is set. */
+function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
   if (!grant) return;
   for (const key of KEYWORD_KEYS) {
-    if (grant[key]) into[key] = true;
+    if (!grant[key]) continue;
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as Record<string, boolean>)[key] = true;
   }
 }
 
 /** The empty aggregate returned for a permanent with no active modifications. */
-export const NO_MOD: AggregatedMod = Object.freeze({ power: 0, toughness: 0, keywords: Object.freeze({}) });
+export const NO_MOD: AggregatedMod = Object.freeze({ power: 0, toughness: 0, keywords: NO_KEYWORDS });
 
 /**
  * The index handed back when nothing on the board modifies anything. Shared and
@@ -133,52 +148,32 @@ export const NO_MOD: AggregatedMod = Object.freeze({ power: 0, toughness: 0, key
 const EMPTY_INDEX: ContinuousIndex = new Map<InstanceId, AggregatedMod>();
 
 /**
- * One static ability that is live right now, paired with the permanent radiating it.
- * Collected per aggregation pass so the source's controller and identity (for the
- * "other" exclusion) are available while matching.
- */
-interface ActiveStatic {
-  readonly source: CardInstance;
-  readonly ability: StaticAbility;
-}
-
-/**
- * The static abilities currently on the battlefield, or `null` when there are none.
+ * The permanents on the battlefield that radiate at least one static ability, or
+ * `null` when there are none.
  *
  * Returning `null` rather than an empty array is the whole point: a board with no
  * anthem — the normal case, and the one the sim spends nearly all its time in —
  * walks the battlefield checking one property per permanent and allocates nothing.
- * Inert declarations are dropped here so the matching loop below never runs for a
- * static that could not change a number anyway.
+ * The sources themselves are stored (not source/ability pairs) so discovery costs no
+ * wrapper objects either; the abilities are read back off `def.statics`.
  */
-function collectActiveStatics(state: GameState): ActiveStatic[] | null {
-  let active: ActiveStatic[] | null = null;
+function collectStaticSources(state: GameState): CardInstance[] | null {
+  let sources: CardInstance[] | null = null;
   for (const perm of state.battlefield) {
     const declared = perm.def.statics;
-    if (!declared || declared.length === 0) continue;
-    for (const ability of staticsOf(perm.def)) {
-      if (staticIsInert(ability)) continue;
-      (active ??= []).push({ source: perm, ability });
-    }
+    if (declared !== undefined && declared.length > 0) (sources ??= []).push(perm);
   }
-  return active;
+  return sources;
 }
 
 /** Get (creating if needed) the accumulator for one instance. */
 function accumulatorFor(map: Map<InstanceId, MutableMod>, id: InstanceId): MutableMod {
   let agg = map.get(id);
-  if (!agg) {
-    agg = { power: 0, toughness: 0, keywords: {} };
+  if (agg === undefined) {
+    agg = { power: 0, toughness: 0, keywords: NO_KEYWORDS };
     map.set(id, agg);
   }
   return agg;
-}
-
-/** Fold a P/T delta + keyword grant into an accumulator (layers 3 and 4 alike). */
-function foldInto(agg: MutableMod, power: number | undefined, toughness: number | undefined, keywords: KeywordFlags | undefined): void {
-  agg.power += power ?? 0;
-  agg.toughness += toughness ?? 0;
-  mergeKeywords(agg.keywords, keywords);
 }
 
 /**
@@ -187,35 +182,49 @@ function foldInto(agg: MutableMod, power: number | undefined, toughness: number 
  * effects. Call once before a batch of stat reads (combat, SBAs, legality,
  * serialization) and look each permanent up in O(1).
  *
- * Cost: O(battlefield) to discover statics — one property check per permanent, and
+ * Cost: O(battlefield) to discover statics — one property check per permanent — then
  * an immediate shared-empty return when there are none and no temporary effects
- * either. When statics ARE present it is O(battlefield × active statics), which for
- * a real board is a couple of dozen filter checks.
+ * either, so a board without anthems allocates nothing at all. When statics ARE
+ * present it is O(sources × abilities × battlefield) filter checks, with the source
+ * and ability hoisted out of the inner loop and inert abilities skipped once rather
+ * than per candidate.
  */
 export function indexContinuous(state: GameState): ContinuousIndex {
-  const statics = collectActiveStatics(state);
-  if (statics === null && state.continuous.length === 0) return EMPTY_INDEX;
+  const sources = collectStaticSources(state);
+  if (sources === null && state.continuous.length === 0) return EMPTY_INDEX;
 
   const map = new Map<InstanceId, MutableMod>();
-  // Layer 3 — statics, matched against every permanent currently in play.
-  if (statics !== null) {
-    for (const perm of state.battlefield) {
-      for (const { source, ability } of statics) {
-        if (!staticAppliesTo(ability, source, perm)) continue;
-        foldInto(accumulatorFor(map, perm.instanceId), ability.power, ability.toughness, ability.keywords);
+  // Layer 3 — statics. The SOURCE ability is the outer loop, deliberately: it hoists
+  // the inert check, the ability lookup and the deltas out of the per-candidate loop,
+  // so the inner body is one filter test plus (only on a match) the accumulator. The
+  // candidate-outer arrangement reads more naturally but re-runs those lookups once
+  // per permanent per ability and measured ~2x slower on a full board.
+  if (sources !== null) {
+    const battlefield = state.battlefield;
+    for (const source of sources) {
+      for (const ability of staticsOf(source.def)) {
+        if (staticIsInert(ability)) continue;
+        const power = ability.power ?? 0;
+        const toughness = ability.toughness ?? 0;
+        const keywords = ability.keywords;
+        for (const candidate of battlefield) {
+          if (!staticAppliesTo(ability, source, candidate)) continue;
+          const agg = accumulatorFor(map, candidate.instanceId);
+          agg.power += power;
+          agg.toughness += toughness;
+          if (keywords !== undefined) grantInto(agg, keywords);
+        }
       }
     }
   }
   // Layer 4 — until-end-of-turn effects, folded onto the same accumulators.
   for (const eff of state.continuous) {
-    foldInto(accumulatorFor(map, eff.targetInstanceId), eff.power, eff.toughness, eff.keywords);
+    const agg = accumulatorFor(map, eff.targetInstanceId);
+    agg.power += eff.power ?? 0;
+    agg.toughness += eff.toughness ?? 0;
+    grantInto(agg, eff.keywords);
   }
-
-  const out = new Map<InstanceId, AggregatedMod>();
-  for (const [id, agg] of map) {
-    out.set(id, { power: agg.power, toughness: agg.toughness, keywords: agg.keywords as KeywordFlags });
-  }
-  return out;
+  return map;
 }
 
 /**
@@ -227,19 +236,21 @@ export function indexContinuous(state: GameState): ContinuousIndex {
  * no temporary effect — statics only reach permanents in play.
  */
 export function aggregateFor(state: GameState, instanceId: InstanceId): AggregatedMod {
-  const agg: MutableMod = { power: 0, toughness: 0, keywords: {} };
+  const agg: MutableMod = { power: 0, toughness: 0, keywords: NO_KEYWORDS };
   let any = false;
 
   // Layer 3 — statics. Find the permanent once, then test each live static against it.
   const target = findPermanent(state, instanceId);
-  if (target) {
-    for (const perm of state.battlefield) {
-      const declared = perm.def.statics;
-      if (!declared || declared.length === 0) continue;
+  if (target !== undefined) {
+    for (const source of state.battlefield) {
+      const declared = source.def.statics;
+      if (declared === undefined || declared.length === 0) continue;
       for (const ability of declared) {
-        if (staticIsInert(ability) || !staticAppliesTo(ability, perm, target)) continue;
+        if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
         any = true;
-        foldInto(agg, ability.power, ability.toughness, ability.keywords);
+        agg.power += ability.power ?? 0;
+        agg.toughness += ability.toughness ?? 0;
+        grantInto(agg, ability.keywords);
       }
     }
   }
@@ -247,11 +258,12 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   for (const eff of state.continuous) {
     if (eff.targetInstanceId !== instanceId) continue;
     any = true;
-    foldInto(agg, eff.power, eff.toughness, eff.keywords);
+    agg.power += eff.power ?? 0;
+    agg.toughness += eff.toughness ?? 0;
+    grantInto(agg, eff.keywords);
   }
 
-  if (!any) return NO_MOD;
-  return { power: agg.power, toughness: agg.toughness, keywords: agg.keywords as KeywordFlags };
+  return any ? agg : NO_MOD;
 }
 
 /**
