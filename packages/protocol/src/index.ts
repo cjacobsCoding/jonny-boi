@@ -33,6 +33,23 @@ import type {
  */
 export const PROTOCOL_VERSION = 2;
 
+/**
+ * The oldest version a current client can still hold a useful game on.
+ *
+ * The two halves of this app deploy at different speeds: the web app ships
+ * automatically on every merge, while the game server is a bundle someone copies
+ * onto a NAS by hand. So the server is routinely the stale side, and a strict
+ * equality check turns that skew into a total outage — the lobby refuses to open
+ * at all, for a difference that only affects some cards.
+ *
+ * v1 → v2 added `MaskedGameView.pendingChoice`. A v1 server simply omits the
+ * field, which a v2 client already reads as "no question parked". Everything else
+ * — rooms, lobby, mulligans, casting, combat, reconnect — is unchanged, so a v2
+ * client can play a v1 server for any game that never asks a player to choose.
+ * The client negotiates down to this floor and says so, rather than failing shut.
+ */
+export const MIN_COMPATIBLE_PROTOCOL_VERSION = 1;
+
 // ---------------------------------------------------------------------------
 // Decklists carried over the wire (so the server can build ANY deck — including
 // the user's custom decks — from the shared card pool, then validate it).

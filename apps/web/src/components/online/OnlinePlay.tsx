@@ -52,6 +52,15 @@ export function OnlinePlay({ decks }: { decks: DecksApi }): ReactElement {
             Opponent disconnected — waiting for them to reconnect…
           </span>
         )}
+        {online.legacyServer && (
+          // Say this up front. The game is fully playable, but a card that asks a
+          // player to choose can't be answered against an older server — finding
+          // that out mid-game, with a spell half-resolved, is much worse.
+          <span className="online__banner online__banner--warn" role="status">
+            The game server is running an older version — cards that ask you to choose
+            won&rsquo;t work until it&rsquo;s updated.
+          </span>
+        )}
       </div>
 
       {state.error && (

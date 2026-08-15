@@ -6,7 +6,8 @@ import {
 } from '@jonny-boi/sim';
 import { allCards } from '../lib/cards.js';
 import { loadCardPool } from '../lib/sim-pool.js';
-import { resolveEntries, deckSize, unsupportedCardNames, type Deck } from '../lib/deck.js';
+import { resolveEntries, unsupportedCardNames, type Deck } from '../lib/deck.js';
+import { gauntletHeroDecks, isGauntletDeckId } from '../lib/decklist/gauntletDecks.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
 import { useSimWorker } from '../lib/useSimWorker.js';
@@ -47,8 +48,17 @@ export function LabView({ decks }: { decks: DecksApi }): ReactElement {
 
   const sim = useSimWorker();
 
+  // Anything selectable as the hero: your saved decks, then the gauntlet decks.
+  // The gauntlet decks are decks — being able to test one against the field (or
+  // against the rest of it) is the obvious first question to ask the lab, and
+  // it also means the Lab is usable before you have built anything yourself.
+  const heroCandidates = useMemo(() => [...decks.decks, ...gauntletHeroDecks()], [decks.decks]);
+
   const hero =
-    decks.decks.find((d) => d.id === heroId) ?? decks.activeDeck ?? decks.decks[0] ?? null;
+    heroCandidates.find((d) => d.id === heroId) ??
+    decks.activeDeck ??
+    heroCandidates[0] ??
+    null;
 
   // The hero validated through the SIM's own rules (60-card / 4-of), so the
   // message matches exactly what the engine would reject — not a UI approximation.
@@ -62,7 +72,10 @@ export function LabView({ decks }: { decks: DecksApi }): ReactElement {
   );
   const chosenOpponents = opponentNames.filter((n) => eligibleOpponents.some((d) => d.name === n));
 
-  if (decks.decks.length === 0 || (decks.decks.length === 1 && deckSize(decks.decks[0]!) === 0)) {
+  // Only truly stuck when there is nothing at all to run — which no longer happens,
+  // since the gauntlet decks are always available as heroes. A brand-new user can
+  // open the Lab and immediately see how the meta decks fare against each other.
+  if (heroCandidates.length === 0) {
     return <EmptyDecksPrompt />;
   }
 
@@ -80,7 +93,7 @@ export function LabView({ decks }: { decks: DecksApi }): ReactElement {
   return (
     <div className="lab">
       <LabConfigBar
-        decks={decks}
+        heroCandidates={heroCandidates}
         heroId={hero?.id ?? null}
         onHero={(id) => {
           setHeroId(id);
@@ -194,8 +207,22 @@ function validateHero(hero: Deck): string[] {
 }
 
 /** The top config bar: hero picker, seed, and the gauntlet-opponent toggles. */
+/** One labelled group of hero options; renders nothing when the group is empty. */
+function HeroOptionGroup({ label, decks }: { label: string; decks: readonly Deck[] }): ReactElement {
+  if (decks.length === 0) return <></>;
+  return (
+    <optgroup label={label}>
+      {decks.map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.name} · {d.cards.reduce((s, e) => s + e.count, 0)} cards
+        </option>
+      ))}
+    </optgroup>
+  );
+}
+
 function LabConfigBar({
-  decks,
+  heroCandidates,
   heroId,
   onHero,
   seed,
@@ -204,7 +231,7 @@ function LabConfigBar({
   chosen,
   onToggleOpponent,
 }: {
-  decks: DecksApi;
+  heroCandidates: readonly Deck[];
   heroId: string | null;
   onHero: (id: string) => void;
   seed: number;
@@ -224,11 +251,16 @@ function LabConfigBar({
             onChange={(e) => onHero(e.target.value)}
             aria-label="Hero deck"
           >
-            {decks.decks.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} · {d.cards.reduce((s, e) => s + e.count, 0)} cards
-              </option>
-            ))}
+            {/* Grouped so it is obvious which decks are yours and which are the
+                bundled meta decks you are being tested against. */}
+            <HeroOptionGroup
+              label="Your decks"
+              decks={heroCandidates.filter((d) => !isGauntletDeckId(d.id))}
+            />
+            <HeroOptionGroup
+              label="Gauntlet decks"
+              decks={heroCandidates.filter((d) => isGauntletDeckId(d.id))}
+            />
           </select>
         </label>
 

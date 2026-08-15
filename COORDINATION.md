@@ -11,6 +11,14 @@ agent sees. Read it at the start of a session; update your section before you pu
    **disjoint package** (DESIGN.md §6). Check this file's in-flight table + `git branch -r` before
    claiming work so two agents don't grab the same files.
 2b. **Pick a unique branch slug.** If a `feat/<slug>` already exists on the remote, choose another.
+2c. **NEVER `git checkout` in the primary checkout `D:\Cool Stuff\Claude\jonny-boi`.** It belongs to the
+   integrator and must stay on `main`. Work ONLY inside the worktree your brief names. This has now
+   broken three times, and the failure is silent and expensive: your commits land on whatever branch
+   you switched to, `git push origin main` then pushes the *stale local* `main` ref, and git reports
+   `non-fast-forward` / "branch tip is behind" while `git rev-list HEAD..origin/main` says you are 0
+   behind — a contradiction that wastes a long debug. **Before committing anywhere, run
+   `git rev-parse --abbrev-ref HEAD` and confirm it is the branch your brief assigned.** If you find
+   the primary checkout on the wrong branch, say so in your report; do not "fix" it mid-task.
 3. **Workers push branches; they do NOT merge to `main`.** One **integrator** merges reviewed green
    branches to `main`, ships, and publishes the build.
 4. **Know your build configs.** `npm test` (Vitest) judges green by "N passed, 0 failed"; the shippable
@@ -114,6 +122,27 @@ _Append dated notes here; keep them short. Newest at top._
   Vantage = 8 copies; the unconditional form already works, these need the choice system for
   "unless you pay 2 life").
   (Worker — pushed, NOT merged.)
+- 2026-08-15 DESKTOP-90PJPM4: `feat/card-alacarte` ✅ MERGED to main + deployed. Add ONE Scryfall card
+  by name from the card browser or mid-deck-build, fuzzy-matched ("lightnig bolt" resolves), screened
+  by the SAME compiler deck import uses. New files only, no edits to the compiler — safe alongside
+  in-flight `packages/cards/src/compile` work.
+  👉 **NEW SEAM — `apps/web/src/lib/cards/unsupportedRegistry.ts`.** Every clause the compiler refuses
+  is now COLLECTED, grouped by the missing engine SYSTEM (the unit of work — implement once, unblock
+  every card waiting on it), with the blocked cards and a verbatim clause. Exports Markdown via
+  `formatUnsupportedReport()`. **This is the queue to work from** — see the new
+  [UNSUPPORTED-MECHANICS.md](UNSUPPORTED-MECHANICS.md) for the contract and how to pick an item up.
+  👉 **NEW: [TESTING.md](TESTING.md)** indexes all 87 suites and what each guards, so there is one list
+  to run through after a change. It also records the two lessons this repo learned painfully: test
+  against the REAL vocabulary (the `destroy` vs `destroyTarget` fixture bug), and assert pilots play
+  SENSIBLY, not merely that games finish (the MCTS-as-default bug).
+  Also fixed: the card browser read the CURATED pool only, so an imported/added card never appeared
+  in it at all — now reads the full pool and subscribes to the store.
+  Deck-level honesty: `decklist/deckHealth.ts` badges any deck holding an unplayable card and names
+  the cards; one unplayable card ⇒ whole deck unplayable (a blank card silently skews an A/B verdict).
+  Suite **1460 passed / 0 failed**, build exit 0, Deploy PWA green.
+  ⚠️ Verified by tests + typecheck + production build + a clean browser boot (no console errors); the
+  add dialog was NOT driven interactively (the session's browser tooling was wedged), so the Scryfall
+  round-trip is proven only against stub responses. Worth a real click-through.
 
 - 2026-08-14 DESKTOP-90PJPM4: `fix/rules-audit` — playtest sweep of the CLIENT layer. The headless
   engine is clean (new `packages/sim/src/rules-audit.test.ts` plays full games and asserts zone
