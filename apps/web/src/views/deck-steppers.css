@@ -1,0 +1,53 @@
+/*
+ * Per-entry +/- steppers in the deck panel.
+ *
+ * The previous remove control was a bare "−" glyph with a transparent background
+ * and the faintest foreground colour in the palette, sitting at the end of a
+ * dense row — you had to already know it was there. So the only DISCOVERABLE way
+ * to change a card's count was to find that card again in the pool grid on the
+ * left, which is the opposite of where you are looking.
+ *
+ * These read as buttons: a visible surface, a border, a hit area big enough for
+ * touch. Own file rather than styles.css to stay clear of other in-flight work.
+ */
+
+.deck-step {
+  appearance: none;
+  flex: none;
+  /* A comfortable target on touch without making the row taller than its text. */
+  min-width: 1.6rem;
+  height: 1.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised, var(--color-surface));
+  color: var(--color-fg);
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 90ms ease, border-color 90ms ease, color 90ms ease;
+}
+
+.deck-step:hover:not(:disabled) {
+  border-color: var(--color-accent-soft);
+  color: var(--color-accent-soft);
+}
+
+.deck-step--remove:hover:not(:disabled) {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.deck-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Keyboard focus must stay obvious — these are the primary edit controls. */
+.deck-step:focus-visible {
+  outline: 2px solid var(--color-accent-soft);
+  outline-offset: 1px;
+}

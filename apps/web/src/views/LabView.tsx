@@ -4,7 +4,7 @@ import {
   validateDeck as validateSimDeck,
   type Deck as SimDeck,
 } from '@jonny-boi/sim';
-import { allCards } from '../lib/cards.js';
+import { allAvailableCards } from '../lib/cards.js';
 import { loadCardPool } from '../lib/sim-pool.js';
 import { resolveEntries, unsupportedCardNames, type Deck } from '../lib/deck.js';
 import { gauntletHeroDecks, isGauntletDeckId } from '../lib/decklist/gauntletDecks.js';
@@ -179,9 +179,18 @@ function heroOutOptions(hero: Deck): CardOption[] {
   return options.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** The full curated pool, as in-swap options (you can bring in any pool card). */
+/**
+ * Every card you can bring IN on a swap.
+ *
+ * Must be the FULL available pool, not the curated Scryfall index. Suggestions
+ * generates its candidates from the engine's pool (~150 cards), so reading the
+ * curated index (~32) here meant the Lab could recommend a swap — Kalonian Tusker
+ * for Birds of Paradise — that you then could not select in the A/B tab to verify.
+ * The two lists have to be drawn from the same pool or the feature contradicts
+ * itself.
+ */
 function poolInOptions(): CardOption[] {
-  return [...allCards]
+  return [...allAvailableCards()]
     .map((c) => ({ cardId: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }

@@ -213,6 +213,7 @@ function runSwapJob(req: Extract<SimRequest, { kind: 'swap' }>, lab: Lab): void 
     req.seed,
     lab.pool,
     lab.registry,
+    { swapScope: req.swapScope },
   );
 
   const elapsedSeconds = nowSeconds() - start;

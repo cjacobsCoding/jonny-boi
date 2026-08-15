@@ -10,6 +10,15 @@
  * shows the correct art for the card the engine actually plays. `name` is carried
  * too and is a secondary join key (the data-tools index is unique by both).
  *
+ * ACCURACY: a definition here is only as true as the index row it was written
+ * from, and a wrong pip in either would bias every A/B verdict silently. Three
+ * checks stand behind them, in increasing strength: `invariants.test.ts` proves
+ * the index is self-consistent; the compiler's frame tests (`compile.test.ts`)
+ * prove every definition below still matches its index row; and
+ * `npm run verify -w @jonny-boi/data-tools` (opt-in, network) proves the index
+ * still matches live Scryfall. Never hand-edit either side to make the other
+ * agree — refresh the index, then let the frame tests point at what to redo.
+ *
  * Effect-ref params carry every tunable value (damage amount, P/T delta, card
  * count, produced mana). The primitive ids referenced live in `../src/primitives`.
  *
@@ -326,11 +335,18 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 2 },
     power: 2,
     toughness: 1,
-    // "When Eternal Witness enters the battlefield, return target card from your
-    // graveyard to your hand." Authored as an `etb` TRIGGER (not a resolution
-    // script) so it fires on every entry — including a later blink/return — and
-    // the card that comes back is CHOSEN by its controller, not whichever card
-    // happened to be on top of the graveyard.
+    // "When this creature enters, you may return target card from your graveyard
+    // to your hand." The quoted text is the CURRENT Oracle wording carried by
+    // the card index — the comment used to quote the older, mandatory-sounding
+    // printing, which made this entry's `optional: true` look like an invention.
+    // It is not: the printed "you may" is why the return is declinable, and the
+    // index is the source of truth (`npm run verify -w @jonny-boi/data-tools`
+    // re-checks it against live Scryfall).
+    //
+    // Authored as an `etb` TRIGGER (not a resolution script) so it fires on every
+    // entry — including a later blink/return — and the card that comes back is
+    // CHOSEN by its controller, not whichever card happened to be on top of the
+    // graveyard.
     triggers: [
       {
         condition: { on: 'etb' },

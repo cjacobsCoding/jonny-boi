@@ -13,9 +13,16 @@
  *
  * Keywords and P/T are read through the continuous-effects layer (internal/
  * continuous.ts): a `ContinuousIndex` is built once per combat pass and threaded so
- * an "until end of turn" pump or granted keyword (e.g. temporary trample) affects
- * this combat and then wears off in cleanup. Combat damage is assigned and then
- * dealt; SBAs (run by the engine afterward) destroy lethally-damaged creatures.
+ * an "until end of turn" pump, a granted keyword (e.g. temporary trample), and any
+ * anthem-style STATIC on the battlefield all affect this combat through one path.
+ * Combat damage is assigned and then dealt; SBAs (run by the engine afterward)
+ * destroy lethally-damaged creatures.
+ *
+ * The index is built at the START of a damage step and used for that whole step,
+ * which is exactly right: a creature that dies during the step — an anthem included
+ * — is still on the battlefield while damage is being assigned. Its departure is
+ * observed by the SBA pass that follows, which rebuilds the index from scratch, so a
+ * creature the dead anthem was propping up dies in that same pass.
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
@@ -37,13 +44,17 @@ function power(inst: CardInstance, index: ContinuousIndex): number {
 }
 
 /**
- * Whether `blocker` may legally block `attacker` given evasion keywords. The
- * optional index lets the caller account for granted/temporary evasion; without it
- * a fresh index is built (one-off callers pay an O(effects) scan).
+ * Whether `blocker` may legally block `attacker` given evasion keywords.
+ *
+ * The index is REQUIRED, not optional: evasion can be granted by an until-EOT effect
+ * *or* by an anthem-style static, and a caller that omitted the index would silently
+ * judge legality against printed keywords only — letting a groundling block a
+ * creature that a static has given flying. Build it once with `indexContinuous` and
+ * thread it through (the engine already does, for exactly this reason).
  */
-export function canBlock(attacker: CardInstance, blocker: CardInstance, index?: ContinuousIndex): boolean {
+export function canBlock(attacker: CardInstance, blocker: CardInstance, index: ContinuousIndex): boolean {
   if (blocker.tapped) return false;
-  const idx = index ?? new Map();
+  const idx = index;
   const ak = kw(attacker, idx);
   const bk = kw(blocker, idx);
   if (ak.flying && !(bk.flying || bk.reach)) return false;

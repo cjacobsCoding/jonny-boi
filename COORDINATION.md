@@ -100,6 +100,27 @@ _Append dated notes here; keep them short. Newest at top._
   are not using before a full-suite run.
   (Worker — pushed, NOT merged.)
 
+- 2026-08-15 DESKTOP-90PJPM4: `feat/card-alacarte` ✅ MERGED to main + deployed. Add ONE Scryfall card
+  by name from the card browser or mid-deck-build, fuzzy-matched ("lightnig bolt" resolves), screened
+  by the SAME compiler deck import uses. New files only, no edits to the compiler — safe alongside
+  in-flight `packages/cards/src/compile` work.
+  👉 **NEW SEAM — `apps/web/src/lib/cards/unsupportedRegistry.ts`.** Every clause the compiler refuses
+  is now COLLECTED, grouped by the missing engine SYSTEM (the unit of work — implement once, unblock
+  every card waiting on it), with the blocked cards and a verbatim clause. Exports Markdown via
+  `formatUnsupportedReport()`. **This is the queue to work from** — see the new
+  [UNSUPPORTED-MECHANICS.md](UNSUPPORTED-MECHANICS.md) for the contract and how to pick an item up.
+  👉 **NEW: [TESTING.md](TESTING.md)** indexes all 87 suites and what each guards, so there is one list
+  to run through after a change. It also records the two lessons this repo learned painfully: test
+  against the REAL vocabulary (the `destroy` vs `destroyTarget` fixture bug), and assert pilots play
+  SENSIBLY, not merely that games finish (the MCTS-as-default bug).
+  Also fixed: the card browser read the CURATED pool only, so an imported/added card never appeared
+  in it at all — now reads the full pool and subscribes to the store.
+  Deck-level honesty: `decklist/deckHealth.ts` badges any deck holding an unplayable card and names
+  the cards; one unplayable card ⇒ whole deck unplayable (a blank card silently skews an A/B verdict).
+  Suite **1460 passed / 0 failed**, build exit 0, Deploy PWA green.
+  ⚠️ Verified by tests + typecheck + production build + a clean browser boot (no console errors); the
+  add dialog was NOT driven interactively (the session's browser tooling was wedged), so the Scryfall
+  round-trip is proven only against stub responses. Worth a real click-through.
 - 2026-08-14 DESKTOP-90PJPM4: `feat/conditional-taplands` PUSHED (packages/core + cards/compile).
   Merged latest main (incl. the a-la-carte card adder) — **1489 tests, build exit 0**.
   Builds directly on `feat/activated-abilities`, so **merge that one first**.
@@ -225,6 +246,24 @@ _Append dated notes here; keep them short. Newest at top._
   stale dist made the worker silently run the OLD pilot and the match viewer appeared to hang
   forever. Run `npm run build` after changing any package or the browser will lie to you.
   (Integrator)
+- 2026-08-14 DESKTOP-90PJPM4: `feat/import-smart-names` ✅ (apps/web/src/lib/decklist only) — a standing
+  regression guard on TWO REAL tournament lists (Boros Energy, Goryo's Vengeance) in
+  `real-decklists.test.ts`. The unit tests prove each import rule alone; this proves they still compose
+  on the lists that actually broke, offline, against a Scryfall fake that reproduces the one asymmetry
+  that matters: `/cards/collection` matches a card FACE name only, while `/cards/search` also sees
+  printed names. Covers "Wear // Tear", the Universes Beyond printing "Kavaero, Mind-Bitten"
+  (Scryfall files it as "Superior Spider-Man"), and DFCs named by their front face.
+  MEASURED against these lists on this commit: every name now resolves (0 not-found), but only
+  **2/75 and 6/75 copies are PLAYABLE**. The wall is not import — it is compiler/engine coverage:
+  • the biggest bucket is "a rules template the compiler does not recognize yet" (19 + 12 copies), and
+    it is a LONG TAIL of unrelated mechanics (Ascend, Mobilize, Rebound, Replicate, Warp, cost
+    reduction, counterspells, Blood Moon's static effect) — no single fix unlocks it.
+  • the one COHESIVE win is the mana base: fetchlands + shocklands are 15 copies in EACH list (20% of
+    the deck). ⚠️ Do not start that here — `feat/activated-abilities` is actively building it
+    (`cost: { tap, life, sacrificeSelf }`, an `activateAbility` action, fetchland tests). Shocklands
+    additionally need the "you may pay 2 life" choice, which `packages/core/src/card.ts` documents as
+    deliberately unimplemented pending the choice system that branch also owns.
+  No `packages/core` or `packages/cards` files touched, by design. (Worker)
 
 - 2026-08-13 DESKTOP-90PJPM4: `feat/import-formats` ✅ (apps/web/src/lib/scryfall + decklist/resolve) —
   **two real deck-import bugs, found by importing the user's actual Modern lists.** The *parser* was
