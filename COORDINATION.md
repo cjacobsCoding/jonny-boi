@@ -61,9 +61,36 @@ throughput (games/sec) from regressing.
 | feat/deck-import | DESKTOP-90PJPM4 (worker) | packages/cards/src/compile + apps/web import | ✅ INTEGRATED |
 | fix/ai-play-quality | DESKTOP-90PJPM4 (worker) | packages/core + packages/ai + sim/cli + apps/web hover | ✅ INTEGRATED |
 | fix/rules-audit | DESKTOP-90PJPM4 (worker) | packages/core mana-plan + apps/web play/online | 🚧 PUSHED, not merged |
+| feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-14 DESKTOP-90PJPM4: `feat/activated-abilities` PUSHED (packages/core + cards/compile +
+  ai/heuristic). Merged latest main incl. `fix/rules-audit` — **1451 tests, build exit 0**.
+  **Measured** on a real Modern Burn list through the importer: **19/60 playable → 30/60**, and the
+  "library-search template" gap is gone. Fetchlands were 11 copies of dead card.
+  - `CardDefinition.activated` — a `COST: EFFECT` line with {T} / pay N life / sacrifice ~ / mana.
+    New `activateAbility` action. Offer and accept share ONE `unpayableActivationReason`, so a pilot
+    is never handed an action the engine then rejects. Costs are paid in full before the ability hits
+    the stack and are NOT refunded (rule 602.2). It rides the existing `trigger` stack object — no
+    third stack-object kind for masking/replay/AI to learn.
+  - **New seam worth knowing:** `CardDefinition.subtypes` (lowercased) + `CardFilter.anyOfSubtypes`.
+    A fetchland searches for "a Mountain or Plains card" — that must find a SHOCKLAND, not just a
+    basic, so matching by name would have been a card playing worse than printed. Any future
+    subtype-selecting card gets this for free.
+  - `targeting.ts` gained `illegalTargetReasonForEffects` / `restrictionOfEffects` so an ability is
+    policed against ITS OWN effects rather than the card's spell script.
+  - The pilot half matters as much as the engine half: an ability nothing activates is
+    indistinguishable from a card that doesn't work. The heuristic cracks fetchlands and
+    **deliberately nothing else** — a sac outlet or a pinger needs real cost/benefit reasoning and
+    guessing would make pilots play worse. If you add ability scoring, that is the seam.
+  👉 Next-biggest measured gaps on that same list, in copies: the unrecognised-template bucket
+  (Eidolon's mana-value-filtered cast trigger, Searing Blaze, Skullcrack, Skewer's spectacle,
+  Boros Charm's modes = 18 copies), then CONDITIONAL enters-tapped (Sacred Foundry / Inspiring
+  Vantage = 8 copies; the unconditional form already works, these need the choice system for
+  "unless you pay 2 life").
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-14 DESKTOP-90PJPM4: `fix/rules-audit` — playtest sweep of the CLIENT layer. The headless
   engine is clean (new `packages/sim/src/rules-audit.test.ts` plays full games and asserts zone
