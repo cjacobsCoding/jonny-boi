@@ -1261,9 +1261,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
 }> = Object.freeze([
   {
     pattern: /add one mana of any color|add \{[wubrgc]\} or \{[wubrgc]\}|add one mana of any/,
-    missingEngineSystem: 'mana abilities that produce a chosen color',
+    missingEngineSystem: 'a mana-ability template the compiler does not recognize yet',
   },
-  { pattern: /\benters tapped\b/, missingEngineSystem: 'permanents entering the battlefield tapped' },
+  { pattern: /\benters tapped\b/, missingEngineSystem: 'an enters-tapped template the compiler does not recognize yet' },
   {
     // Modal cards are the one choice shape still genuinely missing a system: the
     // engine picks a spell's targets at cast with no modes declared, so a mode
@@ -1271,7 +1271,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // one. (Everything else a "choose / you may" clause needs — the question, the
     // ordering, the search — the engine has; see `../choice-primitives.ts`.)
     pattern: /^choose (?:one|two|three|up to)\b|^choose one or both\b/,
-    missingEngineSystem: 'modal spells (modes chosen at cast, with their own targets)',
+    missingEngineSystem: 'a modal template the compiler does not recognize yet',
   },
   {
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
@@ -1281,7 +1281,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bsearch your library\b|\bsearch their library\b/,
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },
-  { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'looking at and reordering library cards' },
+  { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet' },
   { pattern: /\bloyalty\b|^[+-]\d+:/, missingEngineSystem: 'planeswalker loyalty abilities' },
   { pattern: /\btransform\b|\bflip\b|double-faced/, missingEngineSystem: 'transform / double-faced cards' },
   // Flash is now a real timing flag (`castTiming` reads it), so only FLASHBACK —
@@ -1298,9 +1298,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bequip\b|\battach\b|\benchant\b/,
     missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
   },
-  { pattern: /\bsacrifice\b/, missingEngineSystem: 'sacrifice costs and activated abilities' },
-  { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'persistent counters beyond +1/+1 pumps' },
-  { pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/, missingEngineSystem: 'graveyard-based abilities with a chooser' },
+  { pattern: /\bsacrifice\b/, missingEngineSystem: 'a sacrifice/activated-ability template the compiler does not recognize yet' },
+  { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'a counters template the compiler does not recognize yet' },
+  { pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/, missingEngineSystem: 'a graveyard template the compiler does not recognize yet' },
   {
     // Plain "target player mills N" and "you mill N" COMPILE now. What still
     // lands here is a mill whose count is derived or conditional, so the hint
@@ -1318,7 +1318,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
   { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },
-  { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'activated abilities with costs' },
+  { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'an activated-ability template the compiler does not recognize yet' },
   // --- below here: patterns that only refine the DEFAULT explanation. Nothing
   // above changes; these exist so "this card didn't compile" names a buildable
   // engine feature instead of shrugging. They are ordered specific → general,
@@ -1355,18 +1355,18 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   {
     pattern: /leaves the battlefield/,
-    missingEngineSystem: 'leaves-the-battlefield triggers',
+    missingEngineSystem: 'a leaves-the-battlefield template the compiler does not recognize yet',
   },
   {
     pattern: /(?:other )?creatures you control (?:get|have)|as long as you control|creatures? you control gets?/,
-    missingEngineSystem: 'static continuous effects (anthems and conditional buffs)',
+    missingEngineSystem: 'a static-buff template the compiler does not recognize yet',
   },
   {
     // "Destroy target artifact or creature", "Counter target creature spell",
     // "Destroy target nonlegendary creature" — the effect exists, the FILTER on
     // what may be chosen does not.
     pattern: /^(?:destroy|exile|counter) target \S/,
-    missingEngineSystem: 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)',
+    missingEngineSystem: 'a filtered-targeting template the compiler does not recognize yet',
   },
   {
     // A trigger body that names a target. Core resolves triggered abilities with
@@ -1377,7 +1377,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   {
     pattern: /\bdraws? (?:a|two|three|\d+) cards? and (?:you )?loses? \d+ life/,
-    missingEngineSystem: 'compound "draw N and lose M" in one sentence',
+    missingEngineSystem: 'a compound draw/lose template the compiler does not recognize yet',
   },
 ]);
 

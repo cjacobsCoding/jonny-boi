@@ -544,7 +544,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
 
     expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'mana abilities that produce a chosen color',
+      'a mana-ability template the compiler does not recognize yet',
     );
   });
 
@@ -612,16 +612,16 @@ describe('explainUnsupported — every common rejection names a real engine feat
     // a trigger, and a triggered ability cannot choose targets. The explanation
     // has to name THAT, or the queue sends someone to fix an already-solved gap.
     ['when ~ enters, return target creature to its owner\'s hand', 'targets chosen by a triggered ability'],
-    ['destroy target artifact or enchantment', 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)'],
-    ['counter target noncreature spell', 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)'],
+    ['destroy target artifact or enchantment', 'a filtered-targeting template the compiler does not recognize yet'],
+    ['counter target noncreature spell', 'a filtered-targeting template the compiler does not recognize yet'],
     ['counter target spell unless its controller pays {3}', 'optional payment during resolution ("unless its controller pays")'],
-    ['other creatures you control get +1/+1', 'static continuous effects (anthems and conditional buffs)'],
+    ['other creatures you control get +1/+1', 'a static-buff template the compiler does not recognize yet'],
     ['gain control of target creature until end of turn', 'gaining control of another player’s permanent'],
     ['target creature you control fights target creature you don\'t control', 'a fight template the compiler does not recognize yet'],
-    ['when ~ leaves the battlefield, create a 3/3 green beast creature token', 'leaves-the-battlefield triggers'],
+    ['when ~ leaves the battlefield, create a 3/3 green beast creature token', 'a leaves-the-battlefield template the compiler does not recognize yet'],
     ['cascade', 'named keyword mechanics with their own subsystem'],
     ['when ~ enters, it deals 4 damage to target creature', 'targets chosen by a triggered ability'],
-    ['you draw two cards and lose 2 life', 'compound "draw N and lose M" in one sentence'],
+    ['you draw two cards and lose 2 life', 'a compound draw/lose template the compiler does not recognize yet'],
   ])('explains %s', (clause, expected) => {
     expect(explainUnsupported(clause)).toBe(expected);
   });
