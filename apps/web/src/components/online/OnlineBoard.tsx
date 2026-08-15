@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactElement } from 'react';
-import type { GameAction, InstanceId, PlayerId } from '@jonny-boi/core';
+import type { CardInstance, GameAction, InstanceId, PlayerId } from '@jonny-boi/core';
 import { stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
+import { castSequence, castableWithTaps } from '../../lib/online/auto-tap.js';
+import { legalTargets, optionToTarget, targetRequirement } from '../../lib/play/targeting.js';
 import type { GameFrame } from '../../lib/online/online-state.js';
 import {
   castChoices,
@@ -17,6 +19,7 @@ import { ChoicePrompt } from '../play/ChoicePrompt.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
+import '../play/action-bar.css';
 
 /**
  * The in-game board for ONLINE play. It renders the server-pushed `MaskedGameView`
@@ -62,8 +65,24 @@ export function OnlineBoard({
   const tapMenu = useMemo(() => manaTapMenu(masked, legalActions), [masked, legalActions]);
   const tappable = useMemo(() => tappableIds(tapMenu, masked, masked.viewer), [tapMenu, masked]);
 
+  // Cards the server hasn't offered a cast for yet, but which we could pay for by
+  // tapping. Without this the online seat can never cast anything at all: the
+  // server only lists `castSpell` once the pool already covers the cost, and this
+  // board has no other way to tap a land.
+  /** The viewer's own hand instances (present only for their own seat). */
+  const handCardOf = (id: InstanceId): CardInstance | undefined =>
+    (masked.players[masked.viewer].hand ?? []).find((c) => c.instanceId === id);
+
+  const tapCastable = useMemo(
+    () => castableWithTaps(masked, masked.viewer, masked.players[masked.viewer].hand ?? [], legalActions),
+    [masked, legalActions],
+  );
+
   // Transient interaction state.
   const [pendingCast, setPendingCast] = useState<CastChoice | null>(null);
+  /** Taps that must be sent before the pending cast (empty for an offered cast). */
+  const [pendingTaps, setPendingTaps] = useState<readonly GameAction[]>([]);
+  /** A modal source the player tapped BY HAND, awaiting the colour they want. */
   const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   const [chosenAttackers, setChosenAttackers] = useState<Set<InstanceId>>(new Set());
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
@@ -71,6 +90,7 @@ export function OnlineBoard({
 
   const reset = (): void => {
     setPendingCast(null);
+    setPendingTaps([]);
     setPendingManaTap(null);
     setChosenAttackers(new Set());
     setBlockAssign(new Map());
@@ -80,6 +100,16 @@ export function OnlineBoard({
   const submit = (action: GameAction): void => {
     reset();
     onAction(action);
+  };
+
+  /**
+   * Send an ordered sequence (taps, then the cast). The server applies messages in
+   * order, so each tap is legal on arrival and the cast is legal once the last one
+   * lands. It still validates every one — a rejection just stops the sequence.
+   */
+  const submitSequence = (actions: readonly GameAction[]): void => {
+    reset();
+    for (const action of actions) onAction(action);
   };
 
   // --- casting -------------------------------------------------------------------
@@ -93,7 +123,37 @@ export function OnlineBoard({
 
   const commitCast = (targets: ReadonlyArray<InstanceId | PlayerId>): void => {
     if (!pendingCast) return;
-    submit({ kind: 'castSpell', player: masked.viewer, instanceId: pendingCast.instanceId, targets });
+    const cast: GameAction = {
+      kind: 'castSpell',
+      player: masked.viewer,
+      instanceId: pendingCast.instanceId,
+      targets,
+    };
+    submitSequence([...pendingTaps, cast]);
+  };
+
+  /**
+   * Cast a card the server hasn't offered yet, tapping for it first. Targets are
+   * derived client-side (the server only enumerates them for casts it is already
+   * offering) and the server re-validates the chosen one on arrival.
+   */
+  const onTapCastClick = (card: CardInstance): void => {
+    const sequence = castSequence(masked, masked.viewer, card, [], legalActions);
+    if (!sequence) return;
+    const requirement = targetRequirement(card.def);
+    if (requirement.count === 0) {
+      submitSequence(sequence);
+      return;
+    }
+    const options = legalTargets(requirement, masked, names);
+    if (options.length === 0) return; // no legal target → the cast would fizzle
+    // Hold the taps, then reuse the existing target picker for the choice.
+    setPendingTaps(sequence.slice(0, -1));
+    setPendingCast({
+      instanceId: card.instanceId,
+      targetSets: options.map((o) => [optionToTarget(o)]),
+      canCastUntargeted: false,
+    });
   };
 
   // --- mana ------------------------------------------------------------------------
@@ -237,13 +297,15 @@ export function OnlineBoard({
           {(view.self.hand ?? []).map((c) => {
             const isLand = lands.has(c.instanceId);
             const cast = casts.get(c.instanceId);
-            const actionable = yourTurn && (isLand || !!cast);
+            // A card the server hasn't offered but we can fund by tapping.
+            const tapCard = !cast && tapCastable.has(c.instanceId) ? handCardOf(c.instanceId) : undefined;
+            const actionable = yourTurn && (isLand || !!cast || !!tapCard);
             return (
               <PlayCard
                 key={c.instanceId}
                 cardId={c.cardId}
                 name={c.name}
-                badge={c.isLand ? 'Land' : cast ? 'castable' : undefined}
+                badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
                 disabled={!actionable}
                 onClick={
                   actionable
@@ -251,7 +313,9 @@ export function OnlineBoard({
                       ? () => submit({ kind: 'playLand', player: masked.viewer, instanceId: c.instanceId })
                       : cast
                         ? () => onCastClick(cast)
-                        : undefined
+                        : tapCard
+                          ? () => onTapCastClick(tapCard)
+                          : undefined
                     : undefined
                 }
               />

@@ -207,7 +207,7 @@ export {
 
 // Mana payment planning — shared by the AI pilots and the hotseat/online auto-tap
 // so "which lands do I tap" has exactly one implementation.
-export type { ManaTapPlan } from './mana-plan.js';
+export type { ManaTapPlan, ManaPlanView } from './mana-plan.js';
 export { planManaPayment, distanceToPayable } from './mana-plan.js';
 
 // Engine

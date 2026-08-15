@@ -11,6 +11,7 @@ import { PlayCard, CardBack } from './PlayCard.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
+import './action-bar.css';
 
 /**
  * The in-game board for the player who currently holds priority (the `viewer`). It

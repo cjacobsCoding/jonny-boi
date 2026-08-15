@@ -16,7 +16,21 @@ import type { GameAction } from './actions.js';
 import { manaModesOf } from './card.js';
 import type { ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { canPay, MANA_COLORS } from './mana.js';
-import type { GameState, InstanceId, PlayerId } from './state.js';
+import type { CardInstance, InstanceId, PlayerId } from './state.js';
+
+/**
+ * The minimum a caller must expose to plan a payment: the public battlefield and
+ * each player's floating pool.
+ *
+ * Deliberately narrower than `GameState` so the ONLINE client can plan too — it
+ * only ever holds a redacted view of the game, and both that view and the full
+ * `GameState` satisfy this shape structurally. Without it the online seat had no
+ * way to tap mana at all, which meant it could never cast a spell.
+ */
+export interface ManaPlanView {
+  readonly battlefield: readonly CardInstance[];
+  readonly players: Readonly<Record<PlayerId, { readonly manaPool: ManaPool }>>;
+}
 
 /** One activation in a funding plan: which permanent to tap, in which mode. */
 export interface ManaTapPlan {
@@ -64,12 +78,12 @@ export function distanceToPayable(pool: ManaPool, cost: ManaCost): number {
  * so the loop always terminates.
  */
 export function planManaPayment(
-  state: GameState,
+  view: ManaPlanView,
   player: PlayerId,
   cost: ManaCost,
   legalActions: readonly GameAction[],
 ): ManaTapPlan[] | undefined {
-  let pool: ManaPool = { ...state.players[player].manaPool };
+  let pool: ManaPool = { ...view.players[player].manaPool };
   // `canPay` is the authority on "done"; the distance heuristic only orders taps.
   if (canPay(pool, cost)) return [];
 
@@ -78,7 +92,7 @@ export function planManaPayment(
   const candidates = new Map<InstanceId, ManaTapPlan[]>();
   for (const action of legalActions) {
     if (action.kind !== 'tapForMana' || action.player !== player) continue;
-    const perm = state.battlefield.find((c) => c.instanceId === action.instanceId);
+    const perm = view.battlefield.find((c) => c.instanceId === action.instanceId);
     if (!perm) continue;
     const production = manaModesOf(perm.def)[action.mode ?? 0];
     if (!production) continue;
