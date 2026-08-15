@@ -80,6 +80,25 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: `fix/hero-validation` ✅ INTEGRATED to main (apps/web only).
+  One `lib/heroValidation.ts` now serves both the Lab and the Match viewer. `validateHero` was
+  defined twice and the copies had DRIFTED: the Lab named the unsupported imported cards, the Match
+  viewer did not, so watching a game with an imported deck answered `unknown card "<uuid>"` — an id
+  shown nowhere in the UI. Reproduced live in the running app with a real Modern Boros list before
+  fixing, not argued from the code.
+  ⚠️ For whoever integrates next: this branch predated main's refactor of these views, so the merge
+  was resolved to MAIN's version of LabView/MatchView and the extraction re-applied on top. The
+  shared module is main's LabView implementation moved verbatim; the only wording change is
+  "swap them out to run the Lab" -> "run it", since the Match viewer shows the same string now.
+  Two things the lint gate caught that tsc did not: an unused `Deck` import, and a stale comment in
+  gauntletDecks.test.ts pointing at "LabView's validateHero". Run `npm run verify`, not just
+  `npm test` — lint is part of the gate again.
+  STILL OPEN, deliberately not taken: `deckHealth.ts` and `unsupportedCardNames` answer overlapping
+  questions from two mechanisms; unifying them touches DeckBuilder + Lab + Match at once, all live
+  for other agents. And a compiler defect found while reproducing this — a split card
+  ("Wear // Tear") is mis-diagnosed as needing a `"//"` card TYPE and as transform/DFC; only Fuse and
+  the targeting clause are genuine. That is `packages/cards/src/compile`, owned by feat/card-mechanics.
+
 - 2026-08-15 worker: `feat/attachments` 🚧 PUSHED — **auras + equipment, as ONE seam.** Suite **1856
   passed / 0 failed** (baseline 1822 + 34), `npm run verify` exit 0, `npm run build` exit 0, lint 0 errors.
   👉 **The seam is a RELATIONSHIP, not two systems.** `CardInstance.attachedTo` + a data
@@ -337,6 +356,35 @@ _Append dated notes here; keep them short. Newest at top._
   `spawn UNKNOWN`. Running the same command through **PowerShell** worked. Stop any dev server you
   are not using before a full-suite run.
   (Worker — pushed, NOT merged.)
+- 2026-08-15 DESKTOP-90PJPM4: `fix/hero-validation` (apps/web only) — REPRODUCED LIVE, then pinned.
+  Ran the dev server and imported a real Modern Boros list. The Match viewer answered:
+  `unknown card "2588f348-…"` x4 and nothing else — four raw Scryfall uuids, shown nowhere else in
+  the UI, so you cannot tell which of your cards is the problem. Cause: `validateHero` was copied
+  into LabView and MatchView and the copies drifted; only the Lab's checked for unsupported imports,
+  so the Match viewer fell through to the sim's id-level validator. Now one `lib/heroValidation.ts`
+  (net -38/+8 in the views). Tests assert the NAMES appear and no uuid does, at the exact shape
+  captured from the app (4 unplayable + 2 playable imports); removing the fix fails 3 of the 6.
+  ⚠️ FOR WHOEVER OWNS `packages/cards/src/compile` (feat/card-mechanics): a split card is
+  mis-diagnosed. "Wear // Tear" reports THREE bogus blockers — `“//” — needs the "//" card type`
+  (the type line "Instant // Instant" is being split into a literal `//` type), and
+  `“Wear // Tear” — needs transform / double-faced cards` (a split card is not a DFC; `layout` is
+  `split`, not `transform`). Only `Fuse` and the targeting clause are real. Not fixed here: that
+  package is yours and was uncommitted-dirty at the time. (Worker)
+
+- 2026-08-15 DESKTOP-90PJPM4: `fix/hero-validation` ✅ (apps/web views + lib only) — **the Match viewer
+  would not tell you which card broke your deck.** `validateHero` had been copied into BOTH `LabView`
+  and `MatchView`, and the copies had drifted: the Lab's named unsupported imported cards first, the
+  Match viewer's went straight to the sim's validator. So watching a game with a freshly imported deck
+  failed as `unknown card "<uuid>"` — true and useless, and the uuid appears nowhere in the UI, so
+  there was no way to work out which of your 60 cards it was.
+  Fix: one shared `apps/web/src/lib/heroValidation.ts`, used by both views; the per-view copies are
+  gone (DESIGN §1.3, one mechanism per concept). Behaviour is now identical on both surfaces, and an
+  unsupported card is still reported FIRST — fixing a deck-size complaint would not make such a deck
+  runnable. 5 tests in `heroValidation.test.ts` pin the ordering, the naming (asserts the uuid is NOT
+  leaked), and that both surfaces refuse identically.
+  Scope note: no `packages/**` touched. `deckHealth.ts` (used by DeckBuilderView) and
+  `unsupportedCardNames` (used here) still answer overlapping questions — NOT merged, because that is
+  a wider refactor across surfaces other agents are editing. Flagged, not started. (Worker)
 
 - 2026-08-15 DESKTOP-90PJPM4: `feat/card-alacarte` ✅ MERGED to main + deployed. Add ONE Scryfall card
   by name from the card browser or mid-deck-build, fuzzy-matched ("lightnig bolt" resolves), screened
