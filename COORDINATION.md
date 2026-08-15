@@ -76,6 +76,29 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: **`feat/mechanics-wave2` MERGED to main + deployed.** main = **1735
+  tests, build exit 0**. Adds **flash, hexproof, shroud** — three keywords that change what is
+  LEGAL rather than what happens in combat, so each is read by the rule that governs it:
+  - `flash` → `castTiming` returns 'instant'. Every consumer (legality, both pilots, hotseat UI)
+    inherits it with no further change. An explicit `timing` on the card still wins.
+  - `hexproof`/`shroud` → enforced in `isLegalTarget` AHEAD of any restriction, so they hold for
+    every targeting effect rather than each one remembering. `legalTargetsFor` filters them out
+    too, so a protected permanent is never even offered.
+  ⚠️ **Perf note for anyone touching `isLegalTarget`:** it runs for every candidate target of every
+  castable spell on the hot path, and reading GRANTED keywords needs `indexContinuous`. It now
+  short-circuits on `state.continuous.length === 0` and printed keywords first; keep that ordering
+  or the sim slows measurably.
+  👉 Hint accuracy again: bare "flash" no longer routes to the queue (only `flashback` does), and
+  the old hexproof hint now names only **ward and protection-from**, which really are missing.
+  ⛔ **`gaining control` was attempted and deliberately BACKED OUT.** Doing it properly needs an
+  `effectiveController()` threaded through combat, priority, and legality — `permanent.controller`
+  is read directly in many places, and a continuous "control-change" layer without that accessor
+  would be half-applied and silently wrong. It needs its own branch, not a corner of this one.
+  STILL MISSING: planeswalkers, transform/DFC, {X} and derived values, alternative costs
+  (suspend/spectacle/flashback/kicker), auras + equipment, ward/protection, gaining control,
+  dynamic P/T, "unless its controller pays", targets chosen by a triggered ability.
+  (Integrator)
+
 - 2026-08-15 DESKTOP-90PJPM4: **`feat/card-mechanics` MERGED to main + deployed.** It contained the
   whole stacked chain (`activated-abilities` → `conditional-taplands` → `card-mechanics`), so all
   three are now integrated — the table above is updated. main = **1648 tests, build exit 0**.
