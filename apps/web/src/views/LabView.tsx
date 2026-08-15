@@ -1,18 +1,14 @@
 import { useMemo, type ReactElement } from 'react';
-import {
-  SAMPLE_DECKS,
-  validateDeck as validateSimDeck,
-  type Deck as SimDeck,
-} from '@jonny-boi/sim';
+import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import { allAvailableCards } from '../lib/cards.js';
-import { loadCardPool } from '../lib/sim-pool.js';
-import { resolveEntries, unsupportedCardNames, type Deck } from '../lib/deck.js';
+import { resolveEntries, type Deck } from '../lib/deck.js';
 import { gauntletHeroDecks, isGauntletDeckId } from '../lib/decklist/gauntletDecks.js';
 import { applySwapToDeck, describeApplied } from '../lib/decklist/applySwapToDeck.js';
 import { getCard } from '../lib/cards.js';
 import './lab-apply.css';
 import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
+import { validateHero } from '../lib/heroValidation.js';
 import type { SimWorkerApi } from '../lib/useSimWorker.js';
 import type { LabSelection } from '../lib/useLabSelection.js';
 import {
@@ -58,7 +54,7 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
 
   // The hero validated through the SIM's own rules (60-card / 4-of), so the
   // message matches exactly what the engine would reject — not a UI approximation.
-  const heroProblems = useMemo(() => (hero ? validateHero(hero) : ['No deck selected.']), [hero]);
+  const heroProblems = useMemo(() => validateHero(hero), [hero]);
   const heroLegal = heroProblems.length === 0;
 
   // Eligible gauntlet opponents exclude the hero (you don't fight yourself).
@@ -218,26 +214,6 @@ function poolInOptions(): CardOption[] {
   return [...allAvailableCards()]
     .map((c) => ({ cardId: c.id, name: c.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * Validate the hero through the sim's pool + rules (the authoritative check).
- *
- * Unsupported imported cards are named FIRST. The sim's own check would reject
- * them too, but only as `unknown card "<uuid>"` — true and useless. A deck you
- * just imported deserves to be told which card is holding it up and why.
- */
-function validateHero(hero: Deck): string[] {
-  const unsupported = unsupportedCardNames(hero);
-  if (unsupported.length > 0) {
-    return [
-      `${unsupported.length} card${unsupported.length === 1 ? '' : 's'} in this deck can’t be simulated yet: ${unsupported.join(', ')}. ` +
-        'The deck itself is fine — swap them out to run the Lab, or check the deck panel for what the engine still needs.',
-    ];
-  }
-  const pool = loadCardPool();
-  // `SimDeckPayload` is structurally the sim's `Deck` (name/archetype/cards).
-  return validateSimDeck(toSimPayload(hero) as SimDeck, pool);
 }
 
 /** The top config bar: hero picker, seed, and the gauntlet-opponent toggles. */
