@@ -1017,7 +1017,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   { pattern: /\bsacrifice\b/, missingEngineSystem: 'sacrifice costs and activated abilities' },
   { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'persistent counters beyond +1/+1 pumps' },
   { pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/, missingEngineSystem: 'graveyard-based abilities with a chooser' },
-  { pattern: /\bmill\b|puts? the top .* into (?:their|his or her) graveyard/, missingEngineSystem: 'milling' },
+  {
+    // Plain "target player mills N" and "you mill N" COMPILE now. What still
+    // lands here is a mill whose count is derived or conditional, so the hint
+    // names the template gap rather than claiming milling is missing entirely.
+    pattern: /\bmill\b|puts? the top .* into (?:their|his or her) graveyard/,
+    missingEngineSystem: 'a mill template the compiler does not recognize yet',
+  },
   { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
   { pattern: /\bward\b|\bhexproof\b|\bshroud\b|\bprotection from\b/, missingEngineSystem: 'targeting restrictions (hexproof / ward / protection)' },
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
@@ -1034,17 +1040,18 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   {
     pattern: /damage to each (?:creature|player|opponent)|to each of|damage to you\b/,
-    missingEngineSystem: 'effects that hit several targets at once (each creature / each opponent)',
+    missingEngineSystem: 'a group-damage template the compiler does not recognize yet',
   },
-  {
-    pattern: /return target .* to (?:its|their) owner'?s hand/,
-    missingEngineSystem: 'returning a permanent to its owner’s hand (bounce)',
-  },
+  // NOTE: there is deliberately no "bounce" hint any more. Plain bounce compiles
+  // (see the `return-target-permanent-to-hand` rule), so a bounce clause that
+  // still fails does so for some OTHER reason — most often that it sits inside a
+  // trigger, and a triggered ability cannot choose targets. Letting it fall
+  // through to that hint names the real blocker instead of a solved one.
   {
     pattern: /gain control of target/,
     missingEngineSystem: 'gaining control of another player’s permanent',
   },
-  { pattern: /\bfights?\b/, missingEngineSystem: 'creatures fighting each other' },
+  { pattern: /\bfights?\b/, missingEngineSystem: 'a fight template the compiler does not recognize yet' },
   {
     // The effect is implementable; the TARGET is not. A `TargetRestriction` can say
     // "a player", never "a player who isn't you", so an opponent-only spell would be
