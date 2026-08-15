@@ -155,6 +155,19 @@ const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
 const LAND_FILTER = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
 
 /**
+ * The five basic land types. A fetchland selects by these, and restricting the
+ * fetch template to them keeps it from matching a search for some other card
+ * type whose retrieval this template does not actually implement.
+ */
+const LAND_SUBTYPES: ReadonlySet<string> = new Set([
+  'plains',
+  'island',
+  'swamp',
+  'mountain',
+  'forest',
+]);
+
+/**
  * The printed restrictions a "you choose a ___ card from it" discard may carry,
  * mapped to the `CardFilter` implementing each. Anything outside this table is a
  * restriction the filter cannot express, so the rule declines rather than
@@ -595,6 +608,33 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'fetch-land-by-subtype',
+    description:
+      '"Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle." (the fetchland body)',
+    // Matches one or two land subtypes joined by "or", with the optional
+    // "tapped" and the optional trailing shuffle both printed forms carry.
+    // Selection is by SUBTYPE, so this finds a dual land with those land types
+    // exactly as the printed card does — not just a basic.
+    pattern:
+      /^search your library for an? ([a-z]+)(?: or ([a-z]+))? card, put it onto the battlefield( tapped)?(?:, then shuffle)?$/,
+    build(match) {
+      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      // Only LAND subtypes are safe here: a non-land search would need the card
+      // to be castable, which this template does not express.
+      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'], anyOfSubtypes: subtypes },
+          destination: 'battlefield',
+          ...(match[3] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
     id: 'exile-creature-controller-may-fetch-basic',
     description:
       '"Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle." (Path to Exile)',
@@ -721,7 +761,41 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       return { entersTapped: true };
     },
   },
+  {
+    id: 'enters-tapped-unless-few-lands',
+    description:
+      '"~ enters tapped unless you control two or fewer other lands" (the fastland cycle)',
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or fewer other lands$/,
+    build(match) {
+      const max = SMALL_NUMBER_WORDS[match[1]!];
+      if (max === undefined) return null; // an unexpected count — report it
+      return { entersTappedUnless: { maxOtherLands: max } };
+    },
+  },
+  {
+    id: 'enters-tapped-unless-controls-subtype',
+    description:
+      '"~ enters tapped unless you control a Mountain or a Plains" (the checkland cycle)',
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control an? (\w+)(?: or an? (\w+))?$/,
+    build(match) {
+      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      // Only LAND subtypes are expressible: "unless you control a creature"
+      // reads the same but means something this rule does not implement.
+      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      return { entersTappedUnless: { controlsSubtype: subtypes } };
+    },
+  },
 ]);
+
+/** Number words a printed "N or fewer" uses. */
+const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+});
 
 /** The colors "one mana of any color" may be taken as, in canonical order. */
 const ANY_COLOR: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];

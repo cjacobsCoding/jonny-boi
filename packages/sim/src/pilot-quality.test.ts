@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
-import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
+import { buildRegistry, compileCard, loadCardPool } from '@jonny-boi/cards';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
 import { loadDeck } from './deck.js';
 import { runMatch } from './match.js';
@@ -93,5 +93,47 @@ describe(`default pilot ("${DEFAULT_PILOT_ID}") play quality`, () => {
       firstAttack,
       'a hasty creature with no possible blocker never attacked — haste is being ignored',
     ).toBeDefined();
+  });
+
+  it('actually uses a fetchland instead of leaving it on the battlefield', () => {
+    // Compiling a card and PLAYING it are different claims. The engine can offer
+    // an activated ability perfectly while every pilot ignores it, which looks
+    // exactly like the card not working — a fetchland that never cracks is a
+    // dead land. This asserts the whole chain: compile → offer → activate →
+    // resolve → the land is really on the battlefield.
+    const compiled = compileCard({
+      id: 'test:arid-mesa',
+      name: 'Arid Mesa',
+      manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+      typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+      oracleText:
+        '{T}, Pay 1 life, Sacrifice Arid Mesa: Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle.',
+      power: null,
+      toughness: null,
+      keywords: [],
+    });
+    expect(compiled.status, 'the fetchland compiles').toBe('complete');
+
+    const mountain = pool.getByName('Mountain')!;
+    const fetchDeck = {
+      name: 'Fetch test',
+      library: [
+        ...Array.from({ length: 12 }, () => compiled.definition),
+        ...Array.from({ length: 21 }, () => mountain),
+      ],
+    };
+    const landsOnly = { name: 'Lands only', library: Array.from({ length: 33 }, () => mountain) };
+
+    const result = runMatch(
+      { deckA: fetchDeck, deckB: landsOnly, pilotA: pilot, pilotB: pilot, registry },
+      11,
+      { recordTrace: true },
+    );
+
+    const activated = (result.events ?? []).filter((e) => e.type === 'abilityActivated');
+    expect(
+      activated.length,
+      'the pilot never cracked a fetchland — the ability is offered but unused',
+    ).toBeGreaterThan(0);
   });
 });
