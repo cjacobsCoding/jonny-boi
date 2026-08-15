@@ -15,6 +15,7 @@
  */
 import type { CardIndex, NormalizedCard, ManaCost } from '@jonny-boi/data-tools';
 import rawIndex from '../data/card-index.json';
+import { engineDisplayCards } from './cards/enginePool.js';
 import { importedCard, importedCards } from './decklist/importedCards.js';
 
 /** The bundled, normalized card index. */
@@ -24,15 +25,38 @@ export const cardIndex: CardIndex = rawIndex as CardIndex;
 export const attribution: string = cardIndex.attribution;
 
 /**
- * The CURATED cards bundled with the build, sorted by name. Deck import adds
- * more at runtime — use {@link allAvailableCards} when you want everything the
- * user can actually put in a deck.
+ * The CURATED cards bundled with the build, sorted by name.
+ *
+ * This is the SCRYFALL-BACKED set: full art and Oracle text, but far smaller than
+ * the set the engine can play. Prefer {@link allAvailableCards} for anything the
+ * user picks from — it also covers engine cards with no Scryfall record, and
+ * everything deck import has added.
  */
 export const allCards: readonly NormalizedCard[] = cardIndex.cards;
 
-/** Look up a card by its stable Scryfall id. */
-const cardsById: ReadonlyMap<string, NormalizedCard> = new Map(
-  cardIndex.cards.map((card) => [card.id, card]),
+/**
+ * Every card with a display record, indexed by id: the Scryfall-backed ones
+ * FIRST, then synthesized records for engine cards Scryfall data doesn't cover.
+ *
+ * Order matters — a real record must always win over a synthesized one, which
+ * has no art or Oracle text. Built once; both inputs are static build data.
+ */
+const cardsById: ReadonlyMap<string, NormalizedCard> = (() => {
+  const index = new Map<string, NormalizedCard>();
+  // Synthesized first so the real Scryfall records overwrite them.
+  for (const card of engineDisplayCards()) index.set(card.id, card);
+  for (const card of cardIndex.cards) index.set(card.id, card);
+  return index;
+})();
+
+/**
+ * The full displayable pool: Scryfall records plus synthesized ones for the
+ * ~100 engine cards Scryfall data doesn't cover. Without these the app could
+ * play a card it could not show — which is why the Lab's own gauntlet decks
+ * could not be opened in the deck builder.
+ */
+const displayablePool: readonly NormalizedCard[] = [...cardsById.values()].sort((a, b) =>
+  a.name.localeCompare(b.name),
 );
 
 /**
@@ -52,8 +76,8 @@ export function getCard(id: string): NormalizedCard | undefined {
  */
 export function allAvailableCards(): readonly NormalizedCard[] {
   const imported = importedCards();
-  if (imported.length === 0) return allCards;
-  return [...allCards, ...imported].sort((a, b) => a.name.localeCompare(b.name));
+  if (imported.length === 0) return displayablePool;
+  return [...displayablePool, ...imported].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
