@@ -94,10 +94,16 @@ _Append dated notes here; keep them short. Newest at top._
   27.7 ms / 155 ms p95 on control boards, because the policy scores every castable card and plans its
   funding at every node. Budget accordingly.
   👉 **IT SCALES, which is the property that makes it a search rather than a constant.** Same matchup,
-  same 120 seeded games, only the budget varied: **16 sims → 48.3%** [39.6, 57.2] · **64 → 53.3%**
-  [44.4, 62.0] · **256 → 60.0%** [51.1, 68.3]. Monotone, and only the largest clears 50%. That the tiny
-  budget lands at ~50% is the right sanity check, not a failure: with almost no search a policy-guided
-  search should reproduce its own policy, and it does.
+  same seeded games, only the budget varied: **16 sims → 48.3%** [39.6, 57.2] · **64 → 53.3%** [44.4, 62.0]
+  · **256 → 60.0%** [51.1, 68.3] (all n=120) · **1024 → 61.7%** [49.0, 72.9] (n=60). Monotone throughout.
+  That the tiny budget lands at ~50% is the right sanity check, not a failure: with almost no search a
+  policy-guided search should reproduce its own policy, and it does.
+  ⚠️ **IT ALSO PLATEAUS, AND THAT IS THE MORE ACTIONABLE HALF.** 16→256 buys **+11.7 points** for 16× the
+  compute; 256→1024 buys **+1.7** for another 4× (and 88 ms/decision, p95 791 ms). Past a few hundred
+  simulations the binding constraint stops being search depth and becomes **evaluator accuracy** — the
+  search converges on the best line *its evaluation function can see*. **So do not spend the next branch
+  raising the budget.** The next real gain is brief §11–12 (a tactical solver for lethal / anti-lethal /
+  combat) and §31 (a learned value function).
   👉 **METHODOLOGICAL FINDING FOR THE LAB.** Running the gauntlet with `--pilot hybrid` on BOTH seats moved
   Mono-Red Aggro from **32.9% → 19.0%**. That is not a bug: when both sides play better, aggro's edge
   shrinks because much of it was punishing weak blocking. **Deck verdicts are pilot-relative** — an A/B

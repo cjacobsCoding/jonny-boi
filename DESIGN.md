@@ -166,15 +166,23 @@ because the policy scores every castable card and plans its funding at every nod
 **It SCALES — the property that says this is a search and not a constant.** Same matchup, same 120 seeded
 games, only the simulation budget varied (`bench/mcts-bench.mjs scaling`):
 
-| budget | win rate vs heuristic | 95% CI | mean decision |
-|---|---|---|---|
-| 16 sims | 48.3% | [39.6%, 57.2%] | 0.29 ms |
-| 64 sims | 53.3% | [44.4%, 62.0%] | 2.26 ms |
-| 256 sims | **60.0%** | **[51.1%, 68.3%]** | 16.8 ms |
+| budget | n | win rate vs heuristic | 95% CI | mean decision |
+|---|---|---|---|---|
+| 16 sims | 120 | 48.3% | [39.6%, 57.2%] | 0.29 ms |
+| 64 sims | 120 | 53.3% | [44.4%, 62.0%] | 2.26 ms |
+| 256 sims | 120 | **60.0%** | **[51.1%, 68.3%]** | 16.8 ms |
+| 1024 sims | 60 | 61.7% | [49.0%, 72.9%] | 88.0 ms |
 
-Monotone in the budget, and only the largest budget's interval clears 50%. At 16 simulations the pilot is
-indistinguishable from its own prior — which is the correct sanity check: with almost no search, a
-policy-guided search should reproduce the policy.
+Monotone in the budget. At 16 simulations the pilot is indistinguishable from its own prior, which is the
+correct sanity check — with almost no search a policy-guided search should reproduce the policy, and it
+does.
+
+⚠️ **It also PLATEAUS, and that is the more useful finding.** 16→256 buys **+11.7 points** for 16× the
+compute; 256→1024 buys **+1.7** for another 4×. Beyond a few hundred simulations the binding constraint
+stops being search depth and becomes **evaluator accuracy** — the search converges to the best line *its
+evaluation function can see*. So the next real gain is not a bigger budget: it is the brief's §11–12
+(tactical solver for lethal / anti-lethal / combat) and §31 (a learned value function), not more
+iterations of what is here.
 
 `DEFAULT_PILOT_ID` **stays `heuristic`** — the hybrid is ~1400× the heuristic's per-decision cost, and
 re-defaulting is a separate decision that needs a gauntlet-wide throughput case, not a head-to-head win.
