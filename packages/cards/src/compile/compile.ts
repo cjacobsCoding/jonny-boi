@@ -17,6 +17,8 @@
  */
 
 import type {
+  ActivatedAbility,
+  ActivationCost,
   CardDefinition,
   CardType,
   EffectRef,
@@ -162,6 +164,7 @@ interface Assembly {
   readonly triggers: TriggeredAbility[];
   readonly produces: ManaColor[];
   readonly producesOptions: ManaProduction[];
+  readonly activated: ActivatedAbility[];
   keywords: Record<string, boolean>;
   entersTapped: boolean;
   readonly matchedRules: string[];
@@ -179,6 +182,133 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   }
   if (contribution.entersTapped) assembly.entersTapped = true;
   assembly.matchedRules.push(ruleId);
+}
+
+/**
+ * Compile an activated ability line — the printed `COST: EFFECT` shape.
+ *
+ * The cost half is parsed here (it is a small closed vocabulary of symbols and
+ * stock phrases), while the effect half goes through the ordinary effect rules,
+ * so an activated ability can only do things the engine already implements. If
+ * either half is not fully understood the whole line is left unmatched and gets
+ * reported in `missing` — the compiler never ships an ability with a cost it
+ * silently dropped, which would make the card strictly better than printed.
+ *
+ * Returns true when the line was consumed.
+ */
+function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleContext): boolean {
+  const split = splitCostAndEffect(clause);
+  if (!split) return false;
+
+  const cost = parseActivationCost(split.cost, ctx);
+  if (!cost) return false;
+
+  const effects = ctx.compileEffectClause(split.effect);
+  if (!effects || effects.length === 0) return false;
+
+  assembly.activated.push({
+    cost,
+    effects,
+    // Printed activated abilities are instant-speed unless they say otherwise;
+    // "activate only as a sorcery" is caught by the cost parser refusing the
+    // line, so anything reaching here is genuinely instant-speed.
+    label: capitalizeFirst(split.raw),
+  });
+  assembly.matchedRules.push('activated-ability');
+  return true;
+}
+
+/**
+ * Split `COST: EFFECT` on the FIRST colon, rejecting lines whose colon is not an
+ * activation cost separator (a loyalty ability's `+2:`, a reminder-text colon).
+ */
+function splitCostAndEffect(
+  clause: string,
+): { cost: string; effect: string; raw: string } | null {
+  const colon = clause.indexOf(':');
+  if (colon <= 0) return null;
+  const cost = clause.slice(0, colon).trim();
+  const effect = clause.slice(colon + 1).trim();
+  if (cost.length === 0 || effect.length === 0) return null;
+  // Planeswalker loyalty costs are their own system and must stay reported.
+  if (/^[+−-]?\d+$/.test(cost)) return null;
+  return { cost, effect, raw: clause };
+}
+
+/** A cost component the parser understands, as printed. */
+const TAP_SYMBOL = '{t}';
+/** "Pay N life" / "pay 1 life". */
+const PAY_LIFE = /^pay (\d+) life$/;
+/** "Sacrifice ~" — only sacrificing the ability's own source is supported. */
+const SACRIFICE_SELF = /^sacrifice ~$/;
+/** A mana symbol run, e.g. `{1}{g}` or `{u}`. */
+const MANA_SYMBOLS = /^(?:\{[^}]+\})+$/;
+
+/**
+ * Parse an activation cost into the engine's `ActivationCost`, or `null` when
+ * any component is one we cannot pay faithfully.
+ */
+function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | null {
+  const cost: {
+    mana?: ManaCost;
+    tap?: boolean;
+    sacrificeSelf?: boolean;
+    life?: number;
+  } = {};
+
+  for (const partRaw of text.split(',')) {
+    const part = partRaw.trim();
+    if (part.length === 0) continue;
+
+    if (part === TAP_SYMBOL) {
+      cost.tap = true;
+      continue;
+    }
+    const life = PAY_LIFE.exec(part);
+    if (life) {
+      cost.life = Number.parseInt(life[1]!, 10);
+      continue;
+    }
+    if (SACRIFICE_SELF.test(part) || part === `sacrifice ${ctx.card.name.toLowerCase()}`) {
+      cost.sacrificeSelf = true;
+      continue;
+    }
+    if (MANA_SYMBOLS.test(part)) {
+      const mana = parseManaSymbols(part);
+      if (!mana) return null; // a symbol we cannot pay (hybrid, {X}, Phyrexian)
+      cost.mana = mana;
+      continue;
+    }
+    return null; // an unrecognised cost component — report the whole line
+  }
+
+  return Object.keys(cost).length > 0 ? (cost as ActivationCost) : null;
+}
+
+/**
+ * Parse a run of mana symbols (`{1}{g}`) into a `ManaCost`. Returns null for any
+ * symbol the engine cannot pay from a pool, so those lines stay reported.
+ */
+function parseManaSymbols(text: string): ManaCost | null {
+  const cost: Record<string, number> = {};
+  for (const match of text.matchAll(/\{([^}]+)\}/g)) {
+    const symbol = match[1]!.toUpperCase();
+    if (/^\d+$/.test(symbol)) {
+      cost.generic = (cost.generic ?? 0) + Number.parseInt(symbol, 10);
+      continue;
+    }
+    if (['W', 'U', 'B', 'R', 'G', 'C'].includes(symbol)) {
+      cost[symbol] = (cost[symbol] ?? 0) + 1;
+      continue;
+    }
+    return null; // hybrid / Phyrexian / {X} — not payable as an activation cost
+  }
+  return Object.keys(cost).length > 0 ? (cost as ManaCost) : null;
+}
+
+/** Capitalize the first character, for a readable ability label. */
+function capitalizeFirst(text: string): string {
+  return text.length === 0 ? text : text[0]!.toUpperCase() + text.slice(1);
 }
 
 /**
@@ -267,6 +397,10 @@ function compileAbilityLine(
     return;
   }
 
+  // An activated ability: "COST: EFFECT". Handled before the effect rules so the
+  // cost is never mistaken for part of the effect text.
+  if (compileActivatedAbility(clause, assembly, ctx)) return;
+
   if (isSpell) {
     // Whole-line first (compound idioms like "…deals 3 damage… You gain 3 life"),
     // then sentence-by-sentence for plain sequences of effects.
@@ -306,6 +440,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     triggers: [],
     produces: [],
     producesOptions: [],
+    activated: [],
     keywords: {},
     entersTapped: false,
     matchedRules: [],
@@ -456,6 +591,11 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(isCreatureCard && card.power !== null ? { power: card.power } : {}),
     ...(isCreatureCard && card.toughness !== null ? { toughness: card.toughness } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
+    // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain
+    // or Plains card") match a dual land the way the printed card does.
+    ...(card.typeLine.subtypes.length > 0
+      ? { subtypes: card.typeLine.subtypes.map((subtype) => subtype.toLowerCase()) }
+      : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0
@@ -464,6 +604,7 @@ export function compileCard(card: CompilableCard): CompileResult {
         ? { produces: assembly.produces }
         : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
+    ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
   };
 
   return {

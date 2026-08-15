@@ -54,6 +54,22 @@ export interface CastSpellAction {
   readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
 }
 
+/**
+ * Activate a permanent's non-mana activated ability, paying its cost.
+ *
+ * `abilityIndex` indexes the source's `CardDefinition.activated` list, so the
+ * choice of WHICH ability is part of the action and an AI can enumerate and
+ * score each one separately. `targets` carries any targets the ability's effects
+ * need, chosen at activation exactly as a spell's are.
+ */
+export interface ActivateAbilityAction {
+  readonly kind: 'activateAbility';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
+  readonly abilityIndex: number;
+  readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+}
+
 /** Declare attackers (active player, declareAttackers step). */
 export interface DeclareAttackersAction {
   readonly kind: 'declareAttackers';
@@ -96,6 +112,7 @@ export type GameAction =
   | PlayLandAction
   | TapForManaAction
   | CastSpellAction
+  | ActivateAbilityAction
   | DeclareAttackersAction
   | DeclareBlockersAction
   | AnswerChoiceAction;

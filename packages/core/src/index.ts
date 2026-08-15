@@ -47,6 +47,8 @@ export {
 
 // Card model seam
 export type {
+  ActivatedAbility,
+  ActivationCost,
   CardDefinition,
   CardType,
   CastTiming,
@@ -146,6 +148,7 @@ export type {
   PassPriorityAction,
   PlayLandAction,
   TapForManaAction,
+  ActivateAbilityAction,
   CastSpellAction,
   DeclareAttackersAction,
   DeclareBlockersAction,

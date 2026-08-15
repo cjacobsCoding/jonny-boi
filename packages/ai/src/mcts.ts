@@ -640,6 +640,8 @@ function describeAction(action: GameAction): string {
       return `cast #${action.instanceId}`;
     case 'playLand':
       return `play land #${action.instanceId}`;
+    case 'activateAbility':
+      return `activate #${action.instanceId}.${action.abilityIndex}`;
     case 'tapForMana':
       return `tap #${action.instanceId}`;
     case 'declareAttackers':

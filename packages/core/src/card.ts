@@ -68,6 +68,15 @@ export interface CardDefinition {
   readonly toughness?: number;
   readonly keywords?: KeywordFlags;
   /**
+   * Printed subtypes, lowercased ("mountain", "human", "equipment").
+   *
+   * Carried because some cards select by subtype rather than by type or name: a
+   * fetchland searches for "a Mountain or Plains card", which finds a dual land
+   * with those land types and not just a basic. Without this the only options
+   * are an unfaithful name match or reporting the card as unsupported.
+   */
+  readonly subtypes?: readonly string[];
+  /**
    * Ordered effects run when this spell resolves (instants/sorceries) or as the
    * permanent's enters-the-battlefield script. Opaque to core.
    */
@@ -113,6 +122,51 @@ export interface CardDefinition {
    * cards with no triggers.
    */
   readonly triggers?: readonly import('./triggers.js').TriggeredAbility[];
+  /**
+   * Abilities the controller may ACTIVATE by paying a cost — the `Cost: Effect`
+   * line printed on fetchlands ("{T}, Pay 1 life, Sacrifice ~: Search…"),
+   * sacrifice outlets, and mana rocks with a second ability.
+   *
+   * Mana abilities are NOT here: a permanent that only taps for mana declares
+   * {@link produces}/{@link producesOptions} and resolves without using the
+   * stack, exactly as the rules require. Everything in this list uses the stack.
+   */
+  readonly activated?: readonly ActivatedAbility[];
+}
+
+/**
+ * What activating an ability costs. Every field is optional and they combine —
+ * a fetchland pays all three of tap, life, and sacrifice.
+ *
+ * Costs are PAID ON ACTIVATION, before the ability goes on the stack, and are
+ * not refunded if the ability is later countered or fizzles (rule 602.2).
+ */
+export interface ActivationCost {
+  /** Mana component, paid from the controller's floating pool. */
+  readonly mana?: ManaCost;
+  /** The `{T}` symbol: tap this permanent (and obey summoning sickness). */
+  readonly tap?: boolean;
+  /** "Sacrifice ~": this permanent goes to its owner's graveyard. */
+  readonly sacrificeSelf?: boolean;
+  /** "Pay N life". Payable only while the controller's life exceeds it. */
+  readonly life?: number;
+}
+
+/**
+ * One activated ability: a cost, the effects it puts on the stack, and when it
+ * may be activated.
+ *
+ * `timing` defaults to `'instant'` because that is the rules default — an
+ * activated ability may be activated whenever its controller has priority
+ * unless its text says otherwise (rule 602.2). A `'sorcery'` ability is the
+ * exception ("Activate only as a sorcery").
+ */
+export interface ActivatedAbility {
+  readonly cost: ActivationCost;
+  readonly effects: readonly EffectRef[];
+  readonly timing?: CastTiming;
+  /** Human-readable text for the log, the inspector, and the replay viewer. */
+  readonly label: string;
 }
 
 /** Convenience predicates over a definition's type line. */

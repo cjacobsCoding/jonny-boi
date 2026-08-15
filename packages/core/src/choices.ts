@@ -55,6 +55,12 @@ export interface CardFilter {
   readonly anyOfTypes?: readonly CardType[];
   /** Drop cards with any of these types (this is how "nonland" is written). */
   readonly noneOfTypes?: readonly CardType[];
+  /**
+   * Keep only cards carrying at least one of these SUBTYPES, lowercased. This is
+   * how "a Mountain or Plains card" is written — it matches a dual land with
+   * those land types, exactly as the printed card does.
+   */
+  readonly anyOfSubtypes?: readonly string[];
   /** Exact card name match (case-sensitive, as printed). */
   readonly nameEquals?: string;
   /** Inclusive mana-value bounds. */
@@ -68,6 +74,10 @@ export function matchesCardFilter(card: CardInstance, filter?: CardFilter): bool
   const def = card.def;
   if (filter.anyOfTypes && !filter.anyOfTypes.some((t) => def.types.includes(t))) return false;
   if (filter.noneOfTypes && filter.noneOfTypes.some((t) => def.types.includes(t))) return false;
+  if (filter.anyOfSubtypes) {
+    const subtypes = def.subtypes ?? [];
+    if (!filter.anyOfSubtypes.some((s) => subtypes.includes(s))) return false;
+  }
   if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
   if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
     const mv = def.cost ? convertedManaCost(def.cost) : 0;
