@@ -197,13 +197,21 @@ if (mode === 'profile') {
 }
 
 if (mode === 'breakdown') {
+  // CAVEAT: this mode is COARSE. The scavenge counter resolves ~1 MB, so a
+  // per-call figure is quantised to (1 MB / reps) and only means anything as an
+  // order of magnitude; pushing reps up past a few thousand makes it worse, not
+  // better, because the surviving objects start being promoted and collected by
+  // major GCs instead. For attribution you can actually lean on, scale a knob in
+  // `decisions` mode (halve `rolloutDepth`, swap `rolloutPolicy`) and read the
+  // delta — that measures the real search, at the real allocation volume.
+  //
   // Where does a rollout PLY's allocation go? The rollout loop is
   //   legalAt(state)  →  rolloutPilot.chooseAction(...)  →  applyActionInPlace
   // plus one `cloneState` per simulation. Each piece is measured on the same real
   // positions in isolation, so the totals are attributable rather than guessed.
   const positions = collectPositions(count);
   const heuristic = createHeuristicPilot();
-  const reps = 2000;
+  const reps = Number(process.env.BENCH_REPS ?? 2000);
   const measure = async (label, fn) => {
     fn(); // warm
     global.gc?.();
@@ -226,7 +234,7 @@ if (mode === 'breakdown') {
     await measure('heuristic.chooseAction', () =>
       heuristic.chooseAction({ view: s, legalActions: legal, rng: createRng(1) }),
     );
-    await measure('applyActionInPlace(pass)', () => {
+    await measure('clone+applyInPlace(pass)', () => {
       const c = cloneState(s);
       applyActionInPlace(c, { kind: 'passPriority', player: c.priorityPlayer }, DEFAULT_RULES, registry);
     });
