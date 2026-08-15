@@ -30,7 +30,7 @@
  * object, pumps target their own source, and policing those here would break them.
  */
 
-import type { CardDefinition } from './card.js';
+import type { CardDefinition, EffectRef } from './card.js';
 import { isCreature } from './card.js';
 import type { GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
@@ -109,13 +109,7 @@ export function targetRestrictionOf(def: CardDefinition): TargetRestriction | un
   if (memoized !== undefined) return memoized ?? undefined;
   // Only a restriction NARROWER than the default is enforceable, so an explicit
   // `targets: 'any'` reads the same as declaring nothing at all (see above).
-  let found: TargetRestriction | null = null;
-  for (const ref of def.effects ?? []) {
-    const declared = ref.params?.[TARGET_RESTRICTION_PARAM];
-    if (!isTargetRestriction(declared) || declared === DEFAULT_TARGET_RESTRICTION) continue;
-    found = declared;
-    break;
-  }
+  const found = restrictionOfEffects(def.effects ?? []) ?? null;
   RESTRICTION_MEMO.set(def, found);
   return found ?? undefined;
 }
@@ -192,6 +186,43 @@ export function illegalTargetReason(
   const target = targets[0]!;
   if (!isLegalTarget(state, restriction, target)) {
     return `${def.name} can only target ${describeRestriction(restriction)}`;
+  }
+  return undefined;
+}
+
+/**
+ * The same legality check as {@link illegalTargetReason}, but over a bare list
+ * of effects rather than a whole card.
+ *
+ * An ACTIVATED ability has its own effects and therefore its own targeting
+ * rules, independent of the spell script printed on the same card. `label` names
+ * the thing being activated so a rejection reads as a sentence.
+ */
+export function illegalTargetReasonForEffects(
+  state: GameState,
+  label: string,
+  effects: readonly EffectRef[],
+  targets: ReadonlyArray<InstanceId | PlayerId>,
+): string | undefined {
+  const restriction = restrictionOfEffects(effects);
+  if (restriction === undefined) return undefined; // unrestricted — not policed
+  if (targets.length !== 1) {
+    return `${label} targets exactly one ${describeRestriction(restriction)}`;
+  }
+  if (!isLegalTarget(state, restriction, targets[0]!)) {
+    return `${label} can only target ${describeRestriction(restriction)}`;
+  }
+  return undefined;
+}
+
+/** First narrower-than-default restriction declared by any of these effects. */
+export function restrictionOfEffects(
+  effects: readonly EffectRef[],
+): TargetRestriction | undefined {
+  for (const ref of effects) {
+    const declared = ref.params?.[TARGET_RESTRICTION_PARAM];
+    if (!isTargetRestriction(declared) || declared === DEFAULT_TARGET_RESTRICTION) continue;
+    return declared;
   }
   return undefined;
 }

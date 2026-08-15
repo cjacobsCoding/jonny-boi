@@ -155,6 +155,19 @@ const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
 const LAND_FILTER = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
 
 /**
+ * The five basic land types. A fetchland selects by these, and restricting the
+ * fetch template to them keeps it from matching a search for some other card
+ * type whose retrieval this template does not actually implement.
+ */
+const LAND_SUBTYPES: ReadonlySet<string> = new Set([
+  'plains',
+  'island',
+  'swamp',
+  'mountain',
+  'forest',
+]);
+
+/**
  * The printed restrictions a "you choose a ___ card from it" discard may carry,
  * mapped to the `CardFilter` implementing each. Anything outside this table is a
  * restriction the filter cannot express, so the rule declines rather than
@@ -592,6 +605,33 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       /^defending player reveals the top card of their library\. if it'?s a land card, that player puts it into their hand$/,
     build() {
       return effects({ primitive: 'revealTopCard', params: { who: 'opponent', filter: LAND_FILTER } });
+    },
+  },
+  {
+    id: 'fetch-land-by-subtype',
+    description:
+      '"Search your library for a Mountain or Plains card, put it onto the battlefield, then shuffle." (the fetchland body)',
+    // Matches one or two land subtypes joined by "or", with the optional
+    // "tapped" and the optional trailing shuffle both printed forms carry.
+    // Selection is by SUBTYPE, so this finds a dual land with those land types
+    // exactly as the printed card does — not just a basic.
+    pattern:
+      /^search your library for an? ([a-z]+)(?: or ([a-z]+))? card, put it onto the battlefield( tapped)?(?:, then shuffle)?$/,
+    build(match) {
+      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      // Only LAND subtypes are safe here: a non-land search would need the card
+      // to be castable, which this template does not express.
+      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['land'], anyOfSubtypes: subtypes },
+          destination: 'battlefield',
+          ...(match[3] ? { tapped: true } : {}),
+        },
+      });
     },
   },
   {

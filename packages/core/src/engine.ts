@@ -13,7 +13,7 @@
 
 import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
-import type { CardDefinition, EffectRef } from './card.js';
+import type { ActivatedAbility, CardDefinition, EffectRef } from './card.js';
 import { castTiming, isLand, isPermanentType, manaModesOf } from './card.js';
 import type { ChoiceAnswer, PendingChoice, ResolutionFrame } from './choices.js';
 import {
@@ -55,7 +55,13 @@ import {
   PLAYER_IDS,
   STEP_ORDER,
 } from './state.js';
-import { illegalTargetReason, legalTargetsFor, targetRestrictionOf } from './targeting.js';
+import {
+  illegalTargetReason,
+  illegalTargetReasonForEffects,
+  legalTargetsFor,
+  restrictionOfEffects,
+  targetRestrictionOf,
+} from './targeting.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
@@ -830,6 +836,8 @@ function applyActionToDraft(
         return applyTapForMana(state, prevState, action, emit, events);
       case 'castSpell':
         return applyCastSpell(state, prevState, action, config, emit, events);
+      case 'activateAbility':
+        return applyActivateAbility(state, prevState, action, config, emit, events);
       case 'declareAttackers':
         return applyDeclareAttackers(state, prevState, action, emit, events);
       case 'declareBlockers':
@@ -1074,6 +1082,139 @@ function applyCastSpell(
   return { state, events };
 }
 
+/**
+ * Activate a permanent's non-mana ability: check timing and legality, PAY the
+ * whole cost, then put the ability on the stack.
+ *
+ * Order matters and follows rule 602.2: everything is validated first, then the
+ * cost is paid in full, then the ability goes on the stack. Costs are not
+ * refunded if the ability is later countered or its target disappears — which is
+ * why a fetchland that gets its search fizzled has still paid the life and gone
+ * to the graveyard.
+ *
+ * The ability goes on the stack as a `trigger` object. It is not a triggered
+ * ability, but the two are identical from the stack's point of view — a
+ * controller, a source, effects, and targets, with no card changing zones — so
+ * they share one resolution path rather than growing a third stack-object kind
+ * that every consumer (masking, replay, AI) would have to learn.
+ */
+function applyActivateAbility(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'activateAbility' }>,
+  _config: RulesConfig,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+
+  const source = findOnBattlefield(state, action.instanceId);
+  if (!source) return rejectWith(prevState, 'that permanent is not on the battlefield');
+  if (source.controller !== action.player) return rejectWith(prevState, 'you do not control that permanent');
+
+  const ability = source.def.activated?.[action.abilityIndex];
+  if (!ability) return rejectWith(prevState, 'that permanent has no such activated ability');
+
+  // Timing: the rules default for an activated ability is instant speed; only
+  // one that says "activate only as a sorcery" is restricted.
+  const timing = ability.timing ?? 'instant';
+  const sorcerySpeedOk =
+    action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
+  if (timing === 'sorcery' && !sorcerySpeedOk) {
+    return rejectWith(prevState, 'this ability can only be activated at sorcery speed');
+  }
+
+  const problem = unpayableActivationReason(state, source, ability);
+  if (problem) return rejectWith(prevState, problem);
+
+  // Target legality, from the ability's OWN effects rather than the card's — a
+  // permanent's spell script and its activated ability can target different
+  // things, so the ability is policed against what it actually does.
+  const targetProblem = illegalTargetReasonForEffects(
+    state,
+    `${source.def.name}'s ability`,
+    ability.effects,
+    action.targets ?? [],
+  );
+  if (targetProblem) return rejectWith(prevState, targetProblem);
+
+  // --- pay the cost, in full, before anything reaches the stack ---
+  const player = state.players[action.player];
+  const cost = ability.cost;
+  if (cost.mana) {
+    const paid = payCost(player.manaPool, cost.mana);
+    if (!paid.ok) return rejectWith(prevState, paid.reason);
+    player.manaPool = paid.pool;
+  }
+  if (cost.tap) {
+    source.tapped = true;
+    emit({ type: 'tapped', instanceId: source.instanceId });
+  }
+  if (cost.life && cost.life > 0) {
+    player.life -= cost.life;
+    emit({ type: 'lifeChanged', player: action.player, delta: -cost.life, to: player.life });
+  }
+  if (cost.sacrificeSelf) {
+    // Sacrificing is a zone change to the graveyard, using the same path death
+    // does, so leaves-the-battlefield triggers and instance reset behave alike.
+    moveToZone(state, source, 'graveyard', emit, source.owner);
+    resetInstanceForNewZone(source);
+  }
+
+  state.stack.push({
+    kind: 'trigger',
+    instanceId: state.nextInstanceId++,
+    sourceInstanceId: source.instanceId,
+    controller: action.player,
+    effects: ability.effects,
+    targets: action.targets ?? [],
+    label: ability.label,
+  });
+  emit({
+    type: 'abilityActivated',
+    player: action.player,
+    instanceId: source.instanceId,
+    label: ability.label,
+  });
+
+  // The activating player retains priority, as with casting a spell.
+  state.priorityPlayer = action.player;
+  state.consecutivePasses = 0;
+  return { state, events };
+}
+
+/**
+ * Why this ability's cost cannot be paid right now, or `undefined` when it can.
+ *
+ * Shared by the legal-action generator and the applier so "offered" and
+ * "accepted" can never disagree — a pilot is never handed an action the engine
+ * would then reject.
+ */
+function unpayableActivationReason(
+  state: GameState,
+  source: CardInstance,
+  ability: ActivatedAbility,
+): string | undefined {
+  const cost = ability.cost;
+  if (cost.tap) {
+    if (source.tapped) return 'that permanent is already tapped';
+    // Rule 302.6: a creature's {T} cost needs it to have been under your control
+    // since your turn began, unless it has haste. Reuses the same check the mana
+    // abilities use, so both kinds of `{T}` obey summoning sickness identically.
+    if (!canActivateManaAbility(source, indexContinuous(state))) {
+      return `${source.def.name} has summoning sickness`;
+    }
+  }
+  const player = state.players[source.controller];
+  if (cost.life && cost.life > 0 && player.life <= cost.life) {
+    // You may pay life only down to 0, and paying all of it would lose the game
+    // to a state-based action before the ability ever resolved.
+    return 'you do not have enough life to pay that cost';
+  }
+  if (cost.mana && !canPay(player.manaPool, cost.mana)) return 'insufficient mana for that ability';
+  return undefined;
+}
+
 function removeFromHand(player: GameState['players'][PlayerId], id: InstanceId): void {
   const idx = player.hand.findIndex((c) => c.instanceId === id);
   if (idx >= 0) player.hand.splice(idx, 1);
@@ -1254,6 +1395,36 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     }
     for (const target of legalTargetsFor(state, restriction)) {
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
+    }
+  }
+
+  // Activate non-mana abilities of permanents you control. Mirrors the casting
+  // rules above: timing is checked, the whole cost must be payable, and an
+  // ability with a target restriction is offered once per LEGAL target (and not
+  // at all when there is none), so this menu can only contain playable actions.
+  for (const perm of state.battlefield) {
+    if (perm.controller !== me) continue;
+    const abilities = perm.def.activated;
+    if (!abilities || abilities.length === 0) continue;
+    for (let index = 0; index < abilities.length; index++) {
+      const ability = abilities[index]!;
+      const timing = ability.timing ?? 'instant';
+      if (timing === 'sorcery' && !sorcerySpeedWindow) continue;
+      if (unpayableActivationReason(state, perm, ability)) continue;
+      const restriction = restrictionOfEffects(ability.effects);
+      if (restriction === undefined) {
+        actions.push({ kind: 'activateAbility', player: me, instanceId: perm.instanceId, abilityIndex: index });
+        continue;
+      }
+      for (const target of legalTargetsFor(state, restriction)) {
+        actions.push({
+          kind: 'activateAbility',
+          player: me,
+          instanceId: perm.instanceId,
+          abilityIndex: index,
+          targets: [target],
+        });
+      }
     }
   }
 
