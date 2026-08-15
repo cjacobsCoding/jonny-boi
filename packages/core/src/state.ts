@@ -65,9 +65,30 @@ export interface CardInstance {
    * in cleanup alongside marked damage.
    */
   markedByDeathtouch: boolean;
-  /** Generic +1/+1-style counters etc., keyed by counter kind. */
+  /**
+   * Generic +1/+1-style counters etc., keyed by counter kind.
+   *
+   * **Contract: REPLACE this object, never mutate it in place.** To add a counter,
+   * assign a new record (`inst.counters = { ...inst.counters, [kind]: n }`); to
+   * clear them, assign {@link NO_COUNTERS}. Every write in the codebase already
+   * works this way — the field is only ever assigned wholesale.
+   *
+   * That is what lets the empty case be a single shared, frozen object instead of
+   * a fresh `{}` per instance. It is worth spelling out because the saving is not
+   * small: nearly every instance in a game carries no counters, and that one empty
+   * object was **40% of everything `cloneState` allocates** — the whole library,
+   * the whole hand, every vanilla creature, copied on every action. Because the
+   * shared object is frozen, an in-place write fails loudly at the offending line
+   * rather than silently aliasing two states together.
+   */
   counters: Record<string, number>;
 }
+
+/**
+ * The shared, frozen "no counters" record. See {@link CardInstance.counters} for
+ * the replace-never-mutate contract that makes sharing it safe.
+ */
+export const NO_COUNTERS: Record<string, number> = Object.freeze({}) as Record<string, number>;
 
 /** Per-player state. */
 export interface PlayerState {
