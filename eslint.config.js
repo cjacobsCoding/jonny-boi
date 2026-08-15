@@ -20,6 +20,14 @@ export default tseslint.config(
       // generated bundle reported 226 errors in vendored code nobody edits and
       // drowned the 4 real ones, which is why `npm run lint` sat red.
       'dist-bundle/**',
+      // AssemblyScript sources. These carry a `.ts` extension and are NOT
+      // TypeScript: `@inline` / `@operator` are AssemblyScript decorators in
+      // positions TypeScript forbids, so typescript-eslint fails to PARSE them
+      // ("Decorators are not valid here") rather than finding anything real.
+      // They are compiled by `asc`, never by tsc, and never bundled.
+      'spikes/**/assembly/**',
+      // Spike build output: the emitted .wasm/.wat and any generated mirror.
+      'spikes/**/build/**',
     ],
   },
   js.configs.recommended,
@@ -59,6 +67,9 @@ export default tseslint.config(
         performance: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        // A spike that measures a WebAssembly build instantiates the module from
+        // Node, where `WebAssembly` is a standard global exactly as `process` is.
+        WebAssembly: 'readonly',
       },
     },
   },
