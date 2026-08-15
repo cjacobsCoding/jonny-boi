@@ -41,6 +41,10 @@ import {
   makeToken,
   pumpUntilEndOfTurn,
   tapTarget,
+  mill,
+  fight,
+  dealDamageToEach,
+  addCounters,
 } from './primitives.js';
 import {
   discardCard,
@@ -225,6 +229,11 @@ function effectivePT(state: GameState, target: CardInstance): { power: number; t
   const dp = mods.reduce((a, m) => a + (m.power ?? 0), 0);
   const dt = mods.reduce((a, m) => a + (m.toughness ?? 0), 0);
   return { power: effectivePower(target) + dp, toughness: effectiveToughness(target) + dt };
+}
+
+/** A minimal non-creature definition, for tests that only need a source object. */
+function vanilla(name: string): CardDefinition {
+  return { id: `id:${name}`, name, types: ['instant'] };
 }
 
 const bear: CardDefinition = { id: 'bear', name: 'Bear', types: ['creature'], power: 2, toughness: 2, cost: { generic: 2 } };
@@ -827,5 +836,192 @@ describe('returnFromGraveyard', () => {
     expect(asked[0]!.min).toBe(0);
     expect(s.players.A.hand).toHaveLength(0);
     expect(s.players.A.graveyard).toHaveLength(1);
+  });
+});
+
+// --- the newly-added mechanics -------------------------------------------------
+
+describe('mill', () => {
+  it('moves the top N cards of the target player library to their graveyard', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Source'), 'A');
+    const library = [1, 2, 3, 4].map((n) => inst(vanilla(`Card${n}`), 'B', 'library'));
+    state.players.B.library = library;
+
+    const { ctx } = ctxFor(state, source, { amount: 3 }, ['B']);
+    mill(ctx);
+
+    expect(state.players.B.library.map((c) => c.def.name)).toEqual(['Card4']);
+    expect(state.players.B.graveyard.map((c) => c.def.name)).toEqual(['Card1', 'Card2', 'Card3']);
+    // Milled cards are IN the graveyard, not deleted — graveyard effects see them.
+    for (const card of state.players.B.graveyard) expect(card.zone).toBe('graveyard');
+  });
+
+  it('mills the controller when `self` is set', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Source'), 'A');
+    state.players.A.library = [inst(vanilla('Mine'), 'A', 'library')];
+
+    const { ctx } = ctxFor(state, source, { amount: 1, self: true });
+    mill(ctx);
+
+    expect(state.players.A.graveyard).toHaveLength(1);
+  });
+
+  it('empties a short library instead of over-milling', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Source'), 'A');
+    state.players.B.library = [inst(vanilla('Only'), 'B', 'library')];
+
+    const { ctx } = ctxFor(state, source, { amount: 10 }, ['B']);
+    mill(ctx);
+
+    expect(state.players.B.library).toHaveLength(0);
+    expect(state.players.B.graveyard).toHaveLength(1);
+  });
+});
+
+describe('fight', () => {
+  /** A creature definition with the given power/toughness. */
+  function beast(name: string, power: number, toughness: number): CardDefinition {
+    return { id: `id:${name}`, name, types: ['creature'], power, toughness };
+  }
+
+  it('deals damage BOTH ways, simultaneously', () => {
+    const state = emptyState();
+    const mine = inst(beast('Mine', 3, 3), 'A');
+    const theirs = inst(beast('Theirs', 2, 4), 'B');
+    state.battlefield.push(mine, theirs);
+
+    const { ctx } = ctxFor(state, mine, {}, [theirs.instanceId]);
+    fight(ctx);
+
+    expect(theirs.damageMarked).toBe(3);
+    expect(mine.damageMarked).toBe(2);
+  });
+
+  it('lets a mutual kill kill both — damage is read before either is applied', () => {
+    const state = emptyState();
+    // A 4/3 and a 3/4: each has lethal power against the other's toughness.
+    const mine = inst(beast('Mine', 4, 3), 'A');
+    const theirs = inst(beast('Theirs', 3, 4), 'B');
+    state.battlefield.push(mine, theirs);
+
+    const { ctx } = ctxFor(state, mine, {}, [theirs.instanceId]);
+    fight(ctx);
+
+    // If the first death had cancelled the second damage, one would survive.
+    expect(mine.damageMarked).toBeGreaterThanOrEqual(3);
+    expect(theirs.damageMarked).toBeGreaterThanOrEqual(4);
+  });
+
+  it('is a safe no-op with no target', () => {
+    const state = emptyState();
+    const mine = inst(beast('Mine', 2, 2), 'A');
+    state.battlefield.push(mine);
+
+    const { ctx } = ctxFor(state, mine, {}, []);
+    expect(() => fight(ctx)).not.toThrow();
+    expect(mine.damageMarked).toBe(0);
+  });
+});
+
+describe('dealDamageToEach', () => {
+  function beast(name: string, player: PlayerId): CardInstance {
+    return inst({ id: `id:${name}`, name, types: ['creature'], power: 2, toughness: 2 }, player);
+  }
+
+  it('hits every creature on both sides', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Sweeper'), 'A');
+    const a = beast('A1', 'A');
+    const b = beast('B1', 'B');
+    state.battlefield.push(a, b);
+
+    const { ctx } = ctxFor(state, source, { amount: 2, creatures: true });
+    dealDamageToEach(ctx);
+
+    expect(a.damageMarked).toBe(2);
+    expect(b.damageMarked).toBe(2);
+  });
+
+  it('hits only the opponent for the "each opponent" template', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Burn'), 'A');
+
+    const { ctx } = ctxFor(state, source, { amount: 3, opponents: true });
+    dealDamageToEach(ctx);
+
+    expect(state.players.B.life).toBe(17);
+    expect(state.players.A.life, 'the caster must not hit themselves').toBe(20);
+  });
+
+  it('hits BOTH players for the symmetrical template', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Earthquake'), 'A');
+
+    const { ctx } = ctxFor(state, source, { amount: 2, players: true });
+    dealDamageToEach(ctx);
+
+    expect(state.players.A.life).toBe(18);
+    expect(state.players.B.life).toBe(18);
+  });
+});
+
+describe('addCounters', () => {
+  function beast(name: string, power: number, toughness: number): CardDefinition {
+    return { id: `id:${name}`, name, types: ['creature'], power, toughness };
+  }
+
+  it('permanently raises effective power and toughness', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Bolster'), 'A');
+    const target = inst(beast('Bear', 2, 2), 'A');
+    state.battlefield.push(target);
+
+    const { ctx } = ctxFor(state, source, { amount: 2 }, [target.instanceId]);
+    addCounters(ctx);
+
+    // Unlike a pump, this is a counter on the object — it survives cleanup.
+    expect(target.counters[PLUS_ONE_COUNTER]).toBe(2);
+    expect(effectivePower(target)).toBe(4);
+    expect(effectiveToughness(target)).toBe(4);
+  });
+
+  it('accumulates with counters already there', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Bolster'), 'A');
+    const target = inst(beast('Bear', 2, 2), 'A');
+    target.counters[PLUS_ONE_COUNTER] = 1;
+    state.battlefield.push(target);
+
+    const { ctx } = ctxFor(state, source, { amount: 1 }, [target.instanceId]);
+    addCounters(ctx);
+
+    expect(target.counters[PLUS_ONE_COUNTER]).toBe(2);
+  });
+
+  it('shrinks a creature with a negative amount (-1/-1)', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Shrink'), 'A');
+    const target = inst(beast('Bear', 2, 2), 'A');
+    state.battlefield.push(target);
+
+    const { ctx } = ctxFor(state, source, { amount: -1 }, [target.instanceId]);
+    addCounters(ctx);
+
+    expect(effectivePower(target)).toBe(1);
+    expect(effectiveToughness(target)).toBe(1);
+  });
+
+  it('counters the SOURCE when `self` is set (the "enters with" template)', () => {
+    const state = emptyState();
+    const self = inst(beast('Ballista', 0, 0), 'A');
+    state.battlefield.push(self);
+
+    const { ctx } = ctxFor(state, self, { amount: 2, self: true });
+    addCounters(ctx);
+
+    expect(self.counters[PLUS_ONE_COUNTER]).toBe(2);
   });
 });
