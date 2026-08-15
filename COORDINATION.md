@@ -64,6 +64,25 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-14 DESKTOP-90PJPM4: `feat/import-smart-names` ✅ (apps/web/src/lib/decklist only) — a standing
+  regression guard on TWO REAL tournament lists (Boros Energy, Goryo's Vengeance) in
+  `real-decklists.test.ts`. The unit tests prove each import rule alone; this proves they still compose
+  on the lists that actually broke, offline, against a Scryfall fake that reproduces the one asymmetry
+  that matters: `/cards/collection` matches a card FACE name only, while `/cards/search` also sees
+  printed names. Covers "Wear // Tear", the Universes Beyond printing "Kavaero, Mind-Bitten"
+  (Scryfall files it as "Superior Spider-Man"), and DFCs named by their front face.
+  MEASURED against these lists on this commit: every name now resolves (0 not-found), but only
+  **2/75 and 6/75 copies are PLAYABLE**. The wall is not import — it is compiler/engine coverage:
+  • the biggest bucket is "a rules template the compiler does not recognize yet" (19 + 12 copies), and
+    it is a LONG TAIL of unrelated mechanics (Ascend, Mobilize, Rebound, Replicate, Warp, cost
+    reduction, counterspells, Blood Moon's static effect) — no single fix unlocks it.
+  • the one COHESIVE win is the mana base: fetchlands + shocklands are 15 copies in EACH list (20% of
+    the deck). ⚠️ Do not start that here — `feat/activated-abilities` is actively building it
+    (`cost: { tap, life, sacrificeSelf }`, an `activateAbility` action, fetchland tests). Shocklands
+    additionally need the "you may pay 2 life" choice, which `packages/core/src/card.ts` documents as
+    deliberately unimplemented pending the choice system that branch also owns.
+  No `packages/core` or `packages/cards` files touched, by design. (Worker)
+
 - 2026-08-13 DESKTOP-90PJPM4: `feat/import-formats` ✅ (apps/web/src/lib/scryfall + decklist/resolve) —
   **two real deck-import bugs, found by importing the user's actual Modern lists.** The *parser* was
   never at fault: both a Boros Energy list and a Goryo's Vengeance list parsed 60 main + 15 sideboard
