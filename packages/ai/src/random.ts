@@ -36,7 +36,11 @@ export function createRandomPilot(): Pilot {
       const index = rng.nextInt(legalActions.length);
       // index is always in [0, length) so this element exists.
       const choice = legalActions[index] as GameAction;
-      ctx.trace?.({ action: choice, reason: `random pick ${index + 1}/${legalActions.length}` });
+      // Guarded rather than `ctx.trace?.({...})`: the optional call still builds
+      // the trace object and formats its reason first, and this pilot is one of
+      // MCTS's rollout policies — thousands of calls per look-ahead decision,
+      // every one of them with no trace sink attached.
+      if (ctx.trace) ctx.trace({ action: choice, reason: `random pick ${index + 1}/${legalActions.length}` });
       return choice;
     },
   };

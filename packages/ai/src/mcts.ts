@@ -31,9 +31,31 @@
  *
  * Performance: we clone the root state ONCE per simulation and mutate that single
  * sim copy as we descend + roll out — never a deep clone per ply beyond what the
- * engine already does in `applyAction`. MCTS is much slower than the heuristic by
- * design (it plays ~`simulationsPerDecision` partial games per decision); the payoff
- * is fewer-but-better games / higher-confidence verdicts.
+ * engine already does in `applyAction`.
+ *
+ * WHAT THIS PILOT ACTUALLY COSTS AND BUYS (measured 2026-08, sample gauntlet,
+ * Mono-Red Aggro vs Boros Aggro — read this before proposing it as a default):
+ *
+ *   throughput     0.087 games/sec, vs the heuristic's 176 — about 2000x slower.
+ *                  The cost is structural, not garbage: a decision runs
+ *                  `simulationsPerDecision` x `rolloutDepth` engine plies, so a
+ *                  game plays on the order of a million times the engine work the
+ *                  heuristic does. Cutting ~18% of the search's allocation moved
+ *                  wall clock by ~5%, inside this machine's run-to-run noise.
+ *   strength       49 wins in 120 seeded games against the heuristic = 40.8%,
+ *                  95% CI [32.5%, 49.8%]. Seat and play were both rotated. That
+ *                  interval excludes 50%: at this budget the look-ahead pilot is
+ *                  measurably WORSE than the pilot whose policy it rolls out with,
+ *                  not better.
+ *   play quality   0.71 wasted-mana events per turn against the heuristic's 0.00
+ *                  (see `MctsConfig.evalWastedManaPenalty`, which fixes that but
+ *                  costs win rate, and so ships off).
+ *
+ * The premise this pilot was built on — "slower per game, but better games, so
+ * fewer are needed" — is therefore not currently true. It stays as a selectable,
+ * documented option and a research vehicle; it is not a default, and the guard
+ * tests in `index.test.ts` and the sim's `pilot-quality.test.ts` are correct to
+ * pin that. `packages/ai/bench/mcts-bench.mjs` reproduces every number above.
  */
 
 import type {
@@ -80,20 +102,54 @@ export function createMctsPilot(config: MctsConfig = DEFAULT_MCTS_CONFIG): Pilot
   // Reuse the existing pilots as the rollout default policy (DRY — no bespoke
   // playout logic). Both are stateless, so we build them once.
   const rolloutPilot = config.rolloutPolicy === 'heuristic' ? createHeuristicPilot() : createRandomPilot();
+  const policy: RolloutPolicy = { pilot: rolloutPilot, needsTargetedCasts: rolloutPolicyNeedsEnrichment(config) };
 
   return {
     id: MCTS_PILOT_ID,
+    // Honest, because this string is what a user picks from. The old wording
+    // ("plays the meta decks more realistically to cut sim-verdict noise")
+    // promised a benefit that measurement does not support — see the file header.
     description:
-      'Monte-Carlo Tree Search (UCB1 selection + engine rollouts, tunable budget). Plays the meta decks more realistically to cut sim-verdict noise.',
+      'Monte-Carlo Tree Search (UCB1 selection + engine rollouts, tunable budget). Research option: ~2000x slower than the heuristic and, at the shipped budget, measurably weaker (40.8% over 120 seeded games).',
     chooseAction(ctx: DecisionContext): GameAction {
       try {
-        return search(ctx, config, rolloutPilot);
+        return search(ctx, config, policy);
       } catch {
         // Robustness: never throw on an odd state. Fall back to a safe, legal move.
         return safeFallback(ctx);
       }
     },
   };
+}
+
+/**
+ * The rollout default policy, paired with whether its playout menu has to be
+ * ENRICHED with targeted casts (see `candidateActions`).
+ *
+ * The tree needs the enrichment — the search can only value "burn the threat" if
+ * a targeted cast is a node it can expand. A *rollout* only needs it if its
+ * policy picks FROM the menu it is handed:
+ *
+ *   - `random` picks uniformly from the offered actions, so without the targeted
+ *     variants it could never point a burn spell at anything, and its playouts
+ *     would systematically undervalue every removal spell in the deck.
+ *   - `heuristic` reads the hand and CONSTRUCTS its own targeted cast; it consults
+ *     the offered list only for "may I play a land", "which abilities are on
+ *     offer", "which attackers am I allowed to declare", and as the tap menu for
+ *     `planManaPayment` — none of which the enrichment touches (it rewrites bare
+ *     `castSpell`s and passes every other action through in order). Enriching for
+ *     it is pure allocation, once per ply, ~20,000 times per decision.
+ *
+ * Derived from the configured policy rather than a separate knob, so the two can
+ * never fall out of step.
+ */
+interface RolloutPolicy {
+  readonly pilot: Pilot;
+  readonly needsTargetedCasts: boolean;
+}
+
+function rolloutPolicyNeedsEnrichment(config: MctsConfig): boolean {
+  return config.rolloutPolicy !== 'heuristic';
 }
 
 // --- the search ----------------------------------------------------------------
@@ -118,15 +174,14 @@ interface ChildEdge {
   totalReward: number;
 }
 
-function search(ctx: DecisionContext, config: MctsConfig, rolloutPilot: Pilot): GameAction {
+function search(ctx: DecisionContext, config: MctsConfig, policy: RolloutPolicy): GameAction {
   const { view, legalActions, rng } = ctx;
   const decider = view.priorityPlayer;
 
   // Degenerate decisions: nothing offered, or only passing is possible → pass
   // cleanly without spending any search effort.
   if (legalActions.length === 0) return safeFallback(ctx);
-  const nonPass = legalActions.filter((a) => a.kind !== 'passPriority');
-  if (nonPass.length === 0) {
+  if (!hasNonPassAction(legalActions)) {
     const pass = legalActions[0] as GameAction;
     ctx.trace?.({ action: pass, reason: 'only pass available — passing' });
     return pass;
@@ -143,7 +198,7 @@ function search(ctx: DecisionContext, config: MctsConfig, rolloutPilot: Pilot): 
   // mana pools empty at the end of every step, so mana tapped with nothing
   // castable is strictly wasted, and these windows are the single most common
   // shape in a game (every opponent step where we hold no affordable instant).
-  if (isUnspendableManaWindow(view as GameState, nonPass)) {
+  if (isUnspendableManaWindow(view as GameState, legalActions)) {
     const pass = legalActions.find((a) => a.kind === 'passPriority') ?? (legalActions[0] as GameAction);
     ctx.trace?.({ action: pass, reason: 'no castable spell — mana would be wasted, passing' });
     return pass;
@@ -170,13 +225,19 @@ function search(ctx: DecisionContext, config: MctsConfig, rolloutPilot: Pilot): 
   // its input and returns a fresh state, so each simulation derives its own line
   // from `view` without us copying state ourselves.
   const rootState = view as GameState;
+  const scratch: SimScratch = {
+    path: [],
+    edges: [],
+    wasted: 0,
+    rolloutCtx: { view: rootState, legalActions: EMPTY_ACTIONS, rng },
+  };
   const deadline = config.maxDecisionMillis === Infinity ? Infinity : now() + config.maxDecisionMillis;
 
   for (let i = 0; i < config.simulationsPerDecision; i++) {
     // Wall-clock safety backstop. Checked only every few sims to keep `now()` off
     // the hot path; on normal positions this never trips before the count budget.
     if (deadline !== Infinity && (i & 0x7) === 0 && now() >= deadline) break;
-    runSimulation(root, rootState, decider, config, rulesConfig, registry, rolloutPilot, rng);
+    runSimulation(root, rootState, decider, config, rulesConfig, registry, policy, rng, scratch);
   }
 
   // Pick the most-visited root child (robust child) — the standard MCTS final move
@@ -205,16 +266,26 @@ function runSimulation(
   config: MctsConfig,
   rulesConfig: RulesConfig,
   registry: EffectRegistry,
-  rolloutPilot: Pilot,
+  policy: RolloutPolicy,
   rng: Rng,
+  scratch: SimScratch,
 ): void {
   // Each simulation starts from its OWN copy of the root state and mutates that
   // copy from here on (`step` is in-place). This is the only clone a simulation
   // makes: the shared `rootState` — which is the real, live game view — is never
   // touched, and every ply after this one costs no copy at all.
   let state: GameState = cloneState(rootState);
-  const path: SearchNode[] = [root];
-  const edges: ChildEdge[] = [];
+  // The visited path and its edges are rebuilt every simulation and dropped at
+  // the end of it, so they are REUSED scratch rather than two fresh arrays per
+  // simulation. Safe because nothing outside this function ever sees them: the
+  // backprop loop below is their only reader, and `chooseAction` is synchronous
+  // and never re-entered (see `SIM_SCRATCH`).
+  const path = scratch.path;
+  const edges = scratch.edges;
+  path.length = 0;
+  edges.length = 0;
+  scratch.wasted = 0;
+  path.push(root);
 
   let node = root;
 
@@ -223,13 +294,13 @@ function runSimulation(
   while (node.untried.length === 0 && node.children.length > 0 && !state.gameOver) {
     const edge = selectUcb1(node, config, rng);
     if (!edge) break;
-    state = step(state, edge.action, rulesConfig, registry);
+    state = step(state, edge.action, rulesConfig, registry, decider, scratch);
     node = edge.node;
     path.push(node);
     edges.push(edge);
     // Lazily enumerate this child's legal actions the first time we descend into it.
     if (!node.enumerated) {
-      node.untried.push(...legalAt(state, rulesConfig));
+      pushLegalAt(node.untried, state, rulesConfig);
       node.enumerated = true;
     }
   }
@@ -239,7 +310,7 @@ function runSimulation(
   if (!state.gameOver && node.untried.length > 0) {
     const idx = rng.nextInt(node.untried.length);
     const action = node.untried.splice(idx, 1)[0] as GameAction;
-    state = step(state, action, rulesConfig, registry);
+    state = step(state, action, rulesConfig, registry, decider, scratch);
     // The child's legal actions are enumerated lazily on its first later descent.
     const child: SearchNode = { untried: [], children: [], visits: 0, enumerated: false };
     const edge: ChildEdge = { action, node: child, totalReward: 0 };
@@ -250,12 +321,50 @@ function runSimulation(
   }
 
   // --- ROLLOUT + EVALUATE from the leaf's state, in the deciding player's frame.
-  const reward = rollout(state, decider, config, rulesConfig, registry, rolloutPilot, rng);
+  const reward = rollout(state, decider, config, rulesConfig, registry, policy, rng, scratch);
 
   // --- BACKPROP: every visited node gets a visit; every edge accumulates reward.
-  for (const n of path) n.visits++;
-  for (const e of edges) e.totalReward += reward;
+  for (let i = 0; i < path.length; i++) (path[i] as SearchNode).visits++;
+  for (let i = 0; i < edges.length; i++) (edges[i] as ChildEdge).totalReward += reward;
 }
+
+/**
+ * Per-decision scratch reused across a decision's simulations.
+ *
+ * ESCAPE-SAFETY (the rule that decides what may be pooled here): a buffer may
+ * live here only if nothing outside one `runSimulation` call can still be
+ * holding it when the next simulation starts. `path` and `edges` qualify — they
+ * hold references to tree nodes, are read only by that simulation's backprop,
+ * and are cleared at its start. The tree's `untried` action lists and the
+ * `GameAction`s in them emphatically do NOT: a node RETAINS its actions for the
+ * life of the search (they become the `action` on child edges and the value this
+ * function finally returns), so pooling those would hand the tree an object a
+ * later simulation overwrites, and the pilot would return an action describing a
+ * line it never searched.
+ *
+ * One scratch is built per decision rather than per pilot, so a pilot instance
+ * shared between seats — or nested inside another search — cannot alias it.
+ */
+interface SimScratch {
+  readonly path: SearchNode[];
+  readonly edges: ChildEdge[];
+  /**
+   * How many times the deciding player's mana pool emptied with mana still in it
+   * during THIS simulation — see `MctsConfig.evalWastedManaPenalty`. Reset at the
+   * start of every simulation and read once by `evaluate`.
+   */
+  wasted: number;
+  /** The rollout policy's decision context, rewritten per ply (see `rollout`). */
+  readonly rolloutCtx: MutableDecisionContext;
+}
+
+/**
+ * A writable `DecisionContext`. `DecisionContext` is deliberately deep-readonly
+ * so a pilot cannot mutate what it is lent; this is the one place that *builds*
+ * one, and it rewrites the same object each ply instead of allocating ~20,000 of
+ * them per decision.
+ */
+type MutableDecisionContext = { -readonly [K in keyof DecisionContext]: DecisionContext[K] };
 
 /** UCB1 child selection: maximise `mean + c·sqrt(ln(parentVisits)/childVisits)`. */
 function selectUcb1(node: SearchNode, config: MctsConfig, rng: Rng): ChildEdge | undefined {
@@ -293,23 +402,34 @@ function rollout(
   config: MctsConfig,
   rulesConfig: RulesConfig,
   registry: EffectRegistry,
-  rolloutPilot: Pilot,
+  policy: RolloutPolicy,
   rng: Rng,
+  scratch: SimScratch,
 ): number {
+  const ctxScratch = scratch.rolloutCtx;
   let s = state;
   let plies = 0;
   for (let depth = 0; depth < config.rolloutDepth; depth++) {
     if (s.gameOver) break;
-    const legal = legalAt(s, rulesConfig);
+    const legal = policy.needsTargetedCasts ? legalAt(s, rulesConfig) : bareLegalAt(s, rulesConfig);
     if (legal.length === 0) break; // no moves pre-gameOver → stop and evaluate
     // The rollout policy reuses an existing pilot (DRY). It only ever returns a
     // legal/constructible action; the engine cleanly rejects anything odd, so a
     // stray rejection just advances the rollout harmlessly.
-    const action = rolloutPilot.chooseAction({ view: s, legalActions: legal, rng });
-    s = step(s, action, rulesConfig, registry);
+    // The rollout policy is handed a REUSED context object rather than a fresh
+    // one per ply. Escape-safe by construction: `policy.pilot` is never a caller-
+    // supplied pilot — this pilot builds it itself from `config.rolloutPolicy`,
+    // and both `random` and `heuristic` read the context synchronously and retain
+    // nothing from it. (A rollout policy that stored its context would have to
+    // stop sharing this object; the `RolloutPolicy` doc says so.)
+    ctxScratch.view = s;
+    ctxScratch.legalActions = legal;
+    ctxScratch.rng = rng;
+    const action = policy.pilot.chooseAction(ctxScratch as DecisionContext);
+    s = step(s, action, rulesConfig, registry, decider, scratch);
     plies++;
   }
-  return evaluate(s, decider, config, plies);
+  return evaluate(s, decider, config, plies, scratch.wasted);
 }
 
 /**
@@ -321,7 +441,13 @@ function rollout(
  *     board-presence differential, logistically squashed so it shares the [0,1]
  *     scale with the terminal rewards.
  */
-function evaluate(state: GameState, decider: PlayerId, config: MctsConfig, plies: number): number {
+function evaluate(
+  state: GameState,
+  decider: PlayerId,
+  config: MctsConfig,
+  plies: number,
+  wastedMana: number,
+): number {
   if (state.gameOver) {
     const discount = config.winSpeedDiscount * plies;
     if (state.winner === decider) {
@@ -338,7 +464,11 @@ function evaluate(state: GameState, decider: PlayerId, config: MctsConfig, plies
   const boardDiff = boardPresence(state, decider) - boardPresence(state, opp);
   const evalPoints = config.evalLifeWeight * lifeDiff + config.evalBoardWeight * boardDiff;
   // Logistic squash centred at 0 (even position ⇒ 0.5), `evalScale` sets steepness.
-  return 1 / (1 + Math.exp(-evalPoints / config.evalScale));
+  const positional = 1 / (1 + Math.exp(-evalPoints / config.evalScale));
+  // Charge the mana this line tapped and never spent. Clamped back into [0, 1]
+  // because UCB1's exploration term assumes rewards live on that scale.
+  const charged = positional - config.evalWastedManaPenalty * wastedMana;
+  return charged < 0 ? 0 : charged > 1 ? 1 : charged;
 }
 
 /** Board presence: summed (power + toughness) of a player's creatures. */
@@ -366,13 +496,35 @@ function boardPresence(state: GameState, player: PlayerId): number {
  * Robust: on any throw (shouldn't happen — the engine rejects bad input cleanly)
  * we keep the state as-is so a rollout can't crash the search.
  */
-function step(state: GameState, action: GameAction, config: RulesConfig, registry: EffectRegistry): GameState {
+function step(
+  state: GameState,
+  action: GameAction,
+  config: RulesConfig,
+  registry: EffectRegistry,
+  decider: PlayerId,
+  scratch: SimScratch,
+): GameState {
   try {
-    return applyActionInPlace(state, action, config, registry).state;
+    const result = applyActionInPlace(state, action, config, registry);
+    // The engine already built this event list for us; counting the deciding
+    // player's lost mana out of it is what lets `evaluate` see waste at all.
+    const events = result.events;
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i] as { type: string; player?: PlayerId };
+      if (event.type === MANA_POOL_EMPTIED && event.player === decider) scratch.wasted++;
+    }
+    return result.state;
   } catch {
     return state;
   }
 }
+
+/**
+ * The engine event that fires when a step ends with mana still floating — i.e.
+ * mana that was tapped and then lost. Named rather than inlined because it is
+ * the one signal the search has that a line wasted a resource.
+ */
+const MANA_POOL_EMPTIED = 'manaPoolEmptied';
 
 /**
  * Legal actions at a sim state, ENRICHED with targeted spell casts (see
@@ -386,6 +538,36 @@ function legalAt(state: GameState, config: RulesConfig): GameAction[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * The engine's legal actions with NO enrichment, for a rollout policy that does
+ * not read the offered casts (see `RolloutPolicy`). Same robustness contract.
+ */
+function bareLegalAt(state: GameState, config: RulesConfig): readonly GameAction[] {
+  try {
+    return generateLegalActions(state, config);
+  } catch {
+    return EMPTY_ACTIONS;
+  }
+}
+
+/** Shared empty menu — an error path must not allocate a fresh array per ply. */
+const EMPTY_ACTIONS: readonly GameAction[] = Object.freeze([]);
+
+/**
+ * Enumerate a node's legal actions straight INTO its `untried` list.
+ *
+ * `untried.push(...legalAt(...))` built a throwaway array and then spread it
+ * through the argument list — two allocations plus a variadic call per node
+ * expansion. The actions themselves are still freshly built and are RETAINED by
+ * the tree (a node's untried entries become the `action` on its child edges), so
+ * they are deliberately not pooled: pooling them would hand the tree an object
+ * that a later simulation overwrites.
+ */
+function pushLegalAt(untried: GameAction[], state: GameState, config: RulesConfig): void {
+  const legal = legalAt(state, config);
+  for (let i = 0; i < legal.length; i++) untried.push(legal[i] as GameAction);
 }
 
 // --- targeted-cast enrichment ----------------------------------------------------
@@ -532,11 +714,15 @@ const MAX_PUMP_TARGETS = 2;
  * "hold up mana" line to miss here, because holding it is not a thing the pool
  * permits.
  */
-function isUnspendableManaWindow(state: GameState, nonPass: readonly GameAction[]): boolean {
-  if (nonPass.length === 0) return false;
-  for (const action of nonPass) {
-    if (action.kind !== 'tapForMana') return false;
+function isUnspendableManaWindow(state: GameState, legal: readonly GameAction[]): boolean {
+  let taps = 0;
+  for (let i = 0; i < legal.length; i++) {
+    const kind = (legal[i] as GameAction).kind;
+    if (kind === 'passPriority') continue;
+    if (kind !== 'tapForMana') return false;
+    taps++;
   }
+  if (taps === 0) return false;
 
   const me = state.priorityPlayer;
   const player = state.players[me];
@@ -624,6 +810,14 @@ function safeFallback(ctx: DecisionContext): GameAction {
 
 function other(p: PlayerId): PlayerId {
   return p === 'A' ? 'B' : 'A';
+}
+
+/** Is anything other than passing on offer? (Indexed: no closure, no copy.) */
+function hasNonPassAction(actions: readonly GameAction[]): boolean {
+  for (let i = 0; i < actions.length; i++) {
+    if ((actions[i] as GameAction).kind !== 'passPriority') return true;
+  }
+  return false;
 }
 
 /** Wall-clock reader, isolated so the reproducible path never touches it directly. */
