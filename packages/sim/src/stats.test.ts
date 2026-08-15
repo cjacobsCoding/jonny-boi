@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   wilsonInterval,
+  wilsonUpperBound,
   mcNemarTest,
   chiSquare1dfUpperTail,
   normalCdf,
+  adjustPValues,
   type PairedTable,
 } from './stats.js';
 
@@ -94,5 +96,83 @@ describe('mcNemarTest', () => {
     const b = mcNemarTest({ bothWon: 0, variantOnly: 7, baseOnly: 18, neither: 0 });
     expect(a.statistic).toBeCloseTo(b.statistic, 10);
     expect(a.pValue).toBeCloseTo(b.pValue, 10);
+  });
+});
+
+/**
+ * The suggestion engine tests ~139 candidates at once. At alpha 0.05 that yields
+ * about seven "significant" results by chance even when every candidate is
+ * worthless, so a suggestion list built on raw p-values is a list of the luckiest
+ * coin flips. These are the corrections that stop that.
+ */
+describe('adjustPValues (multiple comparisons)', () => {
+  it('Holm matches the textbook step-down computation', () => {
+    // Sorted p = [0.01, 0.02, 0.03, 0.04, 0.05], m = 5.
+    // Multipliers 5,4,3,2,1 → 0.05, 0.08, 0.09, 0.08→0.09 (monotone), 0.05→0.09.
+    const adjusted = adjustPValues([0.01, 0.02, 0.03, 0.04, 0.05], 'holm');
+    expect(adjusted[0]).toBeCloseTo(0.05, 10);
+    expect(adjusted[1]).toBeCloseTo(0.08, 10);
+    expect(adjusted[2]).toBeCloseTo(0.09, 10);
+    expect(adjusted[3]).toBeCloseTo(0.09, 10);
+    expect(adjusted[4]).toBeCloseTo(0.09, 10);
+  });
+
+  it('Holm is never smaller than the raw p and never exceeds 1', () => {
+    const raw = [0.0001, 0.2, 0.4, 0.9, 1];
+    const adjusted = adjustPValues(raw, 'holm');
+    adjusted.forEach((p, i) => {
+      expect(p).toBeGreaterThanOrEqual(raw[i] as number);
+      expect(p).toBeLessThanOrEqual(1);
+    });
+  });
+
+  it('Benjamini-Hochberg matches the textbook step-up computation', () => {
+    // m = 4, sorted [0.01, 0.02, 0.03, 0.04] → m/k × p = 0.04, 0.04, 0.04, 0.04.
+    const adjusted = adjustPValues([0.01, 0.02, 0.03, 0.04], 'benjaminiHochberg');
+    for (const p of adjusted) expect(p).toBeCloseTo(0.04, 10);
+  });
+
+  it('BH is less conservative than Holm (FDR vs family-wise control)', () => {
+    const raw = [0.001, 0.008, 0.02, 0.04, 0.3, 0.7];
+    const holm = adjustPValues(raw, 'holm');
+    const bh = adjustPValues(raw, 'benjaminiHochberg');
+    raw.forEach((_, i) => expect(bh[i] as number).toBeLessThanOrEqual(holm[i] as number));
+  });
+
+  it('returns results in the CALLER\'s order, not sorted order', () => {
+    const adjusted = adjustPValues([0.5, 0.001, 0.2], 'holm');
+    // The smallest raw p (index 1) must still carry the smallest adjusted p.
+    expect(adjusted[1] as number).toBeLessThan(adjusted[2] as number);
+    expect(adjusted[2] as number).toBeLessThanOrEqual(adjusted[0] as number);
+  });
+
+  it('a larger family makes the same evidence less significant', () => {
+    // The point of the correction, and why the family must include candidates
+    // previous runs tested: otherwise re-running until something looks good works.
+    const alone = adjustPValues([0.01], 'holm')[0] as number;
+    const inACrowd = adjustPValues([0.01, ...new Array(139).fill(1)], 'holm')[0] as number;
+    expect(alone).toBeCloseTo(0.01, 10);
+    expect(inACrowd).toBeGreaterThan(alone);
+    expect(inACrowd).toBeCloseTo(1, 10);
+  });
+
+  it("'none' passes p-values through unchanged", () => {
+    expect(adjustPValues([0.01, 0.5], 'none')).toEqual([0.01, 0.5]);
+  });
+
+  it('handles the empty family', () => {
+    expect(adjustPValues([], 'holm')).toEqual([]);
+  });
+});
+
+describe('wilsonUpperBound (the futility rule\'s optimistic reading)', () => {
+  it('is the Wilson interval\'s upper end', () => {
+    expect(wilsonUpperBound(3, 20, Z_95)).toBe(wilsonInterval(3, 20, Z_95).high);
+  });
+
+  it('falls below even for an arm losing badly, and stays above it for a close one', () => {
+    // 3 of 20 discordant games is hopeless; 9 of 20 is merely behind.
+    expect(wilsonUpperBound(3, 20, Z_95)).toBeLessThan(0.5);
+    expect(wilsonUpperBound(9, 20, Z_95)).toBeGreaterThan(0.5);
   });
 });

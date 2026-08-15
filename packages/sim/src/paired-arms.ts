@@ -379,6 +379,11 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
  */
 function canReuseBaseGame(state: ArmState, base: BaseGameRecord): boolean {
   if (state.swappedInstanceId === undefined) return false;
+  // The degenerate case: the "variant" library is the base library card for card
+  // (a swap of a card for itself). Then there is no differing slot to reason about
+  // and EVERY game is the same game — which is exactly why the self-swap sanity
+  // check (delta 0, no discordant pairs, p = 1) must come out perfect.
+  if (state.swappedInstanceId === IDENTICAL_LIBRARIES) return true;
   if (base.libraryDisturbed) return false;
   const left = base.leftLibrary;
   if (!left) return false;
@@ -407,8 +412,15 @@ export function swappedInstanceIdFor(
     if (found >= 0) return undefined; // more than one difference — not a single-slot swap
     found = i;
   }
-  return found < 0 ? undefined : found + HERO_FIRST_INSTANCE_ID;
+  return found < 0 ? IDENTICAL_LIBRARIES : found + HERO_FIRST_INSTANCE_ID;
 }
+
+/**
+ * Sentinel for "the two libraries are identical" — a card swapped for itself. Zero
+ * is safe to use because core mints instance ids from
+ * {@link HERO_FIRST_INSTANCE_ID} (1), so no real card can carry it.
+ */
+export const IDENTICAL_LIBRARIES = 0;
 
 /**
  * Confirm empirically that hero instance ids index the pre-shuffle library. One
