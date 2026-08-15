@@ -127,10 +127,29 @@ _Append dated notes here; keep them short. Newest at top._
   cost the floating pool already covers, and the pilot never floats mana speculatively, so reading
   `legalActions` found nothing. It now plans equip through the same `planManaPayment` a spell uses.
   Anyone wiring a future mana-costed ability into a pilot will hit this.
-  ⚠️ **PERF (rule 7): parity, and the first three measurements were LIES.** Sequential before/after runs
-  showed a 2–3% regression that vanished under INTERLEAVED A/B — this box drifts 332→346 games/sec on
-  identical code within minutes (thermal). Interleaved, the attachment SBA measures FREE. Do not trust a
-  sequential perf comparison on this machine; alternate the variants.
+  ⚠️ **PERF (rule 7) — read this before you re-measure anything on this box.** Two measurements, and
+  they DISAGREE, so both are reported:
+  · **`packages/core/bench/engine-alloc-bench.ts` (the repo's own noise-immune measure — its header says
+    wall clock here "is close to worthless"): PARITY or better.** 10.71 µs/action vs base 10.92;
+    122.6 vs 120.2 games/sec; `cloneState` 4156 ns vs 4128 (34.6 vs 34.4 ns per cloned instance).
+  · **Gauntlet wall clock: −3.6%, consistent.** Golgari Midrange, 300 games/opponent (2,100 games),
+    seed 99, INTERLEAVED base/branch four times: branch 240/239/238/235 vs base 244/248/247/249.
+    The games are **byte-identical** (`sim gauntlet` output diffs clean), so it is pure overhead, not
+    different play.
+  👉 **I could not attribute the 3.6% to any single change, and the bisect is recorded so nobody repeats
+  it.** Reverting each of these individually recovered NOTHING beyond noise: `packages/core` entirely
+  (core alone measures at parity), `targeting.ts`, the attachment SBA scan, the pilot's equip scan,
+  `pool.ts`. It is diffuse — six one-comparison additions spread across `indexContinuous`,
+  `checkStateBasedActions`, `isLegalTarget`/`legalTargetsFor`, the clone and the pilot.
+  👉 **The remaining lever, if the integrator wants it:** a monotone `GameState.hasAttachment` flag set
+  on battlefield entry, so a game whose decks contain no Aura or Equipment skips the attachment work
+  entirely. I did NOT do it: it is a second structure that can desync from the truth (miss one entry
+  path and an unattached Aura silently stops dying), and I was not willing to take that trade at the end
+  of a session for ~1% on a benchmark whose noise floor is ±2.5%.
+  ⚠️ **Measurement discipline:** this box drifts 332→346 games/sec on IDENTICAL code within minutes
+  (thermal), and my first three comparisons were sequential and therefore worthless — one of them
+  "proved" a change was free that a proper interleaved run later showed cost 4%. Alternate the variants
+  inside one shell invocation, use ≥2,000 games, and prefer the allocation bench.
   👉 **Two real hot-path traps found and avoided, both worth knowing:** a helper returning
   `{ statics, attachments }` allocated an object on EVERY `indexContinuous` call (it runs several times
   per action) — the discovery is inlined instead; and the attachment SBA originally re-walked the
