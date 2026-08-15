@@ -27,11 +27,60 @@ export interface MatchupPilots {
   readonly pilotB: Pilot;
 }
 
+/**
+ * A slice of a run's (opponent, game) grid — the unit a parallel host executes.
+ *
+ * Every seed and on-the-play assignment in this package is derived from a game's
+ * ABSOLUTE indices, never from its position within a batch, so playing only
+ * `[gameStart, gameEnd)` of opponents `[opponentStart, opponentEnd)` reproduces
+ * exactly those games of the whole run. That is what lets the web Lab spread one
+ * `evaluateSwap` over twelve cores by calling it twelve times with disjoint
+ * ranges, instead of re-implementing the loop next to it.
+ *
+ * Every bound is optional and defaults to the whole run, so an existing caller
+ * that passes no range is unaffected.
+ */
+export interface RunRange {
+  /** First gauntlet opponent index to play (inclusive). Defaults to 0. */
+  readonly opponentStart?: number;
+  /** One past the last opponent index. Defaults to the gauntlet size. */
+  readonly opponentEnd?: number;
+  /** First game index within each matchup (inclusive). Defaults to 0. */
+  readonly gameStart?: number;
+  /** One past the last game index. Defaults to the run's game count. */
+  readonly gameEnd?: number;
+}
+
+/**
+ * Resolve a range against the run's full extent, clamped so a nonsense range
+ * yields an empty slice rather than an out-of-bounds read.
+ */
+export function resolveRunRange(
+  range: RunRange | undefined,
+  opponentCount: number,
+  gamesPerMatchup: number,
+): { readonly opponentStart: number; readonly opponentEnd: number; readonly gameStart: number; readonly gameEnd: number } {
+  const opponentStart = clamp(range?.opponentStart ?? 0, 0, opponentCount);
+  const opponentEnd = clamp(range?.opponentEnd ?? opponentCount, opponentStart, opponentCount);
+  const gameStart = clamp(range?.gameStart ?? 0, 0, gamesPerMatchup);
+  const gameEnd = clamp(range?.gameEnd ?? gamesPerMatchup, gameStart, gamesPerMatchup);
+  return { opponentStart, opponentEnd, gameStart, gameEnd };
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(Math.max(Math.floor(value), low), high);
+}
+
 /** Options shared by matchup/gauntlet/swap runs. */
 export interface RunOptions {
   readonly config?: RulesConfig;
   readonly sim?: SimConfig;
   readonly stats?: StatsConfig;
+  /**
+   * Play only a slice of the run (a shard). Omit for the whole run — which is
+   * what every single-threaded caller does.
+   */
+  readonly range?: RunRange;
   /**
    * Deck-legality rules for runs that LOAD a deck themselves (`evaluateSwap`
    * builds and loads the variant). Callers that vet legality with custom rules
@@ -104,6 +153,12 @@ export function makeSeats(
  * (no array of full results retained) to stay allocation-light over thousands of
  * games. Pass `onGame` to observe each result (e.g. for reporters) without the
  * harness holding them all.
+ *
+ * `opts.range` narrows the run to games `[gameStart, gameEnd)` of the same n-game
+ * matchup — the seeds and the on-the-play alternation still come from each game's
+ * ABSOLUTE index, so the slice plays byte-identical games to that stretch of the
+ * whole matchup. The returned aggregate then describes the slice alone; a caller
+ * that split a matchup sums the counts back together itself.
  */
 export function runMatchup(
   seats: MatchSeats,
@@ -113,13 +168,14 @@ export function runMatchup(
 ): MatchupResult {
   const stats = opts.stats ?? DEFAULT_STATS_CONFIG;
   const sim = opts.sim ?? DEFAULT_SIM_CONFIG;
+  const { gameStart, gameEnd } = resolveRunRange(opts.range, 1, n);
 
   let winsA = 0;
   let winsB = 0;
   let draws = 0;
   const gameSeeds: number[] = [];
 
-  for (let i = 0; i < n; i++) {
+  for (let i = gameStart; i < gameEnd; i++) {
     const seed = gameSeedFor(baseSeed, i);
     gameSeeds.push(seed);
     const result = runMatch(seats, seed, {
@@ -136,14 +192,15 @@ export function runMatchup(
     opts.onGame?.(result, i);
   }
 
+  const games = gameEnd - gameStart;
   return {
     deckA: seats.deckA.name,
     deckB: seats.deckB.name,
-    games: n,
+    games,
     winsA,
     winsB,
     draws,
-    winRateA: wilsonInterval(winsA, n, stats.z),
+    winRateA: wilsonInterval(winsA, games, stats.z),
     gameSeeds,
   };
 }

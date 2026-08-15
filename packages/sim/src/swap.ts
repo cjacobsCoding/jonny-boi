@@ -22,7 +22,7 @@ import type { CardPool } from '@jonny-boi/cards';
 import type { Deck, LoadedDeck } from './deck.js';
 import { loadDeck } from './deck.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
-import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
+import { gameSeedFor, makeSeats, onPlayFor, resolveRunRange } from './matchup.js';
 import { runMatch } from './match.js';
 import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, type StatsConfig, type SwapScope } from './config.js';
 import {
@@ -32,6 +32,12 @@ import {
   type PairedTable,
   type ProportionCI,
 } from './stats.js';
+
+/**
+ * Games actually played per PAIRED game: the base arm's and the variant arm's.
+ * Named because every progress denominator in the product depends on it.
+ */
+export const GAMES_PER_PAIRED_GAME = 2;
 
 /** The single-card swap to evaluate: one card out, one card in (id or name). */
 export interface CardSwap {
@@ -134,7 +140,7 @@ export function applySwap(
     else entries.splice(outIdx, 1, { ...outEntry, count: outEntry.count - 1 }, replacement);
   }
 
-  const copies = scope === 'playset' ? outEntry.count : 1;
+  const copies = copiesMovedBy(outEntry.count, scope);
   return {
     // The name records HOW MANY copies moved, so a result is never ambiguous
     // about what was actually tested.
@@ -153,6 +159,33 @@ function entryMatches(entry: { cardId: string }, def: CardDefinition, pool: Card
   return resolved?.id === def.id;
 }
 
+/** Copies a swap moves, given the cut LINE's count: the whole line, or one. */
+function copiesMovedBy(lineCount: number, scope: SwapScope): number {
+  return scope === 'playset' ? lineCount : 1;
+}
+
+/**
+ * How many copies applying `swap` to `base` would actually move.
+ *
+ * The one place this is decided, so `applySwap` (which does the moving),
+ * `evaluateSwap` (which reports it) and the suggestion engine's candidate
+ * generator (which stamps it on every candidate so a pooled run can describe a
+ * result without the card pool at hand) can never disagree. Reads the FIRST
+ * decklist line holding the out card — the same line `applySwap` rewrites — and
+ * degrades to 1 for an unresolvable card rather than throwing.
+ */
+export function copiesSwappedBy(
+  base: Deck,
+  swap: CardSwap,
+  pool: CardPool,
+  scope: SwapScope = DEFAULT_SWAP_SCOPE,
+): number {
+  const outDef = resolve(pool, swap.out);
+  if (!outDef) return 1;
+  const line = base.cards.find((entry) => entryMatches(entry, outDef, pool));
+  return copiesMovedBy(line?.count ?? 1, scope);
+}
+
 /**
  * Run the paired A/B swap evaluation.
  *
@@ -166,6 +199,15 @@ function entryMatches(entry: { cardId: string }, def: CardDefinition, pool: Card
  * Sanity property: swapping a card for ITSELF yields a variant identical to the
  * base, so every paired game agrees, the discordant count is 0, p = 1, delta = 0
  * → 'inconclusive'. A great unbiasedness check (and a test).
+ *
+ * ### Running only a slice
+ * `opts.range` restricts the run to some opponents and some game indices — one
+ * shard of a parallel evaluation. Because both the per-game seed and the
+ * on-the-play alternation are functions of the ABSOLUTE (opponent, game) indices,
+ * a slice plays byte-identical games to that stretch of the whole evaluation, and
+ * summing the slices' paired 2×2 tables reconstructs the whole run's table
+ * exactly (integer addition — order cannot matter). That is the seam the web
+ * Lab's worker pool runs on, so it never has to restate this loop.
  */
 export function evaluateSwap(
   baseDeck: Deck,
@@ -176,10 +218,14 @@ export function evaluateSwap(
   baseSeed: number,
   pool: CardPool,
   registry: EffectRegistry,
-  opts: RunOptions = {},
+  opts: RunOptions & {
+    /** Ticked with the games played so far, so a long slice can report progress. */
+    readonly onGame?: (games: number) => void;
+  } = {},
 ): SwapEvaluation {
   const stats = opts.stats ?? DEFAULT_STATS_CONFIG;
   const scope: SwapScope = opts.swapScope ?? DEFAULT_SWAP_SCOPE;
+  const slice = resolveRunRange(opts.range, gauntletDecks.length, gamesPerMatchup);
 
   const variantDeck = applySwap(baseDeck, swap, pool, scope);
   // Load under the CALLER's legality rules. Falling back to the defaults here would
@@ -193,10 +239,7 @@ export function evaluateSwap(
   const inDef = resolve(pool, swap.in);
 
   // How many copies actually moved, reported so a result is self-describing.
-  const outCount = outDef
-    ? (baseDeck.cards.find((e) => entryMatches(e, outDef, pool))?.count ?? 1)
-    : 1;
-  const copiesSwapped = scope === 'playset' ? outCount : 1;
+  const copiesSwapped = copiesSwappedBy(baseDeck, swap, pool, scope);
 
 
   // Paired 2x2 table accumulators (a "win" here = the hero won; timeout = no win).
@@ -207,13 +250,13 @@ export function evaluateSwap(
   let variantOnly = 0;
   let neither = 0;
 
-  for (let opp = 0; opp < gauntletDecks.length; opp++) {
+  for (let opp = slice.opponentStart; opp < slice.opponentEnd; opp++) {
     const opponent = gauntletDecks[opp] as LoadedDeck;
     const matchupSeed = gameSeedFor(baseSeed, opp);
     const baseSeats = makeSeats(baseLoaded, opponent, pilots, registry);
     const variantSeats = makeSeats(variantLoaded, opponent, pilots, registry);
 
-    for (let g = 0; g < gamesPerMatchup; g++) {
+    for (let g = slice.gameStart; g < slice.gameEnd; g++) {
       const seed = gameSeedFor(matchupSeed, g);
       const startingPlayer: PlayerId = onPlayFor(g);
       const matchOpts = { config: opts.config, sim: opts.sim, startingPlayer };
@@ -228,6 +271,9 @@ export function evaluateSwap(
       else if (baseWon && !variantWon) baseOnly++;
       else if (!baseWon && variantWon) variantOnly++;
       else neither++;
+      // Two games are actually played per pair — tick both, so a progress bar
+      // built from this cannot claim a run is half done at a quarter of the work.
+      opts.onGame?.(GAMES_PER_PAIRED_GAME);
     }
   }
 
