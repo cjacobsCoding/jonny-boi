@@ -10,21 +10,50 @@ import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from '..
 import { playerZone, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
 
-/** Find a battlefield permanent by id, or undefined. */
+/**
+ * Find a battlefield permanent by id, or undefined.
+ *
+ * An indexed loop rather than `Array.find`: the predicate closes over `id`, and
+ * this is one of the most-called functions in the engine — every tap, every
+ * activation, every attacker and blocker in every combat, several times per
+ * action. That was a closure allocation per lookup, for a scan of a few items.
+ * The same reasoning applies to the id searches below.
+ */
 export function findOnBattlefield(state: GameState, id: InstanceId): CardInstance | undefined {
-  return state.battlefield.find((c) => c.instanceId === id);
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.instanceId === id) return perm;
+  }
+  return undefined;
+}
+
+/** The instance with this id in a zone array, or undefined. */
+function at(zone: readonly CardInstance[], id: InstanceId): CardInstance | undefined {
+  const idx = indexOfInstance(zone, id);
+  return idx >= 0 ? (zone[idx] as CardInstance) : undefined;
+}
+
+/** Index of an instance in a zone array, or -1. */
+function indexOfInstance(zone: readonly CardInstance[], id: InstanceId): number {
+  for (let i = 0; i < zone.length; i++) {
+    if ((zone[i] as CardInstance).instanceId === id) return i;
+  }
+  return -1;
 }
 
 /** Find an instance anywhere (battlefield, any player zone, stack), or undefined. */
 export function findInstance(state: GameState, id: InstanceId): CardInstance | undefined {
   const bf = findOnBattlefield(state, id);
   if (bf) return bf;
+  // Zones checked one at a time rather than through a `[lib, hand, ...]` literal:
+  // that array (and the closure handed to `find`) was allocated per player on every
+  // lookup, and the first zone usually answers.
   for (const pid of PLAYER_IDS) {
     const p = state.players[pid];
-    for (const zone of [p.library, p.hand, p.graveyard, p.exile, p.command]) {
-      const found = zone.find((c) => c.instanceId === id);
-      if (found) return found;
-    }
+    const found =
+      at(p.library, id) ?? at(p.hand, id) ?? at(p.graveyard, id) ?? at(p.exile, id) ?? at(p.command, id);
+    if (found) return found;
   }
   for (const o of state.stack) {
     if (o.kind === 'spell' && o.card.instanceId === id) return o.card;
@@ -35,7 +64,7 @@ export function findInstance(state: GameState, id: InstanceId): CardInstance | u
 /** Remove an instance from whatever owner-zone it currently sits in (not stack). */
 function removeFromCurrentZone(state: GameState, inst: CardInstance): void {
   if (inst.zone === 'battlefield') {
-    const idx = state.battlefield.findIndex((c) => c.instanceId === inst.instanceId);
+    const idx = indexOfInstance(state.battlefield, inst.instanceId);
     if (idx >= 0) state.battlefield.splice(idx, 1);
     return;
   }
@@ -44,7 +73,7 @@ function removeFromCurrentZone(state: GameState, inst: CardInstance): void {
   const owner = state.players[inst.owner];
   const arr = playerZone(owner, inst.zone);
   if (arr) {
-    const idx = arr.findIndex((c) => c.instanceId === inst.instanceId);
+    const idx = indexOfInstance(arr, inst.instanceId);
     if (idx >= 0) {
       arr.splice(idx, 1);
       return;
@@ -54,7 +83,7 @@ function removeFromCurrentZone(state: GameState, inst: CardInstance): void {
   for (const pid of PLAYER_IDS) {
     const z = playerZone(state.players[pid], inst.zone);
     if (!z) continue;
-    const idx = z.findIndex((c) => c.instanceId === inst.instanceId);
+    const idx = indexOfInstance(z, inst.instanceId);
     if (idx >= 0) {
       z.splice(idx, 1);
       return;

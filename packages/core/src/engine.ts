@@ -77,6 +77,19 @@ import {
 } from './internal/combat.js';
 import { entersTapped, isCreature } from './card.js';
 
+/**
+ * The registry a caller that supplied none gets.
+ *
+ * Built once at module load rather than per action. `createEffectRegistry()` makes
+ * a Map and four closures, and `applyAction` was calling it on EVERY registry-free
+ * action — which is every action of every test and every look-ahead rollout that
+ * doesn't thread the pool through. Sharing one is safe because it never escapes:
+ * the registry is only ever READ (`applyEffectRef` calls `get`), it is not part of
+ * `EffectContext`, and nothing hands it back to a caller who could `register` into
+ * it. Callers that want a registry of their own still call `createEffectRegistry`.
+ */
+const NO_REGISTRY: EffectRegistry = createEffectRegistry();
+
 /** A deck list: an ordered array of card definitions (the library, pre-shuffle). */
 export interface DeckList {
   readonly cards: readonly CardDefinition[];
@@ -730,14 +743,30 @@ function createChoiceChannel(
 }
 
 
+/**
+ * The per-player zones this searches, in order, named once at module scope — the
+ * array literal used to be rebuilt (with a fresh `find` closure per zone) on every
+ * lookup.
+ */
+const ZONE_SEARCH_ORDER = ['graveyard', 'exile', 'hand', 'library', 'command'] as const;
+
+/** The instance with this id in a zone array, or undefined. */
+function instanceIn(zone: readonly CardInstance[], id: InstanceId): CardInstance | undefined {
+  for (let i = 0; i < zone.length; i++) {
+    const inst = zone[i] as CardInstance;
+    if (inst.instanceId === id) return inst;
+  }
+  return undefined;
+}
+
 /** Find an instance in any zone (battlefield/hand/grave/exile/stack), else undefined. */
 function findInstanceAnywhere(state: GameState, id: InstanceId): CardInstance | undefined {
   const bf = findOnBattlefield(state, id);
   if (bf) return bf;
   for (const pid of PLAYER_IDS) {
     const p = state.players[pid];
-    for (const zone of [p.graveyard, p.exile, p.hand, p.library, p.command]) {
-      const found = zone.find((c) => c.instanceId === id);
+    for (const zone of ZONE_SEARCH_ORDER) {
+      const found = instanceIn(p[zone], id);
       if (found) return found;
     }
   }
@@ -811,56 +840,23 @@ function applyActionToDraft(
   const collector = createTriggerCollector(state, baseEmit);
   const emit = collector.emit;
   // Thread the effect registry explicitly through the call chain (no module
-  // global). With none supplied, default to an empty registry: registry-free
+  // global). With none supplied, default to the shared empty registry: registry-free
   // actions (playLand/passPriority/combat) are unaffected; only spell resolution
   // needs primitives, and a bare call signals "no cards registered".
-  const effectRegistry = registry ?? createEffectRegistry();
+  const effectRegistry = registry ?? NO_REGISTRY;
 
   if (state.gameOver) {
     baseEmit({ type: 'actionRejected', reason: 'the game is already over' });
     return { state, events };
   }
 
-  const dispatch = (): EngineResult => {
-    // A parked question freezes the game for everyone else: while it stands, the
-    // only thing anybody may do is answer it. Without this a player could pass
-    // priority (or attack) "around" a half-resolved spell.
-    if (state.pendingChoice && action.kind !== 'answerChoice') {
-      return rejectWith(prevState, 'a choice is awaiting an answer');
-    }
-    switch (action.kind) {
-      case 'answerChoice':
-        return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
-      case 'passPriority': {
-        if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
-        onPassPriority(state, config, effectRegistry, emit);
-        return { state, events };
-      }
-      case 'playLand':
-        return applyPlayLand(state, prevState, action, config, emit, events);
-      case 'tapForMana':
-        return applyTapForMana(state, prevState, action, emit, events);
-      case 'castSpell':
-        return applyCastSpell(state, prevState, action, config, emit, events);
-      case 'activateAbility':
-        return applyActivateAbility(state, prevState, action, config, emit, events);
-      case 'declareAttackers':
-        return applyDeclareAttackers(state, prevState, action, emit, events);
-      case 'declareBlockers':
-        return applyDeclareBlockers(state, prevState, action, emit, events);
-      default: {
-        const _exhaustive: never = action;
-        void _exhaustive;
-        return rejectWith(prevState, 'unknown action');
-      }
-    }
-  };
-
-  const result = dispatch();
+  // Dispatch inline rather than through a local `dispatch()` closure: that arrow
+  // captured six locals and was allocated on every single action.
+  const result = dispatchAction(state, prevState, action, config, effectRegistry, emit, events);
   // On a clean (non-rejected) action, put any triggered abilities that fired onto
   // the stack and hand the active player priority over them. Rejections return a
   // fresh clone of prevState, so `result.state !== state`; we only flush our draft.
-  if (result.state === state && !result.events.some((e) => e.type === 'actionRejected')) {
+  if (result.state === state && !wasRejected(result.events)) {
     // A suspended resolution keeps the floor: a trigger that fired mid-resolution
     // goes on the stack and waits its turn, but the chooser must still answer first.
     if (collector.flush() > 0 && !state.gameOver && !state.pendingChoice) {
@@ -869,6 +865,61 @@ function applyActionToDraft(
     }
   }
   return result;
+}
+
+/** Route one validated-so-far action to its applier. Extracted from
+ * `applyActionToDraft` so the switch is a plain call rather than a closure
+ * allocated on every action. */
+function dispatchAction(
+  state: GameState,
+  prevState: GameState,
+  action: GameAction,
+  config: RulesConfig,
+  effectRegistry: EffectRegistry,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  // A parked question freezes the game for everyone else: while it stands, the
+  // only thing anybody may do is answer it. Without this a player could pass
+  // priority (or attack) "around" a half-resolved spell.
+  if (state.pendingChoice && action.kind !== 'answerChoice') {
+    return rejectWith(prevState, 'a choice is awaiting an answer');
+  }
+  switch (action.kind) {
+    case 'answerChoice':
+      return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
+    case 'passPriority': {
+      if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+      onPassPriority(state, config, effectRegistry, emit);
+      return { state, events };
+    }
+    case 'playLand':
+      return applyPlayLand(state, prevState, action, config, emit, events);
+    case 'tapForMana':
+      return applyTapForMana(state, prevState, action, emit, events);
+    case 'castSpell':
+      return applyCastSpell(state, prevState, action, config, emit, events);
+    case 'activateAbility':
+      return applyActivateAbility(state, prevState, action, config, emit, events);
+    case 'declareAttackers':
+      return applyDeclareAttackers(state, prevState, action, emit, events);
+    case 'declareBlockers':
+      return applyDeclareBlockers(state, prevState, action, emit, events);
+    default: {
+      const _exhaustive: never = action;
+      void _exhaustive;
+      return rejectWith(prevState, 'unknown action');
+    }
+  }
+}
+
+/** Whether an action's events report a rejection. A loop, not `.some()`, which
+ * allocated a predicate closure per action for a scan of two or three events. */
+function wasRejected(events: readonly GameEvent[]): boolean {
+  for (const event of events) {
+    if (event.type === 'actionRejected') return true;
+  }
+  return false;
 }
 
 function rejectWith(prevState: GameState, reason: string): EngineResult {
@@ -952,7 +1003,7 @@ function applyPlayLand(
   if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
-  const card = player.hand.find((c) => c.instanceId === action.instanceId);
+  const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
   if (!isLand(card.def)) return rejectWith(prevState, 'that card is not a land');
 
@@ -1039,7 +1090,7 @@ function applyCastSpell(
 ): EngineResult {
   if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
   const player = state.players[action.player];
-  const card = player.hand.find((c) => c.instanceId === action.instanceId);
+  const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
   if (isLand(card.def)) return rejectWith(prevState, 'lands are played, not cast');
 
@@ -1228,8 +1279,13 @@ function unpayableActivationReason(
 }
 
 function removeFromHand(player: GameState['players'][PlayerId], id: InstanceId): void {
-  const idx = player.hand.findIndex((c) => c.instanceId === id);
-  if (idx >= 0) player.hand.splice(idx, 1);
+  const hand = player.hand;
+  for (let i = 0; i < hand.length; i++) {
+    if ((hand[i] as CardInstance).instanceId === id) {
+      hand.splice(i, 1);
+      return;
+    }
+  }
 }
 
 function applyDeclareAttackers(
@@ -1448,13 +1504,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // Effective keywords (printed OR continuous grants) so a haste/defender granted
     // by an until-EOT effect is reflected in the eligible-attacker set (DESIGN §3.9).
     const cont = indexContinuous(state);
-    const eligible = state.battlefield
-      .filter((c) => {
-        if (c.controller !== me || !isCreature(c.def) || c.tapped) return false;
-        const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
-        return (!c.summoningSick || Boolean(kw.haste)) && !kw.defender;
-      })
-      .map((c) => c.instanceId);
+    // One pass building the id list directly. `filter(...).map(...)` allocated two
+    // closures and an intermediate array of instances that was thrown away.
+    const eligible: InstanceId[] = [];
+    for (const c of state.battlefield) {
+      if (c.controller !== me || !isCreature(c.def) || c.tapped) continue;
+      const kw = effectiveKeywords(c, cont.get(c.instanceId) ?? NO_MOD);
+      if ((c.summoningSick && !kw.haste) || kw.defender) continue;
+      eligible.push(c.instanceId);
+    }
     if (eligible.length > 0) {
       // Offer "attack with all eligible" as the canonical option; the AI may also
       // construct narrower subsets and pass them to applyAction directly.

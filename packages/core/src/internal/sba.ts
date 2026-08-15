@@ -10,7 +10,7 @@
  * keeps the contract correct as effects grow).
  */
 
-import type { GameState, PlayerId } from '../state.js';
+import type { CardInstance, GameState, PlayerId } from '../state.js';
 import { PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
 import { isCreature } from '../card.js';
@@ -30,19 +30,37 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
     const index = indexContinuous(state);
 
     // Creature death: lethal damage or non-positive toughness.
-    for (const inst of [...state.battlefield]) {
-      if (!isCreature(inst.def)) continue;
+    //
+    // Walked with an explicit cursor over the LIVE battlefield rather than over a
+    // spread copy of it. The copy existed because `moveToZone` splices the dying
+    // creature out from under the loop — but it was one full array allocation per
+    // fixpoint pass, on a check that runs after every resolution, every draw and
+    // every combat-damage step. Removing the creature at `cursor` shifts the next
+    // one into that slot, so NOT advancing after a death visits exactly the same
+    // permanents in exactly the same order the snapshot did. (If a death somehow
+    // failed to shorten the array, advance anyway — a stuck cursor here would hang
+    // the game, and a permanent visited twice is far cheaper than that.)
+    for (let cursor = 0; cursor < state.battlefield.length; ) {
+      const inst = state.battlefield[cursor] as CardInstance;
+      if (!isCreature(inst.def)) {
+        cursor += 1;
+        continue;
+      }
       const mod = index.get(inst.instanceId) ?? NO_MOD;
       const dead =
         effectiveToughness(inst, mod) <= 0 ||
         remainingToughness(inst, mod) <= 0 ||
         (inst.markedByDeathtouch && inst.damageMarked > 0);
-      if (dead) {
-        emit({ type: 'creatureDied', instanceId: inst.instanceId, name: inst.def.name });
-        moveToZone(state, inst, 'graveyard', emit, inst.owner);
-        resetInstanceForNewZone(inst);
-        changed = true;
+      if (!dead) {
+        cursor += 1;
+        continue;
       }
+      const sizeBefore = state.battlefield.length;
+      emit({ type: 'creatureDied', instanceId: inst.instanceId, name: inst.def.name });
+      moveToZone(state, inst, 'graveyard', emit, inst.owner);
+      resetInstanceForNewZone(inst);
+      changed = true;
+      if (state.battlefield.length >= sizeBefore) cursor += 1;
     }
 
     // Player loss by life total.

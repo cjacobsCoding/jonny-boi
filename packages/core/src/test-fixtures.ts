@@ -7,7 +7,7 @@
 
 import type { CardDefinition, KeywordFlags } from './card.js';
 import type { DeckList } from './engine.js';
-import { applyAction, createGame, generateLegalActions } from './engine.js';
+import { applyAction, applyActionInPlace, createGame, generateLegalActions } from './engine.js';
 import type { GameAction } from './actions.js';
 import type { GameEvent } from './events.js';
 import type { RulesConfig } from './config.js';
@@ -210,6 +210,15 @@ export function playSelfPlayGame(
   decks: Readonly<Record<PlayerId, DeckList>>,
   seed: number,
   config: RulesConfig = DEFAULT_RULES,
+  /**
+   * Drive the game through `applyActionInPlace` instead of the cloning
+   * `applyAction`. Same game, same result — it is the same engine with the
+   * defensive copy removed — but it measures the hot path as a caller that OWNS
+   * its state sees it. Used by the benchmark to separate "cost of cloning" from
+   * "cost of everything else", since a caller that stops cloning stops paying the
+   * former entirely.
+   */
+  mutateInPlace = false,
 ): SelfPlayResult {
   const rng = createRng(seed);
   const created = createGame({ seed, decks, config });
@@ -221,7 +230,9 @@ export function playSelfPlayGame(
     const legal = generateLegalActions(state, config);
     if (legal.length === 0) break;
     const action = legal[rng.nextInt(legal.length)] as GameAction;
-    const result = applyAction(state, action, config);
+    const result = mutateInPlace
+      ? applyActionInPlace(state, action, config)
+      : applyAction(state, action, config);
     state = result.state;
     for (const e of result.events) events.push(e);
     actions += 1;

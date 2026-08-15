@@ -154,25 +154,42 @@ function whoMatches(who: TriggerWho | undefined, actingPlayer: PlayerId, sourceC
 }
 
 /**
+ * The answer for an event that set nothing off. Shared and frozen: this runs for
+ * EVERY event the engine emits (a few per action, hundreds of thousands per sim),
+ * and the overwhelming majority of them match nothing at all — so the result list
+ * is allocated only when there is something to put in it.
+ */
+const NO_PENDING_TRIGGERS: readonly PendingTrigger[] = Object.freeze([]);
+
+/**
  * Scan a set of trigger sources against one event and return every ability that
  * fired, as `PendingTrigger`s in source-declaration order. The engine then applies
  * APNAP ordering across sources (see orderPendingTriggers).
+ *
+ * The result is read-only: callers consume it, and the no-match case hands back a
+ * shared empty list rather than a fresh one.
  */
-export function matchTriggers(sources: readonly TriggerSource[], event: GameEvent): PendingTrigger[] {
-  const pending: PendingTrigger[] = [];
+export function matchTriggers(
+  sources: readonly TriggerSource[],
+  event: GameEvent,
+): readonly PendingTrigger[] {
+  let pending: PendingTrigger[] | null = null;
   for (const src of sources) {
-    src.triggers.forEach((ability, abilityIndex) => {
-      if (conditionMatches(ability.condition, event, src.instanceId, src.controller)) {
-        pending.push({
-          sourceInstanceId: src.instanceId,
-          controller: src.controller,
-          ability,
-          abilityIndex,
-        });
-      }
-    });
+    // An indexed loop rather than `forEach`: the callback closes over `src` and
+    // `event`, so it was an allocation per source per event on the hot path.
+    const abilities = src.triggers;
+    for (let abilityIndex = 0; abilityIndex < abilities.length; abilityIndex++) {
+      const ability = abilities[abilityIndex] as TriggeredAbility;
+      if (!conditionMatches(ability.condition, event, src.instanceId, src.controller)) continue;
+      (pending ??= []).push({
+        sourceInstanceId: src.instanceId,
+        controller: src.controller,
+        ability,
+        abilityIndex,
+      });
+    }
   }
-  return pending;
+  return pending ?? NO_PENDING_TRIGGERS;
 }
 
 /**

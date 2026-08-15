@@ -24,32 +24,18 @@ import { matchTriggers, orderPendingTriggers } from '../triggers.js';
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
  * as before; matched triggers accumulate in an internal queue. Call `flush` to move
- * the queue onto the stack (APNAP-ordered). `hasPending` lets the engine know
- * whether a flush is needed before granting priority.
+ * the queue onto the stack (APNAP-ordered) — it reports how many it moved, which is
+ * all the engine needs to decide whether priority resets.
+ *
+ * One collector is built per action, so its own footprint is on the hot path: it
+ * holds exactly two closures and allocates its queue, its known-source map and the
+ * scan list only if something actually needs them.
  */
 export interface TriggerCollector {
   /** Emit an event AND scan it for triggers (the wrapped emit the engine uses). */
   emit(event: GameEvent): void;
-  /** Whether any triggers are queued awaiting a flush. */
-  hasPending(): boolean;
   /** Move queued triggers onto the stack in APNAP order. Returns count flushed. */
   flush(): number;
-}
-
-/** Build the list of trigger sources from the current battlefield. */
-function battlefieldTriggerSources(state: GameState): TriggerSource[] {
-  const sources: TriggerSource[] = [];
-  for (const inst of state.battlefield) {
-    const triggers = inst.def.triggers;
-    if (!triggers || triggers.length === 0) continue;
-    sources.push({
-      instanceId: inst.instanceId,
-      controller: inst.controller,
-      name: inst.def.name,
-      triggers,
-    });
-  }
-  return sources;
 }
 
 /**
@@ -63,14 +49,43 @@ function battlefieldTriggerSources(state: GameState): TriggerSource[] {
  * information"). This matches MTG's leave-the-battlefield trigger handling.
  */
 export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent) => void): TriggerCollector {
-  const queue: PendingTrigger[] = [];
+  // Allocated on the first trigger that actually fires — most actions set nothing
+  // off, and this is built once per action for every action of every game.
+  let queue: PendingTrigger[] | null = null;
   // Remember triggerful permanents that have been on the battlefield this action,
-  // so leave/dies triggers on the departing permanent still resolve.
-  const seenSources = new Map<InstanceId, TriggerSource>();
+  // so leave/dies triggers on the departing permanent still resolve. Created lazily:
+  // a board with no triggerful permanent — an opening hand, a land-only turn, and
+  // most of the sim's hot path — never allocates the map or the snapshot at all.
+  let seenSources: Map<InstanceId, TriggerSource> | null = null;
+  // A reusable array view of `seenSources`, rebuilt only when the set changes.
+  // `matchTriggers` wants a list, and spreading the map's values on EVERY emitted
+  // event was one array plus one `TriggerSource` per triggerful permanent, several
+  // times per action, for a scan that almost never matches anything.
+  let snapshot: TriggerSource[] | null = null;
 
-  const rememberSources = () => {
-    for (const src of battlefieldTriggerSources(state)) {
-      seenSources.set(src.instanceId, src);
+  /**
+   * Fold the currently-on-battlefield triggerful permanents into the known set.
+   *
+   * Runs per event, so it must not allocate when nothing has changed — which is
+   * the normal case. A permanent already known under the same controller is left
+   * exactly as it is: its name and abilities come from the immutable definition,
+   * so `controller` is the only field that can go stale. First-seen order (which
+   * is what `matchTriggers` scans in) is preserved, because re-`set`ting an
+   * existing key would not move it and we no longer re-set at all.
+   */
+  const rememberSources = (): void => {
+    for (const inst of state.battlefield) {
+      const triggers = inst.def.triggers;
+      if (triggers === undefined || triggers.length === 0) continue;
+      const known = seenSources?.get(inst.instanceId);
+      if (known !== undefined && known.controller === inst.controller) continue;
+      (seenSources ??= new Map()).set(inst.instanceId, {
+        instanceId: inst.instanceId,
+        controller: inst.controller,
+        name: inst.def.name,
+        triggers,
+      });
+      snapshot = null;
     }
   };
   rememberSources();
@@ -80,19 +95,24 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // Refresh the known-source set so a permanent that entered earlier in this same
     // action can trigger on a later event.
     rememberSources();
-    // Perf early-exit (N1): with no triggerful permanent ever seen this action, no
-    // event can match — skip the array spread + matchTriggers scan entirely. Behavior
-    // is unchanged: matchTriggers over an empty source list always returns [].
-    if (seenSources.size === 0) return;
-    const matched = matchTriggers([...seenSources.values()], event);
+    // Perf early-exit: with no triggerful permanent ever seen this action, no event
+    // can match — skip the scan entirely. Behavior is unchanged: matchTriggers over
+    // an empty source list always returns nothing.
+    if (seenSources === null) return;
+    snapshot ??= [...seenSources.values()];
+    const matched = matchTriggers(snapshot, event);
+    if (matched.length === 0) return;
+    if (queue === null) queue = [];
     for (const m of matched) queue.push(m);
   };
 
   const flush = (): number => {
-    if (queue.length === 0) return 0;
+    if (queue === null || queue.length === 0) return 0;
     const batch = queue.splice(0, queue.length);
     const order = new Map<InstanceId, number>();
-    state.battlefield.forEach((c, i) => order.set(c.instanceId, i));
+    for (let i = 0; i < state.battlefield.length; i++) {
+      order.set((state.battlefield[i] as { instanceId: InstanceId }).instanceId, i);
+    }
     const ordered = orderPendingTriggers(batch, state.activePlayer, order);
     for (const pending of ordered) {
       const label = pending.ability.label ?? `${pending.ability.condition.on} trigger`;
@@ -115,9 +135,5 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     return ordered.length;
   };
 
-  return {
-    emit,
-    hasPending: () => queue.length > 0,
-    flush,
-  };
+  return { emit, flush };
 }
