@@ -1,8 +1,8 @@
 import { useMemo, type ReactElement } from 'react';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
-import { allAvailableCards } from '../lib/cards.js';
 import { resolveEntries, type Deck } from '../lib/deck.js';
 import { gauntletHeroDecks, isGauntletDeckId } from '../lib/decklist/gauntletDecks.js';
+import { swapInOptions } from '../lib/swapOptions.js';
 import { applySwapToDeck, describeApplied } from '../lib/decklist/applySwapToDeck.js';
 import { getCard } from '../lib/cards.js';
 import './lab-apply.css';
@@ -173,7 +173,7 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
             {...sharedProps}
             gamesConfig={SWAP_GAMES}
             outOptions={hero ? heroOutOptions(hero) : []}
-            inOptions={poolInOptions()}
+            inOptions={swapInOptions()}
           />
         )}
         {tab === 'suggest' && (
@@ -195,25 +195,6 @@ function heroOutOptions(hero: Deck): CardOption[] {
     options.push({ cardId: card.id, name: card.name });
   }
   return options.sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * Every card you can bring IN on a swap.
- *
- * Must be the FULL engine pool. Suggestions generates its candidates from that
- * pool, so when this list was historically drawn from a smaller subset the Lab
- * could recommend a swap — Kalonian Tusker for Birds of Paradise — that you then
- * could not select in the A/B tab to verify. The two lists have to be drawn from
- * the same pool or the feature contradicts itself.
- *
- * (The card index is no longer a subset: it is DERIVED from the pool and a test
- * fails if they diverge — see `apps/web/src/data/card-index.test.ts`. Both lists
- * are 156 cards today. Don't reintroduce a hand-maintained shortlist here.)
- */
-function poolInOptions(): CardOption[] {
-  return [...allAvailableCards()]
-    .map((c) => ({ cardId: c.id, name: c.name }))
-    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** The top config bar: hero picker, seed, and the gauntlet-opponent toggles. */

@@ -19,6 +19,16 @@ export interface GamesConfig {
 export interface CardOption {
   readonly cardId: string;
   readonly name: string;
+  /**
+   * Why this card cannot be swapped IN, when it cannot: an imported card whose
+   * printed text the engine does not implement yet has a display record (so it
+   * shows up in lists) but no engine definition, and a run containing one dies
+   * before the first game.
+   *
+   * Present means "offer it, but disabled, with the reason" — hiding it silently
+   * would leave the user hunting for a card they can see everywhere else.
+   */
+  readonly unavailable?: string;
 }
 
 /** Props every run panel shares. */

@@ -90,8 +90,8 @@ export function SwapPanel({
           >
             <option value="">Pick a card…</option>
             {inOptions.map((o) => (
-              <option key={o.cardId} value={o.cardId}>
-                {o.name}
+              <option key={o.cardId} value={o.cardId} disabled={Boolean(o.unavailable)}>
+                {o.unavailable ? `${o.name} — ${o.unavailable}` : o.name}
               </option>
             ))}
           </select>
