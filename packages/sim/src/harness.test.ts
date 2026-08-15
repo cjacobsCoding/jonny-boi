@@ -217,3 +217,88 @@ describe('evaluateSwap (the A/B test)', () => {
     ).toThrow(/exceeds the 4-of limit/);
   });
 });
+
+// --- running only a SLICE (the shard seam the parallel Lab uses) ------------------
+
+describe('RunOptions.range — a run split into slices reassembles into the whole', () => {
+  it('runMatchup: the slices sum to the whole matchup, game for game', () => {
+    // The web Lab plays "games 40-59 of this matchup" on one core and 60-79 on
+    // another. That is only sound if a slice plays byte-identical games to that
+    // stretch of the whole run — which it does because every seed and every
+    // on-the-play assignment comes from a game's ABSOLUTE index.
+    const seats = makeSeats(red, green, pilots(), registry);
+    const whole = runMatchup(seats, 12, 4242);
+
+    const slices = [[0, 5], [5, 6], [6, 12]] as const;
+    let winsA = 0;
+    let winsB = 0;
+    let draws = 0;
+    const seeds: number[] = [];
+    for (const [gameStart, gameEnd] of slices) {
+      const part = runMatchup(seats, 12, 4242, { range: { gameStart, gameEnd } });
+      expect(part.games).toBe(gameEnd - gameStart);
+      winsA += part.winsA;
+      winsB += part.winsB;
+      draws += part.draws;
+      seeds.push(...part.gameSeeds);
+    }
+    expect({ winsA, winsB, draws }).toEqual({
+      winsA: whole.winsA,
+      winsB: whole.winsB,
+      draws: whole.draws,
+    });
+    // Same games, in the same order — not merely the same totals.
+    expect(seeds).toEqual(whole.gameSeeds);
+  });
+
+  it('evaluateSwap: per-opponent slices sum to the whole paired table', () => {
+    // The paired 2x2 table is the sufficient statistic, so summing slices'
+    // tables must reproduce the whole evaluation's table exactly. If a shard
+    // boundary had separated a game index's base and variant arms, the discordant
+    // cells would move even though both runs stayed unbiased.
+    const swap = { out: 'Goblin Guide', in: 'Sol Ring' } as const;
+    const gauntlet = [green, control];
+    const whole = evaluateSwap(MONO_RED_AGGRO, swap, gauntlet, pilots(), 4, 77, pool, registry);
+
+    const table = { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 };
+    let games = 0;
+    for (let opponent = 0; opponent < gauntlet.length; opponent++) {
+      for (const [gameStart, gameEnd] of [[0, 1], [1, 4]] as const) {
+        const part = evaluateSwap(MONO_RED_AGGRO, swap, gauntlet, pilots(), 4, 77, pool, registry, {
+          range: { opponentStart: opponent, opponentEnd: opponent + 1, gameStart, gameEnd },
+        });
+        table.bothWon += part.paired.bothWon;
+        table.baseOnly += part.paired.baseOnly;
+        table.variantOnly += part.paired.variantOnly;
+        table.neither += part.paired.neither;
+        games += part.nGames;
+      }
+    }
+    expect(table).toEqual(whole.paired);
+    expect(games).toBe(whole.nGames);
+  });
+
+  it('evaluateSwap: ticks progress twice per pair — both arms are real games', () => {
+    let games = 0;
+    const evaluation = evaluateSwap(
+      MONO_RED_AGGRO,
+      { out: 'Goblin Guide', in: 'Sol Ring' },
+      [green],
+      pilots(),
+      3,
+      5,
+      pool,
+      registry,
+      { onGame: (n) => { games += n; } },
+    );
+    // A bar counting pairs would sit at 50% when the run was actually done.
+    expect(games).toBe(evaluation.nGames * 2);
+  });
+
+  it('clamps a nonsense range to an empty slice rather than reading out of bounds', () => {
+    const seats = makeSeats(red, green, pilots(), registry);
+    const empty = runMatchup(seats, 6, 1, { range: { gameStart: 9, gameEnd: 99 } });
+    expect(empty.games).toBe(0);
+    expect(empty.gameSeeds).toEqual([]);
+  });
+});

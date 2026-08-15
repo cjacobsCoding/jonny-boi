@@ -23,6 +23,7 @@ import { loadDeck } from './deck.js';
 import type { Deck } from './deck.js';
 import type { MatchupPilots } from './matchup.js';
 import { evaluateSwap } from './swap.js';
+import type { PairedBaseRecord } from './paired-arms.js';
 import { createPairedArmRunner, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
 import { LIBRARY_READING_PRIMITIVES, LIBRARY_SAFE_PRIMITIVES } from './paired-arms-config.js';
 import { MONO_RED_AGGRO, MONO_GREEN_STOMPY, UW_CONTROL, MONO_BLUE_TEMPO, RAKDOS_GOBLINS } from '../data/decks/index.js';
@@ -282,6 +283,125 @@ describe("library peeks are scoped to the HERO's library", () => {
     const arm = runner.openArm(CANDIDATE, CANDIDATE.out, CANDIDATE.in);
     const played = runner.advance(arm, 20);
     expect(played.variantGamesSkipped).toBeGreaterThan(0);
+  });
+});
+
+// --- the seam the parallel Lab runs on --------------------------------------------
+
+describe('slicing an arm across workers changes nothing', () => {
+  const SLOTS = 12;
+
+  it('a set of slices reassembles into exactly what one advance() produced', () => {
+    // The Lab splits one arm's slots over several workers and sums the 2×2 tables.
+    // If a slice's games depended on where the slice STARTED — a shard-local
+    // counter, a seat rebuilt mid-arm — this table would differ while both runs
+    // still looked perfectly reasonable.
+    const whole = makeRunner();
+    const armHandle = whole.openArm(CANDIDATE, CANDIDATE.out, CANDIDATE.in);
+    const reference = whole.advance(armHandle, SLOTS);
+
+    const sliced = makeRunner();
+    const tally = { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 };
+    let skipped = 0;
+    for (const [from, to] of [[0, 3], [3, 4], [4, 10], [10, SLOTS]] as const) {
+      const slice = sliced.playSlice(CANDIDATE, CANDIDATE.out, CANDIDATE.in, from, to);
+      tally.bothWon += slice.paired.bothWon;
+      tally.baseOnly += slice.paired.baseOnly;
+      tally.variantOnly += slice.paired.variantOnly;
+      tally.neither += slice.paired.neither;
+      skipped += slice.variantGamesSkipped;
+      expect(slice.gamesPlayed).toBe(to - from);
+    }
+    expect(tally).toEqual(reference.paired);
+    expect(skipped).toBe(reference.variantGamesSkipped);
+  });
+
+  it('adopts base games another worker played, instead of replaying them', () => {
+    // This is base-arm reuse surviving the jump across workers. The adopted
+    // records must also keep the identical-game skip alive — a record stripped of
+    // its `leftLibrary` would be safe but would silently cost a third of the run.
+    const source = makeRunner();
+    const records = new Map(
+      Array.from({ length: SLOTS }, (_, slot) => [slot, source.baseRecordAt(slot)] as const),
+    );
+    expect(source.usage().baseGamesPlayed).toBe(SLOTS);
+
+    const adopting = createPairedArmRunner(MONO_RED_AGGRO, {
+      gauntletDecks: gauntlet,
+      pilots: pilots(),
+      pool,
+      registry,
+      seed: SEED,
+      baseRecords: (slot) => records.get(slot),
+    });
+    const slice = adopting.playSlice(CANDIDATE, CANDIDATE.out, CANDIDATE.in, 0, SLOTS);
+
+    // Not one base game replayed…
+    expect(slice.baseGamesPlayed).toBe(0);
+    expect(adopting.usage().baseGamesPlayed).toBe(0);
+    // …and the free-game optimisation still fired.
+    expect(slice.variantGamesSkipped).toBeGreaterThan(0);
+
+    const reference = makeRunner();
+    const handle = reference.openArm(CANDIDATE, CANDIDATE.out, CANDIDATE.in);
+    expect(slice.paired).toEqual(reference.advance(handle, SLOTS).paired);
+  });
+
+  it('plays a slot itself when nobody supplied it, and counts it honestly', () => {
+    // The pooled schedule always supplies what it asks for, so this should never
+    // happen — but if it ever did, the run must report the extra base games rather
+    // than quietly double-counting the base arm.
+    const runner = createPairedArmRunner(MONO_RED_AGGRO, {
+      gauntletDecks: gauntlet,
+      pilots: pilots(),
+      pool,
+      registry,
+      seed: SEED,
+      baseRecords: () => undefined,
+    });
+    const slice = runner.playSlice(CANDIDATE, CANDIDATE.out, CANDIDATE.in, 0, 4);
+    expect(slice.baseGamesPlayed).toBe(4);
+  });
+
+  it('reports the swap SCOPE and copy count on the verdict it summarises', () => {
+    // The adaptive engine used to report `copiesSwapped: 1` for every suggestion
+    // even though it swaps the whole playset by default, so the Lab's Apply button
+    // offered to move one copy of a 4-of.
+    const runner = makeRunner();
+    const handle = runner.openArm(CANDIDATE, CANDIDATE.out, CANDIDATE.in);
+    runner.advance(handle, 2);
+    const evaluation = runner.summarize(handle);
+    expect(evaluation.scope).toBe('playset');
+    const copies =
+      MONO_RED_AGGRO.cards.find((entry) => {
+        const def = pool.get(entry.cardId) ?? pool.getByName(entry.cardId);
+        return def?.name === CANDIDATE.out;
+      })?.count ?? 0;
+    expect(copies).toBeGreaterThan(1);
+    expect(evaluation.copiesSwapped).toBe(copies);
+  });
+
+  it('ticks progress once per game actually played, and never for a free one', () => {
+    let ticks = 0;
+    const records = new Map<number, PairedBaseRecord>();
+    const source = makeRunner();
+    for (let slot = 0; slot < SLOTS; slot++) records.set(slot, source.baseRecordAt(slot));
+
+    const runner = createPairedArmRunner(MONO_RED_AGGRO, {
+      gauntletDecks: gauntlet,
+      pilots: pilots(),
+      pool,
+      registry,
+      seed: SEED,
+      baseRecords: (slot) => records.get(slot),
+      onGame: (games) => {
+        ticks += games;
+      },
+    });
+    const slice = runner.playSlice(CANDIDATE, CANDIDATE.out, CANDIDATE.in, 0, SLOTS);
+    // A progress bar that counted skipped games would race to 100% and stall.
+    expect(ticks).toBe(slice.variantGamesPlayed);
+    expect(slice.variantGamesPlayed + slice.variantGamesSkipped).toBe(SLOTS);
   });
 });
 

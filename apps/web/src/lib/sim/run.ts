@@ -90,6 +90,11 @@ export interface ShardRunner {
    * which worker reports first. Rejects with `ShardFailure` or `RunCancelled`.
    */
   submit(job: ShardJob, onGames: (games: number) => void): Promise<ShardResult>;
+  /**
+   * Get every worker ready before a long run's first shard, when the runner has
+   * a start-up cost worth overlapping. Optional: an in-process runner has none.
+   */
+  warmUp?(): void;
 }
 
 /** Everything a run reports back as it goes. */
@@ -309,6 +314,12 @@ export async function runSuggest(
   const opponentNames = opponentsFor(request);
   const context = contextFor(request.hero, opponentNames, request.seed);
   const startedAt = nowSeconds();
+
+  // Phase 1 is a SINGLE job, so left alone the pool would spawn one worker now
+  // and the other ten during round 1 — putting their card-pool construction
+  // inside the first round of games instead of alongside the planning. Warm them
+  // all here and the spin-up overlaps work that has to happen anyway.
+  runner.warmUp?.();
 
   // PHASE 1 — enumerate + pre-rank candidates, accept the cross-run record, plan
   // the waves. Pure CPU over the whole card pool, so it runs on a worker; doing it

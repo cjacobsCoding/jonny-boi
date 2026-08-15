@@ -267,6 +267,32 @@ describe('SimWorkerPool', () => {
     expect(spawned).toHaveLength(spawnedBefore);
   });
 
+  it('warms every worker up front, so a one-job phase does not stagger the spin-up', async () => {
+    // A suggestions search starts with a SINGLE planning job. Left to spawn on
+    // demand the pool would build one card pool now and the other ten during the
+    // first round of games — measured at ~40% of a short search's wall-clock,
+    // spent at barely one-times parallelism.
+    const pool = makePool(4);
+    pool.warmUp();
+    expect(spawned).toHaveLength(4);
+    // Every one of them is handed its card set immediately, which is what makes
+    // them build their pools in parallel rather than on first job.
+    for (const worker of spawned) {
+      expect(worker.received[0]?.type).toBe('init');
+    }
+    // Warming twice must not double the pool.
+    pool.warmUp();
+    expect(spawned).toHaveLength(4);
+    pool.dispose();
+  });
+
+  it('does not spawn anything when warmed after cancel', () => {
+    const pool = makePool(4);
+    pool.dispose();
+    pool.warmUp();
+    expect(spawned).toHaveLength(0);
+  });
+
   it('ignores a straggling reply from a worker whose job already settled', async () => {
     const pool = makePool(1);
     const running = pool.submit(job(0), () => {});

@@ -200,6 +200,25 @@ export class SimWorkerPool implements ShardRunner {
     }
   }
 
+  /**
+   * Spawn every worker now and let them build their card pools in parallel.
+   *
+   * Workers are otherwise created on demand, which is right for a one-job run (a
+   * replay should not start eleven workers to leave ten idle) but wrong for a
+   * suggestions search: its first phase is a SINGLE planning job, so one worker
+   * would build its pool while ten others had not been created yet, and the rest
+   * of the spin-up would then land inside the first round of games. Measured on a
+   * 12-core box that put ~40% of a short search's wall-clock into pool
+   * construction, at barely one-times parallelism.
+   *
+   * Warming is free to get wrong in the harmless direction: it costs nothing but
+   * memory if the run turns out to be short, and it never changes a result.
+   */
+  warmUp(): void {
+    if (this.disposed) return;
+    while (this.slots.length < this.workerCount) this.slots.push(this.createSlot());
+  }
+
   submit(job: ShardJob, onGames: (games: number) => void): Promise<ShardResult> {
     if (this.disposed) return Promise.reject(new RunCancelled());
     return new Promise<ShardResult>((resolve, reject) => {

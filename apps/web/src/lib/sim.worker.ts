@@ -11,10 +11,11 @@
  *
  * Two things this worker is careful about:
  *
- * - **Context is built once.** The card pool and effect registry are the
- *   expensive part of starting a run, so they are built on the first job and
- *   reused for every shard afterwards. This is why the pool keeps workers alive
- *   instead of spawning one per shard.
+ * - **Context is built once, on `init`.** The card pool and effect registry are
+ *   the expensive part of starting a run, so they are built when the worker is
+ *   handed its card set and reused for every shard afterwards. This is why the
+ *   pool keeps workers alive instead of spawning one per shard — and why it can
+ *   warm every worker at once before a long run's first round.
  * - **Progress is coalesced.** Shards tick per game; twelve workers ticking
  *   individually would spend real time serialising `postMessage` payloads
  *   instead of playing games, so ticks are batched on a short timer and the
@@ -47,7 +48,11 @@ function post(message: WorkerMessage): void {
   ctx.postMessage(message);
 }
 
-/** Build the sim context on first use, then reuse it for every later shard. */
+/**
+ * The sim context. Normally built by `init`; the fallback covers a job that
+ * somehow arrives first, so a missing init degrades to the old lazy behaviour
+ * rather than throwing.
+ */
 function simContext(): SimContext {
   context ??= createSimContext(importedCards);
   return context;
@@ -58,8 +63,11 @@ ctx.onmessage = (event: MessageEvent<MainToWorkerMessage>): void => {
 
   if (message.type === 'init') {
     importedCards = message.importedCards;
-    // A new card set invalidates any pool built from the old one.
-    context = null;
+    // A new card set invalidates any pool built from the old one. Rebuild it NOW
+    // rather than on the first job: init is the pool's chance to warm every
+    // worker at once (`SimWorkerPool.warmUp`), and that only buys anything if the
+    // expensive part actually happens here, off the main thread, in parallel.
+    context = createSimContext(importedCards);
     return;
   }
 

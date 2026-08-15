@@ -72,9 +72,47 @@ throughput (games/sec) from regressing.
 | feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | ✅ INTEGRATED (via feat/card-mechanics) |
 | feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | ✅ INTEGRATED (via feat/card-mechanics) |
 | feat/card-mechanics | DESKTOP-90PJPM4 (worker) | packages/cards primitives+compile, core targeting | ✅ INTEGRATED |
+| feat/pool-adaptive-wire | worker | apps/web + packages/sim | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/pool-adaptive-wire` 🚧 PUSHED (apps/web + packages/sim) — **joins the
+  multi-core worker pool to the adaptive suggestion search**, which had collided: the pool was still
+  running the OLD fixed candidate loop, hand-rolled next to the sim, so the Lab ran the wrong algorithm
+  fast and `determinism.test.ts`'s parity assertion against `suggestSwaps` failed (correctly).
+  Successive halving is **stateful across candidates**, so the pool now dispatches ROUND BY ROUND with a
+  barrier: shared base games for the round's new slots → join → every surviving arm's variant games,
+  cut by SLOT range → join → the sim decides eliminations. The web layer schedules and decides nothing;
+  verdicts, futility, the rank cut, Holm and the ranking all run through the sim.
+  👉 **NEW SIM API other agents can use** (all additive): `RunOptions.range` — play a slice of the
+  (opponent, game) grid on `runMatchup`/`evaluateSwap`, which is how a shard reuses those loops instead
+  of copying them; `PairedArmRunner.playSlice` / `baseRecordAt` + `PairedArmsOptions.baseRecords` —
+  play one arm's slots anywhere and adopt base games another process played; `prepareSuggestionRun` +
+  `driveAdaptiveSearch` (a GENERATOR) + `finishSuggestionRun` — the search separated from whoever plays
+  the games; `candidateSeedSalt`, `copiesSwappedBy`, `GAMES_PER_PAIRED_GAME` exported.
+  `suggest.ts` was split into `suggest-candidates` / `suggest-run` / `suggest-report`; `suggestSwaps` is
+  now just the single-threaded driver of the generator. **Two real bugs fixed in passing:** the adaptive
+  engine reported `copiesSwapped: 1` for every suggestion under the default `playset` scope (so the
+  Lab's Apply button offered to move one copy of a 4-of), and the CLI's `--pilot` help described the
+  default as the look-ahead pilot when `DEFAULT_PILOT_ID` is `heuristic`.
+  **MEASURED** (Mono-Red Aggro vs the 7-deck gauntlet, 24 candidates, seed 0xDEADBEEF, 12 logical cores
+  that thermally throttle 3301→2011 MHz under all-core load):
+    · pooled + FIXED (the pre-merge collided state, measured on a worktree at `a97b43f`):
+      20,160 games, **28.5 s**
+    · headless adaptive (CLI, one core): 2,438 games, **8.6 s** eval / 13.3 s wall
+    · pooled + adaptive (this branch, 11 workers): 2,438 games, **4.5–5.0 s** → **~6× vs the
+      collided state**, and byte-identical output to the CLI
+    · at 200 games/finalist: 8,250 games in 9.6 s at 11 workers (867 games/sec) vs 41 s at 1 worker
+      (206 games/sec) = **4.2× parallel**, i.e. 63% of the ~6.7× this box can actually reach all-core.
+  **HONEST GAP:** the fixed sweep parallelises BETTER (708 games/sec vs ~870 here is close, but the
+  fixed run is one flat queue with zero barriers). Round 1 is the weakest round (37% efficiency), not
+  the late ones — splitting each arm's SLOTS keeps a two-survivor final round at 34 shards in flight.
+  👉 **FOLLOW-UP worth someone's time:** ~1.9 s of a short run is 11 workers each independently building
+  a card pool + effect registry. `SimWorkerPool.warmUp()` now overlaps that with the planning phase
+  (round 1: 1.98 s → 1.08 s) but does not remove it — it is memory-bandwidth bound. A shared/immutable
+  pool, or building it once and structured-cloning it, would be the real fix and would help every run
+  kind, not just suggestions. (Worker — branch pushed, NOT merged.)
 
 - 2026-08-15 DESKTOP-90PJPM4: **`feat/card-mechanics` MERGED to main + deployed.** It contained the
   whole stacked chain (`activated-abilities` → `conditional-taplands` → `card-mechanics`), so all

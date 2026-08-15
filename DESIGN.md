@@ -105,7 +105,18 @@ heuristic), evaluates each through the §3.5 paired `evaluateSwap` (common rando
 not reinvented), and ranks proven-better → inconclusive → proven-worse (by delta, then p-value). Honest
 coverage (capped/illegal candidates recorded, no silent truncation), deterministic per seed, throughput
 instrumented, and the §3.9 provisional caveat carried through. CLI: `npm run sim -- suggest <deck>
-[--games N] [--cut "Card"] [--max-candidates K] [--pilot id]`.
+[--games N] [--cut "Card"] [--max-candidates K] [--pilot id] [--history <file>] [--no-adaptive]`.
+*The search is now adaptive, progressive and parallel.* Successive halving (`suggest-schedule.ts`)
+scouts every candidate cheaply, then halves the field and doubles the budget so only finalists reach
+full depth; the base arm is played ONCE for the whole run and variant games that provably could not
+differ are not replayed (`paired-arms.ts`); verdicts are Holm-corrected over every candidate ever
+tested on the deck; and a run returns a plain-JSON record that makes the NEXT run explore new ground
+instead of repeating the shortlist (`suggest-history.ts`). Because that search is **stateful across
+candidates**, it is exposed as a *generator* (`driveAdaptiveSearch`) plus a resumable arm runner
+(`PairedArmRunner.playSlice` / `baseRecordAt` / `PairedArmsOptions.baseRecords`), so the headless
+engine drives it inline and the Lab drives it over a worker pool from the SAME elimination rule.
+Measured on Mono-Red Aggro vs the 7-deck gauntlet at 24 candidates / 60 games per finalist:
+2,438 games instead of the fixed sweep's 20,160 — **8.3× fewer games, 6.8× less wall-clock** headless.
 
 ### 3.7 Web PWA — deck builder + card browser + lab + match viewer — ✅ done
 Professional React/Vite UI: browse cards (Scryfall art), build/edit decks, run the gauntlet and see
@@ -123,6 +134,17 @@ table), and ranked **suggestions** (tunable games-per-candidate + max-candidates
 evaluated/total + capped/illegal coverage), with the §3.9 provisional caveat surfaced near every
 verdict and a fixed/editable seed for reproducibility. Build stays installable (PWA artifacts emitted;
 the sim ships in the worker chunk, off the main bundle).
+*The Lab runs on every core.* `lib/sim/` plans a request into shards, spreads them over a pool of
+long-lived workers (`browserPoolWorkerCount()`, `?simWorkers=N` to override), and merges the results
+in canonical order. Pool size can never move a verdict — `determinism.test.ts` pins every run kind
+byte-identical at 1 worker and at 12, unaffected by completion order, and equal to the sim's own
+single-threaded function. Shards are the sim's functions with a `RunRange`, not copies of them.
+The **suggestions** path drives §3.6's adaptive search *round by round with a barrier*: each round
+plays the shared base games for the slots it newly needs, joins, plays every surviving arm's variant
+games (cut by slot range, so a two-survivor final round still fills the machine), joins, and lets the
+sim decide who survives. Cross-run history is persisted per deck in `localStorage`, keyed by the
+record's deck fingerprint, and surfaced ("Run 3 · 26 candidates carried over", with a Reset); a record
+from another decklist or an older version is rejected with a reason on screen.
 *The match viewer landed:* a **"Watch a Game"** surface plays ONE traced AI-vs-AI game in the sim
 Web Worker (new `match` protocol request; `runMatch(..., {recordTrace:true})` composed with the same
 core primitives to capture a serializable per-action board snapshot) and replays it with a
