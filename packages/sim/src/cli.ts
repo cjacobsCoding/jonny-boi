@@ -52,9 +52,10 @@ Usage:
 
 Notes:
   • Decks and cards may be given by NAME (quote names with spaces) or by id.
-  • --pilot defaults to "${DEFAULT_PILOT_ID}", the look-ahead pilot: it searches real
-    engine rollouts per decision, so it plays far better but is MUCH slower than
-    "heuristic". Use --pilot heuristic for large runs where throughput matters.
+  • --pilot defaults to "${DEFAULT_PILOT_ID}". "mcts" is the look-ahead pilot: it
+    searches real engine rollouts per decision, so it plays better but is MUCH
+    slower — and it reasons over hidden library contents, which switches off the
+    suggestion engine's identical-game optimisation. Use it for quality, not scale.
   • --games N is games per matchup (default ${DEFAULT_SIM_CONFIG.defaultGames}).
   • swap --scope controls HOW MANY copies move (default "${DEFAULT_SWAP_SCOPE}"):
       playset — replace every copy: "does this card belong in the deck at all?"

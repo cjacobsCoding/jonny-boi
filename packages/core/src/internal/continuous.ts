@@ -3,7 +3,7 @@
  * to a permanent's characteristics — P/T deltas and keyword grants — layered over
  * the printed base and +1/+1 counters whenever the engine reads "effective" stats.
  *
- * Two lifetimes feed the same aggregation, deliberately not two code paths:
+ * Three lifetimes feed the same aggregation, deliberately not three code paths:
  *
  *   1. **Until end of turn** — a `ContinuousEffect` record in `GameState.continuous`,
  *      registered by a pump primitive via `EffectContext.addContinuousEffect` and
@@ -12,13 +12,19 @@
  *      permanent's `CardDefinition` (see `../statics.ts`), applying to a *set* of
  *      permanents matched by a filter for exactly as long as the SOURCE is on the
  *      battlefield.
+ *   3. **Attached** — an Aura's or an Equipment's grant to the single permanent it
+ *      is attached to (`../attachments.ts`), for exactly as long as the attachment
+ *      is on the battlefield attached to it. Structurally this is case 2 with a
+ *      filter of "the one permanent named by `attachedTo`", which is why it folds
+ *      into the same pass instead of getting a layer of its own.
  *
- * The static lifetime needs no bookkeeping at all because it is **derived, not
- * stored**: each aggregation pass re-reads `state.battlefield`. The moment a source
- * is destroyed/exiled/bounced it is gone from that array, so the next read — the
- * state-based-action pass that runs immediately after combat damage, for one — no
- * longer sees its modification, and a creature that only an anthem was keeping alive
- * dies right then. Nothing can go stale because nothing is cached across a mutation.
+ * The static and attached lifetimes need no bookkeeping at all because they are
+ * **derived, not stored**: each aggregation pass re-reads `state.battlefield`. The
+ * moment a source is destroyed/exiled/bounced it is gone from that array, so the
+ * next read — the state-based-action pass that runs immediately after combat damage,
+ * for one — no longer sees its modification, and a creature that only an anthem (or
+ * only an Aura) was keeping alive dies right then. Nothing can go stale because
+ * nothing is cached across a mutation.
  *
  * Design choices:
  *   - **Data, not classes.** Both kinds are plain records; core never names a card.
@@ -35,12 +41,19 @@
  * ## Layering order (documented; see also internal/stats.ts)
  *   1. printed base P/T and keywords
  *   2. +1/+1 counters
- *   3. static abilities from permanents currently on the battlefield
+ *   3. modifications radiating from permanents currently on the battlefield —
+ *      attachments (3a) then static abilities (3b)
  *   4. until-end-of-turn continuous effects
- * Layers 3 and 4 are both purely additive (sums) and idempotent (keyword ORs), so
- * the aggregate is order-independent; the order is stated so it stays well-defined
- * if a future *setting* effect ("becomes a 1/1") is ever added, which would have to
- * be inserted with explicit precedence rather than folded in here.
+ * Layers 3 and 4 are all purely additive (sums) and idempotent (keyword ORs), so
+ * the aggregate is order-independent — 3a before 3b is an ordering of convenience,
+ * not of precedence. The order is stated so it stays well-defined if a future
+ * *setting* effect ("becomes a 1/1", "loses all abilities") is ever added, which
+ * would have to be inserted with explicit precedence rather than folded in here.
+ * That is also the honest limit of this model: MTG's real layer system (CR 613)
+ * orders copy → control → text-changing → type → ability → P/T, and this collapses
+ * it to "everything is an additive P/T delta and a keyword OR" — which is EXACT for
+ * every modification the engine can currently express, and would need genuine
+ * sublayers the day a card sets a value rather than adding to one.
  *
  * Determinism: aggregation is sums and ORs over `state.battlefield` (stable order)
  * and `state.continuous` (insertion order), so the same state always yields the same
@@ -50,7 +63,7 @@
 import type { CardInstance, GameState, InstanceId } from '../state.js';
 import type { KeywordFlags } from '../card.js';
 import type { GameEvent } from '../events.js';
-import { staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
+import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 
 /**
  * How long a continuous effect lasts before the engine removes it.
@@ -148,22 +161,23 @@ export const NO_MOD: AggregatedMod = Object.freeze({ power: 0, toughness: 0, key
 const EMPTY_INDEX: ContinuousIndex = new Map<InstanceId, AggregatedMod>();
 
 /**
- * The permanents on the battlefield that radiate at least one static ability, or
- * `null` when there are none.
+ * Fold one attachment's grant onto its host's accumulator (layer 3).
  *
- * Returning `null` rather than an empty array is the whole point: a board with no
- * anthem — the normal case, and the one the sim spends nearly all its time in —
- * walks the battlefield checking one property per permanent and allocates nothing.
- * The sources themselves are stored (not source/ability pairs) so discovery costs no
- * wrapper objects either; the abilities are read back off `def.statics`.
+ * The host is addressed by id and NOT verified to still be on the battlefield: an
+ * accumulator keyed on a dead id is simply never looked up, so the check would cost
+ * a battlefield scan per attachment to prevent nothing. The state-based actions
+ * (`internal/sba.ts`) are what clear a stale attachment, and they run at every point
+ * a permanent can have just left play.
  */
-function collectStaticSources(state: GameState): CardInstance[] | null {
-  let sources: CardInstance[] | null = null;
-  for (const perm of state.battlefield) {
-    const declared = perm.def.statics;
-    if (declared !== undefined && declared.length > 0) (sources ??= []).push(perm);
-  }
-  return sources;
+function applyAttachment(map: Map<InstanceId, MutableMod>, attachment: CardInstance): void {
+  const spec = attachment.def.attachment;
+  if (spec === undefined) return;
+  const mod = spec.modifies;
+  if (mod === undefined || modificationIsInert(mod)) return;
+  const agg = accumulatorFor(map, attachment.attachedTo as InstanceId);
+  agg.power += mod.power ?? 0;
+  agg.toughness += mod.toughness ?? 0;
+  grantInto(agg, mod.keywords);
 }
 
 /** Get (creating if needed) the accumulator for one instance. */
@@ -190,11 +204,34 @@ function accumulatorFor(map: Map<InstanceId, MutableMod>, id: InstanceId): Mutab
  * than per candidate.
  */
 export function indexContinuous(state: GameState): ContinuousIndex {
-  const sources = collectStaticSources(state);
-  if (sources === null && state.continuous.length === 0) return EMPTY_INDEX;
+  // Discovery is INLINE rather than in a helper returning `{ statics, attachments }`.
+  // That helper read beautifully and allocated one object on every call — and this
+  // function runs several times per action across combat, SBAs, legality and
+  // serialization, so it was a measurable step backwards on the sim's hot path for
+  // a board that has neither an anthem nor an attachment.
+  let sources: CardInstance[] | null = null;
+  let attachments: CardInstance[] | null = null;
+  const permanents = state.battlefield;
+  for (let i = 0; i < permanents.length; i++) {
+    const perm = permanents[i] as CardInstance;
+    const declared = perm.def.statics;
+    if (declared !== undefined && declared.length > 0) (sources ??= []).push(perm);
+    // `!= null` rather than `!== null` on purpose: an instance built by code that
+    // predates this field (an older serialized state, an untyped test literal)
+    // then reads as UNATTACHED instead of as an attachment with an undefined
+    // host, which would corrupt the whole layering pass. One comparison either way.
+    if (perm.attachedTo != null) (attachments ??= []).push(perm);
+  }
+  if (sources === null && attachments === null && state.continuous.length === 0) return EMPTY_INDEX;
 
   const map = new Map<InstanceId, MutableMod>();
-  // Layer 3 — statics. The SOURCE ability is the outer loop, deliberately: it hoists
+  // Layer 3a — attachments. An attachment is a static whose "filter" is a single
+  // named permanent, so it needs no battlefield scan at all: O(attachments), not
+  // O(attachments x battlefield).
+  if (attachments !== null) {
+    for (const attachment of attachments) applyAttachment(map, attachment);
+  }
+  // Layer 3b — statics. The SOURCE ability is the outer loop, deliberately: it hoists
   // the inert check, the ability lookup and the deltas out of the per-candidate loop,
   // so the inner body is one filter test plus (only on a match) the accumulator. The
   // candidate-outer arrangement reads more naturally but re-runs those lookups once
@@ -239,10 +276,21 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   const agg: MutableMod = { power: 0, toughness: 0, keywords: NO_KEYWORDS };
   let any = false;
 
-  // Layer 3 — statics. Find the permanent once, then test each live static against it.
+  // Layer 3 — statics and attachments. Find the permanent once, then test each live
+  // modifier against it in the SAME battlefield walk.
   const target = findPermanent(state, instanceId);
   if (target !== undefined) {
     for (const source of state.battlefield) {
+      if (source.attachedTo === instanceId) {
+        const spec = source.def.attachment;
+        const mod = spec?.modifies;
+        if (mod !== undefined && !modificationIsInert(mod)) {
+          any = true;
+          agg.power += mod.power ?? 0;
+          agg.toughness += mod.toughness ?? 0;
+          grantInto(agg, mod.keywords);
+        }
+      }
       const declared = source.def.statics;
       if (declared === undefined || declared.length === 0) continue;
       for (const ability of declared) {

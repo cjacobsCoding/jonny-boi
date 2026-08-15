@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 /**
  * Shared flat ESLint config for the whole workspace.
@@ -10,7 +11,16 @@ import prettier from 'eslint-config-prettier';
  */
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/dev-dist/**', '**/coverage/**', '**/*.tsbuildinfo'],
+    ignores: [
+      '**/dist/**',
+      '**/dev-dist/**',
+      '**/coverage/**',
+      '**/*.tsbuildinfo',
+      // Bundler OUTPUT (`npm run bundle:server` → the NAS artifact). Linting a
+      // generated bundle reported 226 errors in vendored code nobody edits and
+      // drowned the 4 real ones, which is why `npm run lint` sat red.
+      'dist-bundle/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -26,9 +36,54 @@ export default tseslint.config(
   {
     // Build-time scripts run in Node, outside the browser/worker bundles, so
     // they legitimately reach for Node's globals.
-    files: ['scripts/**/*.{js,mjs}', '**/scripts/**/*.{js,mjs}'],
+    // `bench/` and `spikes/` are the same shape: standalone Node ESM, never
+    // bundled — a benchmark harness needs `console`/`global` exactly as a build
+    // script needs `process`.
+    files: [
+      'scripts/**/*.{js,mjs}',
+      '**/scripts/**/*.{js,mjs}',
+      '**/bench/**/*.{js,mjs}',
+      'spikes/**/*.{js,mjs}',
+    ],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly' },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        // `import.meta.url`-relative path resolution is the standard way an ESM
+        // script finds a sibling file, so `URL` belongs here with the rest.
+        URL: 'readonly',
+        // A bench harness measures and reports; `global.gc` is how it forces a
+        // collection under `--expose-gc`.
+        global: 'readonly',
+        performance: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
+  {
+    // The React app. Three files already carried
+    // `eslint-disable-next-line react-hooks/exhaustive-deps`, but the plugin was
+    // never installed — so each disable was INERT (suppressing nothing) *and*
+    // itself an error, because eslint rejects a disable for an unknown rule.
+    // Installing the plugin makes those suppressions mean what they say and
+    // turns the dependency check back on for every other hook.
+    files: ['apps/web/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      // The two classic rules are ERRORS: they catch genuine bugs (a stale
+      // closure reading last render's state, a hook behind a condition).
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
+      // The compiler-era rules are WARN, deliberately. They flag real patterns
+      // (5 sync setStates in effects, 1 ref read during render) in UI that
+      // currently works, and each needs its own think — a blind mechanical fix
+      // is how working screens break. Visible, tracked, not a merge blocker.
+      // See COORDINATION.md; fix them one file at a time, then promote to error.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/refs': 'warn',
     },
   },
 );

@@ -1,8 +1,16 @@
-import { useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { ciStr, pct, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
+import {
+  clearSuggestionHistory,
+  historyRejectionText,
+  readSuggestionHistory,
+  writeSuggestionHistory,
+} from '../../lib/sim/history-store.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
+import type { SimDeckPayload } from '../../lib/sim-protocol.js';
+import type { SuggestionHistory } from '@jonny-boi/sim';
 
 /**
  * The suggestion engine surface: rank candidate single-card swaps that improve
@@ -10,6 +18,20 @@ import type { PanelProps, GamesConfig } from './panel-types.js';
  * verdict), plus the honest coverage note (evaluated/total, capped-by-budget,
  * illegal skips) and the shared fidelity caveat. Two sliders trade speed vs
  * confidence: games-per-candidate and the candidate cap.
+ *
+ * ## The search REMEMBERS
+ *
+ * The engine's search is progressive: hand it what earlier runs learned and it
+ * skips settled losers, spends its budget on candidates nobody has tried, and
+ * refines the ones that looked promising. That record is plain JSON the engine
+ * hands back, and this panel is what persists it — per deck, keyed by the
+ * decklist's content fingerprint (`lib/sim/history-store.ts`).
+ *
+ * So the panel has to SAY so. A user who cannot see that run two is building on
+ * run one has no way to tell progressive search from a coin flip, and no way to
+ * start over when they want a clean read. Hence the banner above the button and
+ * the Reset next to it — and hence the honest line when a saved record was
+ * rejected because the deck changed underneath it.
  */
 export function SuggestPanel({
   heroPayload,
@@ -30,26 +52,49 @@ export function SuggestPanel({
   const result = sim.status === 'done' && sim.result?.kind === 'suggest' ? sim.result : null;
   const report = result?.result ?? null;
 
+  const { stored, rejected, refresh } = useStoredHistory(heroPayload);
+
+  // A finished run's record replaces the stored one. Writing it here — where the
+  // deck that was tuned is in hand — keeps persistence out of the worker pool,
+  // which has no business knowing about localStorage.
+  useEffect(() => {
+    if (!report) return;
+    writeSuggestionHistory(report.history);
+    refresh();
+  }, [report, refresh]);
+
   const cappedCount = report?.skipped.filter((s) => s.reason === 'capped').length ?? 0;
   const illegalCount = report?.skipped.filter((s) => s.reason === 'illegal').length ?? 0;
+  const settledCount = report?.skipped.filter((s) => s.reason === 'settled').length ?? 0;
 
   return (
     <div className="lab-section">
       <p className="lab-section__intro">
-        Let the engine propose the next card swap and prove whether it helps. Each candidate is
-        judged through the same paired A/B test, then ranked best-first.
+        Let the engine propose the next card swap and prove whether it helps. Every candidate gets a
+        cheap scout batch; the budget then concentrates on the ones still plausibly better, so only
+        finalists are played to full depth. Verdicts are corrected for testing many cards at once.
       </p>
+
+      <SearchMemory
+        stored={stored}
+        rejected={rejected}
+        disabled={running}
+        onReset={() => {
+          if (heroPayload) clearSuggestionHistory(heroPayload);
+          refresh();
+        }}
+      />
 
       <div className="lab-controls">
         <RunSlider
-          label="Games per candidate"
+          label="Games per finalist"
           value={games}
           min={gamesConfig.min}
           max={gamesConfig.max}
           step={gamesConfig.step}
           disabled={running}
           onChange={setGames}
-          hint="Confidence per swap"
+          hint="Depth the winner reaches"
         />
         <RunSlider
           label="Max candidates"
@@ -74,10 +119,12 @@ export function SuggestPanel({
               gamesPerCandidate: games,
               maxCandidates,
               seed,
+              // Carrying the record is what makes a re-run explore new ground.
+              ...(stored ? { history: stored } : {}),
             })
           }
         >
-          Suggest swaps
+          {stored ? `Suggest swaps (run ${stored.runsCompleted + 1})` : 'Suggest swaps'}
         </button>
       </div>
 
@@ -89,8 +136,8 @@ export function SuggestPanel({
 
           {report.suggestions.length === 0 ? (
             <p className="lab-placeholder">
-              No candidate swaps were evaluated (none legal, or all capped). Try raising the
-              candidate cap.
+              No candidate swaps were evaluated (none legal, all capped, or all settled by earlier
+              runs). Try raising the candidate cap, or reset the saved search above.
             </p>
           ) : (
             <table className="lab-table">
@@ -102,6 +149,7 @@ export function SuggestPanel({
                   <th>Variant%</th>
                   <th>Delta</th>
                   <th>p-value</th>
+                  <th>Games</th>
                   <th>Verdict</th>
                   {/* Acting on the ranking is the point of producing it. */}
                   <th aria-label="Apply this swap" />
@@ -120,7 +168,18 @@ export function SuggestPanel({
                       <td className="lab-table__num">{pct(ev.baseWinRate.p)}</td>
                       <td className="lab-table__num">{pct(ev.variantWinRate.p)}</td>
                       <td className="lab-table__num">{signedPct(ev.delta)}</td>
-                      <td className="lab-table__num">{pValueStr(ev.pValue)}</td>
+                      {/* The CORRECTED p is what the verdict was decided from, so
+                          it is the one shown; the raw p is a weaker claim. */}
+                      <td className="lab-table__num" title={`uncorrected p = ${pValueStr(s.rawPValue)}`}>
+                        {pValueStr(s.adjustedPValue)}
+                      </td>
+                      <td
+                        className="lab-table__num"
+                        title={s.elimination ? `dropped after wave ${s.elimination.wave}: ${s.elimination.detail}` : undefined}
+                      >
+                        {s.gamesPlayed}
+                        {s.elimination ? '*' : ''}
+                      </td>
                       <td>
                         <span className={`verdict-tag verdict-tag--${v.tone}`}>{v.label}</span>
                       </td>
@@ -149,13 +208,35 @@ export function SuggestPanel({
             Evaluated {report.candidatesEvaluated} of {report.notes.candidatesGenerated} candidates
             {report.notes.cappedByBudget && <> (capped at {maxCandidates})</>}.
             {cappedCount > 0 && <> {cappedCount} capped for budget.</>}
+            {settledCount > 0 && <> {settledCount} settled by earlier runs.</>}
             {illegalCount > 0 && <> {illegalCount} skipped (illegal variant).</>}
+            {report.waves.length > 0 && (
+              <>
+                {' '}
+                {report.waves.length} rounds; {report.multipleComparisons.familySize} tests corrected
+                by {report.multipleComparisons.method}
+                {report.multipleComparisons.demotedByCorrection > 0 && (
+                  <> ({report.multipleComparisons.demotedByCorrection} demoted)</>
+                )}
+                .
+              </>
+            )}
+            {report.notes.historyRejected && (
+              <> Saved search discarded: {report.notes.historyRejected}.</>
+            )}
           </p>
           <p className="lab-throughput">
             {report.notes.totalGamesRun.toLocaleString()} games
+            {report.notes.gamesAvoided > 0 && (
+              <> · {report.notes.gamesAvoided.toLocaleString()} avoided by adaptive sampling</>
+            )}
+            {report.notes.variantGamesSkipped > 0 && (
+              <> · {report.notes.variantGamesSkipped.toLocaleString()} free (card never drawn)</>
+            )}
             {report.notes.gamesPerSecond !== undefined && (
               <> · {throughputText(report.notes.gamesPerSecond)}</>
-            )}{' '}
+            )}
+            {report.notes.workersUsed !== undefined && <> · {report.notes.workersUsed} workers</>}{' '}
             · seed {seed}
           </p>
           <FidelityNote text={report.notes.fidelityCaveat} />
@@ -170,4 +251,88 @@ export function SuggestPanel({
       )}
     </div>
   );
+}
+
+/**
+ * What earlier runs on THIS deck already know, and the button to forget it.
+ *
+ * Kept a separate component so the "is this a fresh search or run four?" question
+ * has one obvious answer on screen rather than being inferable from the results
+ * table after the fact.
+ */
+function SearchMemory({
+  stored,
+  rejected,
+  disabled,
+  onReset,
+}: {
+  stored: SuggestionHistory | null;
+  rejected: string | null;
+  disabled: boolean;
+  onReset: () => void;
+}): ReactElement | null {
+  if (rejected) {
+    return (
+      <p className="lab-memory lab-memory--stale">
+        Starting a fresh search — {rejected}.
+      </p>
+    );
+  }
+  if (!stored || stored.runsCompleted === 0) {
+    return (
+      <p className="lab-memory">
+        First search on this deck. The next run will build on what this one finds instead of
+        repeating it.
+      </p>
+    );
+  }
+  return (
+    <p className="lab-memory">
+      <strong>
+        Run {stored.runsCompleted + 1} · {stored.candidates.length} candidate
+        {stored.candidates.length === 1 ? '' : 's'} carried over
+      </strong>{' '}
+      from {stored.runsCompleted} earlier {stored.runsCompleted === 1 ? 'run' : 'runs'}. Settled
+      losers are skipped and the budget goes to untried swaps.
+      <button
+        type="button"
+        className="btn btn--ghost lab-memory__reset"
+        disabled={disabled}
+        onClick={onReset}
+      >
+        Reset search
+      </button>
+    </p>
+  );
+}
+
+/** The stored record for the current hero, re-read whenever the deck changes. */
+function useStoredHistory(hero: SimDeckPayload | null): {
+  stored: SuggestionHistory | null;
+  rejected: string | null;
+  refresh: () => void;
+} {
+  const [state, setState] = useState<{ stored: SuggestionHistory | null; rejected: string | null }>({
+    stored: null,
+    rejected: null,
+  });
+
+  const fingerprint = hero ? JSON.stringify(hero.cards) : null;
+  const refresh = useCallback(() => {
+    if (!hero) {
+      setState({ stored: null, rejected: null });
+      return;
+    }
+    const found = readSuggestionHistory(hero);
+    setState({
+      stored: found.history ?? null,
+      rejected: found.rejected ? historyRejectionText(found.rejected) : null,
+    });
+    // `hero` is re-created on every render; its CONTENT is what matters, and the
+    // fingerprint below is what actually changes when the deck does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fingerprint]);
+
+  useEffect(refresh, [refresh]);
+  return { ...state, refresh };
 }

@@ -4,16 +4,17 @@
  * card definition's printed base, plus runtime modifiers, applied in this order:
  *   1. printed base (def.power / def.toughness / def.keywords)
  *   2. +1/+1 counters (a permanent per-object modifier)
- *   3. static "anthem" abilities radiating from permanents on the battlefield
+ *   3. modifications radiating from permanents on the battlefield — the Aura /
+ *      Equipment attached to this one, and static "anthem" abilities
  *   4. until-end-of-turn continuous effects (pumps / keyword grants)
  *
  * Layers 3 and 4 arrive here PRE-AGGREGATED as a single `AggregatedMod`, built by
  * internal/continuous.ts — they are both additive (P/T sums) and idempotent (keyword
  * ORs), so folding them together loses nothing and there is exactly one layering
  * path in the codebase rather than one per lifetime. All four layers therefore
- * combine: a 1/1 with a +1/+1 counter, under a +1/+1 anthem, given +2/+2 until end
- * of turn, is a 5/5, and it becomes a 3/3 again when the pump expires and a 2/2 the
- * moment the anthem leaves play.
+ * combine: a 1/1 with a +1/+1 counter, wearing a +2/+0 Equipment, under a +1/+1
+ * anthem, given +2/+2 until end of turn, is a 7/5 — and it drops back a step at a
+ * time as the pump expires, the anthem leaves play, and the Equipment is unequipped.
  *
  * Kept pure so combat, SBAs, legality checks and serialization all read the same
  * numbers. The aggregate is passed explicitly (defaulting to "no modification")

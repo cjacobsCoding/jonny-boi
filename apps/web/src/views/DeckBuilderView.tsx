@@ -41,6 +41,9 @@ export function DeckBuilderView({ decks }: { decks: DecksApi }): ReactElement {
 
   // Includes cards added by deck import, so an imported card is browsable and
   // re-addable exactly like a curated one.
+  // `decks.decks` is an INVISIBLE dependency (see CardsView): `allAvailableCards()`
+  // reads a registry deck import mutates, so this list is the only signal the pool grew.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const pool = useMemo(() => allAvailableCards(), [decks.decks]);
   const results = useMemo(() => queryCards(pool, query), [pool, query]);
   const active = decks.activeDeck;

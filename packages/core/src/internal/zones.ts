@@ -126,4 +126,14 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   inst.markedByDeathtouch = false;
   inst.summoningSick = false;
   inst.counters = NO_COUNTERS;
+  // An attachment that leaves the battlefield is attached to nothing — and so is a
+  // card that re-enters later. Clearing it HERE (rather than only in the
+  // state-based action) is what stops a bounced-and-recast Aura from arriving
+  // still pointing at a creature it no longer enchants.
+  //
+  // Guarded so an instance that never carried the field does not GAIN it here: this
+  // runs for every spell that resolves to a graveyard and every creature that dies,
+  // and adding the property would migrate most of the game's instances onto a
+  // second object shape that `cloneInstance` then has to copy (see clone.ts).
+  if (inst.attachedTo != null) inst.attachedTo = null;
 }

@@ -32,8 +32,10 @@
 
 import type { CardDefinition, EffectRef } from './card.js';
 import { isCreature } from './card.js';
-import type { GameState, InstanceId, PlayerId } from './state.js';
+import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
+import { indexContinuous, NO_MOD } from './internal/continuous.js';
+import { effectiveKeywords } from './internal/stats.js';
 
 /**
  * What a targeted effect may point at.
@@ -67,7 +69,19 @@ export type TargetRestriction =
    * its own caster would make it strictly more permissive than printed, which is
    * the exact infidelity this module exists to prevent.
    */
-  | 'opponent';
+  | 'opponent'
+  /**
+   * "target creature you control" — the aim of every printed `Equip {N}`
+   * ability ("Attach to target creature you control").
+   *
+   * Like `'opponent'`, legality depends on WHO is acting rather than only on the
+   * board, so an absent `controller` makes it ILLEGAL rather than guessed. It
+   * exists as its own restriction instead of being approximated by `'creature'`
+   * for the usual reason: offering an Equipment every creature on the table lets
+   * a pilot spend mana equipping the opponent's board, which is a card playing
+   * differently from its printed text.
+   */
+  | 'creatureYouControl';
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -91,7 +105,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'player' ||
     value === 'spell' ||
     value === 'artifact' ||
-    value === 'opponent'
+    value === 'opponent' ||
+    value === 'creatureYouControl'
   );
 }
 
@@ -169,8 +184,51 @@ export function isLegalTarget(
   }
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
+  if (!isTargetableBy(state, permanent, controller)) return false;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
+  if (restriction === 'creatureYouControl') {
+    // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
+    if (controller === undefined || permanent.controller !== controller) return false;
+  }
   return isCreature(permanent.def);
+}
+
+/**
+ * Whether `permanent` may be targeted at all by `caster` — the hexproof/shroud
+ * check, applied before any restriction so it holds for every targeting effect
+ * rather than each one remembering it.
+ *
+ * Shroud blocks everyone. Hexproof blocks only opponents, so it needs the
+ * caster; with an UNKNOWN caster a hexproof permanent is treated as untargetable
+ * — the conservative direction, since guessing the other way would let an
+ * opponent's spell through a protection the card really has.
+ *
+ * Granted keywords are read through the continuous layer, so a creature given
+ * hexproof by an aura or a pump is protected too.
+ */
+function isTargetableBy(
+  state: GameState,
+  permanent: CardInstance,
+  caster: PlayerId | undefined,
+): boolean {
+  // PERFORMANCE: this runs for every candidate target of every castable spell on
+  // the engine's hottest loop, and `indexContinuous` walks the whole effect list.
+  // The overwhelmingly common board has no continuous effects and no printed
+  // hexproof, so both are checked cheaply first and the index is built only when
+  // a grant could actually exist.
+  const printed = permanent.def.keywords;
+  if (state.continuous.length === 0) {
+    if (printed?.shroud === true) return false;
+    if (printed?.hexproof === true) return caster !== undefined && caster === permanent.controller;
+    return true;
+  }
+  const keywords = effectiveKeywords(
+    permanent,
+    indexContinuous(state).get(permanent.instanceId) ?? NO_MOD,
+  );
+  if (keywords.shroud === true) return false;
+  if (keywords.hexproof === true) return caster !== undefined && caster === permanent.controller;
+  return true;
 }
 
 /**
@@ -197,14 +255,31 @@ export function legalTargetsFor(
       targets.push(...PLAYER_IDS.filter((player) => player !== controller));
     }
   }
+  // A hexproof/shroud permanent is never OFFERED, so a consumer picking only
+  // from this menu cannot try an illegal target in the first place.
   if (restriction === 'any' || restriction === 'creature') {
     for (const permanent of state.battlefield) {
-      if (isCreature(permanent.def)) targets.push(permanent.instanceId);
+      if (isCreature(permanent.def) && isTargetableBy(state, permanent, controller)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'creatureYouControl' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller === controller &&
+        isCreature(permanent.def) &&
+        isTargetableBy(state, permanent, controller)
+      ) {
+        targets.push(permanent.instanceId);
+      }
     }
   }
   if (restriction === 'artifact') {
     for (const permanent of state.battlefield) {
-      if (permanent.def.types.includes('artifact')) targets.push(permanent.instanceId);
+      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller)) {
+        targets.push(permanent.instanceId);
+      }
     }
   }
   return targets;
@@ -288,6 +363,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an artifact';
     case 'opponent':
       return 'an opponent';
+    case 'creatureYouControl':
+      return 'a creature you control';
     case 'any':
       return 'any target (a creature or a player)';
   }

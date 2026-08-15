@@ -65,6 +65,18 @@ export interface HeuristicWeights {
    *  at `lethalBurnScore`). */
   readonly pumpFaceDamagePerPower: number;
 
+  // --- attachments (auras + equipment) -------------------------------------
+  /** Base score for attaching an Aura or Equipment to a creature. Below casting a
+   *  creature: an attachment is a card that does nothing on its own and dies with
+   *  its host, so developing a real body first is the safer default. */
+  readonly attachBaseScore: number;
+  /** Extra score per point of (power + toughness) the attachment grants its host,
+   *  and per granted keyword. One knob for "how much is this buff worth". */
+  readonly attachPerStat: number;
+  /** Extra score per keyword granted (flying/trample/lifelink all change a race
+   *  more than a stat point does, so this is worth more than one stat). */
+  readonly attachPerKeyword: number;
+
   // --- generic / fallback --------------------------------------------------
   /** Score for any other castable spell we don't specifically understand. Above
    *  passing (so we do *something* with mana) but below targeted plays. */
@@ -196,6 +208,13 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   pumpSaveCreatureScore: 50,
   pumpWinFightScore: 55,
   pumpFaceDamagePerPower: 2,
+
+  // attachments — worth real value on a board with a creature to carry them,
+  // but below developing a body, and (via `attachPerStat`) proportional to the
+  // buff rather than a flat "always equip".
+  attachBaseScore: 30,
+  attachPerStat: 4,
+  attachPerKeyword: 6,
 
   // generic / fallback
   genericSpellScore: 25,

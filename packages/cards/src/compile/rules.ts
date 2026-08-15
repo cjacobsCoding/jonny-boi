@@ -18,6 +18,7 @@ import type {
   CardType,
   EffectRef,
   ManaColor,
+  ManaCost,
   ManaProduction,
   TargetRestriction,
   TriggerCondition,
@@ -147,6 +148,11 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   reach: 'reach',
   defender: 'defender',
   lifelink: 'lifelink',
+  // Timing and targeting keywords, not combat ones, but flags all the same:
+  // core reads `flash` in `castTiming` and hexproof/shroud in `isLegalTarget`.
+  flash: 'flash',
+  hexproof: 'hexproof',
+  shroud: 'shroud',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
@@ -1021,7 +1027,147 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       return { entersTappedUnless: { controlsSubtype: subtypes } };
     },
   },
+  // --- attachments: Auras and Equipment (one system, two printed forms) --------
+  //
+  // The three rules below are the whole of "auras and equipment" at the compiler
+  // level, and they are deliberately three rather than one, because a real card
+  // prints them as separate ability lines:
+  //
+  //   Rancor        "Enchant creature"                      → attaches-as (Aura)
+  //                 "Enchanted creature gets +2/+0 and has  → the modification
+  //                  trample."
+  //   Bonesplitter  "Equipped creature gets +2/+0."         → the modification
+  //                 "Equip {1}"                             → attaches-as + how
+  //
+  // The assembly (`../compile.ts`) joins whichever pieces a card printed into ONE
+  // `CardDefinition.attachment`. A modification line with no attaches-as line is
+  // deliberately NOT compiled — see the assembly for why.
+  {
+    id: 'enchant-permanent',
+    description: '"Enchant creature" / "Enchant artifact" — the Aura\'s printed host line',
+    pattern: /^enchant (creature|artifact)$/,
+    build(match) {
+      const restriction = ENCHANT_RESTRICTIONS[match[1]!];
+      if (!restriction) return null;
+      return {
+        attachesAs: {
+          attachesTo: { anyOfTypes: [match[1] as CardType] },
+          // CR 704.5m. An Aura is the form that DIES when it is not legally
+          // attached; that difference is the only thing making it "an aura".
+          whenIllegal: 'toGraveyard',
+          label: `Enchant ${match[1]}`,
+        },
+        // An Aura spell targets its host and enters attached to it (CR 303.4f) —
+        // which is exactly a resolution script of "attach me to my target".
+        effects: [{ primitive: 'attachToTarget', params: { targets: restriction } }],
+      };
+    },
+  },
+  {
+    id: 'attachment-modification',
+    description: '"Enchanted/Equipped creature gets +2/+0 and has trample"',
+    pattern:
+      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+))$/,
+    build(match) {
+      const power = match[1] === undefined ? 0 : Number.parseInt(match[1], 10);
+      const toughness = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
+      const keywordText = match[3] ?? match[4];
+      const keywords = keywordText === undefined ? {} : parseKeywordList(keywordText);
+      // An unmodelled keyword must report the whole line rather than silently
+      // granting only the half we understood.
+      if (keywords === null) return null;
+      return { attachmentModifies: { power, toughness, keywords } };
+    },
+  },
+  {
+    id: 'equip-cost',
+    description: '"Equip {2}" — the Equipment\'s printed attach ability',
+    // Only the plain mana form. "Equip creature with power 2 or less {1}" and
+    // "Equip {1}{W} — Equip only to a Dwarf" narrow the host in ways this rule
+    // does not implement, so they must keep reporting.
+    pattern: /^equip ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const mana = parseEquipCost(match[1]!);
+      if (!mana) return null;
+      return {
+        attachesAs: {
+          // "Attach to target creature YOU CONTROL" — the scope is part of the
+          // printed ability, and offering the opponent's board would be a card
+          // playing differently from its text.
+          attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+          // CR 704.5n: an Equipment attached to nothing is just a permanent.
+          whenIllegal: 'detach',
+          label: `Equip ${match[1]}`,
+        },
+        activated: [
+          {
+            cost: { mana },
+            effects: [{ primitive: 'attachToTarget', params: { targets: EQUIP_TARGET } }],
+            // "Activate only as a sorcery" is part of what `Equip {N}` means, and
+            // dropping it would make every Equipment an instant-speed combat trick.
+            timing: 'sorcery',
+            label: `Equip ${match[1]}`,
+          },
+        ],
+      };
+    },
+  },
 ]);
+
+/** The printed "Enchant <type>" words this compiles, and the aim each means. */
+const ENCHANT_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
+  creature: CREATURE_TARGET,
+  artifact: ARTIFACT_TARGET,
+});
+
+/** What an `Equip {N}` ability may point at (CR 301.5c). */
+const EQUIP_TARGET: TargetRestriction = 'creatureYouControl';
+
+/**
+ * Parse a printed keyword list ("trample", "flying and vigilance", "first strike,
+ * trample") into keyword flags, or `null` when ANY of them is one the engine does
+ * not model — so a partially-understood line is reported rather than compiled into
+ * a card that is missing an ability.
+ */
+function parseKeywordList(text: string): Record<string, boolean> | null {
+  const words = text
+    .split(/,| and /)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  const flags: Record<string, boolean> = {};
+  for (const word of words) {
+    const field = KEYWORD_FLAGS[word];
+    if (!field) return null;
+    flags[field] = true;
+  }
+  return flags;
+}
+
+/**
+ * Parse an equip cost's mana symbols. Rejects anything the engine cannot pay as an
+ * activation cost ({X}, hybrid, Phyrexian), which keeps those Equipment reporting
+ * rather than becoming cheaper than printed.
+ */
+function parseEquipCost(symbols: string): ManaCost | null {
+  const cost: Record<string, number> = {};
+  for (const match of symbols.matchAll(/\{([^}]+)\}/g)) {
+    const symbol = match[1]!.toUpperCase();
+    if (/^\d+$/.test(symbol)) {
+      cost.generic = (cost.generic ?? 0) + Number.parseInt(symbol, 10);
+      continue;
+    }
+    if (MANA_LETTERS.includes(symbol)) {
+      cost[symbol] = (cost[symbol] ?? 0) + 1;
+      continue;
+    }
+    return null;
+  }
+  return Object.keys(cost).length > 0 ? (cost as ManaCost) : null;
+}
+
+/** The mana symbols an activation cost can be paid in. */
+const MANA_LETTERS: readonly string[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
@@ -1170,8 +1316,20 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'looking at and reordering library cards' },
   { pattern: /\bloyalty\b|^[+-]\d+:/, missingEngineSystem: 'planeswalker loyalty abilities' },
   { pattern: /\btransform\b|\bflip\b|double-faced/, missingEngineSystem: 'transform / double-faced cards' },
-  { pattern: /\bflashback\b|\bflash\b/, missingEngineSystem: 'flash timing and graveyard recasting' },
-  { pattern: /\bequip\b|\battach\b|\benchant\b/, missingEngineSystem: 'auras and equipment attachment' },
+  // Flash is now a real timing flag (`castTiming` reads it), so only FLASHBACK —
+  // recasting from the graveyard — is still missing. Matching bare "flash" here
+  // would send a flash creature to the queue for a mechanic it already has.
+  { pattern: /\bflashback\b/, missingEngineSystem: 'recasting a spell from the graveyard (flashback)' },
+  {
+    // Attachment IS implemented now (core's `attachments.ts` + the
+    // `enchant-permanent` / `attachment-modification` / `equip-cost` rules), so
+    // this hint no longer claims the whole system is missing — that would send the
+    // next agent to build something that exists. What still lands here is a
+    // template: "Enchant player", "Equip only to a Human", bestow, reconfigure,
+    // and anything that moves an attachment other than a plain Equip.
+    pattern: /\bequip\b|\battach\b|\benchant\b/,
+    missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
+  },
   { pattern: /\bsacrifice\b/, missingEngineSystem: 'sacrifice costs and activated abilities' },
   { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'persistent counters beyond +1/+1 pumps' },
   { pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/, missingEngineSystem: 'graveyard-based abilities with a chooser' },
@@ -1183,7 +1341,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a mill template the compiler does not recognize yet',
   },
   { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
-  { pattern: /\bward\b|\bhexproof\b|\bshroud\b|\bprotection from\b/, missingEngineSystem: 'targeting restrictions (hexproof / ward / protection)' },
+  {
+    // Hexproof and shroud are implemented keyword flags now. Ward (pay a cost to
+    // target) and protection (a bundle of can't-be-blocked/damaged/enchanted
+    // rules) are genuinely still missing, so the hint names only those.
+    pattern: /\bward\b|\bprotection from\b/,
+    missingEngineSystem: 'ward and protection-from (cost-to-target and the protection bundle)',
+  },
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
   { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'activated abilities with costs' },

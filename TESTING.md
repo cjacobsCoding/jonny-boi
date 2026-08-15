@@ -90,6 +90,9 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 | `gauntlet-health.test.ts` | The gauntlet stays healthy |
 | `stats.test.ts` | The statistics themselves |
 | `suggest.test.ts` | Swap suggestions rank correctly and reproduce |
+| `suggest-adaptive.test.ts` | Successive halving, futility/rank cuts, the cross-run record |
+| `paired-arms.test.ts` | Shared base arm, provably-identical games, **and slicing an arm across workers changing nothing** |
+| `harness.test.ts` (`RunOptions.range`) | A run split into slices reassembles into exactly the whole |
 
 ### Web app — `apps/web`
 | Suite | What it guards |
@@ -108,6 +111,10 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 | `lib/scryfall/collection.test.ts` | Bulk name resolution (split cards, licensed names) |
 | `lib/scan/*.test.ts` | Card scanning pipeline |
 | `lib/proxy/*.test.ts` | Proxy sheet: printings, pagination, upscaling, overrides |
+| `lib/sim/determinism.test.ts` | **THE parallel proof**: every run kind byte-identical at 1 worker and 12, unaffected by completion order, and equal to the sim's own single-threaded function — including the adaptive suggestions search, rank for rank |
+| `lib/sim/plan.test.ts` | Shard plans TILE a run exactly; rounds split by slot so late waves still fill the machine |
+| `lib/sim/pool.test.ts` | A dead worker doesn't hang a run; Cancel stops everything; warm-up |
+| `lib/sim/history-store.test.ts` | The tuning record survives, and a record from another deck is REJECTED with a reason |
 | `lib/replay-*.test.ts` | Match replay building, folding, formatting, quiet-phase skipping |
 | `components/card-hover-position.test.ts` | Hover preview stays on screen |
 

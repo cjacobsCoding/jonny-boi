@@ -76,15 +76,34 @@ card pool sufficient to express the meta decks. Each card is data; each primitiv
 ### 3.3 Scryfall data-tools pipeline — ✅ done
 Fetch + cache card data and art for the curated pool; produce a normalized card index the engine/UI use.
 Robust to misses; respects Scryfall guidelines.
+The PWA's bundled copy (`apps/web/src/data/card-index.json`) is **derived**, not authored:
+`apps/web/scripts/build-card-index.mjs` projects it from the canonical index, keeping only the fields
+the UI renders. Regenerate with `npm run cards:index -w @jonny-boi/web`; never hand-edit it.
+`apps/web/src/data/card-index.test.ts` re-derives it on every `npm test` and fails on any drift, and
+also asserts that every card the engine can play has a display row that resolves to art.
 
 ### 3.4 AI pilots — ✅ done
 The `chooseAction` interface + read-only game view + legal-action generator; a `random` baseline and a
 `heuristic` pilot good enough to play the meta decks competently. Tested against scripted scenarios.
-The look-ahead **`mcts`** pilot (UCB1 + engine rollouts, tunable `MctsConfig`) is now `DEFAULT_PILOT_ID`
-— every consumer that doesn't name a pilot gets it. It plays *far* better than the heuristic, which has
-no lookahead at all, but is **orders of magnitude slower**: pass `--pilot heuristic` (or lower
-`MctsConfig.maxDecisionMillis`) for runs where throughput matters. The heuristic remains MCTS's rollout
-policy, so its play quality still bounds the search's.
+**`DEFAULT_PILOT_ID` is `heuristic`.** The look-ahead **`mcts`** pilot (UCB1 + engine rollouts, tunable
+`MctsConfig`) remains *selectable* but is a research option, not a recommendation — and this paragraph
+used to claim the opposite, which is why the numbers are recorded here rather than an impression:
+
+- **Speed:** ~0.09 games/sec vs the heuristic's ~176 — a **2000×** gap. It is structural (`sims × depth`
+  engine plies per decision), not garbage, so allocation work does not reach it: a measured 19% cut in
+  MCTS-side allocation moved wall clock within run-to-run noise.
+- **Strength:** measured *worse*, not better. Over 120 seeded games with seat and play rotated it won
+  **40.8%** (95% CI **[32.5%, 49.8%]** — the interval excludes 50%) against the very heuristic it uses as
+  its rollout policy. It still wastes 0.71 mana/turn against the heuristic's 0.00.
+- **Diagnosis on file:** the search values tapping a land through rollouts where the *heuristic* later
+  spends that mana, while the real next mover treats it as sunk. `MctsConfig.evalWastedManaPenalty` fixes
+  the symptom (0.71 → 0.22/turn) but costs ~11.6 points of win rate, so it ships **off**. The real fix is
+  making tap-and-cast atomic in the search's action space via `planManaPayment`.
+
+⚠️ Do **not** re-default it without a fresh head-to-head; that has already shipped once and made the Lab's
+stock run a multi-hour job. Pinned by guard tests in `packages/ai`. Note also that lowering
+`MctsConfig.maxDecisionMillis` is NOT a valid throughput knob: a wall-clock budget makes the search
+machine-dependent and destroys the common-random-numbers property the paired A/B test rests on.
 *Play-quality fixes (2026-08):* pilots read effect primitives by **registered id** — a mismatched id
 (`destroy` vs `destroyTarget`) silently degrades a spell to an untargeted "generic" cast that no-ops, so
 `test-support.ts` fixtures must use the real ids. Pumps are scored as combat tricks (save / win the fight
@@ -105,7 +124,18 @@ heuristic), evaluates each through the §3.5 paired `evaluateSwap` (common rando
 not reinvented), and ranks proven-better → inconclusive → proven-worse (by delta, then p-value). Honest
 coverage (capped/illegal candidates recorded, no silent truncation), deterministic per seed, throughput
 instrumented, and the §3.9 provisional caveat carried through. CLI: `npm run sim -- suggest <deck>
-[--games N] [--cut "Card"] [--max-candidates K] [--pilot id]`.
+[--games N] [--cut "Card"] [--max-candidates K] [--pilot id] [--history <file>] [--no-adaptive]`.
+*The search is now adaptive, progressive and parallel.* Successive halving (`suggest-schedule.ts`)
+scouts every candidate cheaply, then halves the field and doubles the budget so only finalists reach
+full depth; the base arm is played ONCE for the whole run and variant games that provably could not
+differ are not replayed (`paired-arms.ts`); verdicts are Holm-corrected over every candidate ever
+tested on the deck; and a run returns a plain-JSON record that makes the NEXT run explore new ground
+instead of repeating the shortlist (`suggest-history.ts`). Because that search is **stateful across
+candidates**, it is exposed as a *generator* (`driveAdaptiveSearch`) plus a resumable arm runner
+(`PairedArmRunner.playSlice` / `baseRecordAt` / `PairedArmsOptions.baseRecords`), so the headless
+engine drives it inline and the Lab drives it over a worker pool from the SAME elimination rule.
+Measured on Mono-Red Aggro vs the 7-deck gauntlet at 24 candidates / 60 games per finalist:
+2,438 games instead of the fixed sweep's 20,160 — **8.3× fewer games, 6.8× less wall-clock** headless.
 
 ### 3.7 Web PWA — deck builder + card browser + lab + match viewer — ✅ done
 Professional React/Vite UI: browse cards (Scryfall art), build/edit decks, run the gauntlet and see
@@ -123,6 +153,17 @@ table), and ranked **suggestions** (tunable games-per-candidate + max-candidates
 evaluated/total + capped/illegal coverage), with the §3.9 provisional caveat surfaced near every
 verdict and a fixed/editable seed for reproducibility. Build stays installable (PWA artifacts emitted;
 the sim ships in the worker chunk, off the main bundle).
+*The Lab runs on every core.* `lib/sim/` plans a request into shards, spreads them over a pool of
+long-lived workers (`browserPoolWorkerCount()`, `?simWorkers=N` to override), and merges the results
+in canonical order. Pool size can never move a verdict — `determinism.test.ts` pins every run kind
+byte-identical at 1 worker and at 12, unaffected by completion order, and equal to the sim's own
+single-threaded function. Shards are the sim's functions with a `RunRange`, not copies of them.
+The **suggestions** path drives §3.6's adaptive search *round by round with a barrier*: each round
+plays the shared base games for the slots it newly needs, joins, plays every surviving arm's variant
+games (cut by slot range, so a two-survivor final round still fills the machine), joins, and lets the
+sim decide who survives. Cross-run history is persisted per deck in `localStorage`, keyed by the
+record's deck fingerprint, and surfaced ("Run 3 · 26 candidates carried over", with a Reset); a record
+from another decklist or an older version is rejected with a reason on screen.
 *The match viewer landed:* a **"Watch a Game"** surface plays ONE traced AI-vs-AI game in the sim
 Web Worker (new `match` protocol request; `runMatch(..., {recordTrace:true})` composed with the same
 core primitives to capture a serializable per-action board snapshot) and replays it with a
@@ -221,12 +262,28 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   Lava Spike and Flame Slash were unrestricted damage, Absorb/Dismiss were castable into an empty stack
   (a free cantrip), fifteen removal/pump spells were castable with no legal target, and Monastery
   Swiftspear's prowess missed every noncreature spell that wasn't an instant or sorcery.
+- ✅ *auras + equipment (attachment)* — ONE relationship, not two systems. `CardInstance.attachedTo`
+  plus `CardDefinition.attachment` (a host filter, a `PermanentModification`, and what the state-based
+  actions do when it is not legally attached) covers both printed forms; they differ only in HOW they
+  attach — an Aura's spell script vs an `Equip {N}` activated ability — and in `whenIllegal`
+  (CR 704.5m an Aura dies, CR 704.5n an Equipment falls off). The grant is **derived, never stored**, so
+  it is aggregated by the same `indexContinuous` pass as anthems and until-EOT pumps and layers with
+  them additively; the SBAs handle host-left-play, illegal-host and attached-to-nothing in one predicate
+  (`isLegallyAttached`). `Equip` needed one new target restriction, `'creatureYouControl'`. The compiler
+  reads "Enchant creature", "Enchanted/Equipped creature gets …", and "Equip {N}", and the heuristic
+  pilot casts Auras on a sensible creature (its own for a buff, the opponent's for a shrink) and
+  activates Equip, funding it through the same `planManaPayment` a spell uses.
+  ⚠️ **Not yet in the curated pool.** The canonical Scryfall index (`packages/data-tools/data`) contains
+  no Aura or Equipment, and a pool card must have a display row with art there — so these cards arrive
+  through the DECK IMPORTER (the Oracle compiler), not `CARD_POOL`. Adding a playset to the pool is a
+  data-tools re-fetch + a web card-index regeneration, and belongs to whoever owns those.
 Still open, roughly by how often they block a real decklist:
 - *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
   pool (fetchlands, mana rocks, sac outlets).
-- *static / "anthem" continuous effects* — a permanent that continuously buffs others. Without it a
-  go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta the
-  lab measures — a bias in the verdicts themselves, not just missing cards.
+- *static / "anthem" continuous effects* — the engine layer EXISTS (`statics.ts`, aggregated with
+  everything else), but no compiler rule reaches it yet, so an anthem still cannot be imported. Without
+  it a go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta
+  the lab measures — a bias in the verdicts themselves, not just missing cards.
 - *alternative and additional costs* (suspend, spectacle, kicker), *{X} and Phyrexian costs*,
   *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*, *flash + casting from the graveyard*,
   *revolt-style "a permanent left the battlefield this turn" trackers*.

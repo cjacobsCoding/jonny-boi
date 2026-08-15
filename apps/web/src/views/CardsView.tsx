@@ -29,6 +29,12 @@ export function CardsView(): ReactElement {
   // Re-render whenever the imported set changes. The count is a cheap, stable
   // snapshot: it changes exactly when the card list does.
   const importedCount = useSyncExternalStore(subscribeToImportedCards, importedCardCount, () => 0);
+  // `importedCount` is an INVISIBLE dependency, not an unnecessary one:
+  // `allAvailableCards()` reads a module-level registry that deck import mutates,
+  // so nothing in this call expression changes when the pool does. Drop it (as the
+  // rule suggests) and an imported card stays missing from the browser until an
+  // unrelated re-render happens to rebuild the memo.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const pool = useMemo(() => allAvailableCards(), [importedCount]);
   const results = useMemo(() => queryCards(pool, query), [pool, query]);
 

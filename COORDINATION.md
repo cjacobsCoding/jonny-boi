@@ -72,9 +72,222 @@ throughput (games/sec) from regressing.
 | feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | ✅ INTEGRATED (via feat/card-mechanics) |
 | feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | ✅ INTEGRATED (via feat/card-mechanics) |
 | feat/card-mechanics | DESKTOP-90PJPM4 (worker) | packages/cards primitives+compile, core targeting | ✅ INTEGRATED |
+| feat/pool-adaptive-wire | worker | apps/web + packages/sim | ✅ INTEGRATED |
+| feat/card-index-truth | worker | apps/web/src/data + apps/web/scripts + web card docs | ✅ INTEGRATED |
+| perf/mcts-usable | worker | packages/ai | ✅ INTEGRATED (NO-GO: mcts slower AND weaker) |
+| feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/attachments` 🚧 PUSHED — **auras + equipment, as ONE seam.** Suite **1856
+  passed / 0 failed** (baseline 1822 + 34), `npm run verify` exit 0, `npm run build` exit 0, lint 0 errors.
+  👉 **The seam is a RELATIONSHIP, not two systems.** `CardInstance.attachedTo` + a data
+  `CardDefinition.attachment` (host filter, `PermanentModification`, `whenIllegal`). An Aura and an
+  Equipment differ in exactly two places, both DATA: how they attach (a spell script vs an `Equip {N}`
+  activated ability — both the same `attachToTarget` primitive) and what the SBAs do when they are not
+  legally attached (CR 704.5m to the graveyard / 704.5n just unattach). Core never asks "is this an aura".
+  👉 **The buff is DERIVED, never stored** — the same choice `statics.ts` made, and it pays off the same
+  way: an attachment's grant is re-read from `state.battlefield` on every effective-P/T read, so it
+  vanishes the instant the attachment leaves play with zero bookkeeping. It folds into `indexContinuous`
+  as layer 3a beside statics (3b), so attachments, anthems, +1/+1 counters and until-EOT pumps all stack
+  additively through ONE path. A 2/2 with a counter, an anthem, an Equipment and a pump reads 9/8.
+  👉 **`isLegallyAttached` is one predicate covering all three SBA cases** (host left play / host no
+  longer matches the printed line / attached to nothing), and `attachTo` asks the SAME function before
+  forming a relationship — so the engine cannot create a board the SBAs immediately undo.
+  ⚠️ **The brief asked for "hexproof gained after attaching → aura falls off". That is NOT the rule and
+  I did not implement it.** Hexproof/shroud stop a permanent being TARGETED (a cast-time rule); only
+  PROTECTION makes an already-attached Aura illegal (CR 704.5m + 303.4c), and this engine has no
+  protection. Dropping the Aura there would make every Aura strictly worse than printed. There is a test
+  pinning the correct behaviour so nobody "fixes" it.
+  👉 **New core API:** `TargetRestriction` gained `'creatureYouControl'` (what every printed Equip aims
+  at — offering the whole table would let a pilot equip the opponent's board); `restrictionOfEffects` is
+  now exported from the core index; `StaticAbility` now extends a shared `PermanentModification` and
+  `staticIsInert` is a thin wrapper over `modificationIsInert` (no behaviour change).
+  ⚠️ **`CardInstance.attachedTo` is OPTIONAL in the type and always WRITTEN by every mint/clone path.**
+  Deliberate: gameplay instances keep one object shape, while hand-built literals in other packages'
+  tests (apps/web has four) and any older serialized state still compile and read as unattached. Every
+  reader tests `!= null`, never `!== null`. Making it required broke the apps/web build; making it
+  optional touches nothing outside my packages.
+  ⚠️ **I touched ONE line outside my packages: `packages/sim/src/paired-arms-config.ts`** adds
+  `'attachToTarget'` to `LIBRARY_SAFE_PRIMITIVES`. Its own test asserts the two sets cover the whole
+  registry, so ANY new primitive fails the sim suite until it is classified — this is that test doing its
+  job, not a scope grab. Integrator: expect a trivial conflict there if another branch adds a primitive.
+  👉 **Cards ship through the IMPORTER, not the pool, and that was forced.** `packages/data-tools/data/
+  card-index.json` (156 cards) contains **zero** Auras and **zero** Equipment, and
+  `apps/web/src/data/card-index.test.ts` requires every pool card to have a display row with art. So a
+  curated-pool playset needs a Scryfall re-fetch (data-tools) plus a web index regeneration — both
+  outside this branch. Verified faithful from real printed Oracle text instead: **Unholy Strength, Dead
+  Weight, Flight, Bonesplitter, Loxodon Warhammer**. Anyone importing those today gets a real card.
+  👉 **The pilot genuinely plays them, proven by BEHAVIOUR not by tests passing**
+  (`packages/cards/src/attachments-play.test.ts` plays real games): an Aura lands on the pilot's OWN
+  creature and its power really goes up; Dead Weight is aimed at the OPPONENT and kills the creature; the
+  Equip ability is activated and the sword ends up attached. ⚠️ **The first version of the equip pilot
+  looked perfect and equipped exactly never**: the engine only OFFERS an activated ability whose mana
+  cost the floating pool already covers, and the pilot never floats mana speculatively, so reading
+  `legalActions` found nothing. It now plans equip through the same `planManaPayment` a spell uses.
+  Anyone wiring a future mana-costed ability into a pilot will hit this.
+  ⚠️ **PERF (rule 7) — read this before you re-measure anything on this box.** Two measurements, and
+  they DISAGREE, so both are reported:
+  · **`packages/core/bench/engine-alloc-bench.ts` (the repo's own noise-immune measure — its header says
+    wall clock here "is close to worthless"): PARITY or better.** 10.71 µs/action vs base 10.92;
+    122.6 vs 120.2 games/sec; `cloneState` 4156 ns vs 4128 (34.6 vs 34.4 ns per cloned instance).
+  · **Gauntlet wall clock: −3.6%, consistent.** Golgari Midrange, 300 games/opponent (2,100 games),
+    seed 99, INTERLEAVED base/branch four times: branch 240/239/238/235 vs base 244/248/247/249.
+    The games are **byte-identical** (`sim gauntlet` output diffs clean), so it is pure overhead, not
+    different play.
+  👉 **I could not attribute the 3.6% to any single change, and the bisect is recorded so nobody repeats
+  it.** Reverting each of these individually recovered NOTHING beyond noise: `packages/core` entirely
+  (core alone measures at parity), `targeting.ts`, the attachment SBA scan, the pilot's equip scan,
+  `pool.ts`. It is diffuse — six one-comparison additions spread across `indexContinuous`,
+  `checkStateBasedActions`, `isLegalTarget`/`legalTargetsFor`, the clone and the pilot.
+  👉 **The remaining lever, if the integrator wants it:** a monotone `GameState.hasAttachment` flag set
+  on battlefield entry, so a game whose decks contain no Aura or Equipment skips the attachment work
+  entirely. I did NOT do it: it is a second structure that can desync from the truth (miss one entry
+  path and an unattached Aura silently stops dying), and I was not willing to take that trade at the end
+  of a session for ~1% on a benchmark whose noise floor is ±2.5%.
+  ⚠️ **Measurement discipline:** this box drifts 332→346 games/sec on IDENTICAL code within minutes
+  (thermal), and my first three comparisons were sequential and therefore worthless — one of them
+  "proved" a change was free that a proper interleaved run later showed cost 4%. Alternate the variants
+  inside one shell invocation, use ≥2,000 games, and prefer the allocation bench.
+  👉 **Two real hot-path traps found and avoided, both worth knowing:** a helper returning
+  `{ statics, attachments }` allocated an object on EVERY `indexContinuous` call (it runs several times
+  per action) — the discovery is inlined instead; and the attachment SBA originally re-walked the
+  battlefield once per FIXPOINT PASS — nothing enters the battlefield during SBAs, so the set is
+  collected once per call and is `null` (one reference compare per pass) on every board without an
+  attachment.
+  👉 **Stale-hint fix:** the compiler's unsupported hint for `equip|attach|enchant` no longer says the
+  whole system is missing; it now names the missing TEMPLATE. Separately: **`statics.ts` exists in core
+  but NO compile rule reaches it**, so anthems still cannot be imported — that is a genuine gap and I
+  left it alone because `feat/static-effects` is in flight on the same files.
+  (Worker — pushed, NOT merged.)
+
+- 2026-08-15 integrator: **`npm run lint` had been red on `main` for a long time — 259 errors — and
+  nobody noticed because nothing ran it.** Now green (0 errors) and wired into a new root
+  **`npm run verify`** (offline: lint + card-index `--check` + full tests). Run it before you push.
+  What the 259 were: **226 were `dist-bundle/`**, i.e. eslint was linting the bundler's OUTPUT — now
+  ignored. 29 were `packages/ai/bench/*.mjs` missing Node globals — `bench/` and `spikes/` now get the
+  same globals block as `scripts/`. That left **4 real ones**, and they were worth having:
+  👉 **`eslint-plugin-react-hooks` was never installed**, yet three files carried
+  `eslint-disable-next-line react-hooks/exhaustive-deps`. Each disable was suppressing NOTHING and was
+  itself an error (eslint rejects a disable for an unknown rule). Plugin installed; the classic pair
+  (`rules-of-hooks`, `exhaustive-deps`) are ERRORS.
+  👉 It immediately found a **real bug** in `components/match/useReplayPlayback.ts`: the auto-advance
+  effect omitted `advance` from its deps, so the running interval held the closure from the render that
+  started playback — **toggling "skip quiet frames" mid-playback silently did nothing** until you
+  paused. The comment directly above it claimed the opposite. Fixed.
+  👉 Two `useMemo`s flagged as having an "unnecessary" dependency (`importedCount`, `decks.decks`) are
+  the opposite — **invisible** dependencies. `allAvailableCards()` reads a module registry that deck
+  import mutates, so those deps are the only signal the pool grew; removing them (as the rule advises)
+  breaks imported-card browsing. Documented disables, not removals. **Don't "fix" them.**
+  👉 The compiler-era rules (`set-state-in-effect`, `refs`) are **WARN on purpose** — 5 sync setStates
+  in effects + 1 ref-write during render, all in UI that currently works. Fix one file at a time and
+  promote to error; a blind mechanical sweep is how working screens break.
+  ⚠️ **Gap needing an owner: the web app has NO hook/component test infrastructure** — no
+  `@testing-library/react`, no jsdom, zero `renderHook` anywhere. The replay bug above could only be
+  guarded by the lint rule, not a test. Adding that stack is a real decision, not a drive-by; whoever
+  takes it should propose it rather than sneak it into another branch.
+
+- 2026-08-15 worker: `feat/card-index-truth` 🚧 PUSHED (apps/web/src/data + apps/web/scripts + the two
+  web card doc-comments + one eslint global). **The reported bug did not exist — read this before
+  anyone re-opens it.** The claim was that `apps/web/src/data/card-index.json` is a stale hand-copied
+  32-card subset of a ~157-card pool. MEASURED on `ae1a894`: the web copy was **156 cards and
+  BYTE-IDENTICAL** (sha1 `c94efd7e…`) to `packages/data-tools/data/card-index.json`, `CARD_POOL` is
+  **156** (32 curated + 124 expanded), and the join is exact — **0** pool cards missing a row, **0**
+  orphan rows, **0** rows without art. `c09b3ac` fixed it back in June.
+  👉 **The "32" was STALE PROSE, and it cost a whole agent-task.** Three comments still described the
+  pre-`c09b3ac` world — `lib/cards.ts` ("32 real MTG cards"), `lib/cards/enginePool.ts` ("only ~32 of
+  them", "100+ cards … were invisible"), and `views/LabView.tsx` ("the curated index (~32)"). Someone
+  read those, believed them over the data, and filed a headline defect. I corrected the first two;
+  **`LabView.tsx:209` still says `~32` and I deliberately left it alone** because
+  `feat/pool-adaptive-wire` owns that file — whoever merges that branch should fix the number.
+  Treat a stale comment as a bug with a blast radius, not as decoration.
+  👉 What WAS real: the copy was **unguarded**. Nothing generated it and nothing compared it, so the
+  only thing preventing the reported bug was someone remembering to copy a file. It is now DERIVED by
+  `apps/web/scripts/build-card-index.mjs` (`npm run cards:index -w @jonny-boi/web`, `--check` for CI)
+  and `apps/web/src/data/card-index.test.ts` re-derives it every `npm test`. Sabotage-tested: cutting
+  the file back to 32 cards makes 3 tests fail and names all 124 lost cards.
+  👉 **The bundled index is now a PROJECTION, and that is a free PWA win.** Scryfall ships 11 image
+  variants per card; `cardImage()` can only ever return 4 (`small`/`normal`/`large`/`art_crop`), so the
+  other 7 were dead weight in every download. Dropping them: main chunk **758.58 → 642.14 kB raw
+  (−15.4%)**, **179.11 → 170.65 kB gzip (−4.7%)**, PWA precache **958.80 → 845.09 KiB (−11.9%)**. A test
+  asserts `DISPLAYED_IMAGE_VARIANTS` still covers every size `cardImage` can return, so widening the UI
+  fails loudly here instead of quietly losing art.
+  👉 **`enginePool.ts` now contributes ZERO records and should NOT be deleted for it.** It synthesizes a
+  text-only display record for any engine card the index lacks; the index covers everything today, so it
+  is an empty safety net — which is the healthy state, and the rule-6 fallback for the window between
+  adding a card and regenerating. Comment updated to say so.
+  ⚠️ **Two gotchas for the next person.** (1) `core.autocrlf=true` and there is no `.gitattributes`, so
+  every committed JSON is CRLF on disk and LF in git — any byte-compare guard MUST normalize newlines or
+  it reports a false "stale" on every Windows checkout. (2) The Scryfall CDN answers **HTTP 400 to
+  `HEAD`**; art-liveness checks must use GET (I used a 1 KB Range + JPEG magic-number check). 28/28 real
+  image fetches across 7 sampled cards incl. the one DFC came back as valid JPEGs.
+  ❗ **`npm run verify` does not exist at the root** — I was told to extend it. The only `verify` in the
+  monorepo is `@jonny-boi/data-tools`' NETWORK re-fetch against live Scryfall, whose own header says it
+  must not run in `npm test` or CI. So the offline guard went where this repo's guards actually live
+  (the vitest suite), plus a `--check` flag on the same module for a human/CI to call. If the integrator
+  wants a root `verify`, `node apps/web/scripts/build-card-index.mjs --check` is the line to add.
+  Suite **1822 passed / 0 failed** (baseline 1814 + 8 new), `npm run build` exit 0, eslint clean.
+  (Worker — pushed, NOT merged.)
+
+- 2026-08-15 DESKTOP-90PJPM4: **`feat/mechanics-wave2` MERGED to main + deployed.** main = **1735
+  tests, build exit 0**. Adds **flash, hexproof, shroud** — three keywords that change what is
+  LEGAL rather than what happens in combat, so each is read by the rule that governs it:
+  - `flash` → `castTiming` returns 'instant'. Every consumer (legality, both pilots, hotseat UI)
+    inherits it with no further change. An explicit `timing` on the card still wins.
+  - `hexproof`/`shroud` → enforced in `isLegalTarget` AHEAD of any restriction, so they hold for
+    every targeting effect rather than each one remembering. `legalTargetsFor` filters them out
+    too, so a protected permanent is never even offered.
+  ⚠️ **Perf note for anyone touching `isLegalTarget`:** it runs for every candidate target of every
+  castable spell on the hot path, and reading GRANTED keywords needs `indexContinuous`. It now
+  short-circuits on `state.continuous.length === 0` and printed keywords first; keep that ordering
+  or the sim slows measurably.
+  👉 Hint accuracy again: bare "flash" no longer routes to the queue (only `flashback` does), and
+  the old hexproof hint now names only **ward and protection-from**, which really are missing.
+  ⛔ **`gaining control` was attempted and deliberately BACKED OUT.** Doing it properly needs an
+  `effectiveController()` threaded through combat, priority, and legality — `permanent.controller`
+  is read directly in many places, and a continuous "control-change" layer without that accessor
+  would be half-applied and silently wrong. It needs its own branch, not a corner of this one.
+  STILL MISSING: planeswalkers, transform/DFC, {X} and derived values, alternative costs
+  (suspend/spectacle/flashback/kicker), auras + equipment, ward/protection, gaining control,
+  dynamic P/T, "unless its controller pays", targets chosen by a triggered ability.
+  (Integrator)
+- 2026-08-15 worker: `feat/pool-adaptive-wire` 🚧 PUSHED (apps/web + packages/sim) — **joins the
+  multi-core worker pool to the adaptive suggestion search**, which had collided: the pool was still
+  running the OLD fixed candidate loop, hand-rolled next to the sim, so the Lab ran the wrong algorithm
+  fast and `determinism.test.ts`'s parity assertion against `suggestSwaps` failed (correctly).
+  Successive halving is **stateful across candidates**, so the pool now dispatches ROUND BY ROUND with a
+  barrier: shared base games for the round's new slots → join → every surviving arm's variant games,
+  cut by SLOT range → join → the sim decides eliminations. The web layer schedules and decides nothing;
+  verdicts, futility, the rank cut, Holm and the ranking all run through the sim.
+  👉 **NEW SIM API other agents can use** (all additive): `RunOptions.range` — play a slice of the
+  (opponent, game) grid on `runMatchup`/`evaluateSwap`, which is how a shard reuses those loops instead
+  of copying them; `PairedArmRunner.playSlice` / `baseRecordAt` + `PairedArmsOptions.baseRecords` —
+  play one arm's slots anywhere and adopt base games another process played; `prepareSuggestionRun` +
+  `driveAdaptiveSearch` (a GENERATOR) + `finishSuggestionRun` — the search separated from whoever plays
+  the games; `candidateSeedSalt`, `copiesSwappedBy`, `GAMES_PER_PAIRED_GAME` exported.
+  `suggest.ts` was split into `suggest-candidates` / `suggest-run` / `suggest-report`; `suggestSwaps` is
+  now just the single-threaded driver of the generator. **Two real bugs fixed in passing:** the adaptive
+  engine reported `copiesSwapped: 1` for every suggestion under the default `playset` scope (so the
+  Lab's Apply button offered to move one copy of a 4-of), and the CLI's `--pilot` help described the
+  default as the look-ahead pilot when `DEFAULT_PILOT_ID` is `heuristic`.
+  **MEASURED** (Mono-Red Aggro vs the 7-deck gauntlet, 24 candidates, seed 0xDEADBEEF, 12 logical cores
+  that thermally throttle 3301→2011 MHz under all-core load):
+    · pooled + FIXED (the pre-merge collided state, measured on a worktree at `a97b43f`):
+      20,160 games, **28.5 s**
+    · headless adaptive (CLI, one core): 2,438 games, **8.6 s** eval / 13.3 s wall
+    · pooled + adaptive (this branch, 11 workers): 2,438 games, **4.5–5.0 s** → **~6× vs the
+      collided state**, and byte-identical output to the CLI
+    · at 200 games/finalist: 8,250 games in 9.6 s at 11 workers (867 games/sec) vs 41 s at 1 worker
+      (206 games/sec) = **4.2× parallel**, i.e. 63% of the ~6.7× this box can actually reach all-core.
+  **HONEST GAP:** the fixed sweep parallelises BETTER (708 games/sec vs ~870 here is close, but the
+  fixed run is one flat queue with zero barriers). Round 1 is the weakest round (37% efficiency), not
+  the late ones — splitting each arm's SLOTS keeps a two-survivor final round at 34 shards in flight.
+  👉 **FOLLOW-UP worth someone's time:** ~1.9 s of a short run is 11 workers each independently building
+  a card pool + effect registry. `SimWorkerPool.warmUp()` now overlaps that with the planning phase
+  (round 1: 1.98 s → 1.08 s) but does not remove it — it is memory-bandwidth bound. A shared/immutable
+  pool, or building it once and structured-cloning it, would be the real fix and would help every run
+  kind, not just suggestions. (Worker — branch pushed, NOT merged.)
 
 - 2026-08-15 DESKTOP-90PJPM4: **`feat/card-mechanics` MERGED to main + deployed.** It contained the
   whole stacked chain (`activated-abilities` → `conditional-taplands` → `card-mechanics`), so all
@@ -375,8 +588,10 @@ _Append dated notes here; keep them short. Newest at top._
      condition. Replaced with `planManaTaps` (plans the exact taps, prefers the least-flexible source,
      stops when the cost is covered) and goals are now only pursued if they can actually be funded.
   Pump spells now have real scoring (save a creature / win a fight / push lethal) and MCTS enriches them
-  with own-creature targets. **`DEFAULT_PILOT_ID` (packages/ai) is now `mcts`** — per user decision, the
-  look-ahead pilot everywhere: CLI default + the web lab/replay worker. ⚠️ **Throughput warning below.**
+  with own-creature targets. ~~`DEFAULT_PILOT_ID` (packages/ai) is now `mcts`~~ — **REVERSED 2026-08-15.**
+  `DEFAULT_PILOT_ID` is `heuristic`. MCTS was measured 2000× slower *and* significantly weaker (40.8% win
+  rate over 120 seeded games, 95% CI [32.5%, 49.8%] — excludes 50%) against the very heuristic it uses as
+  its rollout policy. See DESIGN.md §3.4 for the full numbers and the diagnosis. Do not re-default it.
   Perf (rule 7): measured heuristic at **162.7 games/sec vs 161.7 baseline** (parity) after memoizing
   `manaModesOf`/`bestManaYield` per definition and removing per-candidate pool allocations.
   New UI: `CardHover` (apps/web/src/components) raises a full readable card on hover in the replay board;

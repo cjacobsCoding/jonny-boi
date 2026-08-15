@@ -28,6 +28,7 @@ import {
 import {
   maskStateForSeat,
   maskStateForSpectator,
+  MIN_COMPATIBLE_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   type DeckList,
   type LobbyPlayer,
@@ -705,9 +706,34 @@ export class Room {
 
   // --- protocol version ------------------------------------------------------
 
-  /** Whether a handshake's protocol version matches the server's. */
+  /**
+   * Whether a handshake's protocol version is one this server can serve.
+   *
+   * NOT strict equality. The client half of this negotiation shipped with
+   * `MIN_COMPATIBLE_PROTOCOL_VERSION`, but the server kept comparing `===`, which
+   * made the floor dead code and left the compatibility one-directional: a NEW
+   * client could talk down to an OLD server, but an OLD client was locked out of a
+   * NEW one — with no recourse, because the downgrade logic only exists in the
+   * newer client it doesn't have.
+   *
+   * That asymmetry is exactly backwards for how this app deploys. The web app
+   * auto-ships on every merge while the server bundle is copied to the NAS by hand,
+   * so BOTH skews happen: a stale server (client ahead) and a stale cached PWA
+   * (client behind) after the server is finally updated. Accepting the whole
+   * compatible range is what makes a server restart a non-event for players.
+   *
+   * Safe because the range is additive-only by construction: v1 → v2 added
+   * `MaskedGameView.pendingChoice`, which a v1 client simply ignores as an unknown
+   * JSON field. Any future version that is NOT purely additive must raise
+   * `MIN_COMPATIBLE_PROTOCOL_VERSION` in the same commit that breaks the shape —
+   * that constant, not this function, is the place that decision belongs.
+   */
   static protocolMatches(version: number): boolean {
-    return version === PROTOCOL_VERSION;
+    return (
+      Number.isInteger(version) &&
+      version >= MIN_COMPATIBLE_PROTOCOL_VERSION &&
+      version <= PROTOCOL_VERSION
+    );
   }
 
   // --- broadcasting ----------------------------------------------------------

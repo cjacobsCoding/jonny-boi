@@ -24,6 +24,16 @@
  * attack/block subset the engine validates. On any unexpected state it passes.
  *
  * Determinism: the only nondeterminism is tie-breaking, taken from the seeded RNG.
+ *
+ * Allocation: this pilot is not only the sim's default — it is also the MCTS
+ * pilot's ROLLOUT POLICY, so one MCTS decision calls `chooseAction` on the order
+ * of `simulationsPerDecision * rolloutDepth` times. Every object this function
+ * allocates is therefore multiplied by ~20,000 per look-ahead decision, which is
+ * why the hot path scans arrays in place instead of `filter`/`map`ping them,
+ * memoizes per-`CardDefinition` facts, and builds no explanation string unless a
+ * caller actually asked for one (see `explain` / `NO_REASON`). None of that
+ * changes a single decision: the reasons are observational, and the scans return
+ * exactly what the array pipelines returned.
  */
 
 import type {
@@ -48,12 +58,14 @@ import {
   isCreature,
   isLand,
   isLegalTarget,
+  legalTargetsFor,
   MANA_COLORS,
   planManaPayment,
   remainingToughness,
+  restrictionOfEffects,
   targetRestrictionOf,
 } from '@jonny-boi/core';
-import type { TargetRestriction } from '@jonny-boi/core';
+import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -100,6 +112,22 @@ type SpellIntent =
   | { readonly kind: 'counter' }
   | { readonly kind: 'sweeper' }
   | { readonly kind: 'creature' }
+  /**
+   * An Aura or an Equipment — a card whose value is "what it grants" times "who
+   * is around to carry it". Recognised from `def.attachment`, which is CORE data
+   * rather than a primitive id, so this classification cannot be broken by a
+   * renamed primitive the way a mis-typed `destroy` once blanked every removal
+   * spell in the pool.
+   */
+  | {
+      readonly kind: 'attachment';
+      /** Total P/T the attachment grants its host (negative for Dead Weight). */
+      readonly stats: number;
+      /** How many keyword abilities it grants. */
+      readonly keywords: number;
+      /** False when the modification makes its host WORSE — i.e. it is removal. */
+      readonly helpful: boolean;
+    }
   | { readonly kind: 'other' };
 
 /** Build the heuristic pilot with the given (tunable) weights. */
@@ -122,9 +150,19 @@ export function createHeuristicPilot(weights: HeuristicWeights = DEFAULT_HEURIST
 
 // --- top-level decision --------------------------------------------------------
 
+/**
+ * The empty reason used whenever no caller asked for an explanation. Building the
+ * real string costs several allocations per decision (number→string conversions,
+ * a rope per template) and the sim runs this ~20,000 times per MCTS decision, so
+ * the strings are produced only when a `trace` sink is actually listening. The
+ * chosen action is identical either way — a reason has never fed a decision.
+ */
+const NO_REASON = '';
+
 function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
+  const explain = ctx.trace !== undefined;
 
   // A resolving spell is asking somebody a question. That preempts everything —
   // it is the only thing the game will accept — and it is answered on its own
@@ -133,12 +171,12 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const pending = view.pendingChoice as PendingChoice | null | undefined;
   if (pending) {
     const answer = answerChoiceHeuristically(view as unknown as GameState, pending, weights);
-    return emit(ctx, answer, `answering "${pending.prompt}"`);
+    return emit(ctx, answer, explain ? `answering "${pending.prompt}"` : NO_REASON);
   }
 
   // Nothing offered, or only passing is possible → pass.
   if (legalActions.length === 0) return emit(ctx, passAction(view), 'no legal actions — passing');
-  const onlyPass = legalActions.every((a) => a.kind === 'passPriority');
+  const onlyPass = everyActionIsPass(legalActions);
   if (onlyPass) return emit(ctx, legalActions[0] as GameAction, 'nothing useful — passing');
 
   // Combat declarations are their own decision shape.
@@ -181,17 +219,26 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
   const ability = bestAbility(ctx, weights);
   if (ability) return ability;
 
-  const canPlayLand = legalActions.some((a) => a.kind === 'playLand');
+  const canPlayLand = anyActionOfKind(legalActions, 'playLand');
   const bestSpell = bestSpellGoal(ctx, weights);
+  // Equipping is a real play competing with the others, not a reflex — see
+  // `bestEquipPlay`. It is offered only at sorcery speed by the engine, so it can
+  // only turn up in a window where a land or a spell is also possible.
+  const equip = bestEquipPlay(ctx, weights);
 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
   const landScore = canPlayLand ? weights.playLandScore : -Infinity;
   const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
+  const equipScore = equip ? equip.score : -Infinity;
 
-  if (landScore >= spellScore && canPlayLand) {
-    const landAction = legalActions.find((a) => a.kind === 'playLand');
+  if (landScore >= spellScore && landScore >= equipScore && canPlayLand) {
+    const landAction = firstActionOfKind(legalActions, 'playLand');
     if (landAction) return emit(ctx, landAction, 'develop mana — play a land', weights.playLandScore);
+  }
+
+  if (equip && equipScore >= spellScore && equipScore > weights.passScore) {
+    return emit(ctx, equip.action, ctx.trace ? equip.label : NO_REASON, equipScore);
   }
 
   if (bestSpell && bestSpell.goal.score > weights.passScore) {
@@ -226,7 +273,7 @@ function bestAbility(ctx: DecisionContext, weights: HeuristicWeights): GameActio
     const ability = source?.def.activated?.[action.abilityIndex];
     if (!ability) continue;
     if (!fetchesALand(ability)) continue;
-    return emit(ctx, action, `activate ${ability.label}`, weights.playLandScore);
+    return emit(ctx, action, ctx.trace ? `activate ${ability.label}` : NO_REASON, weights.playLandScore);
   }
   return undefined;
 }
@@ -236,10 +283,155 @@ function bestAbility(ctx: DecisionContext, weights: HeuristicWeights): GameActio
  * the fetchland shape, and the one activated ability this pilot understands.
  */
 function fetchesALand(ability: { readonly effects: readonly EffectRef[] }): boolean {
-  return ability.effects.some(
-    (ref) =>
-      ref.primitive === PRIMITIVE.searchLibrary &&
-      ref.params?.destination === 'battlefield',
+  const memo = FETCH_MEMO.get(ability);
+  if (memo !== undefined) return memo;
+  let found = false;
+  for (let i = 0; i < ability.effects.length; i++) {
+    const ref = ability.effects[i] as EffectRef;
+    if (ref.primitive === PRIMITIVE.searchLibrary && ref.params?.destination === 'battlefield') {
+      found = true;
+      break;
+    }
+  }
+  FETCH_MEMO.set(ability, found);
+  return found;
+}
+
+/**
+ * Memo for {@link fetchesALand}. An activated ability is immutable card data
+ * shared by every instance of its definition, so the answer can never change —
+ * and the question is asked once per offered ability on every rollout ply.
+ * (Mirrors core's `RESTRICTION_MEMO` for exactly the same reason.)
+ */
+const FETCH_MEMO = new WeakMap<{ readonly effects: readonly EffectRef[] }, boolean>();
+
+/**
+ * The best "attach me to that creature" play right now — the Equip half of the
+ * attachment system — together with the taps that fund it.
+ *
+ * Enumerated from the BATTLEFIELD rather than from `legalActions`, and that is the
+ * whole trick: the engine only offers an activated ability whose mana cost the
+ * FLOATING pool already covers, and the pilot never floats mana speculatively. A
+ * version of this that read the offered actions therefore looked completely
+ * correct and equipped exactly never. So the ability is found, scored, and funded
+ * through the same `planManaPayment` a spell goes through, and the caller emits
+ * either the next tap or the activation itself.
+ *
+ * An equip ability is recognised WITHOUT naming a primitive id: the permanent
+ * declares `def.attachment` (core data) and the ability aims at
+ * `'creatureYouControl'` (core's target vocabulary). A renamed primitive therefore
+ * cannot silently turn this back into a no-op, which is exactly how this codebase
+ * lost every removal spell once before.
+ */
+function bestEquipPlay(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+): { readonly action: GameAction; readonly score: number; readonly label: string } | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  // Every printed Equip is "activate only as a sorcery"; checking it here avoids
+  // planning a play the engine would refuse.
+  const sorcerySpeedOpen =
+    me === view.activePlayer &&
+    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
+    view.stack.length === 0;
+  if (!sorcerySpeedOpen) return undefined;
+
+  let hosts: readonly (InstanceId | PlayerId)[] | undefined;
+  let best: { action: GameAction; score: number; label: string } | undefined;
+
+  // Indexed, and cheapest test first: this walks the whole battlefield on every
+  // priority decision in a main phase, so the ordinary permanent must fall out
+  // after ONE property read. `activated` is absent on almost everything (lands,
+  // vanilla creatures); only then is the attachment data worth looking at.
+  const battlefield = view.battlefield;
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
+    const abilities = perm.def.activated;
+    if (abilities === undefined || perm.controller !== me) continue;
+    const modifies = perm.def.attachment?.modifies;
+    if (!modifies) continue;
+    for (let index = 0; index < abilities.length; index++) {
+      const ability = abilities[index]!;
+      if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
+      const mana = ability.cost.mana;
+      // A cost with a non-mana component is not the plain Equip this understands;
+      // leaving it alone is safer than guessing at what paying it costs us.
+      if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
+
+      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me);
+      const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
+      if (!host) continue;
+
+      const score = scoreEquip(modifies, host, weights);
+      if (score === undefined || (best !== undefined && score <= best.score)) continue;
+      const plan = planManaPayment(view as GameState, me, mana, legalActions);
+      if (!plan) continue; // cannot fund it this turn
+      const action: GameAction =
+        plan.length > 0
+          ? { kind: 'tapForMana', player: me, instanceId: plan[0]!.instanceId, mode: plan[0]!.mode }
+          : {
+              kind: 'activateAbility',
+              player: me,
+              instanceId: perm.instanceId,
+              abilityIndex: index,
+              targets: [host.instanceId],
+            };
+      best = {
+        action,
+        score,
+        label: ctx.trace ? `${ability.label} onto ${host.def.name}` : NO_REASON,
+      };
+    }
+  }
+  return best;
+}
+
+/** The target restriction every printed `Equip {N}` aims with (CR 301.5c). */
+const EQUIP_RESTRICTION: TargetRestriction = 'creatureYouControl';
+
+/**
+ * The creature that should carry an attachment: the biggest one it is not already
+ * on. Excluding the CURRENT host is the guard that matters — re-equipping the
+ * creature it is already attached to is legal, changes nothing, and costs mana
+ * every single turn, which is how equipment turns into a mana sink in a sim.
+ */
+function bestEquipHost(
+  view: PilotView,
+  offered: readonly (InstanceId | PlayerId)[],
+  currentHost: InstanceId | null,
+): CardInstance | undefined {
+  let best: CardInstance | undefined;
+  for (const id of offered) {
+    if (typeof id !== 'number' || id === currentHost) continue;
+    const candidate = findInstance(view, id);
+    if (!candidate || !isCreature(candidate.def)) continue;
+    if (!best || effectivePower(candidate) > effectivePower(best)) best = candidate;
+  }
+  return best;
+}
+
+/**
+ * What moving an attachment granting `modifies` onto `host` is worth, or
+ * `undefined` when there is nothing to gain.
+ *
+ * Bigger bodies carry equipment better (a +2/+0 on a 4/4 attacker beats the same
+ * sword on a 0/1), so the host's own power counts toward the score — which is also
+ * what makes the pilot move a sword onto a better creature when one arrives.
+ */
+function scoreEquip(
+  modifies: PermanentModification,
+  host: CardInstance,
+  weights: HeuristicWeights,
+): number | undefined {
+  const stats = (modifies.power ?? 0) + (modifies.toughness ?? 0);
+  const keywords = modifies.keywords ? Object.values(modifies.keywords).filter(Boolean).length : 0;
+  if (stats <= 0 && keywords === 0) return undefined;
+  return (
+    weights.attachBaseScore +
+    weights.attachPerStat * stats +
+    weights.attachPerKeyword * keywords +
+    weights.castCreaturePerStat * effectivePower(host)
   );
 }
 
@@ -263,6 +455,7 @@ interface FundedGoal {
  */
 function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedGoal | undefined {
   const { view } = ctx;
+  const explain = ctx.trace !== undefined;
   const me = view.priorityPlayer;
   const opp = otherPlayer(me);
   const hand = view.players[me].hand;
@@ -275,6 +468,12 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
   const sorcerySpeedOpen =
     me === view.activePlayer && (view.step === 'precombatMain' || view.step === 'postcombatMain') && view.stack.length === 0;
 
+  // The opponent's creatures are the same list for every card in hand, so they
+  // are gathered ONCE here rather than rebuilt inside `scoreSpell` per candidate
+  // — that filter was allocating an array per card in hand per rollout ply.
+  // `undefined` means "not needed yet"; only a spell that targets asks for it.
+  let oppCreatures: readonly CardInstance[] | undefined;
+
   const scored: SpellGoal[] = [];
   for (const card of hand) {
     const def = card.def;
@@ -286,7 +485,8 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
     if (convertedManaCost(cost) > availableMana) continue;
 
     const intent = classifySpell(def);
-    const goal = scoreSpell(view, opp, card, intent, weights);
+    oppCreatures ??= creaturesControlledBy(view, opp);
+    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain);
     // A spell that prints a target restriction is only a goal if we can point it
     // somewhere legal. This runs on EVERY goal, not just the ones the scorer
     // understands, so a restricted card the scorer classifies as 'other' (and
@@ -356,12 +556,13 @@ function defaultLegalTarget(
 function scoreSpell(
   view: PilotView,
   opp: PlayerId,
+  oppCreatures: readonly CardInstance[],
   card: CardInstance,
   intent: SpellIntent,
   weights: HeuristicWeights,
+  explain: boolean,
 ): SpellGoal | undefined {
   const cost = card.def.cost ?? {};
-  const oppCreatures = creaturesControlledBy(view, opp);
 
   switch (intent.kind) {
     case 'damage': {
@@ -373,24 +574,29 @@ function scoreSpell(
           card,
           cost,
           targets: [opp],
-          reason: `burn to face — lethal (${intent.amount} ≥ ${life})`,
+          reason: explain ? `burn to face — lethal (${intent.amount} ≥ ${life})` : NO_REASON,
         };
       }
       // Otherwise WEIGH the two uses against each other rather than always
       // preferring the creature kill. A burn deck that spends every card killing
       // whatever happens to be blocking never actually closes: the previous rule
       // only allowed a face burn when no creature was killable at all.
-      const killable = intent.canTargetCreature
-        ? oppCreatures.filter((c) => remainingToughness(c) <= intent.amount)
-        : [];
-      const target = biggestThreat(killable);
+      // (Scanned in place: the old `filter(...)` built a throwaway array per
+      // candidate spell, and `biggestThreat` only ever wanted the maximum.)
+      const target = intent.canTargetCreature ? biggestThreatWithin(oppCreatures, intent.amount) : undefined;
       const killScore = target
         ? weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target)
         : -Infinity;
       const faceScore = intent.canTargetPlayer ? faceBurnScore(life, intent.amount, weights) : -Infinity;
 
       if (faceScore >= killScore && faceScore > -Infinity) {
-        return { score: faceScore, card, cost, targets: [opp], reason: `burn to face — ${life} life left` };
+        return {
+          score: faceScore,
+          card,
+          cost,
+          targets: [opp],
+          reason: explain ? `burn to face — ${life} life left` : NO_REASON,
+        };
       }
       if (target) {
         return {
@@ -398,7 +604,9 @@ function scoreSpell(
           card,
           cost,
           targets: [target.instanceId],
-          reason: `burn removal — kill ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`,
+          reason: explain
+          ? `burn removal — kill ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`
+          : NO_REASON,
         };
       }
       return undefined;
@@ -411,21 +619,22 @@ function scoreSpell(
         card,
         cost,
         targets: [target.instanceId],
-        reason: `removal — destroy ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`,
+        reason: explain
+          ? `removal — destroy ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`
+          : NO_REASON,
       };
     }
     case 'shrink': {
       // Shrink-removal kills exactly what its toughness reduction can finish off,
       // so it is scored and targeted like burn: the biggest thing it can kill.
-      const killable = oppCreatures.filter((c) => remainingToughness(c) <= intent.toughness);
-      const target = biggestThreat(killable);
+      const target = biggestThreatWithin(oppCreatures, intent.toughness);
       if (!target) return undefined; // it would shrink something that survives — hold it
       return {
         score: weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target),
         card,
         cost,
         targets: [target.instanceId],
-        reason: `removal — shrink ${target.def.name} (-${intent.toughness} toughness)`,
+        reason: explain ? `removal — shrink ${target.def.name} (-${intent.toughness} toughness)` : NO_REASON,
       };
     }
     case 'counter': {
@@ -436,13 +645,13 @@ function scoreSpell(
         card,
         cost,
         targets: [target.instanceId],
-        reason: `counter ${target.card.def.name}`,
+        reason: explain ? `counter ${target.card.def.name}` : NO_REASON,
       };
     }
     case 'sweeper': {
       const net = sweeperValue(view, otherPlayer(opp), weights);
       if (net <= 0) return undefined; // our own board would pay for it — hold it
-      return { score: net, card, cost, targets: [], reason: `sweep the board (net ${net})` };
+      return { score: net, card, cost, targets: [], reason: explain ? `sweep the board (net ${net})` : NO_REASON };
     }
     case 'creature': {
       const stat = (card.def.power ?? 0) + (card.def.toughness ?? 0);
@@ -451,17 +660,59 @@ function scoreSpell(
         card,
         cost,
         targets: [],
-        reason: `develop board — cast ${card.def.name}`,
+        reason: explain ? `develop board — cast ${card.def.name}` : NO_REASON,
       };
     }
     case 'pump': {
-      const play = bestPumpPlay(view, otherPlayer(opp), opp, intent, weights);
+      const play = bestPumpPlay(view, otherPlayer(opp), opp, intent, weights, explain);
       if (!play) return undefined; // no combat use right now — hold the trick
       return { score: play.score, card, cost, targets: [play.target], reason: play.reason };
     }
+    case 'attachment': {
+      // Who should carry it: our best creature for a buff, their best for a
+      // shrink. An attachment with nobody to attach to is NOT cast — it would
+      // enter attached to nothing and (for an Aura) die on the spot.
+      const me = otherPlayer(opp);
+      const hosts = intent.helpful ? creaturesControlledBy(view, me) : oppCreatures;
+      const host = biggestThreat(hosts);
+      if (!host) return undefined;
+      return {
+        score: attachmentScore(intent, weights),
+        card,
+        cost,
+        targets: [host.instanceId],
+        reason: explain
+          ? `${intent.helpful ? 'suit up' : 'shrink'} ${host.def.name} with ${card.def.name}`
+          : NO_REASON,
+      };
+    }
     case 'other':
-      return { score: weights.genericSpellScore, card, cost, targets: [], reason: `cast ${card.def.name}` };
+      return {
+        score: weights.genericSpellScore,
+        card,
+        cost,
+        targets: [],
+        reason: explain ? `cast ${card.def.name}` : NO_REASON,
+      };
   }
+}
+
+/**
+ * What an attachment is worth, from the size of the modification it grants.
+ *
+ * `Math.abs` on the stats deliberately: a -2/-2 Aura is worth its magnitude as
+ * removal exactly as a +2/+2 one is worth its magnitude as a buff. One formula,
+ * both directions, no second weight to keep in sync.
+ */
+function attachmentScore(
+  intent: Extract<SpellIntent, { kind: 'attachment' }>,
+  weights: HeuristicWeights,
+): number {
+  return (
+    weights.attachBaseScore +
+    weights.attachPerStat * Math.abs(intent.stats) +
+    weights.attachPerKeyword * intent.keywords
+  );
 }
 
 /**
@@ -543,6 +794,7 @@ function bestPumpPlay(
   opp: PlayerId,
   intent: Extract<SpellIntent, { kind: 'pump' }>,
   weights: HeuristicWeights,
+  explain: boolean,
 ): PumpPlay | undefined {
   const combat = view.combat;
   if (!combat) return undefined;
@@ -555,18 +807,22 @@ function bestPumpPlay(
       const own = findInstance(view, attackerId);
       if (!own || own.controller !== me) continue;
       const enemies: CardInstance[] = [];
-      for (const [blockerId, blockedId] of Object.entries(combat.blocks)) {
-        if (blockedId !== attackerId) continue;
-        const blocker = findInstance(view, Number(blockerId) as InstanceId);
+      // `for...in` over the block map rather than `Object.entries`: the same keys
+      // in the same order, without materialising an array of pairs per attacker.
+      for (const blockerId in combat.blocks) {
+        const id = Number(blockerId) as InstanceId;
+        if (combat.blocks[id] !== attackerId) continue;
+        const blocker = findInstance(view, id);
         if (blocker) enemies.push(blocker);
       }
       engagements.push({ own, enemies });
     }
   } else {
-    for (const [blockerId, attackerId] of Object.entries(combat.blocks)) {
-      const own = findInstance(view, Number(blockerId) as InstanceId);
+    for (const blockerId in combat.blocks) {
+      const id = Number(blockerId) as InstanceId;
+      const own = findInstance(view, id);
       if (!own || own.controller !== me) continue;
-      const attacker = findInstance(view, attackerId);
+      const attacker = findInstance(view, combat.blocks[id] as InstanceId);
       engagements.push({ own, enemies: attacker ? [attacker] : [] });
     }
   }
@@ -574,9 +830,13 @@ function bestPumpPlay(
 
   // Face damage already coming through from our unblocked attackers — the baseline
   // the pump adds to when we're deciding whether it's lethal.
-  const unblockedDamage = iAmAttacking
-    ? engagements.reduce((sum, e) => (e.enemies.length === 0 ? sum + effectivePower(e.own) : sum), 0)
-    : 0;
+  let unblockedDamage = 0;
+  if (iAmAttacking) {
+    for (let i = 0; i < engagements.length; i++) {
+      const e = engagements[i] as { own: CardInstance; enemies: CardInstance[] };
+      if (e.enemies.length === 0) unblockedDamage += effectivePower(e.own);
+    }
+  }
 
   let best: PumpPlay | undefined;
   for (const { own, enemies } of engagements) {
@@ -587,12 +847,18 @@ function bestPumpPlay(
         return {
           target: own.instanceId,
           score: weights.lethalBurnScore,
-          reason: `pump ${own.def.name} for lethal (${unblockedDamage} + ${intent.power} ≥ ${view.players[opp].life})`,
+          reason: explain
+            ? `pump ${own.def.name} for lethal (${unblockedDamage} + ${intent.power} ≥ ${view.players[opp].life})`
+            : NO_REASON,
         };
       }
       const score = weights.pumpFaceDamagePerPower * intent.power;
       if (score > 0 && (!best || score > best.score)) {
-        best = { target: own.instanceId, score, reason: `pump ${own.def.name} — +${intent.power} face damage` };
+        best = {
+          target: own.instanceId,
+          score,
+          reason: explain ? `pump ${own.def.name} — +${intent.power} face damage` : NO_REASON,
+        };
       }
       continue;
     }
@@ -600,7 +866,8 @@ function bestPumpPlay(
     // In a fight: does the pump flip either outcome?
     const ownToughLeft = remainingToughness(own);
     const ownPower = effectivePower(own);
-    const incoming = enemies.reduce((sum, e) => sum + effectivePower(e), 0);
+    let incoming = 0;
+    for (let i = 0; i < enemies.length; i++) incoming += effectivePower(enemies[i] as CardInstance);
 
     const diesNow = incoming >= ownToughLeft;
     const survivesWithPump = incoming < ownToughLeft + intent.toughness;
@@ -614,19 +881,22 @@ function bestPumpPlay(
     }
 
     let score = 0;
-    const reasons: string[] = [];
+    let saves = false;
     if (diesNow && survivesWithPump) {
       score += weights.pumpSaveCreatureScore + weights.ownCreatureLossPerStat * (ownPower + effectiveToughness(own));
-      reasons.push(`saves ${own.def.name} from ${incoming} damage`);
+      saves = true;
     }
     if (newlyKilled) {
       score +=
         weights.pumpWinFightScore +
         weights.killEnemyPerStat * (effectivePower(newlyKilled) + effectiveToughness(newlyKilled));
-      reasons.push(`kills ${newlyKilled.def.name}`);
     }
     if (score > 0 && (!best || score > best.score)) {
-      best = { target: own.instanceId, score, reason: `pump ${own.def.name} — ${reasons.join(' + ')}` };
+      best = {
+        target: own.instanceId,
+        score,
+        reason: explain ? pumpFightReason(own, incoming, saves, newlyKilled) : NO_REASON,
+      };
     }
   }
   return best;
@@ -656,8 +926,9 @@ function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
     return emit(ctx, cast, goal.reason, goal.score);
   }
 
-  const source = findInstance(view, next.instanceId);
   const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
+  if (!ctx.trace) return emit(ctx, tap, NO_REASON, goal.score);
+  const source = findInstance(view, next.instanceId);
   const label = source ? `tap ${source.def.name} for ${describeProduction(next.production)}` : 'tap for mana';
   return emit(ctx, tap, `${label} → ${goal.reason}`, goal.score);
 }
@@ -702,7 +973,8 @@ function chooseAttack(ctx: DecisionContext, weights: HeuristicWeights): GameActi
     return emit(ctx, passAction(view), 'no profitable attack — holding back', weights.passScore);
   }
   const action: GameAction = { kind: 'declareAttackers', player: me, attackers: chosen };
-  return emit(ctx, action, `attack with ${chosen.length} creature(s)`, weights.attackValueThreshold);
+  const why = ctx.trace ? `attack with ${chosen.length} creature(s)` : NO_REASON;
+  return emit(ctx, action, why, weights.attackValueThreshold);
 }
 
 /**
@@ -803,6 +1075,7 @@ function chooseBlock(ctx: DecisionContext, weights: HeuristicWeights): GameActio
     return emit(ctx, passAction(view), 'no profitable block — taking the hit', weights.passScore);
   }
   const action: GameAction = { kind: 'declareBlockers', player: me, blocks };
+  if (!ctx.trace) return emit(ctx, action, NO_REASON);
   const reason = facingLethal
     ? `block to avoid lethal (${incomingDamage} incoming vs ${myLife} life)`
     : `block ${blocks.length} attacker(s) for value`;
@@ -850,8 +1123,45 @@ function pickBlocker(
 
 // --- spell classification ------------------------------------------------------
 
+/**
+ * Memo for {@link classifySpell}. A spell's intent is a pure function of its
+ * IMMUTABLE definition — the pool is frozen and every instance of a card points
+ * at the same `CardDefinition` object — so the classification can be computed
+ * once per printed card instead of once per card in hand per decision. That
+ * matters because MCTS calls this pilot ~20,000 times per look-ahead decision.
+ * (Same reasoning, and same shape, as core's `RESTRICTION_MEMO`.)
+ */
+const INTENT_MEMO = new WeakMap<CardDefinition, SpellIntent>();
+
 /** Classify a spell's intent from its effect primitives (robust to unknowns). */
 function classifySpell(def: CardDefinition): SpellIntent {
+  const memoized = INTENT_MEMO.get(def);
+  if (memoized !== undefined) return memoized;
+  const intent = computeSpellIntent(def);
+  INTENT_MEMO.set(def, intent);
+  return intent;
+}
+
+function computeSpellIntent(def: CardDefinition): SpellIntent {
+  // Checked before the creature branch so a creature Aura (bestow-style) is still
+  // read as an attachment, and before the primitive scan because an attachment's
+  // value is in its declared modification, not in the ref that attaches it.
+  const attachment = def.attachment;
+  if (attachment) {
+    const mod = attachment.modifies;
+    const stats = (mod?.power ?? 0) + (mod?.toughness ?? 0);
+    const keywords = mod?.keywords ? Object.values(mod.keywords).filter(Boolean).length : 0;
+    return {
+      kind: 'attachment',
+      stats,
+      keywords,
+      // A NEGATIVE attachment is removal wearing an Aura's clothes (Dead Weight),
+      // and must be aimed at the OPPONENT's board. Getting this backwards would
+      // have the pilot shrink its own creatures — a card played as the opposite of
+      // what it prints, which is worse than not playing it at all.
+      helpful: stats >= 0,
+    };
+  }
   if (isCreature(def)) return { kind: 'creature' };
   const effects = def.effects ?? [];
   for (const ref of effects) {
@@ -917,6 +1227,31 @@ function creaturesControlledBy(view: PilotView, player: PlayerId): CardInstance[
   return view.battlefield.filter((c) => c.controller === player && isCreature(c.def)) as CardInstance[];
 }
 
+/**
+ * The biggest threat among creatures whose REMAINING toughness this much damage
+ * (or toughness reduction) would finish off — the same answer as
+ * `biggestThreat(creatures.filter(c => remainingToughness(c) <= amount))`, without
+ * the throwaway array. Removal and burn each ask this once per candidate spell per
+ * decision, and a decision happens ~20,000 times inside one MCTS look-ahead.
+ */
+function biggestThreatWithin(
+  creatures: readonly CardInstance[],
+  amount: number,
+): CardInstance | undefined {
+  let best: CardInstance | undefined;
+  for (const c of creatures) {
+    if (remainingToughness(c) > amount) continue;
+    if (!best) {
+      best = c;
+      continue;
+    }
+    const cp = effectivePower(c);
+    const bp = effectivePower(best);
+    if (cp > bp || (cp === bp && effectiveToughness(c) > effectiveToughness(best))) best = c;
+  }
+  return best;
+}
+
 /** The biggest threat among creatures: highest power, then toughness. */
 function biggestThreat(creatures: readonly CardInstance[]): CardInstance | undefined {
   let best: CardInstance | undefined;
@@ -964,6 +1299,53 @@ function otherPlayer(p: PlayerId): PlayerId {
   return p === 'A' ? 'B' : 'A';
 }
 
+/*
+ * The three action-list predicates below are indexed loops rather than
+ * `every`/`some`/`find`. Not style: each of those takes a fresh function literal,
+ * and this pilot is MCTS's rollout policy, so the callbacks alone were tens of
+ * thousands of throwaway closures per look-ahead decision. They return exactly
+ * what the array methods returned.
+ */
+
+function everyActionIsPass(actions: readonly GameAction[]): boolean {
+  for (let i = 0; i < actions.length; i++) {
+    if ((actions[i] as GameAction).kind !== 'passPriority') return false;
+  }
+  return true;
+}
+
+function anyActionOfKind(actions: readonly GameAction[], kind: GameAction['kind']): boolean {
+  for (let i = 0; i < actions.length; i++) {
+    if ((actions[i] as GameAction).kind === kind) return true;
+  }
+  return false;
+}
+
+function firstActionOfKind(actions: readonly GameAction[], kind: GameAction['kind']): GameAction | undefined {
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i] as GameAction;
+    if (action.kind === kind) return action;
+  }
+  return undefined;
+}
+
+/**
+ * The human-readable "why" for a combat trick cast in a fight. Split out of the
+ * scoring loop so the loop itself never builds the string: it is observational,
+ * and only a caller with a `trace` sink ever asks for it.
+ */
+function pumpFightReason(
+  own: CardInstance,
+  incoming: number,
+  saves: boolean,
+  newlyKilled: CardInstance | undefined,
+): string {
+  const parts: string[] = [];
+  if (saves) parts.push(`saves ${own.def.name} from ${incoming} damage`);
+  if (newlyKilled) parts.push(`kills ${newlyKilled.def.name}`);
+  return `pump ${own.def.name} — ${parts.join(' + ')}`;
+}
+
 function defendingPlayer(view: PilotView): PlayerId {
   return view.activePlayer === 'A' ? 'B' : 'A';
 }
@@ -984,7 +1366,9 @@ function stringParam(params: Readonly<Record<string, unknown>> | undefined, key:
 
 /** Emit an optional trace and return the action (keeps decision sites terse). */
 function emit(ctx: DecisionContext, action: GameAction, reason: string, score?: number): GameAction {
+  const sink = ctx.trace;
+  if (sink === undefined) return action; // nobody listening => no trace object to build
   const trace: DecisionTrace = score === undefined ? { action, reason } : { action, reason, score };
-  ctx.trace?.(trace);
+  sink(trace);
   return action;
 }

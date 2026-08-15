@@ -307,3 +307,49 @@ describe('modal spells — the primitive was built, the text never reached it', 
     expect(result.status).toBe('incomplete');
   });
 });
+
+describe('flash / hexproof / shroud compile from the printed keyword list', () => {
+  it('compiles a flash creature and marks it instant-speed', () => {
+    const result = compileCard(
+      card({
+        name: 'Ambush Viper',
+        oracleText: 'Flash\nDeathtouch',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 1,
+        keywords: ['Flash', 'Deathtouch'],
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.keywords).toMatchObject({ flash: true, deathtouch: true });
+  });
+
+  it('compiles a hexproof creature', () => {
+    const result = compileCard(
+      card({
+        name: 'Slippery Bogle',
+        oracleText: 'Hexproof',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 1,
+        toughness: 1,
+        keywords: ['Hexproof'],
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.keywords).toMatchObject({ hexproof: true });
+  });
+
+  it('still reports WARD, which is a cost-to-target rule we do not have', () => {
+    const result = compileCard(
+      card({
+        name: 'Warded Thing',
+        oracleText: 'Ward {2}',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Ward'],
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+});

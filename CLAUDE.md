@@ -64,7 +64,24 @@ npm run build        # build all packages + the web app
 npm test             # run the full workspace test suite (Vitest)
 npm run dev          # launch the web PWA locally (Vite)
 npm run sim -- ...    # headless gauntlet/A-B sim from the CLI
+npm run verify       # OFFLINE pre-push gate: lint + generated-data check + full tests
 ```
+
+> `npm run verify` at the **root** is offline and safe in CI. Do not confuse it with
+> `npm run verify -w @jonny-boi/data-tools`, which re-fetches from Scryfall over the **network** and
+> must never run in `npm test`/CI.
+
+**Generated data is generated — never hand-copied.** `apps/web/src/data/card-index.json` is derived
+from the card pool by `apps/web/scripts/build-card-index.mjs`; a test re-derives it and fails if they
+diverge. If you need card names/art in the web app, regenerate — do not edit the JSON.
+
+⚠️ **Stale comments are bugs with a blast radius.** A wrong doc-comment here has already caused an
+agent to file and work a headline defect that did not exist (three comments claimed a 32-card index
+long after it became 156). If you change what a comment describes, fix the comment in the same commit.
+
+⚠️ **CRLF trap (Windows):** committed JSON is CRLF on disk, LF in git, and the repo has no
+`.gitattributes`. Any guard that byte-compares a generated file **must normalize newlines** or it
+false-alarms on every Windows checkout.
 
 > Refine these as the build system fills in. The shippable PWA build is `npm run build`; tests run in
 > Node via Vitest. Judge the suite green by the "N passed, 0 failed" summary line.

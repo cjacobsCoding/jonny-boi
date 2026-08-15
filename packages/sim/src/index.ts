@@ -60,9 +60,11 @@ export type {
 } from './match.js';
 export { runMatch } from './match.js';
 
-// Matchup (n games + CI).
-export type { MatchupResult, MatchupPilots, RunOptions } from './matchup.js';
-export { runMatchup, makeSeats, gameSeedFor, onPlayFor } from './matchup.js';
+// Matchup (n games + CI). `RunRange` is the shard seam: a slice of the
+// (opponent, game) grid, so a parallel host reuses these loops instead of
+// restating them.
+export type { MatchupResult, MatchupPilots, RunOptions, RunRange } from './matchup.js';
+export { runMatchup, makeSeats, gameSeedFor, onPlayFor, resolveRunRange } from './matchup.js';
 
 // Gauntlet.
 export type { GauntletResult } from './gauntlet.js';
@@ -70,7 +72,14 @@ export { runGauntlet } from './gauntlet.js';
 
 // The A/B single-card-swap test.
 export type { CardSwap, SwapVerdict, SwapEvaluation, PairedSwapSummaryInput } from './swap.js';
-export { evaluateSwap, applySwap, decideVerdict, summarizePairedSwap } from './swap.js';
+export {
+  evaluateSwap,
+  applySwap,
+  decideVerdict,
+  summarizePairedSwap,
+  copiesSwappedBy,
+  GAMES_PER_PAIRED_GAME,
+} from './swap.js';
 export type { SwapScope } from './config.js';
 export { DEFAULT_SWAP_SCOPE } from './config.js';
 
@@ -79,6 +88,8 @@ export type {
   PairedArmRunner,
   PairedArmsOptions,
   PairedArmsUsage,
+  PairedBaseRecord,
+  PairedSlice,
   PairedSlot,
   SwapArm,
   ArmHandle,
@@ -107,6 +118,7 @@ export {
 export type {
   SwapCandidate,
   SkippedCandidate,
+  CandidateGenerationOptions,
   RankedSwap,
   EliminationNote,
   EliminatedSwap,
@@ -115,8 +127,36 @@ export type {
   SuggestionReport,
   SuggestionNotes,
   SuggestOptions,
+  SuggestProgress,
+  CandidateOutcome,
+  SuggestionSearchResult,
+  SuggestionReportInput,
 } from './suggest.js';
-export { suggestSwaps, generateCandidates, rankEvaluations, scoreCandidate, traitsOf } from './suggest.js';
+export {
+  suggestSwaps,
+  generateCandidates,
+  rankEvaluations,
+  scoreCandidate,
+  traitsOf,
+  candidateSeedSalt,
+  finishSuggestionRun,
+} from './suggest.js';
+
+// The search as a DRIVEABLE generator — the seam the parallel Lab runs on. It
+// schedules the rounds; the elimination rule and the statistics stay in here.
+export type {
+  SuggestionRunPlan,
+  PrepareSuggestionRunOptions,
+  AdaptiveRound,
+  AdaptiveArmRequest,
+  AdaptiveArmOutcome,
+  AdaptiveRoundResult,
+  AdaptiveArmResult,
+  AdaptiveSearchOutcome,
+  AdaptiveSearchSettings,
+  AdaptiveSearchDriver,
+} from './suggest-run.js';
+export { prepareSuggestionRun, driveAdaptiveSearch } from './suggest-run.js';
 
 // The adaptive scheduler (pure — plan, eliminate, explore).
 export type {

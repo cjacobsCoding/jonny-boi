@@ -204,12 +204,15 @@ function heroOutOptions(hero: Deck): CardOption[] {
 /**
  * Every card you can bring IN on a swap.
  *
- * Must be the FULL available pool, not the curated Scryfall index. Suggestions
- * generates its candidates from the engine's pool (~150 cards), so reading the
- * curated index (~32) here meant the Lab could recommend a swap — Kalonian Tusker
- * for Birds of Paradise — that you then could not select in the A/B tab to verify.
- * The two lists have to be drawn from the same pool or the feature contradicts
- * itself.
+ * Must be the FULL engine pool. Suggestions generates its candidates from that
+ * pool, so when this list was historically drawn from a smaller subset the Lab
+ * could recommend a swap — Kalonian Tusker for Birds of Paradise — that you then
+ * could not select in the A/B tab to verify. The two lists have to be drawn from
+ * the same pool or the feature contradicts itself.
+ *
+ * (The card index is no longer a subset: it is DERIVED from the pool and a test
+ * fails if they diverge — see `apps/web/src/data/card-index.test.ts`. Both lists
+ * are 156 cards today. Don't reintroduce a hand-maintained shortlist here.)
  */
 function poolInOptions(): CardOption[] {
   return [...allAvailableCards()]

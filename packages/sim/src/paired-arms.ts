@@ -45,7 +45,7 @@ import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
 import { runMatch, type MatchSeats } from './match.js';
 import type { CardSwap, SwapEvaluation } from './swap.js';
-import { applySwap, summarizePairedSwap } from './swap.js';
+import { applySwap, copiesSwappedBy, summarizePairedSwap } from './swap.js';
 import { DEFAULT_DECK_RULES, DEFAULT_SWAP_SCOPE, type DeckRules } from './config.js';
 import type { PairedTable } from './stats.js';
 import {
@@ -79,6 +79,23 @@ interface PairedTally {
   baseOnly: number;
   variantOnly: number;
   neither: number;
+}
+
+/**
+ * One base game's result, in a shape that survives `postMessage`.
+ *
+ * The parallel Lab plays the shared base arm on its own workers and hands the
+ * records back to the workers that play the variant arms, so this is the wire
+ * form of {@link BaseGameRecord}: a plain array instead of a `Set`, and an
+ * explicit `null` (rather than an absent field) when library tracking was off.
+ */
+export interface PairedBaseRecord {
+  /** Did the hero (base deck) win this game? */
+  readonly heroWon: boolean;
+  /** Instance ids that left a library this game; `null` when tracking is off. */
+  readonly leftLibrary: readonly number[] | null;
+  /** True when the hero's library was read or rewritten — nothing may be reused. */
+  readonly libraryDisturbed: boolean;
 }
 
 /** What one base game tells us, beyond who won. */
@@ -149,6 +166,36 @@ export interface PairedArmsOptions {
    * when a look-ahead pilot is seated, and says so in `identicalGameSkipEnabled`.
    */
   readonly reuseUnseenCardGames?: boolean;
+  /**
+   * Base games somebody else already played, looked up by slot index.
+   *
+   * This is what keeps base-arm reuse intact when the run is spread over a
+   * worker pool: the pool plays each base slot ONCE on some worker, then hands
+   * the record to every worker that plays a variant arm over that slot. A slot
+   * this returns a record for costs nothing and is not counted in
+   * `usage.baseGamesPlayed` — the worker that actually played it counted it.
+   */
+  readonly baseRecords?: (slot: number) => PairedBaseRecord | undefined;
+  /** Ticked with games actually played, so a long slice can report progress. */
+  readonly onGame?: (games: number) => void;
+}
+
+/** One arm's results over a contiguous slice of slots — the pool's unit of work. */
+export interface PairedSlice {
+  /** The 2×2 table for THIS slice alone; callers sum slices themselves. */
+  readonly paired: PairedTable;
+  /** Paired games the slice covered (played or provably skipped). */
+  readonly gamesPlayed: number;
+  /** Variant games actually run. */
+  readonly variantGamesPlayed: number;
+  /** Variant games answered for free by an identical base game. */
+  readonly variantGamesSkipped: number;
+  /**
+   * Base games this slice had to play itself. Zero when the caller supplied every
+   * base record it needed — which is the point of the base phase, so a non-zero
+   * value here means the schedule under-supplied and double-counted work.
+   */
+  readonly baseGamesPlayed: number;
 }
 
 /** Throughput bookkeeping the report prints — no silent accounting. */
@@ -180,6 +227,27 @@ export interface PairedArmRunner {
   /** Turn an arm into the §3.5 verdict over the games it actually played. */
   readonly summarize: (arm: ArmHandle) => SwapEvaluation;
   readonly usage: () => PairedArmsUsage;
+  /**
+   * Play (or read from cache) the SHARED base game for one slot. The base phase
+   * of a pooled run is exactly a loop over this, and the records it returns are
+   * what let variant slices keep the identical-game skip.
+   */
+  readonly baseRecordAt: (slot: number) => PairedBaseRecord;
+  /** Whether the identical-game skip is live for this run, and why not when not. */
+  readonly identicalGameSkip: { readonly enabled: boolean; readonly reason?: string };
+  /**
+   * Play slots `[fromSlot, toSlot)` for one candidate swap and return THAT
+   * slice's tally on its own — the handle-free, resumable-from-anywhere form
+   * `advance` cannot offer, because a pooled run splits one arm's slots across
+   * several workers and no worker sees the whole arm.
+   */
+  readonly playSlice: (
+    swap: CardSwap,
+    outName: string,
+    inName: string,
+    fromSlot: number,
+    toSlot: number,
+  ) => PairedSlice;
 }
 
 /** An opaque handle to an arm (its mutable state stays inside the runner). */
@@ -312,6 +380,17 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     const cached = baseRecords.get(slotIndex);
     if (cached) return cached;
 
+    // Somebody else already played this slot (the pool's base phase): adopt it
+    // verbatim rather than replaying the game. This is base-arm reuse extended
+    // across workers, and it is why a pooled run plays exactly as many base
+    // games as the single-threaded one.
+    const supplied = options.baseRecords?.(slotIndex);
+    if (supplied) {
+      const adopted = fromWireRecord(supplied);
+      baseRecords.set(slotIndex, adopted);
+      return adopted;
+    }
+
     const slot = pairedSlotAt(slotIndex, opponentCount);
     const leftLibrary = trackLibrary ? new Set<number>() : undefined;
     let libraryDisturbed = false;
@@ -355,6 +434,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       ...(observer ? { onEvent: observer } : {}),
     });
     baseGamesPlayed++;
+    options.onGame?.(1);
 
     const record: BaseGameRecord = {
       heroWon: result.outcome.kind === 'win' && result.outcome.winner === HERO_SEAT,
@@ -366,6 +446,28 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
   }
 
   const arms = new Map<ArmHandle, ArmState>();
+  /** Arm state for the handle-free `playSlice` path, reused across slices. */
+  const sliceArms = new Map<string, ArmState>();
+
+  /** Build the per-arm state (variant deck, seats, swapped slots) for a swap. */
+  function newArmState(swap: CardSwap, outName: string, inName: string): ArmState {
+    const variantDeck = applySwap(baseDeck, swap, options.pool, swapScope);
+    const variantLoaded = loadDeck(variantDeck, options.pool, rules);
+    return {
+      swap,
+      outName,
+      inName,
+      variantDeck,
+      variantLoaded,
+      seatsByOpponent: new Array(opponentCount).fill(undefined),
+      swappedInstanceIds: trackLibrary
+        ? swappedInstanceIdsFor(baseLoaded.library, variantLoaded.library)
+        : undefined,
+      gamesPlayed: 0,
+      variantGamesSkipped: 0,
+      tally: { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 },
+    };
+  }
 
   function stateOf(handle: ArmHandle): ArmState {
     const state = arms.get(handle);
@@ -389,37 +491,15 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     slotCapacity: (gamesPerMatchup) => gamesPerMatchup * opponentCount,
 
     openArm(swap, outName, inName) {
-      const variantDeck = applySwap(baseDeck, swap, options.pool, swapScope);
-      const variantLoaded = loadDeck(variantDeck, options.pool, rules);
       const handle = {} as ArmHandle;
-      arms.set(handle, {
-        swap,
-        outName,
-        inName,
-        variantDeck,
-        variantLoaded,
-        seatsByOpponent: new Array(opponentCount).fill(undefined),
-        swappedInstanceIds: trackLibrary
-          ? swappedInstanceIdsFor(baseLoaded.library, variantLoaded.library)
-          : undefined,
-        gamesPlayed: 0,
-        variantGamesSkipped: 0,
-        tally: { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 },
-      });
+      arms.set(handle, newArmState(swap, outName, inName));
       return handle;
     },
 
     advance(handle, targetGames) {
       const state = stateOf(handle);
       for (let slotIndex = state.gamesPlayed; slotIndex < targetGames; slotIndex++) {
-        const slot = pairedSlotAt(slotIndex, opponentCount);
-        const base = baseRecordFor(slotIndex);
-
-        const variantWon = playVariantGame(state, slot, base);
-        if (base.heroWon && variantWon) state.tally.bothWon++;
-        else if (base.heroWon) state.tally.baseOnly++;
-        else if (variantWon) state.tally.variantOnly++;
-        else state.tally.neither++;
+        tallySlot(state.tally, state, slotIndex);
         state.gamesPlayed++;
       }
       return snapshot(state);
@@ -437,7 +517,36 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
         inName: state.inName,
         paired: { ...state.tally },
         ...(options.runOptions?.stats ? { stats: options.runOptions.stats } : {}),
+        scope: swapScope,
+        copiesSwapped: copiesSwappedBy(baseDeck, state.swap, options.pool, swapScope),
       });
+    },
+
+    baseRecordAt: (slot) => toWireRecord(baseRecordFor(slot)),
+
+    identicalGameSkip: skipDecision,
+
+    playSlice(swap, outName, inName, fromSlot, toSlot) {
+      const key = `${swap.out}>${swap.in}`;
+      let state = sliceArms.get(key);
+      if (!state) {
+        state = newArmState(swap, outName, inName);
+        sliceArms.set(key, state);
+      }
+      const tally: PairedTally = { bothWon: 0, baseOnly: 0, variantOnly: 0, neither: 0 };
+      const basedBefore = baseGamesPlayed;
+      const playedBefore = variantGamesPlayed;
+      const skippedBefore = variantGamesSkipped;
+      for (let slotIndex = Math.max(0, fromSlot); slotIndex < toSlot; slotIndex++) {
+        tallySlot(tally, state, slotIndex);
+      }
+      return {
+        paired: tally,
+        gamesPlayed: Math.max(0, toSlot - Math.max(0, fromSlot)),
+        variantGamesPlayed: variantGamesPlayed - playedBefore,
+        variantGamesSkipped: variantGamesSkipped - skippedBefore,
+        baseGamesPlayed: baseGamesPlayed - basedBefore,
+      };
     },
 
     usage: () => ({
@@ -449,6 +558,21 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
       ...(skipDecision.reason ? { identicalGameSkipDisabledReason: skipDecision.reason } : {}),
     }),
   };
+
+  /**
+   * Play one slot for an arm and fold the paired outcome into `tally`. The one
+   * place a (base, variant) pair becomes a 2×2 cell, shared by the handle-based
+   * `advance` and the handle-free `playSlice` so the two can never disagree.
+   */
+  function tallySlot(tally: PairedTally, state: ArmState, slotIndex: number): void {
+    const slot = pairedSlotAt(slotIndex, opponentCount);
+    const base = baseRecordFor(slotIndex);
+    const variantWon = playVariantGame(state, slot, base);
+    if (base.heroWon && variantWon) tally.bothWon++;
+    else if (base.heroWon) tally.baseOnly++;
+    else if (variantWon) tally.variantOnly++;
+    else tally.neither++;
+  }
 
   /** Play (or provably skip) one variant game; returns whether the hero won it. */
   function playVariantGame(state: ArmState, slot: PairedSlot, base: BaseGameRecord): boolean {
@@ -464,8 +588,27 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     }
     const result = runMatch(seats, seedForSlot(slot), matchOptionsFor(slot));
     variantGamesPlayed++;
+    options.onGame?.(1);
     return result.outcome.kind === 'win' && result.outcome.winner === HERO_SEAT;
   }
+}
+
+/** Internal record → wire form (a `Set` cannot survive `postMessage`). */
+function toWireRecord(record: BaseGameRecord): PairedBaseRecord {
+  return {
+    heroWon: record.heroWon,
+    leftLibrary: record.leftLibrary ? [...record.leftLibrary] : null,
+    libraryDisturbed: record.libraryDisturbed,
+  };
+}
+
+/** Wire form → internal record. */
+function fromWireRecord(record: PairedBaseRecord): BaseGameRecord {
+  return {
+    heroWon: record.heroWon,
+    ...(record.leftLibrary ? { leftLibrary: new Set(record.leftLibrary) } : {}),
+    libraryDisturbed: record.libraryDisturbed,
+  };
 }
 
 /**

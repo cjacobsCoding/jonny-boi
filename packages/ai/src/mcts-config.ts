@@ -94,6 +94,52 @@ export interface MctsConfig {
   /** Weight per point of (power + toughness) of board presence differential. */
   readonly evalBoardWeight: number;
   /**
+   * Reward subtracted from a non-terminal evaluation for each time the DECIDING
+   * player's mana pool was emptied with mana still floating during the
+   * simulation — mana that was tapped and then never spent.
+   *
+   * Why the search needs to be told: mana pools empty at the end of every step,
+   * so floating mana is simply lost, and nothing else in the evaluation can see
+   * it (life and board presence are both unchanged by wasting a mana). That
+   * blind spot is not theoretical. Measured on the sample gauntlet, the pilot
+   * tapped and wasted mana on 0.80 of every turn against the heuristic's 0.00,
+   * and the trace showed exactly one shape: tap a land during an opponent's
+   * step, then pass. The tree valued "tap" through rollouts in which the
+   * *heuristic* policy went on to spend the mana, while the real next mover —
+   * another MCTS search, which by then treats the tapped mana as sunk — declined
+   * to. Charging the waste to the deciding player closes that gap from both
+   * ends: tapping speculatively costs something, and so does passing on mana
+   * already floating.
+   *
+   * Terminal rollouts are deliberately NOT charged: once the game is decided,
+   * how tidily it was played is irrelevant, and discounting a win would teach
+   * the search to avoid winning lines.
+   *
+   * **It defaults to 0 — OFF — and that is a measured decision, not an
+   * oversight.** The mechanism does what it was built to do: at 0.1 the waste
+   * rate over eight seeded games falls from 0.709/turn to 0.217/turn, under the
+   * 0.35 budget the sim's play-quality guard puts on a default pilot. But it
+   * costs games. Head-to-head against the heuristic over the same 120 seeded
+   * games (Mono-Red Aggro vs Boros Aggro, seat and play both rotated):
+   *
+   *     penalty 0    (waste-blind)  49/120 = 40.8%  95% CI [32.5%, 49.8%]
+   *     penalty 0.1  (waste-aware)  35/120 = 29.2%  95% CI [21.8%, 37.9%]
+   *
+   * An 11.6-point drop, p ~= 0.06 — short of significant on its own, but pointing
+   * the wrong way, and turning it on cannot be justified by "it looks tidier".
+   * The likely mechanism is that the penalty prices the RISK of floating mana,
+   * not just the waste: a line that taps toward a spell is charged whenever the
+   * search later declines to cast, so the pilot buys mana discipline by simply
+   * doing less. Fixing that properly means making the tap and the cast atomic in
+   * the search's action space (fund a chosen spell through `planManaPayment`, the
+   * way the heuristic does) rather than pricing the symptom.
+   *
+   * Kept, tunable and tested, because the diagnosis is worth keeping: anyone
+   * demonstrating the pilot's mana behaviour, or trying that atomic-cast redesign,
+   * wants this knob and the measurement above.
+   */
+  readonly evalWastedManaPenalty: number;
+  /**
    * The half-saturation constant for the logistic squash of the heuristic eval:
    * an advantage of this many "eval points" maps to roughly a 0.73 reward. Keeps
    * the non-terminal eval on the same [0, 1] scale as win/loss without any term
@@ -131,6 +177,10 @@ export const DEFAULT_MCTS_CONFIG: MctsConfig = Object.freeze({
   evalLifeWeight: 1,
   evalBoardWeight: 1,
   evalScale: 12,
+  // OFF by default — see the field's doc. The mechanism works (0.71 -> 0.22
+  // wasted mana per turn at 0.1, where the sweep flattens) but measured 11.6
+  // points WORSE head-to-head over 120 seeded games, so it does not ship on.
+  evalWastedManaPenalty: 0,
 });
 
 /**

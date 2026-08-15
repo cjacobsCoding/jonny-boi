@@ -251,6 +251,7 @@ export const persistReturn: EffectPrimitive = (ctx) => {
     summoningSick: isCreature(returnedDef),
     damageMarked: 0,
     markedByDeathtouch: false,
+    attachedTo: null,
     counters: { [PLUS_ONE_COUNTER]: -Math.max(minus, 0) },
   };
   ctx.state.battlefield.push(returned);
@@ -371,6 +372,7 @@ export const createToken: EffectPrimitive = (ctx) => {
       summoningSick: true,
       damageMarked: 0,
       markedByDeathtouch: false,
+    attachedTo: null,
       counters: {},
     };
     ctx.state.battlefield.push(token);
@@ -591,6 +593,38 @@ function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
   }
 }
 
+/**
+ * Attach the SOURCE to the permanent it targets — the one primitive that BOTH
+ * printed attachment forms are built from:
+ *
+ *   - an **Aura** carries it as its whole spell script, so "Enchant creature"
+ *     compiles to a spell that targets a creature and, on resolution, enters the
+ *     battlefield already attached to it (CR 303.4f);
+ *   - an **Equipment** carries it inside an activated ability, which is exactly
+ *     what "Equip {2}" abbreviates ("{2}: Attach to target creature you control.
+ *     Activate only as a sorcery.").
+ *
+ * There is nothing aura- or equipment-specific in here, and deliberately so: what
+ * the attachment then DOES to its host, and what happens when the attachment stops
+ * being legal, are declared as data on the card (`CardDefinition.attachment`) and
+ * handled by core's layering pass and state-based actions.
+ *
+ * Robustness: a target that is gone, or that the card may not legally be attached
+ * to, leaves the board untouched and logs `attachmentFailed` via `ctx.attach`. For
+ * an Aura that is exactly right — it then enters attached to nothing and the SBA
+ * puts it in the graveyard, which is the same end state as the printed rule
+ * (the spell is countered on resolution for having no legal target).
+ *
+ * Params: `targets` (the reserved target restriction — `'creature'` for an Aura's
+ * "Enchant creature", `'creatureYouControl'` for an Equip ability).
+ */
+export const attachToTarget: EffectPrimitive = (ctx) => {
+  const target = firstPermanentTarget(ctx);
+  if (!target) return;
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target.instanceId, ctx.controller)) return;
+  ctx.attach(target.instanceId);
+};
+
 // --- the canonical primitive id registry ---------------------------------------
 
 /**
@@ -619,6 +653,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   fight,
   dealDamageToEach,
   addCounters,
+  attachToTarget,
   ...CHOICE_PRIMITIVES,
 });
 

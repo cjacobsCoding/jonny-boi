@@ -43,6 +43,12 @@ export interface SerializedState {
     readonly power?: number;
     readonly toughness?: number;
     readonly damageMarked: number;
+    /**
+     * The permanent this one is attached to (an Aura's enchanted creature, an
+     * Equipment's equipped creature). Present ONLY when actually attached, so a
+     * board with no attachments serializes byte-for-byte as it always did.
+     */
+    readonly attachedTo?: number;
   }>;
   /**
    * The question the game is currently waiting on, if any — so the debug
@@ -97,6 +103,7 @@ export function serializeState(state: GameState): SerializedState {
         power: isCreature(c.def) ? effectivePower(c, mod) : undefined,
         toughness: isCreature(c.def) ? effectiveToughness(c, mod) : undefined,
         damageMarked: c.damageMarked,
+        ...(c.attachedTo != null ? { attachedTo: c.attachedTo } : {}),
       };
     }),
     ...(state.pendingChoice ? { pendingChoice: serializePendingChoice(state.pendingChoice) } : {}),
@@ -136,7 +143,10 @@ export function dumpState(state: GameState): string {
       const flags = [b.tapped ? 'T' : '', b.summoningSick ? 'SS' : '', b.damageMarked ? `dmg${b.damageMarked}` : '']
         .filter(Boolean)
         .join(',');
-      lines.push(`    [${b.instanceId}] ${b.name}${pt} (${b.controller})${flags ? ` {${flags}}` : ''}`);
+      // "→[7]" reads as "attached to instance 7" — the one thing a dump of an
+      // aura/equipment board is useless without.
+      const attached = b.attachedTo !== undefined ? ` →[${b.attachedTo}]` : '';
+      lines.push(`    [${b.instanceId}] ${b.name}${pt} (${b.controller})${flags ? ` {${flags}}` : ''}${attached}`);
     }
   }
   if (s.stackSize > 0) lines.push(`  stack: ${s.stackSize} object(s)`);

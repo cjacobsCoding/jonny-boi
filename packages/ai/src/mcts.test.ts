@@ -295,6 +295,107 @@ function winRateVs(
   return { winRate: decided > 0 ? mctsWins / decided : 0, decided, wins: mctsWins };
 }
 
+/**
+ * The wasted-mana story, pinned so it cannot be rediscovered from scratch a third
+ * time.
+ *
+ * MCTS was made the default pilot once and reverted because it tapped mana it
+ * then never spent — 1.76 such events per turn against the heuristic's 0.01. The
+ * cause is structural, not a bug: mana pools empty at the end of every step, so
+ * floating mana is lost, and the search's evaluation (life + board) cannot see
+ * that. The tree values "tap" through rollouts in which the *heuristic* rollout
+ * policy goes on to spend the mana, while the real next mover — another MCTS
+ * search, for which the tapped mana is already sunk — declines to.
+ *
+ * `MctsConfig.evalWastedManaPenalty` makes the search pay for it, and these tests
+ * prove BOTH halves of what was measured: the mechanism genuinely fixes the waste,
+ * and it is nonetheless OFF by default because it cost 11.6 points of win rate
+ * head-to-head (see the field's doc for the numbers). So the first test enables it
+ * explicitly rather than trusting the default — asserting the budget against the
+ * shipped config would be asserting something that is knowingly false.
+ *
+ * `manaPoolEmptied` is the engine's own signal, so this measures the play rather
+ * than the pilot's reasoning: it would hold for any pilot.
+ */
+describe('mcts pilot — the wasted-mana penalty and what it costs', () => {
+  /**
+   * Wasted-mana budget for a whole self-played game, per turn. Not zero: holding
+   * up an instant that never gets cast is legitimate play. This mirrors the sim's
+   * `pilot-quality.test.ts` budget for the default pilot — the bar MCTS would have
+   * to clear to be eligible for that slot at all.
+   */
+  const MAX_WASTED_MANA_PER_TURN = 0.35;
+  const WASTE_SEEDS: readonly number[] = [3, 11, 29];
+  /**
+   * Half the shipped simulation budget, at the shipped rollout depth. Mana
+   * discipline is search QUALITY, so it scales with the budget: measured on this
+   * fixture the same pilot wastes 0.51/turn at the 40-sim `FAST_MCTS_CONFIG`,
+   * and clears the bar from 80 sims up (the shipped default is 160, which also
+   * clears it but costs ~18 s of suite time instead of ~9 s). The number to hold
+   * this pilot to in production is the one the bench measures over the real card
+   * pool — 0.22/turn against the heuristic's 0.00 — and this is the cheapest
+   * in-suite budget that guards the same property.
+   */
+  /** The value the sweep settled on, where the waste curve flattens. */
+  const TUNED_WASTED_MANA_PENALTY = 0.1;
+  const WASTE_TEST_CONFIG: MctsConfig = {
+    ...DEFAULT_MCTS_CONFIG,
+    simulationsPerDecision: DEFAULT_MCTS_CONFIG.simulationsPerDecision / 2,
+    evalWastedManaPenalty: TUNED_WASTED_MANA_PENALTY,
+  };
+
+  /** Play a self-play game, counting the engine's wasted-mana events. */
+  function wasteRate(config: MctsConfig): { perTurn: number; wasted: number; turns: number } {
+    const pilot = createMctsPilot(config);
+    let wasted = 0;
+    let turns = 0;
+    for (const seed of WASTE_SEEDS) {
+      let state = newGame(seed);
+      const rngs: Record<PlayerId, ReturnType<typeof createRng>> = {
+        A: createRng((seed ^ 0x9e3779b9) >>> 0),
+        B: createRng((seed ^ 0x85ebca6b) >>> 0),
+      };
+      for (let i = 0; i < 600 && !state.gameOver && state.turnNumber <= 12; i++) {
+        const legal = generateLegalActions(state);
+        if (legal.length === 0) break;
+        const seat = state.priorityPlayer;
+        const action = pilot.chooseAction({
+          view: state,
+          legalActions: legal,
+          rng: rngs[seat]!,
+          registry: TEST_REGISTRY,
+        });
+        const result = applyAction(state, action, undefined, TEST_REGISTRY);
+        for (const event of result.events) if (event.type === 'manaPoolEmptied') wasted++;
+        state = result.state;
+      }
+      turns += state.turnNumber;
+    }
+    return { perTurn: wasted / Math.max(turns, 1), wasted, turns };
+  }
+
+  it('with the penalty enabled, stays inside the budget a default pilot must meet', () => {
+    const { perTurn, wasted, turns } = wasteRate(WASTE_TEST_CONFIG);
+    expect(
+      perTurn,
+      `${wasted} wasted-mana events over ${turns} turns (${perTurn.toFixed(2)}/turn). ` +
+        'A pilot that taps sources it never spends plays visibly badly and skews every A/B verdict.',
+    ).toBeLessThan(MAX_WASTED_MANA_PER_TURN);
+  });
+
+  it('the penalty is what does it — the shipped waste-blind default wastes more', () => {
+    // Pins the CAUSE, not just the symptom, in both directions: the mechanism is
+    // load-bearing (zero it and the waste comes back), and the shipped default
+    // really is the waste-blind one, so this test is also the honest record that
+    // MCTS as configured does NOT meet the budget above. Run at the cheap budget:
+    // the effect is largest where the search is noisiest, and this needs two runs.
+    const withPenalty = wasteRate({ ...FAST_MCTS_CONFIG, evalWastedManaPenalty: TUNED_WASTED_MANA_PENALTY });
+    const shipped = wasteRate(FAST_MCTS_CONFIG);
+    expect(DEFAULT_MCTS_CONFIG.evalWastedManaPenalty).toBe(0);
+    expect(shipped.wasted).toBeGreaterThan(withPenalty.wasted);
+  });
+});
+
 describe('mcts pilot — strength vs the other pilots (full-fidelity rollouts)', () => {
   it('beats random clearly over seeded short games', () => {
     // The guaranteed value bar: with the effect registry wired through, MCTS's
