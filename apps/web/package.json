@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "icons": "node scripts/generate-icons.mjs",
+    "cards:index": "node scripts/build-card-index.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

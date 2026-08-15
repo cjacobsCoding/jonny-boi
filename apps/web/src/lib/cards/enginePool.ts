@@ -1,26 +1,32 @@
 /**
- * DISPLAY RECORDS FOR ENGINE CARDS THAT SCRYFALL DATA DOESN'T COVER.
+ * DISPLAY RECORDS FOR ENGINE CARDS THE SCRYFALL INDEX DOES NOT COVER.
  *
- * The app has two card pools and they are not the same size:
+ * The app has two card pools:
  *
  *   - the ENGINE pool (`@jonny-boi/cards`) — every card the rules engine can
- *     actually play, ~150 of them once the expanded pool is counted;
+ *     actually play;
  *   - the DISPLAY index (`data/card-index.json`) — normalized Scryfall records
- *     with art and Oracle text, committed into the build, only ~32 of them.
+ *     with art and Oracle text, committed into the build.
  *
- * Everything the UI shows reads the DISPLAY index, so 100+ cards the engine plays
- * perfectly well were invisible in the app: they could not be browsed, could not
- * be added to a deck, and — the reason this exists — the Lab's own gauntlet decks
- * could not be opened in the deck builder, because most of their cards had no
- * record to render.
+ * Everything the UI shows reads the DISPLAY index, so a card the engine plays
+ * but the index has never heard of is invisible in the app: it cannot be
+ * browsed, cannot be added to a deck, and — the reason this module exists — it
+ * kept the Lab's own gauntlet decks from opening in the deck builder, because
+ * most of their cards had no record to render.
  *
- * Rather than block on re-fetching Scryfall (network, a rebuilt committed index),
- * this synthesizes a display record from the engine definition, which already
+ * The two pools now agree exactly, and `data/card-index.test.ts` fails if they
+ * ever stop agreeing, so THIS SET IS EMPTY IN PRACTICE. It is deliberately kept
+ * as the rule-6 safety net for the window between adding a card to the pool and
+ * regenerating the index: in that window the card degrades to a readable text
+ * tile instead of vanishing from the UI. It should not be deleted just because
+ * it is currently contributing nothing — that IS the healthy state.
+ *
+ * It synthesizes a display record from the engine definition, which already
  * carries name, cost, types and P/T. What it cannot invent is art and Oracle
  * text — so those stay empty, and `CardArt` falls back to its labelled tile. A
  * card you can see and play without art beats a card that does not exist.
  *
- * These are a FALLBACK: a real Scryfall record always wins (see `mergedPool`).
+ * These are a FALLBACK: a real Scryfall record always wins (see `cardsById`).
  */
 
 import { loadCardPool } from '@jonny-boi/cards';

@@ -1,17 +1,23 @@
 /**
  * Single source of truth for card data in the web app.
  *
- * We bundle the committed `card-index.json` (32 real MTG cards, normalized by
- * `@jonny-boi/data-tools`) directly into the app via a static import rather than
- * fetching it at runtime. Rationale: it is tiny (~60 KB of text), it guarantees
- * the card list is available offline (a PWA requirement — no fetch race, no
- * network dependency for the shell), and it removes a class of "blank screen on
- * a bad fetch path" failures. Card *art* still loads from remote Scryfall URLs
- * (see {@link cardImage}); that needs network, which is acceptable per scope.
+ * We bundle the committed `card-index.json` — a normalized Scryfall record for
+ * every card in the engine pool — directly into the app via a static import
+ * rather than fetching it at runtime. Rationale: it guarantees the card list is
+ * available offline (a PWA requirement — no fetch race, no network dependency
+ * for the shell), and it removes a class of "blank screen on a bad fetch path"
+ * failures. Card *art* still loads from remote Scryfall URLs (see
+ * {@link cardImage}); that needs network, which is acceptable per scope.
  *
- * The file is a copy owned by `apps/web`; the canonical generator lives in
- * `packages/data-tools`. We import only the TYPES from that package so there is
- * one definition of the card shape (no duplicated interfaces here).
+ * The file is DERIVED, not authored: `apps/web/scripts/build-card-index.mjs`
+ * projects it out of the canonical `packages/data-tools/data/card-index.json`,
+ * keeping only the fields the app renders. **Never hand-edit it** — regenerate
+ * with `npm run cards:index -w @jonny-boi/web`. It was a hand-made copy once,
+ * and it went stale by 124 cards before anyone noticed; `data/card-index.test.ts`
+ * now re-derives it on every `npm test` so that cannot recur.
+ *
+ * We import only the TYPES from `@jonny-boi/data-tools` so there is one
+ * definition of the card shape (no duplicated interfaces here).
  */
 import type { CardIndex, NormalizedCard, ManaCost } from '@jonny-boi/data-tools';
 import rawIndex from '../data/card-index.json';
@@ -50,10 +56,11 @@ const cardsById: ReadonlyMap<string, NormalizedCard> = (() => {
 })();
 
 /**
- * The full displayable pool: Scryfall records plus synthesized ones for the
- * ~100 engine cards Scryfall data doesn't cover. Without these the app could
- * play a card it could not show — which is why the Lab's own gauntlet decks
- * could not be opened in the deck builder.
+ * The full displayable pool: the Scryfall records, plus synthesized ones for any
+ * engine card the index does not cover. That second set is empty today (a test
+ * asserts it) and exists so it can never again be the case that the app plays a
+ * card it cannot show — which is what stopped the Lab's own gauntlet decks from
+ * opening in the deck builder.
  */
 const displayablePool: readonly NormalizedCard[] = [...cardsById.values()].sort((a, b) =>
   a.name.localeCompare(b.name),

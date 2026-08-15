@@ -76,6 +76,11 @@ card pool sufficient to express the meta decks. Each card is data; each primitiv
 ### 3.3 Scryfall data-tools pipeline — ✅ done
 Fetch + cache card data and art for the curated pool; produce a normalized card index the engine/UI use.
 Robust to misses; respects Scryfall guidelines.
+The PWA's bundled copy (`apps/web/src/data/card-index.json`) is **derived**, not authored:
+`apps/web/scripts/build-card-index.mjs` projects it from the canonical index, keeping only the fields
+the UI renders. Regenerate with `npm run cards:index -w @jonny-boi/web`; never hand-edit it.
+`apps/web/src/data/card-index.test.ts` re-derives it on every `npm test` and fails on any drift, and
+also asserts that every card the engine can play has a display row that resolves to art.
 
 ### 3.4 AI pilots — ✅ done
 The `chooseAction` interface + read-only game view + legal-action generator; a `random` baseline and a

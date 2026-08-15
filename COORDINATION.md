@@ -73,9 +73,52 @@ throughput (games/sec) from regressing.
 | feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | ✅ INTEGRATED (via feat/card-mechanics) |
 | feat/card-mechanics | DESKTOP-90PJPM4 (worker) | packages/cards primitives+compile, core targeting | ✅ INTEGRATED |
 | feat/pool-adaptive-wire | worker | apps/web + packages/sim | 🚧 PUSHED, not merged |
+| feat/card-index-truth | worker | apps/web/src/data + apps/web/scripts + web card docs | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/card-index-truth` 🚧 PUSHED (apps/web/src/data + apps/web/scripts + the two
+  web card doc-comments + one eslint global). **The reported bug did not exist — read this before
+  anyone re-opens it.** The claim was that `apps/web/src/data/card-index.json` is a stale hand-copied
+  32-card subset of a ~157-card pool. MEASURED on `ae1a894`: the web copy was **156 cards and
+  BYTE-IDENTICAL** (sha1 `c94efd7e…`) to `packages/data-tools/data/card-index.json`, `CARD_POOL` is
+  **156** (32 curated + 124 expanded), and the join is exact — **0** pool cards missing a row, **0**
+  orphan rows, **0** rows without art. `c09b3ac` fixed it back in June.
+  👉 **The "32" was STALE PROSE, and it cost a whole agent-task.** Three comments still described the
+  pre-`c09b3ac` world — `lib/cards.ts` ("32 real MTG cards"), `lib/cards/enginePool.ts` ("only ~32 of
+  them", "100+ cards … were invisible"), and `views/LabView.tsx` ("the curated index (~32)"). Someone
+  read those, believed them over the data, and filed a headline defect. I corrected the first two;
+  **`LabView.tsx:209` still says `~32` and I deliberately left it alone** because
+  `feat/pool-adaptive-wire` owns that file — whoever merges that branch should fix the number.
+  Treat a stale comment as a bug with a blast radius, not as decoration.
+  👉 What WAS real: the copy was **unguarded**. Nothing generated it and nothing compared it, so the
+  only thing preventing the reported bug was someone remembering to copy a file. It is now DERIVED by
+  `apps/web/scripts/build-card-index.mjs` (`npm run cards:index -w @jonny-boi/web`, `--check` for CI)
+  and `apps/web/src/data/card-index.test.ts` re-derives it every `npm test`. Sabotage-tested: cutting
+  the file back to 32 cards makes 3 tests fail and names all 124 lost cards.
+  👉 **The bundled index is now a PROJECTION, and that is a free PWA win.** Scryfall ships 11 image
+  variants per card; `cardImage()` can only ever return 4 (`small`/`normal`/`large`/`art_crop`), so the
+  other 7 were dead weight in every download. Dropping them: main chunk **758.58 → 642.14 kB raw
+  (−15.4%)**, **179.11 → 170.65 kB gzip (−4.7%)**, PWA precache **958.80 → 845.09 KiB (−11.9%)**. A test
+  asserts `DISPLAYED_IMAGE_VARIANTS` still covers every size `cardImage` can return, so widening the UI
+  fails loudly here instead of quietly losing art.
+  👉 **`enginePool.ts` now contributes ZERO records and should NOT be deleted for it.** It synthesizes a
+  text-only display record for any engine card the index lacks; the index covers everything today, so it
+  is an empty safety net — which is the healthy state, and the rule-6 fallback for the window between
+  adding a card and regenerating. Comment updated to say so.
+  ⚠️ **Two gotchas for the next person.** (1) `core.autocrlf=true` and there is no `.gitattributes`, so
+  every committed JSON is CRLF on disk and LF in git — any byte-compare guard MUST normalize newlines or
+  it reports a false "stale" on every Windows checkout. (2) The Scryfall CDN answers **HTTP 400 to
+  `HEAD`**; art-liveness checks must use GET (I used a 1 KB Range + JPEG magic-number check). 28/28 real
+  image fetches across 7 sampled cards incl. the one DFC came back as valid JPEGs.
+  ❗ **`npm run verify` does not exist at the root** — I was told to extend it. The only `verify` in the
+  monorepo is `@jonny-boi/data-tools`' NETWORK re-fetch against live Scryfall, whose own header says it
+  must not run in `npm test` or CI. So the offline guard went where this repo's guards actually live
+  (the vitest suite), plus a `--check` flag on the same module for a human/CI to call. If the integrator
+  wants a root `verify`, `node apps/web/scripts/build-card-index.mjs --check` is the line to add.
+  Suite **1822 passed / 0 failed** (baseline 1814 + 8 new), `npm run build` exit 0, eslint clean.
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-15 DESKTOP-90PJPM4: **`feat/mechanics-wave2` MERGED to main + deployed.** main = **1735
   tests, build exit 0**. Adds **flash, hexproof, shroud** — three keywords that change what is
