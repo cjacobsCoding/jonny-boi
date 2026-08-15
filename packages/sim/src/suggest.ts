@@ -142,12 +142,17 @@ export interface RankedSwap {
   readonly inName: string;
   /** The paired A/B verdict; its `verdict` is the multiplicity-adjusted call. */
   readonly evaluation: SwapEvaluation;
-  /** Paired games this candidate actually received (adaptive: not all are equal). */
-  readonly gamesPlayed: number;
+  /**
+   * Paired games this candidate actually received (adaptive: not all are equal).
+   * Optional only so that a caller assembling a report by hand — the web app's
+   * worker does — is not broken by this field being added; `suggestSwaps` always
+   * sets it.
+   */
+  readonly gamesPlayed?: number;
   /** The uncorrected McNemar p-value (identical to `evaluation.pValue`). */
-  readonly rawPValue: number;
+  readonly rawPValue?: number;
   /** The multiplicity-corrected p-value the verdict is decided from. */
-  readonly adjustedPValue: number;
+  readonly adjustedPValue?: number;
   /** Present when the search stopped spending games here, with the reason. */
   readonly elimination?: EliminationNote;
 }
@@ -209,15 +214,21 @@ export interface SuggestionReport {
   readonly suggestions: readonly RankedSwap[];
   /** Candidates generated but not evaluated (illegal / capped / settled). */
   readonly skipped: readonly SkippedCandidate[];
-  /** What each wave played, dropped, and pulled in. Empty in fixed-budget mode. */
-  readonly waves: readonly WaveReport[];
+  /**
+   * What each wave played, dropped, and pulled in. Empty in fixed-budget mode.
+   *
+   * This and the two fields below are optional purely so a caller that assembles a
+   * report by hand (the web app's sim worker does, to stream progress) keeps
+   * compiling as the engine grows. `suggestSwaps` always sets all three.
+   */
+  readonly waves?: readonly WaveReport[];
   /** How the multiple-comparisons problem was handled. */
-  readonly multipleComparisons: MultipleComparisonsReport;
+  readonly multipleComparisons?: MultipleComparisonsReport;
   /**
    * The record to persist and hand back next time — this is what makes a re-run
    * explore new ground instead of repeating itself.
    */
-  readonly history: SuggestionHistory;
+  readonly history?: SuggestionHistory;
   /** Throughput + coverage notes (games run, games/sec, caveats). */
   readonly notes: SuggestionNotes;
 }
@@ -234,22 +245,25 @@ export interface SuggestionNotes {
   readonly candidatesGenerated: number;
   /** True when the roster cap trimmed the candidate set. */
   readonly cappedByBudget: boolean;
-  /** Base-deck games played — ONCE for the whole run under base-arm reuse. */
-  readonly baseGamesPlayed: number;
+  /**
+   * Base-deck games played — ONCE for the whole run under base-arm reuse. Optional
+   * for hand-assembled reports (see `waves`); `suggestSwaps` always sets it.
+   */
+  readonly baseGamesPlayed?: number;
   /** Variant games played. */
-  readonly variantGamesPlayed: number;
+  readonly variantGamesPlayed?: number;
   /** Variant games answered for free because the swapped card was never seen. */
-  readonly variantGamesSkipped: number;
+  readonly variantGamesSkipped?: number;
   /**
    * Games the fixed scheme would have played for the same candidates and depths —
    * the honest denominator for "how much did adaptive sampling save?".
    */
-  readonly gamesAvoided: number;
+  readonly gamesAvoided?: number;
   /** Whether the identical-game optimisation was live, and why not when it wasn't. */
-  readonly identicalGameSkipEnabled: boolean;
+  readonly identicalGameSkipEnabled?: boolean;
   readonly identicalGameSkipDisabledReason?: string;
   /** Which run this was for this deck (0 = the first ever). */
-  readonly runIndex: number;
+  readonly runIndex?: number;
   /** Set when a supplied history was rejected, with the reason. */
   readonly historyRejected?: HistoryRejection;
   /** The shared fidelity caveat (`FIDELITY_CAVEAT`), carried for the UI/CLI. */

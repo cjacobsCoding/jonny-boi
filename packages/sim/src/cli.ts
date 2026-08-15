@@ -429,7 +429,7 @@ function cmdSuggest(flags: Flags): number {
       `${mode} search, up to ${games} games/matchup, seed ${seed}`,
   );
   console.log(
-    `Run #${n.runIndex + 1} for this deck` +
+    `Run #${(n.runIndex ?? 0) + 1} for this deck` +
       (priorHistory ? ` (continuing a search that already covered ${priorHistory.candidates.length} candidates)` : '') +
       (n.historyRejected ? ` — supplied history IGNORED (${n.historyRejected})` : ''),
   );
@@ -447,12 +447,12 @@ function cmdSuggest(flags: Flags): number {
           return [
             String(s.rank),
             `${s.outName} → ${s.inName}`,
-            String(s.gamesPlayed),
+            String(s.gamesPlayed ?? s.evaluation.nGames),
             pct(e.baseWinRate.p),
             pct(e.variantWinRate.p),
             `${sign}${pct(e.delta)}`,
-            s.rawPValue.toExponential(2),
-            s.adjustedPValue.toExponential(2),
+            (s.rawPValue ?? e.pValue).toExponential(2),
+            (s.adjustedPValue ?? e.pValue).toExponential(2),
             e.verdict.toUpperCase(),
             s.elimination ? `dropped w${s.elimination.wave}: ${s.elimination.reason}` : 'full depth',
           ];
@@ -462,12 +462,13 @@ function cmdSuggest(flags: Flags): number {
   }
 
   // The waves: what each one played, dropped and pulled in. No silent scheduling.
-  if (report.waves.length > 0) {
+  const waves = report.waves ?? [];
+  if (waves.length > 0) {
     console.log('\nSearch waves (successive halving — budget concentrates on survivors):');
     console.log(
       table(
         ['Wave', 'Games/cand', 'Played', 'Survived', 'Dropped', 'New leads'],
-        report.waves.map((w) => [
+        waves.map((w) => [
           String(w.wave),
           String(w.cumulativeGames),
           String(w.candidatesPlayed),
@@ -477,7 +478,7 @@ function cmdSuggest(flags: Flags): number {
         ]),
       ),
     );
-    const futile = report.waves.flatMap((w) => w.eliminated).filter((e) => e.reason === 'futile');
+    const futile = waves.flatMap((w) => w.eliminated).filter((e) => e.reason === 'futile');
     for (const e of futile.slice(0, MAX_FUTILITY_LINES_PRINTED)) {
       console.log(`  dropped early: ${e.outName} → ${e.inName} — ${e.detail}`);
     }
@@ -487,7 +488,8 @@ function cmdSuggest(flags: Flags): number {
   }
 
   const mc = report.multipleComparisons;
-  console.log(
+  if (mc)
+    console.log(
     `\nMultiple comparisons: ${mc.method} correction over a family of ${mc.familySize} ` +
       `(${mc.testedThisRun} tested this run` +
       (mc.familySize > mc.testedThisRun ? `, ${mc.familySize - mc.testedThisRun} from previous runs` : '') +
@@ -510,19 +512,19 @@ function cmdSuggest(flags: Flags): number {
 
   const gps = n.gamesPerSecond;
   console.log(
-    `${n.totalGamesRun} games (${n.baseGamesPlayed} base + ${n.variantGamesPlayed} variant)` +
+    `${n.totalGamesRun} games (${n.baseGamesPlayed ?? 0} base + ${n.variantGamesPlayed ?? 0} variant)` +
       (n.elapsedSeconds ? ` in ${n.elapsedSeconds.toFixed(2)}s → ${gps ? gps.toFixed(0) : '?'} games/sec` : ''),
   );
   console.log(
-    `Saved ${n.gamesAvoided} games vs a fixed sweep of the same candidates at the same depths` +
-      (n.variantGamesSkipped > 0
+    `Saved ${n.gamesAvoided ?? 0} games vs a fixed sweep of the same candidates at the same depths` +
+      ((n.variantGamesSkipped ?? 0) > 0
         ? `; ${n.variantGamesSkipped} variant games were provably identical to the base game and were not replayed`
         : '') +
       (n.identicalGameSkipEnabled ? '' : ` (identical-game skip off: ${n.identicalGameSkipDisabledReason ?? 'n/a'})`) +
       '.',
   );
 
-  if (flags.history) {
+  if (flags.history && report.history) {
     writeHistoryFile(flags.history, report.history);
     console.log(
       `Search record written to ${flags.history} (${report.history.candidates.length} candidates known). ` +
