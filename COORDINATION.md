@@ -11,6 +11,14 @@ agent sees. Read it at the start of a session; update your section before you pu
    **disjoint package** (DESIGN.md §6). Check this file's in-flight table + `git branch -r` before
    claiming work so two agents don't grab the same files.
 2b. **Pick a unique branch slug.** If a `feat/<slug>` already exists on the remote, choose another.
+2c. **NEVER `git checkout` in the primary checkout `D:\Cool Stuff\Claude\jonny-boi`.** It belongs to the
+   integrator and must stay on `main`. Work ONLY inside the worktree your brief names. This has now
+   broken three times, and the failure is silent and expensive: your commits land on whatever branch
+   you switched to, `git push origin main` then pushes the *stale local* `main` ref, and git reports
+   `non-fast-forward` / "branch tip is behind" while `git rev-list HEAD..origin/main` says you are 0
+   behind — a contradiction that wastes a long debug. **Before committing anywhere, run
+   `git rev-parse --abbrev-ref HEAD` and confirm it is the branch your brief assigned.** If you find
+   the primary checkout on the wrong branch, say so in your report; do not "fix" it mid-task.
 3. **Workers push branches; they do NOT merge to `main`.** One **integrator** merges reviewed green
    branches to `main`, ships, and publishes the build.
 4. **Know your build configs.** `npm test` (Vitest) judges green by "N passed, 0 failed"; the shippable

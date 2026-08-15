@@ -8,8 +8,14 @@
  * All game/lobby logic lives in the pure reducer (online-state.ts) and the connection
  * module; this hook is intentionally thin so the testable surface stays pure.
  */
-import { useCallback, useEffect, useReducer, useRef } from 'react';
-import { PROTOCOL_VERSION, type DeckList } from '@jonny-boi/protocol';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import {
+  PROTOCOL_VERSION,
+  type ClientMessage,
+  type DeckList,
+  type ErrorCode,
+} from '@jonny-boi/protocol';
+import { isLegacyVersion, negotiateOnError } from './negotiation.js';
 import type { GameAction } from '@jonny-boi/core';
 import { OnlineConnection, type ConnectionOptions } from './connection.js';
 import {
@@ -41,6 +47,13 @@ export interface OnlineGameApi {
   leave(): void;
   /** Clear the current transient error banner. */
   dismissError(): void;
+  /**
+   * True once we've had to negotiate down to an older server (see
+   * {@link MIN_COMPATIBLE_PROTOCOL_VERSION}). The game is playable, but cards that
+   * ask a player to choose won't work until the server is updated — so the UI
+   * should say so rather than let a player discover it mid-game.
+   */
+  readonly legacyServer: boolean;
 }
 
 /**
@@ -51,11 +64,47 @@ export function useOnlineGame(options?: ConnectionOptions): OnlineGameApi {
   const [state, dispatch] = useReducer(onlineReducer, INITIAL_ONLINE_STATE);
   const connRef = useRef<OnlineConnection | null>(null);
 
+  // --- protocol negotiation -----------------------------------------------------
+  // The version we're currently speaking, the handshake we last sent (so it can be
+  // replayed at a lower version), and whether we've already stepped down. Refs, not
+  // state: the message handler is installed once and must read the live values.
+  const versionRef = useRef<number>(PROTOCOL_VERSION);
+  const lastHandshakeRef = useRef<ClientMessage | null>(null);
+  const [legacyServer, setLegacyServer] = useState(false);
+
+  /** Send a versioned handshake, remembering it in case we must retry it lower. */
+  const sendHandshake = useCallback((build: (version: number) => ClientMessage) => {
+    const msg = build(versionRef.current);
+    lastHandshakeRef.current = msg;
+    connRef.current?.send(msg);
+  }, []);
+
+  /**
+   * A `protocolMismatch` on a handshake is recoverable when we're still above the
+   * compatible floor: step down and replay the SAME request once. Returns true if
+   * we handled it, in which case the error is swallowed rather than shown — the
+   * user sees a working lobby plus a "server is older" notice, not a dead end.
+   */
+  const tryDowngrade = useCallback((code: ErrorCode): boolean => {
+    const pending = lastHandshakeRef.current;
+    const outcome = negotiateOnError(code, versionRef.current, pending !== null);
+    if (outcome.action !== 'retry' || !pending) return false;
+    versionRef.current = outcome.version;
+    setLegacyServer(isLegacyVersion(outcome.version));
+    connRef.current?.send({ ...pending, protocolVersion: outcome.version } as ClientMessage);
+    return true;
+  }, []);
+
   // Create the connection once; subscribe; connect; tear down on unmount.
   useEffect(() => {
     const conn = new OnlineConnection(options);
     connRef.current = conn;
-    const offMsg = conn.onMessage((msg) => dispatch({ kind: 'server', msg }));
+    const offMsg = conn.onMessage((msg) => {
+      // Intercept a recoverable version mismatch before it reaches the reducer, so
+      // the retry is invisible instead of flashing a scary error the user can't act on.
+      if (msg.t === 'error' && tryDowngrade(msg.code)) return;
+      dispatch({ kind: 'server', msg });
+    });
     const offStatus = conn.onStatus((status) => dispatch({ kind: 'status', status }));
     conn.connect();
     return () => {
@@ -68,21 +117,27 @@ export function useOnlineGame(options?: ConnectionOptions): OnlineGameApi {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const createRoom = useCallback((name: string, deck?: DeckList) => {
-    dispatch({ kind: 'requestCreate' });
-    connRef.current?.send({ t: 'createRoom', protocolVersion: PROTOCOL_VERSION, name, deck });
-  }, []);
+  const createRoom = useCallback(
+    (name: string, deck?: DeckList) => {
+      dispatch({ kind: 'requestCreate' });
+      sendHandshake((protocolVersion) => ({ t: 'createRoom', protocolVersion, name, deck }));
+    },
+    [sendHandshake],
+  );
 
-  const joinRoom = useCallback((code: string, name: string, deck?: DeckList) => {
-    dispatch({ kind: 'requestJoin' });
-    connRef.current?.send({
-      t: 'joinRoom',
-      protocolVersion: PROTOCOL_VERSION,
-      code: code.trim().toUpperCase(),
-      name,
-      deck,
-    });
-  }, []);
+  const joinRoom = useCallback(
+    (code: string, name: string, deck?: DeckList) => {
+      dispatch({ kind: 'requestJoin' });
+      sendHandshake((protocolVersion) => ({
+        t: 'joinRoom',
+        protocolVersion,
+        code: code.trim().toUpperCase(),
+        name,
+        deck,
+      }));
+    },
+    [sendHandshake],
+  );
 
   const chooseDeck = useCallback((deck: DeckList) => {
     dispatch({ kind: 'localDeckChosen' });
@@ -130,5 +185,6 @@ export function useOnlineGame(options?: ConnectionOptions): OnlineGameApi {
     rematch,
     leave,
     dismissError,
+    legacyServer,
   };
 }
