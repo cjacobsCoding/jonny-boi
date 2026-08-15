@@ -44,6 +44,7 @@ import {
   mill,
   fight,
   dealDamageToEach,
+  addCounters,
 } from './primitives.js';
 import {
   discardCard,
@@ -964,5 +965,63 @@ describe('dealDamageToEach', () => {
 
     expect(state.players.A.life).toBe(18);
     expect(state.players.B.life).toBe(18);
+  });
+});
+
+describe('addCounters', () => {
+  function beast(name: string, power: number, toughness: number): CardDefinition {
+    return { id: `id:${name}`, name, types: ['creature'], power, toughness };
+  }
+
+  it('permanently raises effective power and toughness', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Bolster'), 'A');
+    const target = inst(beast('Bear', 2, 2), 'A');
+    state.battlefield.push(target);
+
+    const { ctx } = ctxFor(state, source, { amount: 2 }, [target.instanceId]);
+    addCounters(ctx);
+
+    // Unlike a pump, this is a counter on the object — it survives cleanup.
+    expect(target.counters[PLUS_ONE_COUNTER]).toBe(2);
+    expect(effectivePower(target)).toBe(4);
+    expect(effectiveToughness(target)).toBe(4);
+  });
+
+  it('accumulates with counters already there', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Bolster'), 'A');
+    const target = inst(beast('Bear', 2, 2), 'A');
+    target.counters[PLUS_ONE_COUNTER] = 1;
+    state.battlefield.push(target);
+
+    const { ctx } = ctxFor(state, source, { amount: 1 }, [target.instanceId]);
+    addCounters(ctx);
+
+    expect(target.counters[PLUS_ONE_COUNTER]).toBe(2);
+  });
+
+  it('shrinks a creature with a negative amount (-1/-1)', () => {
+    const state = emptyState();
+    const source = inst(vanilla('Shrink'), 'A');
+    const target = inst(beast('Bear', 2, 2), 'A');
+    state.battlefield.push(target);
+
+    const { ctx } = ctxFor(state, source, { amount: -1 }, [target.instanceId]);
+    addCounters(ctx);
+
+    expect(effectivePower(target)).toBe(1);
+    expect(effectiveToughness(target)).toBe(1);
+  });
+
+  it('counters the SOURCE when `self` is set (the "enters with" template)', () => {
+    const state = emptyState();
+    const self = inst(beast('Ballista', 0, 0), 'A');
+    state.battlefield.push(self);
+
+    const { ctx } = ctxFor(state, self, { amount: 2, self: true });
+    addCounters(ctx);
+
+    expect(self.counters[PLUS_ONE_COUNTER]).toBe(2);
   });
 });

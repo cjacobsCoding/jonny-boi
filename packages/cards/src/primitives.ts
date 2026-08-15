@@ -528,6 +528,37 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
   }
 };
 
+/**
+ * "Put N +1/+1 counters on target creature" — a PERMANENT stat change, unlike
+ * `pumpUntilEndOfTurn`, which wears off at cleanup.
+ *
+ * Restricted to +1/+1 (and its negative, -1/-1) on purpose. Those are the two
+ * the stat layer genuinely reads, so they really change power and toughness. A
+ * charge or loyalty counter would be *stored* and read by nothing, producing a
+ * card that looks implemented and does nothing — so those keep reporting as
+ * unsupported instead.
+ *
+ * Params: `amount` (may be negative for -1/-1), `self` (counter the source
+ * rather than a target — the "enters with counters on it" template).
+ */
+export const addCounters: EffectPrimitive = (ctx) => {
+  const amount = intParam(ctx, 'amount', 0);
+  if (amount === 0) return;
+  const target = boolParam(ctx, 'self', false)
+    ? selfIfCreature(ctx)
+    : (firstPermanentTarget(ctx) ?? selfIfCreature(ctx));
+  if (!target || !isCreature(target.def)) return;
+
+  const current = target.counters[PLUS_ONE_COUNTER] ?? 0;
+  target.counters[PLUS_ONE_COUNTER] = current + amount;
+  ctx.emit({
+    type: 'counterAdded',
+    instanceId: target.instanceId,
+    kind: PLUS_ONE_COUNTER,
+    amount,
+  });
+};
+
 /** Destroy a creature: move it to its owner's graveyard and emit `creatureDied`. */
 function destroyCreature(ctx: EffectContext, creature: CardInstance): void {
   movePermanentTo(ctx, creature, 'graveyard');
@@ -561,6 +592,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   mill,
   fight,
   dealDamageToEach,
+  addCounters,
   ...CHOICE_PRIMITIVES,
 });
 

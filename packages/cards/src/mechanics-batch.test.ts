@@ -167,3 +167,77 @@ describe('the compiler is still strict about what these rules do NOT cover', () 
     expect(result.definition.effects).toHaveLength(2);
   });
 });
+
+describe('leaves-the-battlefield triggers', () => {
+  it('compiles "When ~ leaves the battlefield, BODY"', () => {
+    const result = compileCard(
+      card({
+        name: 'Departing Friend',
+        oracleText: 'When Departing Friend leaves the battlefield, you gain 2 life.',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    const triggers = result.definition.triggers ?? [];
+    expect(triggers).toHaveLength(1);
+    expect(triggers[0]!.condition).toEqual({ on: 'leaves' });
+  });
+});
+
+describe('compound "draw N and lose M" in one sentence', () => {
+  it('compiles both halves of the single printed sentence', () => {
+    const result = compileCard(
+      card({
+        name: "Night's Whisper",
+        oracleText: "You draw two cards and you lose 2 life.",
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.effects).toEqual([
+      { primitive: 'drawCards', params: { count: 2 } },
+      { primitive: 'loseLife', params: { amount: 2 } },
+    ]);
+  });
+});
+
+describe('+1/+1 counters', () => {
+  it('compiles "Put a +1/+1 counter on target creature"', () => {
+    const result = compileCard(
+      card({ name: 'Bolster', oracleText: 'Put a +1/+1 counter on target creature.' }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'addCounters',
+      params: { amount: 1, targets: 'creature' },
+    });
+  });
+
+  it('compiles the "enters with N counters" template onto the source', () => {
+    const result = compileCard(
+      card({
+        name: 'Walking Ballista-ish',
+        oracleText: 'Walking Ballista-ish enters the battlefield with two +1/+1 counters on it.',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 0,
+        toughness: 0,
+      }),
+    );
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(onlyEffect(result.definition)).toEqual({
+      primitive: 'addCounters',
+      params: { amount: 2, self: true },
+    });
+  });
+
+  it('still reports a counter kind the stat layer does not read', () => {
+    // A charge counter would be stored and read by nothing — a card that looks
+    // implemented and does nothing is worse than one honestly reported.
+    const result = compileCard(
+      card({ name: 'Charger', oracleText: 'Put a charge counter on target creature.' }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+});

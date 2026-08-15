@@ -384,6 +384,40 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'put-counters-on-target',
+    description: '"Put N +1/+1 counters on target creature"',
+    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature$`),
+    needsChosenTarget: true,
+    build(match) {
+      // "a counter" has no count token to parse — it is exactly one.
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, targets: CREATURE_TARGET },
+      });
+    },
+  },
+  {
+    id: 'draw-and-lose-life',
+    description: '"You draw N cards and you lose M life" (one sentence, two effects)',
+    // Printed as a single sentence, so the sentence splitter never separates it
+    // into the two clauses that each already compile. Night's Whisper, Sign in
+    // Blood, and the whole black card-draw family read this way.
+    pattern: new RegExp(
+      `^(?:you )?draws? ${COUNT_TOKEN} cards? and (?:you )?loses? ${COUNT_TOKEN} life$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]!);
+      const life = parseCount(match[2]!);
+      if (count === null || life === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count } },
+        { primitive: 'loseLife', params: { amount: life } },
+      );
+    },
+  },
+  {
     id: 'return-target-permanent-to-hand',
     description: '"Return target creature to its owner\'s hand" (bounce)',
     pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
@@ -793,6 +827,16 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-leaves',
+    description: '"When ~ leaves the battlefield, BODY"',
+    // Core has had the `leaves` trigger event all along; only this pattern was
+    // missing, so every leaves-the-battlefield card reported as unsupported.
+    pattern: /^when ~ leaves the battlefield, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(ctx, { on: 'leaves' }, match[1] ?? '', `Leaves: ${match[1] ?? ''}`);
+    },
+  },
+  {
     id: 'trigger-upkeep',
     description: '"At the beginning of your upkeep, BODY"',
     pattern: /^at the beginning of your upkeep, (.+)$/,
@@ -829,6 +873,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 
 /** Card-level static properties printed as their own ability line. */
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'enters-with-counters',
+    description: '"~ enters with N +1/+1 counters on it"',
+    // A whole ability line like "enters tapped", not a split sentence — hence its
+    // place in this table and the optional trailing full stop.
+    pattern: new RegExp(
+      `^~ enters(?: the battlefield)? with (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on it\\.?$`,
+    ),
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      // The permanent's own ETB script counters itself.
+      return { effects: [{ primitive: 'addCounters', params: { amount, self: true } }] };
+    },
+  },
   {
     id: 'enters-tapped',
     description: '"~ enters tapped" (the unconditional form only)',
