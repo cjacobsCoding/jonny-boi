@@ -18,25 +18,40 @@ import type {
   SuggestRequest,
   SwapRequest,
 } from '../sim-protocol.js';
+import {
+  DEFAULT_ADAPTIVE_CONFIG,
+  DEFAULT_EXPLORATION_WEIGHTS,
+  DEFAULT_STATS_CONFIG,
+  DEFAULT_SWAP_SCOPE,
+  driveAdaptiveSearch,
+  finishSuggestionRun,
+  summarizePairedSwap,
+  type AdaptiveRound,
+  type PairedBaseRecord,
+  type PairedTable,
+  type SkippedCandidate,
+  type SuggestionRunPlan,
+} from '@jonny-boi/sim';
 import { resolveOpponentNames } from './opponents.js';
 import {
+  planBaseSlotShards,
   planGauntletShards,
   planPairedShards,
-  planSuggestShards,
+  planVariantSliceShards,
   totalGauntletGames,
   totalPairedGames,
 } from './plan.js';
-import { mergeGauntlet, mergePairedEvaluation, mergeSuggestions } from './merge.js';
+import { mergeGauntlet, mergePairedEvaluation, mergeVariantSlices } from './merge.js';
 import type {
+  BaseSlotShardResult,
   GauntletShardResult,
   MatchJobResult,
-  PairedShardJob,
   PairedShardResult,
   ShardContext,
   ShardJob,
   ShardResult,
-  SkippedCandidateInfo,
   SuggestPlanResult,
+  VariantSliceShardResult,
 } from './shard-protocol.js';
 
 /**
@@ -98,7 +113,7 @@ class ProgressTally {
   private lastEmittedAt = -Infinity;
 
   constructor(
-    private readonly total: number,
+    private total: number,
     private readonly sink: ProgressSink,
     private readonly intervalSeconds: number,
   ) {}
@@ -113,6 +128,19 @@ class ProgressTally {
 
   add(games: number): void {
     this.games += games;
+  }
+
+  /**
+   * Revise the denominator.
+   *
+   * An adaptive search cannot know its total up front — how many games it plays
+   * depends on who survives, and the identical-game skip answers an unpredictable
+   * share of them for free. So the total is a live ESTIMATE, revised each round
+   * and settled exactly when the run ends. Revising it is honest; pretending a
+   * guess was a plan, and letting the bar sit at 87% forever, is not.
+   */
+  setTotal(total: number): void {
+    this.total = Math.max(total, this.games);
   }
 
   /** Emit a progress message, rate-limited unless `force`. */
@@ -249,6 +277,29 @@ export async function runSwap(
 
 // --- suggestions ---------------------------------------------------------------
 
+/**
+ * THE POOLED DRIVER OF THE ADAPTIVE SEARCH.
+ *
+ * Successive halving cannot be flattened into a queue of independent games: which
+ * arms survive round N+1 depends on what round N measured. So the pool drives the
+ * sim's search generator **round by round, with a barrier**, and each round is two
+ * parallel phases:
+ *
+ *   A. the SHARED base games for the slots this round newly needs (one game per
+ *      slot for the whole run — base-arm reuse, preserved across workers), then
+ *   B. every surviving arm's variant games over those slots, cut by slot range so
+ *      a two-survivor round still fills the machine.
+ *
+ * Phase B needs phase A's records to keep the identical-game skip, which is what
+ * forces the barrier between them. Utilisation is highest in the wide early
+ * rounds and drops in the late ones — few arms, and the round can only finish when
+ * its slowest shard does. That cost is inherent to a stateful search; the
+ * alternative is a faster run that answers a different question.
+ *
+ * Everything this function decides is scheduling. Who survives, what each verdict
+ * is, how the list ranks and what the next run should explore are all decided by
+ * `@jonny-boi/sim` — `driveAdaptiveSearch` and `finishSuggestionRun`.
+ */
 export async function runSuggest(
   request: SuggestRequest,
   runner: ShardRunner,
@@ -259,9 +310,9 @@ export async function runSuggest(
   const context = contextFor(request.hero, opponentNames, request.seed);
   const startedAt = nowSeconds();
 
-  // PHASE 1 — enumerate + pre-rank candidates. Pure CPU over the whole pool, so
-  // it runs on a worker; doing it on the main thread would freeze the UI before
-  // the first game is played.
+  // PHASE 1 — enumerate + pre-rank candidates, accept the cross-run record, plan
+  // the waves. Pure CPU over the whole card pool, so it runs on a worker; doing it
+  // on the main thread would freeze the UI before the first game is played.
   sink({
     type: 'progress',
     done: 0,
@@ -270,99 +321,243 @@ export async function runSuggest(
     elapsedSeconds: 0,
     label: 'finding candidate swaps…',
   });
-  const plan = (await runner.submit({ kind: 'suggest-plan', context, maxCandidates: request.maxCandidates }, () => {})) as SuggestPlanResult;
+  const planned = (await runner.submit(
+    {
+      kind: 'suggest-plan',
+      context,
+      maxCandidates: request.maxCandidates,
+      gamesPerCandidate: request.gamesPerCandidate,
+      ...(request.history ? { history: request.history } : {}),
+    },
+    () => {},
+  )) as SuggestPlanResult;
+  const plan = planned.plan;
 
-  const skipped: SkippedCandidateInfo[] = [...plan.skipped];
-  if (plan.candidates.length === 0) {
-    return {
-      kind: 'suggest',
-      result: mergeSuggestions({
-        baseDeckName: plan.baseDeckName,
-        candidates: [],
-        shards: [],
-        skipped,
-        candidatesGenerated: plan.candidatesGenerated,
-        cappedByBudget: plan.cappedByBudget,
-        elapsedSeconds: nowSeconds() - startedAt,
-      }),
-    };
-  }
+  const tally = new ProgressTally(estimatePlannedGames(plan), sink, progressIntervalSeconds);
 
-  // PHASE 2 — every candidate's paired gauntlet, all shards in ONE queue so the
-  // pool stays saturated even when there are fewer candidates than cores.
-  const jobs = planSuggestShards(
-    context,
-    plan.candidates,
-    request.gamesPerCandidate,
-    runner.workerCount,
-  );
-  const total = totalPairedGames(jobs);
-  const tally = new ProgressTally(total, sink, progressIntervalSeconds);
+  // Live state the rounds accumulate. Every one of these is either an integer sum
+  // or keyed by the candidate's stable key, so none of them can carry arrival
+  // order into the result.
+  const baseRecords = new Map<number, PairedBaseRecord>();
+  let armTables: ReadonlyMap<string, PairedTable> = new Map();
+  const failures = new Map<string, string>();
+  let variantGamesPlayed = 0;
+  let variantGamesSkipped = 0;
 
-  // Candidate completion is what the user actually wants to read, so we count
-  // shards per candidate and only call one finished when its last shard lands.
-  const shardsPerCandidate = new Map<number, number>();
-  for (const job of jobs) {
-    const index = job.candidateIndex ?? 0;
-    shardsPerCandidate.set(index, (shardsPerCandidate.get(index) ?? 0) + 1);
-  }
-  const doneShardsPerCandidate = new Map<number, number>();
-  let candidatesDone = 0;
-  /** Candidates dropped mid-run; their partial shards are discarded wholesale. */
-  const failedCandidates = new Set<number>();
+  const driver = driveAdaptiveSearch(plan);
+  let step = driver.next();
+  let label = `round 1 of ${plan.waves.length} · ${workersLabel(runner.workerCount)}`;
+  tally.emit(label, true);
 
-  const label = (): string =>
-    `${candidatesDone}/${plan.candidates.length} candidates · ${workersLabel(runner.workerCount)}`;
-  tally.emit(label(), true);
+  while (!step.done) {
+    const round = step.value;
+    const live = round.arms.filter((arm) => !failures.has(arm.candidate.key));
+    label =
+      `round ${round.wave} of ${plan.waves.length} · ${live.length} ` +
+      `${live.length === 1 ? 'candidate' : 'candidates'} · ${round.cumulativeGames} games each · ` +
+      workersLabel(runner.workerCount);
+    tally.emit(label, true);
 
-  const settled = await Promise.all(
-    jobs.map(async (job: PairedShardJob) => {
-      const index = job.candidateIndex ?? 0;
-      try {
-        const result = (await runner.submit(job, (games) => {
+    // --- phase A: the shared base arm, for the slots this round adds ---
+    const baseJobs = planBaseSlotShards(
+      context,
+      plan.runSeed,
+      round.baseSlotStart,
+      round.baseSlotEnd,
+      runner.workerCount,
+    );
+    const baseResults = (await Promise.all(
+      baseJobs.map(async (job) => {
+        const result = await runner.submit(job, (games) => {
           tally.add(games);
-          tally.emit(label());
-        })) as PairedShardResult;
-        const done = (doneShardsPerCandidate.get(index) ?? 0) + 1;
-        doneShardsPerCandidate.set(index, done);
-        if (done === shardsPerCandidate.get(index)) candidatesDone++;
-        tally.emit(label());
-        return result;
-      } catch (err) {
-        if (isCancellation(err)) throw err;
-        // One bad candidate must not throw away a run that may have taken
-        // twenty minutes. Drop it and record WHY, so the report is honest about
-        // its coverage rather than quietly one candidate short.
-        if (!failedCandidates.has(index)) {
-          failedCandidates.add(index);
-          const candidate = plan.candidates[index];
-          skipped.push({
-            outName: candidate?.outName ?? 'unknown',
-            inName: candidate?.inName ?? 'unknown',
-            reason: 'illegal',
-            details: [err instanceof Error ? err.message : String(err)],
-          });
+          tally.emit(label);
+        });
+        tally.emit(label);
+        return result as BaseSlotShardResult;
+      }),
+    )) as BaseSlotShardResult[];
+    for (const result of baseResults) {
+      result.records.forEach((record, i) => baseRecords.set(result.slotStart + i, record));
+    }
+
+    // --- barrier --- phase B may not start until every base record above exists.
+
+    const sliceJobs = planVariantSliceShards(
+      context,
+      plan.runSeed,
+      live.map((arm) => ({
+        candidateKey: arm.candidate.key,
+        outCardId: arm.candidate.outId,
+        inCardId: arm.candidate.inId,
+        outName: arm.candidate.outName,
+        inName: arm.candidate.inName,
+        fromSlot: arm.fromGames,
+        toSlot: arm.toGames,
+      })),
+      runner.workerCount,
+      (slot) => baseRecords.get(slot) as PairedBaseRecord,
+    );
+
+    const settled = await Promise.all(
+      sliceJobs.map(async (job) => {
+        try {
+          const result = (await runner.submit(job, (games) => {
+            tally.add(games);
+            tally.emit(label);
+          })) as VariantSliceShardResult;
+          tally.emit(label);
+          return result;
+        } catch (err) {
+          if (isCancellation(err)) throw err;
+          // One bad candidate must not throw away a search that may have been
+          // running for twenty minutes. Drop the ARM (not the run) and record
+          // why, so the report is honest about its coverage.
+          if (!failures.has(job.candidateKey)) {
+            failures.set(job.candidateKey, err instanceof Error ? err.message : String(err));
+          }
+          return null;
         }
-        return null;
-      }
-    }),
-  );
+      }),
+    );
 
-  const shards = settled.filter(
-    (r): r is PairedShardResult => r !== null && !failedCandidates.has(r.candidateIndex ?? -1),
-  );
+    const usable = settled.filter(
+      (result): result is VariantSliceShardResult =>
+        result !== null && !failures.has(result.candidateKey),
+    );
+    for (const slice of usable) {
+      variantGamesPlayed += slice.variantGamesPlayed;
+      variantGamesSkipped += slice.variantGamesSkipped;
+    }
+    armTables = mergeVariantSlices(dropFailed(armTables, failures), usable);
 
-  const report = mergeSuggestions({
+    step = driver.next({
+      arms: round.arms.map((arm) => {
+        const failure = failures.get(arm.candidate.key);
+        if (failure !== undefined) {
+          return { key: arm.candidate.key, gamesPlayed: 0, paired: EMPTY_TABLE, failure };
+        }
+        return {
+          key: arm.candidate.key,
+          gamesPlayed: arm.toGames,
+          paired: armTables.get(arm.candidate.key) ?? EMPTY_TABLE,
+        };
+      }),
+    });
+    tally.setTotal(estimatePlannedGames(plan, tally.gamesDone, step.done ? undefined : step.value));
+  }
+
+  const outcome = step.value;
+  const elapsedSeconds = nowSeconds() - startedAt;
+  const baseGamesPlayed = outcome.baseSlotsPlayed;
+  // Reserve candidates the search never reached — reported, never silent.
+  const evaluated = new Set(outcome.arms.map((arm) => arm.candidate.key));
+  const capped: SkippedCandidate[] = plan.reserves
+    .filter((candidate) => !evaluated.has(candidate.key))
+    .map((candidate) => ({
+      outName: candidate.outName,
+      inName: candidate.inName,
+      reason: 'capped' as const,
+      details: [],
+    }));
+
+  const report = finishSuggestionRun({
     baseDeckName: plan.baseDeckName,
-    candidates: plan.candidates,
-    shards,
-    skipped,
+    search: {
+      // Each arm's cumulative table becomes the §3.5 verdict through the sim's own
+      // `summarizePairedSwap` — the same function `evaluateSwap` ends with, so a
+      // pooled verdict is computed by exactly the code the CLI's verdict is.
+      outcomes: outcome.arms.map((arm) => ({
+        candidate: arm.candidate,
+        evaluation: summarizePairedSwap({
+          baseDeckName: plan.baseDeckName,
+          variantDeckName: arm.candidate.variantDeckName,
+          swap: { out: arm.candidate.outId, in: arm.candidate.inId },
+          outName: arm.candidate.outName,
+          inName: arm.candidate.inName,
+          paired: arm.paired,
+          scope: DEFAULT_SWAP_SCOPE,
+          copiesSwapped: arm.candidate.copiesSwapped,
+        }),
+        gamesPlayed: arm.gamesPlayed,
+        ...(arm.elimination ? { elimination: arm.elimination } : {}),
+      })),
+      waves: outcome.waves,
+      usage: {
+        baseGamesPlayed,
+        variantGamesPlayed,
+        variantGamesSkipped,
+        totalGamesPlayed: baseGamesPlayed + variantGamesPlayed,
+        identicalGameSkipEnabled: planned.identicalGameSkipEnabled,
+        ...(planned.identicalGameSkipDisabledReason
+          ? { identicalGameSkipDisabledReason: planned.identicalGameSkipDisabledReason }
+          : {}),
+      },
+      failures: outcome.failures,
+      fixedSchemeGames: outcome.fixedSchemeGames,
+    },
+    skipped: [...plan.skipped, ...outcome.failures, ...capped],
     candidatesGenerated: plan.candidatesGenerated,
-    cappedByBudget: plan.cappedByBudget,
-    elapsedSeconds: nowSeconds() - startedAt,
+    cappedByBudget: capped.length > 0,
+    elapsedSeconds,
+    history: plan.history,
+    ...(plan.historyRejected ? { historyRejected: plan.historyRejected } : {}),
+    method: DEFAULT_ADAPTIVE_CONFIG.multipleComparisons,
+    exploration: DEFAULT_EXPLORATION_WEIGHTS,
+    stats: DEFAULT_STATS_CONFIG,
+    workersUsed: runner.workerCount,
   });
-  tally.emit(label(), true);
+
+  // The estimate has served its purpose; end on the number actually played.
+  tally.setTotal(tally.gamesDone);
+  tally.emit(`${report.candidatesEvaluated} candidates · ${workersLabel(runner.workerCount)}`, true);
   return { kind: 'suggest', result: report };
+}
+
+const EMPTY_TABLE: PairedTable = Object.freeze({
+  bothWon: 0,
+  baseOnly: 0,
+  variantOnly: 0,
+  neither: 0,
+});
+
+/** Forget an arm the search dropped, so its partial games cannot be reported. */
+function dropFailed(
+  tables: ReadonlyMap<string, PairedTable>,
+  failures: ReadonlyMap<string, string>,
+): ReadonlyMap<string, PairedTable> {
+  if (failures.size === 0) return tables;
+  const kept = new Map(tables);
+  for (const key of failures.keys()) kept.delete(key);
+  return kept;
+}
+
+/**
+ * Estimate the games a search will play, so the bar and the ETA have a
+ * denominator.
+ *
+ * It is genuinely an estimate and the code says so. Each wave plays one base game
+ * per new slot plus one variant game per surviving arm per new slot; the field
+ * shrinks to each wave's `survivorTarget`. The identical-game skip then answers
+ * some variant games for free, so the real total lands BELOW this — which is the
+ * right direction to be wrong in, and the total is revised every round and settled
+ * exactly when the run ends.
+ */
+function estimatePlannedGames(
+  plan: SuggestionRunPlan,
+  gamesSoFar = 0,
+  nextRound?: AdaptiveRound,
+): number {
+  let arms = nextRound?.arms.length ?? plan.roster.length;
+  const fromWave = nextRound?.wave ?? 1;
+  let previous = plan.waves[fromWave - 2]?.cumulativeGames ?? 0;
+  let games = gamesSoFar;
+  for (const spec of plan.waves.slice(fromWave - 1)) {
+    const newSlots = Math.max(0, spec.cumulativeGames - previous);
+    games += newSlots * (arms + 1); // one variant game per arm, one shared base game
+    previous = spec.cumulativeGames;
+    arms = Math.min(arms, spec.survivorTarget);
+  }
+  return games;
 }
 
 // --- single-game replay --------------------------------------------------------

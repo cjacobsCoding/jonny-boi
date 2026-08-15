@@ -17,17 +17,21 @@ import {
   poolWorkerCount,
 } from './pool-config.js';
 import {
-  candidateSeedSalt,
+  planBaseSlotShards,
   planGauntletShards,
   planPairedShards,
-  planSuggestShards,
+  planVariantSliceShards,
+  shardsPerGroup,
   shardsPerMatchup,
   splitGameRange,
+  splitSlotRange,
   totalGauntletGames,
   totalPairedGames,
+  type ArmSlice,
 } from './plan.js';
 import { resolveOpponentNames } from './opponents.js';
-import type { PlannedCandidate, ShardContext } from './shard-protocol.js';
+import type { ShardContext } from './shard-protocol.js';
+import type { PairedBaseRecord } from '@jonny-boi/sim';
 
 const hero = { name: 'Hero', archetype: 'Hero', cards: [{ cardId: 'x', count: 60 }] };
 
@@ -157,28 +161,112 @@ describe('planPairedShards', () => {
   });
 });
 
-describe('planSuggestShards', () => {
-  it('flattens every candidate into one queue so a small search still uses the machine', () => {
-    const context = contextWith(['A']);
-    const candidates: PlannedCandidate[] = [
-      { outId: 'o1', inId: 'i1', outName: 'O1', inName: 'I1', swapSeed: 11 },
-      { outId: 'o2', inId: 'i2', outName: 'O2', inName: 'I2', swapSeed: 22 },
-    ];
-    const jobs = planSuggestShards(context, candidates, 60, 11);
-    // Three candidates' worth of work would otherwise be three busy workers.
-    expect(jobs.length).toBeGreaterThanOrEqual(11);
-    expect(jobs.filter((j) => j.candidateIndex === 0).length).toBeGreaterThan(1);
-    expect(jobs.every((j) => j.swapSeed === (j.candidateIndex === 0 ? 11 : 22))).toBe(true);
-    expect(totalPairedGames(jobs)).toBe(2 * 2 * 60);
+// --- the adaptive search's two per-round phases ---------------------------------
+
+describe('splitSlotRange', () => {
+  it('tiles a half-open slot range with no gap and no overlap', () => {
+    for (const [start, end] of [[0, 10], [26, 52], [7, 8], [100, 420]] as const) {
+      for (const parts of [1, 3, 12]) {
+        const ranges = splitSlotRange(start, end, parts);
+        expect(ranges[0]?.slotStart).toBe(start);
+        expect(ranges[ranges.length - 1]?.slotEnd).toBe(end);
+        for (let i = 1; i < ranges.length; i++) {
+          expect(ranges[i]?.slotStart).toBe(ranges[i - 1]?.slotEnd);
+        }
+      }
+    }
+  });
+
+  it('has nothing to split when a round adds no depth', () => {
+    expect(splitSlotRange(40, 40, 12)).toEqual([]);
   });
 });
 
-describe('candidateSeedSalt', () => {
-  it('is stable, non-negative, and distinguishes the two directions of a swap', () => {
-    const forward = candidateSeedSalt('alpha', 'beta');
-    expect(candidateSeedSalt('alpha', 'beta')).toBe(forward);
-    expect(forward).toBeGreaterThanOrEqual(0);
-    expect(candidateSeedSalt('beta', 'alpha')).not.toBe(forward);
+describe('planBaseSlotShards', () => {
+  it('covers every new base slot exactly once, and spreads it over the workers', () => {
+    const context = contextWith(['A', 'B']);
+    const jobs = planBaseSlotShards(context, 99, 26, 152, 11);
+    expect(jobs.length).toBeGreaterThanOrEqual(11);
+    const played = new Set<number>();
+    for (const job of jobs) {
+      expect(job.runSeed).toBe(99);
+      for (let slot = job.slotStart; slot < job.slotEnd; slot++) {
+        // Playing one base slot twice would double-count the base arm and break
+        // the "base games played once for the whole run" guarantee.
+        expect(played.has(slot)).toBe(false);
+        played.add(slot);
+      }
+    }
+    expect(played.size).toBe(152 - 26);
+  });
+
+  it('plans nothing when the round needs no new base games', () => {
+    expect(planBaseSlotShards(contextWith(['A']), 1, 40, 40, 12)).toEqual([]);
+  });
+});
+
+describe('planVariantSliceShards', () => {
+  const context = contextWith(['A', 'B']);
+  const record: PairedBaseRecord = { heroWon: true, leftLibrary: [], libraryDisturbed: false };
+  const arm = (key: string, fromSlot: number, toSlot: number): ArmSlice => ({
+    candidateKey: key,
+    outCardId: 'o',
+    inCardId: 'i',
+    outName: 'O',
+    inName: 'I',
+    fromSlot,
+    toSlot,
+  });
+
+  it('cuts WITHIN an arm, so a two-survivor late round still fills the machine', () => {
+    // This is the whole reason slices exist. Handing each survivor one shard would
+    // run the deepest, most expensive round of the search on two cores.
+    const jobs = planVariantSliceShards(context, 7, [arm('a', 52, 208), arm('b', 52, 208)], 11, () => record);
+    expect(jobs.length).toBeGreaterThanOrEqual(11);
+    expect(jobs.filter((j) => j.candidateKey === 'a').length).toBeGreaterThan(1);
+  });
+
+  it('covers each arm’s outstanding slots exactly once', () => {
+    const arms = [arm('a', 0, 26), arm('b', 0, 26), arm('c', 13, 26)];
+    const jobs = planVariantSliceShards(context, 7, arms, 12, () => record);
+    for (const { candidateKey, fromSlot, toSlot } of arms) {
+      const played = new Set<number>();
+      for (const job of jobs.filter((j) => j.candidateKey === candidateKey)) {
+        for (let slot = job.slotStart; slot < job.slotEnd; slot++) {
+          expect(played.has(slot)).toBe(false);
+          played.add(slot);
+        }
+      }
+      expect(played.size).toBe(toSlot - fromSlot);
+    }
+  });
+
+  it('carries the base records for exactly its own slots, so a shard is self-contained', () => {
+    // A shard the pool retries on a fresh worker must not need the round replayed,
+    // and it cannot apply the identical-game skip without these.
+    const jobs = planVariantSliceShards(context, 7, [arm('a', 10, 40)], 4, (slot) => ({
+      heroWon: slot % 2 === 0,
+      leftLibrary: [slot],
+      libraryDisturbed: false,
+    }));
+    for (const job of jobs) {
+      expect(job.baseRecords).toHaveLength(job.slotEnd - job.slotStart);
+      job.baseRecords.forEach((rec, i) => {
+        expect(rec.leftLibrary).toEqual([job.slotStart + i]);
+      });
+    }
+  });
+
+  it('plans nothing for an arm that is already at depth', () => {
+    expect(planVariantSliceShards(context, 7, [arm('a', 26, 26)], 12, () => record)).toEqual([]);
+  });
+});
+
+describe('shardsPerGroup', () => {
+  it('is the same arithmetic matchups and search arms both need', () => {
+    expect(shardsPerGroup).toBe(shardsPerMatchup);
+    // Two survivors on eleven workers: split each one, do not run at two cores.
+    expect(shardsPerGroup(2, 200, 11)).toBeGreaterThanOrEqual(11 / 2);
   });
 });
 

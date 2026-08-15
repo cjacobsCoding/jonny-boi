@@ -23,7 +23,13 @@
  * functions, no `Map`/`Set`.
  */
 import type { CardDefinition } from '@jonny-boi/core';
-import type { SwapScope } from '@jonny-boi/sim';
+import type {
+  PairedBaseRecord,
+  PairedTable,
+  SuggestionHistory,
+  SuggestionRunPlan,
+  SwapScope,
+} from '@jonny-boi/sim';
 import type { SimDeckPayload } from '../sim-protocol.js';
 import type { MatchTrace } from '../replay-types.js';
 
@@ -124,44 +130,101 @@ export interface PairedShardResult extends GameRange {
   readonly neither: number;
 }
 
-/** A suggestion candidate as the plan phase resolved it (canonical order). */
-export interface PlannedCandidate {
-  readonly outId: string;
-  readonly inId: string;
-  readonly outName: string;
-  readonly inName: string;
-  /** Seed for this candidate's whole paired gauntlet (base seed + stable key). */
-  readonly swapSeed: number;
-}
-
-/** A candidate generated but never simulated, with the honest reason. */
-export interface SkippedCandidateInfo {
-  readonly outName: string;
-  readonly inName: string;
-  readonly reason: 'illegal' | 'capped';
-  readonly details: readonly string[];
-}
-
 /**
- * PHASE 1 of a suggestions run: enumerate + pre-rank candidates. This is pure
- * CPU over the whole card pool (no games), so it runs on a worker too — doing it
- * on the main thread would freeze the UI before the first game is even played.
+ * PHASE 1 of a suggestions run: enumerate + pre-rank candidates, accept (or
+ * reject) the caller's cross-run record, and plan the wave ladder.
+ *
+ * This is pure CPU over the whole card pool (no games), so it runs on a worker —
+ * doing it on the main thread would freeze the UI before the first game is even
+ * played, and the main thread does not build a card pool at all. What comes back
+ * is the sim's own `SuggestionRunPlan`, which is deliberately plain JSON so the
+ * main thread can schedule from it without the pool.
  */
 export interface SuggestPlanJob {
   readonly kind: 'suggest-plan';
   readonly context: ShardContext;
   readonly maxCandidates: number;
+  /** Depth a FINALIST reaches (not what every candidate gets — it is adaptive). */
+  readonly gamesPerCandidate: number;
+  /** The record a previous run on this deck returned, if the UI kept one. */
+  readonly history?: SuggestionHistory;
 }
 
-/** The candidate set a suggestions run will evaluate, plus honest coverage notes. */
+/** The plan a suggestions run will execute, straight from the sim. */
 export interface SuggestPlanResult {
   readonly kind: 'suggest-plan';
-  readonly baseDeckName: string;
-  /** Candidates to evaluate, in the canonical order ranks are resolved against. */
-  readonly candidates: readonly PlannedCandidate[];
-  readonly skipped: readonly SkippedCandidateInfo[];
-  readonly candidatesGenerated: number;
-  readonly cappedByBudget: boolean;
+  readonly plan: SuggestionRunPlan;
+  /**
+   * Whether the identical-game skip is live for this run, decided ONCE here
+   * rather than per shard, so the report's honesty note cannot depend on which
+   * worker happened to answer first.
+   */
+  readonly identicalGameSkipEnabled: boolean;
+  readonly identicalGameSkipDisabledReason?: string;
+}
+
+/**
+ * PHASE 2a of a suggestions run: play the SHARED base games for a slice of slots.
+ *
+ * The adaptive search compares every candidate against the same base deck on the
+ * same games, so the base arm is played ONCE for the whole run — not once per
+ * candidate. Splitting that work by slot range is embarrassingly parallel, and
+ * its results are what every variant slice in the same round needs before it can
+ * start (hence the barrier in `run.ts`).
+ */
+export interface BaseSlotShardJob {
+  readonly kind: 'base-slot-shard';
+  readonly context: ShardContext;
+  /** The run's seed — offset from `context.seed` when a history carried over. */
+  readonly runSeed: number;
+  /** Half-open slot range `[slotStart, slotEnd)`; slot k is (k % opps, k / opps). */
+  readonly slotStart: number;
+  readonly slotEnd: number;
+}
+
+export interface BaseSlotShardResult {
+  readonly kind: 'base-slot-shard';
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  /** One record per slot, in slot order — the wire form of the base arm. */
+  readonly records: readonly PairedBaseRecord[];
+}
+
+/**
+ * PHASE 2b of a suggestions run: play ONE candidate's variant games over a slice
+ * of slots, given the base records for those slots.
+ *
+ * Handing the base records in is what preserves the identical-game skip across
+ * workers: a variant game whose swapped slots never left the library is provably
+ * the base game, and this shard can only know that if it can see what the base
+ * game did. The saving is real (often a third of all variant games), so dropping
+ * it to simplify the protocol would cost more than the parallelism gained.
+ */
+export interface VariantSliceShardJob {
+  readonly kind: 'variant-slice-shard';
+  readonly context: ShardContext;
+  readonly runSeed: number;
+  /** The candidate's stable `outId>inId` key — how results are folded back. */
+  readonly candidateKey: string;
+  readonly outCardId: string;
+  readonly inCardId: string;
+  readonly outName: string;
+  readonly inName: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  /** Base records for exactly `[slotStart, slotEnd)`, in slot order. */
+  readonly baseRecords: readonly PairedBaseRecord[];
+}
+
+export interface VariantSliceShardResult {
+  readonly kind: 'variant-slice-shard';
+  readonly candidateKey: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  /** THIS slice's 2×2 table; the main thread sums slices into the arm's total. */
+  readonly paired: PairedTable;
+  readonly variantGamesPlayed: number;
+  readonly variantGamesSkipped: number;
 }
 
 /** Play ONE game and record its full trace (the match-replay viewer). */
@@ -178,13 +241,21 @@ export interface MatchJobResult {
 }
 
 /** Anything the pool can hand to a worker. */
-export type ShardJob = GauntletShardJob | PairedShardJob | SuggestPlanJob | MatchJob;
+export type ShardJob =
+  | GauntletShardJob
+  | PairedShardJob
+  | SuggestPlanJob
+  | BaseSlotShardJob
+  | VariantSliceShardJob
+  | MatchJob;
 
 /** Anything a worker can hand back on success. */
 export type ShardResult =
   | GauntletShardResult
   | PairedShardResult
   | SuggestPlanResult
+  | BaseSlotShardResult
+  | VariantSliceShardResult
   | MatchJobResult;
 
 /**

@@ -13,8 +13,9 @@
  */
 import type {
   GauntletResult,
-  SwapEvaluation,
+  SuggestionHistory,
   SuggestionReport,
+  SwapEvaluation,
   SwapScope,
 } from '@jonny-boi/sim';
 import type { MatchTrace } from './replay-types.js';
@@ -67,9 +68,18 @@ export interface SuggestRequest {
   readonly kind: 'suggest';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
+  /** Depth a FINALIST reaches. The search is adaptive — losers get far less. */
   readonly gamesPerCandidate: number;
   readonly maxCandidates: number;
   readonly seed: number;
+  /**
+   * What earlier runs on this deck already learned (`lib/sim/history-store.ts`
+   * keeps it in `localStorage`). Supplying it is what makes a re-run explore NEW
+   * candidates instead of re-deriving the same shortlist — the user-reported bug
+   * "it just started comparing to Eternal Witness AGAIN". The finished report
+   * carries the updated record back for the caller to persist.
+   */
+  readonly history?: SuggestionHistory;
 }
 
 /**

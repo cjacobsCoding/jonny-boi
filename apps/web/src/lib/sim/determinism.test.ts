@@ -32,6 +32,7 @@ import {
   evaluateSwap,
   generateCandidates,
   loadDeck,
+  prepareSuggestionRun,
   runGauntlet as simRunGauntlet,
   suggestSwaps,
   SAMPLE_DECKS,
@@ -363,16 +364,26 @@ describe('a parallel suggestions search', () => {
     return payload.result;
   }
 
-  /** Timings differ run to run; equality is about the numbers, not the clock. */
-  function withoutTimings(report: SuggestionReport): unknown {
-    const { elapsedSeconds: _elapsed, gamesPerSecond: _throughput, ...notes } = report.notes;
+  /**
+   * Strip the notes that describe the RUN ENVIRONMENT rather than the result:
+   * how long it took, how fast, and how many workers played it. Those legitimately
+   * differ between a 1-worker run, a 12-worker run and the headless engine —
+   * everything else must not, which is precisely what these tests assert.
+   */
+  function withoutRunEnvironment(report: SuggestionReport): unknown {
+    const {
+      elapsedSeconds: _elapsed,
+      gamesPerSecond: _throughput,
+      workersUsed: _workers,
+      ...notes
+    } = report.notes;
     return { ...report, notes };
   }
 
   it('produces the same ranking at 1 worker and at 12', async () => {
     const single = await runAt(1, 'forward');
     const pooled = await runAt(12, 'forward');
-    expect(withoutTimings(pooled)).toEqual(withoutTimings(single));
+    expect(withoutRunEnvironment(pooled)).toEqual(withoutRunEnvironment(single));
     expect(pooled.suggestions.map((s) => `${s.outName}>${s.inName}`)).toEqual(
       single.suggestions.map((s) => `${s.outName}>${s.inName}`),
     );
@@ -381,7 +392,7 @@ describe('a parallel suggestions search', () => {
   it('is unaffected by the order candidates finish in', async () => {
     const forward = await runAt(12, 'forward');
     const backward = await runAt(12, 'reverse');
-    expect(withoutTimings(backward)).toEqual(withoutTimings(forward));
+    expect(withoutRunEnvironment(backward)).toEqual(withoutRunEnvironment(forward));
   });
 
   it('equals the sim’s own suggestSwaps, rank for rank', async () => {
@@ -395,18 +406,19 @@ describe('a parallel suggestions search', () => {
       suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates: SUGGEST_CANDIDATES },
     });
     const parallel = await runAt(12, 'reverse');
-    expect(withoutTimings(parallel)).toEqual(withoutTimings(reference));
+    expect(withoutRunEnvironment(parallel)).toEqual(withoutRunEnvironment(reference));
   });
 
   it('drops a candidate whose shards fail and says so, instead of losing the whole run', async () => {
     // A worker dying on one candidate must not throw away a search that may have
     // been running for twenty minutes — and the report must not quietly come back
     // one candidate short.
+    const doomed = firstRosterKey();
     const runner = new LocalShardRunner(
       12,
       context,
       'forward',
-      (job) => job.kind === 'paired-shard' && job.candidateIndex === 0,
+      (job) => job.kind === 'variant-slice-shard' && job.candidateKey === doomed,
     );
     const payload = await runSuggest(request, runner, collect().sink, NO_THROTTLE);
     if (payload.kind !== 'suggest') throw new Error('wrong payload kind');
@@ -416,4 +428,77 @@ describe('a parallel suggestions search', () => {
     );
     expect(failure).toBeDefined();
   });
+
+  it('reports honest progress: rounds are named, and it ends on the games it played', async () => {
+    const { sink, seen } = collect();
+    // A FRESH context, because that is what production has: `useSimWorker`
+    // disposes the pool after every run, so a run's workers never inherit an
+    // earlier run's memoised base games. Reusing the suite's shared context here
+    // would let a previous test's cached base arm skip real work and make the
+    // tick stream disagree with the games the report accounts for.
+    const payload = await runSuggest(
+      request,
+      new LocalShardRunner(12, createSimContext(), 'forward'),
+      sink,
+      NO_THROTTLE,
+    );
+    if (payload.kind !== 'suggest') throw new Error('wrong payload kind');
+    const last = seen[seen.length - 1] as SimProgress;
+    // The denominator of an adaptive search is an estimate until the run ends, so
+    // the contract is "never claims more done than planned, and settles exactly".
+    for (const tick of seen) expect(tick.done).toBeLessThanOrEqual(tick.total);
+    expect(last.done).toBe(payload.result.notes.totalGamesRun);
+    expect(last.total).toBe(last.done);
+    expect(seen.some((tick) => /round \d+ of \d+/.test(tick.label))).toBe(true);
+    expect(seen.some((tick) => tick.label.includes('12 workers'))).toBe(true);
+  });
+
+  it('carries a previous run’s record forward, and rejects one from another deck', async () => {
+    // The user-reported bug: without the record, run two re-derives run one's
+    // shortlist. The pooled path must thread it exactly as the headless one does.
+    const first = await runAt(12, 'forward');
+    expect(first.notes.runIndex).toBe(0);
+    expect(first.history.candidates.length).toBeGreaterThan(0);
+
+    const second = await runSuggest(
+      { ...request, history: first.history },
+      new LocalShardRunner(12, context, 'forward'),
+      collect().sink,
+      NO_THROTTLE,
+    );
+    if (second.kind !== 'suggest') throw new Error('wrong payload kind');
+    expect(second.result.notes.runIndex).toBe(1);
+    expect(second.result.notes.historyRejected).toBeUndefined();
+    // The correction knows the family got bigger — re-running cannot p-hack.
+    expect(second.result.multipleComparisons.familySize).toBeGreaterThanOrEqual(
+      second.result.multipleComparisons.testedThisRun,
+    );
+
+    // A record gathered on a DIFFERENT decklist is rejected with a reason, never
+    // silently used to steer this deck's search.
+    const foreign = { ...first.history, deckFingerprint: 'some-other-deck' };
+    const third = await runSuggest(
+      { ...request, history: foreign },
+      new LocalShardRunner(12, context, 'forward'),
+      collect().sink,
+      NO_THROTTLE,
+    );
+    if (third.kind !== 'suggest') throw new Error('wrong payload kind');
+    expect(third.result.notes.historyRejected).toBe('deck-changed');
+    expect(third.result.notes.runIndex).toBe(0);
+  });
 });
+
+/** The key of the first candidate the search will scout (for failure injection). */
+function firstRosterKey(): string {
+  const plan = prepareSuggestionRun(HERO, {
+    pool: context.pool,
+    opponentCount: ONE_OPPONENT.length,
+    baseSeed: SEED,
+    gamesPerCandidate: SUGGEST_GAMES,
+    suggestConfig: { ...DEFAULT_SUGGEST_CONFIG, maxCandidates: SUGGEST_CANDIDATES },
+  });
+  const first = plan.roster[0];
+  if (!first) throw new Error('the hero deck produced no suggestion candidates');
+  return first.key;
+}

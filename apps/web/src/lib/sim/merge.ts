@@ -23,21 +23,16 @@ import {
   decideVerdict,
   gameSeedFor,
   mcNemarTest,
-  rankEvaluations,
   wilsonInterval,
-  FIDELITY_CAVEAT,
   type GauntletResult,
   type MatchupResult,
   type PairedTable,
-  type RankedSwap,
-  type SuggestionReport,
   type SwapEvaluation,
 } from '@jonny-boi/sim';
 import type {
   GauntletShardResult,
   PairedShardResult,
-  PlannedCandidate,
-  SkippedCandidateInfo,
+  VariantSliceShardResult,
 } from './shard-protocol.js';
 
 /** Canonical order for gauntlet shards: opponent, then position in the matchup. */
@@ -179,82 +174,39 @@ export function mergePairedEvaluation(shards: readonly PairedShardResult[]): Swa
   };
 }
 
-/** What the suggestions merge needs beyond the shards themselves. */
-export interface SuggestMergeInput {
-  readonly baseDeckName: string;
-  readonly candidates: readonly PlannedCandidate[];
-  readonly shards: readonly PairedShardResult[];
-  /** Candidates never simulated (illegal at generation, or over the budget cap). */
-  readonly skipped: readonly SkippedCandidateInfo[];
-  readonly candidatesGenerated: number;
-  readonly cappedByBudget: boolean;
-  readonly elapsedSeconds: number;
-}
-
 /**
- * Fold every candidate's paired shards into the ranked `SuggestionReport`.
+ * Fold a round's variant slices into each arm's CUMULATIVE paired table.
  *
- * Candidates are rebuilt in CANONICAL index order before `rankEvaluations` sees
- * them. That matters because the ranking comparator is stable: two candidates
- * with an identical delta, p-value and swap key would otherwise be ordered by
- * whichever worker happened to finish first, and the "same seed ⇒ same ranking"
- * promise would hold only by luck.
+ * Every cell is an integer count, and integer addition is exact and commutative,
+ * so an arm's table cannot depend on how its slots were split across workers or
+ * on which slice came home first. That is the entire reason a slice reports its
+ * own 2×2 table rather than a win-rate: a proportion would have to be re-weighted,
+ * and re-weighting floats is order-dependent.
+ *
+ * `previous` holds what earlier rounds already measured for each arm (successive
+ * halving keeps playing the SAME arms deeper), so the result is the arm's whole
+ * history, which is exactly what the elimination rule is entitled to see.
  */
-export function mergeSuggestions(input: SuggestMergeInput): SuggestionReport {
-  const byCandidate = new Map<number, PairedShardResult[]>();
-  for (const shard of input.shards) {
-    if (shard.candidateIndex === null) continue;
-    const bucket = byCandidate.get(shard.candidateIndex);
-    if (bucket) bucket.push(shard);
-    else byCandidate.set(shard.candidateIndex, [shard]);
+export function mergeVariantSlices(
+  previous: ReadonlyMap<string, PairedTable>,
+  slices: readonly VariantSliceShardResult[],
+): Map<string, PairedTable> {
+  const totals = new Map<string, PairedTable>(previous);
+  for (const slice of slices) {
+    const running = totals.get(slice.candidateKey) ?? {
+      bothWon: 0,
+      baseOnly: 0,
+      variantOnly: 0,
+      neither: 0,
+    };
+    totals.set(slice.candidateKey, {
+      bothWon: running.bothWon + slice.paired.bothWon,
+      baseOnly: running.baseOnly + slice.paired.baseOnly,
+      variantOnly: running.variantOnly + slice.paired.variantOnly,
+      neither: running.neither + slice.paired.neither,
+    });
   }
-
-  const evaluations: SwapEvaluation[] = [];
-  let totalGamesRun = 0;
-  let baseGauntletWinRate: SwapEvaluation['baseWinRate'] | undefined;
-
-  for (let index = 0; index < input.candidates.length; index++) {
-    const parts = byCandidate.get(index);
-    if (!parts || parts.length === 0) continue; // dropped (see `skipped`).
-    const evaluation = mergePairedEvaluation(parts);
-    evaluations.push(evaluation);
-    // Each paired game plays BOTH the base and the variant → 2 games per pair.
-    const GAMES_PER_PAIR = 2;
-    totalGamesRun += evaluation.nGames * GAMES_PER_PAIR;
-    // The base deck's gauntlet win-rate is the same for every candidate; take the
-    // first in canonical order so it can't depend on who finished first.
-    baseGauntletWinRate ??= evaluation.baseWinRate;
-  }
-
-  const ranked = rankEvaluations(evaluations);
-  const suggestions: RankedSwap[] = ranked.map((evaluation, i) => ({
-    rank: i + 1,
-    outName: evaluation.outName,
-    inName: evaluation.inName,
-    evaluation,
-  }));
-
-  return {
-    baseDeck: input.baseDeckName,
-    baseGauntletWinRate: baseGauntletWinRate ?? { p: 0, low: 0, high: 0, successes: 0, n: 0 },
-    candidatesEvaluated: evaluations.length,
-    suggestions,
-    skipped: input.skipped.map((s) => ({
-      outName: s.outName,
-      inName: s.inName,
-      reason: s.reason,
-      details: [...s.details],
-    })),
-    notes: {
-      totalGamesRun,
-      elapsedSeconds: input.elapsedSeconds > 0 ? input.elapsedSeconds : undefined,
-      gamesPerSecond:
-        input.elapsedSeconds > 0 ? totalGamesRun / input.elapsedSeconds : undefined,
-      candidatesGenerated: input.candidatesGenerated,
-      cappedByBudget: input.cappedByBudget,
-      fidelityCaveat: FIDELITY_CAVEAT,
-    },
-  };
+  return totals;
 }
 
 /**
