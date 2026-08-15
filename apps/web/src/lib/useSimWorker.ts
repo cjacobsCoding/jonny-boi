@@ -34,8 +34,6 @@ export interface SimWorkerApi {
   readonly progress: SimProgress | null;
   readonly result: SimResultPayload | null;
   readonly error: string | null;
-  /** How many workers a run will use on this machine (surfaced in the UI). */
-  readonly workerCount: number;
   /** Kick off a run. Replaces any in-flight run (terminates it first). */
   run: (request: SimRequest) => void;
   /** Cancel the current run (terminate every worker) and reset to idle. */
@@ -56,6 +54,11 @@ export function useSimWorker(): SimWorkerApi {
    * error over a NEW run that had already started.
    */
   const runIdRef = useRef(0);
+  /**
+   * The pool size is decided ONCE per mount, not per run: it is a property of
+   * the machine, and re-reading it mid-session would let two runs of the same
+   * request be planned differently for no reason.
+   */
   const [workerCount] = useState(() => browserPoolWorkerCount());
 
   /** Tear down the live pool (used by cancel, replace-run, and unmount). */
@@ -126,5 +129,5 @@ export function useSimWorker(): SimWorkerApi {
     setStatus('idle');
   }, []);
 
-  return { status, progress, result, error, workerCount, run, cancel, reset };
+  return { status, progress, result, error, run, cancel, reset };
 }
