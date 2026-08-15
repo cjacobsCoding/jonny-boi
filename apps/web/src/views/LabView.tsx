@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useMemo, type ReactElement } from 'react';
 import {
   SAMPLE_DECKS,
   validateDeck as validateSimDeck,
@@ -13,9 +13,9 @@ import { getCard } from '../lib/cards.js';
 import './lab-apply.css';
 import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
-import { useSimWorker } from '../lib/useSimWorker.js';
+import type { SimWorkerApi } from '../lib/useSimWorker.js';
+import type { LabSelection } from '../lib/useLabSelection.js';
 import {
-  DEFAULT_LAB_SEED,
   GAUNTLET_GAMES,
   SWAP_GAMES,
   SUGGEST_GAMES,
@@ -34,24 +34,15 @@ const LAB_TABS = [
   { id: 'suggest', label: 'Suggestions' },
 ] as const;
 
-type LabTabId = (typeof LAB_TABS)[number]['id'];
 
 /**
  * The Lab (DESIGN §3.7): pick one of your saved decks as the hero, choose which
  * gauntlet decks to test against, then run a gauntlet, an A/B single-card swap,
  * or a ranked suggestions search — all in a Web Worker so the UI never freezes.
  */
-export function LabView({ decks }: { decks: DecksApi }): ReactElement {
-  const [tab, setTab] = useState<LabTabId>('gauntlet');
-  const [heroId, setHeroId] = useState<string | null>(decks.activeDeck?.id ?? null);
-  const [seed, setSeed] = useState(DEFAULT_LAB_SEED);
-  // Confirmation shown after applying a verdict to the hero deck.
-  const [applyNote, setApplyNote] = useState<string | null>(null);
-  const [opponentNames, setOpponentNames] = useState<string[]>(() =>
-    SAMPLE_DECKS.map((d) => d.name),
-  );
+export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWorkerApi; selection: LabSelection }): ReactElement {
+  const { tab, setTab, heroId, setHeroId, seed, setSeed, opponentNames, setOpponentNames, applyNote, setApplyNote } = selection;
 
-  const sim = useSimWorker();
 
   // Anything selectable as the hero: your saved decks, then the gauntlet decks.
   // The gauntlet decks are decks — being able to test one against the field (or
@@ -352,4 +343,7 @@ function EmptyDecksPrompt(): ReactElement {
     </div>
   );
 }
+
+
+
 
