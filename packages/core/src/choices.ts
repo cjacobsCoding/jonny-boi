@@ -38,6 +38,7 @@
  */
 
 import type { CardType, EffectRef } from './card.js';
+import { hasSubtype } from './card.js';
 import { convertedManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
@@ -55,6 +56,13 @@ export interface CardFilter {
   readonly anyOfTypes?: readonly CardType[];
   /** Drop cards with any of these types (this is how "nonland" is written). */
   readonly noneOfTypes?: readonly CardType[];
+  /**
+   * Keep only cards with at least one of these printed subtypes — how "Goblins"
+   * / "Islands" is written. Compared case-insensitively (see `hasSubtype`).
+   */
+  readonly anyOfSubtypes?: readonly string[];
+  /** Drop cards carrying any of these printed subtypes ("non-Goblin creature"). */
+  readonly noneOfSubtypes?: readonly string[];
   /** Exact card name match (case-sensitive, as printed). */
   readonly nameEquals?: string;
   /** Inclusive mana-value bounds. */
@@ -68,6 +76,8 @@ export function matchesCardFilter(card: CardInstance, filter?: CardFilter): bool
   const def = card.def;
   if (filter.anyOfTypes && !filter.anyOfTypes.some((t) => def.types.includes(t))) return false;
   if (filter.noneOfTypes && filter.noneOfTypes.some((t) => def.types.includes(t))) return false;
+  if (filter.anyOfSubtypes && !filter.anyOfSubtypes.some((s) => hasSubtype(def, s))) return false;
+  if (filter.noneOfSubtypes && filter.noneOfSubtypes.some((s) => hasSubtype(def, s))) return false;
   if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
   if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
     const mv = def.cost ? convertedManaCost(def.cost) : 0;

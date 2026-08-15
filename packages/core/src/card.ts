@@ -62,6 +62,14 @@ export interface CardDefinition {
   readonly id: string;
   readonly name: string;
   readonly types: readonly CardType[];
+  /**
+   * Printed subtypes exactly as Scryfall spells them — creature types (`['Goblin',
+   * 'Warrior']`), land types (`['Mountain']`), and so on. Present so tribal effects
+   * ("Goblins you control get +1/+1") can be written as DATA against a filter
+   * instead of a per-card rule. Matching is case-insensitive (see {@link hasSubtype})
+   * so an authoring slip in casing cannot silently break a lord.
+   */
+  readonly subtypes?: readonly string[];
   /** Mana cost. Absent for lands and other free-to-play cards. */
   readonly cost?: ManaCost;
   readonly power?: number;
@@ -113,6 +121,39 @@ export interface CardDefinition {
    * cards with no triggers.
    */
   readonly triggers?: readonly import('./triggers.js').TriggeredAbility[];
+  /**
+   * Static ("anthem") abilities: continuous modifications this permanent applies to
+   * a *set* of other permanents for as long as it is on the battlefield — "creatures
+   * you control get +1/+1", "other Goblins you control have haste". Data, like
+   * triggers; see `statics.ts` for the shape and for why the lifetime needs no
+   * bookkeeping. Omit for cards with none (the overwhelming majority).
+   */
+  readonly statics?: readonly import('./statics.js').StaticAbility[];
+}
+
+/**
+ * Memo of a definition's subtypes, lower-cased into a set for O(1) case-insensitive
+ * lookup. Same argument as the mana memos below: definitions are immutable and
+ * shared across every instance, and subtype matching runs inside the continuous
+ * layering pass that combat and legality checks drive.
+ */
+const SUBTYPE_SET_MEMO = new WeakMap<CardDefinition, ReadonlySet<string>>();
+
+/**
+ * Whether a definition has a printed subtype, compared case-insensitively.
+ *
+ * A card with no subtypes answers `false` without touching the memo, so the common
+ * board pays a single property check.
+ */
+export function hasSubtype(def: CardDefinition, subtype: string): boolean {
+  const printed = def.subtypes;
+  if (!printed || printed.length === 0) return false;
+  let set = SUBTYPE_SET_MEMO.get(def);
+  if (!set) {
+    set = new Set(printed.map((s) => s.toLowerCase()));
+    SUBTYPE_SET_MEMO.set(def, set);
+  }
+  return set.has(subtype.toLowerCase());
 }
 
 /** Convenience predicates over a definition's type line. */

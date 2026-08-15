@@ -1,15 +1,25 @@
 /**
+/**
  * Creature stat derivation. Effective power/toughness and keywords come from the
  * card definition's printed base, plus runtime modifiers, applied in this order:
  *   1. printed base (def.power / def.toughness / def.keywords)
  *   2. +1/+1 counters (a permanent per-object modifier)
- *   3. continuous effects (temporary "until end of turn" pumps / keyword grants —
- *      see internal/continuous.ts), passed in as an `AggregatedMod`.
+ *   3. static "anthem" abilities radiating from permanents on the battlefield
+ *   4. until-end-of-turn continuous effects (pumps / keyword grants)
  *
- * Kept pure so combat, SBAs, and serialization all read the same numbers. The
- * continuous layer is passed explicitly (defaulting to "no modification") rather
- * than read from a global, so a caller that already has the per-instance aggregate
- * pays O(1) and a caller that doesn't gets correct base+counter values for free.
+ * Layers 3 and 4 arrive here PRE-AGGREGATED as a single `AggregatedMod`, built by
+ * internal/continuous.ts — they are both additive (P/T sums) and idempotent (keyword
+ * ORs), so folding them together loses nothing and there is exactly one layering
+ * path in the codebase rather than one per lifetime. All four layers therefore
+ * combine: a 1/1 with a +1/+1 counter, under a +1/+1 anthem, given +2/+2 until end
+ * of turn, is a 5/5, and it becomes a 3/3 again when the pump expires and a 2/2 the
+ * moment the anthem leaves play.
+ *
+ * Kept pure so combat, SBAs, legality checks and serialization all read the same
+ * numbers. The aggregate is passed explicitly (defaulting to "no modification")
+ * rather than read from a global, so a caller that already has the per-instance
+ * aggregate pays O(1) — and a caller that passes nothing gets base+counters, which
+ * is correct only where no modification can apply.
  */
 
 import type { CardInstance } from '../state.js';

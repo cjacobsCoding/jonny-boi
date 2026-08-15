@@ -1,30 +1,57 @@
 /**
- * Continuous-effects layer (DESIGN §3.9). Temporary modifications to a permanent's
- * characteristics — P/T buffs (+X/+Y) and keyword grants — that are layered over
- * the printed base (and any +1/+1 counters) when the engine reads "effective"
- * stats. The canonical use is an "until end of turn" pump (Giant Growth): the
- * modification lives in `GameState.continuous` and is removed in the cleanup step,
- * so it genuinely wears off rather than being baked in as a permanent counter.
+ * Continuous-effects layer (DESIGN §3.9). ONE layering path for every modification
+ * to a permanent's characteristics — P/T deltas and keyword grants — layered over
+ * the printed base and +1/+1 counters whenever the engine reads "effective" stats.
+ *
+ * Two lifetimes feed the same aggregation, deliberately not two code paths:
+ *
+ *   1. **Until end of turn** — a `ContinuousEffect` record in `GameState.continuous`,
+ *      registered by a pump primitive via `EffectContext.addContinuousEffect` and
+ *      removed in the cleanup step, so a Giant Growth genuinely wears off.
+ *   2. **Static / "anthem"** — a {@link StaticAbility} declared as data on a
+ *      permanent's `CardDefinition` (see `../statics.ts`), applying to a *set* of
+ *      permanents matched by a filter for exactly as long as the SOURCE is on the
+ *      battlefield.
+ *
+ * The static lifetime needs no bookkeeping at all because it is **derived, not
+ * stored**: each aggregation pass re-reads `state.battlefield`. The moment a source
+ * is destroyed/exiled/bounced it is gone from that array, so the next read — the
+ * state-based-action pass that runs immediately after combat damage, for one — no
+ * longer sees its modification, and a creature that only an anthem was keeping alive
+ * dies right then. Nothing can go stale because nothing is cached across a mutation.
  *
  * Design choices:
- *   - **Data, not classes.** A `ContinuousEffect` is a plain record. The pump
- *     primitive (owned by `cards`) registers one via `EffectContext.addContinuousEffect`.
- *   - **Composition.** P/T deltas sum; keyword grants OR together. No per-card layering
- *     logic — every active effect that targets an instance contributes additively.
- *   - **Cheap recompute.** Rather than recomputing the whole world on every stat read,
- *     callers that touch many creatures (combat, SBAs, serialization) build a single
- *     `ContinuousIndex` once per pass via `indexContinuous(state)` — an O(effects) map
- *     from instance id to its aggregated delta — then look each creature up in O(1).
- *     Single-creature reads can pass the raw list and accept an O(effects) scan; with
- *     the handful of temporary effects a real game carries, that stays negligible.
+ *   - **Data, not classes.** Both kinds are plain records; core never names a card.
+ *   - **Composition.** P/T deltas sum; keyword grants OR together. No per-card
+ *     layering logic — every active modification that matches contributes additively.
+ *   - **Cheap recompute.** Callers that touch many creatures (combat, SBAs, legality,
+ *     serialization) build a single `ContinuousIndex` once per pass via
+ *     `indexContinuous(state)`, then look each creature up in O(1).
+ *   - **A board with no modifications pays ~nothing.** `indexContinuous` returns a
+ *     shared frozen empty index without allocating when `state.continuous` is empty
+ *     and no permanent on the battlefield declares a static — which is the common
+ *     case on the sim's hottest path.
  *
- * Determinism: effects carry a stable insertion id; aggregation is order-independent
- * (sums and ORs), so the same set always yields the same effective values.
+ * ## Layering order (documented; see also internal/stats.ts)
+ *   1. printed base P/T and keywords
+ *   2. +1/+1 counters
+ *   3. static abilities from permanents currently on the battlefield
+ *   4. until-end-of-turn continuous effects
+ * Layers 3 and 4 are both purely additive (sums) and idempotent (keyword ORs), so
+ * the aggregate is order-independent; the order is stated so it stays well-defined
+ * if a future *setting* effect ("becomes a 1/1") is ever added, which would have to
+ * be inserted with explicit precedence rather than folded in here.
+ *
+ * Determinism: aggregation is sums and ORs over `state.battlefield` (stable order)
+ * and `state.continuous` (insertion order), so the same state always yields the same
+ * effective values — no map-iteration order or floating point is involved.
  */
 
-import type { GameState, InstanceId } from '../state.js';
+import type { CardInstance, GameState, InstanceId } from '../state.js';
 import type { KeywordFlags } from '../card.js';
 import type { GameEvent } from '../events.js';
+import type { StaticAbility } from '../statics.js';
+import { staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 
 /**
  * How long a continuous effect lasts before the engine removes it.
@@ -80,6 +107,13 @@ const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'lifelink',
 ];
 
+/** The mutable accumulator an aggregation pass folds into before freezing. */
+interface MutableMod {
+  power: number;
+  toughness: number;
+  keywords: Record<string, boolean>;
+}
+
 /** Fold one effect's keyword grants into a mutable accumulator. */
 function mergeKeywords(into: Record<string, boolean>, grant: KeywordFlags | undefined): void {
   if (!grant) return;
@@ -88,22 +122,95 @@ function mergeKeywords(into: Record<string, boolean>, grant: KeywordFlags | unde
   }
 }
 
+/** The empty aggregate returned for a permanent with no active modifications. */
+export const NO_MOD: AggregatedMod = Object.freeze({ power: 0, toughness: 0, keywords: Object.freeze({}) });
+
 /**
- * Build the per-instance aggregation map for all currently-active continuous
- * effects. O(number of active effects). Call once before a batch of stat reads.
+ * The index handed back when nothing on the board modifies anything. Shared and
+ * empty so the overwhelmingly common case allocates zero — `ContinuousIndex` is a
+ * ReadonlyMap precisely so this can be safely shared.
+ */
+const EMPTY_INDEX: ContinuousIndex = new Map<InstanceId, AggregatedMod>();
+
+/**
+ * One static ability that is live right now, paired with the permanent radiating it.
+ * Collected per aggregation pass so the source's controller and identity (for the
+ * "other" exclusion) are available while matching.
+ */
+interface ActiveStatic {
+  readonly source: CardInstance;
+  readonly ability: StaticAbility;
+}
+
+/**
+ * The static abilities currently on the battlefield, or `null` when there are none.
+ *
+ * Returning `null` rather than an empty array is the whole point: a board with no
+ * anthem — the normal case, and the one the sim spends nearly all its time in —
+ * walks the battlefield checking one property per permanent and allocates nothing.
+ * Inert declarations are dropped here so the matching loop below never runs for a
+ * static that could not change a number anyway.
+ */
+function collectActiveStatics(state: GameState): ActiveStatic[] | null {
+  let active: ActiveStatic[] | null = null;
+  for (const perm of state.battlefield) {
+    const declared = perm.def.statics;
+    if (!declared || declared.length === 0) continue;
+    for (const ability of staticsOf(perm.def)) {
+      if (staticIsInert(ability)) continue;
+      (active ??= []).push({ source: perm, ability });
+    }
+  }
+  return active;
+}
+
+/** Get (creating if needed) the accumulator for one instance. */
+function accumulatorFor(map: Map<InstanceId, MutableMod>, id: InstanceId): MutableMod {
+  let agg = map.get(id);
+  if (!agg) {
+    agg = { power: 0, toughness: 0, keywords: {} };
+    map.set(id, agg);
+  }
+  return agg;
+}
+
+/** Fold a P/T delta + keyword grant into an accumulator (layers 3 and 4 alike). */
+function foldInto(agg: MutableMod, power: number | undefined, toughness: number | undefined, keywords: KeywordFlags | undefined): void {
+  agg.power += power ?? 0;
+  agg.toughness += toughness ?? 0;
+  mergeKeywords(agg.keywords, keywords);
+}
+
+/**
+ * Build the per-instance aggregation map covering BOTH lifetimes — the statics
+ * radiating from permanents on the battlefield and the active until-end-of-turn
+ * effects. Call once before a batch of stat reads (combat, SBAs, legality,
+ * serialization) and look each permanent up in O(1).
+ *
+ * Cost: O(battlefield) to discover statics — one property check per permanent, and
+ * an immediate shared-empty return when there are none and no temporary effects
+ * either. When statics ARE present it is O(battlefield × active statics), which for
+ * a real board is a couple of dozen filter checks.
  */
 export function indexContinuous(state: GameState): ContinuousIndex {
-  const map = new Map<InstanceId, { power: number; toughness: number; keywords: Record<string, boolean> }>();
-  for (const eff of state.continuous) {
-    let agg = map.get(eff.targetInstanceId);
-    if (!agg) {
-      agg = { power: 0, toughness: 0, keywords: {} };
-      map.set(eff.targetInstanceId, agg);
+  const statics = collectActiveStatics(state);
+  if (statics === null && state.continuous.length === 0) return EMPTY_INDEX;
+
+  const map = new Map<InstanceId, MutableMod>();
+  // Layer 3 — statics, matched against every permanent currently in play.
+  if (statics !== null) {
+    for (const perm of state.battlefield) {
+      for (const { source, ability } of statics) {
+        if (!staticAppliesTo(ability, source, perm)) continue;
+        foldInto(accumulatorFor(map, perm.instanceId), ability.power, ability.toughness, ability.keywords);
+      }
     }
-    agg.power += eff.power ?? 0;
-    agg.toughness += eff.toughness ?? 0;
-    mergeKeywords(agg.keywords, eff.keywords);
   }
+  // Layer 4 — until-end-of-turn effects, folded onto the same accumulators.
+  for (const eff of state.continuous) {
+    foldInto(accumulatorFor(map, eff.targetInstanceId), eff.power, eff.toughness, eff.keywords);
+  }
+
   const out = new Map<InstanceId, AggregatedMod>();
   for (const [id, agg] of map) {
     out.set(id, { power: agg.power, toughness: agg.toughness, keywords: agg.keywords as KeywordFlags });
@@ -111,28 +218,52 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   return out;
 }
 
-/** The empty aggregate returned for a permanent with no active effects. */
-export const NO_MOD: AggregatedMod = Object.freeze({ power: 0, toughness: 0, keywords: Object.freeze({}) });
-
 /**
- * Aggregate the active continuous effects targeting a single instance directly off
- * `state.continuous` (no precomputed index). Use for one-off reads; for bulk reads
- * prefer `indexContinuous` + map lookup.
+ * Aggregate every active modification for a SINGLE instance without building the
+ * whole index. Use for one-off reads; for bulk reads prefer `indexContinuous` + map
+ * lookup, which shares the battlefield scan across every permanent.
+ *
+ * Returns {@link NO_MOD} for an instance that is not on the battlefield and carries
+ * no temporary effect — statics only reach permanents in play.
  */
 export function aggregateFor(state: GameState, instanceId: InstanceId): AggregatedMod {
-  let power = 0;
-  let toughness = 0;
-  const keywords: Record<string, boolean> = {};
+  const agg: MutableMod = { power: 0, toughness: 0, keywords: {} };
   let any = false;
+
+  // Layer 3 — statics. Find the permanent once, then test each live static against it.
+  const target = findPermanent(state, instanceId);
+  if (target) {
+    for (const perm of state.battlefield) {
+      const declared = perm.def.statics;
+      if (!declared || declared.length === 0) continue;
+      for (const ability of declared) {
+        if (staticIsInert(ability) || !staticAppliesTo(ability, perm, target)) continue;
+        any = true;
+        foldInto(agg, ability.power, ability.toughness, ability.keywords);
+      }
+    }
+  }
+  // Layer 4 — until-end-of-turn effects aimed at this instance.
   for (const eff of state.continuous) {
     if (eff.targetInstanceId !== instanceId) continue;
     any = true;
-    power += eff.power ?? 0;
-    toughness += eff.toughness ?? 0;
-    mergeKeywords(keywords, eff.keywords);
+    foldInto(agg, eff.power, eff.toughness, eff.keywords);
   }
+
   if (!any) return NO_MOD;
-  return { power, toughness, keywords: keywords as KeywordFlags };
+  return { power: agg.power, toughness: agg.toughness, keywords: agg.keywords as KeywordFlags };
+}
+
+/**
+ * Locate a battlefield permanent by id. Local to this module (rather than reusing
+ * `internal/zones.ts`) to keep the layering pass free of an import cycle with the
+ * zone-movement code, which itself reads effective stats.
+ */
+function findPermanent(state: GameState, instanceId: InstanceId): CardInstance | undefined {
+  for (const perm of state.battlefield) {
+    if (perm.instanceId === instanceId) return perm;
+  }
+  return undefined;
 }
 
 /**
