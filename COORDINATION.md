@@ -138,10 +138,14 @@ _Append dated notes here; keep them short. Newest at top._
   👉 **The evaluator is deliberately NOT "life + card count"** (brief §9): life, board stats, body count,
   card advantage, mana development, untapped mana, and a lethal-board bonus, each a named tunable weight.
   Regression tests pin the three blind spots the old life-and-board leaf eval had.
-  ⚠️ **RULE 7 — heuristic path is UNCHANGED, and that is proven by output, not by timing.** `npm run sim --
-  gauntlet "Mono-Red Aggro" --games 40 --seed 99` is **byte-identical** between `main` and this branch on
-  every line except the throughput line. The only heuristic edit was extracting `scoredSpellGoals` out of
-  `bestSpellGoal` (same code, same order); everything else is new files the heuristic never calls.
+  ⚠️ **RULE 7 — heuristic path is UNCHANGED, proven two ways.** (1) BEHAVIOUR: `npm run sim -- gauntlet
+  "Mono-Red Aggro" --games 40 --seed 99` is **byte-identical** between `main` and this branch on every line
+  except the throughput line — same games, same winners, same counts. (2) THROUGHPUT, **interleaved** over
+  7 alternating rounds of a 700-game gauntlet (sequential comparisons on this box have already "proved" a
+  change free that a proper interleaved run showed cost 4%): **main median 109 games/sec, branch median
+  118** — at parity or better, and main's spread (57..137) shows why only the median is quotable. The only
+  heuristic edit was extracting `scoredSpellGoals` out of `bestSpellGoal` (same code, same order);
+  everything else is new files the heuristic never calls.
   ⚠️ **I found and fixed a real measurement bug in the existing bench.** `wilsonInterval(successes, n)` —
   `z` is a REQUIRED third argument, so the `strength` mode has been printing `95%CI=[NaN%, NaN%]` all
   along. It now reads `DEFAULT_STATS_CONFIG.z`. If you have an old strength result with NaN bounds, that
