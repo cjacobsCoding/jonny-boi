@@ -81,6 +81,29 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 integrator: **`fix/room-code-length` MERGED + DEPLOYED** (Deploy PWA success).
+  main = **1887 tests, build exit 0**. USER-REPORTED: PC hosted, phone entered the code, Join stayed
+  greyed and did nothing.
+  🐛 **Online play has never been joinable.** `ROOM_CODE_LENGTH` was declared TWICE — **5** in
+  `apps/server/src/config.ts`, **6** in `apps/web/src/lib/online/online-config.ts` — and the Join
+  button gates on the client copy. Every genuine code is 5 chars, so the button could never enable.
+  Neither side was wrong alone, which is why nothing caught it: each package tested itself and
+  agreed with itself. **The bug lived in the gap between two packages.**
+  ✅ Fix: the room-code shape (length, alphabet, wire bound) now lives ONCE in
+  `@jonny-boi/protocol` — the shared contract is exactly where a value the server ISSUES and the
+  client TYPES BACK belongs. Both sides re-export; neither declares. Plus `normalizeRoomCode` /
+  `isPlausibleRoomCode` so a lowercase or space-padded code still works on a phone.
+  🧪 Guards at both ends AND across the seam: 200 server-generated codes must each pass the
+  CLIENT validator, and both configs must re-export rather than re-declare. **Verified live**, not
+  just in unit tests — created room "MJT4G" on a local server and joined it from a second socket
+  with the code lowercased; both seats appeared.
+  👉 **NO NAS REDEPLOY NEEDED** — the server already issued 5-char codes and its behaviour is
+  unchanged. The fix ships with the web app.
+  👉 Lesson worth generalising: **a constant both packages need is a contract, not a config.** If
+  you find yourself typing the same name in two packages, it belongs in `protocol` (or `core`).
+  Also: a disabled control must say why — this one silently refused valid input for its whole life,
+  which is indistinguishable from broken.
+
 - 2026-08-15 integrator: **NAS server is now LIVE on protocol v2, and backward compatible.** Verified
   against `wss://jonnyboi.duckdns.org:8443` after the restart: v1 ACCEPTED, v2 ACCEPTED, v3 and v0 both
   REJECTED. Rollback bundle is on the NAS at `/docker/jonny-boi/backup/server.cjs` (361,992 bytes, the
