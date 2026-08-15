@@ -34,7 +34,7 @@ import type {
   PlayerId,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { PLUS_ONE_COUNTER, effectivePower, isCreature, isLegalTarget } from '@jonny-boi/core';
+import { MINUS_ONE_COUNTER, PLUS_ONE_COUNTER, effectivePower, isCreature, isLegalTarget } from '@jonny-boi/core';
 import {
   boolParam,
   changeLife,
@@ -555,14 +555,26 @@ export const addCounters: EffectPrimitive = (ctx) => {
     : (firstPermanentTarget(ctx) ?? selfIfCreature(ctx));
   if (!target || !isCreature(target.def)) return;
 
-  const current = target.counters[PLUS_ONE_COUNTER] ?? 0;
-  target.counters[PLUS_ONE_COUNTER] = current + amount;
-  ctx.emit({
-    type: 'counterAdded',
-    instanceId: target.instanceId,
-    kind: PLUS_ONE_COUNTER,
-    amount,
-  });
+  // A negative amount is a -1/-1 counter, stored as its own kind rather than as
+  // a negative +1/+1. The arithmetic is the same either way; the difference is
+  // that the counters now genuinely EXIST as the card says they do, so state can
+  // be inspected ("does it have a -1/-1 counter?") and the two kinds annihilate.
+  const kind = amount < 0 ? MINUS_ONE_COUNTER : PLUS_ONE_COUNTER;
+  const magnitude = Math.abs(amount);
+  target.counters[kind] = (target.counters[kind] ?? 0) + magnitude;
+  ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
+
+  // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has them removed
+  // in pairs as a state-based action. Without this the counts drift apart while
+  // the net stays right, so "remove a -1/-1 counter" later finds one that should
+  // have been annihilated turns ago.
+  const plus = target.counters[PLUS_ONE_COUNTER] ?? 0;
+  const minus = target.counters[MINUS_ONE_COUNTER] ?? 0;
+  const annihilated = Math.min(plus, minus);
+  if (annihilated > 0) {
+    target.counters[PLUS_ONE_COUNTER] = plus - annihilated;
+    target.counters[MINUS_ONE_COUNTER] = minus - annihilated;
+  }
 };
 
 /**
@@ -622,3 +634,4 @@ export function registerCoreEffects(registry: EffectRegistry): void {
     registry.register(id, primitive);
   }
 }
+

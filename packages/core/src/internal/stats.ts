@@ -30,18 +30,36 @@ import { NO_MOD } from './continuous.js';
 /** Counter kind for the standard +1/+1 counter. */
 export const PLUS_ONE_COUNTER = '+1/+1';
 
+/** Counter kind for the standard -1/-1 counter. */
+export const MINUS_ONE_COUNTER = '-1/-1';
+
+/**
+ * Net power/toughness shift from counters on a permanent.
+ *
+ * Both standard kinds are read here. `-1/-1` used to be stored as a NEGATIVE
+ * `+1/+1` because the stat layer looked at one key, which works for arithmetic
+ * but is not what the card says: nothing could ask "does this have a -1/-1
+ * counter on it?", and a card that puts a -1/-1 counter on a creature already
+ * carrying a +1/+1 counter has to ANNIHILATE the pair (CR 704.5q), which a single
+ * signed number silently pre-collapses.
+ *
+ * Counting them separately keeps the arithmetic identical while letting the two
+ * kinds exist as distinct, inspectable state.
+ */
+function counterShift(inst: CardInstance): number {
+  return (inst.counters[PLUS_ONE_COUNTER] ?? 0) - (inst.counters[MINUS_ONE_COUNTER] ?? 0);
+}
+
 /** Effective power: base + counters + continuous power delta. */
 export function effectivePower(inst: CardInstance, mod: AggregatedMod = NO_MOD): number {
   const base = inst.def.power ?? 0;
-  const plus = inst.counters[PLUS_ONE_COUNTER] ?? 0;
-  return base + plus + mod.power;
+  return base + counterShift(inst) + mod.power;
 }
 
 /** Effective toughness: base + counters + continuous toughness delta. */
 export function effectiveToughness(inst: CardInstance, mod: AggregatedMod = NO_MOD): number {
   const base = inst.def.toughness ?? 0;
-  const plus = inst.counters[PLUS_ONE_COUNTER] ?? 0;
-  return base + plus + mod.toughness;
+  return base + counterShift(inst) + mod.toughness;
 }
 
 /** Remaining toughness after marked damage (≤ 0 means lethal). */
