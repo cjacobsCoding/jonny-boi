@@ -12,7 +12,21 @@
  * that alters play is a behaviour change, not a speedup, and `bench-digest` will
  * say so.
  *
- * Run: npx tsx --expose-gc packages/core/bench/engine-alloc-bench.ts
+ * Run: npx tsx packages/core/bench/engine-alloc-bench.ts
+ *
+ * ## Measuring ALLOCATION rather than time
+ *
+ * Wall clock on a shared machine is close to worthless here — repeated runs of
+ * the SAME build swing by more than 2x, which is larger than most wins. Garbage
+ * is the thing this work actually removes, and it can be counted exactly:
+ *
+ *   node --min-semi-space-size=1 --max-semi-space-size=1 --trace-gc \
+ *        --import tsx <a script that plays N self-play games> | grep -c Scavenge
+ *
+ * Pinning the nursery to 1 MB (BOTH bounds — with only the max set, V8 resizes it
+ * adaptively and the count wanders by 30% run to run) makes the scavenge count a
+ * direct, reproducible proxy for bytes allocated: ±2 across runs, and completely
+ * immune to what else the box is doing.
  */
 
 import { applyAction, createGame, generateLegalActions } from '../src/engine.js';

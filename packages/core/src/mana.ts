@@ -51,9 +51,18 @@ export type ManaPool = Record<ManaColor, number>;
  */
 export type ManaProduction = Readonly<Partial<Record<ManaColor, number>>>;
 
-/** Total mana one production mode yields — how much a single tap is worth. */
+/**
+ * Total mana one production mode yields — how much a single tap is worth.
+ *
+ * A plain loop rather than `reduce`: this and {@link poolTotal} run on the
+ * engine's hottest paths (every step change empties both pools; the AI's mana
+ * math totals a pool per candidate play), and the callback handed to `reduce`
+ * closes over nothing useful while costing an allocation per call.
+ */
 export function productionTotal(production: ManaProduction): number {
-  return MANA_COLORS.reduce((sum, c) => sum + (production[c] ?? 0), 0);
+  let total = 0;
+  for (const color of MANA_COLORS) total += production[color] ?? 0;
+  return total;
 }
 
 /** Add every color of a production mode to a pool, returning a new pool. */
@@ -70,7 +79,9 @@ export function emptyPool(): ManaPool {
 
 /** Total mana in a pool. */
 export function poolTotal(pool: ManaPool): number {
-  return MANA_COLORS.reduce((sum, c) => sum + pool[c], 0);
+  let total = 0;
+  for (const color of MANA_COLORS) total += pool[color];
+  return total;
 }
 
 /** Add `amount` of one color to a pool, returning a new pool. */
@@ -172,16 +183,12 @@ function payWithHybrids(
 function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
   const remaining = { ...pool };
 
-  // 1. Pay each specific color requirement from its own color.
-  const coloredReqs: ReadonlyArray<[ManaColor, number]> = [
-    ['W', cost.W ?? 0],
-    ['U', cost.U ?? 0],
-    ['B', cost.B ?? 0],
-    ['R', cost.R ?? 0],
-    ['G', cost.G ?? 0],
-    ['C', cost.C ?? 0],
-  ];
-  for (const [color, need] of coloredReqs) {
+  // 1. Pay each specific color requirement from its own color. Iterating
+  // `MANA_COLORS` (which is W,U,B,R,G,C — the same order this always used) rather
+  // than building a fresh array of [color, need] pairs: that array plus its six
+  // tuples were seven allocations on every payment attempt.
+  for (const color of MANA_COLORS) {
+    const need = cost[color] ?? 0;
     if (need <= 0) continue;
     if (remaining[color] < need) {
       return { ok: false, reason: `insufficient ${color} mana (need ${need}, have ${remaining[color]})` };
@@ -205,7 +212,75 @@ function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
   return { ok: true, pool: remaining };
 }
 
-/** Whether `pool` can pay `cost` without committing the spend. */
+/**
+ * Whether `pool` can pay `cost` without committing the spend.
+ *
+ * Deliberately NOT `payCost(pool, cost).ok`. `generateLegalActions` asks this for
+ * every card in hand and every activated ability on the board, on every single
+ * decision — and the paying version answered by allocating a copy of the pool, an
+ * array of six [colour, need] tuples, and (on the far more common *failure* path,
+ * because most of a hand is unaffordable most of the time) a formatted "insufficient
+ * mana" string that nobody ever reads. That was the single largest source of
+ * garbage outside the per-action clone.
+ *
+ * The answer is exactly the same one `payFixedCost` computes, just without the
+ * bookkeeping: every coloured requirement must be met by its own colour, and the
+ * mana left over afterwards — which is fungible, so the ORDER generic is spent in
+ * cannot change feasibility — must cover the generic portion.
+ */
 export function canPay(pool: ManaPool, cost: ManaCost): boolean {
-  return payCost(pool, cost).ok;
+  const hybrids = cost.hybrid;
+  if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(pool, cost, hybrids);
+  return canPayFixed(pool, cost, undefined);
+}
+
+/**
+ * The feasibility half of {@link payFixedCost}, allocation-free.
+ *
+ * `extra` carries the additional per-colour demands a hybrid assignment has
+ * chosen, so the hybrid search can reuse this without folding a new cost object
+ * per candidate assignment.
+ */
+function canPayFixed(
+  pool: ManaPool,
+  cost: ManaCost,
+  extra: Partial<Record<ManaColor, number>> | undefined,
+): boolean {
+  let spare = 0;
+  for (const color of MANA_COLORS) {
+    const need = (cost[color] ?? 0) + (extra?.[color] ?? 0);
+    const have = pool[color];
+    if (have < need) return false;
+    spare += have - need;
+  }
+  return spare >= (cost.generic ?? 0);
+}
+
+/**
+ * Feasibility for a cost containing hybrid symbols: is there ANY assignment of
+ * colours to those symbols that the pool can cover?
+ *
+ * Mirrors `payWithHybrids`' exhaustive, fixed-order search — a greedy choice can
+ * fail a cost that is genuinely payable — but accumulates the chosen colours into
+ * one reused counter object instead of folding a fresh cost per assignment.
+ */
+function canPayWithHybrids(
+  pool: ManaPool,
+  cost: ManaCost,
+  hybrids: readonly (readonly ManaColor[])[],
+): boolean {
+  const chosen: Partial<Record<ManaColor, number>> = {};
+
+  const search = (index: number): boolean => {
+    if (index === hybrids.length) return canPayFixed(pool, cost, chosen);
+    for (const color of hybrids[index] ?? []) {
+      chosen[color] = (chosen[color] ?? 0) + 1;
+      const found = search(index + 1);
+      chosen[color] = (chosen[color] ?? 1) - 1;
+      if (found) return true;
+    }
+    return false;
+  };
+
+  return search(0);
 }
