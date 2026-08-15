@@ -62,20 +62,26 @@ export interface CardDefinition {
   readonly id: string;
   readonly name: string;
   readonly types: readonly CardType[];
+  /**
+   * Printed subtypes — creature types (`['Goblin', 'Warrior']`), land types
+   * (`['Mountain']`), and so on.
+   *
+   * Two features need them, which is why the field is load-bearing rather than
+   * decorative: tribal statics ("Goblins you control get +1/+1") select against
+   * them as DATA instead of a per-card rule, and a fetchland searches for "a
+   * Mountain or Plains card", which must find a DUAL land with those land types
+   * and not just a basic — matching by name there would play worse than printed.
+   *
+   * Case is not significant: every comparison goes through {@link hasSubtype},
+   * which folds both sides, so either as-printed (`'Mountain'`) or lower-cased
+   * (`'mountain'`) authoring works and a casing slip cannot silently break a lord.
+   */
+  readonly subtypes?: readonly string[];
   /** Mana cost. Absent for lands and other free-to-play cards. */
   readonly cost?: ManaCost;
   readonly power?: number;
   readonly toughness?: number;
   readonly keywords?: KeywordFlags;
-  /**
-   * Printed subtypes, lowercased ("mountain", "human", "equipment").
-   *
-   * Carried because some cards select by subtype rather than by type or name: a
-   * fetchland searches for "a Mountain or Plains card", which finds a dual land
-   * with those land types and not just a basic. Without this the only options
-   * are an unfaithful name match or reporting the card as unsupported.
-   */
-  readonly subtypes?: readonly string[];
   /**
    * Ordered effects run when this spell resolves (instants/sorceries) or as the
    * permanent's enters-the-battlefield script. Opaque to core.
@@ -146,6 +152,14 @@ export interface CardDefinition {
    * stack, exactly as the rules require. Everything in this list uses the stack.
    */
   readonly activated?: readonly ActivatedAbility[];
+  /**
+   * Static ("anthem") abilities: continuous modifications this permanent applies to
+   * a *set* of other permanents for as long as it is on the battlefield — "creatures
+   * you control get +1/+1", "other Goblins you control have haste". Data, like
+   * triggers; see `statics.ts` for the shape and for why the lifetime needs no
+   * bookkeeping. Omit for cards with none (the overwhelming majority).
+   */
+  readonly statics?: readonly import('./statics.js').StaticAbility[];
 }
 
 /**
@@ -181,6 +195,31 @@ export interface ActivatedAbility {
   readonly timing?: CastTiming;
   /** Human-readable text for the log, the inspector, and the replay viewer. */
   readonly label: string;
+}
+
+/**
+ * Memo of a definition's subtypes, lower-cased into a set for O(1) case-insensitive
+ * lookup. Same argument as the mana memos below: definitions are immutable and
+ * shared across every instance, and subtype matching runs inside the continuous
+ * layering pass that combat and legality checks drive.
+ */
+const SUBTYPE_SET_MEMO = new WeakMap<CardDefinition, ReadonlySet<string>>();
+
+/**
+ * Whether a definition has a printed subtype, compared case-insensitively.
+ *
+ * A card with no subtypes answers `false` without touching the memo, so the common
+ * board pays a single property check.
+ */
+export function hasSubtype(def: CardDefinition, subtype: string): boolean {
+  const printed = def.subtypes;
+  if (!printed || printed.length === 0) return false;
+  let set = SUBTYPE_SET_MEMO.get(def);
+  if (!set) {
+    set = new Set(printed.map((s) => s.toLowerCase()));
+    SUBTYPE_SET_MEMO.set(def, set);
+  }
+  return set.has(subtype.toLowerCase());
 }
 
 /** Convenience predicates over a definition's type line. */
