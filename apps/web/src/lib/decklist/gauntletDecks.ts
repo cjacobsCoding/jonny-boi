@@ -107,6 +107,40 @@ export function copyGauntletDeck(sample: SimDeck, nameSuffix = ' (copy)'): Gaunt
   return { deck, unresolved };
 }
 
+/**
+ * Prefix marking a deck id as a gauntlet deck rather than one of the user's.
+ * Stable across reloads, so a hero selection survives a refresh.
+ */
+export const GAUNTLET_DECK_ID_PREFIX = 'gauntlet:';
+
+/** Whether a deck id refers to a bundled gauntlet deck. */
+export function isGauntletDeckId(id: string): boolean {
+  return id.startsWith(GAUNTLET_DECK_ID_PREFIX);
+}
+
+let heroCache: readonly Deck[] | undefined;
+
+/**
+ * The gauntlet decks as ordinary `Deck`s, so they can be SELECTED anywhere a deck
+ * is selected — in particular as the Lab's hero.
+ *
+ * They are decks; there was never a reason you could only ever test your own list
+ * against them and never test one of them. Wanting to know how the field's own
+ * decks stack up against each other is the obvious first question to ask a lab.
+ *
+ * Unlike {@link copyGauntletDeck} these keep the EXACT deck name — the Lab
+ * excludes the hero from the opponent list by name, so a suffix here would make a
+ * deck fight itself.
+ */
+export function gauntletHeroDecks(): readonly Deck[] {
+  if (heroCache) return heroCache;
+  heroCache = SAMPLE_DECKS.map((sample) => ({
+    ...copyGauntletDeck(sample, '').deck,
+    id: `${GAUNTLET_DECK_ID_PREFIX}${sample.name}`,
+  }));
+  return heroCache;
+}
+
 /** A one-line summary of a copy, for the toast/message after copying. */
 export function describeGauntletCopy(copy: GauntletCopy): string {
   const size = copy.deck.cards.reduce((total, entry) => total + entry.count, 0);

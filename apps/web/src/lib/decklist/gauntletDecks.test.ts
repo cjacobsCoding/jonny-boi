@@ -8,9 +8,18 @@
  */
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
-import { copyGauntletDeck, describeGauntletCopy, gauntletDecks } from './gauntletDecks.js';
+import {
+  copyGauntletDeck,
+  describeGauntletCopy,
+  gauntletDecks,
+  gauntletHeroDecks,
+  isGauntletDeckId,
+  GAUNTLET_DECK_ID_PREFIX,
+} from './gauntletDecks.js';
 import { deckSize } from '../deck.js';
 import { getCard } from '../cards.js';
+import { toSimPayload } from '../sim-format.js';
+import { unsupportedCardNames } from '../deck.js';
 
 /** Total cards in a bundled sim deck. */
 function simSize(deck: (typeof SAMPLE_DECKS)[number]): number {
@@ -95,6 +104,58 @@ describe('copying a gauntlet deck into an editable one', () => {
   });
 
   it('says plainly when a copy is complete', () => {
+    const copy = copyGauntletDeck(SAMPLE_DECKS[0]!);
+    const text = describeGauntletCopy(copy);
+    expect(text).toContain('ready to edit');
+    expect(text).not.toContain('could not be resolved');
+  });
+});
+
+describe('gauntlet decks are selectable as the Lab hero', () => {
+  it('offers every gauntlet deck as a full, legal hero deck', () => {
+    const heroes = gauntletHeroDecks();
+    expect(heroes).toHaveLength(SAMPLE_DECKS.length);
+    for (const hero of heroes) {
+      expect(isGauntletDeckId(hero.id), `${hero.name} needs a gauntlet id`).toBe(true);
+      // A hero must be a real, complete deck or the Lab refuses to run it. These
+      // are the two conditions LabView's `validateHero` gates on.
+      expect(deckSize(hero), `${hero.name} is not a full deck`).toBeGreaterThanOrEqual(60);
+      expect(
+        unsupportedCardNames(hero),
+        `${hero.name} holds a card the engine cannot play`,
+      ).toEqual([]);
+    }
+  });
+
+  it('keeps the EXACT deck name, so the Lab excludes it from its own opponents', () => {
+    const heroes = gauntletHeroDecks();
+    for (const sample of SAMPLE_DECKS) {
+      const hero = heroes.find((h) => h.id === `${GAUNTLET_DECK_ID_PREFIX}${sample.name}`);
+      expect(hero, `no hero for ${sample.name}`).toBeDefined();
+      // The Lab filters opponents by name; a suffix here would make a deck fight
+      // itself, which is both nonsense and a silently skewed win rate.
+      expect(hero!.name).toBe(sample.name);
+      const opponents = SAMPLE_DECKS.filter((d) => d.name !== hero!.name);
+      expect(opponents).toHaveLength(SAMPLE_DECKS.length - 1);
+    }
+  });
+
+  it('gives gauntlet heroes stable ids, so a selection survives a reload', () => {
+    expect(gauntletHeroDecks().map((d) => d.id)).toEqual(gauntletHeroDecks().map((d) => d.id));
+    expect(isGauntletDeckId('gauntlet:Mono-Red Aggro')).toBe(true);
+    expect(isGauntletDeckId('local-1234'), 'a saved deck is not a gauntlet deck').toBe(false);
+  });
+
+  it('converts to a sim payload the harness can actually load', () => {
+    for (const hero of gauntletHeroDecks()) {
+      const payload = toSimPayload(hero);
+      expect(payload.name).toBe(hero.name);
+      const size = payload.cards.reduce((n, e) => n + e.count, 0);
+      expect(size, `${hero.name} lost cards converting to a sim payload`).toBeGreaterThanOrEqual(60);
+    }
+  });
+
+  it('legacy: a complete copy still reports cleanly', () => {
     const copy = copyGauntletDeck(SAMPLE_DECKS[0]!);
     const text = describeGauntletCopy(copy);
     expect(text).toContain('ready to edit');
