@@ -69,11 +69,61 @@ throughput (games/sec) from regressing.
 | feat/deck-import | DESKTOP-90PJPM4 (worker) | packages/cards/src/compile + apps/web import | ✅ INTEGRATED |
 | fix/ai-play-quality | DESKTOP-90PJPM4 (worker) | packages/core + packages/ai + sim/cli + apps/web hover | ✅ INTEGRATED |
 | fix/rules-audit | DESKTOP-90PJPM4 (worker) | packages/core mana-plan + apps/web play/online | 🚧 PUSHED, not merged |
-| feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | 🚧 PUSHED, not merged |
-| feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | 🚧 PUSHED, not merged |
+| feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | ✅ INTEGRATED (via feat/card-mechanics) |
+| feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | ✅ INTEGRATED (via feat/card-mechanics) |
+| feat/card-mechanics | DESKTOP-90PJPM4 (worker) | packages/cards primitives+compile, core targeting | ✅ INTEGRATED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 DESKTOP-90PJPM4: **`feat/card-mechanics` MERGED to main + deployed.** It contained the
+  whole stacked chain (`activated-abilities` → `conditional-taplands` → `card-mechanics`), so all
+  three are now integrated — the table above is updated. main = **1648 tests, build exit 0**.
+  Mechanics added across the chain: activated abilities with costs (fetchlands crack), conditional
+  enters-tapped (fastlands/checklands), bounce, fight, mill, group damage, leaves-the-battlefield
+  triggers, compound draw/lose, +1/+1 counters, artifact + opponent-only targeting, modal spells.
+  👉 **THE "INVISIBLE PRIMITIVE" AUDIT IS WORTH RE-RUNNING PERIODICALLY.** Three separate mechanics
+  turned out to be fully implemented primitives that NO compile rule could reach — `returnToHand`
+  (bounce) and `modal` (every charm and command) among them. One line finds them:
+  compare `CORE_PRIMITIVE_IDS` against the `primitive: '...'` ids the rule table emits.
+  Only `createToken` and `tapPermanents` remain unreached.
+  ⚠️ **Modal needed a TEXT change, not just a rule.** A modal card prints its header and each mode
+  on separate lines, so the newline split handed the compiler "Choose one —" with no modes and then
+  orphan bullets. `text.ts` now folds the block into one ability line. If you add a mechanic whose
+  printed form spans lines, check `splitAbilities` first.
+  ⚠️ Also note `'opponent'` targeting depends on WHO is casting, so `isLegalTarget` /
+  `legalTargetsFor` / `illegalTargetReason` now take an optional `controller`. Absent ⇒ the target
+  is ILLEGAL, never guessed.
+  STILL MISSING (the honest remainder): planeswalkers, transform/DFC, {X} and derived values,
+  alternative costs (suspend/spectacle/flashback/kicker), auras + equipment, hexproof/ward/
+  protection, gaining control, dynamic P/T, flash + graveyard recasting, "unless its controller
+  pays", and targets chosen by a triggered ability.
+  (Integrator)
+
+- 2026-08-15 DESKTOP-90PJPM4: `feat/card-mechanics` PUSHED (packages/cards + one core event).
+  **1531 tests, build exit 0.** Stacks on `feat/conditional-taplands` → `feat/activated-abilities`;
+  **merge that chain in order.** Four mechanics, each proven at BOTH levels (primitive behaviour +
+  compiler reaching it from the real printed template):
+  - **bounce** — `returnToHand` was already implemented and tested, and every bounce card was
+    still reported unsupported, because no rule pattern could reach it. **Worth checking for more
+    of these:** a primitive with no rule is invisible. Compare `CORE_PRIMITIVE_IDS` against the
+    ids the rule table actually emits.
+  - **fight** — reads BOTH powers before applying either, so a mutual kill kills both.
+  - **mill** — moves cards through the owned-zone path so a milled card is really in the
+    graveyard; short library empties rather than over-milling. Adds the `cardsMilled` event.
+  - **group damage** — one `dealDamageToEach` for each-creature / each-opponent / symmetrical,
+    snapshotting the battlefield first (damage is simultaneous).
+  👉 **I also corrected the UNSUPPORTED HINTS, which feed UNSUPPORTED-MECHANICS.md.** Three now say
+  "a <kind> template the compiler does not recognize yet" (the system exists; the printed shape is
+  what is missing), and the bounce hint is DELETED — so "when ~ enters, return target creature to
+  its owner's hand" now explains as **"targets chosen by a triggered ability"**, the real blocker.
+  A stale hint sends the next agent to implement something that already works; treat the hint text
+  as part of the feature, not decoration.
+  ⚠️ **Machine was memory-starved** (~200-700 MB free, several agent sessions at once): `vitest`
+  worker spawn failed repeatedly under Git-bash with `fork: Resource temporarily unavailable` /
+  `spawn UNKNOWN`. Running the same command through **PowerShell** worked. Stop any dev server you
+  are not using before a full-suite run.
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-15 DESKTOP-90PJPM4: `feat/card-alacarte` ✅ MERGED to main + deployed. Add ONE Scryfall card
   by name from the card browser or mid-deck-build, fuzzy-matched ("lightnig bolt" resolves), screened
@@ -143,6 +193,27 @@ _Append dated notes here; keep them short. Newest at top._
   Vantage = 8 copies; the unconditional form already works, these need the choice system for
   "unless you pay 2 life").
   (Worker — pushed, NOT merged.)
+- 2026-08-15 DESKTOP-90PJPM4: `feat/card-alacarte` ✅ MERGED to main + deployed. Add ONE Scryfall card
+  by name from the card browser or mid-deck-build, fuzzy-matched ("lightnig bolt" resolves), screened
+  by the SAME compiler deck import uses. New files only, no edits to the compiler — safe alongside
+  in-flight `packages/cards/src/compile` work.
+  👉 **NEW SEAM — `apps/web/src/lib/cards/unsupportedRegistry.ts`.** Every clause the compiler refuses
+  is now COLLECTED, grouped by the missing engine SYSTEM (the unit of work — implement once, unblock
+  every card waiting on it), with the blocked cards and a verbatim clause. Exports Markdown via
+  `formatUnsupportedReport()`. **This is the queue to work from** — see the new
+  [UNSUPPORTED-MECHANICS.md](UNSUPPORTED-MECHANICS.md) for the contract and how to pick an item up.
+  👉 **NEW: [TESTING.md](TESTING.md)** indexes all 87 suites and what each guards, so there is one list
+  to run through after a change. It also records the two lessons this repo learned painfully: test
+  against the REAL vocabulary (the `destroy` vs `destroyTarget` fixture bug), and assert pilots play
+  SENSIBLY, not merely that games finish (the MCTS-as-default bug).
+  Also fixed: the card browser read the CURATED pool only, so an imported/added card never appeared
+  in it at all — now reads the full pool and subscribes to the store.
+  Deck-level honesty: `decklist/deckHealth.ts` badges any deck holding an unplayable card and names
+  the cards; one unplayable card ⇒ whole deck unplayable (a blank card silently skews an A/B verdict).
+  Suite **1460 passed / 0 failed**, build exit 0, Deploy PWA green.
+  ⚠️ Verified by tests + typecheck + production build + a clean browser boot (no console errors); the
+  add dialog was NOT driven interactively (the session's browser tooling was wedged), so the Scryfall
+  round-trip is proven only against stub responses. Worth a real click-through.
 
 - 2026-08-14 DESKTOP-90PJPM4: `fix/rules-audit` — playtest sweep of the CLIENT layer. The headless
   engine is clean (new `packages/sim/src/rules-audit.test.ts` plays full games and asserts zone

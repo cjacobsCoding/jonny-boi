@@ -1,0 +1,21 @@
+/*
+ * "Apply to my deck" affordances in the Lab, plus the confirmation line.
+ * Own file to stay clear of other in-flight work in styles.css.
+ */
+
+.verdict-banner__apply { margin-left: auto; }
+
+.lab-table__apply {
+  padding: 0.2rem 0.6rem;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.lab-apply-note {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-accent-soft);
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-size: var(--text-sm);
+}

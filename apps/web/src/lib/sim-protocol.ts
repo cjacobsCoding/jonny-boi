@@ -17,6 +17,7 @@ import type {
   SuggestionReport,
 } from '@jonny-boi/sim';
 import type { CardDefinition } from '@jonny-boi/core';
+import type { SwapScope } from '@jonny-boi/sim';
 import type { MatchTrace } from './replay-types.js';
 
 /**
@@ -57,6 +58,12 @@ export interface SwapRequest extends SimRequestBase {
   readonly inCardId: string;
   readonly gamesPerOpponent: number;
   readonly seed: number;
+  /**
+   * Replace one copy or the whole playset. Omitted means the sim's default
+   * (`DEFAULT_SWAP_SCOPE`) — the two answer different questions, so the UI always
+   * sends this explicitly and shows which was tested.
+   */
+  readonly swapScope?: SwapScope;
 }
 
 /** Rank candidate single-card swaps that improve the hero (the suggestion loop). */

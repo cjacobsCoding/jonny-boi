@@ -49,7 +49,8 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   'reorderTopOfLibrary',
   // Reads the whole library to choose a card.
   'searchLibrary',
-  // Reads the top card and acts on what it is.
+  // Reads the top card and BRANCHES on what it is — the filter miss is the
+  // dangerous case: it looked, learned, and moved nothing.
   'revealTopCard',
   // Writes a card into the library, moving the slot we reason about.
   'putFromHandOnTop',
@@ -57,6 +58,37 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // is answered by a pilot valuing a library it can see. Classified conservatively.
   'mayShuffleLibrary',
 ]);
+
+/**
+ * The parameter every library primitive resolves its victim from, and the value
+ * that means "the source's own controller".
+ *
+ * `playerParam(ctx, 'who', 'controller')` accepts `'controller'`, `'opponent'`,
+ * `'targetPlayer'` and `'targetController'` — so a primitive id alone does NOT
+ * tell you whose library was read, and neither does the source's controller. Only
+ * the authored card data does, which is why `paired-arms.ts` scans the decklist
+ * rather than guessing from the event.
+ */
+export const LIBRARY_TARGET_PARAM = 'who';
+export const SELF_LIBRARY_TARGET = 'controller';
+/** `who: 'opponent'` — the player who is NOT the source's controller. */
+export const OPPONENT_LIBRARY_TARGET = 'opponent';
+
+/**
+ * Primitives that can move a permanent from one player's control to another's.
+ *
+ * The identical-game check reads a source card's OWNER off its instance id and
+ * treats that as its controller, which is what lets it say "this Ponder belongs to
+ * the opponent, so it read the opponent's library". A control-changing effect
+ * breaks that equivalence: a stolen card's controller is no longer its owner, and
+ * `who: 'controller'` would then resolve to the wrong player.
+ *
+ * The set is EMPTY because the pool has no such primitive today. It exists so the
+ * assumption is written down and checked rather than implied — if one is ever
+ * added, the runner falls back to the fully conservative rule instead of quietly
+ * returning a wrong answer, and `paired-arms.test.ts` fails until it is classified.
+ */
+export const CONTROL_CHANGING_PRIMITIVES: ReadonlySet<string> = new Set<string>();
 
 /**
  * Primitives that provably cannot read a library, and so leave the identical-game
@@ -67,6 +99,25 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'dealDamage',
   // Drawing is safe *because* every drawn card announces its instance id.
   'drawCards',
+  /*
+   * `mill` is SAFE for exactly the same reason `drawCards` is, which is worth
+   * spelling out because "milling doesn't read a library" sounds wrong.
+   *
+   * Mill never branches on what it saw: it moves the top N cards to the graveyard
+   * through `moveOwnedCard`, and every single one of those moves emits a
+   * `zoneChange` carrying its instance id. So the runner already tracks mill
+   * EXACTLY, per card:
+   *   - the swapped card gets milled  → its id lands in `leftLibrary` → replay;
+   *   - it doesn't                    → both arms milled the same cards from the
+   *                                     same positions, so the games still agree.
+   * Classifying it as library-reading would disqualify every game containing any
+   * mill effect and buy no soundness whatsoever.
+   */
+  'mill',
+  // Battlefield-only: reads and writes creatures, never a library.
+  'fight',
+  'dealDamageToEach',
+  'addCounters',
   'gainLife',
   'loseLife',
   'pumpUntilEndOfTurn',

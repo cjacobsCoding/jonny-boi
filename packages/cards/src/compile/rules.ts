@@ -56,15 +56,17 @@ const TOKEN_DEFAULT_COUNT = 1;
  * the engine has no planeswalkers at all: the choice is vacuous, not approximated.
  * If planeswalkers are ever implemented, these entries need a third target kind.
  *
- * Deliberately ABSENT: "target **opponent**". `TargetRestriction` can say "a
- * player" but not "a player who isn't you", so an opponent-only spell would be
- * offered pointing at its own caster. That is a (harmless-looking) infidelity, and
- * the rule is faithful or not at all — those cards fall through to `missing`.
+ * "target **opponent**" now maps to its own `'opponent'` restriction, which the
+ * engine evaluates against the caster. It used to be absent here because
+ * `TargetRestriction` could say "a player" but not "a player who isn't you", and
+ * flattening it to `'player'` would have let the spell be aimed at its own
+ * caster — strictly more permissive than printed.
  */
 const DAMAGE_TARGET_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = Object.freeze({
   'any target': 'any',
   'target creature': 'creature',
   'target player': 'player',
+  'target opponent': 'opponent',
   'target creature or player': 'any',
   'target player or planeswalker': 'player',
   'target creature or planeswalker': 'creature',
@@ -113,6 +115,17 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
 const SPELL_TARGET: TargetRestriction = 'spell';
+const PLAYER_TARGET: TargetRestriction = 'player';
+const ARTIFACT_TARGET: TargetRestriction = 'artifact';
+
+/** How many modes each printed header lets you choose. */
+const MODAL_COUNTS: Readonly<Record<string, number>> = Object.freeze({
+  one: 1,
+  two: 2,
+  // "one or both" is a range the mode chooser cannot express as a fixed count,
+  // so it is deliberately absent and those cards keep reporting.
+});
+const OPPONENT_TARGET: TargetRestriction = 'opponent';
 
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
@@ -380,6 +393,170 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^destroy all creatures$/,
     build() {
       return effects({ primitive: 'destroyAll' });
+    },
+  },
+  {
+    id: 'modal-choose',
+    description: '"Choose one — • MODE • MODE" (charms and commands)',
+    // `text.ts` folds the header and its bullets into one line, so this sees the
+    // whole block. Each mode compiles through the ordinary effect rules, which
+    // means a modal card can only ever offer modes the engine can really run.
+    pattern: /^choose\s+(one|two|one or both)\s*[—-]\s*(•.+)$/,
+    build(match, ctx) {
+      const count = MODAL_COUNTS[match[1]!.toLowerCase()];
+      if (count === undefined) return null;
+
+      const bodies = match[2]!
+        .split('•')
+        .map((mode) => mode.trim())
+        .filter((mode) => mode.length > 0);
+      if (bodies.length < 2) return null; // not really a choice
+
+      const modes: Array<{ id: string; label: string; effects: readonly EffectRef[] }> = [];
+      for (const [index, body] of bodies.entries()) {
+        // A mode the engine cannot run makes the WHOLE card unsupported. Half a
+        // modal spell is not a modal spell — offering only the modes we happen
+        // to implement would silently change what the card can do.
+        const effects = ctx.compileEffectClause(body);
+        if (!effects) return null;
+        modes.push({ id: `mode${index + 1}`, label: body, effects });
+      }
+
+      return { effects: [{ primitive: 'modal', params: { count, modes } }] };
+    },
+  },
+  {
+    id: 'destroy-target-artifact',
+    description: '"Destroy target artifact"',
+    pattern: /^destroy target artifact$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'destroyTarget', params: { targets: ARTIFACT_TARGET } });
+    },
+  },
+  {
+    id: 'target-opponent-loses-life',
+    description: '"Target opponent loses N life"',
+    // Now expressible: `TargetRestriction` can say "a player who isn't you", so
+    // the spell can no longer be offered pointing at its own caster.
+    pattern: new RegExp(`^target opponent loses ${COUNT_TOKEN} life$`),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'loseLife',
+        params: { amount, targetPlayer: true, targets: OPPONENT_TARGET },
+      });
+    },
+  },
+  {
+    id: 'put-counters-on-target',
+    description: '"Put N +1/+1 counters on target creature"',
+    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature$`),
+    needsChosenTarget: true,
+    build(match) {
+      // "a counter" has no count token to parse — it is exactly one.
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, targets: CREATURE_TARGET },
+      });
+    },
+  },
+  {
+    id: 'draw-and-lose-life',
+    description: '"You draw N cards and you lose M life" (one sentence, two effects)',
+    // Printed as a single sentence, so the sentence splitter never separates it
+    // into the two clauses that each already compile. Night's Whisper, Sign in
+    // Blood, and the whole black card-draw family read this way.
+    pattern: new RegExp(
+      `^(?:you )?draws? ${COUNT_TOKEN} cards? and (?:you )?loses? ${COUNT_TOKEN} life$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]!);
+      const life = parseCount(match[2]!);
+      if (count === null || life === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count } },
+        { primitive: 'loseLife', params: { amount: life } },
+      );
+    },
+  },
+  {
+    id: 'return-target-permanent-to-hand',
+    description: '"Return target creature to its owner\'s hand" (bounce)',
+    pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
+    needsChosenTarget: true,
+    build() {
+      // `returnToHand` has existed in the primitive library the whole time with
+      // no rule able to reach it — bounce was reported unsupported purely for
+      // want of this pattern.
+      return effects({ primitive: 'returnToHand', params: { targets: CREATURE_TARGET } });
+    },
+  },
+  {
+    id: 'creature-fights',
+    description: '"~ fights target creature"',
+    pattern: /^~ fights target creature$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'fight', params: { targets: CREATURE_TARGET } });
+    },
+  },
+  {
+    id: 'target-player-mills',
+    description: '"Target player mills N cards"',
+    pattern: new RegExp(`^target (player|opponent) mills ${COUNT_TOKEN} cards?$`),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = parseCount(match[2]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'mill', params: { amount, targets: PLAYER_TARGET } });
+    },
+  },
+  {
+    id: 'self-mill',
+    description: '"You mill N cards" / "Mill N cards"',
+    pattern: new RegExp(`^(?:you )?mills? ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'mill', params: { amount, self: true } });
+    },
+  },
+  {
+    id: 'damage-to-each-creature',
+    description: '"~ deals N damage to each creature"',
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each creature$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'dealDamageToEach', params: { amount, creatures: true } });
+    },
+  },
+  {
+    id: 'damage-to-each-opponent',
+    description: '"~ deals N damage to each opponent"',
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each opponent$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({ primitive: 'dealDamageToEach', params: { amount, opponents: true } });
+    },
+  },
+  {
+    id: 'damage-to-each-creature-and-player',
+    description: '"~ deals N damage to each creature and each player"',
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to each creature and each player$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'dealDamageToEach',
+        params: { amount, creatures: true, players: true },
+      });
     },
   },
   {
@@ -717,6 +894,16 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-leaves',
+    description: '"When ~ leaves the battlefield, BODY"',
+    // Core has had the `leaves` trigger event all along; only this pattern was
+    // missing, so every leaves-the-battlefield card reported as unsupported.
+    pattern: /^when ~ leaves the battlefield, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(ctx, { on: 'leaves' }, match[1] ?? '', `Leaves: ${match[1] ?? ''}`);
+    },
+  },
+  {
     id: 'trigger-upkeep',
     description: '"At the beginning of your upkeep, BODY"',
     pattern: /^at the beginning of your upkeep, (.+)$/,
@@ -753,6 +940,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 
 /** Card-level static properties printed as their own ability line. */
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'enters-with-counters',
+    description: '"~ enters with N +1/+1 counters on it"',
+    // A whole ability line like "enters tapped", not a split sentence — hence its
+    // place in this table and the optional trailing full stop.
+    pattern: new RegExp(
+      `^~ enters(?: the battlefield)? with (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on it\\.?$`,
+    ),
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      // The permanent's own ETB script counters itself.
+      return { effects: [{ primitive: 'addCounters', params: { amount, self: true } }] };
+    },
+  },
   {
     id: 'enters-tapped',
     description: '"~ enters tapped" (the unconditional form only)',
@@ -941,7 +1143,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   { pattern: /\bsacrifice\b/, missingEngineSystem: 'sacrifice costs and activated abilities' },
   { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'persistent counters beyond +1/+1 pumps' },
   { pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/, missingEngineSystem: 'graveyard-based abilities with a chooser' },
-  { pattern: /\bmill\b|puts? the top .* into (?:their|his or her) graveyard/, missingEngineSystem: 'milling' },
+  {
+    // Plain "target player mills N" and "you mill N" COMPILE now. What still
+    // lands here is a mill whose count is derived or conditional, so the hint
+    // names the template gap rather than claiming milling is missing entirely.
+    pattern: /\bmill\b|puts? the top .* into (?:their|his or her) graveyard/,
+    missingEngineSystem: 'a mill template the compiler does not recognize yet',
+  },
   { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
   { pattern: /\bward\b|\bhexproof\b|\bshroud\b|\bprotection from\b/, missingEngineSystem: 'targeting restrictions (hexproof / ward / protection)' },
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
@@ -958,23 +1166,24 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   {
     pattern: /damage to each (?:creature|player|opponent)|to each of|damage to you\b/,
-    missingEngineSystem: 'effects that hit several targets at once (each creature / each opponent)',
+    missingEngineSystem: 'a group-damage template the compiler does not recognize yet',
   },
-  {
-    pattern: /return target .* to (?:its|their) owner'?s hand/,
-    missingEngineSystem: 'returning a permanent to its owner’s hand (bounce)',
-  },
+  // NOTE: there is deliberately no "bounce" hint any more. Plain bounce compiles
+  // (see the `return-target-permanent-to-hand` rule), so a bounce clause that
+  // still fails does so for some OTHER reason — most often that it sits inside a
+  // trigger, and a triggered ability cannot choose targets. Letting it fall
+  // through to that hint names the real blocker instead of a solved one.
   {
     pattern: /gain control of target/,
     missingEngineSystem: 'gaining control of another player’s permanent',
   },
-  { pattern: /\bfights?\b/, missingEngineSystem: 'creatures fighting each other' },
+  { pattern: /\bfights?\b/, missingEngineSystem: 'a fight template the compiler does not recognize yet' },
   {
-    // The effect is implementable; the TARGET is not. A `TargetRestriction` can say
-    // "a player", never "a player who isn't you", so an opponent-only spell would be
-    // offered pointing at its own caster — strictly more permissive than printed.
+    // `TargetRestriction` CAN now say "a player who isn't you" ('opponent'), so
+    // what still lands here is an opponent-targeting template with no rule yet —
+    // not a missing engine capability.
     pattern: /\btarget opponent\b/,
-    missingEngineSystem: 'targeting restricted to an opponent (a "player who isn’t you" target)',
+    missingEngineSystem: 'an opponent-targeting template the compiler does not recognize yet',
   },
   {
     pattern: /unless (?:its controller|that player|you) pays?/,

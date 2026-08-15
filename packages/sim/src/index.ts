@@ -71,6 +71,8 @@ export { runGauntlet } from './gauntlet.js';
 // The A/B single-card-swap test.
 export type { CardSwap, SwapVerdict, SwapEvaluation, PairedSwapSummaryInput } from './swap.js';
 export { evaluateSwap, applySwap, decideVerdict, summarizePairedSwap } from './swap.js';
+export type { SwapScope } from './config.js';
+export { DEFAULT_SWAP_SCOPE } from './config.js';
 
 // The incremental paired-arm runner (shared base arm + provably-identical games).
 export type {
@@ -81,7 +83,7 @@ export type {
   SwapArm,
   ArmHandle,
 } from './paired-arms.js';
-export { createPairedArmRunner, pairedSlotAt, swappedInstanceIdFor } from './paired-arms.js';
+export { createPairedArmRunner, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
 export {
   HERO_SEAT,
   LIBRARY_READING_PRIMITIVES,

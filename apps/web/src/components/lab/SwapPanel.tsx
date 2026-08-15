@@ -4,8 +4,10 @@ import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { ciStr, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
 import { VERDICT_ALPHA } from '../../lib/lab-config.js';
+import { DEFAULT_SWAP_SCOPE, type SwapScope } from '@jonny-boi/sim';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 import type { CardOption } from './panel-types.js';
+import './swap-scope.css';
 
 /**
  * The A/B single-card swap test — the product's signature feature. Pick a card to
@@ -14,11 +16,13 @@ import type { CardOption } from './panel-types.js';
  * variant win-rates, the delta, the McNemar p-value, and the paired 2×2 table.
  */
 export function SwapPanel({
+  hero,
   heroPayload,
   heroLegal,
   chosenOpponents,
   seed,
   sim,
+  onApplySwap,
   gamesConfig,
   outOptions,
   inOptions,
@@ -28,6 +32,8 @@ export function SwapPanel({
   inOptions: readonly CardOption[];
 }): ReactElement {
   const [games, setGames] = useState(gamesConfig.default);
+  // Defaults to the sim's own default so the UI and a CLI run agree.
+  const [scope, setScope] = useState<SwapScope>(DEFAULT_SWAP_SCOPE);
   const [outId, setOutId] = useState<string>(outOptions[0]?.cardId ?? '');
   const [inId, setInId] = useState<string>('');
 
@@ -49,7 +55,7 @@ export function SwapPanel({
   return (
     <div className="lab-section">
       <p className="lab-section__intro">
-        Swap one card and get a paired, significance-tested verdict. Both decks play the SAME games
+        Swap a card and get a paired, significance-tested verdict. Both decks play the SAME games
         (common random numbers), so the only difference is the swapped card.
       </p>
 
@@ -92,6 +98,25 @@ export function SwapPanel({
         </label>
       </div>
 
+      <label className="lab-field lab-scope">
+        <span className="section-label">How many copies</span>
+        <select
+          className="select"
+          value={scope}
+          onChange={(ev) => setScope(ev.target.value as SwapScope)}
+          disabled={running}
+          aria-label="How many copies to swap"
+        >
+          <option value="playset">The whole playset — does this card belong at all?</option>
+          <option value="one">A single copy — is the last copy earning its slot?</option>
+        </select>
+        <span className="lab-scope__hint">
+          {scope === 'playset'
+            ? 'Every copy of the cut card is replaced. Much larger effect, so a verdict is reachable in far fewer games.'
+            : 'One copy is replaced. A small effect — expect “inconclusive” unless you run a lot of games.'}
+        </span>
+      </label>
+
       <div className="lab-controls">
         <RunSlider
           label="Games per opponent"
@@ -117,6 +142,7 @@ export function SwapPanel({
               inCardId: inId,
               gamesPerOpponent: games,
               seed,
+              swapScope: scope,
             })
           }
         >
@@ -130,8 +156,19 @@ export function SwapPanel({
           <div className={`verdict-banner verdict-banner--${verdict.tone}`}>
             <span className="verdict-banner__label">{verdict.label}</span>
             <span className="verdict-banner__detail">
-              −{e.outName} +{e.inName} · {signedPct(e.delta)} win rate
+              −{e.copiesSwapped}× {e.outName} +{e.copiesSwapped}× {e.inName} ·{' '}
+              {signedPct(e.delta)} win rate
             </span>
+            {onApplySwap && (
+              <button
+                type="button"
+                className="btn btn--primary verdict-banner__apply"
+                onClick={() => onApplySwap(outId, inId, e.copiesSwapped)}
+                title={`Make this change to ${hero?.name ?? 'your deck'}`}
+              >
+                Apply to my deck
+              </button>
+            )}
           </div>
 
           <div className="swap-compare">

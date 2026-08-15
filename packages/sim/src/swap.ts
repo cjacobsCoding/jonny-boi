@@ -24,7 +24,7 @@ import { loadDeck } from './deck.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
 import { runMatch } from './match.js';
-import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG, type StatsConfig } from './config.js';
+import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, type StatsConfig, type SwapScope } from './config.js';
 import {
   mcNemarTest,
   wilsonInterval,
@@ -68,7 +68,12 @@ export interface SwapEvaluation {
   readonly verdict: SwapVerdict;
   /** Paired games actually played (per opponent × games). */
   readonly nGames: number;
+  /** Whether one copy or the whole playset was swapped. */
+  readonly scope: SwapScope;
+  /** How many copies actually moved — 1, or the out card's full count. */
+  readonly copiesSwapped: number;
 }
+
 
 /**
  * Construct the variant `Deck` by applying a single-card swap to a base `Deck`.
@@ -93,7 +98,12 @@ export interface SwapEvaluation {
  * entry and re-appended it, moving it to the end of the decklist, so "swap a card
  * for itself" produced a non-zero delta: the lab's own sanity check, broken.
  */
-export function applySwap(base: Deck, swap: CardSwap, pool: CardPool): Deck {
+export function applySwap(
+  base: Deck,
+  swap: CardSwap,
+  pool: CardPool,
+  scope: SwapScope = DEFAULT_SWAP_SCOPE,
+): Deck {
   const outDef = resolve(pool, swap.out);
   const inDef = resolve(pool, swap.in);
   if (!outDef) throw new Error(`swap "out" card not found in pool: "${swap.out}"`);
@@ -107,17 +117,28 @@ export function applySwap(base: Deck, swap: CardSwap, pool: CardPool): Deck {
   const outEntry = entries[outIdx];
   if (outEntry === undefined) throw new Error(`"${outDef.name}" is not in deck "${base.name}"`);
 
-  // The out entry's LAST copy becomes the in card, right where it sat. One entry
-  // when the line is cut to nothing, otherwise a shortened line plus a one-card
-  // line immediately after it — which expands to the base library with a single
-  // slot rewritten. (`loadDeck` totals copies per card across entries, so the
-  // 4-of rule still catches an in card that is already maxed elsewhere.)
-  const replacement = { cardId: inDef.id, count: 1 };
-  if (outEntry.count <= 1) entries.splice(outIdx, 1, replacement);
-  else entries.splice(outIdx, 1, { ...outEntry, count: outEntry.count - 1 }, replacement);
+  if (scope === 'playset') {
+    // EVERY copy becomes the in card, in the same entry at the same index and with
+    // the same count — so the expanded library differs at exactly those slots and
+    // nowhere else. This preserves the common-random-numbers pairing even more
+    // cleanly than the one-copy case, which has to split the entry in two.
+    entries.splice(outIdx, 1, { cardId: inDef.id, count: outEntry.count });
+  } else {
+    // The out entry's LAST copy becomes the in card, right where it sat. One entry
+    // when the line is cut to nothing, otherwise a shortened line plus a one-card
+    // line immediately after it — which expands to the base library with a single
+    // slot rewritten. (`loadDeck` totals copies per card across entries, so the
+    // 4-of rule still catches an in card that is already maxed elsewhere.)
+    const replacement = { cardId: inDef.id, count: 1 };
+    if (outEntry.count <= 1) entries.splice(outIdx, 1, replacement);
+    else entries.splice(outIdx, 1, { ...outEntry, count: outEntry.count - 1 }, replacement);
+  }
 
+  const copies = scope === 'playset' ? outEntry.count : 1;
   return {
-    name: `${base.name} (−${outDef.name} +${inDef.name})`,
+    // The name records HOW MANY copies moved, so a result is never ambiguous
+    // about what was actually tested.
+    name: `${base.name} (−${copies}× ${outDef.name} +${copies}× ${inDef.name})`,
     archetype: base.archetype,
     cards: entries,
   };
@@ -158,8 +179,9 @@ export function evaluateSwap(
   opts: RunOptions = {},
 ): SwapEvaluation {
   const stats = opts.stats ?? DEFAULT_STATS_CONFIG;
+  const scope: SwapScope = opts.swapScope ?? DEFAULT_SWAP_SCOPE;
 
-  const variantDeck = applySwap(baseDeck, swap, pool);
+  const variantDeck = applySwap(baseDeck, swap, pool, scope);
   // Load under the CALLER's legality rules. Falling back to the defaults here would
   // reject a variant the caller's own rules (and its candidate generator) called
   // legal — the suggestion engine would then report every candidate as illegal.
@@ -169,6 +191,13 @@ export function evaluateSwap(
 
   const outDef = resolve(pool, swap.out);
   const inDef = resolve(pool, swap.in);
+
+  // How many copies actually moved, reported so a result is self-describing.
+  const outCount = outDef
+    ? (baseDeck.cards.find((e) => entryMatches(e, outDef, pool))?.count ?? 1)
+    : 1;
+  const copiesSwapped = scope === 'playset' ? outCount : 1;
+
 
   // Paired 2x2 table accumulators (a "win" here = the hero won; timeout = no win).
   // The two arms' win counts and the game count are the table's margins, so the
@@ -210,6 +239,8 @@ export function evaluateSwap(
     inName: inDef?.name ?? swap.in,
     paired: { bothWon, baseOnly, variantOnly, neither },
     stats,
+    scope,
+    copiesSwapped,
   });
 }
 
@@ -223,6 +254,10 @@ export interface PairedSwapSummaryInput {
   /** The paired 2x2 table accumulated over the games actually played. */
   readonly paired: PairedTable;
   readonly stats?: StatsConfig;
+  /** How many copies the swap moved — one, or the whole playset. */
+  readonly scope?: SwapScope;
+  /** The copy count that scope worked out to, so a result self-describes. */
+  readonly copiesSwapped?: number;
 }
 
 /**
@@ -266,6 +301,8 @@ export function summarizePairedSwap(input: PairedSwapSummaryInput): SwapEvaluati
     mcNemar,
     verdict,
     nGames: n,
+    scope: input.scope ?? DEFAULT_SWAP_SCOPE,
+    copiesSwapped: input.copiesSwapped ?? 1,
   };
 }
 

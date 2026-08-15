@@ -2,6 +2,9 @@ import { useState, useSyncExternalStore, type ReactElement } from 'react';
 import { attribution, allAvailableCards } from './lib/cards.js';
 import { importedCardCount, subscribeToImportedCards } from './lib/decklist/importedCards.js';
 import { useDecks } from './lib/useDecks.js';
+import { useSimWorker } from './lib/useSimWorker.js';
+import { useLabSelection } from './lib/useLabSelection.js';
+import { SAMPLE_DECKS } from '@jonny-boi/sim';
 import { CardsView } from './views/CardsView.js';
 import { DeckBuilderView } from './views/DeckBuilderView.js';
 import { LabView } from './views/LabView.js';
@@ -36,6 +39,17 @@ export function App(): ReactElement {
   const [view, setView] = useState<ViewId>('cards');
   const decks = useDecks();
 
+  // The sim workers live HERE, above the views, so a run survives navigation.
+  // Owned by `LabView`/`MatchView` they were destroyed the moment you switched
+  // tabs — a long gauntlet you left to check a card list was silently thrown
+  // away, with no indication it had even stopped. Each surface keeps its own
+  // worker so a replay and a gauntlet can be in flight at once.
+  const labSim = useSimWorker();
+  const matchSim = useSimWorker();
+  // The Lab's hero/seed/opponent choices live here too, so a result and the
+  // question that produced it survive navigation together.
+  const labSelection = useLabSelection(SAMPLE_DECKS.map((d) => d.name));
+
   return (
     <div className="app">
       <header className="app__header">
@@ -67,8 +81,8 @@ export function App(): ReactElement {
         {view === 'cards' && <CardsView />}
         {view === 'deck' && <DeckBuilderView decks={decks} />}
         {view === 'play' && <PlayView decks={decks} />}
-        {view === 'lab' && <LabView decks={decks} />}
-        {view === 'match' && <MatchView decks={decks} />}
+        {view === 'lab' && <LabView decks={decks} sim={labSim} selection={labSelection} />}
+        {view === 'match' && <MatchView decks={decks} sim={matchSim} />}
         {view === 'proxies' && <ProxiesView decks={decks} />}
       </main>
 
@@ -78,3 +92,4 @@ export function App(): ReactElement {
     </div>
   );
 }
+

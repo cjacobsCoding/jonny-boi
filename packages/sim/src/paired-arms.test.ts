@@ -20,11 +20,12 @@ import { loadCardPool, buildRegistry, CORE_PRIMITIVE_IDS } from '@jonny-boi/card
 import { createDefaultAiRegistry, HEURISTIC_PILOT_ID, MCTS_PILOT_ID } from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
 import { loadDeck } from './deck.js';
+import type { Deck } from './deck.js';
 import type { MatchupPilots } from './matchup.js';
 import { evaluateSwap } from './swap.js';
-import { createPairedArmRunner, pairedSlotAt, swappedInstanceIdFor, IDENTICAL_LIBRARIES } from './paired-arms.js';
+import { createPairedArmRunner, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
 import { LIBRARY_READING_PRIMITIVES, LIBRARY_SAFE_PRIMITIVES } from './paired-arms-config.js';
-import { MONO_RED_AGGRO, MONO_GREEN_STOMPY, UW_CONTROL } from '../data/decks/index.js';
+import { MONO_RED_AGGRO, MONO_GREEN_STOMPY, UW_CONTROL, MONO_BLUE_TEMPO, RAKDOS_GOBLINS } from '../data/decks/index.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -183,24 +184,104 @@ describe('the self-swap invariant survives the new machinery', () => {
     }
   });
 
-  it('detects identical libraries and the single swapped slot', () => {
+  it('detects identical libraries and every swapped slot', () => {
     const base = loadDeck(MONO_RED_AGGRO, pool);
-    expect(swappedInstanceIdFor(base.library, base.library)).toBe(IDENTICAL_LIBRARIES);
+    // A card swapped for itself: no differing slot at all.
+    expect(swappedInstanceIdsFor(base.library, base.library)).toEqual([]);
 
-    const variant = [...base.library];
-    variant[17] = base.library[0] as (typeof base.library)[number];
-    const id = swappedInstanceIdFor(base.library, variant);
+    const oneChanged = [...base.library];
+    oneChanged[17] = base.library[0] as (typeof base.library)[number];
     // Instance ids are 1-based over the pre-shuffle library.
-    expect(id).toBe(18);
+    expect(swappedInstanceIdsFor(base.library, oneChanged)).toEqual([18]);
 
-    // Two differences is not a single-card swap — refuse to reason about it.
-    // (The deck's last card is a land, its first a creature, so this really is a
-    // second, distinct change rather than an accidental like-for-like.)
-    const twoChanges = [...variant];
+    // A PLAYSET swap rewrites four slots, and all four must be reported — a
+    // single-slot detector returned `undefined` here and silently disabled the
+    // whole optimisation once `DEFAULT_SWAP_SCOPE` became 'playset'.
     const lastCard = base.library[base.library.length - 1] as (typeof base.library)[number];
-    expect(lastCard.id).not.toBe((base.library[2] as (typeof base.library)[number]).id);
-    twoChanges[2] = lastCard;
-    expect(swappedInstanceIdFor(base.library, twoChanges)).toBeUndefined();
+    const playset = [...base.library];
+    const changed: number[] = [];
+    for (let i = 0; i < base.library.length && changed.length < 4; i++) {
+      if ((base.library[i] as (typeof base.library)[number]).id === lastCard.id) continue;
+      playset[i] = lastCard;
+      changed.push(i + 1);
+    }
+    expect(swappedInstanceIdsFor(base.library, playset)).toEqual(changed);
+
+    // Libraries of different lengths cannot be compared at all.
+    expect(swappedInstanceIdsFor(base.library, base.library.slice(1))).toBeUndefined();
+  });
+});
+
+/**
+ * Scoping the library check is where the optimisation is easiest to get subtly
+ * wrong, so these test it against the REAL cards in the pool rather than invented
+ * ones. Whose library a primitive reads is decided by `playerParam(ctx, 'who',
+ * 'controller')` at RUNTIME, so neither the primitive id nor the source's
+ * controller settles it — only the authored `who` on that card's own effect ref.
+ */
+describe("library peeks are scoped to the HERO's library", () => {
+  function peekRefs(deck: Deck) {
+    const found: { card: string; primitive: string; who: unknown }[] = [];
+    for (const def of loadDeck(deck, pool).library) {
+      const refs = [
+        ...(def.effects ?? []),
+        ...(def.triggers ?? []).flatMap((t) => t.effects),
+        ...(def.activated ?? []).flatMap((a) => a.effects),
+      ];
+      for (const r of refs) {
+        if (LIBRARY_READING_PRIMITIVES.has(r.primitive)) {
+          found.push({ card: def.name, primitive: r.primitive, who: r.params?.['who'] });
+        }
+      }
+    }
+    return found;
+  }
+
+  it('the gauntlet really does contain all three targeting shapes', () => {
+    // If this ever stops holding, the cases below stop proving anything.
+    const hero = peekRefs(MONO_RED_AGGRO);
+    const control = peekRefs(UW_CONTROL);
+
+    // The hero's own Goblin Guide reveals the OPPONENT's top card.
+    expect(hero.some((r) => r.card === 'Goblin Guide' && r.who === 'opponent')).toBe(true);
+    // Ponder reads its own controller's library (no `who` at all).
+    expect(control.some((r) => r.card === 'Ponder' && r.who === undefined)).toBe(true);
+    // Path to Exile searches the library of whoever controlled the target — which
+    // IS the hero when it answers a hero creature. This is the case that must stay
+    // conservative, and it is why scoping by the source's controller is unsound.
+    expect(control.some((r) => r.card === 'Path to Exile' && r.who === 'targetController')).toBe(true);
+  });
+
+  it('still skips games against an opponent whose only peeks read their OWN library', () => {
+    // Izzet Prowess runs Ponder and no cross-table library effect, so its peeks
+    // cannot reach the hero's deck: same deck, same seed, same draw in both arms.
+    const runner = createPairedArmRunner(MONO_RED_AGGRO, {
+      gauntletDecks: [loadDeck(MONO_BLUE_TEMPO, pool)],
+      pilots: pilots(),
+      pool,
+      registry,
+      seed: SEED,
+    });
+    const arm = runner.openArm(CANDIDATE, CANDIDATE.out, CANDIDATE.in);
+    const played = runner.advance(arm, 20);
+    expect(runner.usage().identicalGameSkipEnabled).toBe(true);
+    expect(played.variantGamesSkipped).toBeGreaterThan(0);
+  });
+
+  it("a hero card that peeks at the OPPONENT's library does not disqualify a game", () => {
+    // Goblin Guide triggers on nearly every attack, so treating "any library-reading
+    // primitive fired" as disqualifying killed the hit rate outright — even though
+    // it only ever looks at a library that is identical in both arms.
+    const runner = createPairedArmRunner(MONO_RED_AGGRO, {
+      gauntletDecks: [loadDeck(RAKDOS_GOBLINS, pool)],
+      pilots: pilots(),
+      pool,
+      registry,
+      seed: SEED,
+    });
+    const arm = runner.openArm(CANDIDATE, CANDIDATE.out, CANDIDATE.in);
+    const played = runner.advance(arm, 20);
+    expect(played.variantGamesSkipped).toBeGreaterThan(0);
   });
 });
 

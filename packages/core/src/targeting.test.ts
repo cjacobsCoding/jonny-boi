@@ -341,3 +341,45 @@ describe('the legality helpers themselves', () => {
     expect(illegalTargetReason(state, LIGHTNING_BOLT, ['A', 'B'])).toBeUndefined();
   });
 });
+
+describe('artifact and opponent restrictions', () => {
+  const SOL_RING: CardDefinition = { id: 'sol', name: 'Sol Ring', types: ['artifact'] };
+
+  it('an artifact target is legal for "artifact" and a creature is not', () => {
+    const state = mainPhase();
+    const artifact = place(state, SOL_RING, 'A');
+    const creature = place(state, BEAR, 'A');
+
+    expect(isLegalTarget(state, 'artifact', artifact)).toBe(true);
+    expect(isLegalTarget(state, 'artifact', creature)).toBe(false);
+    // An artifact is not a legal "creature" target either — the filters are real.
+    expect(isLegalTarget(state, 'creature', artifact)).toBe(false);
+  });
+
+  it('"opponent" excludes the caster and accepts the other seat', () => {
+    const state = mainPhase();
+    expect(isLegalTarget(state, 'opponent', 'B', 'A')).toBe(true);
+    expect(isLegalTarget(state, 'opponent', 'A', 'A')).toBe(false);
+  });
+
+  it('treats an opponent-target as ILLEGAL when the caster is unknown', () => {
+    // Being unable to cast is a safe failure; letting the spell point at its own
+    // caster would make it strictly more permissive than printed.
+    const state = mainPhase();
+    expect(isLegalTarget(state, 'opponent', 'A')).toBe(false);
+    expect(isLegalTarget(state, 'opponent', 'B')).toBe(false);
+  });
+
+  it('offers only the opponent in the legal-target menu', () => {
+    const state = mainPhase();
+    expect(legalTargetsFor(state, 'opponent', 'A')).toEqual(['B']);
+    expect(legalTargetsFor(state, 'opponent')).toEqual([]);
+  });
+
+  it('offers only artifacts for an artifact-restricted effect', () => {
+    const state = mainPhase();
+    const artifact = place(state, SOL_RING, 'B');
+    place(state, BEAR, 'B');
+    expect(legalTargetsFor(state, 'artifact')).toEqual([artifact]);
+  });
+});

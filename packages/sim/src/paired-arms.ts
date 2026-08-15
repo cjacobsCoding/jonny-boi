@@ -33,6 +33,7 @@
 import {
   createGame,
   type CardDefinition,
+  type EffectRef,
   type EffectRegistry,
   type GameEvent,
   type PlayerId,
@@ -45,13 +46,17 @@ import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
 import { runMatch, type MatchSeats } from './match.js';
 import type { CardSwap, SwapEvaluation } from './swap.js';
 import { applySwap, summarizePairedSwap } from './swap.js';
-import { DEFAULT_DECK_RULES, type DeckRules } from './config.js';
+import { DEFAULT_DECK_RULES, DEFAULT_SWAP_SCOPE, type DeckRules } from './config.js';
 import type { PairedTable } from './stats.js';
 import {
+  CONTROL_CHANGING_PRIMITIVES,
   HERO_FIRST_INSTANCE_ID,
   HERO_SEAT,
   LIBRARY_READING_PRIMITIVES,
+  LIBRARY_TARGET_PARAM,
+  OPPONENT_LIBRARY_TARGET,
   PILOTS_THAT_READ_HIDDEN_LIBRARY,
+  SELF_LIBRARY_TARGET,
 } from './paired-arms-config.js';
 
 /** One paired game slot: which gauntlet opponent, and which game against them. */
@@ -117,10 +122,11 @@ interface ArmState {
   readonly variantLoaded: LoadedDeck;
   readonly seatsByOpponent: (MatchSeats | undefined)[];
   /**
-   * The instance id the variant replaces, in the BASE game — or `undefined` when
-   * we could not establish it and must therefore always replay the variant.
+   * The instance ids the variant replaces, in the BASE game — one for a single-copy
+   * swap, the whole playset otherwise. `undefined` when we could not establish them
+   * and must therefore always replay the variant.
    */
-  readonly swappedInstanceId: number | undefined;
+  readonly swappedInstanceIds: readonly number[] | undefined;
   gamesPlayed: number;
   variantGamesSkipped: number;
   tally: PairedTally;
@@ -187,6 +193,8 @@ export type ArmHandle = { readonly __arm: unique symbol } & object;
  */
 export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions): PairedArmRunner {
   const rules = options.deckRules ?? DEFAULT_DECK_RULES;
+  // Match `evaluateSwap`'s scope exactly, or the two would build different variants.
+  const swapScope = options.runOptions?.swapScope ?? DEFAULT_SWAP_SCOPE;
   const baseLoaded = loadDeck(baseDeck, options.pool, rules);
   const opponents = options.gauntletDecks;
   const opponentCount = opponents.length;
@@ -200,6 +208,83 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
 
   const skipDecision = decideIdenticalGameSkip(options, baseLoaded, opponents, rules);
   const trackLibrary = skipDecision.enabled;
+
+  // Instance ids are minted sequentially, hero library first (verified by
+  // `verifyHeroInstanceIdMapping`), so a card's OWNER is readable straight off its
+  // id. Ownership — unlike targeting — is fixed at creation and cannot be
+  // redirected, which is what makes it a sound thing to scope on.
+  const heroLibrarySize = baseLoaded.library.length;
+  const heroLastInstanceId = HERO_FIRST_INSTANCE_ID + heroLibrarySize - 1;
+
+  // Owner is only a proxy for controller while nothing can steal a permanent.
+  const controlCanChange = [baseLoaded, ...opponents].some((deck) =>
+    deck.library.some((def) => allEffectRefs(def).some((ref) => CONTROL_CHANGING_PRIMITIVES.has(ref.primitive))),
+  );
+
+  function isHeroOwned(instanceId: number): boolean {
+    return instanceId >= HERO_FIRST_INSTANCE_ID && instanceId <= heroLastInstanceId;
+  }
+
+  /** True only for a card that started in THIS opponent's deck (never a token). */
+  function isOpponentOwned(instanceId: number, opponentIndex: number): boolean {
+    const opponent = opponents[opponentIndex];
+    if (!opponent) return false;
+    return instanceId > heroLastInstanceId && instanceId <= heroLastInstanceId + opponent.library.length;
+  }
+
+  /**
+   * Could THIS peek have read the hero's library?
+   *
+   * Answered per source card from authored data, not per deck and not from the
+   * event alone. Every library primitive resolves its victim through
+   * `playerParam(ctx, 'who', 'controller')`, so the `who` on the source card's own
+   * effect ref decides who gets read:
+   *
+   *   - absent / `'controller'` → the source's controller. An OPPONENT's Ponder
+   *     reads the opponent's library, which is byte-identical in both arms.
+   *   - `'opponent'`            → the other player. The HERO's Goblin Guide reveals
+   *     the opponent's top card — also identical in both arms.
+   *   - `'targetPlayer'` / `'targetController'` → decided at runtime by targeting,
+   *     which the event does not carry. UW Control's Path to Exile is exactly this
+   *     and genuinely does search the hero's library, so it stays conservative.
+   *
+   * Per-deck scanning was too coarse to be useful: one Path to Exile would have
+   * disqualified every Ponder in the same deck, and the hero's own Goblin Guide
+   * (which only ever looks at the opponent) would have disqualified nearly every
+   * game in the gauntlet.
+   */
+  function peekCouldReadHeroLibrary(sourceInstanceId: number, opponentIndex: number): boolean {
+    if (controlCanChange) return true; // owner is no longer a proxy for controller
+    const source = sourceCardFor(sourceInstanceId, opponentIndex);
+    if (!source) return true; // a token or an id we cannot place — stay conservative
+    for (const ref of allEffectRefs(source.def)) {
+      if (!LIBRARY_READING_PRIMITIVES.has(ref.primitive)) continue;
+      const who = ref.params?.[LIBRARY_TARGET_PARAM];
+      if (who === undefined || who === SELF_LIBRARY_TARGET) {
+        if (source.ownedByHero) return true; // reads its controller's = the hero's
+      } else if (who === OPPONENT_LIBRARY_TARGET) {
+        if (!source.ownedByHero) return true; // the opponent's "opponent" is the hero
+      } else {
+        return true; // target-driven — unknowable from the event, so assume the worst
+      }
+    }
+    return false;
+  }
+
+  /** Place an instance id back on the card it was minted from, and whose deck. */
+  function sourceCardFor(
+    instanceId: number,
+    opponentIndex: number,
+  ): { readonly def: CardDefinition; readonly ownedByHero: boolean } | undefined {
+    if (isHeroOwned(instanceId)) {
+      const def = baseLoaded.library[instanceId - HERO_FIRST_INSTANCE_ID];
+      return def ? { def, ownedByHero: true } : undefined;
+    }
+    const opponent = opponents[opponentIndex];
+    if (!opponent || !isOpponentOwned(instanceId, opponentIndex)) return undefined;
+    const def = opponent.library[instanceId - heroLastInstanceId - 1];
+    return def ? { def, ownedByHero: false } : undefined;
+  }
 
   function baseSeats(opponentIndex: number): MatchSeats {
     const cached = baseSeatsByOpponent[opponentIndex];
@@ -230,17 +315,34 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     const slot = pairedSlotAt(slotIndex, opponentCount);
     const leftLibrary = trackLibrary ? new Set<number>() : undefined;
     let libraryDisturbed = false;
+    // Ownership is decided by the instance id, not by targeting: ids are minted
+    // hero-first over the hero's pre-shuffle library, so `1..heroLibrarySize` is
+    // the hero's deck and the opponent's follows. A token minted mid-game falls
+    // outside BOTH ranges and is treated conservatively.
     const observer = trackLibrary
       ? (event: GameEvent): void => {
           if (event.type === 'drawCard') {
             (leftLibrary as Set<number>).add(event.instanceId);
           } else if (event.type === 'zoneChange') {
+            // Every card that leaves ANY library announces its instance id here
+            // (`moveOwnedCard` always emits this), which is what lets mills,
+            // tutors and reveals be tracked exactly rather than feared in bulk.
             if (event.from === 'library') (leftLibrary as Set<number>).add(event.instanceId);
-            // A card put back INTO a library shifts the slot we are reasoning about.
-            else if (event.to === 'library') libraryDisturbed = true;
+            // A card put back into the HERO's library shifts the slot we reason
+            // about. Into the opponent's, it cannot: their deck and their seed are
+            // identical in both arms, so their Brainstorm plays out the same way.
+            else if (event.to === 'library' && isHeroOwned(event.instanceId)) libraryDisturbed = true;
           } else if (event.type === 'effectApplied' && LIBRARY_READING_PRIMITIVES.has(event.primitive)) {
-            // An effect looked at library contents; what it saw could differ.
-            libraryDisturbed = true;
+            // An effect READ library contents without necessarily moving anything
+            // (a search that found nothing, a reveal that missed its filter), so
+            // there is no instance id to reason about — only "could this have been
+            // the hero's library?". `playerParam` picks the victim at RUNTIME from
+            // targets, so neither the primitive id nor the source's controller
+            // settles it; what settles it is whether the opponent's DECK contains
+            // any library effect aimed at someone other than its own controller.
+            if (peekCouldReadHeroLibrary(event.sourceInstanceId, slot.opponentIndex)) {
+              libraryDisturbed = true;
+            }
           } else if (event.type === 'choiceAbandoned') {
             // An unrepresentable question — do not reason about this game at all.
             libraryDisturbed = true;
@@ -287,7 +389,7 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
     slotCapacity: (gamesPerMatchup) => gamesPerMatchup * opponentCount,
 
     openArm(swap, outName, inName) {
-      const variantDeck = applySwap(baseDeck, swap, options.pool);
+      const variantDeck = applySwap(baseDeck, swap, options.pool, swapScope);
       const variantLoaded = loadDeck(variantDeck, options.pool, rules);
       const handle = {} as ArmHandle;
       arms.set(handle, {
@@ -297,8 +399,8 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
         variantDeck,
         variantLoaded,
         seatsByOpponent: new Array(opponentCount).fill(undefined),
-        swappedInstanceId: trackLibrary
-          ? swappedInstanceIdFor(baseLoaded.library, variantLoaded.library)
+        swappedInstanceIds: trackLibrary
+          ? swappedInstanceIdsFor(baseLoaded.library, variantLoaded.library)
           : undefined,
         gamesPlayed: 0,
         variantGamesSkipped: 0,
@@ -369,58 +471,70 @@ export function createPairedArmRunner(baseDeck: Deck, options: PairedArmsOptions
 /**
  * Is the variant's game PROVABLY the base's game?
  *
- * The two decks are identical apart from one library slot, and (equal lengths,
+ * The two decks are identical apart from the swapped slots, and (equal lengths,
  * same seed) the shuffle permutes positions independently of contents, so they stay
- * identical apart from that one slot for the whole game. If the card in that slot
- * never left the library and nothing read or rewrote a library, then every action,
- * every RNG draw and every pilot decision saw byte-identical information — the two
- * games ARE the same game. This is an exactness argument, not a heuristic: when it
- * does not hold we simply play the game.
+ * identical apart from those slots for the whole game. If no card in those slots
+ * ever left the library, and nothing read or rewrote the HERO's library, then every
+ * action, every RNG draw and every pilot decision saw byte-identical information —
+ * the two games ARE the same game. This is an exactness argument, not a heuristic:
+ * when it does not hold we simply play the game.
  */
 function canReuseBaseGame(state: ArmState, base: BaseGameRecord): boolean {
-  if (state.swappedInstanceId === undefined) return false;
+  const swapped = state.swappedInstanceIds;
+  if (swapped === undefined) return false;
   // The degenerate case: the "variant" library is the base library card for card
-  // (a swap of a card for itself). Then there is no differing slot to reason about
-  // and EVERY game is the same game — which is exactly why the self-swap sanity
-  // check (delta 0, no discordant pairs, p = 1) must come out perfect.
-  if (state.swappedInstanceId === IDENTICAL_LIBRARIES) return true;
+  // (a swap of a card for itself). There is no differing slot to reason about, so
+  // EVERY game is the same game — which is why the self-swap sanity check
+  // (delta 0, no discordant pairs, p = 1) must come out perfect and cost nothing.
+  if (swapped.length === 0) return true;
   if (base.libraryDisturbed) return false;
   const left = base.leftLibrary;
   if (!left) return false;
-  return !left.has(state.swappedInstanceId);
+  for (const id of swapped) {
+    if (left.has(id)) return false;
+  }
+  return true;
 }
 
 /**
- * The instance id, in the base game, of the one card the variant replaces.
+ * The instance ids, in the base game, of every card the variant replaces.
  *
  * `createGame` mints instance ids sequentially over the hero's pre-shuffle library
  * (the hero is seated first), so the card at pre-shuffle index i always carries id
  * `i + HERO_FIRST_INSTANCE_ID` — a fact this module VERIFIES at startup rather than
- * assumes (see `verifyHeroInstanceIdMapping`). Finding i is a diff of the two flat
- * libraries: `applySwap` rewrites a single slot in place, so exactly one index
- * differs. Anything else (different lengths, several differences, none at all)
- * returns `undefined` and simply switches the optimisation off for that arm.
+ * assumes (see `verifyHeroInstanceIdMapping`). Finding the slots is a diff of the
+ * two flat libraries: `applySwap` rewrites them in place, so the differing indices
+ * are exactly the copies that moved.
+ *
+ * A **playset** swap rewrites four slots, not one — and since `DEFAULT_SWAP_SCOPE`
+ * became `'playset'` (replacing every copy is what a person usually means when
+ * comparing two cards), a single-slot detector silently switched this optimisation
+ * off for every candidate. The argument never depended on there being exactly one
+ * differing card, only on NONE of them being touched, so it generalises to a set.
+ *
+ * Returns an empty array when the libraries are identical (a card swapped for
+ * itself), and `undefined` when the two cannot be compared at all.
  */
-export function swappedInstanceIdFor(
+export function swappedInstanceIdsFor(
   baseLibrary: readonly CardDefinition[],
   variantLibrary: readonly CardDefinition[],
-): number | undefined {
+): readonly number[] | undefined {
   if (baseLibrary.length !== variantLibrary.length) return undefined;
-  let found = -1;
+  const ids: number[] = [];
   for (let i = 0; i < baseLibrary.length; i++) {
     if ((baseLibrary[i] as CardDefinition).id === (variantLibrary[i] as CardDefinition).id) continue;
-    if (found >= 0) return undefined; // more than one difference — not a single-slot swap
-    found = i;
+    ids.push(i + HERO_FIRST_INSTANCE_ID);
   }
-  return found < 0 ? IDENTICAL_LIBRARIES : found + HERO_FIRST_INSTANCE_ID;
+  return ids;
 }
 
-/**
- * Sentinel for "the two libraries are identical" — a card swapped for itself. Zero
- * is safe to use because core mints instance ids from
- * {@link HERO_FIRST_INSTANCE_ID} (1), so no real card can carry it.
- */
-export const IDENTICAL_LIBRARIES = 0;
+/** Every effect a card can run, wherever it is authored. */
+function allEffectRefs(def: CardDefinition): readonly EffectRef[] {
+  const refs: EffectRef[] = [...(def.effects ?? [])];
+  for (const trigger of def.triggers ?? []) refs.push(...trigger.effects);
+  for (const ability of def.activated ?? []) refs.push(...ability.effects);
+  return refs;
+}
 
 /**
  * Confirm empirically that hero instance ids index the pre-shuffle library. One

@@ -18,7 +18,7 @@ import type { EffectRegistry } from '@jonny-boi/core';
 import type { LoadedDeck } from './deck.js';
 import { runMatch, type MatchResult, type MatchSeats } from './match.js';
 import { DEFAULT_SIM_CONFIG, type SimConfig } from './config.js';
-import { DEFAULT_STATS_CONFIG, type DeckRules, type StatsConfig } from './config.js';
+import { DEFAULT_STATS_CONFIG, type DeckRules, type StatsConfig, type SwapScope } from './config.js';
 import { wilsonInterval, type ProportionCI } from './stats.js';
 
 /** The pilots driving each deck (selected by id upstream, resolved to instances). */
@@ -40,6 +40,12 @@ export interface RunOptions {
    * runs take already-loaded decks and ignore this.
    */
   readonly deckRules?: DeckRules;
+  /**
+   * For `evaluateSwap`: replace one copy of the out card, or the whole playset.
+   * Defaults to `DEFAULT_SWAP_SCOPE`. See `SwapScope` — the two answer different
+   * questions, and a result means nothing without knowing which was asked.
+   */
+  readonly swapScope?: SwapScope;
 }
 
 /** The aggregate of an n-game matchup from deck A's perspective. */

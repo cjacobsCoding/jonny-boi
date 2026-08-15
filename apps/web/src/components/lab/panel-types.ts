@@ -29,4 +29,10 @@ export interface PanelProps {
   readonly chosenOpponents: readonly string[];
   readonly seed: number;
   readonly sim: SimWorkerApi;
+  /**
+   * Apply a tested swap to the hero deck, or `undefined` when the hero cannot be
+   * edited (a bundled gauntlet deck is build data, not yours). Acting on a verdict
+   * is the whole point of getting one, so a panel that shows a result offers it.
+   */
+  readonly onApplySwap?: (outCardId: string, inCardId: string, copies: number) => void;
 }

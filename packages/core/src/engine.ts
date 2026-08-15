@@ -1056,7 +1056,7 @@ function applyCastSpell(
   // rejected here when handed an illegal target — the engine, not the caller, is
   // the authority, so a pilot or a UI that builds its own action cannot play a
   // card as strictly better than printed.
-  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? []);
+  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? [], action.player);
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
   // Pay the mana cost from the floating pool.
@@ -1147,6 +1147,7 @@ function applyActivateAbility(
     `${source.def.name}'s ability`,
     ability.effects,
     action.targets ?? [],
+    action.player,
   );
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
@@ -1405,7 +1406,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
       continue;
     }
-    for (const target of legalTargetsFor(state, restriction)) {
+    for (const target of legalTargetsFor(state, restriction, me)) {
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
     }
   }
@@ -1428,7 +1429,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         actions.push({ kind: 'activateAbility', player: me, instanceId: perm.instanceId, abilityIndex: index });
         continue;
       }
-      for (const target of legalTargetsFor(state, restriction)) {
+      for (const target of legalTargetsFor(state, restriction, me)) {
         actions.push({
           kind: 'activateAbility',
           player: me,

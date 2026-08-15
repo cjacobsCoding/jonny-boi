@@ -325,10 +325,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'targeting restricted to an opponent (a "player who isn’t you" target)',
-    );
+    // The engine now HAS a "player who isn't you" restriction, so this card is
+    // implementable and must actually be implemented — refusing it would be the
+    // compiler being stricter than the engine requires.
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: 2, targets: 'opponent' } },
+    ]);
   });
 
   // Removal, combat tricks and counterspells were never aimed wrongly — their
@@ -604,14 +607,17 @@ describe('explainUnsupported — every common rejection names a real engine feat
   const DEFAULT_EXPLANATION = 'a rules template the compiler does not recognize yet';
 
   it.each([
-    ['pyroclasm deals 2 damage to each creature', 'effects that hit several targets at once (each creature / each opponent)'],
-    ['when ~ enters, return target creature to its owner\'s hand', 'returning a permanent to its owner’s hand (bounce)'],
+    ['pyroclasm deals 2 damage to each creature', 'a group-damage template the compiler does not recognize yet'],
+    // Bounce itself compiles now; what blocks this clause is that it sits inside
+    // a trigger, and a triggered ability cannot choose targets. The explanation
+    // has to name THAT, or the queue sends someone to fix an already-solved gap.
+    ['when ~ enters, return target creature to its owner\'s hand', 'targets chosen by a triggered ability'],
     ['destroy target artifact or enchantment', 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)'],
     ['counter target noncreature spell', 'targeting filtered by card type or quality (artifact / noncreature / nonlegendary / with flying)'],
     ['counter target spell unless its controller pays {3}', 'optional payment during resolution ("unless its controller pays")'],
     ['other creatures you control get +1/+1', 'static continuous effects (anthems and conditional buffs)'],
     ['gain control of target creature until end of turn', 'gaining control of another player’s permanent'],
-    ['target creature you control fights target creature you don\'t control', 'creatures fighting each other'],
+    ['target creature you control fights target creature you don\'t control', 'a fight template the compiler does not recognize yet'],
     ['when ~ leaves the battlefield, create a 3/3 green beast creature token', 'leaves-the-battlefield triggers'],
     ['cascade', 'named keyword mechanics with their own subsystem'],
     ['when ~ enters, it deals 4 damage to target creature', 'targets chosen by a triggered ability'],
