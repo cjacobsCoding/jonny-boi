@@ -351,7 +351,8 @@ function createTokenInState(
     damageMarked: 0,
     markedByDeathtouch: false,
     counters: NO_COUNTERS,
-    attachedTo: null,
+    // Absent, not null — see `makeInstance` in engine.ts for why the unattached
+    // shape must match the one `cloneInstance` produces.
   };
   state.battlefield.push(token);
   emit({ type: 'tokenCreated', instanceId, controller, name: def.name });

@@ -142,7 +142,11 @@ function makeInstance(state: GameState, def: CardDefinition, owner: PlayerId): C
     damageMarked: 0,
     markedByDeathtouch: false,
     counters: NO_COUNTERS,
-    attachedTo: null,
+    // `attachedTo` is deliberately NOT written here. It is optional, absent means
+    // "attached to nothing", and leaving it off keeps every freshly-minted instance
+    // on the exact same object shape `cloneInstance` produces for an unattached
+    // permanent — writing it here instead put the original and its clone on two
+    // different shapes and cost measurable throughput on the engine's hottest loop.
   };
 }
 
@@ -553,7 +557,6 @@ function frameSource(state: GameState, frame: ResolutionFrame): CardInstance {
       damageMarked: 0,
       markedByDeathtouch: false,
       counters: NO_COUNTERS,
-      attachedTo: null,
     }
   );
 }

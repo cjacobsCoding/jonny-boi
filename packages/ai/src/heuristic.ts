@@ -340,11 +340,17 @@ function bestEquipPlay(
   let hosts: readonly (InstanceId | PlayerId)[] | undefined;
   let best: { action: GameAction; score: number; label: string } | undefined;
 
-  for (const perm of view.battlefield) {
-    if (perm.controller !== me) continue;
-    const modifies = perm.def.attachment?.modifies;
+  // Indexed, and cheapest test first: this walks the whole battlefield on every
+  // priority decision in a main phase, so the ordinary permanent must fall out
+  // after ONE property read. `activated` is absent on almost everything (lands,
+  // vanilla creatures); only then is the attachment data worth looking at.
+  const battlefield = view.battlefield;
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
     const abilities = perm.def.activated;
-    if (!modifies || !abilities) continue;
+    if (abilities === undefined || perm.controller !== me) continue;
+    const modifies = perm.def.attachment?.modifies;
+    if (!modifies) continue;
     for (let index = 0; index < abilities.length; index++) {
       const ability = abilities[index]!;
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
