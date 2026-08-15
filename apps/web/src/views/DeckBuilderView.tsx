@@ -27,6 +27,7 @@ import { deckToDecklist } from '../lib/proxy/deckToText.js';
 import { copyText } from '../lib/clipboard.js';
 import './deck-health.css';
 import './gauntlet-decks.css';
+import './deck-steppers.css';
 
 /**
  * The Deck Builder: a card pool on the left (reusing the browser's toolbar +
@@ -213,13 +214,32 @@ function DeckPanel({
                       ⚠
                     </span>
                   )}
+                  {/* A real stepper, right where the card already is. The old
+                      control was a single faint "−" glyph with no background,
+                      effectively invisible in a dense list — so changing a count
+                      meant hunting the card back down in the pool grid. */}
                   <button
                     type="button"
-                    className="deck-entry__remove"
+                    className="deck-step deck-step--remove"
                     onClick={() => decks.removeCard(card.id)}
                     aria-label={`Remove one ${card.name}`}
+                    title={`Remove one ${card.name}`}
                   >
                     −
+                  </button>
+                  <button
+                    type="button"
+                    className="deck-step deck-step--add"
+                    onClick={() => decks.addCard(card)}
+                    disabled={count >= maxCopiesFor(card)}
+                    aria-label={`Add one more ${card.name}`}
+                    title={
+                      count >= maxCopiesFor(card)
+                        ? `Already at the maximum ${maxCopiesFor(card)} copies`
+                        : `Add one more ${card.name}`
+                    }
+                  >
+                    +
                   </button>
                 </div>
               ))}
