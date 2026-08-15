@@ -254,6 +254,24 @@ function ciStr(ci: ProportionCI): string {
   return `${pct(ci.p)} (${pct(ci.low)}–${pct(ci.high)})`;
 }
 
+/**
+ * Throughput, with enough precision to still be a MEASUREMENT at low rates.
+ *
+ * This was `toFixed(0)`, which was fine while every pilot ran hundreds of games
+ * a second — and then a search pilot landed at ~0.3 and the line read
+ * "140 games in 445.56s → 0 games/sec". Rule 7 requires instrumenting sim
+ * throughput and refusing regressions; a readout that prints 0 for everything
+ * slower than 0.5 can't do that, and reads like a broken tool besides.
+ */
+function rateStr(games: number, seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 'n/a';
+  const rate = games / seconds;
+  // Keep ~3 significant figures across the whole plausible range: a 900 g/s
+  // heuristic sweep and a 0.087 g/s search pilot are both legible.
+  const digits = rate >= 100 ? 0 : rate >= 10 ? 1 : rate >= 1 ? 2 : 3;
+  return `${rate.toFixed(digits)} games/sec`;
+}
+
 /** Render a simple left-aligned table from a header + rows. */
 function table(header: readonly string[], rows: readonly (readonly string[])[]): string {
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)));
@@ -311,7 +329,7 @@ function cmdMatch(flags: Flags): number {
     ),
   );
   if (result.draws > 0) console.log(`Timeout draws: ${result.draws}`);
-  console.log(`\n${games} games in ${elapsed.toFixed(2)}s → ${(games / elapsed).toFixed(0)} games/sec`);
+  console.log(`\n${games} games in ${elapsed.toFixed(2)}s → ${rateStr(games, elapsed)}`);
   console.log(FIDELITY_NOTE);
   return 0;
 }
@@ -346,7 +364,7 @@ function cmdGauntlet(flags: Flags): number {
     `\nOverall: ${result.totalWins}/${result.totalGames} = ${ciStr(result.overallWinRate)}` +
       (result.totalDraws > 0 ? `  (${result.totalDraws} timeout draws)` : ''),
   );
-  console.log(`${result.totalGames} games in ${elapsed.toFixed(2)}s → ${(result.totalGames / elapsed).toFixed(0)} games/sec`);
+  console.log(`${result.totalGames} games in ${elapsed.toFixed(2)}s → ${rateStr(result.totalGames, elapsed)}`);
   console.log(FIDELITY_NOTE);
   return 0;
 }
