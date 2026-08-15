@@ -28,6 +28,13 @@ export interface DecksApi {
   replaceActive: (deck: Deck) => void;
   /** Add an externally-created deck and make it active (used by import). */
   importDeck: (deck: Deck) => void;
+  /**
+   * Replace a deck BY ID, wherever it sits in the collection. Unlike
+   * `replaceActive`, this does not assume the deck being edited is the selected
+   * one — the Lab's hero can be any saved deck, so applying a verdict to it must
+   * not silently write over whichever deck happens to be active.
+   */
+  updateDeck: (deck: Deck) => void;
 }
 
 /**
@@ -120,6 +127,10 @@ export function useDecks(): DecksApi {
     setActiveId(deck.id);
   }, []);
 
+  const updateDeck = useCallback((deck: Deck) => {
+    setDecks((current) => current.map((d) => (d.id === deck.id ? deck : d)));
+  }, []);
+
   return {
     decks,
     activeDeck,
@@ -131,5 +142,7 @@ export function useDecks(): DecksApi {
     removeCard,
     replaceActive,
     importDeck,
+    updateDeck,
   };
 }
+

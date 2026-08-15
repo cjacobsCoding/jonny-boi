@@ -16,11 +16,13 @@ import './swap-scope.css';
  * variant win-rates, the delta, the McNemar p-value, and the paired 2×2 table.
  */
 export function SwapPanel({
+  hero,
   heroPayload,
   heroLegal,
   chosenOpponents,
   seed,
   sim,
+  onApplySwap,
   gamesConfig,
   outOptions,
   inOptions,
@@ -157,6 +159,16 @@ export function SwapPanel({
               −{e.copiesSwapped}× {e.outName} +{e.copiesSwapped}× {e.inName} ·{' '}
               {signedPct(e.delta)} win rate
             </span>
+            {onApplySwap && (
+              <button
+                type="button"
+                className="btn btn--primary verdict-banner__apply"
+                onClick={() => onApplySwap(outId, inId, e.copiesSwapped)}
+                title={`Make this change to ${hero?.name ?? 'your deck'}`}
+              >
+                Apply to my deck
+              </button>
+            )}
           </div>
 
           <div className="swap-compare">

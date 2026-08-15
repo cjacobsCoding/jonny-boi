@@ -8,6 +8,9 @@ import { allAvailableCards } from '../lib/cards.js';
 import { loadCardPool } from '../lib/sim-pool.js';
 import { resolveEntries, unsupportedCardNames, type Deck } from '../lib/deck.js';
 import { gauntletHeroDecks, isGauntletDeckId } from '../lib/decklist/gauntletDecks.js';
+import { applySwapToDeck, describeApplied } from '../lib/decklist/applySwapToDeck.js';
+import { getCard } from '../lib/cards.js';
+import './lab-apply.css';
 import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
 import { useSimWorker } from '../lib/useSimWorker.js';
@@ -42,6 +45,8 @@ export function LabView({ decks }: { decks: DecksApi }): ReactElement {
   const [tab, setTab] = useState<LabTabId>('gauntlet');
   const [heroId, setHeroId] = useState<string | null>(decks.activeDeck?.id ?? null);
   const [seed, setSeed] = useState(DEFAULT_LAB_SEED);
+  // Confirmation shown after applying a verdict to the hero deck.
+  const [applyNote, setApplyNote] = useState<string | null>(null);
   const [opponentNames, setOpponentNames] = useState<string[]>(() =>
     SAMPLE_DECKS.map((d) => d.name),
   );
@@ -81,6 +86,25 @@ export function LabView({ decks }: { decks: DecksApi }): ReactElement {
 
   const heroPayload = hero ? toSimPayload(hero) : null;
 
+  // Applying a verdict edits the hero — only possible for a deck the user owns.
+  // A gauntlet deck is bundled build data; copy it in the builder first.
+  const canEditHero = hero !== null && !isGauntletDeckId(hero.id);
+
+  const onApplySwap = canEditHero
+    ? (outCardId: string, inCardId: string, copies: number): void => {
+        const result = applySwapToDeck(hero, outCardId, inCardId, copies);
+        if (result.copiesMoved > 0) decks.updateDeck(result.deck);
+        setApplyNote(
+          describeApplied(
+            result,
+            getCard(outCardId)?.name ?? 'card',
+            getCard(inCardId)?.name ?? 'card',
+            hero.name,
+          ),
+        );
+      }
+    : undefined;
+
   const sharedProps = {
     hero,
     heroPayload,
@@ -88,6 +112,7 @@ export function LabView({ decks }: { decks: DecksApi }): ReactElement {
     chosenOpponents,
     seed,
     sim,
+    onApplySwap,
   };
 
   return (
@@ -138,6 +163,12 @@ export function LabView({ decks }: { decks: DecksApi }): ReactElement {
           </button>
         ))}
       </nav>
+
+      {applyNote && (
+        <p className="lab-apply-note" role="status">
+          {applyNote}
+        </p>
+      )}
 
       {sim.status === 'running' && <RunStatus progress={sim.progress} onCancel={sim.cancel} />}
       {sim.status === 'error' && (
@@ -321,3 +352,4 @@ function EmptyDecksPrompt(): ReactElement {
     </div>
   );
 }
+
