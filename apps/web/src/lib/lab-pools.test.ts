@@ -36,20 +36,29 @@ describe('the swap-in pool covers everything Suggestions can propose', () => {
   it('regression: Kalonian Tusker is selectable (the card that exposed this)', () => {
     const tusker = simPoolCards().find((c) => c.name === 'Kalonian Tusker');
     expect(tusker, 'Kalonian Tusker should be in the sim pool').toBeDefined();
-
-    // It is NOT in the curated Scryfall index — that is exactly why reading
-    // `allCards` here was wrong.
-    expect(allCards.some((c) => c.id === tusker!.id)).toBe(false);
-
-    // But it must resolve and be selectable through the full pool.
     expect(getCard(tusker!.id), 'Kalonian Tusker must resolve for display').toBeDefined();
     expect(allAvailableCards().some((c) => c.id === tusker!.id)).toBe(true);
   });
 
-  it('the full pool is meaningfully larger than the curated index', () => {
-    // Guards against someone "simplifying" the union back to the curated list.
-    expect(allAvailableCards().length).toBeGreaterThan(allCards.length);
+  it('the selectable pool is never smaller than what the sim can play', () => {
+    // The real invariant, independent of how many cards Scryfall data covers:
+    // whatever the engine can play must be offerable. (It used to be ~32 vs ~150.)
     expect(allAvailableCards().length).toBeGreaterThanOrEqual(simPoolCards().length);
+    expect(allAvailableCards().length).toBeGreaterThanOrEqual(allCards.length);
+  });
+
+  it('every simulatable card has real art, not a synthesized placeholder', () => {
+    // The synthesized records exist as a safety net for an engine card Scryfall
+    // data misses; if this fails the index needs re-fetching for the new cards.
+    const artless = simPoolCards()
+      .map((def) => getCard(def.id))
+      .filter((card) => card && !card.imageUris?.normal && !card.imageUris?.large)
+      .map((card) => card!.name);
+
+    expect(
+      artless,
+      `these render with no art — re-run the data-tools fetch for them: ${artless.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('every selectable card has a usable display name', () => {

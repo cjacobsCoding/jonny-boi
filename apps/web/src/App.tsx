@@ -1,5 +1,6 @@
-import { useState, type ReactElement } from 'react';
-import { attribution, allCards } from './lib/cards.js';
+import { useState, useSyncExternalStore, type ReactElement } from 'react';
+import { attribution, allAvailableCards } from './lib/cards.js';
+import { importedCardCount, subscribeToImportedCards } from './lib/decklist/importedCards.js';
 import { useDecks } from './lib/useDecks.js';
 import { CardsView } from './views/CardsView.js';
 import { DeckBuilderView } from './views/DeckBuilderView.js';
@@ -26,6 +27,12 @@ type ViewId = (typeof VIEWS)[number]['id'];
  * the PWA is a single-page shell, so we avoid a router dependency for two views.
  */
 export function App(): ReactElement {
+  // The footer count must be the LIVE pool, not the bundled curated slice — it
+  // read a stale, never-changing number that looked hardcoded, and stayed wrong
+  // after adding a card. Subscribing to the imported-card store keeps it honest.
+  useSyncExternalStore(subscribeToImportedCards, importedCardCount, importedCardCount);
+  const cardCount = allAvailableCards().length;
+
   const [view, setView] = useState<ViewId>('cards');
   const decks = useDecks();
 
@@ -66,7 +73,7 @@ export function App(): ReactElement {
       </main>
 
       <footer className="app__footer">
-        {allCards.length} curated cards · {attribution}
+        {cardCount} cards · {attribution}
       </footer>
     </div>
   );
