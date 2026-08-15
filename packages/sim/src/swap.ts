@@ -24,7 +24,7 @@ import { loadDeck } from './deck.js';
 import type { MatchupPilots, RunOptions } from './matchup.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
 import { runMatch } from './match.js';
-import { DEFAULT_STATS_CONFIG } from './config.js';
+import { DEFAULT_DECK_RULES, DEFAULT_STATS_CONFIG } from './config.js';
 import {
   mcNemarTest,
   wilsonInterval,
@@ -72,10 +72,26 @@ export interface SwapEvaluation {
 
 /**
  * Construct the variant `Deck` by applying a single-card swap to a base `Deck`.
- * Decrements (or removes) one copy of `out` and adds one copy of `in`. Resolves
- * `out`/`in` by id OR name against the pool so the CLI can accept either. Throws
- * a clear `Error` (caught upstream) when `out` isn't in the deck or a card id is
- * unknown — never a silent miss.
+ * Resolves `out`/`in` by id OR name against the pool so the CLI can accept either.
+ * Throws a clear `Error` (caught upstream) when `out` isn't in the deck or a card
+ * id is unknown — never a silent miss.
+ *
+ * **The swap replaces the out card IN PLACE**, and that positioning is load-bearing
+ * for the whole paired A/B test, not cosmetic tidiness. `loadDeck` expands entries
+ * in order into the flat library, and the engine shuffles that library with a
+ * Fisher–Yates driven purely by the game seed: for two libraries of equal length
+ * the same seed produces the same *permutation*, so a variant library that differs
+ * from the base in exactly ONE slot yields a shuffled deck that also differs in
+ * exactly one slot. That is the common-random-numbers property the McNemar test
+ * lives on.
+ *
+ * Removing the out copy and appending the in copy at the END (as this once did)
+ * shifts every card after the cut by one position, so the two arms draw completely
+ * different games. The comparison stays unbiased but the variance reduction — the
+ * entire reason a single-card swap is detectable in hundreds rather than tens of
+ * thousands of games — evaporates. Worse, a self-swap of a 1-of card removed the
+ * entry and re-appended it, moving it to the end of the decklist, so "swap a card
+ * for itself" produced a non-zero delta: the lab's own sanity check, broken.
  */
 export function applySwap(base: Deck, swap: CardSwap, pool: CardPool): Deck {
   const outDef = resolve(pool, swap.out);
@@ -90,17 +106,15 @@ export function applySwap(base: Deck, swap: CardSwap, pool: CardPool): Deck {
 
   const outEntry = entries[outIdx];
   if (outEntry === undefined) throw new Error(`"${outDef.name}" is not in deck "${base.name}"`);
-  if (outEntry.count <= 1) entries.splice(outIdx, 1);
-  else entries[outIdx] = { ...outEntry, count: outEntry.count - 1 };
 
-  // Add one copy of the in card — merge into an existing entry if present.
-  const inIdx = entries.findIndex((e) => entryMatches(e, inDef, pool));
-  if (inIdx >= 0) {
-    const inEntry = entries[inIdx] as { cardId: string; count: number };
-    entries[inIdx] = { ...inEntry, count: inEntry.count + 1 };
-  } else {
-    entries.push({ cardId: inDef.id, count: 1 });
-  }
+  // The out entry's LAST copy becomes the in card, right where it sat. One entry
+  // when the line is cut to nothing, otherwise a shortened line plus a one-card
+  // line immediately after it — which expands to the base library with a single
+  // slot rewritten. (`loadDeck` totals copies per card across entries, so the
+  // 4-of rule still catches an in card that is already maxed elsewhere.)
+  const replacement = { cardId: inDef.id, count: 1 };
+  if (outEntry.count <= 1) entries.splice(outIdx, 1, replacement);
+  else entries.splice(outIdx, 1, { ...outEntry, count: outEntry.count - 1 }, replacement);
 
   return {
     name: `${base.name} (−${outDef.name} +${inDef.name})`,
@@ -146,8 +160,12 @@ export function evaluateSwap(
   const stats = opts.stats ?? DEFAULT_STATS_CONFIG;
 
   const variantDeck = applySwap(baseDeck, swap, pool);
-  const baseLoaded = loadDeck(baseDeck, pool);
-  const variantLoaded = loadDeck(variantDeck, pool);
+  // Load under the CALLER's legality rules. Falling back to the defaults here would
+  // reject a variant the caller's own rules (and its candidate generator) called
+  // legal — the suggestion engine would then report every candidate as illegal.
+  const deckRules = opts.deckRules ?? DEFAULT_DECK_RULES;
+  const baseLoaded = loadDeck(baseDeck, pool, deckRules);
+  const variantLoaded = loadDeck(variantDeck, pool, deckRules);
 
   const outDef = resolve(pool, swap.out);
   const inDef = resolve(pool, swap.in);

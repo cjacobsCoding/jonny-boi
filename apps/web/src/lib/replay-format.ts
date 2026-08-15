@@ -21,7 +21,7 @@ export type NameResolver = (instanceId: number) => string;
 export interface LogLine {
   readonly text: string;
   /** Emphasis tone → a CSS modifier; absent for plain lines. */
-  readonly tone?: 'cast' | 'damage' | 'death' | 'life' | 'trigger' | 'turn' | 'win';
+  readonly tone?: 'cast' | 'damage' | 'death' | 'life' | 'trigger' | 'turn' | 'waste' | 'win';
 }
 
 /** Friendly seat label ("Player A" / "Player B"). Used when no deck name is handy. */
@@ -75,7 +75,10 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
         tone: 'life',
       };
     case 'gainLife':
-      return { text: `Player ${event.player} gains ${event.amount} life.`, tone: 'life' };
+      // Paired with the `lifeChanged` that precedes it (see `changeLife` in
+      // packages/cards), so printing both duplicated every life-gain in the replay
+      // log. `lifeChanged` also carries the resulting total, so it wins.
+      return null;
     case 'creatureDied':
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':
@@ -92,6 +95,12 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
       };
     case 'continuousEffectAdded':
       return { text: `${name(event.targetInstanceId)} gets a temporary effect.` };
+    // Mana left floating when a step ended: the pilot tapped a source and never
+    // spent it. Surfaced because it is otherwise invisible — you can watch a
+    // whole game and never learn a pilot burned two mana off a Sol Ring for
+    // nothing, which is exactly the kind of misplay this viewer exists to catch.
+    case 'manaPoolEmptied':
+      return { text: `Player ${event.player} wasted unspent mana.`, tone: 'waste' };
     case 'playerLost':
       return { text: `Player ${event.player} loses — ${event.reason}.`, tone: 'death' };
     case 'gameOver':

@@ -14,7 +14,7 @@ import {
   PROXY_PRINTS_CACHE_STORAGE_KEY,
   PRINTS_CACHE_TTL_MS,
 } from './config.js';
-import { normalizeName, type ResolvedProxyCard } from './scryfall.js';
+import { nameAliases, normalizeName, type ResolvedProxyCard } from './scryfall.js';
 import type { PrintOption } from './prints.js';
 
 /** In-memory view of the persisted cache: normalized name → resolved card. */
@@ -50,9 +50,15 @@ export function saveCache(cache: ProxyCache): void {
   }
 }
 
-/** Add resolved cards to the cache under their normalized names. */
+/**
+ * Add resolved cards to the cache under every name they answer to — the
+ * combined "Front // Back" name and each face — so a decklist that writes a
+ * double-faced card by its front face is a cache HIT rather than a re-fetch.
+ */
 export function putResolved(cache: ProxyCache, resolved: readonly ResolvedProxyCard[]): void {
-  for (const card of resolved) cache.set(normalizeName(card.name), card);
+  for (const card of resolved) {
+    for (const alias of nameAliases(card.name)) cache.set(alias, card);
+  }
 }
 
 /** Look up a resolved card by (raw) name. */

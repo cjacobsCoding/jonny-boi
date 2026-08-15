@@ -75,6 +75,17 @@ function requirementForEffect(primitive: string, params?: Readonly<Record<string
   }
   const kind = PRIMITIVE_TARGET_KIND[primitive];
   if (!kind) return NO_TARGET;
+  // A card may narrow its own aim with the engine's reserved `targets` param
+  // (core's TargetRestriction): Lava Spike is player-only, Flame Slash
+  // creature-only, even though both are `dealDamage`. The engine ENFORCES that
+  // restriction, so a UI that offered the wider table kind would present a target
+  // the cast is then rejected for — a dead end for the player. The declared
+  // restriction therefore wins; the table is only the default for cards that
+  // don't declare one.
+  const declared = params?.targets;
+  if (declared === 'creature' || declared === 'player' || declared === 'any' || declared === 'spell') {
+    return { count: 1, kind: declared };
+  }
   return { count: 1, kind };
 }
 

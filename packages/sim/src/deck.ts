@@ -67,6 +67,11 @@ function resolveCard(pool: CardPool, ref: string): CardDefinition | undefined {
 export function loadDeck(deck: Deck, pool: CardPool, rules: DeckRules = DEFAULT_DECK_RULES): LoadedDeck {
   const reasons: string[] = [];
   const library: CardDefinition[] = [];
+  // Copies are counted per CARD, not per decklist line. The same card may appear
+  // on several lines (by id on one and by name on another, or because a swap split
+  // a line in two), and checking each line in isolation would wave a 6-of through
+  // as two legal 3-ofs — an illegal deck silently simulated as if it were legal.
+  const copiesByCard = new Map<string, { readonly def: CardDefinition; count: number }>();
 
   if (deck.cards.length === 0) {
     reasons.push('the deck has no cards');
@@ -82,13 +87,17 @@ export function loadDeck(deck: Deck, pool: CardPool, rules: DeckRules = DEFAULT_
       reasons.push(`unknown card "${entry.cardId}" (not in the pool by id or name)`);
       continue;
     }
-    const isUnlimited = rules.unlimitedCopies.has(def.name);
-    if (!isUnlimited && entry.count > rules.maxCopiesNonBasic) {
-      reasons.push(
-        `${def.name}: ${entry.count} copies exceeds the ${rules.maxCopiesNonBasic}-of limit`,
-      );
-    }
+    const tally = copiesByCard.get(def.id);
+    if (tally) tally.count += entry.count;
+    else copiesByCard.set(def.id, { def, count: entry.count });
     for (let i = 0; i < entry.count; i++) library.push(def);
+  }
+
+  for (const { def, count } of copiesByCard.values()) {
+    if (rules.unlimitedCopies.has(def.name)) continue;
+    if (count > rules.maxCopiesNonBasic) {
+      reasons.push(`${def.name}: ${count} copies exceeds the ${rules.maxCopiesNonBasic}-of limit`);
+    }
   }
 
   if (library.length < rules.minDeckSize) {

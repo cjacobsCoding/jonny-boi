@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import type { SimProgress } from '../lib/sim-protocol.js';
-import { gamesPerSecond } from '../lib/sim-format.js';
+import { etaText, gamesPerSecond, throughputText } from '../lib/sim-format.js';
 
 /**
  * The live-run indicator: a progress bar (units done / total), games run,
@@ -18,6 +18,7 @@ export function RunStatus({
   const done = progress?.done ?? 0;
   const fraction = total > 0 ? Math.min(done / total, 1) : 0;
   const gps = progress ? gamesPerSecond(progress.gamesRun, progress.elapsedSeconds) : 0;
+  const eta = progress ? etaText(done, total, progress.elapsedSeconds) : null;
   return (
     <div className="run-status" role="status" aria-live="polite">
       <div className="run-status__bar-track">
@@ -28,8 +29,8 @@ export function RunStatus({
         <span className="run-status__nums">
           {progress ? (
             <>
-              {progress.gamesRun.toLocaleString()} games · {gps.toFixed(0)} games/sec ·{' '}
-              {progress.elapsedSeconds.toFixed(1)}s
+              {progress.gamesRun.toLocaleString()} games · {throughputText(gps)} ·{' '}
+              {progress.elapsedSeconds.toFixed(1)}s{eta ? ` · ${eta}` : ''}
             </>
           ) : (
             'spinning up the worker…'

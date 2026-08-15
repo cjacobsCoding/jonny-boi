@@ -1,17 +1,32 @@
 /**
  * Mono-Red Aggro (Burn) — the fastest clock in the gauntlet.
  *
- * Game plan: drop a one-drop hasty creature on turn 1, keep adding pressure, and
- * point Lightning Bolt at whatever blocker stands in the way — then at the
- * opponent's face to close.
+ * **Game plan.** Land a hasty one-drop on turn one, add a spell-payoff two-drop,
+ * and point cheap burn at whatever blocks — then at the face to close. It wins by
+ * turn five or it does not win; every card either attacks on the turn it lands or
+ * removes the thing stopping the attack.
  *
- * All four red nonlands are fully-supported pool cards (Goblin Guide's attack
- * trigger, Swiftspear's prowess, and Young Pyromancer's token triggers all resolve
- * under engine-v2). The curated pool is shallow in red nonlands — four playable
- * cards — so a legal mono-red 60 is necessarily land-heavy; we keep it pure red
- * (no colorless ramp) so the archetype stays the clean low-curve beatdown control
- * point of the gauntlet, and so it remains the canonical swap-in target the
- * suggestion engine tunes against. Identity: hyper-aggressive, reach via Bolt.
+ * The twelve one-mana burn/damage spells are the deck's *second* creature suite:
+ * they clear blockers early and become reach late, and each one grows Monastery
+ * Swiftspear (prowess), swings Kiln Fiend for +3, and spawns an Elemental off
+ * Young Pyromancer — so the burn is never a "dead" card against a creatureless
+ * draw.
+ *
+ * **Why the list looks like this now.** The old build ran 44 Mountains and four
+ * nonland cards, which is not a deck: three of every four draws did nothing. The
+ * curated pool was that shallow in red; the ~157-card pool is not. Twenty-four
+ * lands and thirty-six spells is the real shape of this archetype.
+ *
+ * **Deliberately still PURE red, and deliberately still Sol-Ring-free.** It is the
+ * clean low-curve control point of the gauntlet — one colour, one plan, no
+ * colourless acceleration — and the suggestion-engine fixtures use exactly that
+ * property (Sol Ring is the canonical legal swap-IN to test against, so it must
+ * not already be here).
+ *
+ * Lava Spike and Flame Slash were once excluded here because the engine could not
+ * express their printed target restrictions, so they played as strictly better than
+ * they print. That gap is closed (core's `targets` restriction), and both are now
+ * faithful and deckable. Everything below plays exactly as written.
  */
 
 import type { Deck } from '../../src/deck.js';
@@ -20,13 +35,21 @@ export const MONO_RED_AGGRO: Deck = {
   name: 'Mono-Red Aggro',
   archetype: 'Aggro (burn)',
   cards: [
-    // One-drop hasty pressure.
+    // Turn-one pressure: eight hasty one-drops that attack the turn they land.
     { cardId: 'Goblin Guide', count: 4 }, // 2/2 haste
     { cardId: 'Monastery Swiftspear', count: 4 }, // 1/2 haste, prowess
-    // Two-drop token engine + Bolt fuel.
-    { cardId: 'Young Pyromancer', count: 4 }, // 2/1, makes 1/1s off spells
-    // Removal that doubles as reach to the face.
-    { cardId: 'Lightning Bolt', count: 4 }, // 3 damage
-    { cardId: 'Mountain', count: 44 },
+    { cardId: 'Goblin Piker', count: 4 }, // 2/1 — a 1/1 haste is not a clock
+    // Two-drop spell payoffs — each burn spell makes these bigger or wider.
+    { cardId: 'Young Pyromancer', count: 4 }, // 2/1, a 1/1 per noncreature spell
+    { cardId: 'Kiln Fiend', count: 4 }, // 1/2, +3/+0 per instant/sorcery
+    // The one card above two mana: three bodies at once, so the deck has a way
+    // through a board that has stabilised against one-for-one burn.
+    { cardId: 'Beetleback Chief', count: 4 }, // 2/2 plus two 1/1s
+    // Burn: removal early, reach late.
+    { cardId: 'Lightning Bolt', count: 4 }, // 3 damage, {R}
+    { cardId: 'Searing Spear', count: 4 }, // 3 damage, {1}{R}
+    { cardId: 'Lightning Strike', count: 4 }, // 3 damage, {1}{R}
+    // A one-colour curve that tops out at two needs twenty-four lands, not forty-four.
+    { cardId: 'Mountain', count: 24 },
   ],
 };

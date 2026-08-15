@@ -63,7 +63,24 @@ export {
   manaColorsOffered,
   bestManaYield,
   castTiming,
+  entersTapped,
 } from './card.js';
+
+// Target legality (targeting.ts): what a spell is ALLOWED to point at, declared
+// as data on the effect ref (`params.targets`) and enforced when actions are
+// offered, when a cast is applied, and again when the effect resolves.
+export type { TargetRestriction } from './targeting.js';
+export {
+  TARGET_RESTRICTION_PARAM,
+  DEFAULT_TARGET_RESTRICTION,
+  isTargetRestriction,
+  targetRestrictionOf,
+  isPlayerTarget,
+  isLegalTarget,
+  legalTargetsFor,
+  illegalTargetReason,
+  describeRestriction,
+} from './targeting.js';
 
 // Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.
 export type {
@@ -104,15 +121,23 @@ export type {
   TriggeredStackObject,
   CombatState,
 } from './state.js';
-export { PLAYER_IDS, STEP_ORDER, MAIN_STEPS, createPlayer, playerZone } from './state.js';
+export { PLAYER_IDS, STEP_ORDER, MAIN_STEPS, createPlayer, playerZone, opponentOf } from './state.js';
 
 // Events
 export type { GameEvent, EventLog } from './events.js';
 export { createEventLog, eventsOfType } from './events.js';
 
 // Effect registry seam
-export type { EffectContext, EffectPrimitive, EffectRegistry, ContinuousModRequest } from './effects.js';
-export { createEffectRegistry, applyEffectRef } from './effects.js';
+export type {
+  EffectContext,
+  EffectContextBase,
+  EffectPrimitive,
+  EffectRegistry,
+  ContinuousModRequest,
+  ChoiceChannel,
+  ChoiceRequestArgs,
+} from './effects.js';
+export { createEffectRegistry, applyEffectRef, shuffleLibraryInState } from './effects.js';
 
 // Actions seam
 export type {
@@ -124,8 +149,58 @@ export type {
   CastSpellAction,
   DeclareAttackersAction,
   DeclareBlockersAction,
+  AnswerChoiceAction,
 } from './actions.js';
 export { DEFAULT_MANA_MODE } from './actions.js';
+
+/**
+ * Player-choice seam (DESIGN §3.11 "player choice during resolution"): a resolving
+ * spell/ability asks a typed question, the engine parks it in
+ * `GameState.pendingChoice`, and an `answerChoice` action resumes the resolution.
+ * Card authors ask via `EffectContext.chooseCards / choosePlayers / chooseModes /
+ * confirm`; the AI, the hotseat UI and the online server all answer through the
+ * ordinary action seam.
+ */
+export type {
+  CardFilter,
+  CardOption,
+  ChoiceMode,
+  ChoiceKind,
+  ChoiceValence,
+  ChoiceRequest,
+  SelectCardsRequest,
+  SelectPlayersRequest,
+  ChooseModesRequest,
+  ConfirmRequest,
+  PendingChoice,
+  SelectCardsChoice,
+  SelectPlayersChoice,
+  ChooseModesChoice,
+  ConfirmChoice,
+  ChoiceAnswer,
+  SelectCardsAnswer,
+  SelectPlayersAnswer,
+  ChooseModesAnswer,
+  ConfirmAnswer,
+  AnswerValidation,
+  ResolutionFrame,
+  CollectOptions,
+} from './choices.js';
+export {
+  matchesCardFilter,
+  cardOption,
+  collectCardOptions,
+  normalizeChoiceRequest,
+  validateChoiceAnswer,
+  defaultAnswerFor,
+  isTrivialChoice,
+  enumerateChoiceAnswers,
+  describeChoiceAnswer,
+  choiceOptionCount,
+  cloneChoiceAnswer,
+  MAX_CHOICES_PER_RESOLUTION,
+  MAX_ENUMERATED_CHOICE_ANSWERS,
+} from './choices.js';
 
 // Mana payment planning — shared by the AI pilots and the hotseat/online auto-tap
 // so "which lands do I tap" has exactly one implementation.
@@ -134,7 +209,14 @@ export { planManaPayment, distanceToPayable } from './mana-plan.js';
 
 // Engine
 export type { DeckList, GameSetup, EngineResult, Engine } from './engine.js';
-export { createGame, createEngine, applyAction, applyActionInPlace, generateLegalActions } from './engine.js';
+export {
+  createGame,
+  createEngine,
+  applyAction,
+  applyActionInPlace,
+  generateLegalActions,
+  choiceActionsFor,
+} from './engine.js';
 /**
  * Deep-copy the mutable parts of a state (card definitions stay shared). Paired
  * with `applyActionInPlace`: a look-ahead pilot clones once, then mutates freely.

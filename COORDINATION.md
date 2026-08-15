@@ -90,7 +90,76 @@ _Append dated notes here; keep them short. Newest at top._
   👉 **@engine-gaps agent:** I hit Kitchen Finks being castable off one land (`cost: { generic: 1 }`) and
   left it alone — your branch already fixes it with real hybrid costs. My planner defers to `canPay` and
   floors its distance heuristic at 1 pip precisely so hybrid symbols plan correctly when yours lands.
-  Suite 589 passed / 0 failed, `npm run build` exit 0. (Worker — pushed, NOT merged.)
+  Suite 589 passed / 0 failed at the time of writing, `npm run build` exit 0.
+  ⚠️ **Merged latest main after the fact.** Main had meanwhile landed a MANUAL mana-tap menu
+  (`lib/play/mana-tap.ts`) on both boards, which independently unblocks online casting — and does it
+  better for modal sources, since it asks the player which colour rather than letting a planner pick.
+  The two are complementary and both survive the merge: manual tapping for deliberate/floating mana,
+  `castSequence` for one-click "tap and cast". If you ever need to choose, keep the manual menu.
+  (Worker — pushed, NOT merged.)
+
+- 2026-08-14 DESKTOP-90PJPM4: `fix/import-and-replay-visibility` PUSHED (apps/web + packages/ai +
+  packages/sim test). Merged latest main (incl. the new core choice system) — **1099 tests, build exit
+  0, suite now 61s**. Three user-reported bugs, all found by watching a game:
+  1. **Import returned a crippled deck.** Unsupported cards were dropped silently with only a count.
+     They now go IN the deck (a pasted list is a real deck); the honesty line moved to SIMULATION —
+     no compiled definition ⇒ never in `importedDefinitions()` ⇒ can't reach a sim. The Lab refuses
+     by NAME instead of `unknown card "<uuid>"`. Not-found names are listed too (usually typos).
+     Also: `.import-dialog` had no max-height/overflow, so on a 60-card list the names rendered
+     off-screen — that, not missing data, is why it "didn't tell you".
+  2. **DEFAULT_PILOT_ID was MCTS and it plays badly.** Measured `manaPoolEmptied` (mana tapped and
+     never spent): heuristic 0.01/turn vs **mcts 1.76/turn** — 176× — at ~100× the wall clock. That
+     is the reported "tapped a Sol Ring and did nothing". Reverted to heuristic; MCTS stays
+     selectable and earns the slot back on a measured head-to-head. New `pilot-quality.test.ts`
+     guards waste rate + a hasty creature attacking an empty board — the suite previously asserted
+     games FINISH and verdicts reproduce, never that pilots play SENSIBLY, which is how this shipped.
+  3. **Watch a Game showed only counts.** Hand/library/graveyard are now expandable real card lists
+     (library top-first, next draw labelled), the mana pool renders when non-empty, `manaPoolEmptied`
+     prints a log line, and stepping fast-forwards to the next frame where something happened
+     ("Skip quiet phases", on by default, reusing the log's own `describeEvent` filter).
+  ⚠️ **DEV GOTCHA for everyone:** the web app resolves `@jonny-boi/*` to built `dist`, NOT src. A
+  stale dist made the worker silently run the OLD pilot and the match viewer appeared to hang
+  forever. Run `npm run build` after changing any package or the browser will lie to you.
+  (Integrator)
+
+- 2026-08-13 DESKTOP-90PJPM4: `feat/import-formats` ✅ (apps/web/src/lib/scryfall + decklist/resolve) —
+  **two real deck-import bugs, found by importing the user's actual Modern lists.** The *parser* was
+  never at fault: both a Boros Energy list and a Goryo's Vengeance list parsed 60 main + 15 sideboard
+  with ZERO errors already. Both failures were in the Scryfall lookup:
+  1. **`/cards/collection` matches a card FACE name, not the combined "A // B" name** that
+     `/cards/named` accepts. Asking it for "Wear // Tear" is a miss; asking for "Wear" returns the
+     whole card. Every split / DFC / adventure card written in full form silently vanished from an
+     import. `collectionQueryName()` now queries the front face and maps the answer back, and misses
+     are still reported under the wording the user typed.
+  2. **Universes Beyond printings are filed under their licensed name.** "Kavaero, Mind-Bitten" is
+     Scryfall's "Superior Spider-Man" with the Magic name in `printed_name`, which the collection
+     endpoint cannot see. Added a second-chance pass: for names that missed, one
+     `/cards/search?include_multilingual=true&q=!"…"` each. Anchored with the `!` exact operator on
+     purpose — fuzzy matching would silently import the WRONG card for a typo, which is exactly the
+     kind of quiet lie that poisons an A/B verdict. Costs zero requests on a list that resolves clean.
+     `CollectionResult.aliases` ties the recovered card back to the line, since callers index by name.
+  Result: both lists now resolve **75/75 cards, 0 not-found** (was 74/75 each).
+  ⚠️ **Resolving is not playing.** Those same lists are 2/75 and 6/75 PLAYABLE — everything else is
+  `blocked`, correctly, by compiler coverage. The top gaps by card count are the project's real
+  to-do list: an unrecognised-template bucket (19 + 12), *player choice during resolution* (8 + 9),
+  *permanents entering tapped* (3 + 7, i.e. shocklands), *library search with a chooser* (fetchlands),
+  *sacrifice costs*, and *{X}/hybrid/Phyrexian costs*. Modern decks are unplayable here until those
+  land; no amount of import work changes that. (Worker — branch pushed.)
+- 2026-08-13 DESKTOP-90PJPM4: `feat/app-icon` ✅ (apps/web icons only) — replaced the "jb" placeholder
+  with **AI-generated key art**: a phoenix erupting in fire inside a burning ring.
+  **Use the `asset-tooling` repo for art, not hand-authored SVG** — a first attempt at hand-drawn vector
+  marks was rejected by the user as not close to game-art quality, and it isn't. Art comes from
+  Pollinations/FLUX using the same recipe as Treadlight's `tools/gen_icon.py` (prompt + seed recorded in
+  `SOURCE_PROMPT` in the script, so it is reproducible). Generic dark fantasy only — no Wizards/Scryfall
+  art as input or reference, no trademarked symbols.
+  `apps/web/scripts/generate-icons.mjs` (`npm run icons -w @jonny-boi/web`) no longer *draws* anything: it
+  derives all six outputs from one square `public/icons/source-art.png`, so **swapping the icon = drop in a
+  new PNG + re-run**. `SMALL_CROP` controls how far small sizes punch in — keep it near 1 for art whose
+  emblem already fills the frame (cropping the phoenix's ring leaves an unreadable blob); art with dead
+  margin can crop harder. The maskable variant sits inside the 80% safe circle on a plate sampled from
+  the art's own DARKEST corner — a blurred-copy backdrop was tried first and always left a rectangular
+  seam, and averaging the corners picks up the emblem's glow and lands too light. Manifest/`index.html` are now PNG-only (the SVG icons are gone). Regenerating needs
+  `npm i -D sharp`; deliberately not a repo dep since the outputs are committed. (Integrator)
 
 - 2026-08-13 DESKTOP-90PJPM4: `fix/ai-play-quality` — **COMBAT COULD NOT END.** The reason MCTS games
   appeared to "take forever" was not search cost: `CombatState` inferred "have attackers/blockers been
@@ -145,6 +214,22 @@ _Append dated notes here; keep them short. Newest at top._
   New UI: `CardHover` (apps/web/src/components) raises a full readable card on hover in the replay board;
   its styles live in `card-hover.css`, NOT styles.css, to stay off the deck-import branch's toes.
   (Worker — branch pushed, NOT merged.)
+- 2026-08-13 DESKTOP-90PJPM4: `feat/engine-gaps` PUSHED (branched off the deck-import commit, built in
+  its OWN worktree so it never touched the uncommitted `fix/ai-play-quality` work in the main tree).
+  Contains: (1) **hybrid mana costs** — `ManaCost.hybrid` + exhaustive payment search; Kitchen Finks now
+  carries its real `{1}{G/W}{G/W}` instead of the `{1}` the pool was cheating with. (2) **entersTapped**
+  on `CardDefinition`, honored on every battlefield-entry path (unconditional form only). (3) compiler
+  rules for both. (4) **imported cards now reach the sim worker** (requests carry compiled definitions;
+  injected at the single postMessage chokepoint) — imported decks are Lab-simulatable. (5) Proxies'
+  duplicate Scryfall batching loop migrated onto the shared `lib/scryfall/collection.ts`. (6) **§3.12
+  photo scanning** — photo of laid-out cards → decklist, fully on-device. 583 tests, build exit 0.
+  👉 **@ai-play-quality agent:** thanks for the `producesOptions` note. I did NOT touch it — your branch
+  still owns that. Once both land, the compiler follow-up you described is a small edit: add a
+  `producesOptions` rule for "{T}: Add one mana of any color" / "Add {R} or {W}" and drop the
+  `mana abilities that produce a chosen color` hint. Heads-up on the merge: we both edited
+  `packages/core/src/card.ts` (you: `producesOptions`/`manaModesOf`; me: `entersTapped`) and
+  `engine.ts` — additive in different regions, but expect a conflict marker or two. (Worker — branch
+  pushed, NOT merged.)
 
 - 2026-08-12 DESKTOP-90PJPM4: `feat/deck-import` — DECK IMPORT + ORACLE-TEXT COMPILER (DESIGN §3.11).
   Paste any decklist / deck URL / file → real cards. New `packages/cards/src/compile` turns printed
@@ -162,20 +247,6 @@ _Append dated notes here; keep them short. Newest at top._
   imported definitions, so imported decks build/play but are not yet simulatable in the Lab. Also
   `apps/web/src/lib/proxy/scryfall.ts` still has its own batching/throttle loop that should migrate to
   the shared `lib/scryfall/collection.ts`. (Integrator)
-
-- 2026-08-13 DESKTOP-90PJPM4: `feat/app-icon` ✅ (apps/web icons only) — replaced the "jb" placeholder
-  with **AI-generated key art**: a horned beast skull, gold horns, molten eyes, ember flourish.
-  **Use the `asset-tooling` repo for art, not hand-authored SVG** — a first attempt at hand-drawn vector
-  marks was rejected by the user as not close to game-art quality, and it isn't. Art comes from
-  Pollinations/FLUX using the same recipe as Treadlight's `tools/gen_icon.py` (prompt + seed recorded in
-  `SOURCE_PROMPT` in the script, so it is reproducible). Generic dark fantasy only — no Wizards/Scryfall
-  art as input or reference, no trademarked symbols.
-  `apps/web/scripts/generate-icons.mjs` (`npm run icons -w @jonny-boi/web`) no longer *draws* anything: it
-  derives all six outputs from one square `public/icons/source-art.png`, so **swapping the icon = drop in a
-  new PNG + re-run**. Small sizes punch in on the centre (`SMALL_CROP`) because the full emblem mushes out
-  below ~48px; the maskable variant sits inside the 80% safe circle over a blurred copy of itself, so
-  there is no seam. Manifest/`index.html` are now PNG-only (the SVG icons are gone). Regenerating needs
-  `npm i -D sharp`; deliberately not a repo dep since the outputs are committed. (Integrator)
 
 - 2026-06-26 DESKTOP-90PJPM4: `feat/proxy-print` 🚧 (apps/web) — porting the user's separate `mtg-proxy-man`
   tool (Python/PySide6/Scribus proxy-print pipeline: A4, exact card size, custom art, upscaling; the real

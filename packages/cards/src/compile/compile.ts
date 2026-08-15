@@ -22,6 +22,7 @@ import type {
   EffectRef,
   ManaColor,
   ManaCost,
+  ManaProduction,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import type {
@@ -37,6 +38,7 @@ import {
   KEYWORD_ABILITY_BUILDERS,
   KEYWORD_FLAGS,
   MANA_RULES,
+  STATIC_RULES,
   TRIGGER_RULES,
   explainUnsupported,
   isVacuousClause,
@@ -80,28 +82,70 @@ const LAND_SUBTYPE_MANA: Readonly<Record<string, ManaColor>> = Object.freeze({
  * noncreature spell type that pumps the source until end of turn.
  */
 const KEYWORD_ABILITY_TEXT: Readonly<Record<string, string>> = Object.freeze({
-  prowess: 'whenever you cast a noncreature spell, target creature gets +1/+1 until end of turn',
+  // Prowess's own reminder text, in the compiler's canonical form: the SOURCE
+  // gets the buff. (It must be the self template, not "target creature" — a
+  // triggered ability resolves with no chosen targets, so only a self-referring
+  // pump is faithful inside one. See `triggerFrom` in ./rules.ts.)
+  prowess: 'whenever you cast a noncreature spell, ~ gets +1/+1 until end of turn',
 });
 
+/**
+ * A color/color hybrid symbol as the Scryfall parser leaves it in `other`
+ * (e.g. `G/W`). Monocolour hybrid (`2/W`) and Phyrexian (`W/P`) deliberately do
+ * not match — the engine cannot pay those, so they must stay reported.
+ */
+const HYBRID_SYMBOL = /^([WUBRGC])\/([WUBRGC])$/;
+
+/** Fold a fixed bundle of colors ({C}{C}) into the single mode one tap adds. */
+function bundleAsMode(bundle: readonly ManaColor[]): ManaProduction {
+  const mode: Partial<Record<ManaColor, number>> = {};
+  for (const color of bundle) mode[color] = (mode[color] ?? 0) + 1;
+  return mode;
+}
+
+/** Split `other` cost symbols into payable hybrids and genuinely unpayable ones. */
+function partitionOtherSymbols(symbols: readonly string[]): {
+  hybrid: ManaColor[][];
+  unpayable: string[];
+} {
+  const hybrid: ManaColor[][] = [];
+  const unpayable: string[] = [];
+  for (const symbol of symbols) {
+    const match = HYBRID_SYMBOL.exec(symbol.toUpperCase());
+    if (match) hybrid.push([match[1] as ManaColor, match[2] as ManaColor]);
+    else unpayable.push(symbol);
+  }
+  return { hybrid, unpayable };
+}
+
 /** Convert a data-tools mana cost to the core cost shape (omitting zeroes). */
-function toCoreCost(card: CompilableCard): ManaCost | undefined {
+function toCoreCost(card: CompilableCard, hybrid: readonly (readonly ManaColor[])[]): ManaCost | undefined {
   const source = card.manaCost;
-  const cost: Record<string, number> = {};
+  const cost: Record<string, unknown> = {};
   if (source.generic > 0) cost.generic = source.generic;
   for (const color of ['W', 'U', 'B', 'R', 'G', 'C'] as const) {
     const count = source[color];
     if (count > 0) cost[color] = count;
   }
+  if (hybrid.length > 0) cost.hybrid = hybrid;
   return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
 }
 
-/** Try every rule in a table against one clause; return the first contribution. */
+/**
+ * Try every rule in a table against one clause; return the first contribution.
+ *
+ * `targetFree` restricts the table to rules whose effects work without a
+ * caster-chosen target — the mode trigger bodies compile in, since core resolves
+ * triggered abilities with no targets.
+ */
 function applyRules(
   rules: readonly CompileRule[],
   clause: string,
   ctx: RuleContext,
+  targetFree = false,
 ): { contribution: ClauseContribution; ruleId: string } | null {
   for (const rule of rules) {
+    if (targetFree && rule.needsChosenTarget) continue;
     const match = clause.match(rule.pattern);
     if (!match) continue;
     const contribution = rule.build(match, ctx);
@@ -117,7 +161,9 @@ interface Assembly {
   readonly effects: EffectRef[];
   readonly triggers: TriggeredAbility[];
   readonly produces: ManaColor[];
+  readonly producesOptions: ManaProduction[];
   keywords: Record<string, boolean>;
+  entersTapped: boolean;
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -127,9 +173,11 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.effects) assembly.effects.push(...contribution.effects);
   if (contribution.triggers) assembly.triggers.push(...contribution.triggers);
   if (contribution.produces) assembly.produces.push(...contribution.produces);
+  if (contribution.producesOptions) assembly.producesOptions.push(...contribution.producesOptions);
   if (contribution.keywords) {
     assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
   }
+  if (contribution.entersTapped) assembly.entersTapped = true;
   assembly.matchedRules.push(ruleId);
 }
 
@@ -212,6 +260,13 @@ function compileAbilityLine(
     return;
   }
 
+  // Card-level static properties ("~ enters tapped").
+  const staticRule = applyRules(STATIC_RULES, clause, ctx);
+  if (staticRule) {
+    absorb(assembly, staticRule.contribution, staticRule.ruleId);
+    return;
+  }
+
   if (isSpell) {
     // Whole-line first (compound idioms like "…deals 3 damage… You gain 3 life"),
     // then sentence-by-sentence for plain sequences of effects.
@@ -250,7 +305,9 @@ export function compileCard(card: CompilableCard): CompileResult {
     effects: [],
     triggers: [],
     produces: [],
+    producesOptions: [],
     keywords: {},
+    entersTapped: false,
     matchedRules: [],
     missing: [],
   };
@@ -291,15 +348,18 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
 
   // --- mana cost -------------------------------------------------------------
-  // `other` holds symbols the payment system cannot express: {X}, hybrid,
-  // Phyrexian. A card whose cost we cannot pay correctly is never complete.
-  if (card.manaCost.other.length > 0) {
+  // Colour/colour hybrid symbols are payable now (the mana system tries each
+  // assignment). What remains in `other` — {X}, Phyrexian, monocolour hybrid,
+  // snow — genuinely cannot be paid, and a card we would mis-cost is never
+  // complete.
+  const { hybrid, unpayable } = partitionOtherSymbols(card.manaCost.other);
+  if (unpayable.length > 0) {
     assembly.missing.push({
-      text: card.manaCost.other.join(''),
-      missingEngineSystem: 'variable, hybrid, and Phyrexian mana costs',
+      text: unpayable.map((symbol) => `{${symbol}}`).join(''),
+      missingEngineSystem: 'variable ({X}), Phyrexian, and monocolour hybrid mana costs',
     });
   }
-  const cost = toCoreCost(card);
+  const cost = toCoreCost(card, hybrid);
 
   // --- power / toughness -----------------------------------------------------
   const isCreatureCard = types.includes('creature');
@@ -323,16 +383,20 @@ export function compileCard(card: CompilableCard): CompileResult {
   const isSpell = types.includes('instant') || types.includes('sorcery');
   const ctx: RuleContext = {
     card,
-    compileEffectClause(text: string): readonly EffectRef[] | null {
+    compileEffectClause(
+      text: string,
+      options?: { readonly targetFree?: boolean },
+    ): readonly EffectRef[] | null {
+      const targetFree = options?.targetFree === true;
       const clause = normalizeClause(text);
-      const whole = applyRules(EFFECT_RULES, clause, ctx);
+      const whole = applyRules(EFFECT_RULES, clause, ctx, targetFree);
       if (whole) return whole.contribution.effects ?? [];
       // A multi-sentence trigger body: every sentence must compile.
       const sentences = splitSentences(text).map(normalizeClause);
       if (sentences.length > 1) {
         const refs: EffectRef[] = [];
         for (const sentence of sentences) {
-          const result = applyRules(EFFECT_RULES, sentence, ctx);
+          const result = applyRules(EFFECT_RULES, sentence, ctx, targetFree);
           if (!result) return null;
           refs.push(...(result.contribution.effects ?? []));
         }
@@ -356,7 +420,10 @@ export function compileCard(card: CompilableCard): CompileResult {
       assembly.keywords = { ...assembly.keywords, [field]: true };
       continue;
     }
-    if (KEYWORD_ABILITY_TEXT[word]) continue; // handled from the printed line
+    // Keywords with a real implementation are compiled from the printed line
+    // (prowess via its template, persist via a direct builder) — Scryfall
+    // listing them again is not a second, unmodelled ability.
+    if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
     if (!assembly.missing.some((m) => m.text.toLowerCase().includes(word))) {
       assembly.missing.push({
         text: keyword,
@@ -366,6 +433,19 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
 
   // --- assemble --------------------------------------------------------------
+  // Mana production has two authoring forms and a card uses exactly one of them:
+  // a fixed bundle (`produces`, one tap adds all of it) or a list of modes
+  // (`producesOptions`, one tap adds one). A card printing BOTH shapes has two
+  // mana abilities, and since it can only be tapped once they are simply more
+  // modes of the same choice — so the bundle folds in as one extra mode.
+  const manaModes: readonly ManaProduction[] =
+    assembly.producesOptions.length > 0
+      ? [
+          ...(assembly.produces.length > 0 ? [bundleAsMode(assembly.produces)] : []),
+          ...assembly.producesOptions,
+        ]
+      : [];
+
   const definition: CardDefinition = {
     id: card.id,
     // A double-faced card is played as its front face; the back is a separate
@@ -376,8 +456,13 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(isCreatureCard && card.power !== null ? { power: card.power } : {}),
     ...(isCreatureCard && card.toughness !== null ? { toughness: card.toughness } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
+    ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
-    ...(assembly.produces.length > 0 ? { produces: assembly.produces } : {}),
+    ...(manaModes.length > 0
+      ? { producesOptions: manaModes }
+      : assembly.produces.length > 0
+        ? { produces: assembly.produces }
+        : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
   };
 

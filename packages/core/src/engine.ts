@@ -13,12 +13,24 @@
 
 import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
-import type { CardDefinition } from './card.js';
+import type { CardDefinition, EffectRef } from './card.js';
 import { castTiming, isLand, isPermanentType, manaModesOf } from './card.js';
+import type { ChoiceAnswer, PendingChoice, ResolutionFrame } from './choices.js';
+import {
+  choiceOptionCount,
+  cloneChoiceAnswer,
+  defaultAnswerFor,
+  describeChoiceAnswer,
+  enumerateChoiceAnswers,
+  isTrivialChoice,
+  MAX_CHOICES_PER_RESOLUTION,
+  normalizeChoiceRequest,
+  validateChoiceAnswer,
+} from './choices.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
-import type { EffectRegistry } from './effects.js';
-import { applyEffectRef, createEffectRegistry } from './effects.js';
+import type { ChoiceChannel, EffectRegistry } from './effects.js';
+import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './effects.js';
 import type { GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
 import {
@@ -43,6 +55,7 @@ import {
   PLAYER_IDS,
   STEP_ORDER,
 } from './state.js';
+import { illegalTargetReason, legalTargetsFor, targetRestrictionOf } from './targeting.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
@@ -56,7 +69,7 @@ import {
   hasAnyFirstStrike,
   tapAttackers,
 } from './internal/combat.js';
-import { isCreature } from './card.js';
+import { entersTapped, isCreature } from './card.js';
 
 /** A deck list: an ordered array of card definitions (the library, pre-shuffle). */
 export interface DeckList {
@@ -404,8 +417,10 @@ function onPassPriority(
   state.consecutivePasses = 0;
   if (state.stack.length > 0) {
     resolveTopOfStack(state, config, registry, emit);
-    // After resolution the active player receives priority again.
-    if (!state.gameOver) {
+    // After resolution the active player receives priority again — UNLESS the
+    // resolution stopped to ask somebody a question, in which case the floor now
+    // belongs to that chooser and priority resumes when they answer.
+    if (!state.gameOver && !state.pendingChoice) {
       state.priorityPlayer = state.activePlayer;
     }
     return;
@@ -433,39 +448,32 @@ function resolveTopOfStack(
 
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
 
-  // Run the card's effects (ETB script for permanents, spell effect for non-permanents).
-  const effects = card.def.effects ?? [];
-  for (const ref of effects) {
-    applyEffectRef(
-      registry,
-      ref,
-      { state, source: card, controller: top.controller },
-      emit,
-      top.targets,
-    );
+  // Fast path: a spell with no script (every vanilla creature and land) never asks
+  // anybody anything, so it skips the resolution frame entirely and pays nothing
+  // for the choice machinery.
+  const effects = card.def.effects;
+  if (!effects || effects.length === 0) {
+    finishSpellResolution(state, card, top.resolvesTo, emit);
+    checkStateBasedActions(state, emit);
+    return;
   }
 
-  if (top.resolvesTo === 'battlefield') {
-    card.controller = top.controller;
-    card.zone = 'stack'; // moveToZone will set it
-    // Stack objects aren't in a player zone; place directly on battlefield.
-    card.zone = 'battlefield';
-    card.tapped = false;
-    card.damageMarked = 0;
-    card.markedByDeathtouch = false;
-    // Summoning sickness: a creature is sick unless it has haste.
-    card.summoningSick = isCreature(card.def) ? !(card.def.keywords?.haste ?? false) : false;
-    state.battlefield.push(card);
-    emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'battlefield' });
-  } else {
-    // Spell → graveyard.
-    card.zone = 'graveyard';
-    state.players[card.owner].graveyard.push(card);
-    resetInstanceForNewZone(card);
-    emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
-  }
-
-  checkStateBasedActions(state, emit);
+  runResolution(
+    state,
+    {
+      origin: 'spell',
+      controller: top.controller,
+      targets: top.targets,
+      effects: effects.slice(),
+      next: 0,
+      answers: [],
+      askCount: 0,
+      card,
+      resolvesTo: top.resolvesTo,
+    },
+    registry,
+    emit,
+  );
 }
 
 /**
@@ -481,29 +489,234 @@ function resolveTriggeredAbility(
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
 ): void {
-  const source = findOnBattlefield(state, obj.sourceInstanceId) ?? findInstanceAnywhere(state, obj.sourceInstanceId);
-  // A trigger always has a controller even if its source is gone; build a minimal
-  // synthetic source only when the real instance can't be found at all.
-  const effectSource: CardInstance =
-    source ?? {
-      instanceId: obj.sourceInstanceId,
-      def: { id: 'unknown-trigger-source', name: 'unknown', types: [] },
+  runResolution(
+    state,
+    {
+      origin: 'trigger',
       controller: obj.controller,
-      owner: obj.controller,
+      targets: obj.targets,
+      effects: obj.effects.slice(),
+      next: 0,
+      answers: [],
+      askCount: 0,
+      sourceInstanceId: obj.sourceInstanceId,
+      label: obj.label,
+    },
+    registry,
+    emit,
+  );
+}
+
+// --- resolution frames + player choice -----------------------------------------
+
+/**
+ * The instance a frame's effects run against. Re-derived on every (re)entry rather
+ * than captured, because a suspended resolution can outlive its source: a trigger's
+ * permanent may die while its controller is answering a question. A source that has
+ * gone entirely is replaced by a last-known-information stand-in so the ability
+ * still resolves (as MTG requires) instead of silently vanishing.
+ */
+function frameSource(state: GameState, frame: ResolutionFrame): CardInstance {
+  if (frame.card) return frame.card;
+  const id = frame.sourceInstanceId ?? 0;
+  return (
+    findOnBattlefield(state, id) ??
+    findInstanceAnywhere(state, id) ?? {
+      instanceId: id,
+      def: { id: 'unknown-trigger-source', name: 'unknown', types: [] },
+      controller: frame.controller,
+      owner: frame.controller,
       zone: 'exile',
       tapped: false,
       summoningSick: false,
       damageMarked: 0,
       markedByDeathtouch: false,
       counters: {},
-    };
+    }
+  );
+}
 
-  for (const ref of obj.effects) {
-    applyEffectRef(registry, ref, { state, source: effectSource, controller: obj.controller }, emit, obj.targets);
+/**
+ * Run a resolution to completion, or until an effect asks a question.
+ *
+ * This is the whole suspend/resume mechanism. Effects run in order; if one parks a
+ * question, the frame (which effect ref, which answers so far) is stored in state
+ * and the chooser gets the floor. `applyAnswerChoice` calls straight back into here
+ * with the answer appended, and the same effect ref is re-run — replaying its
+ * already-answered questions from `frame.answers` until execution reaches the point
+ * it stopped at. Everything is plain data, so this survives a clone, a serialize,
+ * and a replay.
+ */
+function runResolution(
+  state: GameState,
+  frame: ResolutionFrame,
+  registry: EffectRegistry,
+  emit: (e: GameEvent) => void,
+): void {
+  while (frame.next < frame.effects.length) {
+    const ref = frame.effects[frame.next] as EffectRef;
+    const source = frameSource(state, frame);
+    applyEffectRef(
+      registry,
+      ref,
+      { state, source, controller: frame.controller },
+      emit,
+      frame.targets,
+      createChoiceChannel(state, frame, source, emit),
+    );
+    if (state.pendingChoice) {
+      // Parked. Bookmark the resolution and hand the floor to the chooser — who is
+      // NOT necessarily the spell's controller (targeted discard is chosen by its
+      // victim), and whose only legal action is to answer.
+      state.resolution = frame;
+      state.priorityPlayer = state.pendingChoice.chooser;
+      state.consecutivePasses = 0;
+      return;
+    }
+    frame.next += 1;
+    // Answers belong to one effect ref; the next ref starts its own conversation.
+    frame.answers.length = 0;
   }
-  emit({ type: 'triggeredAbilityResolved', sourceInstanceId: obj.sourceInstanceId, label: obj.label });
+  finishResolution(state, frame, emit);
+}
+
+/** Complete a resolution: put the card where it goes / close out the trigger. */
+function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: GameEvent) => void): void {
+  state.resolution = null;
+  state.pendingChoice = null;
+  if (frame.origin === 'spell' && frame.card) {
+    finishSpellResolution(state, frame.card, frame.resolvesTo ?? 'graveyard', emit);
+  } else {
+    emit({
+      type: 'triggeredAbilityResolved',
+      sourceInstanceId: frame.sourceInstanceId ?? 0,
+      label: frame.label ?? '',
+    });
+  }
   checkStateBasedActions(state, emit);
 }
+
+/** Move a finished spell/permanent off the stack into its destination zone. */
+function finishSpellResolution(
+  state: GameState,
+  card: CardInstance,
+  resolvesTo: 'battlefield' | 'graveyard',
+  emit: (e: GameEvent) => void,
+): void {
+  if (resolvesTo === 'battlefield') {
+    // Stack objects aren't in a player zone; place directly on battlefield.
+    card.zone = 'battlefield';
+    card.tapped = entersTapped(card.def);
+    card.damageMarked = 0;
+    card.markedByDeathtouch = false;
+    // Summoning sickness: a creature is sick unless it has haste.
+    card.summoningSick = isCreature(card.def) ? !(card.def.keywords?.haste ?? false) : false;
+    state.battlefield.push(card);
+    emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'battlefield' });
+    // The event log is the replay/inspector source (DESIGN §2), and a consumer
+    // folding it starts every entering permanent untapped — so arriving tapped has
+    // to be SAID, not just stored. `playLand` already emits this; without the same
+    // emission here a resolved "enters tapped" permanent replayed as untapped.
+    if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
+    return;
+  }
+  // Spell → graveyard.
+  card.zone = 'graveyard';
+  state.players[card.owner].graveyard.push(card);
+  resetInstanceForNewZone(card);
+  emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
+}
+
+/**
+ * Build the channel one effect-ref invocation asks its questions through.
+ *
+ * Questions are numbered per invocation: number `i` is answered from
+ * `frame.answers[i]` when that answer already exists (a replay), and otherwise
+ * becomes the new parked choice. Because the engine re-runs the ref from the top,
+ * a primitive must ask BEFORE it mutates — see `EffectContext.ask`.
+ *
+ * Every path out of `ask` is safe. A question with exactly one legal answer is
+ * answered here rather than put to a human; a chooser who can no longer act gets
+ * the default; an unrepresentable question, or a runaway primitive that blows the
+ * per-resolution ask budget, is abandoned with an event. None of them can hang.
+ */
+function createChoiceChannel(
+  state: GameState,
+  frame: ResolutionFrame,
+  source: CardInstance,
+  emit: (e: GameEvent) => void,
+): ChoiceChannel {
+  let askIndex = 0;
+  const abandon = (reason: string): undefined => {
+    emit({ type: 'choiceAbandoned', sourceInstanceId: source.instanceId, reason });
+    return undefined;
+  };
+  const settle = (choice: PendingChoice, reason: string): ChoiceAnswer => {
+    const answer = defaultAnswerFor(choice);
+    emit({
+      type: 'choiceAutoAnswered',
+      choiceId: choice.id,
+      chooser: choice.chooser,
+      choiceKind: choice.kind,
+      answer,
+      reason,
+    });
+    frame.answers.push(answer);
+    askIndex += 1;
+    return answer;
+  };
+
+  return {
+    ask(request) {
+      const recorded = frame.answers[askIndex];
+      if (recorded !== undefined) {
+        askIndex += 1;
+        return recorded;
+      }
+      if (frame.askCount >= MAX_CHOICES_PER_RESOLUTION) {
+        return abandon(`asked more than ${MAX_CHOICES_PER_RESOLUTION} questions in one resolution`);
+      }
+      const choice = normalizeChoiceRequest(request, {
+        id: state.nextInstanceId++,
+        sourceInstanceId: source.instanceId,
+        sourceName: source.def.name,
+      });
+      if (!choice) return abandon(`unknown choice kind '${String((request as { kind?: unknown }).kind)}'`);
+      frame.askCount += 1;
+
+      // Only one legal answer (including "no candidates left" — the shape a choice
+      // takes when its objects have already left the zone): answer it here rather
+      // than stopping the game to collect the inevitable.
+      if (isTrivialChoice(choice)) return settle(choice, 'only one legal answer');
+      // Nobody left to ask.
+      if (state.gameOver || state.players[choice.chooser].hasLost) {
+        return settle(choice, 'the chooser can no longer act');
+      }
+
+      state.pendingChoice = choice;
+      emit({
+        type: 'choiceAsked',
+        choiceId: choice.id,
+        chooser: choice.chooser,
+        choiceKind: choice.kind,
+        prompt: choice.prompt,
+        sourceInstanceId: choice.sourceInstanceId,
+        optionCount: choiceOptionCount(choice),
+      });
+      return undefined;
+    },
+    enqueueEffects(refs) {
+      if (refs.length === 0) return;
+      // Insert AFTER the ref now running, so a modal spell's chosen modes resolve
+      // in order as part of this same resolution (and may ask questions of their own).
+      frame.effects.splice(frame.next + 1, 0, ...refs);
+    },
+    shuffleLibrary(player) {
+      shuffleLibraryInState(state, player);
+    },
+  };
+}
+
 
 /** Find an instance in any zone (battlefield/hand/grave/exile/stack), else undefined. */
 function findInstanceAnywhere(state: GameState, id: InstanceId): CardInstance | undefined {
@@ -597,7 +810,15 @@ function applyActionToDraft(
   }
 
   const dispatch = (): EngineResult => {
+    // A parked question freezes the game for everyone else: while it stands, the
+    // only thing anybody may do is answer it. Without this a player could pass
+    // priority (or attack) "around" a half-resolved spell.
+    if (state.pendingChoice && action.kind !== 'answerChoice') {
+      return rejectWith(prevState, 'a choice is awaiting an answer');
+    }
     switch (action.kind) {
+      case 'answerChoice':
+        return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
       case 'passPriority': {
         if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
         onPassPriority(state, config, effectRegistry, emit);
@@ -626,7 +847,9 @@ function applyActionToDraft(
   // the stack and hand the active player priority over them. Rejections return a
   // fresh clone of prevState, so `result.state !== state`; we only flush our draft.
   if (result.state === state && !result.events.some((e) => e.type === 'actionRejected')) {
-    if (collector.flush() > 0 && !state.gameOver) {
+    // A suspended resolution keeps the floor: a trigger that fired mid-resolution
+    // goes on the stack and waits its turn, but the chooser must still answer first.
+    if (collector.flush() > 0 && !state.gameOver && !state.pendingChoice) {
       state.priorityPlayer = state.activePlayer;
       state.consecutivePasses = 0;
     }
@@ -636,6 +859,67 @@ function applyActionToDraft(
 
 function rejectWith(prevState: GameState, reason: string): EngineResult {
   return { state: cloneState(prevState), events: [{ type: 'actionRejected', reason }] };
+}
+
+/**
+ * Answer the parked question and resume the resolution it belongs to.
+ *
+ * Every rejection here is a *clean* one — the pending choice and the suspended
+ * frame are left exactly as they were, so a wrong seat answering, a stale answer,
+ * or a malformed one from a hostile client costs nothing and the real chooser can
+ * still answer. This is the entry point the online server exposes to the wire, so
+ * "rejects without corrupting" is a security property, not just tidiness.
+ */
+function applyAnswerChoice(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'answerChoice' }>,
+  registry: EffectRegistry,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  const choice = state.pendingChoice;
+  if (!choice) return rejectWith(prevState, 'no choice is awaiting an answer');
+  // Answers name their question, so an answer to an already-resolved choice (a
+  // slow client, a replayed packet) is refused instead of applied to whatever
+  // question happens to be open now.
+  if (action.choiceId !== choice.id) return rejectWith(prevState, 'that answer is for a different choice');
+  if (action.player !== choice.chooser) return rejectWith(prevState, `only player ${choice.chooser} makes this choice`);
+  const verdict = validateChoiceAnswer(choice, action.answer);
+  if (!verdict.ok) return rejectWith(prevState, verdict.reason);
+
+  // Copy the answer out of the caller's action: it is about to live in both the
+  // event log and the resumed frame, and neither may alias caller-owned data.
+  const answer = cloneChoiceAnswer(action.answer);
+  emit({
+    type: 'choiceAnswered',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    answer,
+    summary: describeChoiceAnswer(answer),
+  });
+  state.pendingChoice = null;
+
+  const frame = state.resolution;
+  if (!frame) {
+    // Defensive: a choice with nothing to resume (only reachable from a hand-built
+    // state). Clearing it is the safe outcome — the game continues normally.
+    state.priorityPlayer = state.activePlayer;
+    state.consecutivePasses = 0;
+    return { state, events };
+  }
+  state.resolution = null;
+  frame.answers.push(cloneChoiceAnswer(answer));
+  runResolution(state, frame, registry, emit);
+
+  // Resolution finished (rather than parking on a follow-up question) → priority
+  // returns to the active player, exactly as it does after any other resolution.
+  if (!state.pendingChoice && !state.gameOver) {
+    state.priorityPlayer = state.activePlayer;
+    state.consecutivePasses = 0;
+  }
+  return { state, events };
 }
 
 function applyPlayLand(
@@ -660,8 +944,9 @@ function applyPlayLand(
 
   moveToZone(state, card, 'battlefield', emit, action.player);
   card.controller = action.player;
-  card.tapped = false;
+  card.tapped = entersTapped(card.def);
   card.summoningSick = false; // lands aren't affected by summoning sickness
+  if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
@@ -746,6 +1031,14 @@ function applyCastSpell(
     return rejectWith(prevState, 'this spell can only be cast at sorcery speed (your main phase, empty stack)');
   }
 
+  // Target legality (targeting.ts). A spell whose printed text restricts what it
+  // may point at ("to target creature", "to target player or planeswalker") is
+  // rejected here when handed an illegal target — the engine, not the caller, is
+  // the authority, so a pilot or a UI that builds its own action cannot play a
+  // card as strictly better than printed.
+  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? []);
+  if (targetProblem) return rejectWith(prevState, targetProblem);
+
   // Pay the mana cost from the floating pool.
   const cost = card.def.cost;
   if (cost) {
@@ -799,6 +1092,16 @@ function applyDeclareAttackers(
   if (!state.combat) return rejectWith(prevState, 'not in combat');
   if (state.combat.attackersDeclared) return rejectWith(prevState, 'attackers already declared');
 
+  // A creature attacks at most ONCE. `combat.attackers` is a flat list the damage
+  // step iterates, so a repeated id would have the same creature deal its damage
+  // once per occurrence — a caller passing `[id, id]` hit for double power. Reject
+  // the malformed declaration rather than silently doubling combat damage.
+  const declaredAttackers = new Set<InstanceId>();
+  for (const id of action.attackers) {
+    if (declaredAttackers.has(id)) return rejectWith(prevState, `attacker ${id} was declared more than once`);
+    declaredAttackers.add(id);
+  }
+
   // Validate each attacker. Read EFFECTIVE keywords (printed OR continuous grants)
   // so an until-EOT haste/defender grant is honored for attack legality (DESIGN §3.9).
   const cont = indexContinuous(state);
@@ -842,6 +1145,16 @@ function applyDeclareBlockers(
   // grant is honored for block legality, matching the damage step which builds the same
   // index (DESIGN §3.9). Build it once and thread it into every canBlock check.
   const cont = indexContinuous(state);
+  // `combat.blocks` is a blocker→attacker map, so a blocker named twice would have
+  // all but its LAST assignment silently discarded — turning "I block both" into
+  // "one attacker is unblocked" without telling the player. A creature blocks one
+  // attacker in this MVP, so a repeated blocker is an illegal declaration: reject it
+  // instead of quietly rewriting the defender's choice.
+  const declaredBlockers = new Set<InstanceId>();
+  for (const { blocker } of action.blocks) {
+    if (declaredBlockers.has(blocker)) return rejectWith(prevState, `blocker ${blocker} was assigned more than once`);
+    declaredBlockers.add(blocker);
+  }
   for (const { blocker, attacker } of action.blocks) {
     const b = findOnBattlefield(state, blocker);
     const a = findOnBattlefield(state, attacker);
@@ -876,6 +1189,11 @@ function applyDeclareBlockers(
  */
 export function generateLegalActions(state: GameState, config: RulesConfig = DEFAULT_RULES): readonly GameAction[] {
   if (state.gameOver) return [];
+  // A parked question preempts the whole game: the only legal action is its
+  // chooser answering it. This is what makes the choice system invisible to every
+  // consumer — the sim loop, MCTS, the hotseat UI and the server already ask for
+  // legal actions and apply one, so they answer questions with no change at all.
+  if (state.pendingChoice) return choiceActionsFor(state.pendingChoice);
   const me = state.priorityPlayer;
   const player = state.players[me];
   const actions: GameAction[] = [];
@@ -915,13 +1233,28 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   }
 
   // Cast spells you can afford at the appropriate timing.
+  //
+  // A spell that declares a TARGET RESTRICTION (targeting.ts) is offered once per
+  // LEGAL target instead of once bare, so a consumer that only picks from this
+  // menu physically cannot choose an illegal target — and a restricted spell with
+  // no legal target on the board is not offered at all, because a spell with no
+  // legal target cannot be cast. Unrestricted spells keep their single bare offer:
+  // their targets (a stack object, the source itself, none) are chosen by the
+  // caller, and enumerating them here would change every consumer's action space.
   for (const card of player.hand) {
     if (isLand(card.def)) continue;
     const timing = castTiming(card.def);
     const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
     if (!timingOk) continue;
     if (card.def.cost && !canPay(player.manaPool, card.def.cost)) continue;
-    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
+    const restriction = targetRestrictionOf(card.def);
+    if (restriction === undefined) {
+      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
+      continue;
+    }
+    for (const target of legalTargetsFor(state, restriction)) {
+      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
+    }
   }
 
   // Declare attackers: a single composite action listing all eligible attackers.
@@ -959,6 +1292,19 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   }
 
   return actions;
+}
+
+/**
+ * The `answerChoice` actions offered for a parked choice — a BOUNDED, always
+ * non-empty menu (see `MAX_ENUMERATED_CHOICE_ANSWERS`). `applyAction` accepts any
+ * valid answer besides these, exactly as it accepts attack/block subsets a pilot
+ * builds itself, so a UI or a pilot that wants a specific ordering is not limited
+ * to the menu.
+ */
+export function choiceActionsFor(choice: PendingChoice): readonly GameAction[] {
+  return enumerateChoiceAnswers(choice).map(
+    (answer): GameAction => ({ kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer }),
+  );
 }
 
 /** Convenience: re-export winner resolution for callers that force-end a game. */

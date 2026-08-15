@@ -42,7 +42,9 @@ function scryfallCard(overrides: Record<string, unknown> & { name: string }): Re
 function fakeScryfall(known: ReadonlyArray<Record<string, unknown>>): FetchLike {
   const byName = new Map(known.map((card) => [String(card.name).toLowerCase(), card]));
   return async (_url, init) => {
-    const body = JSON.parse(init.body) as { identifiers: Array<{ name: string }> };
+    const body = JSON.parse(init.body ?? '{"identifiers":[]}') as {
+      identifiers: Array<{ name: string }>;
+    };
     const data: unknown[] = [];
     const notFound: Array<{ name: string }> = [];
     for (const identifier of body.identifiers) {

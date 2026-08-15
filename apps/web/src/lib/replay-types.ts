@@ -31,12 +31,39 @@ export interface ReplayPermanent {
   readonly isLand: boolean;
 }
 
-/** One player's render-ready state at a replay frame. */
+/**
+ * One player's render-ready state at a replay frame.
+ *
+ * The hidden zones are carried as INSTANCE IDS, not card records: the trace
+ * already maps every id it has ever seen to a name and pool card id
+ * ({@link MatchTrace.names} / {@link MatchTrace.cardIds}), so ids keep a frame
+ * cheap — a long game snapshots hundreds of frames, and repeating 60 card
+ * records per frame per player would bloat the message the worker posts back.
+ *
+ * Revealing hands and libraries is the POINT of this surface. It is a replay of
+ * a finished AI-vs-AI game, not a game anyone is playing, and you cannot tell
+ * whether a pilot is drawing well, holding a removal spell, or flooding out
+ * without seeing what it actually had. (Hidden-information masking lives in the
+ * hotseat/online view model, `lib/play/`, and is untouched by this.)
+ */
 export interface ReplaySide {
   readonly life: number;
   readonly handCount: number;
   readonly libraryCount: number;
   readonly graveyardCount: number;
+  /** Instance ids in hand, in hand order. */
+  readonly hand: readonly number[];
+  /** Instance ids in the library, TOP CARD FIRST (the engine draws index 0). */
+  readonly library: readonly number[];
+  /** Instance ids in the graveyard, most recently added last. */
+  readonly graveyard: readonly number[];
+  /**
+   * Unspent mana in the pool at this frame, by symbol (`W`/`U`/`B`/`R`/`G`/`C`),
+   * omitting zeroes. Mana empties at every step boundary, so a non-empty pool
+   * sitting here at end of turn is exactly the "tapped a Sol Ring and did
+   * nothing with it" waste that is otherwise invisible.
+   */
+  readonly manaPool: Readonly<Record<string, number>>;
   readonly board: readonly ReplayPermanent[];
 }
 

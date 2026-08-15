@@ -355,8 +355,15 @@ function LocalPlay({ decks }: { decks: DecksApi }): ReactElement {
   // their own priority passes; only a change of controlling human triggers a handoff.
   const priority = session.priorityPlayer;
   if (transport && revealed !== null && revealed !== priority && transport.requiresHandoff(revealed, priority)) {
-    const context =
-      session.state.activePlayer === priority ? 'to take your turn' : 'to respond (you have priority)';
+    // A parked question moves priority to its CHOOSER, who may be the opponent of
+    // the spell's controller — so the handoff has to name the question, not the
+    // turn, or the player picking up the device has no idea why it is their move.
+    const pending = session.pendingChoice;
+    const context = pending
+      ? `to answer ${pending.sourceName}`
+      : session.state.activePlayer === priority
+        ? 'to take your turn'
+        : 'to respond (you have priority)';
     return (
       <div className="play-view">
         <HandoffScreen

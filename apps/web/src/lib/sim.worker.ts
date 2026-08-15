@@ -27,7 +27,7 @@ import {
   DEFAULT_PILOT_ID,
 } from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
-import type { EffectRegistry } from '@jonny-boi/core';
+import type { CardDefinition, EffectRegistry } from '@jonny-boi/core';
 import {
   SAMPLE_DECKS,
   loadDeck,
@@ -70,9 +70,15 @@ interface Lab {
   readonly pilots: MatchupPilots;
 }
 
-function makeLab(): Lab {
+/**
+ * Build the sim context for one request. `importedCards` are the compiled
+ * definitions the user's imported decks depend on; they join the curated pool
+ * through the same `extraCards` seam the main thread uses, so a deck loads
+ * identically here and there.
+ */
+function makeLab(importedCards: readonly CardDefinition[] = []): Lab {
   // Silence pool validation warnings (stubbed mechanics are intentional, not noise).
-  const pool = loadCardPool({ onWarn: () => {} });
+  const pool = loadCardPool({ onWarn: () => {}, extraCards: importedCards });
   const registry = buildRegistry();
   const aiRegistry = createDefaultAiRegistry();
   const pilotA = aiRegistry.getPilot(DEFAULT_PILOT_ID);
@@ -88,6 +94,13 @@ function post(message: SimResponse): void {
 function nowSeconds(): number {
   return performance.now() / 1000;
 }
+
+/**
+ * How often a long run may post a progress message. Frequent enough that the UI
+ * always looks alive, rare enough that a fast run doesn't spend its time
+ * serialising `postMessage` payloads instead of playing games.
+ */
+const PROGRESS_INTERVAL_SECONDS = 0.25;
 
 /** Resolve the chosen sample-deck names into loaded gauntlet decks. */
 function resolveOpponents(names: readonly string[], hero: SimDeckPayload, pool: CardPool): LoadedDeck[] {
@@ -119,24 +132,41 @@ function runGauntletJob(req: Extract<SimRequest, { kind: 'gauntlet' }>, lab: Lab
   let totalWins = 0;
   let totalDraws = 0;
   const start = nowSeconds();
+  // Games, not opponents, are the progress unit: reporting once per opponent left
+  // a single-opponent run (the common quick check) showing "spinning up the
+  // worker…" for the WHOLE run — indistinguishable from a hang, because one AI
+  // game can take seconds. `runMatchup`'s own `onGame` hook gives us a per-game
+  // tick without duplicating any of its match logic.
+  const totalPlanned = opponents.length * req.gamesPerOpponent;
+  let lastPostedAt = 0;
+
+  const tick = (label: string, force: boolean): void => {
+    const elapsedSeconds = nowSeconds() - start;
+    if (!force && elapsedSeconds - lastPostedAt < PROGRESS_INTERVAL_SECONDS) return;
+    lastPostedAt = elapsedSeconds;
+    post({ type: 'progress', done: totalGames, total: totalPlanned, gamesRun: totalGames, elapsedSeconds, label });
+  };
+
+  // Say we're alive BEFORE the first (potentially slow) game, not after it.
+  tick(`vs ${(opponents[0] as LoadedDeck).name}`, true);
 
   for (let i = 0; i < opponents.length; i++) {
     const opponent = opponents[i] as LoadedDeck;
     const seats = makeSeats(hero, opponent, lab.pilots, lab.registry);
     const matchupSeed = gameSeedFor(req.seed, i);
-    const result = runMatchup(seats, req.gamesPerOpponent, matchupSeed);
+    const result = runMatchup(seats, req.gamesPerOpponent, matchupSeed, {
+      onGame: () => {
+        totalGames += 1;
+        tick(`vs ${opponent.name}`, false);
+      },
+    });
     matchups.push(result);
-    totalGames += result.games;
+    // `onGame` already counted this matchup's games; re-sync in case a future
+    // `runMatchup` ever finishes without calling back for every game.
+    totalGames = matchups.reduce((sum, m) => sum + m.games, 0);
     totalWins += result.winsA;
     totalDraws += result.draws;
-    post({
-      type: 'progress',
-      done: i + 1,
-      total: opponents.length,
-      gamesRun: totalGames,
-      elapsedSeconds: nowSeconds() - start,
-      label: `vs ${opponent.name}`,
-    });
+    tick(`vs ${opponent.name}`, true);
   }
 
   const elapsedSeconds = nowSeconds() - start;
@@ -232,6 +262,17 @@ function runSuggestJob(req: Extract<SimRequest, { kind: 'suggest' }>, lab: Lab):
   let totalGamesRun = 0;
   let baseGauntletWinRate: SwapEvaluation['baseWinRate'] | undefined;
   const start = nowSeconds();
+
+  // Evaluating ONE candidate is a whole paired gauntlet, so the first tick has to
+  // come before it — otherwise the UI reads "spinning up the worker…" for minutes.
+  post({
+    type: 'progress',
+    done: 0,
+    total: evaluated.length,
+    gamesRun: 0,
+    elapsedSeconds: 0,
+    label: evaluated[0] ? `${evaluated[0].outName} → ${evaluated[0].inName}` : 'preparing candidates…',
+  });
 
   for (let i = 0; i < evaluated.length; i++) {
     const candidate = evaluated[i]!;
@@ -344,7 +385,7 @@ function runMatchJob(req: Extract<SimRequest, { kind: 'match' }>, lab: Lab): voi
 ctx.onmessage = (event: MessageEvent<SimRequest>): void => {
   const req = event.data;
   try {
-    const lab = makeLab();
+    const lab = makeLab(req.importedCards ?? []);
     switch (req.kind) {
       case 'gauntlet':
         runGauntletJob(req, lab);

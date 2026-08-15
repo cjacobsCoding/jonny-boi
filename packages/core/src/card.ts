@@ -91,6 +91,18 @@ export interface CardDefinition {
    * fixed bundle is simply a source with exactly one mode.
    */
   readonly producesOptions?: readonly import('./mana.js').ManaProduction[];
+  /**
+   * When true this permanent arrives on the battlefield already tapped, exactly
+   * as printed ("~ enters tapped"). It is the defining drawback of the common
+   * dual lands, so without it those lands would play a full turn faster than
+   * they really do and every deck containing them would simulate too fast.
+   *
+   * Only the UNCONDITIONAL form is modelled here. A conditional entry ("enters
+   * tapped unless you control two or fewer other lands") or a paid choice
+   * (shocklands' "you may pay 2 life") needs the choice system, so those cards
+   * stay unimplemented rather than being flattened into always-tapped.
+   */
+  readonly entersTapped?: boolean;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -209,6 +221,15 @@ export function bestManaYield(def: CardDefinition): number {
   }
   MANA_YIELD_MEMO.set(def, best);
   return best;
+}
+
+/**
+ * Whether a permanent of this definition arrives tapped. One accessor so every
+ * battlefield-entry path (resolving a permanent spell, playing a land, creating
+ * a token) asks the same question the same way.
+ */
+export function entersTapped(def: CardDefinition): boolean {
+  return def.entersTapped === true;
 }
 
 /** Resolve a definition's casting timing, defaulting to sorcery-speed. */

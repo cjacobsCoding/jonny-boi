@@ -6,7 +6,7 @@ import {
 } from '@jonny-boi/sim';
 import { allCards } from '../lib/cards.js';
 import { loadCardPool } from '../lib/sim-pool.js';
-import { resolveEntries, deckSize, type Deck } from '../lib/deck.js';
+import { resolveEntries, deckSize, unsupportedCardNames, type Deck } from '../lib/deck.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { toSimPayload } from '../lib/sim-format.js';
 import { useSimWorker } from '../lib/useSimWorker.js';
@@ -173,8 +173,21 @@ function poolInOptions(): CardOption[] {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Validate the hero through the sim's pool + rules (the authoritative check). */
+/**
+ * Validate the hero through the sim's pool + rules (the authoritative check).
+ *
+ * Unsupported imported cards are named FIRST. The sim's own check would reject
+ * them too, but only as `unknown card "<uuid>"` — true and useless. A deck you
+ * just imported deserves to be told which card is holding it up and why.
+ */
 function validateHero(hero: Deck): string[] {
+  const unsupported = unsupportedCardNames(hero);
+  if (unsupported.length > 0) {
+    return [
+      `${unsupported.length} card${unsupported.length === 1 ? '' : 's'} in this deck can’t be simulated yet: ${unsupported.join(', ')}. ` +
+        'The deck itself is fine — swap them out to run the Lab, or check the deck panel for what the engine still needs.',
+    ];
+  }
   const pool = loadCardPool();
   // `SimDeckPayload` is structurally the sim's `Deck` (name/archetype/cards).
   return validateSimDeck(toSimPayload(hero) as SimDeck, pool);

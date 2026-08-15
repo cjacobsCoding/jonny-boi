@@ -10,8 +10,10 @@ import {
   manaCurve,
   validateDeck,
   toExport,
+  type DeckIssue,
 } from '../lib/deck.js';
 import { MIN_DECK_SIZE } from '../lib/config.js';
+import { unsupportedReason } from '../lib/decklist/importedCards.js';
 import type { DecksApi } from '../lib/useDecks.js';
 import { CardToolbar } from '../components/CardToolbar.js';
 import { CardGrid } from '../components/CardGrid.js';
@@ -19,6 +21,7 @@ import { CardDetail } from '../components/CardDetail.js';
 import { ManaCurveChart } from '../components/ManaCurveChart.js';
 import { ImportDeckDialog } from '../components/ImportDeckDialog.js';
 import { deckToDecklist } from '../lib/proxy/deckToText.js';
+import { copyText } from '../lib/clipboard.js';
 
 /**
  * The Deck Builder: a card pool on the left (reusing the browser's toolbar +
@@ -145,7 +148,7 @@ function DeckPanel({
         <ul className="deck-issues">
           {issues.map((issue, index) => (
             <li key={index} className={`deck-issue--${issue.severity}`}>
-              {issue.severity === 'error' ? '✕ ' : '! '}
+              {ISSUE_ICONS[issue.severity]}
               {issue.message}
             </li>
           ))}
@@ -177,6 +180,15 @@ function DeckPanel({
                   >
                     {card.name}
                   </span>
+                  {unsupportedReason(card.id) && (
+                    <span
+                      className="deck-entry__unsupported"
+                      title={unsupportedSummary(card.id)}
+                      aria-label={`${card.name} cannot be simulated yet`}
+                    >
+                      ⚠
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="deck-entry__remove"
@@ -200,14 +212,14 @@ function DeckPanel({
             <button
               type="button"
               className="btn btn--ghost"
-              onClick={() => navigator.clipboard?.writeText(exportJson)}
+              onClick={() => void copyText(exportJson)}
             >
               Copy JSON
             </button>
             <button
               type="button"
               className="btn btn--ghost"
-              onClick={() => navigator.clipboard?.writeText(deckToDecklist(active))}
+              onClick={() => void copyText(deckToDecklist(active))}
             >
               Copy decklist
             </button>
@@ -222,6 +234,25 @@ function DeckPanel({
       )}
     </aside>
   );
+}
+
+/** Leading glyph per issue severity (kept out of JSX so the mapping is one place). */
+const ISSUE_ICONS: Readonly<Record<DeckIssue['severity'], string>> = {
+  error: '✕ ',
+  warning: '! ',
+  unsupported: '⚠ ',
+};
+
+/**
+ * Hover text for an unsupported card's warning marker: the engine systems its
+ * rules text needs, so the answer to "why is this flagged?" is one hover away.
+ */
+function unsupportedSummary(cardId: string): string {
+  const missing = unsupportedReason(cardId) ?? [];
+  const systems = [...new Set(missing.map((gap) => gap.missingEngineSystem))];
+  return systems.length > 0
+    ? `Can't be simulated yet — needs ${systems.join('; ')}.`
+    : "Can't be simulated yet.";
 }
 
 /** The saved-deck switcher (load / active highlight / delete). */

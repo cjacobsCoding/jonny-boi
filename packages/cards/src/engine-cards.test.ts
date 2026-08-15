@@ -27,6 +27,7 @@ import type {
 import {
   applyAction,
   createGame,
+  defaultAnswerFor,
   DEFAULT_RULES,
   effectivePower,
   effectiveToughness,
@@ -244,11 +245,23 @@ describe('pool smoke run — supported cards resolve with no effectUnsupported e
       r.events.forEach((e) => allEvents.push(e.type));
       return r.state;
     };
+    // Resolve everything, ANSWERING any question a card parks — several of these
+    // cards ask one now (Brainstorm's put-back, Ponder's reorder), and while a
+    // choice is parked passing is rejected, so a loop that only passed would
+    // quietly stop casting anything after the first one.
     const resolveSink = (st: GameState, max = 50): GameState => {
       let cur = st;
       let g = 0;
-      while (cur.stack.length > 0 && !cur.gameOver && g++ < max) {
-        cur = sink(cur, { kind: 'passPriority', player: cur.priorityPlayer });
+      while ((cur.stack.length > 0 || cur.pendingChoice) && !cur.gameOver && g++ < max) {
+        const choice = cur.pendingChoice;
+        cur = choice
+          ? sink(cur, {
+              kind: 'answerChoice',
+              player: choice.chooser,
+              choiceId: choice.id,
+              answer: defaultAnswerFor(choice),
+            })
+          : sink(cur, { kind: 'passPriority', player: cur.priorityPlayer });
       }
       return cur;
     };

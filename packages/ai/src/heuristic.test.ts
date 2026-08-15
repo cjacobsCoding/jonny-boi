@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyAction,
+  canPay,
   createGame,
   createRng,
   generateLegalActions,
@@ -12,12 +14,17 @@ import { createHeuristicPilot, HEURISTIC_PILOT_ID } from './heuristic.js';
 import {
   addPool,
   burnDef,
+  counterDef,
+  createTestRegistry,
   creatureDef,
   destroyDef,
   giveHand,
   landDef,
   pumpDef,
   putOnBattlefield,
+  putOnStack,
+  shrinkDef,
+  sweeperDef,
 } from './test-support.js';
 
 /** A deck stub good enough to start a game; tests override hand/board directly. */
@@ -118,6 +125,26 @@ describe('heuristic pilot — removal & burn', () => {
     }
   });
 
+  it('burns the FACE instead of a blocker once the opponent is nearly dead', () => {
+    // The same board, the same Bolt, a different life total: at 20 killing the
+    // creature is right, at 6 the game is two spells away and the creature is
+    // irrelevant. A flat "chip the face" score could not tell those apart, so an
+    // aggro deck answered creatures until it ran out of cards.
+    const play = (life: number) => {
+      const state = freshGame();
+      intoMainPhase(state);
+      state.players.B.life = life;
+      putOnBattlefield(state, 'B', [creatureDef('Bear', 2, 2, { cost: { R: 2 } })]);
+      giveHand(state, 'A', [burnDef('Bolt', 3, { R: 1 })]);
+      addPool(state, 'A', 'R', 1);
+      const action = choose(state);
+      if (action.kind !== 'castSpell') throw new Error('expected a cast');
+      return action.targets;
+    };
+    expect(play(20)).not.toEqual(['B']); // healthy: kill the blocker
+    expect(play(6)).toEqual(['B']); // low: race
+  });
+
   it('targets the BIGGEST killable threat with removal', () => {
     const state = freshGame();
     intoMainPhase(state);
@@ -153,6 +180,92 @@ describe('heuristic pilot — removal & burn', () => {
     // No opposing creatures → removal has no target → should just pass.
     const action = choose(state);
     expect(action.kind).toBe('passPriority');
+  });
+});
+
+describe('heuristic pilot — reactive spells are not blank cards', () => {
+  it('holds a counterspell while the stack is empty', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    giveHand(state, 'A', [counterDef('Counterspell')]);
+    addPool(state, 'A', 'U', 2);
+    // Casting it now would resolve as a no-op that ate a card.
+    expect(choose(state).kind).toBe('passPriority');
+  });
+
+  it('counters the opponent’s spell on the stack, naming it as the target', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    state.priorityPlayer = 'A';
+    const threat = putOnStack(state, 'B', creatureDef('Dragon', 6, 6, { cost: { generic: 6 } }));
+    const [counter] = giveHand(state, 'A', [counterDef('Counterspell')]);
+    addPool(state, 'A', 'U', 2);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') {
+      expect(action.instanceId).toBe(counter!.instanceId);
+      expect(action.targets).toEqual([threat.instanceId]);
+    }
+  });
+
+  it('does not stack a second counter on its own answer', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnStack(state, 'B', creatureDef('Dragon', 6, 6, { cost: { generic: 6 } }));
+    putOnStack(state, 'A', counterDef('Counterspell')); // our answer, already on top
+    giveHand(state, 'A', [counterDef('Counterspell')]);
+    addPool(state, 'A', 'U', 2);
+    expect(choose(state).kind).toBe('passPriority');
+  });
+
+  it('holds a sweeper that would cost it more than the opponent', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'A', [creatureDef('Ours', 4, 4, { cost: { W: 3 } })]);
+    putOnBattlefield(state, 'B', [creatureDef('Theirs', 1, 1, { cost: { B: 1 } })]);
+    giveHand(state, 'A', [sweeperDef('Wrath of God')]);
+    addPool(state, 'A', 'W', 4);
+    expect(choose(state).kind).toBe('passPriority');
+  });
+
+  it('fires a sweeper into a board that is all theirs', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'B', [
+      creatureDef('A1', 3, 3, { cost: { B: 2 } }),
+      creatureDef('A2', 3, 3, { cost: { B: 2 } }),
+    ]);
+    const [wrath] = giveHand(state, 'A', [sweeperDef('Wrath of God')]);
+    addPool(state, 'A', 'W', 4);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') expect(action.instanceId).toBe(wrath!.instanceId);
+  });
+
+  it('reads a NEGATIVE pump as removal and points it at the biggest thing it kills', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    const [small] = putOnBattlefield(state, 'B', [creatureDef('Rat', 1, 1, { cost: { B: 1 } })]);
+    const [mid] = putOnBattlefield(state, 'B', [creatureDef('Knight', 2, 2, { cost: { B: 2 } })]);
+    putOnBattlefield(state, 'B', [creatureDef('Ogre', 4, 4, { cost: { B: 3 } })]); // survives -2/-2
+    const [disfigure] = giveHand(state, 'A', [shrinkDef('Disfigure', -2, -2)]);
+    addPool(state, 'A', 'B', 1);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') {
+      expect(action.instanceId).toBe(disfigure!.instanceId);
+      expect(action.targets).toEqual([mid!.instanceId]);
+      expect(action.targets).not.toEqual([small!.instanceId]);
+    }
+  });
+
+  it('holds shrink-removal that would kill nothing', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'B', [creatureDef('Ogre', 4, 4, { cost: { B: 3 } })]);
+    giveHand(state, 'A', [shrinkDef('Disfigure', -2, -2)]);
+    addPool(state, 'A', 'B', 1);
+    expect(choose(state).kind).toBe('passPriority');
   });
 });
 
@@ -348,7 +461,7 @@ describe('heuristic pilot — mana is tapped only as needed', () => {
 
     // Drive the pilot forward until it casts, counting the taps it makes.
     let taps = 0;
-    let s = state;
+    const s = state;
     for (let i = 0; i < 10; i++) {
       const action = choose(s);
       if (action.kind === 'castSpell') break;
@@ -392,5 +505,86 @@ describe('heuristic pilot — mana is tapped only as needed', () => {
     const action = choose(state);
     expect(action.kind).toBe('tapForMana');
     if (action.kind === 'tapForMana') expect(action.instanceId).toBe(forest!.instanceId);
+  });
+});
+
+// --- regression: hybrid mana costs (the livelock) -------------------------------
+
+describe('heuristic pilot — hybrid mana costs (regression)', () => {
+  /**
+   * `{1}{G/W}{G/W}` (Kitchen Finks). The pilot used to ignore `cost.hybrid`
+   * entirely, so it read this as a one-generic-mana spell, proposed a cast the
+   * engine rejected for insufficient mana, and — seeing the same state on its next
+   * decision — proposed the identical cast forever. That livelock burned the sim's
+   * whole action cap and banked a bogus timeout draw; roughly 60% of gauntlet games
+   * ended that way, poisoning every win-rate and A/B verdict built on them.
+   */
+  const hybridCost = { generic: 1, hybrid: [['G', 'W'], ['G', 'W']] } as const;
+  const finks = creatureDef('Finks', 3, 2, { cost: hybridCost });
+
+  it('never proposes a cast the engine refuses when a hybrid cost is unpayable', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    // One Forest + one floating G: nowhere near {1}{G/W}{G/W}.
+    putOnBattlefield(state, 'A', [landDef('Forest', 'G')]);
+    addPool(state, 'A', 'G', 1);
+    giveHand(state, 'A', [finks]);
+
+    // Whatever the pilot chooses, the engine must accept it — and re-choosing from
+    // the same position must not produce an ever-repeating rejected cast.
+    for (let i = 0; i < 3; i++) {
+      const action = choose(state);
+      expect(action.kind).not.toBe('castSpell');
+      const result = applyAction(state, action, undefined, createTestRegistry());
+      expect(result.events.some((e) => e.type === 'actionRejected')).toBe(false);
+    }
+  });
+
+  it('casts a hybrid spell once the pool genuinely covers it', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    // GGG pays {1}{G/W}{G/W} by spending two G on the hybrids and one on the {1}.
+    addPool(state, 'A', 'G', 3);
+    const [card] = giveHand(state, 'A', [finks]);
+    const action = choose(state);
+    expect(action.kind).toBe('castSpell');
+    if (action.kind === 'castSpell') expect(action.instanceId).toBe(card!.instanceId);
+  });
+
+  it('taps toward a hybrid cost instead of stalling', () => {
+    const state = freshGame();
+    intoMainPhase(state);
+    putOnBattlefield(state, 'A', [landDef('F1', 'G'), landDef('F2', 'G'), landDef('P1', 'W')]);
+    giveHand(state, 'A', [finks]);
+    const action = choose(state);
+    expect(action.kind).toBe('tapForMana');
+  });
+
+  it("agrees with core's canPay on every hybrid pool (the invariant the pilot relies on)", () => {
+    // The pilot's payability test must be the engine's, or it proposes illegal
+    // casts. We assert the equivalence behaviourally: for each pool, the pilot
+    // casts iff core says the cost is payable.
+    const pools = [
+      { G: 0, W: 0, C: 0 },
+      { G: 1, W: 0, C: 0 },
+      { G: 2, W: 0, C: 0 },
+      { G: 3, W: 0, C: 0 },
+      { G: 0, W: 3, C: 0 },
+      { G: 1, W: 1, C: 0 },
+      { G: 1, W: 1, C: 1 },
+      { G: 0, W: 2, C: 1 },
+      { G: 0, W: 0, C: 3 },
+    ] as const;
+    for (const p of pools) {
+      const state = freshGame();
+      intoMainPhase(state);
+      addPool(state, 'A', 'G', p.G);
+      addPool(state, 'A', 'W', p.W);
+      addPool(state, 'A', 'C', p.C);
+      giveHand(state, 'A', [finks]);
+      const payable = canPay(state.players.A.manaPool, hybridCost);
+      const action = choose(state);
+      expect(action.kind === 'castSpell').toBe(payable);
+    }
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
 import { createDefaultAiRegistry, HEURISTIC_PILOT_ID, RANDOM_PILOT_ID } from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
-import { loadDeck } from './deck.js';
+import { loadDeck, type Deck } from './deck.js';
 import { runMatch } from './match.js';
 import { makeSeats, runMatchup, type MatchupPilots } from './matchup.js';
 import { runGauntlet } from './gauntlet.js';
@@ -111,6 +111,39 @@ describe('evaluateSwap (the A/B test)', () => {
     expect(verdict.paired.variantOnly).toBe(0);
     expect(verdict.pValue).toBe(1);
     expect(verdict.verdict).toBe('inconclusive');
+  });
+
+  it('self-swap stays EXACTLY zero across decks, seeds, and a 1-of card', () => {
+    // The crown-jewel invariant, probed where it actually broke: a self-swap of a
+    // card the deck runs ONE of used to delete its decklist line and re-add it at
+    // the end, shifting every later card in the library. Same-seed Fisher-Yates
+    // then dealt the two arms different games, so an identical deck "beat" itself.
+    // If this ever drifts off zero, the common-random-numbers pairing is gone and
+    // every McNemar verdict built on it is noise dressed as significance.
+    const oneOf: Deck = {
+      ...MONO_RED_AGGRO,
+      name: 'Mono-Red Aggro (1-of probe)',
+      cards: [
+        // A single Sol Ring, deliberately NOT the last line, paid for with a Mountain.
+        { cardId: 'Sol Ring', count: 1 },
+        ...MONO_RED_AGGRO.cards.map((c) =>
+          c.cardId === 'Mountain' ? { ...c, count: c.count - 1 } : c,
+        ),
+      ],
+    };
+    const cases: readonly { readonly deck: Deck; readonly card: string; readonly seed: number }[] = [
+      { deck: MONO_RED_AGGRO, card: 'Goblin Guide', seed: 11 },
+      { deck: MONO_RED_AGGRO, card: 'Mountain', seed: 12345 },
+      { deck: oneOf, card: 'Sol Ring', seed: 7 },
+      { deck: UW_CONTROL, card: 'Island', seed: 909 },
+    ];
+    for (const { deck, card, seed } of cases) {
+      const verdict = evaluateSwap(deck, { out: card, in: card }, [green], pilots(), 8, seed, pool, registry);
+      expect(verdict.delta).toBe(0);
+      expect(verdict.paired.baseOnly).toBe(0);
+      expect(verdict.paired.variantOnly).toBe(0);
+      expect(verdict.pValue).toBe(1);
+    }
   });
 
   it('a rigged downgrade (creature → a basic land) registers as worse-or-inconclusive, never better', () => {

@@ -591,6 +591,10 @@ button {
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
+  /* The art wrapper (.card-tile__art) is positioned and comes LATER in the DOM,
+     so with `z-index: auto` it painted over this badge and the in-deck count was
+     invisible. Lift the badge above the art. */
+  z-index: 1;
   background: var(--color-accent);
   color: var(--color-accent-contrast);
   font-weight: 800;
@@ -891,6 +895,15 @@ button {
 
 .deck-issue--error { color: var(--color-error); }
 .deck-issue--warning { color: var(--color-warning); }
+/* A legal card the engine can't play yet — informational, not a rules problem. */
+.deck-issue--unsupported { color: var(--color-fg-muted); }
+
+.deck-entry__unsupported {
+  padding: 0 var(--space-1);
+  color: var(--color-warning);
+  font-size: var(--text-sm);
+  cursor: help;
+}
 
 .saved-decks {
   display: flex;
@@ -1569,11 +1582,101 @@ button {
 }
 .replay-side__zones {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--space-3);
   margin-top: var(--space-2);
   font-size: var(--text-xs);
   color: var(--color-fg-muted);
 }
+
+/* --- Revealed zones (hand / library / graveyard) --------------------------- */
+
+/* The card list pops OVER the board rather than pushing it down, so expanding a
+   zone never reflows the thing you are watching. */
+.replay-zone {
+  position: relative;
+}
+
+.replay-zone > summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.replay-zone > summary:hover {
+  color: var(--color-accent-soft);
+}
+
+.replay-zone--empty {
+  opacity: 0.6;
+}
+
+.replay-zone__list {
+  position: absolute;
+  z-index: 5;
+  max-height: 20rem;
+  overflow-y: auto;
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  list-style: decimal inside;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-raised, #161c22);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.replay-zone__list li {
+  white-space: nowrap;
+  padding: 1px 0;
+}
+
+.replay-zone__card {
+  color: var(--color-fg);
+}
+
+.replay-zone__top {
+  margin-left: var(--space-2);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft, #2b6cb0);
+  color: #fff;
+  font-size: 0.85em;
+}
+
+.replay-skip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* --- Mana pool ------------------------------------------------------------- */
+
+.replay-mana {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.replay-mana__pip {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-sunken, #0d1117);
+  border: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--color-fg);
+}
+
+.replay-mana__pip--W { color: #f5f0dc; }
+.replay-mana__pip--U { color: #7fb3e8; }
+.replay-mana__pip--B { color: #b39ddb; }
+.replay-mana__pip--R { color: #ef8b7a; }
+.replay-mana__pip--G { color: #86c58a; }
+.replay-mana__pip--C { color: var(--color-fg-muted); }
 
 .replay-board {
   display: flex;
@@ -1762,6 +1865,29 @@ button {
   .app__header {
     gap: var(--space-3);
     padding: 0 var(--space-3);
+    /* The header must never be wider than the phone. Without this the six nav
+       links laid out at their natural 439px and dragged the WHOLE app into a
+       584px horizontal scroll, so every screen drifted sideways and the last
+       two tabs sat off the edge. */
+    min-width: 0;
+  }
+  /* The nav becomes its own scroll strip instead of stretching the page: the
+     tabs stay on one line, reachable by swiping the header, and `main` keeps
+     the full viewport width. */
+  .app__nav {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app__nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-link {
+    flex: 0 0 auto;
+    padding: var(--space-2) var(--space-3);
+    white-space: nowrap;
   }
   .app__main {
     padding: var(--space-3);
@@ -1881,6 +2007,7 @@ button {
 .online__banner { padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .online__banner--warn { background: rgba(214, 185, 78, 0.12); border: 1px solid var(--color-warning); color: var(--color-warning); }
 .online__hint { font-size: var(--text-sm); color: var(--color-fg-faint); }
+.online__failed { color: var(--color-error); font-size: var(--text-lg); font-family: var(--font-serif); }
 .online__waiting {
   display: flex;
   flex-direction: column;
@@ -2038,10 +2165,38 @@ button {
 .play-toast { position: fixed; bottom: var(--space-5); left: 50%; transform: translateX(-50%); background: var(--color-surface-raised); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); z-index: 60; }
 .play-toast--error { border-color: var(--color-error); color: var(--color-error); }
 
+/* Player-choice prompt (DESIGN §3.11) — sits above the target prompt because a
+   parked question preempts every other interaction until it is answered. */
+.choice-prompt { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.72); z-index: 55; padding: var(--space-4); }
+.choice-prompt__card { background: var(--color-surface-raised); border: 1px solid var(--color-accent); border-radius: var(--radius-md); padding: var(--space-5); max-width: 46rem; width: 100%; max-height: 90vh; display: flex; flex-direction: column; gap: var(--space-3); }
+.choice-prompt__head { display: flex; flex-direction: column; gap: var(--space-1); }
+.choice-prompt__who { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-accent-soft); }
+.choice-prompt__title { font-family: var(--font-serif); font-size: var(--text-lg); margin: 0; color: var(--color-fg); }
+.choice-prompt__source { margin: 0; font-size: var(--text-sm); color: var(--color-fg-muted); }
+.choice-prompt__requirement { margin: 0; font-size: var(--text-sm); color: var(--color-fg-faint); }
+.choice-prompt__options { overflow-y: auto; padding: var(--space-1) 0; }
+.choice-prompt__cards { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.choice-prompt__list { display: flex; flex-direction: column; gap: var(--space-2); }
+.choice-prompt__list--inline { flex-direction: row; }
+.choice-prompt__empty { color: var(--color-fg-faint); font-size: var(--text-sm); margin: 0; }
+.choice-option { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-fg); font: inherit; padding: var(--space-3) var(--space-4); text-align: left; cursor: pointer; }
+.choice-option:hover { background: var(--color-surface-hover); }
+.choice-option:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.choice-option--selected { border-color: var(--color-accent); background: var(--color-surface-hover); box-shadow: inset 3px 0 0 var(--color-accent); }
+.choice-prompt__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; border-top: 1px solid var(--color-border); padding-top: var(--space-3); }
+.choice-prompt__hint { font-size: var(--text-sm); color: var(--color-fg-muted); }
+.choice-prompt__actions { display: flex; gap: var(--space-2); }
+
 /* ---------- Responsive: stack columns on phones ---------- */
 @media (max-width: 860px) {
   .play-board__center { grid-template-columns: 1fr; }
   .play-mode__choices, .online-menu__actions, .play-setup__seats, .online-lobby__seats { grid-template-columns: 1fr; }
+  /* On a phone the prompt fills the screen and its footer stacks, so the Confirm
+     button never falls off the edge of a 375px viewport. */
+  .choice-prompt { padding: var(--space-2); align-items: flex-start; }
+  .choice-prompt__card { padding: var(--space-4); max-height: 96vh; }
+  .choice-prompt__foot { flex-direction: column; align-items: stretch; }
+  .choice-prompt__actions { justify-content: flex-end; }
 }
 
 /* ==================================================================== */
@@ -2145,6 +2300,14 @@ button {
   font-size: var(--text-sm);
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-3);
+}
+
+/* Honest note when a very large quantity was capped for the preview. */
+.proxies-truncated {
+  color: var(--color-warning);
+  font-size: var(--text-xs);
+  margin-top: var(--space-2);
+  line-height: 1.4;
 }
 
 .proxies-attribution {
@@ -2469,6 +2632,12 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  /* A 60-card list with a long problem list is TALLER than the viewport. Without
+     these two lines the card names — the whole point of the review — render
+     off-screen with no way to scroll to them, and the commit button goes with
+     them. Cap the height and let the dialog scroll. */
+  max-height: min(90vh, 60rem);
+  overflow-y: auto;
   padding: var(--space-5);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -2632,6 +2801,120 @@ button {
 
   .import-dialog {
     padding: var(--space-4);
+  }
+}
+
+/* --- Photo scanner ---------------------------------------------------------
+   The review grid after a scan: each detected card shows its own crop, the name
+   we matched, and a way to correct it. Cards we are unsure about are outlined so
+   the eye goes straight to them. */
+
+.scan-file-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.scan-manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.scan-manual__input {
+  width: 6rem;
+}
+
+.scan-manual__times {
+  color: var(--color-fg-faint);
+}
+
+.scan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+  max-height: 28rem;
+  overflow-y: auto;
+  padding-right: var(--space-2);
+}
+
+.scan-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+
+/* An unconfident or unnamed card — the ones actually worth looking at. */
+.scan-tile--attention {
+  border-color: var(--color-warning);
+  box-shadow: inset 0 0 0 1px var(--color-warning);
+}
+
+.scan-tile__image {
+  width: 100%;
+  aspect-ratio: 63 / 88;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-raised, #161c22);
+}
+
+.scan-tile__image--empty {
+  display: block;
+}
+
+.scan-tile__name {
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+}
+
+.scan-tile__ocr {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-faint);
+  font-style: italic;
+}
+
+.scan-tile__search {
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.scan-tile__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.scan-tile__option {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-fg-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.scan-tile__option:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-soft);
+}
+
+.scan-tile__option--chosen {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.scan-tile__option--clear {
+  color: var(--color-fg-faint);
+}
+
+@media (max-width: 640px) {
+  .scan-grid {
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
   }
 }
 

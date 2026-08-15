@@ -34,6 +34,7 @@ import type {
   InstanceId,
   ManaCost,
   ManaProduction,
+  PendingChoice,
   ManaTapPlan,
   PlayerId,
 } from '@jonny-boi/core';
@@ -45,10 +46,15 @@ import {
   effectiveToughness,
   isCreature,
   isLand,
+  isLegalTarget,
   MANA_COLORS,
   planManaPayment,
   remainingToughness,
+  targetRestrictionOf,
 } from '@jonny-boi/core';
+import type { TargetRestriction } from '@jonny-boi/core';
+import { cardValue, cardValueContext } from './card-value.js';
+import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
@@ -70,8 +76,14 @@ const PRIMITIVE = Object.freeze({
    *  untargeted "generic spell" that fizzles on resolution. */
   destroyTarget: 'destroyTarget',
   exileTarget: 'exileTarget',
-  /** Combat trick (+X/+Y until end of turn). Also targeted. */
+  /** Combat trick (+X/+Y until end of turn). Also targeted. NOTE: the same
+   *  primitive with NEGATIVE deltas is how the pool writes shrink-removal
+   *  (Disfigure's -2/-2), which is a different play entirely — see `shrink`. */
   pumpUntilEndOfTurn: 'pumpUntilEndOfTurn',
+  /** Counter target spell. Only ever castable with a spell on the stack. */
+  counterSpell: 'counterSpell',
+  /** A symmetric board sweeper (Wrath of God / Day of Judgment). */
+  destroyAll: 'destroyAll',
   gainLife: 'gainLife',
   drawCards: 'drawCards',
 });
@@ -80,7 +92,10 @@ const PRIMITIVE = Object.freeze({
 type SpellIntent =
   | { readonly kind: 'damage'; readonly amount: number; readonly canTargetCreature: boolean; readonly canTargetPlayer: boolean }
   | { readonly kind: 'destroyCreature' }
+  | { readonly kind: 'shrink'; readonly toughness: number }
   | { readonly kind: 'pump'; readonly power: number; readonly toughness: number }
+  | { readonly kind: 'counter' }
+  | { readonly kind: 'sweeper' }
   | { readonly kind: 'creature' }
   | { readonly kind: 'other' };
 
@@ -93,8 +108,10 @@ export function createHeuristicPilot(weights: HeuristicWeights = DEFAULT_HEURIST
       try {
         return decide(ctx, weights);
       } catch {
-        // Robustness: never throw on a weird state. Fall back to passing.
-        return passAction(ctx.view);
+        // Robustness: never throw on a weird state. Fall back to the one move the
+        // engine is guaranteed to accept — which is NOT always passing: while a
+        // choice is parked, passing is rejected and only an answer moves the game.
+        return safeFallbackAction(ctx.view as unknown as GameState);
       }
     },
   };
@@ -105,6 +122,16 @@ export function createHeuristicPilot(weights: HeuristicWeights = DEFAULT_HEURIST
 function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
+
+  // A resolving spell is asking somebody a question. That preempts everything —
+  // it is the only thing the game will accept — and it is answered on its own
+  // terms (pick what is best for the chooser), not by scoring board plays.
+  // (The cast strips the view's DeepReadonly wrapper; the answerer only reads.)
+  const pending = view.pendingChoice as PendingChoice | null | undefined;
+  if (pending) {
+    const answer = answerChoiceHeuristically(view as unknown as GameState, pending, weights);
+    return emit(ctx, answer, `answering "${pending.prompt}"`);
+  }
 
   // Nothing offered, or only passing is possible → pass.
   if (legalActions.length === 0) return emit(ctx, passAction(view), 'no legal actions — passing');
@@ -209,7 +236,13 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
 
     const intent = classifySpell(def);
     const goal = scoreSpell(view, opp, card, intent, weights);
-    if (goal) scored.push(goal);
+    // A spell that prints a target restriction is only a goal if we can point it
+    // somewhere legal. This runs on EVERY goal, not just the ones the scorer
+    // understands, so a restricted card the scorer classifies as 'other' (and
+    // would therefore cast with no target at all) still gets a legal target
+    // instead of being rejected by the engine and retried forever.
+    const legal = goal ? withLegalTargets(view, opp, goal) : undefined;
+    if (legal) scored.push(legal);
   }
 
   // Best-first, but only a goal we can genuinely fund. Planning is the expensive
@@ -220,6 +253,48 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
     if (plan) return { goal, plan };
   }
   return undefined;
+}
+
+/**
+ * Enforce the spell's printed TARGET RESTRICTION on a scored goal (core's
+ * `targetRestrictionOf`): keep the scorer's own choice when it is legal, otherwise
+ * substitute the least-bad legal target, and give up on the goal entirely when the
+ * board offers none.
+ *
+ * Why the pilot needs this at all when the engine already rejects illegal targets:
+ * the heuristic builds its cast action itself rather than picking one the engine
+ * offered, so without this it would happily aim a creature-only spell at a face
+ * (or a player-only spell at a creature), have the cast rejected, and re-choose
+ * the same action on the next pass — a live-lock. It is also simply better play:
+ * a burn spell that cannot hit players should never be scored as reach.
+ */
+function withLegalTargets(view: PilotView, opp: PlayerId, goal: SpellGoal): SpellGoal | undefined {
+  const restriction = targetRestrictionOf(goal.card.def);
+  if (restriction === undefined) return goal; // unrestricted — the scorer's choice stands
+  const state = view as GameState;
+  for (const target of goal.targets) {
+    if (!isLegalTarget(state, restriction, target)) continue;
+    return goal.targets.length === 1 ? goal : { ...goal, targets: [target] };
+  }
+  const fallback = defaultLegalTarget(view, opp, restriction);
+  return fallback === undefined ? undefined : { ...goal, targets: [fallback] };
+}
+
+/**
+ * The target to use for a restricted spell the scorer didn't target itself: the
+ * opponent's face when the spell may hit a player, otherwise their biggest
+ * creature. A creature-only spell with no enemy creature is NOT redirected onto
+ * one of our own — it is simply not cast.
+ */
+function defaultLegalTarget(
+  view: PilotView,
+  opp: PlayerId,
+  restriction: TargetRestriction,
+): InstanceId | PlayerId | undefined {
+  if (restriction === 'player') return opp;
+  const biggest = biggestThreat(creaturesControlledBy(view, opp));
+  if (biggest) return biggest.instanceId;
+  return restriction === 'any' ? opp : undefined;
 }
 
 /**
@@ -239,33 +314,41 @@ function scoreSpell(
 
   switch (intent.kind) {
     case 'damage': {
+      const life = view.players[opp].life;
       // Lethal to the face? Take the win.
-      if (intent.canTargetPlayer && intent.amount >= view.players[opp].life) {
+      if (intent.canTargetPlayer && intent.amount >= life) {
         return {
           score: weights.lethalBurnScore,
           card,
           cost,
           targets: [opp],
-          reason: `burn to face — lethal (${intent.amount} ≥ ${view.players[opp].life})`,
+          reason: `burn to face — lethal (${intent.amount} ≥ ${life})`,
         };
       }
-      // Otherwise prefer killing the biggest threat this burn can actually kill.
+      // Otherwise WEIGH the two uses against each other rather than always
+      // preferring the creature kill. A burn deck that spends every card killing
+      // whatever happens to be blocking never actually closes: the previous rule
+      // only allowed a face burn when no creature was killable at all.
       const killable = intent.canTargetCreature
         ? oppCreatures.filter((c) => remainingToughness(c) <= intent.amount)
         : [];
       const target = biggestThreat(killable);
+      const killScore = target
+        ? weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target)
+        : -Infinity;
+      const faceScore = intent.canTargetPlayer ? faceBurnScore(life, intent.amount, weights) : -Infinity;
+
+      if (faceScore >= killScore && faceScore > -Infinity) {
+        return { score: faceScore, card, cost, targets: [opp], reason: `burn to face — ${life} life left` };
+      }
       if (target) {
         return {
-          score: weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target),
+          score: killScore,
           card,
           cost,
           targets: [target.instanceId],
           reason: `burn removal — kill ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`,
         };
-      }
-      // No good creature target → chip the face if we can.
-      if (intent.canTargetPlayer) {
-        return { score: weights.burnFaceBaseScore, card, cost, targets: [opp], reason: 'burn to face — no better target' };
       }
       return undefined;
     }
@@ -279,6 +362,36 @@ function scoreSpell(
         targets: [target.instanceId],
         reason: `removal — destroy ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`,
       };
+    }
+    case 'shrink': {
+      // Shrink-removal kills exactly what its toughness reduction can finish off,
+      // so it is scored and targeted like burn: the biggest thing it can kill.
+      const killable = oppCreatures.filter((c) => remainingToughness(c) <= intent.toughness);
+      const target = biggestThreat(killable);
+      if (!target) return undefined; // it would shrink something that survives — hold it
+      return {
+        score: weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target),
+        card,
+        cost,
+        targets: [target.instanceId],
+        reason: `removal — shrink ${target.def.name} (-${intent.toughness} toughness)`,
+      };
+    }
+    case 'counter': {
+      const target = counterTarget(view, otherPlayer(opp));
+      if (!target) return undefined; // nothing on the stack worth answering — hold it
+      return {
+        score: weights.removalBaseScore + cardValue(target.card, weights, cardValueContext(view as GameState)),
+        card,
+        cost,
+        targets: [target.instanceId],
+        reason: `counter ${target.card.def.name}`,
+      };
+    }
+    case 'sweeper': {
+      const net = sweeperValue(view, otherPlayer(opp), weights);
+      if (net <= 0) return undefined; // our own board would pay for it — hold it
+      return { score: net, card, cost, targets: [], reason: `sweep the board (net ${net})` };
     }
     case 'creature': {
       const stat = (card.def.power ?? 0) + (card.def.toughness ?? 0);
@@ -298,6 +411,58 @@ function scoreSpell(
     case 'other':
       return { score: weights.genericSpellScore, card, cost, targets: [], reason: `cast ${card.def.name}` };
   }
+}
+
+/**
+ * What pointing `amount` damage at a player on `life` is worth.
+ *
+ * The point of the curve is that the SAME burn spell is a different card at
+ * different life totals. At twenty, three damage to the face is a poor rate and
+ * killing a blocker is plainly better. At eight it is a quarter of the game and
+ * beats killing almost anything, because the creature you did not kill will not
+ * matter — you are two spells from winning. A flat "chip the face" score could
+ * never express that, so an aggro deck piloted by the old rule spent its whole
+ * hand answering creatures and then ran out of gas at twelve life.
+ *
+ * The value scales with the fraction of their remaining life the burn removes,
+ * which is exactly the intuition, and is continuous — no cliff, no mode flag.
+ */
+function faceBurnScore(life: number, amount: number, weights: HeuristicWeights): number {
+  const pressure = weights.burnFaceLifeReference / Math.max(life, 1);
+  return weights.burnFaceBaseScore + weights.burnFacePerDamage * amount * pressure;
+}
+
+/**
+ * The spell on the stack a counter should answer, or undefined for "hold it".
+ *
+ * Two rules keep a counterspell from being a blank card. It must have something to
+ * counter at all — casting it into an empty stack resolves as a no-op that ate a
+ * card, which is the same class of mistake as casting a pump in the main phase. And
+ * it only answers the TOP object: if something of ours already sits above the
+ * opponent's spell we have responded, and stacking a second counter on our own
+ * answer just throws the extra card away.
+ */
+function counterTarget(view: PilotView, me: PlayerId) {
+  const top = view.stack[view.stack.length - 1];
+  if (!top || top.kind !== 'spell') return undefined;
+  if (top.controller === me) return undefined; // already answered / it is ours
+  return top as Extract<typeof top, { kind: 'spell' }>;
+}
+
+/**
+ * What sweeping the board is worth to us right now: their creatures cleared, less
+ * ours cleared with them, on the same scale as targeted removal. A sweeper with
+ * nothing to sweep — or one that costs us more than it costs them — scores zero or
+ * less and is held, instead of being fired into an empty board for value nobody got.
+ */
+function sweeperValue(view: PilotView, me: PlayerId, weights: HeuristicWeights): number {
+  let net = 0;
+  for (const perm of view.battlefield) {
+    if (!isCreature(perm.def)) continue;
+    const stats = effectivePower(perm as CardInstance) + effectiveToughness(perm as CardInstance);
+    net += perm.controller === me ? -stats * weights.ownCreatureLossPerStat : stats * weights.killEnemyPerStat;
+  }
+  return net * weights.removalPerPowerOfTarget;
 }
 
 /** A combat trick's best use right now: whom to pump, and what it buys us. */
@@ -654,12 +819,17 @@ function classifySpell(def: CardDefinition): SpellIntent {
     if (ref.primitive === PRIMITIVE.destroyTarget || ref.primitive === PRIMITIVE.exileTarget) {
       return { kind: 'destroyCreature' };
     }
+    if (ref.primitive === PRIMITIVE.counterSpell) return { kind: 'counter' };
+    if (ref.primitive === PRIMITIVE.destroyAll) return { kind: 'sweeper' };
     if (ref.primitive === PRIMITIVE.pumpUntilEndOfTurn) {
-      return {
-        kind: 'pump',
-        power: numberParam(ref.params, 'power', 0),
-        toughness: numberParam(ref.params, 'toughness', 0),
-      };
+      const power = numberParam(ref.params, 'power', 0);
+      const toughness = numberParam(ref.params, 'toughness', 0);
+      // A NEGATIVE "pump" is the pool's shrink-removal (Disfigure, Last Gasp,
+      // Grasp of Darkness). Reading it as a combat trick made the pilot look for a
+      // creature of its own to make *worse*, find none, and never cast the card at
+      // all — a whole family of removal spells silently blank. It is removal.
+      if (power < 0 || toughness < 0) return { kind: 'shrink', toughness: -toughness };
+      return { kind: 'pump', power, toughness };
     }
   }
   return { kind: 'other' };

@@ -66,3 +66,40 @@ export function verdictDisplay(verdict: SwapVerdict): VerdictDisplay {
 export function gamesPerSecond(games: number, elapsedSeconds: number): number {
   return elapsedSeconds > 0 ? games / elapsedSeconds : 0;
 }
+
+/**
+ * Below this rate, "games/sec" rounds to a flat `0` and the run looks broken even
+ * though it is working — so a slow run is reported as seconds PER GAME instead.
+ */
+const SLOW_RUN_GAMES_PER_SECOND = 1;
+/** Decimal places used when a throughput is small enough that rounding hides it. */
+const THROUGHPUT_PRECISION = 1;
+
+/**
+ * Throughput as a readable phrase. A fast run reads "42 games/sec"; a slow one —
+ * an MCTS pilot can take many seconds per game — reads "37.1s/game" rather than
+ * the honest-but-useless "0 games/sec".
+ */
+export function throughputText(gamesPerSec: number): string {
+  if (gamesPerSec <= 0) return '— games/sec';
+  if (gamesPerSec >= SLOW_RUN_GAMES_PER_SECOND) return `${gamesPerSec.toFixed(0)} games/sec`;
+  return `${(1 / gamesPerSec).toFixed(THROUGHPUT_PRECISION)}s/game`;
+}
+
+/** Above this many seconds, a remaining-time estimate reads better in minutes. */
+const SECONDS_PER_MINUTE = 60;
+
+/**
+ * A remaining-time estimate for a run, extrapolated from what it has done so far,
+ * or `null` while there is nothing to extrapolate from.
+ *
+ * A strong AI pilot can spend seconds on a single game, so a 600-game gauntlet is
+ * a coffee break, not a moment — and a progress bar that creeps without ever
+ * saying how long is the thing that makes a working run look broken.
+ */
+export function etaText(done: number, total: number, elapsedSeconds: number): string | null {
+  if (done <= 0 || total <= 0 || elapsedSeconds <= 0 || done >= total) return null;
+  const remaining = ((total - done) * elapsedSeconds) / done;
+  if (remaining < SECONDS_PER_MINUTE) return `~${Math.max(1, Math.round(remaining))}s left`;
+  return `~${Math.round(remaining / SECONDS_PER_MINUTE)} min left`;
+}
