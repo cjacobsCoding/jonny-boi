@@ -72,11 +72,38 @@ throughput (games/sec) from regressing.
 | feat/activated-abilities | DESKTOP-90PJPM4 (worker) | packages/core + cards/compile + ai/heuristic | ✅ INTEGRATED (via feat/card-mechanics) |
 | feat/conditional-taplands | DESKTOP-90PJPM4 (worker) | packages/core card.ts/engine.ts + cards/compile | ✅ INTEGRATED (via feat/card-mechanics) |
 | feat/card-mechanics | DESKTOP-90PJPM4 (worker) | packages/cards primitives+compile, core targeting | ✅ INTEGRATED |
-| feat/pool-adaptive-wire | worker | apps/web + packages/sim | 🚧 PUSHED, not merged |
-| feat/card-index-truth | worker | apps/web/src/data + apps/web/scripts + web card docs | 🚧 PUSHED, not merged |
+| feat/pool-adaptive-wire | worker | apps/web + packages/sim | ✅ INTEGRATED |
+| feat/card-index-truth | worker | apps/web/src/data + apps/web/scripts + web card docs | ✅ INTEGRATED |
+| perf/mcts-usable | worker | packages/ai | ✅ INTEGRATED (NO-GO: mcts slower AND weaker) |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 integrator: **`npm run lint` had been red on `main` for a long time — 259 errors — and
+  nobody noticed because nothing ran it.** Now green (0 errors) and wired into a new root
+  **`npm run verify`** (offline: lint + card-index `--check` + full tests). Run it before you push.
+  What the 259 were: **226 were `dist-bundle/`**, i.e. eslint was linting the bundler's OUTPUT — now
+  ignored. 29 were `packages/ai/bench/*.mjs` missing Node globals — `bench/` and `spikes/` now get the
+  same globals block as `scripts/`. That left **4 real ones**, and they were worth having:
+  👉 **`eslint-plugin-react-hooks` was never installed**, yet three files carried
+  `eslint-disable-next-line react-hooks/exhaustive-deps`. Each disable was suppressing NOTHING and was
+  itself an error (eslint rejects a disable for an unknown rule). Plugin installed; the classic pair
+  (`rules-of-hooks`, `exhaustive-deps`) are ERRORS.
+  👉 It immediately found a **real bug** in `components/match/useReplayPlayback.ts`: the auto-advance
+  effect omitted `advance` from its deps, so the running interval held the closure from the render that
+  started playback — **toggling "skip quiet frames" mid-playback silently did nothing** until you
+  paused. The comment directly above it claimed the opposite. Fixed.
+  👉 Two `useMemo`s flagged as having an "unnecessary" dependency (`importedCount`, `decks.decks`) are
+  the opposite — **invisible** dependencies. `allAvailableCards()` reads a module registry that deck
+  import mutates, so those deps are the only signal the pool grew; removing them (as the rule advises)
+  breaks imported-card browsing. Documented disables, not removals. **Don't "fix" them.**
+  👉 The compiler-era rules (`set-state-in-effect`, `refs`) are **WARN on purpose** — 5 sync setStates
+  in effects + 1 ref-write during render, all in UI that currently works. Fix one file at a time and
+  promote to error; a blind mechanical sweep is how working screens break.
+  ⚠️ **Gap needing an owner: the web app has NO hook/component test infrastructure** — no
+  `@testing-library/react`, no jsdom, zero `renderHook` anywhere. The replay bug above could only be
+  guarded by the lint rule, not a test. Adding that stack is a real decision, not a drive-by; whoever
+  takes it should propose it rather than sneak it into another branch.
 
 - 2026-08-15 worker: `feat/card-index-truth` 🚧 PUSHED (apps/web/src/data + apps/web/scripts + the two
   web card doc-comments + one eslint global). **The reported bug did not exist — read this before

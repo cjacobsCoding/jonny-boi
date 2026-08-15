@@ -95,7 +95,11 @@ export function useReplayPlayback(
   const setSpeed = useCallback((id: string) => setSpeedId(id), []);
 
   // Auto-advance: while playing, step one frame each tick; stop at the end. The
-  // timer is recreated when the speed changes so a mid-playback speed change applies.
+  // timer is recreated when the speed changes so a mid-playback speed change applies —
+  // and likewise when `advance` changes, which is what makes the skip-quiet toggle
+  // take effect DURING playback. Omitting it (as this did) left the running interval
+  // holding the `advance` closure from the render that started playback, so flipping
+  // "skip quiet frames" while playing silently kept the old rule until you paused.
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
     if (!playing) return;
@@ -116,7 +120,7 @@ export function useReplayPlayback(
       if (tickRef.current) clearInterval(tickRef.current);
       tickRef.current = null;
     };
-  }, [playing, speedId, frameCount]);
+  }, [playing, speedId, frameCount, advance]);
 
   return {
     index,
