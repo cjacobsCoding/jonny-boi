@@ -81,7 +81,9 @@ export class SimWorkerPool implements ShardRunner {
   ) {
     this.workerCount = Math.max(1, workerCount);
     this.spawn = options.spawn ?? spawnWorker;
-    for (let i = 0; i < this.workerCount; i++) this.slots.push(this.createSlot());
+    // Workers are spawned on demand (see `pump`), never up front: a single-game
+    // replay is one job, and starting eleven workers — each loading the whole sim
+    // bundle — to leave ten of them idle is pure latency.
   }
 
   /** Spawn a worker, wire its handlers, and hand it the shared card definitions. */
@@ -175,11 +177,20 @@ export class SimWorkerPool implements ShardRunner {
     this.pump();
   }
 
-  /** Hand queued shards to idle workers until one side runs out. */
+  /**
+   * Hand queued shards to idle workers until one side runs out, growing the pool
+   * up to `workerCount` as long as there is work for another worker.
+   */
   private pump(): void {
     if (this.disposed) return;
-    for (const slot of this.slots) {
-      if (slot.task !== null) continue;
+    for (;;) {
+      if (this.queue.length === 0) return;
+      let slot = this.slots.find((candidate) => candidate.task === null);
+      if (!slot) {
+        if (this.slots.length >= this.workerCount) return; // fully committed.
+        slot = this.createSlot();
+        this.slots.push(slot);
+      }
       const task = this.queue.shift();
       if (!task) return;
       task.attempts++;

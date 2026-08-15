@@ -120,12 +120,19 @@ function makePool(workerCount: number): SimWorkerPool {
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('SimWorkerPool', () => {
-  it('spawns the requested workers and hands each the imported card set once', () => {
-    makePool(4);
-    expect(spawned).toHaveLength(4);
-    for (const worker of spawned) {
-      expect(worker.received).toEqual([{ type: 'init', importedCards: [] }]);
-    }
+  it('spawns no worker until there is work, then only as many as there is work for', async () => {
+    // A single-game replay is one job; starting eleven workers to leave ten idle
+    // is pure latency on the one run where latency is all the user sees.
+    const pool = makePool(4);
+    expect(spawned).toHaveLength(0);
+
+    const running = pool.submit(job(0), () => {});
+    expect(spawned).toHaveLength(1);
+    expect((spawned[0] as FakeWorker).received[0]).toEqual({ type: 'init', importedCards: [] });
+
+    (spawned[0] as FakeWorker).finish();
+    await running;
+    pool.dispose();
   });
 
   it('keeps every worker busy and queues the rest, never over-committing one', async () => {
@@ -133,6 +140,7 @@ describe('SimWorkerPool', () => {
     const results = Promise.all([0, 1, 2, 3].map((i) => pool.submit(job(i), () => {})));
 
     // Two workers, four shards: exactly two are in flight and two wait.
+    expect(spawned).toHaveLength(2);
     expect(spawned.map((w) => w.jobCount)).toEqual([1, 1]);
 
     for (const worker of spawned) worker.finish();
