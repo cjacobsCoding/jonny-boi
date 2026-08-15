@@ -28,7 +28,14 @@ export default tseslint.config(
     // they legitimately reach for Node's globals.
     files: ['scripts/**/*.{js,mjs}', '**/scripts/**/*.{js,mjs}'],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly' },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        // `import.meta.url`-relative path resolution is the standard way an ESM
+        // script finds a sibling file, so `URL` belongs here with the rest.
+        URL: 'readonly',
+      },
     },
   },
 );
