@@ -65,6 +65,28 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: `feat/card-alacarte` ✅ MERGED to main + deployed. Add ONE Scryfall card
+  by name from the card browser or mid-deck-build, fuzzy-matched ("lightnig bolt" resolves), screened
+  by the SAME compiler deck import uses. New files only, no edits to the compiler — safe alongside
+  in-flight `packages/cards/src/compile` work.
+  👉 **NEW SEAM — `apps/web/src/lib/cards/unsupportedRegistry.ts`.** Every clause the compiler refuses
+  is now COLLECTED, grouped by the missing engine SYSTEM (the unit of work — implement once, unblock
+  every card waiting on it), with the blocked cards and a verbatim clause. Exports Markdown via
+  `formatUnsupportedReport()`. **This is the queue to work from** — see the new
+  [UNSUPPORTED-MECHANICS.md](UNSUPPORTED-MECHANICS.md) for the contract and how to pick an item up.
+  👉 **NEW: [TESTING.md](TESTING.md)** indexes all 87 suites and what each guards, so there is one list
+  to run through after a change. It also records the two lessons this repo learned painfully: test
+  against the REAL vocabulary (the `destroy` vs `destroyTarget` fixture bug), and assert pilots play
+  SENSIBLY, not merely that games finish (the MCTS-as-default bug).
+  Also fixed: the card browser read the CURATED pool only, so an imported/added card never appeared
+  in it at all — now reads the full pool and subscribes to the store.
+  Deck-level honesty: `decklist/deckHealth.ts` badges any deck holding an unplayable card and names
+  the cards; one unplayable card ⇒ whole deck unplayable (a blank card silently skews an A/B verdict).
+  Suite **1460 passed / 0 failed**, build exit 0, Deploy PWA green.
+  ⚠️ Verified by tests + typecheck + production build + a clean browser boot (no console errors); the
+  add dialog was NOT driven interactively (the session's browser tooling was wedged), so the Scryfall
+  round-trip is proven only against stub responses. Worth a real click-through.
+
 - 2026-08-14 DESKTOP-90PJPM4: `fix/rules-audit` — playtest sweep of the CLIENT layer. The headless
   engine is clean (new `packages/sim/src/rules-audit.test.ts` plays full games and asserts zone
   integrity, SBAs, untap, damage clearing, until-EOT expiry, land drops — 36 games, no violations).
