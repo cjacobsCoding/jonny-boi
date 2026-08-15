@@ -138,6 +138,97 @@ function erf(x: number): number {
   return sign * y;
 }
 
+// --- multiple comparisons ------------------------------------------------------
+
+/**
+ * How a family of simultaneous tests is corrected. Testing many candidate swaps at
+ * once is the classic multiple-comparisons trap: at alpha = 0.05, **139 candidates
+ * produce ~7 "significant" results by chance alone** even if every single one is
+ * worthless. An uncorrected suggestion list is therefore not a list of
+ * improvements — it is a list of the luckiest coin flips.
+ *
+ *  - `holm`   — Holm–Bonferroni step-down. Controls the FAMILY-WISE error rate:
+ *               the probability of *even one* false "better" is ≤ alpha. Uniformly
+ *               more powerful than plain Bonferroni and makes no independence
+ *               assumption, which matters here because candidates share the same
+ *               base games and are therefore correlated. The default: a deck-tuning
+ *               tool that says "this card is better" should be wrong ~5% of the
+ *               time overall, not 5% per row.
+ *  - `benjaminiHochberg` — BH step-up. Controls the FALSE DISCOVERY RATE (the
+ *               expected share of wrong calls *among the calls made*). More
+ *               permissive; a reasonable choice when the list is a shortlist for
+ *               further testing rather than a final answer.
+ *  - `none`   — raw p-values. Honest only for a single pre-registered comparison.
+ */
+export type MultipleComparisonsMethod = 'holm' | 'benjaminiHochberg' | 'none';
+
+/**
+ * Adjust a family of p-values for multiplicity, returning adjusted p-values **in
+ * the caller's original order** (so they can be zipped back onto their tests).
+ *
+ * An adjusted p-value is compared against the SAME alpha as an unadjusted one —
+ * that is the point of the transform: `adjusted < alpha` ⇔ the test is rejected by
+ * the corresponding procedure at level alpha.
+ *
+ * Both procedures are implemented with the standard monotonicity enforcement (a
+ * running maximum for Holm's step-down, a running minimum for BH's step-up) so the
+ * adjusted values never violate the ordering of the raw ones. All values are
+ * clamped to [0, 1].
+ *
+ * Pure and order-stable: ties keep the caller's order, so the same inputs always
+ * produce the same outputs.
+ */
+export function adjustPValues(
+  pValues: readonly number[],
+  method: MultipleComparisonsMethod,
+): readonly number[] {
+  const m = pValues.length;
+  if (m === 0) return [];
+  if (method === 'none') return pValues.map(clamp01);
+
+  // Sort indices by p ascending (ties by index → deterministic, order-stable).
+  const order = pValues.map((_, i) => i).sort((a, b) => {
+    const pa = pValues[a] as number;
+    const pb = pValues[b] as number;
+    return pa === pb ? a - b : pa - pb;
+  });
+
+  const adjusted = new Array<number>(m);
+  if (method === 'holm') {
+    // Step-down: the k-th smallest p (0-based k) is multiplied by (m − k), then
+    // made non-decreasing down the list.
+    let running = 0;
+    for (let k = 0; k < m; k++) {
+      const idx = order[k] as number;
+      const scaled = (pValues[idx] as number) * (m - k);
+      running = Math.max(running, scaled);
+      adjusted[idx] = clamp01(running);
+    }
+    return adjusted;
+  }
+
+  // Benjamini–Hochberg step-up: the k-th smallest (1-based) p is multiplied by
+  // m / k, then made non-increasing walking back up from the largest.
+  let running = 1;
+  for (let k = m - 1; k >= 0; k--) {
+    const idx = order[k] as number;
+    const scaled = (pValues[idx] as number) * (m / (k + 1));
+    running = Math.min(running, scaled);
+    adjusted[idx] = clamp01(running);
+  }
+  return adjusted;
+}
+
+/**
+ * The one-sided upper confidence bound on a proportion — used to decide when an
+ * arm can be *abandoned* early. If even the optimistic end of a candidate's
+ * interval is below the break-even share, keeping games on it is wasted budget.
+ * Built on the same Wilson interval as everything else (no second formula).
+ */
+export function wilsonUpperBound(successes: number, n: number, z: number): number {
+  return wilsonInterval(successes, n, z).high;
+}
+
 function clamp01(x: number): number {
   if (x < 0) return 0;
   if (x > 1) return 1;

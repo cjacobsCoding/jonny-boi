@@ -87,6 +87,26 @@ export interface SimConfig {
   readonly maxConsecutiveRejectedActions: number;
   /** Default number of games when the caller / CLI doesn't specify. */
   readonly defaultGames: number;
+  /**
+   * Apply actions by MUTATING the harness's own game state instead of taking
+   * core's defensive clone on every action (`applyActionInPlace` vs
+   * `applyAction`).
+   *
+   * The pure `applyAction` deep-copies the ENTIRE world — both libraries (~60
+   * card instances each), battlefield, hands, stack, continuous effects — before
+   * every single action, and a game applies hundreds of actions. The harness owns
+   * its state outright: it never reads a previous state, and the only other holder
+   * is the pilot, which is handed the state as a read-only *borrow* for the
+   * duration of one `chooseAction` call (the look-ahead pilot clones before it
+   * mutates). So the copy is pure waste here.
+   *
+   * This is an EXACT optimisation, not a trade-off: both entry points run the same
+   * validation and the same mutation on a draft, so the resulting state, events,
+   * winner, turn and action counts are bit-identical (pinned by
+   * `match-inplace.test.ts`). The flag exists so that equivalence stays *testable*
+   * — flip it off and the harness takes the pure path.
+   */
+  readonly applyActionsInPlace: boolean;
 }
 
 export const DEFAULT_SIM_CONFIG: SimConfig = Object.freeze({
@@ -100,6 +120,10 @@ export const DEFAULT_SIM_CONFIG: SimConfig = Object.freeze({
   // is already pathological, so we intervene quickly rather than after thousands.
   maxConsecutiveRejectedActions: 3,
   defaultGames: 100,
+  // On: the harness owns its state, so core's per-action defensive clone is pure
+  // waste. Exact, not approximate — `match-inplace.test.ts` pins both paths to
+  // bit-identical results.
+  applyActionsInPlace: true,
 });
 
 /** Statistical thresholds for confidence intervals and the A/B verdict. */

@@ -1,0 +1,151 @@
+/**
+ * Named constants behind the paired-arm runner's **identical-game** argument
+ * (`paired-arms.ts`). Everything the exactness proof depends on lives here, named
+ * and auditable, rather than as literals buried in the runner.
+ *
+ * The claim being made is strong — "this variant game cannot possibly differ from
+ * the base game, so we will not play it" — so each assumption is either verified at
+ * runtime or pinned by a test that fails when the world changes underneath it.
+ */
+
+import type { PlayerId } from '@jonny-boi/core';
+import { MCTS_PILOT_ID } from '@jonny-boi/ai';
+
+/**
+ * The seat the deck under test always occupies. `evaluateSwap`, the gauntlet and
+ * the suggestion engine all seat the hero as A and the opponent as B; a "win" in
+ * every paired table means this seat won.
+ */
+export const HERO_SEAT: PlayerId = 'A';
+
+/**
+ * The instance id core assigns to the hero's FIRST library card. Ids are minted
+ * sequentially from 1 as libraries are built, hero first, so the hero's pre-shuffle
+ * library index `i` carries id `i + HERO_FIRST_INSTANCE_ID`. Verified at runtime by
+ * `verifyHeroInstanceIdMapping` — if a future engine mints ids differently the
+ * optimisation switches itself off rather than answering wrongly.
+ */
+export const HERO_FIRST_INSTANCE_ID = 1;
+
+/**
+ * Effect primitives whose behaviour can depend on **library contents**.
+ *
+ * When one of these resolves, the base and variant games may diverge even though
+ * the swapped card was never drawn — a search sees a different card list, a
+ * top-of-library peek sees a different card — so the identical-game claim is
+ * withdrawn for that game and the variant is played for real.
+ *
+ * Primitives that only *move known cards* (draws, discards, removal, combat tricks)
+ * are absent on purpose: a draw is reported by a `drawCard` event carrying the
+ * exact instance id, which the runner already tracks precisely.
+ *
+ * `paired-arms.test.ts` asserts that EVERY primitive the card pool registers is
+ * classified either here or in {@link LIBRARY_SAFE_PRIMITIVES}. A new primitive
+ * therefore breaks the build until someone decides which side it belongs on — the
+ * failure mode is a red test, never a silently wrong verdict.
+ */
+export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
+  // Reads the top of a library and rearranges it.
+  'reorderTopOfLibrary',
+  // Reads the whole library to choose a card.
+  'searchLibrary',
+  // Reads the top card and BRANCHES on what it is — the filter miss is the
+  // dangerous case: it looked, learned, and moved nothing.
+  'revealTopCard',
+  // Writes a card into the library, moving the slot we reason about.
+  'putFromHandOnTop',
+  // A shuffle permutes both arms identically, but the *question* ("may I shuffle?")
+  // is answered by a pilot valuing a library it can see. Classified conservatively.
+  'mayShuffleLibrary',
+]);
+
+/**
+ * The parameter every library primitive resolves its victim from, and the value
+ * that means "the source's own controller".
+ *
+ * `playerParam(ctx, 'who', 'controller')` accepts `'controller'`, `'opponent'`,
+ * `'targetPlayer'` and `'targetController'` — so a primitive id alone does NOT
+ * tell you whose library was read, and neither does the source's controller. Only
+ * the authored card data does, which is why `paired-arms.ts` scans the decklist
+ * rather than guessing from the event.
+ */
+export const LIBRARY_TARGET_PARAM = 'who';
+export const SELF_LIBRARY_TARGET = 'controller';
+/** `who: 'opponent'` — the player who is NOT the source's controller. */
+export const OPPONENT_LIBRARY_TARGET = 'opponent';
+
+/**
+ * Primitives that can move a permanent from one player's control to another's.
+ *
+ * The identical-game check reads a source card's OWNER off its instance id and
+ * treats that as its controller, which is what lets it say "this Ponder belongs to
+ * the opponent, so it read the opponent's library". A control-changing effect
+ * breaks that equivalence: a stolen card's controller is no longer its owner, and
+ * `who: 'controller'` would then resolve to the wrong player.
+ *
+ * The set is EMPTY because the pool has no such primitive today. It exists so the
+ * assumption is written down and checked rather than implied — if one is ever
+ * added, the runner falls back to the fully conservative rule instead of quietly
+ * returning a wrong answer, and `paired-arms.test.ts` fails until it is classified.
+ */
+export const CONTROL_CHANGING_PRIMITIVES: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Primitives that provably cannot read a library, and so leave the identical-game
+ * argument intact. Listed explicitly (rather than "everything not above") so the
+ * classification test can prove the two sets together cover the whole registry.
+ */
+export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
+  'dealDamage',
+  // Drawing is safe *because* every drawn card announces its instance id.
+  'drawCards',
+  /*
+   * `mill` is SAFE for exactly the same reason `drawCards` is, which is worth
+   * spelling out because "milling doesn't read a library" sounds wrong.
+   *
+   * Mill never branches on what it saw: it moves the top N cards to the graveyard
+   * through `moveOwnedCard`, and every single one of those moves emits a
+   * `zoneChange` carrying its instance id. So the runner already tracks mill
+   * EXACTLY, per card:
+   *   - the swapped card gets milled  → its id lands in `leftLibrary` → replay;
+   *   - it doesn't                    → both arms milled the same cards from the
+   *                                     same positions, so the games still agree.
+   * Classifying it as library-reading would disqualify every game containing any
+   * mill effect and buy no soundness whatsoever.
+   */
+  'mill',
+  // Battlefield-only: reads and writes creatures, never a library.
+  'fight',
+  'dealDamageToEach',
+  'addCounters',
+  'gainLife',
+  'loseLife',
+  'pumpUntilEndOfTurn',
+  'grantKeywordUntilEndOfTurn',
+  'makeToken',
+  'persistReturn',
+  'destroyTarget',
+  'exileTarget',
+  'destroyAll',
+  'addMana',
+  'counterSpell',
+  'createToken',
+  'tapTarget',
+  'discardCard',
+  'returnFromGraveyard',
+  'modal',
+  'returnToHand',
+  'tapPermanents',
+]);
+
+/**
+ * Pilots that reason over information the *player* cannot see — specifically, the
+ * real contents of the library, which a look-ahead pilot draws from when it rolls
+ * out hypothetical lines.
+ *
+ * For such a pilot the swapped card influences decisions from turn one whether or
+ * not it is ever drawn, so "the game never saw the card" is false and the
+ * identical-game skip is unsound. The runner detects a seated pilot by id and
+ * disables the optimisation, recording the reason in the report.
+ */
+export const PILOTS_THAT_READ_HIDDEN_LIBRARY: ReadonlySet<string> = new Set([MCTS_PILOT_ID]);

@@ -23,6 +23,7 @@ import type {
 } from '@jonny-boi/core';
 import {
   applyAction,
+  applyActionInPlace,
   createGame,
   createRng,
   DEFAULT_RULES,
@@ -60,6 +61,11 @@ export interface MatchOptions {
    * gauntlet runs thousands of games.
    */
   readonly recordTrace?: boolean;
+  /**
+   * Stream every event to this observer WITHOUT retaining it. Independent of
+   * `recordTrace`: use it to watch for one condition across a game cheaply.
+   */
+  readonly onEvent?: MatchEventObserver;
 }
 
 /** One decision a pilot made, captured only when `recordTrace` is on. */
@@ -93,6 +99,15 @@ export interface MatchResult {
   /** Decision trace — only present when `recordTrace` was set. */
   readonly decisions?: readonly TracedDecision[];
 }
+
+/**
+ * An optional per-event observer. Unlike `recordTrace` (which RETAINS the whole
+ * log), this streams each event to the caller and retains nothing, so an analysis
+ * that only needs to *notice* something — "was this particular card ever drawn?" —
+ * costs a function call rather than an array of every event in the game. Used by
+ * the suggestion engine's identical-game detector (`paired-arms.ts`).
+ */
+export type MatchEventObserver = (event: GameEvent) => void;
 
 /**
  * Derive a per-seat RNG seed from the game seed so the two pilots draw from
@@ -133,9 +148,17 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
     },
   });
 
+  // The harness owns this state exclusively from here on: nothing outside the loop
+  // keeps a reference to it (the pilot is lent it read-only for the duration of one
+  // `chooseAction`, and the look-ahead pilot clones before it mutates). That
+  // ownership is what makes `applyActionInPlace` legal below.
   let state: GameState = created.state;
   const events: GameEvent[] | undefined = record ? [...created.events] : undefined;
   const decisions: TracedDecision[] | undefined = record ? [] : undefined;
+  const observe = opts.onEvent;
+  if (observe) for (const e of created.events) observe(e);
+  // Chosen ONCE per game, not per action: the branch is in the hot loop.
+  const apply = sim.applyActionsInPlace ? applyActionInPlace : applyAction;
 
   let actions = 0;
   let rejectedActions = 0;
@@ -169,12 +192,16 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
         : chosen;
     if (decisions) decisions.push({ player: seat, action });
 
-    const result = applyAction(state, action, config, seats.registry);
+    // `applyActionInPlace` mutates and returns the SAME object; the pure path
+    // returns a fresh one. Reassigning covers both (and a rejected in-place action
+    // hands back a clone, so the contracts stay identical either way).
+    const result = apply(state, action, config, seats.registry);
     state = result.state;
     let rejected = false;
     for (const e of result.events) {
       if (e.type === 'actionRejected') rejected = true;
       if (events) events.push(e);
+      if (observe) observe(e);
     }
     if (rejected) {
       rejectedActions++;
