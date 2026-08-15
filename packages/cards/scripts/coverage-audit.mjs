@@ -133,7 +133,9 @@ function audit(rawCards) {
     let result;
     try {
       result = compileCard(normalizeCard(raw));
-    } catch (err) {
+    } catch {
+      // The audit's whole point is counting what fails to compile, so a throw
+      // here is data, not an error to surface — the tally is the report.
       failed++;
       continue;
     }

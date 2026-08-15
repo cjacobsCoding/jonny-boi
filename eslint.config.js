@@ -70,6 +70,9 @@ export default tseslint.config(
         // A spike that measures a WebAssembly build instantiates the module from
         // Node, where `WebAssembly` is a standard global exactly as `process` is.
         WebAssembly: 'readonly',
+        // Global since Node 18, and the repo requires >=20 (root package.json
+        // `engines`). Data-fetching scripts use it instead of pulling in a client.
+        fetch: 'readonly',
       },
     },
   },
