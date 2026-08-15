@@ -278,8 +278,10 @@ export {
   effectiveKeywords,
   hasKeyword,
   PLUS_ONE_COUNTER,
+  MINUS_ONE_COUNTER,
 } from './internal/stats.js';
 
 // Debug / inspector seam
 export type { SerializedState } from './serialize.js';
 export { serializeState, dumpState } from './serialize.js';
+

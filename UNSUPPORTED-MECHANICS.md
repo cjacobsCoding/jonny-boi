@@ -36,9 +36,30 @@ It is stored per-browser (localStorage), because it is driven by the cards *this
 user* actually tried to add. That is the point: the queue reflects real demand
 rather than a speculative wishlist.
 
-## Outstanding
+## Outstanding — the measured backlog
 
-_Paste an exported report here when you triage. Format:_
+**→ [UNSUPPORTED-BACKLOG.md](UNSUPPORTED-BACKLOG.md) is the ranked list. Work from the top.**
+
+That file is *generated*, not written:
+
+```bash
+node packages/cards/scripts/coverage-audit.mjs --pages 12 --out UNSUPPORTED-BACKLOG.md
+```
+
+It fetches the most-played cards from Scryfall (EDHREC order), runs every one
+through the real compiler, and ranks each missing engine system by **how many
+cards it blocks**. So the top entry is, by construction, the highest-value engine
+work available — not the one someone happened to hit.
+
+This complements the in-app registry below rather than replacing it: the registry
+reflects what *this user* tried to add, the audit reflects what the format plays.
+When they disagree, the registry wins — it is real demand.
+
+⚠️ **Re-run the audit after landing a system**, and put the before/after in your
+commit. "Blocks 158 cards" is a claim that expires; the only honest way to say a
+mechanic mattered is to show the playable count move.
+
+_The in-app registry format, for pasting a triage below:_
 
 ```
 ## <missing engine system>

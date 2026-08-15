@@ -472,6 +472,38 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The same template with -1/-1 counters. Now that the stat layer reads that
+    // kind in its own right, this is a faithful compile rather than an
+    // approximation stored as a negative +1/+1.
+    id: 'put-minus-counters-on-target',
+    description: '"Put N -1/-1 counters on target creature"',
+    pattern: new RegExp(`^put (?:a|${COUNT_TOKEN}) -1/-1 counters? on target creature$`),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount: -amount, targets: CREATURE_TARGET },
+      });
+    },
+  },
+  {
+    // "Put a +1/+1 counter on it" / "on ~" — the SELF form. Extremely common as
+    // the payload of an ETB or attack trigger, and it needs no target, which is
+    // why the targeted rule above could never match it.
+    id: 'put-counters-on-self',
+    description: '"Put N +1/+1 counters on ~" (no target)',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on (?:~|it|this creature)$`,
+    ),
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return effects({ primitive: 'addCounters', params: { amount, self: true } });
+    },
+  },
+  {
     id: 'draw-and-lose-life',
     description: '"You draw N cards and you lose M life" (one sentence, two effects)',
     // Printed as a single sentence, so the sentence splitter never separates it
