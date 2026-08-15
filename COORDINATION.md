@@ -76,9 +76,27 @@ throughput (games/sec) from regressing.
 | feat/card-index-truth | worker | apps/web/src/data + apps/web/scripts + web card docs | ✅ INTEGRATED |
 | perf/mcts-usable | worker | packages/ai | ✅ INTEGRATED (NO-GO: mcts slower AND weaker) |
 | feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
+| spike/engine-representation | worker | spikes/engine-representation (new) + 2 narrow eslint.config.js additions | 🚧 PUSHED, not merged — DECISION SPIKE, no product code |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 integrator: **NAS server is now LIVE on protocol v2, and backward compatible.** Verified
+  against `wss://jonnyboi.duckdns.org:8443` after the restart: v1 ACCEPTED, v2 ACCEPTED, v3 and v0 both
+  REJECTED. Rollback bundle is on the NAS at `/docker/jonny-boi/backup/server.cjs` (361,992 bytes, the
+  previous build); live is 402,745.
+  👉 **Do not ship a server bundle without checking `Room.protocolMatches` first.** It was strict
+  equality (`version === PROTOCOL_VERSION`), which made `MIN_COMPATIBLE_PROTOCOL_VERSION` dead code and
+  compatibility ONE-directional — a new client could talk down to an old server, but an old client was
+  locked out of a new one, with no downgrade logic to recover with. Restarting onto v2 would have
+  blacked out every stale cached PWA. Fixed + tests pin both directions.
+  👉 **Deploying to the NAS: drive the DSM *webapi*, not the DSM desktop UI.** Loading the desktop
+  wedges the Chrome renderer (screenshots and JS both time out, and it starves sibling tabs). Get the
+  CSRF token from `/webman/login.cgi` on the existing session, send it as `X-SYNO-TOKEN`, then use
+  `SYNO.FileStation.Upload` / `SYNO.Docker.Container`. NAS is **10.0.0.28**.
+  ⚠️ A single-file Docker bind mount **pins the inode** — replacing `server.cjs` is invisible to the
+  running container until it restarts. Always back up to `backup/` and confirm the new size/mtime
+  before restarting.
 
 - 2026-08-15 DESKTOP-90PJPM4: **`fix/hint-accuracy` MERGED + DEPLOYED** (Deploy PWA green, live
   site HTTP 200). main = **1864 tests, build exit 0**.
@@ -118,6 +136,75 @@ _Append dated notes here; keep them short. Newest at top._
   for other agents. And a compiler defect found while reproducing this — a split card
   ("Wear // Tear") is mis-diagnosed as needing a `"//"` card TYPE and as transform/DFC; only Fuse and
   the targeting clause are genuine. That is `packages/cards/src/compile`, owned by feat/card-mechanics.
+- 2026-08-15 worker: `spike/engine-representation` 🚧 PUSHED — **"build the hot path in whatever is
+  fastest, possibly C++" — answered with measurements. Full write-up:
+  [spikes/engine-representation/README.md](spikes/engine-representation/README.md).**
+  **NO product code touched.** New dir `spikes/engine-representation/` (outside the workspaces globs
+  and outside the vitest `include`) + **two narrow additions to `eslint.config.js`** — expect a
+  trivial conflict there only if someone else edits that file.
+  👉 **THE HEADLINE IS NOT WHAT THE BRIEF EXPECTED. The cost is the LANGUAGE, not the data — and
+  neither is the thing to do first.** Four arms, all playing **byte-identical games** (transcript
+  digest over every decision, `packages/ai/bench/mcts-bench.mjs`'s technique):
+  · **A** object graph TS (today's design) · **B** flat `Int32Array` arena + delta undo journal, TS ·
+  **B+** a tuned steelman of B · **C** arm B ported line-for-line to WASM.
+  **A→B changes only the DATA. B→C changes only the RUNTIME.** Neither comparison existed before.
+  ⚠️ **THE FLAT-REPRESENTATION ARM LOSES, and that is the most useful result here.** Flat TypeScript
+  is **0.61–0.70× on forward simulation** (a 30–39% SLOWDOWN), stable across three runs. It wins ONLY
+  where it replaces *cloning* with *undo* — 1.7–2.8× at rollout depth 1, break-even at ~depth 8,
+  a loss beyond. **Mechanism:** `inst.def.power` is two pointer loads V8's inline caches make nearly
+  free; the flat equivalent is two BOUNDS-CHECKED `Int32Array` loads, and JS cannot spell "this index
+  is already proved in range". This is the same trap `spikes/wasm` hit ("use typed arrays" is not the
+  optimisation) — now with the mechanism attached. **Do NOT flatten `packages/core`.**
+  👉 **I tried to make the flat arm faster and it got SLOWER — arm B+ is kept in the repo as
+  evidence.** Giving every instance its own copy of its card row (removing a load) cost 0.81×: the
+  shared 19-card table is 912 bytes and lives in L1, and duplicating it per instance grew it to
+  7.5 KiB. The flat result is not a first draft.
+  👉 **The LANGUAGE win is real and much bigger than the previous spike's +0.4%: B→C is 2.1–3.5×**
+  with the representation held exactly constant. Decomposed by compiling a second WASM with bounds
+  checks left IN: **2.0× is codegen alone**, a further **1.43×** is unchecked access. The earlier
+  +0.4% was correct *for a kernel*; it is not the number for a whole-engine flat port.
+  ❗ **BUT THE ALGORITHMIC LEVER BEATS BOTH AND IS ALREADY IN FLIGHT.** Holding the rollout budget
+  fixed and sweeping depth: **terminal rollout → depth-1 leaf eval is 12.2–15.5× on the CURRENT object
+  engine with no port at all** (`feat/hybrid-search`). The port's honest marginal value *on top of
+  that* is **5.6× / 5.8×** — the steadiest number in the whole spike. **Recommendation: land the
+  algorithmic change, then kill the per-action clone in plain TS; revisit WASM only after both.**
+  👉 The two levers COMPOUND rather than overlap — shallow rollouts are exactly where clone cost
+  dominates and flat+undo wins biggest. The algorithmic change makes a future port *more* attractive.
+  👉 **Independent cross-check worth knowing:** calibration says `cloneState` is **36–38% of a real
+  action's cost**, so removing it has a ceiling of ~**1.58×** — and `spikes/wasm` measured that same
+  ceiling end-to-end at **1.53×** by a completely different method. Two methods agreeing to 3% is the
+  strongest evidence in the report.
+  ⚠️ **If WASM is ever done it must be ALL-IN, never a hybrid.** "WASM for the sim, TS for play" means
+  two rules engines in two languages in the path of a *statistically definitive* A/B verdict — two
+  ways for the verdict to drift, showing up as a card being subtly mis-evaluated. Either the engine
+  moves wholly, or it stays. The boundary itself is NOT the blocker (~3.3 ns marginal per call,
+  18.6 KiB module, batching makes per-call cost immaterial) — but **one state copy-out per action
+  costs +51–68%**, and the match viewer / replay / online server / debug inspector all read state
+  from JS. Any port must keep those at batch granularity.
+  ⚠️ **Arm D (native binary) was NOT measured:** this box has no emcc/clang/rustc/cargo/wasm-pack/g++/
+  zig and installing one is a large external download. AssemblyScript came from the npm cache
+  (`spikes/wasm` had already fetched it). Arm C is a **lower** bound on native — no autovectorisation
+  — but `verify.mjs` proves the emitted `.wat` contains **no garbage collector** and only 3 start-up
+  allocations, so it is not paying managed-runtime overhead.
+  ⚠️ **HONEST BIAS, stated because it cuts against my own headline:** the model game omits triggered/
+  activated abilities, the choice system, attachments, layered statics, modal spells, {X}, and the
+  Oracle-text compiler. What it omits is disproportionately the work that does NOT flatten cleanly
+  (registry dispatch through function refs, string zone names, `Map` in `indexContinuous`), while what
+  it keeps is nearly pure integer/array work — WASM's best case. **Treat 2.1–3.5× as an optimistic
+  bound.** Calibration is in the README: instance count is *identical* (120/120) and branching is
+  *higher* in the model (3.17 vs 2.00), so the clone/undo result transfers well; ns/action is 13.4×
+  apart, so the language result transfers worst.
+  ⚠️ **Measurement note for whoever re-runs this:** absolute times moved by a factor of **1.7** between
+  runs of identical code, while the key ratios moved by <0.1×. Everything is best-of-9 interleaved
+  A/B/C inside one process, three independent runs quoted. One number did NOT resolve and is reported
+  as unresolved rather than dropped: the undo journal's cost on a forward-only playout came out 1.08×,
+  1.54× and 0.92× — the spread swamps it. Captured outputs are in `spikes/engine-representation/results/`.
+  👉 **eslint.config.js — two additions, both generalizable, not spike-specific:** `spikes/**/assembly/**`
+  is now IGNORED (AssemblyScript files carry a `.ts` extension but are not TypeScript — `@inline` is a
+  decorator in a position tsc forbids, so typescript-eslint fails to PARSE them rather than finding
+  anything; this also covers the existing `spikes/wasm/assembly/`), and `WebAssembly` joins the Node
+  globals for `spikes/**`. `npm run verify` exit 0, `npm run build` exit 0, suite unchanged.
+  (Worker — pushed, NOT merged. Spike only: nothing to integrate, a decision to take.)
 
 - 2026-08-15 worker: `feat/attachments` 🚧 PUSHED — **auras + equipment, as ONE seam.** Suite **1856
   passed / 0 failed** (baseline 1822 + 34), `npm run verify` exit 0, `npm run build` exit 0, lint 0 errors.

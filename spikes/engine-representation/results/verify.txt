@@ -1,0 +1,27 @@
+EQUIVALENCE GATE — four implementations must be the same program
+
+1. full-game transcripts (60 seeds, digest over every decision)
+  ok    60 games x 4 arms byte-identical
+  ok    every game reaches a result (60/60), 308 actions/game
+
+2. search workload (200 rollouts at each quoted depth)
+  ok    leaf checksums + transition counts agree at all 8 depths
+
+3. per-operation microbenchmarks return identical values
+  ok    benchGenerate = 2000
+  ok    benchEvaluate = -500
+  ok    benchTransition = 7500
+  ok    benchDecide = 500
+
+4. arm C buys its speed with codegen, not by dropping safety the JS arms pay for
+  ok    no garbage collector in the emitted wasm (checked: __collect, __visit, __pin, __unpin, ~lib/rt/itcms, ~lib/rt/tcms, ~lib/rt/full)
+  ok    only start-up allocations remain (3 __new call sites, all in the module's start function)
+  ok    the hot exports allocate nothing at run time
+
+5. the flat arms allocate nothing on the hot path
+  A  objects (TS)      heap delta over 40 games: 2.32 MB
+  B  flat (TS)         heap delta over 40 games: 0.02 MB
+  B+ flat tuned (TS)   heap delta over 40 games: 0.11 MB
+  C  flat (WASM)       heap delta over 40 games: 0.03 MB
+
+GATE PASSED — every arm is the same program.

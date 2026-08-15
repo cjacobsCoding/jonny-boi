@@ -1,0 +1,18 @@
+============================================================================
+CALIBRATION — real packages/core engine vs the spike model, same process
+============================================================================
+                                  REAL core        model   real/model
+instances in a mid-game state           120          120        1.00x
+actions per game                        761          300        2.53x
+branching factor                       2.00         3.17        0.63x
+ns per action (whole game)            15248         1142       13.35x
+ns per generateLegalActions             410          243        1.69x
+ns per cloneState                      5522         2606        2.12x
+ns per cloned instance                 46.0         21.7        2.12x
+games/sec                              86.1       2912.5             
+
+clone as a multiple of one action's cost:
+   real core  0.36x     model  2.28x
+
+real core, clone+generate+apply in isolation: 11842 ns per undoable transition
+============================================================================
