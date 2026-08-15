@@ -181,6 +181,7 @@ function place(state: GameState, def: CardDefinition, controller: PlayerId): Ins
   state.battlefield.push({
     instanceId: id, def, controller, owner: controller, zone: 'battlefield',
     tapped: false, summoningSick: false, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    attachedTo: null,
   });
   return id;
 }
@@ -191,6 +192,7 @@ function placeSick(state: GameState, def: CardDefinition, controller: PlayerId):
   state.battlefield.push({
     instanceId: id, def, controller, owner: controller, zone: 'battlefield',
     tapped: false, summoningSick: true, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    attachedTo: null,
   });
   return id;
 }
@@ -201,6 +203,7 @@ function giveCard(state: GameState, player: PlayerId, def: CardDefinition): Inst
   state.players[player].hand.push({
     instanceId: id, def, controller: player, owner: player, zone: 'hand',
     tapped: false, summoningSick: false, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    attachedTo: null,
   });
   return id;
 }
@@ -382,6 +385,7 @@ describe('a static lasts exactly as long as its source is on the battlefield', (
     s.players.A.graveyard.push({
       instanceId: s.nextInstanceId++, def: GLORIOUS_ANTHEM, controller: 'A', owner: 'A', zone: 'graveyard',
       tapped: false, summoningSick: false, damageMarked: 0, markedByDeathtouch: false, counters: {},
+    attachedTo: null,
     });
     expect(pt(s, bearId)).toEqual({ power: 1, toughness: 1 });
   });

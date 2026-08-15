@@ -46,6 +46,7 @@ export {
   counterSpell,
   createToken,
   tapTarget,
+  attachToTarget,
 } from './primitives.js';
 
 // The choice-driven primitives (DESIGN §3.11): the ones that ask the player a
@@ -65,7 +66,7 @@ export {
 } from './choice-primitives.js';
 
 // Pool loader + registry builder.
-export type { CardPool, UnsupportedRef } from './pool.js';
+export type { AttachmentProblem, CardPool, UnsupportedRef } from './pool.js';
 export {
   loadCardPool,
   getCardDefinition,

@@ -119,6 +119,38 @@ export type GameEvent =
       readonly duration: ContinuousDuration;
     }
   | {
+      // A permanent became attached to another (an Aura enchanting a creature, an
+      // Equipment being equipped). Emitted for the MOVE too — attaching an already
+      // attached Equipment is one `permanentAttached`, since the log's consumer
+      // only ever needs the new host.
+      readonly type: 'permanentAttached';
+      readonly instanceId: InstanceId;
+      readonly hostInstanceId: InstanceId;
+    }
+  | {
+      // A permanent stopped being attached — CR 704.5n, or its host left play.
+      readonly type: 'permanentUnattached';
+      readonly instanceId: InstanceId;
+      /** The host it was attached to, so a replay can undo the visual link. */
+      readonly hostInstanceId: InstanceId;
+    }
+  | {
+      // An attach was REFUSED because the host was not legal for it. The rule-6
+      // signal: the board is unchanged and the reason is in the log, rather than a
+      // silently mis-attached permanent (or a throw).
+      readonly type: 'attachmentFailed';
+      readonly instanceId: InstanceId;
+      readonly reason: string;
+    }
+  | {
+      // CR 704.5m: an Aura that is not legally attached was put into its owner's
+      // graveyard by a state-based action. Named separately from `creatureDied` so
+      // a log reader can tell "the aura fell off" from "the creature died".
+      readonly type: 'attachmentPutIntoGraveyard';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
       // A token permanent was created on the battlefield.
       readonly type: 'tokenCreated';
       readonly instanceId: InstanceId;

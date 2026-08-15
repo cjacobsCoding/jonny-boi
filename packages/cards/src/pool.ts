@@ -6,7 +6,7 @@
  */
 
 import type { CardDefinition, EffectRegistry } from '@jonny-boi/core';
-import { createEffectRegistry } from '@jonny-boi/core';
+import { attachmentProblem, createEffectRegistry } from '@jonny-boi/core';
 import { CARD_POOL } from '../data/pool.js';
 import { CORE_PRIMITIVE_IDS, registerCoreEffects } from './primitives.js';
 
@@ -19,6 +19,12 @@ export interface CardPool {
   getByName(name: string): CardDefinition | undefined;
   /** Effect refs that point at an unregistered primitive (empty when healthy). */
   readonly unsupportedRefs: readonly UnsupportedRef[];
+  /**
+   * Cards whose `attachment` data core cannot honour (empty when healthy). Kept
+   * separate from {@link unsupportedRefs} because the failure is different in
+   * kind: the primitive exists, the DECLARATION is unusable.
+   */
+  readonly attachmentProblems: readonly AttachmentProblem[];
 }
 
 /** A diagnostic for a card referencing a primitive id no registry provides. */
@@ -26,6 +32,14 @@ export interface UnsupportedRef {
   readonly cardId: string;
   readonly cardName: string;
   readonly primitive: string;
+}
+
+/** A diagnostic for a card whose attachment declaration core cannot honour. */
+export interface AttachmentProblem {
+  readonly cardId: string;
+  readonly cardName: string;
+  /** Plain-English explanation from core's `attachmentProblem`. */
+  readonly problem: string;
 }
 
 /**
@@ -60,6 +74,7 @@ export function loadCardPool(options?: {
   const byId = new Map<string, CardDefinition>();
   const byName = new Map<string, CardDefinition>();
   const unsupportedRefs: UnsupportedRef[] = [];
+  const attachmentProblems: AttachmentProblem[] = [];
 
   const curatedIds = new Set(CARD_POOL.map((card) => card.id));
   const extras = (options?.extraCards ?? []).filter((card) => !curatedIds.has(card.id));
@@ -71,12 +86,23 @@ export function loadCardPool(options?: {
     byName.set(card.name, card);
     // Validate the resolution/ETB script refs AND every triggered-ability effect ref
     // (DESIGN §3.9): a card now carries effects via both `effects` and `triggers`.
-    const refs = [...(card.effects ?? []), ...(card.triggers ?? []).flatMap((t) => t.effects)];
+    const refs = [
+      ...(card.effects ?? []),
+      ...(card.triggers ?? []).flatMap((t) => t.effects),
+      ...(card.activated ?? []).flatMap((a) => a.effects),
+    ];
     for (const ref of refs) {
       if (!known.has(ref.primitive)) {
         unsupportedRefs.push({ cardId: card.id, cardName: card.name, primitive: ref.primitive });
         onWarn(`[cards] '${card.name}' references unknown primitive '${ref.primitive}'`);
       }
+    }
+    // An attachment shape core cannot honour is the rule-6 case: report it here
+    // rather than letting the card enter play and quietly do nothing.
+    const attachmentIssue = attachmentProblem(card);
+    if (attachmentIssue) {
+      attachmentProblems.push({ cardId: card.id, cardName: card.name, problem: attachmentIssue });
+      onWarn(`[cards] ${attachmentIssue}`);
     }
   }
 
@@ -85,6 +111,7 @@ export function loadCardPool(options?: {
     get: (id) => byId.get(id),
     getByName: (name) => byName.get(name),
     unsupportedRefs,
+    attachmentProblems,
   };
 }
 

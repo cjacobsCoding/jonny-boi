@@ -19,12 +19,14 @@
 import type {
   ActivatedAbility,
   ActivationCost,
+  AttachmentSpec,
   CardDefinition,
   CardType,
   EffectRef,
   ManaColor,
   ManaCost,
   ManaProduction,
+  PermanentModification,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import type {
@@ -46,6 +48,13 @@ import {
   isVacuousClause,
 } from './rules.js';
 import { frontFaceName, normalizeClause, prepareOracle, splitSentences } from './text.js';
+
+/**
+ * Scryfall's keyword names for the two printed attachment abilities. They are
+ * modelled by the rule table (`enchant-permanent` / `equip-cost`) rather than by a
+ * keyword flag, so the keyword sweep must not report them a second time.
+ */
+const ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['enchant', 'equip']);
 
 /** Scryfall card types → the core `CardType`s the engine understands. */
 const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
@@ -168,6 +177,10 @@ interface Assembly {
   keywords: Record<string, boolean>;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
+  /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
+  attachesAs?: ClauseContribution['attachesAs'];
+  /** The "Enchanted/Equipped creature gets …" half, accumulated across lines. */
+  attachmentModifies?: PermanentModification;
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -181,9 +194,48 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.keywords) {
     assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
   }
+  if (contribution.activated) assembly.activated.push(...contribution.activated);
   if (contribution.entersTapped) assembly.entersTapped = true;
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
+  if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
+  if (contribution.attachmentModifies) {
+    // Merged rather than replaced: a card may print the P/T line and the keyword
+    // line separately ("Equipped creature gets +1/+1." / "Equipped creature has
+    // vigilance."), and both are the same one modification.
+    assembly.attachmentModifies = mergeModifications(assembly.attachmentModifies, contribution.attachmentModifies);
+  }
   assembly.matchedRules.push(ruleId);
+}
+
+/** Sum two attachment modifications (P/T adds, keyword grants OR together). */
+function mergeModifications(
+  existing: PermanentModification | undefined,
+  incoming: PermanentModification,
+): PermanentModification {
+  if (!existing) return incoming;
+  return {
+    power: (existing.power ?? 0) + (incoming.power ?? 0),
+    toughness: (existing.toughness ?? 0) + (incoming.toughness ?? 0),
+    keywords: { ...existing.keywords, ...incoming.keywords },
+  };
+}
+
+/**
+ * The `attachment` data a card's clauses added up to, or `undefined`.
+ *
+ * A modification with no "Enchant …"/"Equip {N}" line is deliberately REFUSED
+ * (returns `undefined`, and the caller reports the clause): "Enchanted creature
+ * gets +2/+0" alone tells us what the card does but nothing about how it ever
+ * becomes attached, and compiling it would produce a permanent that sits on the
+ * battlefield doing nothing — precisely the "looks implemented, isn't" failure the
+ * compiler exists to prevent.
+ */
+function assembleAttachment(assembly: Assembly): AttachmentSpec | undefined {
+  if (!assembly.attachesAs) return undefined;
+  return {
+    ...assembly.attachesAs,
+    ...(assembly.attachmentModifies ? { modifies: assembly.attachmentModifies } : {}),
+  };
 }
 
 /**
@@ -561,12 +613,26 @@ export function compileCard(card: CompilableCard): CompileResult {
     // (prowess via its template, persist via a direct builder) — Scryfall
     // listing them again is not a second, unmodelled ability.
     if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
+    // "Enchant" and "Equip" are Scryfall's names for the attachment ability the
+    // card's own printed line already compiled (see `assembleAttachment`). Without
+    // this, every Aura and Equipment would report its central ability as missing
+    // one line after implementing it.
+    if (ATTACHMENT_KEYWORDS.has(word) && assembly.attachesAs !== undefined) continue;
     if (!assembly.missing.some((m) => m.text.toLowerCase().includes(word))) {
       assembly.missing.push({
         text: keyword,
         missingEngineSystem: `the "${keyword}" keyword ability`,
       });
     }
+  }
+
+  // --- attachments -----------------------------------------------------------
+  const attachment = assembleAttachment(assembly);
+  if (attachment === undefined && assembly.attachmentModifies !== undefined) {
+    assembly.missing.push({
+      text: 'enchanted/equipped creature gets …',
+      missingEngineSystem: 'auras and equipment attachment (no "Enchant …" or "Equip {N}" line to attach it)',
+    });
   }
 
   // --- assemble --------------------------------------------------------------
@@ -608,6 +674,7 @@ export function compileCard(card: CompilableCard): CompileResult {
         : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
     ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
+    ...(attachment ? { attachment } : {}),
   };
 
   return {

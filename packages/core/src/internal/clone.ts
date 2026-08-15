@@ -54,6 +54,9 @@ function cloneInstance(inst: CardInstance): CardInstance {
     damageMarked: inst.damageMarked,
     markedByDeathtouch: inst.markedByDeathtouch,
     counters: cloneCounters(inst.counters),
+    // A plain number|null copy — no allocation, and unconditional so every clone
+    // produces the same object shape (see the field's note in state.ts).
+    attachedTo: inst.attachedTo,
   };
 }
 

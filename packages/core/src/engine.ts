@@ -142,6 +142,7 @@ function makeInstance(state: GameState, def: CardDefinition, owner: PlayerId): C
     damageMarked: 0,
     markedByDeathtouch: false,
     counters: NO_COUNTERS,
+    attachedTo: null,
   };
 }
 
@@ -552,6 +553,7 @@ function frameSource(state: GameState, frame: ResolutionFrame): CardInstance {
       damageMarked: 0,
       markedByDeathtouch: false,
       counters: NO_COUNTERS,
+      attachedTo: null,
     }
   );
 }

@@ -122,6 +122,7 @@ function placeInZone(
       summoningSick: true,
       damageMarked: 0,
       markedByDeathtouch: false,
+      attachedTo: null,
       counters: {},
     };
     place(inst);

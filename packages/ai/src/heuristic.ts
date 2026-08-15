@@ -58,12 +58,14 @@ import {
   isCreature,
   isLand,
   isLegalTarget,
+  legalTargetsFor,
   MANA_COLORS,
   planManaPayment,
   remainingToughness,
+  restrictionOfEffects,
   targetRestrictionOf,
 } from '@jonny-boi/core';
-import type { TargetRestriction } from '@jonny-boi/core';
+import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -110,6 +112,22 @@ type SpellIntent =
   | { readonly kind: 'counter' }
   | { readonly kind: 'sweeper' }
   | { readonly kind: 'creature' }
+  /**
+   * An Aura or an Equipment — a card whose value is "what it grants" times "who
+   * is around to carry it". Recognised from `def.attachment`, which is CORE data
+   * rather than a primitive id, so this classification cannot be broken by a
+   * renamed primitive the way a mis-typed `destroy` once blanked every removal
+   * spell in the pool.
+   */
+  | {
+      readonly kind: 'attachment';
+      /** Total P/T the attachment grants its host (negative for Dead Weight). */
+      readonly stats: number;
+      /** How many keyword abilities it grants. */
+      readonly keywords: number;
+      /** False when the modification makes its host WORSE — i.e. it is removal. */
+      readonly helpful: boolean;
+    }
   | { readonly kind: 'other' };
 
 /** Build the heuristic pilot with the given (tunable) weights. */
@@ -203,15 +221,24 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
 
   const canPlayLand = anyActionOfKind(legalActions, 'playLand');
   const bestSpell = bestSpellGoal(ctx, weights);
+  // Equipping is a real play competing with the others, not a reflex — see
+  // `bestEquipPlay`. It is offered only at sorcery speed by the engine, so it can
+  // only turn up in a window where a land or a spell is also possible.
+  const equip = bestEquipPlay(ctx, weights);
 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
   const landScore = canPlayLand ? weights.playLandScore : -Infinity;
   const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
+  const equipScore = equip ? equip.score : -Infinity;
 
-  if (landScore >= spellScore && canPlayLand) {
+  if (landScore >= spellScore && landScore >= equipScore && canPlayLand) {
     const landAction = firstActionOfKind(legalActions, 'playLand');
     if (landAction) return emit(ctx, landAction, 'develop mana — play a land', weights.playLandScore);
+  }
+
+  if (equip && equipScore >= spellScore && equipScore > weights.passScore) {
+    return emit(ctx, equip.action, ctx.trace ? equip.label : NO_REASON, equipScore);
   }
 
   if (bestSpell && bestSpell.goal.score > weights.passScore) {
@@ -277,6 +304,130 @@ function fetchesALand(ability: { readonly effects: readonly EffectRef[] }): bool
  * (Mirrors core's `RESTRICTION_MEMO` for exactly the same reason.)
  */
 const FETCH_MEMO = new WeakMap<{ readonly effects: readonly EffectRef[] }, boolean>();
+
+/**
+ * The best "attach me to that creature" play right now — the Equip half of the
+ * attachment system — together with the taps that fund it.
+ *
+ * Enumerated from the BATTLEFIELD rather than from `legalActions`, and that is the
+ * whole trick: the engine only offers an activated ability whose mana cost the
+ * FLOATING pool already covers, and the pilot never floats mana speculatively. A
+ * version of this that read the offered actions therefore looked completely
+ * correct and equipped exactly never. So the ability is found, scored, and funded
+ * through the same `planManaPayment` a spell goes through, and the caller emits
+ * either the next tap or the activation itself.
+ *
+ * An equip ability is recognised WITHOUT naming a primitive id: the permanent
+ * declares `def.attachment` (core data) and the ability aims at
+ * `'creatureYouControl'` (core's target vocabulary). A renamed primitive therefore
+ * cannot silently turn this back into a no-op, which is exactly how this codebase
+ * lost every removal spell once before.
+ */
+function bestEquipPlay(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+): { readonly action: GameAction; readonly score: number; readonly label: string } | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  // Every printed Equip is "activate only as a sorcery"; checking it here avoids
+  // planning a play the engine would refuse.
+  const sorcerySpeedOpen =
+    me === view.activePlayer &&
+    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
+    view.stack.length === 0;
+  if (!sorcerySpeedOpen) return undefined;
+
+  let hosts: readonly (InstanceId | PlayerId)[] | undefined;
+  let best: { action: GameAction; score: number; label: string } | undefined;
+
+  for (const perm of view.battlefield) {
+    if (perm.controller !== me) continue;
+    const modifies = perm.def.attachment?.modifies;
+    const abilities = perm.def.activated;
+    if (!modifies || !abilities) continue;
+    for (let index = 0; index < abilities.length; index++) {
+      const ability = abilities[index]!;
+      if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
+      const mana = ability.cost.mana;
+      // A cost with a non-mana component is not the plain Equip this understands;
+      // leaving it alone is safer than guessing at what paying it costs us.
+      if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
+
+      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me);
+      const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
+      if (!host) continue;
+
+      const score = scoreEquip(modifies, host, weights);
+      if (score === undefined || (best !== undefined && score <= best.score)) continue;
+      const plan = planManaPayment(view as GameState, me, mana, legalActions);
+      if (!plan) continue; // cannot fund it this turn
+      const action: GameAction =
+        plan.length > 0
+          ? { kind: 'tapForMana', player: me, instanceId: plan[0]!.instanceId, mode: plan[0]!.mode }
+          : {
+              kind: 'activateAbility',
+              player: me,
+              instanceId: perm.instanceId,
+              abilityIndex: index,
+              targets: [host.instanceId],
+            };
+      best = {
+        action,
+        score,
+        label: ctx.trace ? `${ability.label} onto ${host.def.name}` : NO_REASON,
+      };
+    }
+  }
+  return best;
+}
+
+/** The target restriction every printed `Equip {N}` aims with (CR 301.5c). */
+const EQUIP_RESTRICTION: TargetRestriction = 'creatureYouControl';
+
+/**
+ * The creature that should carry an attachment: the biggest one it is not already
+ * on. Excluding the CURRENT host is the guard that matters — re-equipping the
+ * creature it is already attached to is legal, changes nothing, and costs mana
+ * every single turn, which is how equipment turns into a mana sink in a sim.
+ */
+function bestEquipHost(
+  view: PilotView,
+  offered: readonly (InstanceId | PlayerId)[],
+  currentHost: InstanceId | null,
+): CardInstance | undefined {
+  let best: CardInstance | undefined;
+  for (const id of offered) {
+    if (typeof id !== 'number' || id === currentHost) continue;
+    const candidate = findInstance(view, id);
+    if (!candidate || !isCreature(candidate.def)) continue;
+    if (!best || effectivePower(candidate) > effectivePower(best)) best = candidate;
+  }
+  return best;
+}
+
+/**
+ * What moving an attachment granting `modifies` onto `host` is worth, or
+ * `undefined` when there is nothing to gain.
+ *
+ * Bigger bodies carry equipment better (a +2/+0 on a 4/4 attacker beats the same
+ * sword on a 0/1), so the host's own power counts toward the score — which is also
+ * what makes the pilot move a sword onto a better creature when one arrives.
+ */
+function scoreEquip(
+  modifies: PermanentModification,
+  host: CardInstance,
+  weights: HeuristicWeights,
+): number | undefined {
+  const stats = (modifies.power ?? 0) + (modifies.toughness ?? 0);
+  const keywords = modifies.keywords ? Object.values(modifies.keywords).filter(Boolean).length : 0;
+  if (stats <= 0 && keywords === 0) return undefined;
+  return (
+    weights.attachBaseScore +
+    weights.attachPerStat * stats +
+    weights.attachPerKeyword * keywords +
+    weights.castCreaturePerStat * effectivePower(host)
+  );
+}
 
 /**
  * A goal together with the taps that actually fund it. Pairing the two is the
@@ -511,6 +662,24 @@ function scoreSpell(
       if (!play) return undefined; // no combat use right now — hold the trick
       return { score: play.score, card, cost, targets: [play.target], reason: play.reason };
     }
+    case 'attachment': {
+      // Who should carry it: our best creature for a buff, their best for a
+      // shrink. An attachment with nobody to attach to is NOT cast — it would
+      // enter attached to nothing and (for an Aura) die on the spot.
+      const me = otherPlayer(opp);
+      const hosts = intent.helpful ? creaturesControlledBy(view, me) : oppCreatures;
+      const host = biggestThreat(hosts);
+      if (!host) return undefined;
+      return {
+        score: attachmentScore(intent, weights),
+        card,
+        cost,
+        targets: [host.instanceId],
+        reason: explain
+          ? `${intent.helpful ? 'suit up' : 'shrink'} ${host.def.name} with ${card.def.name}`
+          : NO_REASON,
+      };
+    }
     case 'other':
       return {
         score: weights.genericSpellScore,
@@ -520,6 +689,24 @@ function scoreSpell(
         reason: explain ? `cast ${card.def.name}` : NO_REASON,
       };
   }
+}
+
+/**
+ * What an attachment is worth, from the size of the modification it grants.
+ *
+ * `Math.abs` on the stats deliberately: a -2/-2 Aura is worth its magnitude as
+ * removal exactly as a +2/+2 one is worth its magnitude as a buff. One formula,
+ * both directions, no second weight to keep in sync.
+ */
+function attachmentScore(
+  intent: Extract<SpellIntent, { kind: 'attachment' }>,
+  weights: HeuristicWeights,
+): number {
+  return (
+    weights.attachBaseScore +
+    weights.attachPerStat * Math.abs(intent.stats) +
+    weights.attachPerKeyword * intent.keywords
+  );
 }
 
 /**
@@ -950,6 +1137,25 @@ function classifySpell(def: CardDefinition): SpellIntent {
 }
 
 function computeSpellIntent(def: CardDefinition): SpellIntent {
+  // Checked before the creature branch so a creature Aura (bestow-style) is still
+  // read as an attachment, and before the primitive scan because an attachment's
+  // value is in its declared modification, not in the ref that attaches it.
+  const attachment = def.attachment;
+  if (attachment) {
+    const mod = attachment.modifies;
+    const stats = (mod?.power ?? 0) + (mod?.toughness ?? 0);
+    const keywords = mod?.keywords ? Object.values(mod.keywords).filter(Boolean).length : 0;
+    return {
+      kind: 'attachment',
+      stats,
+      keywords,
+      // A NEGATIVE attachment is removal wearing an Aura's clothes (Dead Weight),
+      // and must be aimed at the OPPONENT's board. Getting this backwards would
+      // have the pilot shrink its own creatures — a card played as the opposite of
+      // what it prints, which is worse than not playing it at all.
+      helpful: stats >= 0,
+    };
+  }
   if (isCreature(def)) return { kind: 'creature' };
   const effects = def.effects ?? [];
   for (const ref of effects) {

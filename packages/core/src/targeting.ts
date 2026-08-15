@@ -69,7 +69,19 @@ export type TargetRestriction =
    * its own caster would make it strictly more permissive than printed, which is
    * the exact infidelity this module exists to prevent.
    */
-  | 'opponent';
+  | 'opponent'
+  /**
+   * "target creature you control" — the aim of every printed `Equip {N}`
+   * ability ("Attach to target creature you control").
+   *
+   * Like `'opponent'`, legality depends on WHO is acting rather than only on the
+   * board, so an absent `controller` makes it ILLEGAL rather than guessed. It
+   * exists as its own restriction instead of being approximated by `'creature'`
+   * for the usual reason: offering an Equipment every creature on the table lets
+   * a pilot spend mana equipping the opponent's board, which is a card playing
+   * differently from its printed text.
+   */
+  | 'creatureYouControl';
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -93,7 +105,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'player' ||
     value === 'spell' ||
     value === 'artifact' ||
-    value === 'opponent'
+    value === 'opponent' ||
+    value === 'creatureYouControl'
   );
 }
 
@@ -173,6 +186,10 @@ export function isLegalTarget(
   if (!permanent) return false;
   if (!isTargetableBy(state, permanent, controller)) return false;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
+  if (restriction === 'creatureYouControl') {
+    // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
+    if (controller === undefined || permanent.controller !== controller) return false;
+  }
   return isCreature(permanent.def);
 }
 
@@ -243,6 +260,17 @@ export function legalTargetsFor(
   if (restriction === 'any' || restriction === 'creature') {
     for (const permanent of state.battlefield) {
       if (isCreature(permanent.def) && isTargetableBy(state, permanent, controller)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'creatureYouControl' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller === controller &&
+        isCreature(permanent.def) &&
+        isTargetableBy(state, permanent, controller)
+      ) {
         targets.push(permanent.instanceId);
       }
     }
@@ -335,6 +363,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an artifact';
     case 'opponent':
       return 'an opponent';
+    case 'creatureYouControl':
+      return 'a creature you control';
     case 'any':
       return 'any target (a creature or a player)';
   }

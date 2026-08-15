@@ -77,8 +77,35 @@ export {
  * Aggregated through the same `indexContinuous` path as until-end-of-turn effects,
  * so every consumer that already reads effective values gets statics for free.
  */
-export type { StaticAbility, StaticAffects, StaticControllerScope } from './statics.js';
-export { DEFAULT_STATIC_SCOPE, staticsOf, staticAppliesTo, staticIsInert } from './statics.js';
+export type { PermanentModification, StaticAbility, StaticAffects, StaticControllerScope } from './statics.js';
+export {
+  DEFAULT_STATIC_SCOPE,
+  staticsOf,
+  staticAppliesTo,
+  staticIsInert,
+  modificationIsInert,
+} from './statics.js';
+
+/**
+ * Attachment seam: one permanent attached to another. Auras and Equipment are the
+ * SAME relationship — a host filter, a modification, and what the state-based
+ * actions do when it is not legally attached — so a card declares
+ * `CardDefinition.attachment` and core needs no per-form system. See
+ * `attachments.ts` for the full rationale.
+ */
+export type { AttachmentSpec, AttachmentHostFilter, AttachmentIllegalAction } from './attachments.js';
+export {
+  AURA_WHEN_ILLEGAL,
+  EQUIPMENT_WHEN_ILLEGAL,
+  DEFAULT_HOST_SCOPE,
+  attachmentOf,
+  attachmentProblem,
+  attachTo,
+  detachFromHost,
+  isLegalHost,
+  isLegallyAttached,
+  illegalAttachmentReason,
+} from './attachments.js';
 
 // Target legality (targeting.ts): what a spell is ALLOWED to point at, declared
 // as data on the effect ref (`params.targets`) and enforced when actions are
@@ -93,6 +120,7 @@ export {
   isLegalTarget,
   legalTargetsFor,
   illegalTargetReason,
+  restrictionOfEffects,
   describeRestriction,
 } from './targeting.js';
 

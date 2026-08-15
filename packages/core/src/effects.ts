@@ -14,6 +14,7 @@ import { NO_COUNTERS } from './state.js';
 import type { GameEvent } from './events.js';
 import type { CardDefinition, EffectRef } from './card.js';
 import { entersTapped } from './card.js';
+import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import type {
   ChooseModesRequest,
@@ -59,6 +60,17 @@ export interface EffectContext {
    * permanent. Used by token-makers (e.g. a cast-trigger that makes a 1/1).
    */
   createToken(def: CardDefinition, controller?: PlayerId): InstanceId;
+  /**
+   * Attach the SOURCE of this effect to the permanent `hostInstanceId` — the
+   * channel an Aura's "enters attached to the creature it targets" and an
+   * Equipment's `Equip {N}` both use (see `attachments.ts`).
+   *
+   * Returns false (and says why in the log) when the host is not a legal one for
+   * the source's printed `attachment` data, or when the source is not an
+   * attachment at all. It never throws and never produces a board the state-based
+   * actions would immediately have to undo.
+   */
+  attach(hostInstanceId: InstanceId): boolean;
 
   // --- player choice (choices.ts) ------------------------------------------------
   /**
@@ -220,6 +232,9 @@ export function applyEffectRef(
     createToken(def, controller) {
       return createTokenInState(base.state, def, controller ?? base.controller, emit);
     },
+    attach(hostInstanceId) {
+      return attachTo(base.state, base.source, hostInstanceId, emit);
+    },
     ask,
     chooseCards(request) {
       const answer = ask({ ...request, kind: 'selectCards', chooser: request.chooser ?? base.controller });
@@ -336,6 +351,7 @@ function createTokenInState(
     damageMarked: 0,
     markedByDeathtouch: false,
     counters: NO_COUNTERS,
+    attachedTo: null,
   };
   state.battlefield.push(token);
   emit({ type: 'tokenCreated', instanceId, controller, name: def.name });
