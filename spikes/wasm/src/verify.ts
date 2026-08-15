@@ -12,31 +12,11 @@
  * and a non-empty plan, which the real caller acts on differently.
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import type { PaymentCase } from './corpus.js';
-import { encodeCost, encodeHybrid, encodeSources, type FlatCase, type PlanResult } from './kernel.js';
 import { planFlat as planJsFlat } from './kernel-js-flat.js';
 import { loadWasmKernel } from './kernel-wasm.js';
 import { planShipped, toObjectCase } from './kernel-js-shipped.js';
-
-export function toFlatCase(c: PaymentCase): FlatCase {
-  const pool = Int32Array.from(c.pool);
-  const cost = new Int32Array(7);
-  encodeCost(c.cost, cost);
-  return { pool, cost, hybrid: encodeHybrid(c.cost), sources: encodeSources(c.sources) };
-}
-
-export function describePlan(p: PlanResult): string {
-  if (p === null) return 'UNPAYABLE';
-  if (p.length === 0) return 'ALREADY-PAID';
-  return p.map((t) => `${t.sourceIndex}/${t.modeIndex}`).join(',');
-}
-
-export function loadCorpus(): PaymentCase[] {
-  const path = fileURLToPath(new URL('../results/corpus.json', import.meta.url));
-  return JSON.parse(readFileSync(path, 'utf8')) as PaymentCase[];
-}
+import { describePlan, loadCorpus, toFlatCase } from './corpus-io.js';
 
 function main(): void {
   const corpus = loadCorpus();

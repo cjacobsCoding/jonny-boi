@@ -35,8 +35,12 @@
 
 const COLOR_COUNT: i32 = 6;
 
-/** The shared arena. 4 MiB of i32 is far more than the corpus needs. */
-const ARENA_INTS: i32 = 1 << 20;
+/**
+ * The shared arena — 8M i32 words (32 MiB). Sized to hold the ENTIRE recorded
+ * corpus resident at once, which the batch ceiling arm needs; the per-call arms
+ * use only the first few hundred words.
+ */
+const ARENA_INTS: i32 = 1 << 23;
 const arena = new StaticArray<i32>(ARENA_INTS);
 
 /** Byte offset of the arena in linear memory, so the host can view it. */

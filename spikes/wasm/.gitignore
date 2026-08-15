@@ -1,2 +1,7 @@
+# Compiled spike output (JS via esbuild, .wasm via asc) — regenerate with `npm run build`.
 build/
+
+# Recorded measurement artefacts. Regenerate with `npm run corpus` / `npm run profile`;
+# the corpus alone is ~5 MB of recorded game inputs and does not belong in git.
+results/
 *.cpuprofile
