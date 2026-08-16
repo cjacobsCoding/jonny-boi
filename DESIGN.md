@@ -817,6 +817,21 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   because Thoughtseize's candidates ARE the opponent's hand). Brainstorm, Ponder, Thoughtseize,
   Eternal Witness, Cryptic Command and Path to Exile now play as printed.
 - ✅ *library search* — closed with the above (`searchLibrary`, filtered, optional, with a seeded shuffle).
+- ✅ *targets chosen by a triggered ability* — "when ~ enters, **it deals 2 damage to target
+  creature**" (Flametongue Kavu). The first question this engine asks with **nothing resolving**:
+  targets are chosen as the ability is put on the stack (CR 603.3d), where there is no resolution
+  frame to park a question in. So the waiting is a marker on the STACK OBJECT
+  (`TriggeredStackObject.awaitingTargets`) rather than a bookkeeping record beside it — "is anything
+  still waiting to be aimed?" is then answered by the stack itself and cannot drift out of step with
+  it, the same reason state-based actions are derived from the board. `TriggeredAbility.targets`
+  declares what may be chosen (a property of the ABILITY, not of a primitive: the same `dealDamage`
+  ref is targeted here and untargeted in "deals 2 damage to each creature"), and the compiler sets it
+  from the printed body. Three outcomes, all rules-mandated: **no legal target** removes the ability
+  from the stack unresolved; **exactly one** is taken without stopping the game (one lawful aim is not
+  a decision); **two or more is always asked** — auto-picking there is exactly the shortcut that makes
+  a card report as playable and then aim itself the moment a board grows a second creature. The pilot
+  aims by pricing the ability's own effects against each candidate (`valueOfEffects`), which is what
+  lets one rule point damage at the opponent's board and a pump at its own.
 - ✅ *optional payment during resolution* — "counter target spell **unless its controller pays {3}**"
   (Mana Leak, Force Spike, Miscalculation). A fifth choice kind, `payMana`, rather than a `confirm`
   with the cost written into the prompt: the engine has to know the cost to decide whether paying is

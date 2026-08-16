@@ -995,12 +995,16 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
 /**
  * Build a one-condition trigger whose body is compiled from `bodyText`.
  *
- * The body is compiled in TARGET-FREE mode, because core resolves a triggered
- * ability with an empty target list (`triggers-runtime.ts` puts `targets: []` on
- * the stack object): nothing chooses targets for a trigger yet. So a body like
- * "destroy target creature" would go on the stack, resolve, find no target and
- * do NOTHING — a card that reads as removal and is actually blank. Rejecting the
- * whole trigger reports the card instead, which is the compiler's contract.
+ * The body MAY name a target now: core aims a triggered ability as it goes on the
+ * stack (`TriggeredAbility.targets` → the engine's `aimPendingTriggers`), so
+ * "when ~ enters, it deals 2 damage to any target" is a real card rather than one
+ * that resolves pointing at nothing. What the body targets is carried onto the
+ * ability, because the ABILITY is what gets aimed — the effects only read the
+ * targets it was given.
+ *
+ * A body with no faithful implementation still rejects the whole trigger (a
+ * trigger that fires and does nothing is worse than a reported card), and so does
+ * one that would need two separate targets — see `compileTriggerBody`.
  */
 function triggerFrom(
   ctx: RuleContext,
@@ -1008,9 +1012,18 @@ function triggerFrom(
   bodyText: string,
   label: string,
 ): ClauseContribution | null {
-  const body = ctx.compileEffectClause(bodyText, { targetFree: true });
-  if (body === null || body.length === 0) return null;
-  return { triggers: [{ condition, effects: body, label }] };
+  const body = ctx.compileTriggerBody(bodyText);
+  if (body === null || body.effects.length === 0) return null;
+  return {
+    triggers: [
+      {
+        condition,
+        effects: body.effects,
+        label,
+        ...(body.targets ? { targets: body.targets } : {}),
+      },
+    ],
+  };
 }
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
@@ -1497,11 +1510,15 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a filtered-targeting template the compiler does not recognize yet',
   },
   {
-    // A trigger body that names a target. Core resolves triggered abilities with
-    // an empty target list, so these cannot be compiled without the same decision
-    // seam "player choice during resolution" needs.
+    // A trigger body that names a target COMPILES now — core aims a triggered
+    // ability as it goes on the stack (`TriggeredAbility.targets`). So this hint
+    // no longer claims the system is missing, which would send the next agent to
+    // rebuild it. What still lands here is a body whose own template is
+    // unrecognised (a filtered target, two separate targets, a targeted mechanic
+    // with no rule of its own) — reported by the BODY's shape, not by the fact
+    // that it sits inside a trigger.
     pattern: /^(?:when|whenever)\b.*\btarget\b/,
-    missingEngineSystem: 'targets chosen by a triggered ability',
+    missingEngineSystem: 'a targeted-trigger template the compiler does not recognize yet',
   },
   {
     pattern: /\bdraws? (?:a|two|three|\d+) cards? and (?:you )?loses? \d+ life/,

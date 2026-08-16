@@ -19,6 +19,7 @@
 import type { CardType, EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { InstanceId, PlayerId } from './state.js';
+import type { TargetRestriction } from './targeting.js';
 
 /**
  * The game occurrences a trigger can watch. Kept small and explicit (the §3.9
@@ -74,6 +75,22 @@ export interface TriggeredAbility {
   readonly effects: readonly EffectRef[];
   /** Human-readable label for debug/inspector display. */
   readonly label?: string;
+  /**
+   * What this ability TARGETS, chosen by its controller as it goes on the stack
+   * (CR 603.3d) — "when ~ enters, **it deals 2 damage to any target**".
+   *
+   * Declared here rather than inferred from the effects because targeting is a
+   * property of the ABILITY, not of a primitive: the same `dealDamage` ref is a
+   * targeted trigger here and an untargeted "deals 2 damage to each creature"
+   * elsewhere, and core must not guess which. Absent ⇒ the ability targets
+   * nothing and resolves with an empty target list, exactly as every trigger did
+   * before targeting existed.
+   *
+   * Single-target on purpose: every printed template the compiler reproduces
+   * names one target, and a multi-target trigger would need its own rule rather
+   * than a silently-widened one here.
+   */
+  readonly targets?: TargetRestriction;
 }
 
 /**

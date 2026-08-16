@@ -95,6 +95,7 @@ export function ChoicePrompt({
             <PlayerOptions choice={choice} draft={draft} names={names} onPick={pick} />
           )}
           {choice.kind === 'chooseModes' && <ModeOptions choice={choice} draft={draft} onPick={pick} />}
+          {choice.kind === 'selectTargets' && <TargetOptions choice={choice} draft={draft} onPick={pick} />}
           {choice.kind === 'confirm' && (
             <BinaryOptions
               chosen={draft.kind === 'confirm' ? draft.yes : null}
@@ -229,6 +230,43 @@ function ModeOptions({
           onClick={() => onPick(m.id)}
         >
           {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * What a triggered ability is being pointed at. A target may be a PLAYER as well
+ * as a permanent, which is why this renders the choice's own `TargetOption`
+ * snapshots (name + controller) rather than reusing the card chips: there is no
+ * card to draw for "Player B".
+ */
+function TargetOptions({
+  choice,
+  draft,
+  onPick,
+}: {
+  choice: Extract<PendingChoice, { kind: 'selectTargets' }>;
+  draft: ChoiceDraft;
+  onPick: (value: ChoiceOptionValue) => void;
+}): ReactElement {
+  const picked = new Set<ChoiceOptionValue>(draft.kind === 'selectTargets' ? draft.targets : []);
+  if (choice.candidates.length === 0) {
+    return <p className="choice-prompt__empty">Nothing legal to point at.</p>;
+  }
+  return (
+    <div className="choice-prompt__list">
+      {choice.candidates.map((candidate) => (
+        <button
+          key={String(candidate.ref)}
+          type="button"
+          className={`choice-option${picked.has(candidate.ref) ? ' choice-option--selected' : ''}`}
+          aria-pressed={picked.has(candidate.ref)}
+          onClick={() => onPick(candidate.ref)}
+        >
+          {candidate.name}
+          <span className="choice-option__note"> ({candidate.controller})</span>
         </button>
       ))}
     </div>

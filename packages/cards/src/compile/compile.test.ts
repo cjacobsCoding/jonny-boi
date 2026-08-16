@@ -592,28 +592,57 @@ describe('compileCard — templated cards outside the curated pool', () => {
     }
   });
 
-  // A triggered ability resolves with NO chosen targets in core, so a body that
-  // needs one would fire and do nothing. The compiler must report the card
-  // rather than ship a creature whose "removal" ETB is silently blank.
+  // A triggered ability is AIMED as it goes on the stack now (core's
+  // `TriggeredAbility.targets`), so a body that names a target compiles — and the
+  // restriction has to travel onto the ability, because the ability is what gets
+  // aimed. A trigger carrying the effects but not the restriction would be aimed
+  // at nothing and resolve blank, which is the failure this asserts against.
   it.each([
-    ['When Blocked Kavu enters, Blocked Kavu deals 4 damage to target creature.', 'ETB damage'],
-    ['When Blocked Mage enters, destroy target creature.', 'ETB removal'],
-    ['Whenever Blocked Mage attacks, target creature gets +2/+2 until end of turn.', 'attack pump'],
-  ])('refuses a trigger whose body needs a chosen target (%s)', (oracleText) => {
-    const name = oracleText.startsWith('When Blocked Kavu') ? 'Blocked Kavu' : 'Blocked Mage';
-    const result = compileCard(
-      makeCard({
-        name,
-        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
-        manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
-        power: 2,
-        toughness: 2,
-        oracleText,
-      }),
-    );
+    [
+      'When Aimed Kavu enters, Aimed Kavu deals 4 damage to target creature.',
+      'creature',
+      [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creature' } }],
+    ],
+    [
+      'When Aimed Kavu enters, Aimed Kavu deals 2 damage to any target.',
+      'any',
+      [{ primitive: 'dealDamage', params: { amount: 2 } }],
+    ],
+    [
+      'When Aimed Kavu enters, destroy target creature.',
+      'creature',
+      [{ primitive: 'destroyTarget', params: { targets: 'creature' } }],
+    ],
+    [
+      'Whenever Aimed Kavu attacks, target creature gets +2/+2 until end of turn.',
+      'creature',
+      [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2, targets: 'creature' } }],
+    ],
+  ])('compiles a trigger that names a target (%s)', (oracleText, restriction, effects) => {
+    const result = compileCard(aimedKavu(oracleText));
 
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers).toHaveLength(1);
+    const trigger = result.definition.triggers![0]!;
+    expect(trigger.targets).toBe(restriction);
+    expect(trigger.effects).toEqual(effects);
+  });
+
+  it('leaves an untargeted trigger declaring NO targets at all', () => {
+    // The absence matters: `targets` present means "stop and aim me", so an ETB
+    // that draws a card must not acquire one.
+    const result = compileCard(aimedKavu('When Aimed Kavu enters, draw a card.'));
+    expect(result.status).toBe('complete');
+    expect(result.definition.triggers![0]!.targets).toBeUndefined();
+  });
+
+  it('REFUSES a trigger body that would need two separate targets', () => {
+    // One printed template, two aims. Quietly pointing both halves at one object
+    // would be a card playing differently from its text, so it keeps reporting.
+    const result = compileCard(
+      aimedKavu('When Aimed Kavu enters, destroy target creature. Aimed Kavu deals 2 damage to any target.'),
+    );
     expect(result.status).toBe('incomplete');
-    // …and it certainly must not have emitted a trigger that does nothing.
     expect(result.definition.triggers ?? []).toHaveLength(0);
   });
 });
@@ -630,10 +659,13 @@ describe('explainUnsupported — every common rejection names a real engine feat
 
   it.each([
     ['pyroclasm deals 2 damage to each creature', 'a group-damage template the compiler does not recognize yet'],
-    // Bounce itself compiles now; what blocks this clause is that it sits inside
-    // a trigger, and a triggered ability cannot choose targets. The explanation
-    // has to name THAT, or the queue sends someone to fix an already-solved gap.
-    ['when ~ enters, return target creature to its owner\'s hand', 'targets chosen by a triggered ability'],
+    // A trigger that names a target COMPILES now — core aims it as the ability
+    // goes on the stack — so the example here has to be a targeted trigger whose
+    // BODY still has no template: two separate targets in one ability.
+    [
+      'when ~ enters, return two target creatures to their owners\' hands',
+      'a targeted-trigger template the compiler does not recognize yet',
+    ],
     ['destroy target artifact or enchantment', 'a filtered-targeting template the compiler does not recognize yet'],
     ['counter target noncreature spell', 'a filtered-targeting template the compiler does not recognize yet'],
     // "Counter target spell unless its controller pays {3}" COMPILES now (Mana
@@ -646,7 +678,10 @@ describe('explainUnsupported — every common rejection names a real engine feat
     ['target creature you control fights target creature you don\'t control', 'a fight template the compiler does not recognize yet'],
     ['when ~ leaves the battlefield, create a 3/3 green beast creature token', 'a leaves-the-battlefield template the compiler does not recognize yet'],
     ['cascade', 'named keyword mechanics with their own subsystem'],
-    ['when ~ enters, it deals 4 damage to target creature', 'targets chosen by a triggered ability'],
+    [
+      'when ~ enters, it deals 4 damage to target creature with flying',
+      'a targeted-trigger template the compiler does not recognize yet',
+    ],
     ['you draw two cards and lose 2 life', 'a compound draw/lose template the compiler does not recognize yet'],
   ])('explains %s', (clause, expected) => {
     expect(explainUnsupported(clause)).toBe(expected);
@@ -658,6 +693,18 @@ describe('explainUnsupported — every common rejection names a real engine feat
 });
 
 /** Build a `CompilableCard` for a synthetic test card. */
+/** A 2/2 creature whose only printed line is `oracleText` — the trigger fixture. */
+function aimedKavu(oracleText: string): CompilableCard {
+  return makeCard({
+    name: 'Aimed Kavu',
+    typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
+    manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+    power: 2,
+    toughness: 2,
+    oracleText,
+  });
+}
+
 function makeCard(overrides: Partial<CompilableCard> & { name: string }): CompilableCard {
   return {
     id: `test:${overrides.name}`,

@@ -126,6 +126,11 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         effects: pending.ability.effects,
         targets: [],
         label,
+        // An ability that declares what it targets goes on the stack UNAIMED; the
+        // engine asks its controller immediately afterwards (`aimPendingTriggers`),
+        // which is when the rules say targets are chosen. Absent for every other
+        // trigger, so those are pushed byte-for-byte as they always were.
+        ...(pending.ability.targets ? { awaitingTargets: pending.ability.targets } : {}),
       });
       baseEmit({
         type: 'triggerPutOnStack',

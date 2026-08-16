@@ -460,6 +460,102 @@ describe('what a SOFT counter is worth ("unless its controller pays {3}")', () =
   });
 });
 
+describe('aiming a triggered ability (the choice with no resolution behind it)', () => {
+  /**
+   * Park a trigger-targeting question exactly as the engine does: the ability is
+   * ON THE STACK carrying `awaitingTargets`, and the choice offers the candidates.
+   * The pilot has to recover what the ability DOES from the stack — that is the
+   * whole mechanism, since a target choice carries no valence that could tell it
+   * whether being pointed at is good or bad.
+   */
+  function parkAim(
+    state: GameState,
+    effects: readonly EffectRef[],
+    candidates: readonly { ref: InstanceId | PlayerId; name: string; controller: PlayerId }[],
+  ): PendingChoice {
+    state.stack.push({
+      kind: 'trigger',
+      instanceId: 9001,
+      sourceInstanceId: 1,
+      controller: 'A',
+      effects,
+      targets: [],
+      label: 'Enters: aim me',
+      awaitingTargets: 'creature',
+    });
+    const choice = park({
+      kind: 'selectTargets',
+      chooser: 'A',
+      prompt: 'Choose a creature',
+      candidates: [...candidates],
+      restriction: 'creature',
+      min: 1,
+      max: 1,
+    });
+    state.pendingChoice = choice;
+    return choice;
+  }
+
+  function aimedAt(state: GameState, choice: PendingChoice): InstanceId | PlayerId | undefined {
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectTargets') throw new Error('wrong shape');
+    expect(validateChoiceAnswer(choice, action.answer).ok).toBe(true);
+    return action.answer.targets[0];
+  }
+
+  it('points a DAMAGE trigger at the opponent’s creature, not its own', () => {
+    const state = newGame().state;
+    const [mine] = putOnBattlefield(state, 'A', [BEAR]);
+    const [theirs] = putOnBattlefield(state, 'B', [BEAR]);
+    const choice = parkAim(state, [{ primitive: 'dealDamage', params: { amount: 3 } }], [
+      { ref: mine!.instanceId, name: 'Bear', controller: 'A' },
+      { ref: theirs!.instanceId, name: 'Bear', controller: 'B' },
+    ]);
+    expect(aimedAt(state, choice)).toBe(theirs!.instanceId);
+  });
+
+  it('points a PUMP trigger at its own creature — the same question, the other way', () => {
+    // This is why aiming cannot be a valence rule: "which creature?" wants the
+    // opponent's for damage and ours for a buff, and only the ability's own
+    // effects distinguish them.
+    const state = newGame().state;
+    const [mine] = putOnBattlefield(state, 'A', [BEAR]);
+    const [theirs] = putOnBattlefield(state, 'B', [BEAR]);
+    const choice = parkAim(
+      state,
+      [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+      [
+        { ref: theirs!.instanceId, name: 'Bear', controller: 'B' },
+        { ref: mine!.instanceId, name: 'Bear', controller: 'A' },
+      ],
+    );
+    expect(aimedAt(state, choice)).toBe(mine!.instanceId);
+  });
+
+  it('kills the BIGGEST thing it can when several are legal', () => {
+    const state = newGame().state;
+    const [small] = putOnBattlefield(state, 'B', [BEAR]);
+    const [big] = putOnBattlefield(state, 'B', [DRAGON]);
+    const choice = parkAim(state, [{ primitive: 'destroyTarget', params: {} }], [
+      { ref: small!.instanceId, name: 'Bear', controller: 'B' },
+      { ref: big!.instanceId, name: 'Dragon', controller: 'B' },
+    ]);
+    expect(aimedAt(state, choice)).toBe(big!.instanceId);
+  });
+
+  it('still answers legally when the ability is one it cannot price', () => {
+    const state = newGame().state;
+    const [one] = putOnBattlefield(state, 'B', [BEAR]);
+    const [two] = putOnBattlefield(state, 'B', [BEAR]);
+    const choice = parkAim(state, [{ primitive: 'someMechanicFromTheFuture', params: {} }], [
+      { ref: one!.instanceId, name: 'Bear', controller: 'B' },
+      { ref: two!.instanceId, name: 'Bear', controller: 'B' },
+    ]);
+    // Deterministic and legal: the first offered candidate, not a crash.
+    expect(aimedAt(state, choice)).toBe(one!.instanceId);
+  });
+});
+
 describe('choosing modal-spell modes (scripted positions)', () => {
   it('DRAWS instead of bouncing a permanent that is not worth bouncing', () => {
     // The old pilot took the first two printed modes and bounced a Forest while

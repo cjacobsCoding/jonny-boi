@@ -18,6 +18,7 @@ import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
+import type { TargetRestriction } from './targeting.js';
 
 /** Opaque, stable identity for a player. */
 export type PlayerId = 'A' | 'B';
@@ -201,6 +202,18 @@ export interface TriggeredStackObject {
   readonly targets: ReadonlyArray<InstanceId | PlayerId>;
   /** Debug label for the inspector/event log. */
   readonly label: string;
+  /**
+   * Set while this trigger is on the stack but its controller has NOT yet chosen
+   * what it points at (CR 603.3d — targets are chosen as the ability is put on
+   * the stack, which is a decision made at a moment when no resolution frame
+   * exists). The value is what may be chosen.
+   *
+   * It is cleared the instant the targets are recorded, so "is anything still
+   * waiting to be aimed?" is answered by the STACK itself rather than by a
+   * separate bookkeeping record that could drift out of step with it — the same
+   * reason state-based actions are derived from the board rather than queued.
+   */
+  readonly awaitingTargets?: TargetRestriction;
 }
 
 /** Anything that can sit on the stack. */

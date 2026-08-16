@@ -117,6 +117,33 @@ export type GameEvent =
       readonly label: string;
     }
   | {
+      /**
+       * A triggered ability chose what it points at, as it went on the stack
+       * (CR 603.3d). Separate from `triggerPutOnStack` because they are separate
+       * moments — the ability is on the stack first, then aimed — and a replay
+       * folding them together could not show a trigger being aimed at a creature
+       * that is about to die in response.
+       */
+      readonly type: 'triggerTargetsChosen';
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly label: string;
+      readonly targets: ReadonlyArray<InstanceId | PlayerId>;
+    }
+  | {
+      /**
+       * A triggered ability left the stack WITHOUT resolving — today only because
+       * it had no legal target when it needed one (CR 603.3d). Its own event
+       * rather than a silent removal: a trigger that vanishes with no trace in the
+       * log is indistinguishable from one that never fired.
+       */
+      readonly type: 'triggerRemovedFromStack';
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly label: string;
+      readonly reason: string;
+    }
+  | {
       // A triggered ability finished resolving (its effects ran).
       readonly type: 'triggeredAbilityResolved';
       readonly sourceInstanceId: InstanceId;

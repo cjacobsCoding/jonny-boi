@@ -161,4 +161,25 @@ export interface RuleContext {
     text: string,
     options?: { readonly targetFree?: boolean },
   ): readonly import('@jonny-boi/core').EffectRef[] | null;
+  /**
+   * Compile a TRIGGER's body, reporting what it targets.
+   *
+   * A trigger chooses its targets as it goes on the stack (core's
+   * `TriggeredAbility.targets`), so unlike a spell — where the caster names the
+   * target in the cast action — the ABILITY has to declare what may be chosen.
+   * This returns both halves, and `null` when the body has no faithful
+   * implementation at all.
+   *
+   * A body that would need TWO chosen targets is rejected: every printed template
+   * reproduced here names one, and quietly aiming both at the same object would
+   * be a card playing differently from its text.
+   */
+  compileTriggerBody(text: string): TriggerBodyResult | null;
+}
+
+/** What {@link RuleContext.compileTriggerBody} recovered from a trigger's body. */
+export interface TriggerBodyResult {
+  readonly effects: readonly import('@jonny-boi/core').EffectRef[];
+  /** What the ability targets, or `undefined` when it targets nothing. */
+  readonly targets?: import('@jonny-boi/core').TargetRestriction;
 }

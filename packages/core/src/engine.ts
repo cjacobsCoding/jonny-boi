@@ -15,7 +15,7 @@ import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
 import type { ActivatedAbility, CardDefinition, EffectRef } from './card.js';
 import { castTiming, isLand, isPermanentType, manaModesOf } from './card.js';
-import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame } from './choices.js';
+import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame, TargetOption } from './choices.js';
 import {
   choiceOptionCount,
   cloneChoiceAnswer,
@@ -25,6 +25,7 @@ import {
   isTrivialChoice,
   MAX_CHOICES_PER_RESOLUTION,
   normalizeChoiceRequest,
+  permanentTargetOption,
   validateChoiceAnswer,
 } from './choices.js';
 import type { RulesConfig } from './config.js';
@@ -51,6 +52,7 @@ import type {
   PlayerId,
   SpellStackObject,
   Step,
+  TriggeredStackObject,
 } from './state.js';
 import {
   createPlayer,
@@ -59,9 +61,12 @@ import {
   PLAYER_IDS,
   STEP_ORDER,
 } from './state.js';
+import type { TargetRestriction } from './targeting.js';
 import {
+  describeRestriction,
   illegalTargetReason,
   illegalTargetReasonForEffects,
+  isPlayerTarget,
   legalTargetsFor,
   restrictionOfEffects,
   targetRestrictionOf,
@@ -220,6 +225,8 @@ export function createGame(setup: GameSetup): EngineResult {
   if (collector.flush() > 0) {
     state.priorityPlayer = state.activePlayer;
     state.consecutivePasses = 0;
+    // A trigger that names a target chooses it now, before anybody holds priority.
+    aimPendingTriggers(state, emit);
   }
 
   return { state, events };
@@ -879,6 +886,9 @@ function applyActionToDraft(
     if (collector.flush() > 0 && !state.gameOver && !state.pendingChoice) {
       state.priorityPlayer = state.activePlayer;
       state.consecutivePasses = 0;
+      // Targets are chosen as the ability goes on the stack, which is HERE —
+      // before priority, and with no resolution in progress to park a question in.
+      aimPendingTriggers(state, emit);
     }
   }
   return result;
@@ -994,6 +1004,20 @@ function applyAnswerChoice(
   });
   state.pendingChoice = null;
 
+  // A TARGETING answer belongs to the stack, not to a resolution: it names what a
+  // triggered ability points at, chosen as the ability went on the stack. Nothing
+  // is resumed — the aim is recorded, and any trigger still waiting behind it asks
+  // next (see `aimPendingTriggers`).
+  if (choice.kind === 'selectTargets' && answer.kind === 'selectTargets') {
+    recordTriggerTargets(state, answer.targets, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      state.priorityPlayer = state.activePlayer;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
   const frame = state.resolution;
   if (!frame) {
     // Defensive: a choice with nothing to resume (only reachable from a hand-built
@@ -1070,6 +1094,146 @@ function canActivateManaAbility(
 ): boolean {
   if (!perm.summoningSick || !isCreature(perm.def)) return true;
   return Boolean(effectiveKeywords(perm, cont?.get(perm.instanceId) ?? NO_MOD).haste);
+}
+
+/**
+ * Aim every triggered ability that has just gone on the stack and does not know
+ * yet what it points at (CR 603.3d — **targets are chosen as the ability is put
+ * on the stack**, which is the moment this whole subsystem exists for: there is
+ * no resolution frame to park a question in, because nothing is resolving).
+ *
+ * Three outcomes per waiting trigger, in the order that keeps a game moving:
+ *  - **no legal target** — the ability is removed from the stack and never
+ *    resolves (CR 603.3d again). This is a rules requirement, not a shortcut: an
+ *    ability that stayed would resolve pointing at nothing and read as a blank.
+ *  - **exactly one legal target** — taken. One legal aim is not a decision; it is
+ *    the only lawful one, and `isTrivialChoice` settles it without stopping the
+ *    game. ⚠️ TWO or more is a REAL decision and is always asked — auto-picking
+ *    there is precisely the shortcut that would make a card report as playable
+ *    and then fizzle the moment the board grew a second creature.
+ *  - **several** — the controller is asked, and this returns with the question
+ *    parked. The remaining waiters are aimed after the answer arrives.
+ *
+ * Stack order is bottom-up: triggers were pushed in APNAP order, so aiming them
+ * in that order is the order they were put on the stack in.
+ */
+function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): void {
+  // Bounded by the stack, and each pass either aims a trigger, removes one, or
+  // parks a question — so it cannot spin.
+  for (;;) {
+    const index = state.stack.findIndex((object) => object.kind === 'trigger' && object.awaitingTargets !== undefined);
+    if (index < 0) return;
+    const trigger = state.stack[index] as TriggeredStackObject;
+    const restriction = trigger.awaitingTargets as TargetRestriction;
+    const candidates = legalTargetsFor(state, restriction, trigger.controller);
+
+    if (candidates.length === 0) {
+      state.stack.splice(index, 1);
+      emit({
+        type: 'triggerRemovedFromStack',
+        sourceInstanceId: trigger.sourceInstanceId,
+        controller: trigger.controller,
+        label: trigger.label,
+        reason: `no legal target (${describeRestriction(restriction)})`,
+      });
+      continue;
+    }
+
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'selectTargets',
+        chooser: trigger.controller,
+        prompt: `Choose ${describeRestriction(restriction)} for ${trigger.label}`,
+        candidates: candidates.map((ref) => targetOptionFor(state, ref)),
+        restriction,
+        min: SINGLE_TARGET,
+        max: SINGLE_TARGET,
+      },
+      {
+        id: state.nextInstanceId++,
+        // The SOURCE PERMANENT, not the stack object: it is what a UI draws and
+        // what the log names. The ability being aimed is found from the stack by
+        // its `awaitingTargets` marker, which is unique while a question is open.
+        sourceInstanceId: trigger.sourceInstanceId,
+        sourceName: nameOfInstance(state, trigger.sourceInstanceId) ?? trigger.label,
+      },
+    );
+    if (!choice) return; // unrepresentable — leave the trigger unaimed rather than crash
+
+    if (isTrivialChoice(choice) || state.gameOver || state.players[choice.chooser].hasLost) {
+      const answer = defaultAnswerFor(choice);
+      emit({
+        type: 'choiceAutoAnswered',
+        choiceId: choice.id,
+        chooser: choice.chooser,
+        choiceKind: choice.kind,
+        answer,
+        reason: isTrivialChoice(choice) ? 'only one legal target' : 'the chooser can no longer act',
+      });
+      recordTriggerTargets(state, answer.kind === 'selectTargets' ? answer.targets : [], emit);
+      continue;
+    }
+
+    state.pendingChoice = choice;
+    state.priorityPlayer = choice.chooser;
+    state.consecutivePasses = 0;
+    emit({
+      type: 'choiceAsked',
+      choiceId: choice.id,
+      chooser: choice.chooser,
+      choiceKind: choice.kind,
+      prompt: choice.prompt,
+      sourceInstanceId: choice.sourceInstanceId,
+      optionCount: choiceOptionCount(choice),
+    });
+    return;
+  }
+}
+
+/** A printed targeted trigger names exactly one target (see `TriggeredAbility.targets`). */
+const SINGLE_TARGET = 1;
+
+/**
+ * Write chosen targets onto the trigger that was waiting for them, clearing the
+ * marker so it is no longer waiting. The waiting trigger is unique — only one
+ * question is ever open — so the answer cannot be applied to the wrong ability.
+ */
+function recordTriggerTargets(
+  state: GameState,
+  targets: ReadonlyArray<InstanceId | PlayerId>,
+  emit: (e: GameEvent) => void,
+): void {
+  const index = state.stack.findIndex((object) => object.kind === 'trigger' && object.awaitingTargets !== undefined);
+  if (index < 0) return;
+  const trigger = state.stack[index] as TriggeredStackObject;
+  // Replaced rather than mutated: a stack object is read-only data to everyone
+  // else (the masked view, the replay, a look-ahead clone), and a fresh object
+  // keeps that true without a mutable escape hatch on the type.
+  state.stack[index] = { ...trigger, targets: [...targets], awaitingTargets: undefined };
+  emit({
+    type: 'triggerTargetsChosen',
+    sourceInstanceId: trigger.sourceInstanceId,
+    controller: trigger.controller,
+    label: trigger.label,
+    targets: [...targets],
+  });
+}
+
+/** Describe a target reference (a permanent or a seat) for a choice's option list. */
+function targetOptionFor(state: GameState, ref: InstanceId | PlayerId): TargetOption {
+  if (isPlayerTarget(ref)) return { ref, name: `Player ${ref}`, controller: ref };
+  const permanent = findOnBattlefield(state, ref);
+  return permanent
+    ? permanentTargetOption(permanent)
+    : // Only reachable if the board changed between listing and describing, which
+      // it cannot inside one action; described rather than dropped so a candidate
+      // list can never come out shorter than the legality check that built it.
+      { ref, name: `#${ref}`, controller: state.activePlayer };
+}
+
+/** The name of an instance anywhere in the game, for a prompt. */
+function nameOfInstance(state: GameState, instanceId: InstanceId): string | undefined {
+  return findOnBattlefield(state, instanceId)?.def.name ?? findInstanceAnywhere(state, instanceId)?.def.name;
 }
 
 /**

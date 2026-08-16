@@ -202,6 +202,10 @@ export interface HeuristicWeights {
    *  unknown mode is probably still doing something — but below every category we
    *  do understand, so a known-good mode always wins. */
   readonly modeUnknownEffectScore: number;
+  /** What one point of a temporary +X/+X is worth when scoring which creature to
+   *  point a pump at. Below `attachPerStat` on purpose: a pump wears off at end of
+   *  turn, an Equipment does not. */
+  readonly modePumpPerStatValue: number;
 }
 
 /**
@@ -308,4 +312,7 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   modeSelectionValue: 10,
   modeManaPerSymbolValue: 4,
   modeUnknownEffectScore: 20,
+  // A +2/+2 until end of turn scores 8 — worth taking over nothing, comfortably
+  // below removing a real threat (60+), which is the ordering that matters.
+  modePumpPerStatValue: 2,
 });

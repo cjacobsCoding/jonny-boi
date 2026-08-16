@@ -27,14 +27,17 @@ import type {
   ManaCost,
   ManaProduction,
   PermanentModification,
+  TargetRestriction,
   TriggeredAbility,
 } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION, restrictionOfEffects } from '@jonny-boi/core';
 import type {
   ClauseContribution,
   CompilableCard,
   CompileResult,
   CompileRule,
   RuleContext,
+  TriggerBodyResult,
   UnsupportedClause,
 } from './types.js';
 import {
@@ -140,6 +143,17 @@ function toCoreCost(card: CompilableCard, hybrid: readonly (readonly ManaColor[]
   }
   if (hybrid.length > 0) cost.hybrid = hybrid;
   return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
+}
+
+/**
+ * Whether the rule with this id declares that its effects need a target chosen by
+ * somebody. Looked up by id (rather than threaded through every call site)
+ * because it is asked once per trigger body, off any hot path — and looking it up
+ * in the SAME table `applyRules` matched against is what stops the two from
+ * disagreeing about which rules target.
+ */
+function ruleNeedsChosenTarget(ruleId: string): boolean {
+  return EFFECT_RULES.some((rule) => rule.id === ruleId && rule.needsChosenTarget === true);
 }
 
 /**
@@ -571,6 +585,46 @@ export function compileCard(card: CompilableCard): CompileResult {
         return refs;
       }
       return null;
+    },
+    compileTriggerBody(text: string): TriggerBodyResult | null {
+      // Compiled WITH targeting allowed (core aims a trigger as it goes on the
+      // stack now), so what this has to work out is what may be aimed at.
+      const clauses = [normalizeClause(text)];
+      const whole = applyRules(EFFECT_RULES, clauses[0]!, ctx);
+      const matched = whole ? [whole] : null;
+      const parts =
+        matched ??
+        (() => {
+          const sentences = splitSentences(text).map(normalizeClause);
+          if (sentences.length <= 1) return null;
+          const out: NonNullable<ReturnType<typeof applyRules>>[] = [];
+          for (const sentence of sentences) {
+            const result = applyRules(EFFECT_RULES, sentence, ctx);
+            if (!result) return null;
+            out.push(result);
+          }
+          return out;
+        })();
+      if (!parts) return null;
+
+      const refs: EffectRef[] = [];
+      let restriction: TargetRestriction | undefined;
+      let targetingParts = 0;
+      for (const part of parts) {
+        const partEffects = part.contribution.effects ?? [];
+        refs.push(...partEffects);
+        if (!ruleNeedsChosenTarget(part.ruleId)) continue;
+        targetingParts += 1;
+        // `restrictionOfEffects` deliberately reports nothing for the default
+        // "any target" (core does not police it), but a trigger still has to be
+        // AIMED at something — so the default is what "any target" means.
+        restriction = restrictionOfEffects(partEffects) ?? DEFAULT_TARGET_RESTRICTION;
+      }
+      // Two targets in one trigger is a template of its own; refusing keeps the
+      // card reported rather than silently aiming both halves at one object.
+      if (targetingParts > 1) return null;
+      if (refs.length === 0) return null;
+      return restriction === undefined ? { effects: refs } : { effects: refs, targets: restriction };
     },
   };
 

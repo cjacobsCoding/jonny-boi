@@ -20,20 +20,23 @@
  *     the only seat whose answer the engine accepts.
  *
  * ## The kinds are composable, not per-card
- * Five small kinds cover every "you may / choose / search / modal / unless you
- * pay" clause in the card pool (DESIGN §1 composition over inheritance — no
- * choice type per card):
+ * Six small kinds cover every "you may / choose / search / modal / unless you pay
+ * / at what" question the card pool asks (DESIGN §1 composition over inheritance
+ * — no choice type per card):
  *   - {@link SelectCardsChoice}  — pick `min..max` cards from a candidate list,
  *     optionally ORDERED (that is what "put them back in any order" is).
  *   - {@link SelectPlayersChoice} — pick `min..max` players.
  *   - {@link ChooseModesChoice}  — pick `min..max` of the listed modes.
  *   - {@link ConfirmChoice}      — yes/no ("you may …").
+ *   - {@link SelectTargetsChoice} — what an ability POINTS AT, chosen as it goes
+ *     on the stack. Not a `selectCards`: a target may be a player, and the answer
+ *     has to be usable as the stack object's `targets` list.
  *   - {@link PayManaChoice}      — pay a mana cost, or decline ("unless its
  *     controller pays {3}"). It is NOT a `confirm` with a cost in the prompt: the
  *     engine has to know the cost to decide whether paying is even possible, and
  *     to actually spend the mana when the answer says yes.
  * Library search is `selectCards` over library candidates plus the shuffle that
- * follows (`EffectContext.shuffleLibrary`), not a fifth kind.
+ * follows (`EffectContext.shuffleLibrary`), not a kind of its own.
  *
  * ## The invariant that makes hanging impossible
  * Every normalised choice satisfies `0 <= min <= max <= optionCount`, so
@@ -45,6 +48,7 @@
 import type { CardType, EffectRef } from './card.js';
 import { hasSubtype } from './card.js';
 import type { ManaCost } from './mana.js';
+import type { TargetRestriction } from './targeting.js';
 import { convertedManaCost, formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
@@ -162,6 +166,27 @@ export function cardOption(card: CardInstance): CardOption {
     zone: card.zone,
     controller: card.controller,
   };
+}
+
+/**
+ * One thing an ability may be aimed at, as a flat snapshot.
+ *
+ * A target is a permanent OR a player, which is why this is not a
+ * {@link CardOption}: the answer has to be usable directly as a stack object's
+ * `targets` entry, and half of those entries are seats. `name` is carried so a UI
+ * (and a log line) can render the choice without looking anything up.
+ */
+export interface TargetOption {
+  /** What the answer names: a permanent's instance id, or a seat. */
+  readonly ref: InstanceId | PlayerId;
+  readonly name: string;
+  /** Who controls it — the steer an AI uses ("theirs" vs "mine"). */
+  readonly controller: PlayerId;
+}
+
+/** Snapshot a permanent as a target option. */
+export function permanentTargetOption(card: CardInstance): TargetOption {
+  return { ref: card.instanceId, name: card.def.name, controller: card.controller };
 }
 
 /** Where {@link collectCardOptions} looks and what it keeps. */
@@ -289,6 +314,13 @@ export interface ConfirmRequest extends ChoiceRequestBase {
   readonly kind: 'confirm';
 }
 
+export interface SelectTargetsRequest extends ChoiceRequestBase, ChoiceCountRequest {
+  readonly kind: 'selectTargets';
+  readonly candidates: readonly TargetOption[];
+  /** What may be chosen — carried so a UI can say "a creature" and an AI can reason. */
+  readonly restriction: TargetRestriction;
+}
+
 export interface PayManaRequest extends ChoiceRequestBase {
   readonly kind: 'payMana';
   /** What paying costs. The chooser either pays this in full or pays nothing. */
@@ -309,7 +341,8 @@ export type ChoiceRequest =
   | SelectPlayersRequest
   | ChooseModesRequest
   | ConfirmRequest
-  | PayManaRequest;
+  | PayManaRequest
+  | SelectTargetsRequest;
 
 /** The kinds, as a discriminator. */
 export type ChoiceKind = ChoiceRequest['kind'];
@@ -355,6 +388,12 @@ export interface ConfirmChoice extends PendingChoiceBase {
   readonly kind: 'confirm';
 }
 
+export interface SelectTargetsChoice extends PendingChoiceBase {
+  readonly kind: 'selectTargets';
+  readonly candidates: readonly TargetOption[];
+  readonly restriction: TargetRestriction;
+}
+
 export interface PayManaChoice extends PendingChoiceBase {
   readonly kind: 'payMana';
   readonly cost: ManaCost;
@@ -377,7 +416,8 @@ export type PendingChoice =
   | SelectPlayersChoice
   | ChooseModesChoice
   | ConfirmChoice
-  | PayManaChoice;
+  | PayManaChoice
+  | SelectTargetsChoice;
 
 // --- answers ----------------------------------------------------------------------
 
@@ -398,6 +438,11 @@ export interface ConfirmAnswer {
   readonly kind: 'confirm';
   readonly yes: boolean;
 }
+export interface SelectTargetsAnswer {
+  readonly kind: 'selectTargets';
+  /** The chosen target references, in the order the effect will use them. */
+  readonly targets: ReadonlyArray<InstanceId | PlayerId>;
+}
 export interface PayManaAnswer {
   readonly kind: 'payMana';
   /**
@@ -415,7 +460,8 @@ export type ChoiceAnswer =
   | SelectPlayersAnswer
   | ChooseModesAnswer
   | ConfirmAnswer
-  | PayManaAnswer;
+  | PayManaAnswer
+  | SelectTargetsAnswer;
 
 // --- normalisation ----------------------------------------------------------------
 
@@ -429,6 +475,8 @@ export function choiceOptionCount(choice: PendingChoice): number {
     case 'selectCards':
       return choice.candidates.length;
     case 'selectPlayers':
+      return choice.candidates.length;
+    case 'selectTargets':
       return choice.candidates.length;
     case 'chooseModes':
       return choice.modes.length;
@@ -499,6 +547,17 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
     case 'selectPlayers': {
       const { min, max } = normalizeCounts(request, request.candidates.length);
       return { ...base, kind: 'selectPlayers', candidates: [...request.candidates], min, max };
+    }
+    case 'selectTargets': {
+      const { min, max } = normalizeCounts(request, request.candidates.length);
+      return {
+        ...base,
+        kind: 'selectTargets',
+        candidates: request.candidates.map((c) => ({ ...c })),
+        restriction: request.restriction,
+        min,
+        max,
+      };
     }
     case 'chooseModes': {
       const { min, max } = normalizeCounts(request, request.modes.length);
@@ -579,6 +638,14 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
         choice.max,
         'player',
       );
+    case 'selectTargets':
+      return validateSelection(
+        (answer as SelectTargetsAnswer).targets,
+        choice.candidates.map((c) => c.ref),
+        choice.min,
+        choice.max,
+        'target',
+      );
     case 'chooseModes':
       return validateSelection(
         (answer as ChooseModesAnswer).modeIds,
@@ -620,6 +687,8 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
       return { kind: 'selectCards', instanceIds: choice.candidates.slice(0, choice.min).map((c) => c.instanceId) };
     case 'selectPlayers':
       return { kind: 'selectPlayers', players: choice.candidates.slice(0, choice.min) };
+    case 'selectTargets':
+      return { kind: 'selectTargets', targets: choice.candidates.slice(0, choice.min).map((c) => c.ref) };
     case 'chooseModes':
       return { kind: 'chooseModes', modeIds: choice.modes.slice(0, choice.min).map((m) => m.id) };
     case 'confirm':
@@ -649,6 +718,12 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       if (choice.ordered && choice.max > 1) return false;
       return choice.min === choice.max && (choice.min === 0 || choice.min === choice.candidates.length);
     case 'selectPlayers':
+      return choice.min === choice.max && (choice.min === 0 || choice.min === choice.candidates.length);
+    case 'selectTargets':
+      // One legal target is not a decision, it is the only lawful aim — the engine
+      // takes it rather than stopping the game. (Two or more genuinely IS a
+      // decision and must be asked: auto-picking there would make a card report
+      // as playable and then fizzle the moment the board grew a second option.)
       return choice.min === choice.max && (choice.min === 0 || choice.min === choice.candidates.length);
     case 'chooseModes':
       return choice.min === choice.max && (choice.min === 0 || choice.min === choice.modes.length);
@@ -734,6 +809,13 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
       );
       return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
     }
+    case 'selectTargets': {
+      const refs = choice.candidates.map((c) => c.ref);
+      const answers = boundedSubsets(refs, choice.min, choice.max, limit).map(
+        (targets): ChoiceAnswer => ({ kind: 'selectTargets', targets }),
+      );
+      return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
+    }
     case 'chooseModes': {
       const ids = choice.modes.map((m) => m.id);
       const answers = boundedSubsets(ids, choice.min, choice.max, limit).map(
@@ -771,6 +853,8 @@ export function cloneChoiceAnswer(answer: ChoiceAnswer): ChoiceAnswer {
       return { kind: 'selectCards', instanceIds: [...answer.instanceIds] };
     case 'selectPlayers':
       return { kind: 'selectPlayers', players: [...answer.players] };
+    case 'selectTargets':
+      return { kind: 'selectTargets', targets: [...answer.targets] };
     case 'chooseModes':
       return { kind: 'chooseModes', modeIds: [...answer.modeIds] };
     default:
@@ -785,6 +869,8 @@ export function describeChoiceAnswer(answer: ChoiceAnswer): string {
       return answer.instanceIds.length === 0 ? 'no cards' : `cards [${answer.instanceIds.join(', ')}]`;
     case 'selectPlayers':
       return answer.players.length === 0 ? 'no players' : `players [${answer.players.join(', ')}]`;
+    case 'selectTargets':
+      return answer.targets.length === 0 ? 'no targets' : `targets [${answer.targets.join(', ')}]`;
     case 'chooseModes':
       return answer.modeIds.length === 0 ? 'no modes' : `modes [${answer.modeIds.join(', ')}]`;
     case 'confirm':

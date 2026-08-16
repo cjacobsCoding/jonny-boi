@@ -25,6 +25,7 @@
  */
 import {
   choiceOptionCount,
+  describeRestriction,
   formatManaCost,
   validateChoiceAnswer,
   type AnswerValidation,
@@ -55,6 +56,7 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
   chooseModes: { one: 'mode', many: 'modes' },
   confirm: { one: 'answer', many: 'answers' },
   payMana: { one: 'answer', many: 'answers' },
+  selectTargets: { one: 'target', many: 'targets' },
 });
 
 /**
@@ -87,6 +89,7 @@ function countNoun(kind: ChoiceKind, n: number): string {
  */
 export type ChoiceDraft =
   | { readonly kind: 'selectCards'; readonly instanceIds: readonly InstanceId[] }
+  | { readonly kind: 'selectTargets'; readonly targets: readonly (InstanceId | PlayerId)[] }
   | { readonly kind: 'selectPlayers'; readonly players: readonly PlayerId[] }
   | { readonly kind: 'chooseModes'; readonly modeIds: readonly string[] }
   | { readonly kind: 'confirm'; readonly yes: boolean | null }
@@ -104,6 +107,8 @@ export function emptyDraft(choice: PendingChoice): ChoiceDraft {
       return { kind: 'selectPlayers', players: [] };
     case 'chooseModes':
       return { kind: 'chooseModes', modeIds: [] };
+    case 'selectTargets':
+      return { kind: 'selectTargets', targets: [] };
     case 'payMana':
       return { kind: 'payMana', pay: null };
     default:
@@ -120,6 +125,8 @@ export function draftValues(draft: ChoiceDraft): readonly ChoiceOptionValue[] {
       return draft.players;
     case 'chooseModes':
       return draft.modeIds;
+    case 'selectTargets':
+      return draft.targets;
     default:
       return [];
   }
@@ -134,6 +141,8 @@ function withValues(draft: ChoiceDraft, values: readonly ChoiceOptionValue[]): C
       return { kind: 'selectPlayers', players: values as readonly PlayerId[] };
     case 'chooseModes':
       return { kind: 'chooseModes', modeIds: values as readonly string[] };
+    case 'selectTargets':
+      return { kind: 'selectTargets', targets: values as readonly (InstanceId | PlayerId)[] };
     default:
       return draft;
   }
@@ -202,6 +211,8 @@ export function draftToAnswer(draft: ChoiceDraft): ChoiceAnswer | null {
       return { kind: 'selectPlayers', players: [...draft.players] };
     case 'chooseModes':
       return { kind: 'chooseModes', modeIds: [...draft.modeIds] };
+    case 'selectTargets':
+      return { kind: 'selectTargets', targets: [...draft.targets] };
     case 'payMana':
       return draft.pay === null ? null : { kind: 'payMana', pay: draft.pay };
     default:
@@ -280,6 +291,9 @@ export interface ChoicePromptView {
  */
 function requirementText(choice: PendingChoice): string {
   if (choice.kind === 'confirm') return 'Answer yes or no.';
+  if (choice.kind === 'selectTargets') {
+    return `Choose what ${choice.sourceName} points at: ${describeRestriction(choice.restriction)}.`;
+  }
   if (choice.kind === 'payMana') {
     const cost = formatManaCost(choice.cost);
     // An unaffordable payment is normally settled by the engine without ever

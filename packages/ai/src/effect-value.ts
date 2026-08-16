@@ -407,8 +407,42 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
    * `bestPumpPlay`). Off the battlefield it is worth about a generic effect, and
    * pricing it higher would have modal spells choosing tricks at sorcery speed.
    */
-  pumpUntilEndOfTurn: (_params, ctx) => ctx.weights.modeUnknownEffectScore,
-  grantKeywordUntilEndOfTurn: (_params, ctx) => ctx.weights.modeUnknownEffectScore,
+  /**
+   * A pump is the one effect on this table whose RIGHT target is your own
+   * creature — which is precisely why it could not stay a flat constant once
+   * abilities started being aimed: every candidate scored the same, so the first
+   * one offered won, and "target creature gets +2/+2" cheerfully buffed the
+   * opponent's blocker.
+   *
+   * A NEGATIVE pump is not a buff at all: the pool writes shrink-removal
+   * (Disfigure, Last Gasp) as `pumpUntilEndOfTurn` with negative deltas, and the
+   * heuristic's own spell classifier already reads it that way. So the sign of
+   * the printed numbers decides which side of the table the effect wants.
+   */
+  pumpUntilEndOfTurn: (params, ctx) => {
+    const power = intParam(params, 'power', 0);
+    const toughness = intParam(params, 'toughness', 0);
+    const perm = firstTargetPermanent(ctx);
+    if (!perm) return 0;
+    if (power < 0 || toughness < 0) {
+      // Shrink-removal: worth a kill when it is lethal, a fraction when it only
+      // trims, and a mistake pointed at our own board.
+      if (perm.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
+      return -toughness >= remainingToughness(perm)
+        ? removalValue(perm, ctx.weights)
+        : ctx.weights.modePumpPerStatValue * -toughness;
+    }
+    if (perm.controller !== ctx.player) return -ctx.weights.modeSelfHarmPenalty;
+    return ctx.weights.modePumpPerStatValue * (power + toughness);
+  },
+  /** Granting a keyword follows the pump: good on ours, a mistake on theirs. */
+  grantKeywordUntilEndOfTurn: (_params, ctx) => {
+    const perm = firstTargetPermanent(ctx);
+    if (!perm) return 0;
+    return perm.controller === ctx.player
+      ? ctx.weights.modeUnknownEffectScore
+      : -ctx.weights.modeSelfHarmPenalty;
+  },
 });
 
 /** "Tap all creatures" is the overwhelmingly common form, so it is the default. */

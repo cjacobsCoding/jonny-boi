@@ -36,6 +36,7 @@ import type {
   GameState,
   PayManaChoice,
   PendingChoice,
+  SelectTargetsChoice,
   PlayerId,
   SelectCardsChoice,
   SelectPlayersChoice,
@@ -95,6 +96,8 @@ export function answerChoiceHeuristically(
       return answerAction(choice, answerConfirm(choice, weights));
     case 'payMana':
       return answerAction(choice, answerPayMana(choice, weights));
+    case 'selectTargets':
+      return answerAction(choice, answerSelectTargets(state, choice, weights));
     default:
       // A kind this build does not know: take the smallest legal answer the engine
       // itself would take. Robustness over cleverness — never a throw.
@@ -191,6 +194,46 @@ function answerChooseModes(state: GameState, choice: ChooseModesChoice, weights:
   // it keeps the answer readable in the event log.
   const picked = scored.slice(0, take).sort((a, b) => a.index - b.index);
   return { kind: 'chooseModes', modeIds: picked.map((m) => m.id) };
+}
+
+/**
+ * Aim a triggered ability — "when ~ enters, it deals 2 damage to any target".
+ *
+ * Valence cannot answer this one, and neither can a rule of thumb about whose
+ * permanent it is: the SAME question ("which creature?") wants the opponent's
+ * best body for a damage trigger and the pilot's own best body for a pump. So
+ * each candidate is priced by what the ability's OWN effects would do to it
+ * (`valueOfEffects`, the same scorer that picks a modal spell's modes), and the
+ * best-scoring target wins.
+ *
+ * The ability is found from the stack by its `awaitingTargets` marker — the
+ * engine parks exactly one targeting question at a time, so there is no ambiguity
+ * — and an ability whose effects cannot be priced scores every candidate zero and
+ * degrades to the first offered, which is legal and deterministic rather than
+ * clever.
+ */
+function answerSelectTargets(
+  state: GameState,
+  choice: SelectTargetsChoice,
+  weights: HeuristicWeights,
+): ChoiceAnswer {
+  const aiming = state.stack.find(
+    (object): object is Extract<typeof object, { kind: 'trigger' }> =>
+      object.kind === 'trigger' && object.awaitingTargets !== undefined,
+  );
+  const effects = aiming?.effects ?? [];
+  const base = resolutionValueContext(state, choice.chooser, weights, cardValueContext(state));
+  const scored = choice.candidates.map((candidate, index) => ({
+    ref: candidate.ref,
+    index,
+    // Score the ability AS IF aimed here. Everything else about the board is the
+    // same in every branch, so the differences are exactly what the target buys.
+    value: valueOfEffects(effects, { ...base, targets: [candidate.ref] }),
+  }));
+  // A 'loss' valence would mean somebody is making US aim it, so take the worst.
+  const worstFirst = choice.valence === 'loss';
+  scored.sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value) || a.index - b.index);
+  return { kind: 'selectTargets', targets: scored.slice(0, choice.max).map((s) => s.ref) };
 }
 
 /** The value of a mode that does nothing at all — the bar a mode must clear. */

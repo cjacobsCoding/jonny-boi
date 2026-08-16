@@ -172,6 +172,11 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   actionRejected: 'public',
   counterAdded: 'public',
   triggerPutOnStack: 'public',
+  // Both halves of aiming a trigger happen face-up on the table: everyone sees
+  // what the ability was pointed at, and everyone sees one leave the stack for
+  // want of a target.
+  triggerTargetsChosen: 'public',
+  triggerRemovedFromStack: 'public',
   triggeredAbilityResolved: 'public',
   continuousEffectAdded: 'public',
   continuousEffectExpired: 'public',

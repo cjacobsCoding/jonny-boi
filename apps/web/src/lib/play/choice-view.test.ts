@@ -236,6 +236,54 @@ describe('choice-view — a pay/decline choice', () => {
   });
 });
 
+function selectTargets(over: Partial<Extract<PendingChoice, { kind: 'selectTargets' }>> = {}): PendingChoice {
+  return {
+    ...BASE,
+    kind: 'selectTargets',
+    prompt: 'Choose a creature for Enters: deals 2 damage',
+    sourceName: 'Flametongue Kavu',
+    candidates: [
+      { ref: 11, name: 'Grizzly Bears', controller: 'B' },
+      { ref: 12, name: 'Wall of Omens', controller: 'B' },
+    ],
+    restriction: 'creature',
+    min: 1,
+    max: 1,
+    ...over,
+  } as PendingChoice;
+}
+
+describe('choice-view — aiming a triggered ability', () => {
+  it('drafts a target the same way a card selection drafts a card', () => {
+    const choice = selectTargets();
+    let draft = emptyDraft(choice);
+    expect(draftStatus(choice, draft).canSubmit).toBe(false);
+
+    draft = toggleOption(choice, draft, 12);
+    const status = draftStatus(choice, draft);
+    expect(status.answer).toEqual({ kind: 'selectTargets', targets: [12] });
+    expect(status.canSubmit).toBe(true);
+    expect(validateChoiceAnswer(choice, status.answer!)).toEqual({ ok: true });
+  });
+
+  it('replaces the pick rather than stacking a second one (a single-target ability)', () => {
+    const choice = selectTargets();
+    let draft = toggleOption(choice, emptyDraft(choice), 11);
+    draft = toggleOption(choice, draft, 12);
+    expect(draftValues(draft)).toEqual([12]);
+  });
+
+  it('says what may be pointed at, and offers no "choose none"', () => {
+    // A target is mandatory: an ability with no legal target never reaches a
+    // human at all (the engine removes it from the stack), so a decline button
+    // here would offer an answer the rules do not have.
+    const view = choicePromptView(selectTargets(), NAMES);
+    expect(view.requirement).toContain('a creature');
+    expect(view.requirement).toContain('Flametongue Kavu');
+    expect(view.optional).toBe(false);
+  });
+});
+
 describe('choice-view — prompt copy + viewer gating', () => {
   it('names the chooser, the source and the count rule', () => {
     const view = choicePromptView(selectCards({ min: 2, max: 2, fromZone: 'graveyard' }), NAMES);

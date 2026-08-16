@@ -104,6 +104,11 @@ function cloneStackObject(o: StackObject): StackObject {
       effects: o.effects.map((e) => ({ ...e })),
       targets: [...o.targets],
       label: o.label,
+      // Field-by-field on purpose (see the header), which means a NEW field is
+      // dropped unless it is added here — and dropping this one would lose a
+      // trigger's "still needs aiming" marker on the clone `applyAction` makes at
+      // every action boundary, silently resolving it at nothing.
+      ...(o.awaitingTargets !== undefined ? { awaitingTargets: o.awaitingTargets } : {}),
     };
   }
   return {
@@ -141,6 +146,8 @@ function clonePendingChoice(choice: PendingChoice): PendingChoice {
       return { ...choice, modes: choice.modes.map((m) => ({ ...m })) };
     case 'payMana':
       return { ...choice, cost: { ...choice.cost } };
+    case 'selectTargets':
+      return { ...choice, candidates: choice.candidates.map((c) => ({ ...c })) };
     default:
       return { ...choice };
   }
