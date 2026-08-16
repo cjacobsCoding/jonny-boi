@@ -136,7 +136,7 @@ describe('evaluateState — the leaf evaluator', () => {
 
   /**
    * ⚠️ THE SHIPPED DEFAULT KEEPS THE TACTICAL SOLVER OFF, AND THAT IS A MEASURED
-   * DECISION — the same shape as `DEFAULT_HYBRID_CONFIG.reuse` (DESIGN §3.4b/c).
+   * DECISION — the same shape as `DEFAULT_HYBRID_CONFIG.reuse` (DESIGN §3.4b/d).
    *
    * The tactical blend is the more CORRECT evaluator by a wide margin (5/5 against
    * 0/5 on the curated ordering suite; two of the default's answers are backwards,

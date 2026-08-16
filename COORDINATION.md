@@ -80,17 +80,20 @@ throughput (games/sec) from regressing.
 | feat/hybrid-search | worker | packages/ai (new: search-stats/evaluator/hybrid/hybrid-config + heuristic policy seam + bench), DESIGN §3.4a | 🚧 PUSHED, not merged |
 | feat/pilot-relative-verdicts | worker | apps/web ONLY (lib/sim/pilots+history-store+protocols+run/plan/execute, lab panels, LabView/MatchView), DESIGN §3.7a | 🚧 PUSHED, not merged |
 | perf/core-hotpath | worker | packages/core (mana-plan.ts + new mana-plan.test.ts + bench/engine-alloc-bench.ts) | 🚧 PUSHED, not merged |
-| feat/tree-reuse | worker | packages/ai (new: tree-reuse.ts + tests; hybrid/hybrid-config/search-stats/index/bench), DESIGN §3.4b | ✅ INTEGRATED (on main) |
-| feat/tactical-eval | worker | packages/ai (new: tactical.ts + tactical-suite.ts + 2 test files; evaluator/hybrid/hybrid-config/index/tsconfig/bench + 2 existing tests), DESIGN §3.4c | 🚧 PUSHED, not merged — branches off main |
+| feat/tree-reuse | worker | packages/ai (new: tree-reuse.ts + tests; hybrid/hybrid-config/search-stats/index/bench), DESIGN §3.4b | 🚧 PUSHED, not merged — stacks on feat/hybrid-search |
+| feat/attachment-cards | worker | packages/cards (data + compile/text.ts + build-expansion.ts + 2 tests), packages/data-tools/data, apps/web/src/data (generated), 1 stale comment in apps/web LabView.tsx, DESIGN §3.11 | 🚧 PUSHED, not merged |
+| feat/pilot-observation | worker | packages/sim (new observation.ts + test + bench; match.ts, index.ts, package.json) + MINIMAL packages/ai (new observation.ts, reveal-tally.ts + test; additive edits to pilot.ts, index.ts, one comment in tree-reuse.ts), DESIGN §2 + §3.4c | 🚧 PUSHED, not merged |
+| feat/tactical-eval | worker | packages/ai (new: tactical.ts + tactical-suite.ts + 2 test files; evaluator/hybrid/hybrid-config/index/tsconfig/bench + 2 existing tests), DESIGN §3.4d | 🚧 PUSHED, not merged — branches off main |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-15 worker: `feat/tactical-eval` 🚧 PUSHED — **an exact combat solver + the curated tactical
   suite the brief asks for. The evaluator half is MORE CORRECT and NOT STRONGER, so it ships OFF; the
-  measurement and the suite ARE the deliverable.** `packages/ai` only, plus DESIGN §3.4c. Branches off
-  `main` (which already has hybrid-search + tree-reuse). `npm run verify` exit 0 — **2058 passed / 0
-  failed** (baseline 2012 + 46), lint 0 errors, `npm run build` exit 0.
+  measurement and the suite ARE the deliverable.** `packages/ai` only, plus DESIGN §3.4d. Branches off
+  `main` (which already has hybrid-search + tree-reuse). `npm run verify` exit 0 — **2226 passed / 0
+  failed** after merging the newer `main` (2058 before that merge; my own contribution is **+46**), lint
+  0 errors, `npm run build` exit 0.
   ❗ **HEADLINE: 5/5 versus 0/5 on correctness, 50.4% over 240 games on strength.** The tactical blend
   orders every curated position pair correctly where the shipped evaluator orders **none** of them
   correctly — and head to head over 240 paired games it is **121/240 = 50.4%**. Both statements are
@@ -170,9 +173,158 @@ _Append dated notes here; keep them short. Newest at top._
   ❌ **NOT done, and not mine:** burn-to-face lethal is not in the router (it needs `effect-value` to say
   how much damage a card in hand deals to a face — a different question with different failure modes; the
   policy already scores lethal burn at the top of its range). No belief model, no determinization
-  (§13–17) — still blocked on `DecisionContext` having no way to observe the OPPONENT's actions, which
-  `feat/tree-reuse` also reported and which is a `packages/sim` seam change.
+  (§13–17) — those are now UNBLOCKED by `feat/pilot-observation`'s seam, which landed on `main` while this
+  branch was measuring, and they are a branch of their own.
+  🔀 **Merged `origin/main` in** (which had gained the observation seam + the attachment cards). Three
+  conflicts, all resolved in main's favour plus my addition: **my DESIGN section is renumbered §3.4c →
+  §3.4d** because `feat/pilot-observation` took §3.4c first, and the two COORDINATION blocks are simple
+  appends. `packages/ai/src/index.ts` auto-merged — the two branches added disjoint export blocks — and
+  `pilot.ts`'s new optional `TObserver` type parameter has a default, so nothing here needed changing.
+  `npm run verify` re-run after the merge, still exit 0.
   (Worker — pushed, NOT merged.)
+- 2026-08-15 worker: `feat/attachment-cards` 🚧 PUSHED — **the attachment seam is no longer inert: the
+  pool went from ZERO Auras and ZERO Equipment to 14 + 14.** `npm run verify` exit 0 — **2156 passed /
+  0 failed** (main baseline 2117 + 39 new), lint 0 errors, `npm run build` exit 0. Pool **156 → 191**;
+  both card indexes regenerated, never hand-edited.
+  👉 **NOTHING WAS HAND-WRITTEN INTO EITHER INDEX.** Names → `expansion-candidates.json` →
+  `build-expansion.ts --fetch` → `build-expansion.ts` → `npm run fetch -w @jonny-boi/data-tools` →
+  `npm run cards:index -w @jonny-boi/web`. Every accepted card is the OUTPUT of the real Oracle
+  compiler on its real Scryfall text, so `fidelity.test.ts` (which re-compiles every pool card and
+  demands an exact match) covers the new cards automatically. **Art verified live with GET, not HEAD**
+  — Scryfall's CDN answers 400 to HEAD — all 35 new rows resolve.
+  ❗ **THE RE-RUN CAUGHT UP A STALE POOL: 7 NON-ATTACHMENT CARDS CAME IN FOR FREE, and that is the
+  finding worth acting on.** `expanded-pool.ts` had not been regenerated since several compiler
+  branches landed, so the pool was behind the COMPILER, not behind Scryfall. Re-running the generator
+  admitted **Shivan Dragon, Mind Stone, Guttersnipe, Pyroclasm, Thragtusk, Night's Whisper, Unsummon**
+  — all faithful, all checked by eye against the printed text committed above each definition.
+  ⚠️ **So `build-expansion.ts` should be re-run whenever a compile rule lands, not only when the
+  candidate list changes.** Nothing enforces that today and nothing failed while the pool was stale:
+  the generator's output is committed, so a compiler that got smarter is invisible until someone
+  re-runs it. Verified this re-run drifted NOTHING else: of the 156 existing index rows, **0 changed
+  id, 0 changed art, 0 changed oracle text**, and every one of the 124 previously-compiled definitions
+  is byte-identical.
+  👉 **OBSERVED PLAYING, not just green.** Real games, real heuristic pilot, real pool definitions:
+  · `Serra's Embrace` onto Savannah Lions — **2/1 → 4/3**, `flying`+`vigilance` granted; a second copy
+    stacks it to **6/5** (so my first assertion of a flat +2/+2 was wrong and the ENGINE was right).
+  · `Dead Weight` aimed at the opponent — 2/2 Walking Corpse becomes a 0/0, **dies to an SBA**, the Aura
+    unattaches and is **put into the graveyard** (CR 704.5m).
+  · `Bonesplitter` — Equip {1} **activated** by the pilot, host **2/2 → 4/2**; when the host dies the
+    Equipment **unattaches and STAYS on the battlefield** (CR 704.5n, the whole difference from an Aura)
+    and is then re-equipped onto a new creature. Three copies stack to 8/2.
+  · `Loxodon Warhammer` — host **2/2 → 5/2** with `trample` and `lifelink`.
+  ⛔ **NEEDS AN OWNER IN `packages/ai` (reported, not fixed — that package is live for two branches).
+  The pilot PING-PONGS an Equipment between two creatures.** Measured, one game, seed 4242, two
+  IDENTICAL vanilla 2/2s: Loxodon Warhammer was equipped **5 times, hosts 1 → 13 → 1 → 13 → 1**, i.e.
+  **3 of the 5 activations returned it to the host it had just left**, paying {3} each time for a board
+  it already had. The existing guard in `attachments-play.test.ts` only covers the ONE-creature case
+  ("does NOT re-equip the creature it is already on"), which is why this survived. The equip heuristic
+  needs hysteresis — a move should have to beat staying put by a margin, not merely tie.
+  👉 **ONE COMPILER FIX, and it is a normalization gap rather than a new template** (`compile/text.ts`):
+  `SELF_PHRASES` folded "this creature/permanent/artifact/enchantment/land/card" into `~` but **not
+  "this Aura" / "this Equipment"** — the subtype is how Oracle templates an attachment's self-reference.
+  Without it "When this Aura enters, draw a card" survived normalization and looked like an ability
+  about some other object. Two words unlocked **Angelic Gift** and **Dark Favor**, and it also makes
+  Rancor/Claustrophobia report a clean `~`-normalized clause instead of a raw one. Blast radius is
+  confined to Aura/Equipment-typed cards, of which the pool previously had none.
+  ⚠️ **`paired-arms-config.ts` NOT touched and did not need to be** — every new card compiles to
+  primitives that already exist (`attachToTarget` was classified LIBRARY_SAFE by `feat/attachments`,
+  and the ETB triggers reuse `drawCards`/`loseLife`). No new primitive, no classification decision.
+  ❌ **Rejected on fidelity grounds, deliberately** (each named in `expansion-report.json` with the
+  system it needs): **Pacifism** (can't attack or block), **Rancor** (returns itself from the graveyard),
+  **Spirit Mantle** (protection), **Ethereal Armor** (dynamic P/T), **Firebreathing** / **Shiv's
+  Embrace** / **Gaea's Embrace** (an ability granted to the HOST), **Aqueous Form** / **Whispersilk
+  Cloak** / **Madcap Skills** (can't-be-blocked and menace), **Skullclamp** / **Elephant Guide** /
+  **Armadillo Cloak** (triggers on the equipped/enchanted creature), **Flayer Husk** (living weapon),
+  **Ghostfire Blade** (a conditional equip cost — the plain half compiles, the narrowed half must keep
+  reporting or it would be cheaper than printed), **Darksteel Axe** (indestructible), **Silverskin
+  Armor** / **Sinister Strength** (type/colour changes), **Hyena Umbra** / **Snake Umbra** (totem armor).
+  ⚠️ **Green has no mono-green Aura and that is a real gap, not a shortfall of effort.** Nearly every
+  green Aura in Magic is an umbra, a regenerate-granter or dynamic. The single highest-value engine
+  work for Auras is **"can't attack or block"** — it alone unlocks Pacifism and its whole family.
+  👉 Two small leave-it-better fixes: `build-expansion.ts` emitted `{  }` for an empty record (my
+  cards were the first to print one — a modification granting no keywords), now `{}`; and the stale
+  "Both lists are 156 cards today" comment in `apps/web/src/views/LabView.tsx` is replaced with a
+  count-free sentence so it cannot go stale again. **That LabView line is my only edit outside my
+  owned files** — expect at most a one-line conflict there.
+- 2026-08-15 worker: `feat/pilot-observation` 🚧 PUSHED — **the blocker `feat/tree-reuse` reported is
+  gone: a pilot can now see the half of the game it does not play.** `npm run verify` exit 0 — **2027
+  passed / 0 failed** (baseline 2012 + 15), lint 0 errors, card-index clean, `npm run build` exit 0.
+  DESIGN §2 + new §3.4c.
+  👉 **THE SEAM IS SPECTATOR-LEVEL, NOT PER-SEAT, AND THAT IS THE WHOLE ANTI-CHEAT ARGUMENT.** An
+  `Observation` carries only what someone beside the table holding no cards would know, so **there is no
+  seat whose entitlement could be computed wrongly** — the failure mode of a per-seat feed is a masking
+  bug, and the failure mode here is nothing, because nothing in the feed is anybody's secret. It also
+  makes the feed **one projection per event instead of one per seat**, which is where the cost went.
+  A pilot combines it with the view it is already lent (which holds its own hand), so no seat loses
+  anything it is entitled to.
+  ⚠️ **THE WORST LEAK IN THE UNION IS `gameStart.seed`, AND IT READS LIKE BOOKKEEPING.** It is the number
+  both libraries were shuffled from — a pilot holding it has perfect information about the entire game,
+  not "a bit extra". Also redacted: `drawCard` (that a draw happened, never which card), `zoneChange`
+  (the instance id survives only when the card came to rest somewhere **public** — the test is the
+  DESTINATION, since a bounce is watched by everyone and then vanishes), and the three choice events (an
+  effect authors its own prompt and may name the cards it is asking about — the same reasoning
+  `@jonny-boi/protocol`'s `RedactedPendingChoice` already uses; the two redactions agreeing is deliberate).
+  35 of core's 41 event types pass through untouched.
+  ⚠️ **THREE GATES, AND ONLY ONE OF THEM IS WORTH ANYTHING ON ITS OWN.** (1) `OBSERVATION_POLICY` is a
+  mapped type over `GameEvent['type']`, so a new core event breaks the sim build until classified —
+  same shape as `paired-arms-config.ts`. (2) `'public'` is **unspellable** for the six redacted types:
+  each replacement shape declares its dropped field `?: never`, so the raw event is not assignable, and
+  `REDACTION_IS_UNSPELLABLE` fails to compile if any is weakened (verified by deleting one). (3) The
+  real one: `observation.test.ts` plays real games and scans every delivered observation with protocol's
+  `collectInstanceIds` against the cards **actually in a hand or library at that instant**. **Verified
+  RED by sabotage** — un-redacting `drawCard`, then `zoneChange`, each makes the scan name the exact
+  leaked cards. A green anti-cheat test that cannot go red is worse than none.
+  ❗ **`REDACTION_IS_UNSPELLABLE` LIVES IN SHIPPED SOURCE, NOT IN THE TEST FILE, AND THIS IS A TRAP
+  EVERYONE SHOULD KNOW ABOUT.** `packages/*/tsconfig.json` **excludes `src/**/*.test.ts`** and Vitest
+  strips types without checking them, and eslint here is not type-aware. **A `@ts-expect-error` written
+  in a test file in this repo is evaluated by NOTHING.** I wrote six of them, then checked, then moved
+  the guarantee into a compiled file. Anyone writing a type-level assertion here must do the same.
+  👉 **PER-GAME ISOLATION IS STRUCTURAL BY CHOOSING THE OTHER SEAM SHAPE.** The obvious design is
+  `Pilot.observe(obs)`, and it is the wrong one: it forces per-game state onto an object that is reused
+  across hundreds of games. The seam is `Pilot.createGameObserver(info)` — the harness creates one per
+  game, hands it back on every `DecisionContext`, and drops it at the end, so **a pilot has nowhere to
+  put cross-game state**. This is not tidiness: every real consumer builds ONE pilot and runs MANY games
+  through it, and the Lab shards the grid across workers by range, so a belief that outlived a game would
+  make a paired A/B verdict **depend on the worker count**. Pinned by a test that plays one game
+  standalone and again after three others through the same pilot and demands a byte-identical transcript.
+  ⚠️ **DETERMINISM — digested, not asserted.** sha256 over the FULL chosen-action sequence, **131,524
+  plies** (`heuristic`, `random` AND `hybrid` × three matchups): **all nine digests identical** before and
+  after, measured by building the pre-seam sources in the same worktree. `npm run sim -- gauntlet
+  "Mono-Red Aggro" --games 40 --seed 99` diffs **byte-identical except the throughput line**. None of the
+  four built-ins implement the seam, so `observers` is `null` and the loop is the old loop.
+  👉 **COST: public events are delivered BY REFERENCE; only redacted ones allocate.** Measured over 20
+  games — 1,128 events/game, **96.9% by reference, 3.1% (35/game) copied**. Interleaved **in-process** A/B
+  with the pre-seam and post-seam harness both loaded (alternating which arm runs first, because this box
+  warms up over a run): 21 rounds × 250 games → **paired median 0.989×**, i.e. parity, against a per-round
+  spread of **0.79–1.18**. An 11-round run of the same code said 0.956× — quote the paired median of the
+  longer run, and never a single round. Feed **ON at both seats**: **0.963×**, n=15.
+  👉 **Proof of life, deliberately NOT a belief model:** `createOpponentRevealObserver` tallies what the
+  opponent has publicly revealed this game (cards drawn, lands, spells by name, mana by colour, ids that
+  entered public view — the raw material for §16 known cards, §32–33 archetype and §35–37 represented
+  mana). `createRevealTrackingPilot(base)` wraps any pilot and delegates the decision unchanged, which is
+  what lets a test prove observing costs no change in play. Re-runnable:
+  `node packages/sim/bench/observation-bench.mjs digest | throughput | plain | volume`.
+  ⛔ **NEEDS AN OWNER ELSEWHERE — reported, not done:**
+  · **`DecisionContext.view` is the FULL, UNMASKED `GameState`.** A pilot can read
+    `view.players.B.hand` and `view.players.B.library` today, and `view.seed`. This seam does not make
+    that worse (it is the reason the feed had to be provably clean), but the honest statement is
+    "observations cannot leak; the VIEW already does". `PILOTS_THAT_READ_HIDDEN_LIBRARY` in
+    `paired-arms-config.ts` exists precisely because `mcts` exploits it. Masking the view is a
+    cross-package decision (`packages/ai` + `packages/sim` + every pilot) and belongs on its own branch —
+    a belief model built against an unmasked view would be measuring nothing.
+  · **`apps/server` and `apps/web/src/lib/replay-build.ts` call `chooseAction` themselves** and do not
+    drive the seam. That is safe and by design (`ctx.observer` is optional and the wrapper tolerates its
+    absence — tested), but a pilot that ever needs observations *in online play* would need the same
+    ~10 lines in `apps/server`'s room loop. Not touched.
+  · `packages/sim` gained `@jonny-boi/protocol` as a **devDependency** (test-only, for
+    `collectInstanceIds`). Deliberate: re-implementing "does this mention that card?" is exactly the drift
+    the room-code bug taught us about.
+  ⚠️ **For `feat/tactical-eval` / whoever else is in `packages/ai`:** my footprint there is 2 new files
+  (`observation.ts`, `reveal-tally.ts` + its test), an additive block in `index.ts`, and `pilot.ts` —
+  where `Pilot` and `DecisionContext` gained an optional `TObserver` type parameter **with a default**, so
+  every bare `Pilot` / `DecisionContext` annotation in the repo is unchanged. Plus one stale comment
+  corrected in `tree-reuse.ts` (it said the observation channel does not exist). `evaluator.ts`,
+  `hybrid.ts` and `mcts.ts` are untouched.
 
 - 2026-08-15 worker: `feat/pilot-relative-verdicts` 🚧 PUSHED — **every result now says which pilot
   produced it, and the suggestion engine refuses to pool two pilots' evidence.** `apps/web` ONLY; nothing

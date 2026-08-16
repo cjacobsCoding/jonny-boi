@@ -219,8 +219,10 @@ function heroOutOptions(hero: Deck): CardOption[] {
  * the same pool or the feature contradicts itself.
  *
  * (The card index is no longer a subset: it is DERIVED from the pool and a test
- * fails if they diverge — see `apps/web/src/data/card-index.test.ts`. Both lists
- * are 156 cards today. Don't reintroduce a hand-maintained shortlist here.)
+ * fails if they diverge — see `apps/web/src/data/card-index.test.ts`, which is
+ * also the only honest place to read the current count. Don't quote a card count
+ * here — the last one went stale — and don't reintroduce a hand-maintained
+ * shortlist.)
  */
 function poolInOptions(): CardOption[] {
   return [...allAvailableCards()]

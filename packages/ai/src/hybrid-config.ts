@@ -256,7 +256,7 @@ export const DEFAULT_HYBRID_CONFIG: HybridConfig = Object.freeze({
   evaluation: DEFAULT_EVALUATION_WEIGHTS,
   winSpeedDiscount: 0.005,
   tactical: DEFAULT_TACTICAL_CONFIG,
-  // ⚠️ OFF, and measured — see `TACTICAL_HYBRID_CONFIG` and DESIGN §3.4c. With
+  // ⚠️ OFF, and measured — see `TACTICAL_HYBRID_CONFIG` and DESIGN §3.4d. With
   // this false and the evaluation weights at their defaults, the pilot is the one
   // §3.4a/§3.4b measured, to the byte.
   takeProvenLethal: false,

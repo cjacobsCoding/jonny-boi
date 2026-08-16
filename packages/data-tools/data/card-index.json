@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-15T07:09:55.024Z",
+  "generatedAt": "2026-08-16T01:29:18.712Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 156,
+  "requested": 191,
   "unresolved": [],
   "cards": [
     {
@@ -54,7 +54,65 @@
         "art": "https://cards.scryfall.io/art/front/2/1/21892cbc-1af2-4ea1-8907-cec514b53004.webp?1783918431",
         "crop": "https://cards.scryfall.io/crop/front/2/1/21892cbc-1af2-4ea1-8907-cec514b53004.webp?1783918431"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "absorb-normal.jpg",
+        "art_crop": "absorb-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "dd70d439-bd60-43d1-ac26-13b744cc4a37",
+      "name": "Accorder's Shield",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +0/+3 and has vigilance. (Attacking doesn't cause it to tap.)\nEquip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "m14",
+      "collectorNumber": "204",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.jpg?1783939898",
+        "normal": "https://cards.scryfall.io/normal/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.jpg?1783939898",
+        "large": "https://cards.scryfall.io/large/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.jpg?1783939898",
+        "png": "https://cards.scryfall.io/png/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.png?1783939898",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.jpg?1783939898",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.jpg?1783939898",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.webp?1783939898",
+        "grid": "https://cards.scryfall.io/grid/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.webp?1783939898",
+        "display": "https://cards.scryfall.io/display/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.webp?1783939898",
+        "art": "https://cards.scryfall.io/art/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.webp?1783939898",
+        "crop": "https://cards.scryfall.io/crop/front/c/5/c5a4c2ab-c5bc-4e07-8671-a688ebd5471c.webp?1783939898"
+      },
+      "localImages": {
+        "normal": "accorder-s-shield-normal.jpg",
+        "art_crop": "accorder-s-shield-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -113,7 +171,10 @@
         "art": "https://cards.scryfall.io/art/front/8/8/8833065e-5022-4f48-b2fd-6fe5647c0a07.webp?1783931207",
         "crop": "https://cards.scryfall.io/crop/front/8/8/8833065e-5022-4f48-b2fd-6fe5647c0a07.webp?1783931207"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "aerial-responder-normal.jpg",
+        "art_crop": "aerial-responder-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -169,7 +230,10 @@
         "art": "https://cards.scryfall.io/art/front/a/2/a27efec0-40c4-48bc-a21a-3af28a6529b5.webp?1783933018",
         "crop": "https://cards.scryfall.io/crop/front/a/2/a27efec0-40c4-48bc-a21a-3af28a6529b5.webp?1783933018"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "air-elemental-normal.jpg",
+        "art_crop": "air-elemental-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -226,7 +290,10 @@
         "art": "https://cards.scryfall.io/art/front/3/7/373d6799-e031-4043-8437-ed4880be0de9.webp?1783939367",
         "crop": "https://cards.scryfall.io/crop/front/3/7/373d6799-e031-4043-8437-ed4880be0de9.webp?1783939367"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "ajani-s-sunstriker-normal.jpg",
+        "art_crop": "ajani-s-sunstriker-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -277,7 +344,10 @@
         "art": "https://cards.scryfall.io/art/front/e/8/e8d2180b-f54c-47a9-9458-28e7a19e35ee.webp?1783930344",
         "crop": "https://cards.scryfall.io/crop/front/e/8/e8d2180b-f54c-47a9-9458-28e7a19e35ee.webp?1783930344"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "alloy-myr-normal.jpg",
+        "art_crop": "alloy-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -328,7 +398,10 @@
         "art": "https://cards.scryfall.io/art/front/f/3/f3f792d7-75be-429e-8f62-0b563b103642.webp?1783944529",
         "crop": "https://cards.scryfall.io/crop/front/f/3/f3f792d7-75be-429e-8f62-0b563b103642.webp?1783944529"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "alpha-myr-normal.jpg",
+        "art_crop": "alpha-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -384,7 +457,10 @@
         "art": "https://cards.scryfall.io/art/front/2/d/2d22fdde-5590-4a4c-af2e-09711f4b5ffd.webp?1783930480",
         "crop": "https://cards.scryfall.io/crop/front/2/d/2d22fdde-5590-4a4c-af2e-09711f4b5ffd.webp?1783930480"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "angel-of-mercy-normal.jpg",
+        "art_crop": "angel-of-mercy-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -436,7 +512,69 @@
         "art": "https://cards.scryfall.io/art/front/4/3/43e6d650-4e96-43a3-8b94-7f044d3b2f82.webp?1783940523",
         "crop": "https://cards.scryfall.io/crop/front/4/3/43e6d650-4e96-43a3-8b94-7f044d3b2f82.webp?1783940523"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "angel-s-mercy-normal.jpg",
+        "art_crop": "angel-s-mercy-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e5e04968-d9b7-4bd5-b826-be9502360cd3",
+      "name": "Angelic Gift",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nWhen this Aura enters, draw a card.\nEnchanted creature has flying.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "afc",
+      "collectorNumber": "64",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.jpg?1783926232",
+        "normal": "https://cards.scryfall.io/normal/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.jpg?1783926232",
+        "large": "https://cards.scryfall.io/large/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.jpg?1783926232",
+        "png": "https://cards.scryfall.io/png/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.png?1783926232",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.jpg?1783926232",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.jpg?1783926232",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.webp?1783926232",
+        "grid": "https://cards.scryfall.io/grid/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.webp?1783926232",
+        "display": "https://cards.scryfall.io/display/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.webp?1783926232",
+        "art": "https://cards.scryfall.io/art/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.webp?1783926232",
+        "crop": "https://cards.scryfall.io/crop/front/5/a/5a2122c0-5fb4-4767-b969-c61bd959d604.webp?1783926232"
+      },
+      "localImages": {
+        "normal": "angelic-gift-normal.jpg",
+        "art_crop": "angelic-gift-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -493,7 +631,10 @@
         "art": "https://cards.scryfall.io/art/front/e/a/eac22a3b-4536-4372-a854-bc7f0919830b.webp?1783936685",
         "crop": "https://cards.scryfall.io/crop/front/e/a/eac22a3b-4536-4372-a854-bc7f0919830b.webp?1783936685"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "attended-knight-normal.jpg",
+        "art_crop": "attended-knight-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -549,7 +690,10 @@
         "art": "https://cards.scryfall.io/art/front/a/3/a390a7df-b8da-41aa-93e5-2c0db938a27e.webp?1783925334",
         "crop": "https://cards.scryfall.io/crop/front/a/3/a390a7df-b8da-41aa-93e5-2c0db938a27e.webp?1783925334"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "avacyn-s-pilgrim-normal.jpg",
+        "art_crop": "avacyn-s-pilgrim-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -602,7 +746,10 @@
         "art": "https://cards.scryfall.io/art/front/f/9/f98a7264-0a83-42c8-a94d-05ad4c234242.webp?1783908907",
         "crop": "https://cards.scryfall.io/crop/front/f/9/f98a7264-0a83-42c8-a94d-05ad4c234242.webp?1783908907"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "azorius-guildgate-normal.jpg",
+        "art_crop": "azorius-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -657,7 +804,10 @@
         "art": "https://cards.scryfall.io/art/front/2/d/2d19a474-b008-4088-8a31-333c0b2d9d65.webp?1783907076",
         "crop": "https://cards.scryfall.io/crop/front/2/d/2d19a474-b008-4088-8a31-333c0b2d9d65.webp?1783907076"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "beetleback-chief-normal.jpg",
+        "art_crop": "beetleback-chief-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -713,7 +863,65 @@
         "art": "https://cards.scryfall.io/art/front/4/9/492c2f9a-51e7-4e0f-9899-23bf43ea988b.webp?1783903230",
         "crop": "https://cards.scryfall.io/crop/front/4/9/492c2f9a-51e7-4e0f-9899-23bf43ea988b.webp?1783903230"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "birds-of-paradise-normal.jpg",
+        "art_crop": "birds-of-paradise-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c8cdc08a-975b-475f-8e30-85d61f6f3a9b",
+      "name": "Bladed Pinions",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature has flying and first strike.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "som",
+      "collectorNumber": "140",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.jpg?1783941713",
+        "normal": "https://cards.scryfall.io/normal/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.jpg?1783941713",
+        "large": "https://cards.scryfall.io/large/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.jpg?1783941713",
+        "png": "https://cards.scryfall.io/png/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.png?1783941713",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.jpg?1783941713",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.jpg?1783941713",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.webp?1783941713",
+        "grid": "https://cards.scryfall.io/grid/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.webp?1783941713",
+        "display": "https://cards.scryfall.io/display/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.webp?1783941713",
+        "art": "https://cards.scryfall.io/art/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.webp?1783941713",
+        "crop": "https://cards.scryfall.io/crop/front/b/f/bf479c90-c791-4152-a8e6-fd3123f698df.webp?1783941713"
+      },
+      "localImages": {
+        "normal": "bladed-pinions-normal.jpg",
+        "art_crop": "bladed-pinions-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -764,7 +972,10 @@
         "art": "https://cards.scryfall.io/art/front/1/d/1dde3c68-6f29-4c00-b668-c25ac9e3e13b.webp?1783907281",
         "crop": "https://cards.scryfall.io/crop/front/1/d/1dde3c68-6f29-4c00-b668-c25ac9e3e13b.webp?1783907281"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "bloodfell-caves-normal.jpg",
+        "art_crop": "bloodfell-caves-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -815,7 +1026,120 @@
         "art": "https://cards.scryfall.io/art/front/0/a/0a9df994-e0f4-4919-af99-4f643eb9199c.webp?1783907282",
         "crop": "https://cards.scryfall.io/crop/front/0/a/0a9df994-e0f4-4919-af99-4f643eb9199c.webp?1783907282"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "blossoming-sands-normal.jpg",
+        "art_crop": "blossoming-sands-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "16e555f2-5aa8-4100-a036-eed48db0e84a",
+      "name": "Bone Saw",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/+0.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "ogw",
+      "collectorNumber": "161",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.jpg?1783937894",
+        "normal": "https://cards.scryfall.io/normal/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.jpg?1783937894",
+        "large": "https://cards.scryfall.io/large/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.jpg?1783937894",
+        "png": "https://cards.scryfall.io/png/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.png?1783937894",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.jpg?1783937894",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.jpg?1783937894",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.webp?1783937894",
+        "grid": "https://cards.scryfall.io/grid/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.webp?1783937894",
+        "display": "https://cards.scryfall.io/display/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.webp?1783937894",
+        "art": "https://cards.scryfall.io/art/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.webp?1783937894",
+        "crop": "https://cards.scryfall.io/crop/front/d/c/dc3d19ff-b618-4b07-99a8-ea6e7ee72459.webp?1783937894"
+      },
+      "localImages": {
+        "normal": "bone-saw-normal.jpg",
+        "art_crop": "bone-saw-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "452e3f5f-ce17-4682-966b-5cc100210aee",
+      "name": "Bonesplitter",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +2/+0.\nEquip {1}",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "cmr",
+      "collectorNumber": "458",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/9/690972a8-72df-4050-a353-16e45589167c.jpg?1783928693",
+        "normal": "https://cards.scryfall.io/normal/front/6/9/690972a8-72df-4050-a353-16e45589167c.jpg?1783928693",
+        "large": "https://cards.scryfall.io/large/front/6/9/690972a8-72df-4050-a353-16e45589167c.jpg?1783928693",
+        "png": "https://cards.scryfall.io/png/front/6/9/690972a8-72df-4050-a353-16e45589167c.png?1783928693",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/9/690972a8-72df-4050-a353-16e45589167c.jpg?1783928693",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/9/690972a8-72df-4050-a353-16e45589167c.jpg?1783928693",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/9/690972a8-72df-4050-a353-16e45589167c.webp?1783928693",
+        "grid": "https://cards.scryfall.io/grid/front/6/9/690972a8-72df-4050-a353-16e45589167c.webp?1783928693",
+        "display": "https://cards.scryfall.io/display/front/6/9/690972a8-72df-4050-a353-16e45589167c.webp?1783928693",
+        "art": "https://cards.scryfall.io/art/front/6/9/690972a8-72df-4050-a353-16e45589167c.webp?1783928693",
+        "crop": "https://cards.scryfall.io/crop/front/6/9/690972a8-72df-4050-a353-16e45589167c.webp?1783928693"
+      },
+      "localImages": {
+        "normal": "bonesplitter-normal.jpg",
+        "art_crop": "bonesplitter-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -868,7 +1192,10 @@
         "art": "https://cards.scryfall.io/art/front/3/e/3e3c74ea-40e9-4ad9-a491-c208403b68ad.webp?1783908903",
         "crop": "https://cards.scryfall.io/crop/front/3/e/3e3c74ea-40e9-4ad9-a491-c208403b68ad.webp?1783908903"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "boros-guildgate-normal.jpg",
+        "art_crop": "boros-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -920,7 +1247,10 @@
         "art": "https://cards.scryfall.io/art/front/b/5/b5545882-6963-4729-b2c6-fb4bdc75ffcc.webp?1783904806",
         "crop": "https://cards.scryfall.io/crop/front/b/5/b5545882-6963-4729-b2c6-fb4bdc75ffcc.webp?1783904806"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "brainstorm-normal.jpg",
+        "art_crop": "brainstorm-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -971,7 +1301,10 @@
         "art": "https://cards.scryfall.io/art/front/a/9/a95f8df0-3490-47ad-b452-76fe60179242.webp?1783937282",
         "crop": "https://cards.scryfall.io/crop/front/a/9/a95f8df0-3490-47ad-b452-76fe60179242.webp?1783937282"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "bronze-sable-normal.jpg",
+        "art_crop": "bronze-sable-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1023,7 +1356,10 @@
         "art": "https://cards.scryfall.io/art/front/4/7/475bff39-220a-4490-9c2e-d311e306a6db.webp?1783908966",
         "crop": "https://cards.scryfall.io/crop/front/4/7/475bff39-220a-4490-9c2e-d311e306a6db.webp?1783908966"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "cancel-normal.jpg",
+        "art_crop": "cancel-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1075,7 +1411,10 @@
         "art": "https://cards.scryfall.io/art/front/0/c/0c7ed7e0-0e80-44d3-a7af-b4c321239df8.webp?1783921370",
         "crop": "https://cards.scryfall.io/crop/front/0/c/0c7ed7e0-0e80-44d3-a7af-b4c321239df8.webp?1783921370"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "captain-s-call-normal.jpg",
+        "art_crop": "captain-s-call-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1130,7 +1469,10 @@
         "art": "https://cards.scryfall.io/art/front/e/8/e8b67ee8-3189-4426-8b1a-b540267768fd.webp?1783932966",
         "crop": "https://cards.scryfall.io/crop/front/e/8/e8b67ee8-3189-4426-8b1a-b540267768fd.webp?1783932966"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "centaur-courser-normal.jpg",
+        "art_crop": "centaur-courser-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1180,7 +1522,10 @@
         "art": "https://cards.scryfall.io/art/front/f/0/f0475c79-bc7f-4de8-a020-226bc658d303.webp?1783922679",
         "crop": "https://cards.scryfall.io/crop/front/f/0/f0475c79-bc7f-4de8-a020-226bc658d303.webp?1783922679"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "charcoal-diamond-normal.jpg",
+        "art_crop": "charcoal-diamond-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1236,7 +1581,10 @@
         "art": "https://cards.scryfall.io/art/front/3/8/3887af00-a87d-4396-b82b-38b88c084e8e.webp?1783930429",
         "crop": "https://cards.scryfall.io/crop/front/3/8/3887af00-a87d-4396-b82b-38b88c084e8e.webp?1783930429"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "child-of-night-normal.jpg",
+        "art_crop": "child-of-night-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1293,7 +1641,65 @@
         "art": "https://cards.scryfall.io/art/front/2/5/25e97ad6-8b49-4fb6-9c07-e8d91bbaed5a.webp?1783912558",
         "crop": "https://cards.scryfall.io/crop/front/2/5/25e97ad6-8b49-4fb6-9c07-e8d91bbaed5a.webp?1783912558"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "cloudkin-seer-normal.jpg",
+        "art_crop": "cloudkin-seer-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8d8682f3-9ef3-4aa7-9ea6-8a2ce09bff6f",
+      "name": "Cobbled Wings",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature has flying.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "inr",
+      "collectorNumber": "258",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.jpg?1783908067",
+        "normal": "https://cards.scryfall.io/normal/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.jpg?1783908067",
+        "large": "https://cards.scryfall.io/large/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.jpg?1783908067",
+        "png": "https://cards.scryfall.io/png/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.png?1783908067",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.jpg?1783908067",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.jpg?1783908067",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.webp?1783908067",
+        "grid": "https://cards.scryfall.io/grid/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.webp?1783908067",
+        "display": "https://cards.scryfall.io/display/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.webp?1783908067",
+        "art": "https://cards.scryfall.io/art/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.webp?1783908067",
+        "crop": "https://cards.scryfall.io/crop/front/e/8/e8bb16f6-71b2-4338-a546-27f37f50e811.webp?1783908067"
+      },
+      "localImages": {
+        "normal": "cobbled-wings-normal.jpg",
+        "art_crop": "cobbled-wings-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1345,7 +1751,10 @@
         "art": "https://cards.scryfall.io/art/front/5/a/5aca3338-30a6-4ce4-b74c-a18144b6efc9.webp?1783935617",
         "crop": "https://cards.scryfall.io/crop/front/5/a/5aca3338-30a6-4ce4-b74c-a18144b6efc9.webp?1783935617"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "concentrate-normal.jpg",
+        "art_crop": "concentrate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1398,7 +1807,10 @@
         "art": "https://cards.scryfall.io/art/front/3/2/323efe27-da58-4207-9c0c-dba5031bfa04.webp?1783941712",
         "crop": "https://cards.scryfall.io/crop/front/3/2/323efe27-da58-4207-9c0c-dba5031bfa04.webp?1783941712"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "copper-myr-normal.jpg",
+        "art_crop": "copper-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1452,7 +1864,10 @@
         "art": "https://cards.scryfall.io/art/front/9/7/97a74ccf-8165-4db1-a87c-52c2d8ea0058.webp?1783932908",
         "crop": "https://cards.scryfall.io/crop/front/9/7/97a74ccf-8165-4db1-a87c-52c2d8ea0058.webp?1783932908"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "coral-merfolk-normal.jpg",
+        "art_crop": "coral-merfolk-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1504,7 +1919,10 @@
         "art": "https://cards.scryfall.io/art/front/4/f/4f616706-ec97-4923-bb1e-11a69fbaa1f8.webp?1783909630",
         "crop": "https://cards.scryfall.io/crop/front/4/f/4f616706-ec97-4923-bb1e-11a69fbaa1f8.webp?1783909630"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "counterspell-normal.jpg",
+        "art_crop": "counterspell-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1558,7 +1976,10 @@
         "art": "https://cards.scryfall.io/art/front/3/8/3875f73d-6108-488b-bd34-4cf2c23ce6b3.webp?1783942364",
         "crop": "https://cards.scryfall.io/crop/front/3/8/3875f73d-6108-488b-bd34-4cf2c23ce6b3.webp?1783942364"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "craw-wurm-normal.jpg",
+        "art_crop": "craw-wurm-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1610,7 +2031,69 @@
         "art": "https://cards.scryfall.io/art/front/3/0/30f6fca9-003b-4f6b-9d6e-1e88adda4155.webp?1783935549",
         "crop": "https://cards.scryfall.io/crop/front/3/0/30f6fca9-003b-4f6b-9d6e-1e88adda4155.webp?1783935549"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "cryptic-command-normal.jpg",
+        "art_crop": "cryptic-command-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c1f4a440-638a-4e3e-8a3e-af4a4a73ec91",
+      "name": "Dark Favor",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nWhen this Aura enters, you lose 1 life.\nEnchanted creature gets +3/+1.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "m14",
+      "collectorNumber": "92",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.jpg?1783939925",
+        "normal": "https://cards.scryfall.io/normal/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.jpg?1783939925",
+        "large": "https://cards.scryfall.io/large/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.jpg?1783939925",
+        "png": "https://cards.scryfall.io/png/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.png?1783939925",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.jpg?1783939925",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.jpg?1783939925",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.webp?1783939925",
+        "grid": "https://cards.scryfall.io/grid/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.webp?1783939925",
+        "display": "https://cards.scryfall.io/display/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.webp?1783939925",
+        "art": "https://cards.scryfall.io/art/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.webp?1783939925",
+        "crop": "https://cards.scryfall.io/crop/front/5/c/5c1591ae-07aa-4013-bc6d-4cafd09927f0.webp?1783939925"
+      },
+      "localImages": {
+        "normal": "dark-favor-normal.jpg",
+        "art_crop": "dark-favor-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1662,7 +2145,10 @@
         "art": "https://cards.scryfall.io/art/front/1/1/11e12a84-e7be-4afc-a230-c2e644743fa8.webp?1783903013",
         "crop": "https://cards.scryfall.io/crop/front/1/1/11e12a84-e7be-4afc-a230-c2e644743fa8.webp?1783903013"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "dark-ritual-normal.jpg",
+        "art_crop": "dark-ritual-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1714,7 +2200,69 @@
         "art": "https://cards.scryfall.io/art/front/9/6/96e84bdc-8a9a-4c58-ba8b-9f052fd60069.webp?1783909086",
         "crop": "https://cards.scryfall.io/crop/front/9/6/96e84bdc-8a9a-4c58-ba8b-9f052fd60069.webp?1783909086"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "day-of-judgment-normal.jpg",
+        "art_crop": "day-of-judgment-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b1804304-fac1-4b19-a48d-6ade9407972a",
+      "name": "Dead Weight",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets -2/-2.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "lci",
+      "collectorNumber": "99",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.jpg?1783913779",
+        "normal": "https://cards.scryfall.io/normal/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.jpg?1783913779",
+        "large": "https://cards.scryfall.io/large/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.jpg?1783913779",
+        "png": "https://cards.scryfall.io/png/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.png?1783913779",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.jpg?1783913779",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.jpg?1783913779",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.webp?1783913779",
+        "grid": "https://cards.scryfall.io/grid/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.webp?1783913779",
+        "display": "https://cards.scryfall.io/display/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.webp?1783913779",
+        "art": "https://cards.scryfall.io/art/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.webp?1783913779",
+        "crop": "https://cards.scryfall.io/crop/front/8/2/82e6b971-3f5b-47e7-8209-98d72ee781fc.webp?1783913779"
+      },
+      "localImages": {
+        "normal": "dead-weight-normal.jpg",
+        "art_crop": "dead-weight-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1771,7 +2319,10 @@
         "art": "https://cards.scryfall.io/art/front/d/4/d432d17e-052b-4a81-bad8-14babf6e593f.webp?1783915635",
         "crop": "https://cards.scryfall.io/crop/front/d/4/d432d17e-052b-4a81-bad8-14babf6e593f.webp?1783915635"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "deadly-recluse-normal.jpg",
+        "art_crop": "deadly-recluse-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1831,7 +2382,10 @@
         "art": "https://cards.scryfall.io/art/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.webp?1783908173",
         "crop": "https://cards.scryfall.io/crop/front/6/9/6904ea20-e504-47da-95a0-08739fdde260.webp?1783908173"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "delver-of-secrets-insectile-aberration-normal.jpg",
+        "art_crop": "delver-of-secrets-insectile-aberration-art_crop.jpg"
+      },
       "isDoubleFaced": true,
       "faces": [
         {
@@ -1971,7 +2525,10 @@
         "art": "https://cards.scryfall.io/art/front/f/9/f9b8a159-5e58-4432-8ecd-62f39afa96da.webp?1783908901",
         "crop": "https://cards.scryfall.io/crop/front/f/9/f9b8a159-5e58-4432-8ecd-62f39afa96da.webp?1783908901"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "dimir-guildgate-normal.jpg",
+        "art_crop": "dimir-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2025,7 +2582,10 @@
         "art": "https://cards.scryfall.io/art/front/4/6/4682012c-d7e0-4257-b538-3de497507464.webp?1783909075",
         "crop": "https://cards.scryfall.io/crop/front/4/6/4682012c-d7e0-4257-b538-3de497507464.webp?1783909075"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "diregraf-ghoul-normal.jpg",
+        "art_crop": "diregraf-ghoul-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2077,7 +2637,10 @@
         "art": "https://cards.scryfall.io/art/front/a/a/aaa9c6f1-3938-448b-bdc3-22420c5984d3.webp?1783920093",
         "crop": "https://cards.scryfall.io/crop/front/a/a/aaa9c6f1-3938-448b-bdc3-22420c5984d3.webp?1783920093"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "disfigure-normal.jpg",
+        "art_crop": "disfigure-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2128,7 +2691,10 @@
         "art": "https://cards.scryfall.io/art/front/0/8/082b52c9-c46e-44d3-b723-546ba528e07b.webp?1783907280",
         "crop": "https://cards.scryfall.io/crop/front/0/8/082b52c9-c46e-44d3-b723-546ba528e07b.webp?1783907280"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "dismal-backwater-normal.jpg",
+        "art_crop": "dismal-backwater-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2180,7 +2746,10 @@
         "art": "https://cards.scryfall.io/art/front/9/5/95b57eec-ecb3-408c-b938-7d3a34602cc5.webp?1783937325",
         "crop": "https://cards.scryfall.io/crop/front/9/5/95b57eec-ecb3-408c-b938-7d3a34602cc5.webp?1783937325"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "dismiss-normal.jpg",
+        "art_crop": "dismiss-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2232,7 +2801,10 @@
         "art": "https://cards.scryfall.io/art/front/c/b/cb3b35b8-f321-46d8-a441-6b9a6efa9021.webp?1783934590",
         "crop": "https://cards.scryfall.io/crop/front/c/b/cb3b35b8-f321-46d8-a441-6b9a6efa9021.webp?1783934590"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "divination-normal.jpg",
+        "art_crop": "divination-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2284,7 +2856,10 @@
         "art": "https://cards.scryfall.io/art/front/5/d/5dcd0c4e-4047-47a2-8969-c62616d457c2.webp?1783903090",
         "crop": "https://cards.scryfall.io/crop/front/5/d/5dcd0c4e-4047-47a2-8969-c62616d457c2.webp?1783903090"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "doom-blade-normal.jpg",
+        "art_crop": "doom-blade-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2336,7 +2911,10 @@
         "art": "https://cards.scryfall.io/art/front/f/9/f9abe517-f601-4784-8d62-2350bd755146.webp?1783908954",
         "crop": "https://cards.scryfall.io/crop/front/f/9/f9abe517-f601-4784-8d62-2350bd755146.webp?1783908954"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "dragon-fodder-normal.jpg",
+        "art_crop": "dragon-fodder-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2391,7 +2969,10 @@
         "art": "https://cards.scryfall.io/art/front/2/8/28a5c350-2ed1-4a25-9626-0f8da5d1aef7.webp?1783937635",
         "crop": "https://cards.scryfall.io/crop/front/2/8/28a5c350-2ed1-4a25-9626-0f8da5d1aef7.webp?1783937635"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "elite-vanguard-normal.jpg",
+        "art_crop": "elite-vanguard-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2446,7 +3027,10 @@
         "art": "https://cards.scryfall.io/art/front/0/8/08b9a296-3b76-4f8f-9d71-7c9af92bb3b4.webp?1785647413",
         "crop": "https://cards.scryfall.io/crop/front/0/8/08b9a296-3b76-4f8f-9d71-7c9af92bb3b4.webp?1785647413"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "elvish-mystic-normal.jpg",
+        "art_crop": "elvish-mystic-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2501,7 +3085,69 @@
         "art": "https://cards.scryfall.io/art/front/6/d/6d2f4a37-453f-4a2c-bfba-2d1227394c90.webp?1785497604",
         "crop": "https://cards.scryfall.io/crop/front/6/d/6d2f4a37-453f-4a2c-bfba-2d1227394c90.webp?1785497604"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "elvish-visionary-normal.jpg",
+        "art_crop": "elvish-visionary-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "42b2db4c-4a1d-436f-9eeb-53a04db46c58",
+      "name": "Enfeeblement",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature (Target a creature as you cast this. This card enters attached to that creature.)\nEnchanted creature gets -2/-2.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "9ed",
+      "collectorNumber": "127",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.jpg?1783944007",
+        "normal": "https://cards.scryfall.io/normal/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.jpg?1783944007",
+        "large": "https://cards.scryfall.io/large/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.jpg?1783944007",
+        "png": "https://cards.scryfall.io/png/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.png?1783944007",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.jpg?1783944007",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.jpg?1783944007",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.webp?1783944007",
+        "grid": "https://cards.scryfall.io/grid/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.webp?1783944007",
+        "display": "https://cards.scryfall.io/display/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.webp?1783944007",
+        "art": "https://cards.scryfall.io/art/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.webp?1783944007",
+        "crop": "https://cards.scryfall.io/crop/front/4/a/4adaf0bf-b26d-4166-8809-431283690de7.webp?1783944007"
+      },
+      "localImages": {
+        "normal": "enfeeblement-normal.jpg",
+        "art_crop": "enfeeblement-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2556,7 +3202,10 @@
         "art": "https://cards.scryfall.io/art/front/3/9/39704000-65d3-4d39-849e-a3b617376bbc.webp?1783915632",
         "crop": "https://cards.scryfall.io/crop/front/3/9/39704000-65d3-4d39-849e-a3b617376bbc.webp?1783915632"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "eternal-witness-normal.jpg",
+        "art_crop": "eternal-witness-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2610,7 +3259,10 @@
         "art": "https://cards.scryfall.io/art/front/6/e/6e9d8fe4-fd9b-4923-92bf-7dd6b8fa02e7.webp?1783930180",
         "crop": "https://cards.scryfall.io/crop/front/6/e/6e9d8fe4-fd9b-4923-92bf-7dd6b8fa02e7.webp?1783930180"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "fatal-push-normal.jpg",
+        "art_crop": "fatal-push-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2667,7 +3319,10 @@
         "art": "https://cards.scryfall.io/art/front/9/9/994094f8-e175-4e2e-aa39-c096f0ed9e6a.webp?1783915723",
         "crop": "https://cards.scryfall.io/crop/front/9/9/994094f8-e175-4e2e-aa39-c096f0ed9e6a.webp?1783915723"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "fencing-ace-normal.jpg",
+        "art_crop": "fencing-ace-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2717,7 +3372,10 @@
         "art": "https://cards.scryfall.io/art/front/5/a/5a561484-438b-4ce9-911e-97078ac5b0fa.webp?1783922676",
         "crop": "https://cards.scryfall.io/crop/front/5/a/5a561484-438b-4ce9-911e-97078ac5b0fa.webp?1783922676"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "fire-diamond-normal.jpg",
+        "art_crop": "fire-diamond-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2771,7 +3429,65 @@
         "art": "https://cards.scryfall.io/art/front/d/c/dc506f58-048d-49cc-ad8c-2eb851b08bb6.webp?1783908952",
         "crop": "https://cards.scryfall.io/crop/front/d/c/dc506f58-048d-49cc-ad8c-2eb851b08bb6.webp?1783908952"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "fire-elemental-normal.jpg",
+        "art_crop": "fire-elemental-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a02e1ca7-23c5-41e3-a744-72fc9e9dd8ba",
+      "name": "Fireshrieker",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature has double strike. (It deals both first-strike and regular combat damage.)\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "fdn",
+      "collectorNumber": "674",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.jpg?1783908906",
+        "normal": "https://cards.scryfall.io/normal/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.jpg?1783908906",
+        "large": "https://cards.scryfall.io/large/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.jpg?1783908906",
+        "png": "https://cards.scryfall.io/png/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.png?1783908906",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.jpg?1783908906",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.jpg?1783908906",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.webp?1783908906",
+        "grid": "https://cards.scryfall.io/grid/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.webp?1783908906",
+        "display": "https://cards.scryfall.io/display/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.webp?1783908906",
+        "art": "https://cards.scryfall.io/art/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.webp?1783908906",
+        "crop": "https://cards.scryfall.io/crop/front/4/8/484fbce6-71bd-40eb-a71b-86958a094708.webp?1783908906"
+      },
+      "localImages": {
+        "normal": "fireshrieker-normal.jpg",
+        "art_crop": "fireshrieker-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2823,7 +3539,69 @@
         "art": "https://cards.scryfall.io/art/front/1/5/15affc1b-2ebb-4934-87a2-10e89eafe894.webp?1783937304",
         "crop": "https://cards.scryfall.io/crop/front/1/5/15affc1b-2ebb-4934-87a2-10e89eafe894.webp?1783937304"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "flame-slash-normal.jpg",
+        "art_crop": "flame-slash-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6a4068b0-fb4f-429c-a94e-47849f3eb7ef",
+      "name": "Flight",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature has flying.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "m12",
+      "collectorNumber": "53",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.jpg?1783941092",
+        "normal": "https://cards.scryfall.io/normal/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.jpg?1783941092",
+        "large": "https://cards.scryfall.io/large/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.jpg?1783941092",
+        "png": "https://cards.scryfall.io/png/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.png?1783941092",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.jpg?1783941092",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.jpg?1783941092",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.webp?1783941092",
+        "grid": "https://cards.scryfall.io/grid/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.webp?1783941092",
+        "display": "https://cards.scryfall.io/display/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.webp?1783941092",
+        "art": "https://cards.scryfall.io/art/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.webp?1783941092",
+        "crop": "https://cards.scryfall.io/crop/front/1/5/15316953-dcb2-4428-b90a-c90d3d4c45f3.webp?1783941092"
+      },
+      "localImages": {
+        "normal": "flight-normal.jpg",
+        "art_crop": "flight-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2877,7 +3655,10 @@
         "art": "https://cards.scryfall.io/art/front/d/c/dce15387-4114-4b3e-91aa-5b42b45c44ac.webp?1785981675",
         "crop": "https://cards.scryfall.io/crop/front/d/c/dce15387-4114-4b3e-91aa-5b42b45c44ac.webp?1785981675"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "forest-normal.jpg",
+        "art_crop": "forest-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2932,7 +3713,10 @@
         "art": "https://cards.scryfall.io/art/front/4/5/450744cf-7eba-491b-97b0-ca80c6368bbb.webp?1783928794",
         "crop": "https://cards.scryfall.io/crop/front/4/5/450744cf-7eba-491b-97b0-ca80c6368bbb.webp?1783928794"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "fyndhorn-elves-normal.jpg",
+        "art_crop": "fyndhorn-elves-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2988,7 +3772,10 @@
         "art": "https://cards.scryfall.io/art/front/b/8/b8d8806c-43c5-4c6c-9420-6210a17ec2b0.webp?1783941062",
         "crop": "https://cards.scryfall.io/crop/front/b/8/b8d8806c-43c5-4c6c-9420-6210a17ec2b0.webp?1783941062"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "garruk-s-companion-normal.jpg",
+        "art_crop": "garruk-s-companion-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3040,7 +3827,10 @@
         "art": "https://cards.scryfall.io/art/front/f/d/fd1f95bf-48ea-455a-8a6c-0249b11c8900.webp?1783902918",
         "crop": "https://cards.scryfall.io/crop/front/f/d/fd1f95bf-48ea-455a-8a6c-0249b11c8900.webp?1783902918"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "giant-growth-normal.jpg",
+        "art_crop": "giant-growth-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3096,7 +3886,74 @@
         "art": "https://cards.scryfall.io/art/front/2/1/213c9202-b6f4-43ab-b57f-b97a1da5e263.webp?1783918443",
         "crop": "https://cards.scryfall.io/crop/front/2/1/213c9202-b6f4-43ab-b57f-b97a1da5e263.webp?1783918443"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "giant-spider-normal.jpg",
+        "art_crop": "giant-spider-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "dcb6d317-5c55-4973-8e3d-2e98211dc30e",
+      "name": "Gift of Orzhova",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [
+          "W/B",
+          "W/B"
+        ]
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +1/+1 and has flying and lifelink.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B",
+        "W"
+      ],
+      "colorIdentity": [
+        "B",
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "mm3",
+      "collectorNumber": "209",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.jpg?1783936600",
+        "normal": "https://cards.scryfall.io/normal/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.jpg?1783936600",
+        "large": "https://cards.scryfall.io/large/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.jpg?1783936600",
+        "png": "https://cards.scryfall.io/png/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.png?1783936600",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.jpg?1783936600",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.jpg?1783936600",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.webp?1783936600",
+        "grid": "https://cards.scryfall.io/grid/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.webp?1783936600",
+        "display": "https://cards.scryfall.io/display/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.webp?1783936600",
+        "art": "https://cards.scryfall.io/art/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.webp?1783936600",
+        "crop": "https://cards.scryfall.io/crop/front/d/a/da824204-a7ed-46f1-b890-f21fcc39ce7e.webp?1783936600"
+      },
+      "localImages": {
+        "normal": "gift-of-orzhova-normal.jpg",
+        "art_crop": "gift-of-orzhova-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3153,7 +4010,10 @@
         "art": "https://cards.scryfall.io/art/front/3/c/3c0f5411-1940-410f-96ce-6f92513f753a.webp?1783930165",
         "crop": "https://cards.scryfall.io/crop/front/3/c/3c0f5411-1940-410f-96ce-6f92513f753a.webp?1783930165"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "goblin-guide-normal.jpg",
+        "art_crop": "goblin-guide-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3208,7 +4068,10 @@
         "art": "https://cards.scryfall.io/art/front/b/3/b36a1bc7-a080-4fb6-b975-c59bb33a090a.webp?1783917147",
         "crop": "https://cards.scryfall.io/crop/front/b/3/b36a1bc7-a080-4fb6-b975-c59bb33a090a.webp?1783917147"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "goblin-instigator-normal.jpg",
+        "art_crop": "goblin-instigator-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3263,7 +4126,69 @@
         "art": "https://cards.scryfall.io/art/front/0/8/083ec3e7-950c-4e9d-aba5-02ed13d723f0.webp?1783941070",
         "crop": "https://cards.scryfall.io/crop/front/0/8/083ec3e7-950c-4e9d-aba5-02ed13d723f0.webp?1783941070"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "goblin-piker-normal.jpg",
+        "art_crop": "goblin-piker-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "67ca79d7-9064-4605-8625-b1cfe5cb1b45",
+      "name": "Goblin War Paint",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +2/+2 and has haste.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "bfz",
+      "collectorNumber": "146",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.jpg?1783938194",
+        "normal": "https://cards.scryfall.io/normal/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.jpg?1783938194",
+        "large": "https://cards.scryfall.io/large/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.jpg?1783938194",
+        "png": "https://cards.scryfall.io/png/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.png?1783938194",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.jpg?1783938194",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.jpg?1783938194",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.webp?1783938194",
+        "grid": "https://cards.scryfall.io/grid/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.webp?1783938194",
+        "display": "https://cards.scryfall.io/display/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.webp?1783938194",
+        "art": "https://cards.scryfall.io/art/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.webp?1783938194",
+        "crop": "https://cards.scryfall.io/crop/front/b/6/b6ff3183-c273-4a61-ad25-526db29111c8.webp?1783938194"
+      },
+      "localImages": {
+        "normal": "goblin-war-paint-normal.jpg",
+        "art_crop": "goblin-war-paint-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3316,7 +4241,10 @@
         "art": "https://cards.scryfall.io/art/front/1/2/12331b1d-a561-4a8c-8e85-ed3a607ce508.webp?1783923939",
         "crop": "https://cards.scryfall.io/crop/front/1/2/12331b1d-a561-4a8c-8e85-ed3a607ce508.webp?1783923939"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "gold-myr-normal.jpg",
+        "art_crop": "gold-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3369,7 +4297,10 @@
         "art": "https://cards.scryfall.io/art/front/9/2/92d4646c-a375-4835-aa58-8bb77d1a5abf.webp?1783908900",
         "crop": "https://cards.scryfall.io/crop/front/9/2/92d4646c-a375-4835-aa58-8bb77d1a5abf.webp?1783908900"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "golgari-guildgate-normal.jpg",
+        "art_crop": "golgari-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3421,7 +4352,10 @@
         "art": "https://cards.scryfall.io/art/front/7/7/7737b578-8ae3-4846-b508-93ef40f25244.webp?1783930706",
         "crop": "https://cards.scryfall.io/crop/front/7/7/7737b578-8ae3-4846-b508-93ef40f25244.webp?1783930706"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "grasp-of-darkness-normal.jpg",
+        "art_crop": "grasp-of-darkness-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3475,7 +4409,10 @@
         "art": "https://cards.scryfall.io/art/front/4/0/409f9b88-f03e-40b6-9883-68c14c37c0de.webp?1783943001",
         "crop": "https://cards.scryfall.io/crop/front/4/0/409f9b88-f03e-40b6-9883-68c14c37c0de.webp?1783943001"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "grizzly-bears-normal.jpg",
+        "art_crop": "grizzly-bears-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3528,7 +4465,68 @@
         "art": "https://cards.scryfall.io/art/front/3/a/3ab6c240-c97d-4a5c-bc39-860c2d9901c2.webp?1783908900",
         "crop": "https://cards.scryfall.io/crop/front/3/a/3ab6c240-c97d-4a5c-bc39-860c2d9901c2.webp?1783908900"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "gruul-guildgate-normal.jpg",
+        "art_crop": "gruul-guildgate-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c6bdaf76-6a03-4695-9c4b-f040e73435af",
+      "name": "Guttersnipe",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Goblin Shaman",
+      "oracleText": "Whenever you cast an instant or sorcery spell, this creature deals 2 damage to each opponent.",
+      "power": 2,
+      "toughness": 2,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "hoc",
+      "collectorNumber": "196",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.jpg?1785497556",
+        "normal": "https://cards.scryfall.io/normal/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.jpg?1785497556",
+        "large": "https://cards.scryfall.io/large/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.jpg?1785497556",
+        "png": "https://cards.scryfall.io/png/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.png?1785497556",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.jpg?1785497556",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.jpg?1785497556",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.webp?1785497556",
+        "grid": "https://cards.scryfall.io/grid/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.webp?1785497556",
+        "display": "https://cards.scryfall.io/display/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.webp?1785497556",
+        "art": "https://cards.scryfall.io/art/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.webp?1785497556",
+        "crop": "https://cards.scryfall.io/crop/front/f/6/f6bb1ffc-2251-4655-b8f9-4c8047dd5d5f.webp?1785497556"
+      },
+      "localImages": {
+        "normal": "guttersnipe-normal.jpg",
+        "art_crop": "guttersnipe-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3585,7 +4583,10 @@
         "art": "https://cards.scryfall.io/art/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.webp?1783903956",
         "crop": "https://cards.scryfall.io/crop/front/0/6/069cfaa5-bba4-4503-b54e-b98fa9f0a0fc.webp?1783903956"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "healer-s-hawk-normal.jpg",
+        "art_crop": "healer-s-hawk-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3639,7 +4640,69 @@
         "art": "https://cards.scryfall.io/art/front/1/4/14c2be6a-9ca6-4d3a-8dd0-db4ea40799f8.webp?1783943018",
         "crop": "https://cards.scryfall.io/crop/front/1/4/14c2be6a-9ca6-4d3a-8dd0-db4ea40799f8.webp?1783943018"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "hill-giant-normal.jpg",
+        "art_crop": "hill-giant-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9357de36-f8be-4f49-b2c8-9fe9eaf82b07",
+      "name": "Holy Strength",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +1/+2.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "m11",
+      "collectorNumber": "16",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.jpg?1783941836",
+        "normal": "https://cards.scryfall.io/normal/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.jpg?1783941836",
+        "large": "https://cards.scryfall.io/large/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.jpg?1783941836",
+        "png": "https://cards.scryfall.io/png/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.png?1783941836",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.jpg?1783941836",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.jpg?1783941836",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.webp?1783941836",
+        "grid": "https://cards.scryfall.io/grid/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.webp?1783941836",
+        "display": "https://cards.scryfall.io/display/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.webp?1783941836",
+        "art": "https://cards.scryfall.io/art/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.webp?1783941836",
+        "crop": "https://cards.scryfall.io/crop/front/a/c/ac0987b8-755e-42f1-bd6d-1401fecd4171.webp?1783941836"
+      },
+      "localImages": {
+        "normal": "holy-strength-normal.jpg",
+        "art_crop": "holy-strength-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3692,7 +4755,10 @@
         "art": "https://cards.scryfall.io/art/front/5/b/5bd0a588-b695-4060-b5d5-c6a74710ff0f.webp?1783941706",
         "crop": "https://cards.scryfall.io/crop/front/5/b/5bd0a588-b695-4060-b5d5-c6a74710ff0f.webp?1783941706"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "iron-myr-normal.jpg",
+        "art_crop": "iron-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3746,7 +4812,10 @@
         "art": "https://cards.scryfall.io/art/front/f/3/f3cc07cd-cc79-4745-b0b7-eade60175cc3.webp?1785981645",
         "crop": "https://cards.scryfall.io/crop/front/f/3/f3cc07cd-cc79-4745-b0b7-eade60175cc3.webp?1785981645"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "island-normal.jpg",
+        "art_crop": "island-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3799,7 +4868,10 @@
         "art": "https://cards.scryfall.io/art/front/d/b/db9e6fc9-813d-4a71-8a68-8e0f83fa945d.webp?1783908899",
         "crop": "https://cards.scryfall.io/crop/front/d/b/db9e6fc9-813d-4a71-8a68-8e0f83fa945d.webp?1783908899"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "izzet-guildgate-normal.jpg",
+        "art_crop": "izzet-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3850,7 +4922,10 @@
         "art": "https://cards.scryfall.io/art/front/e/a/ea13440b-3f7b-4182-9541-27c1fa3121e5.webp?1783907280",
         "crop": "https://cards.scryfall.io/crop/front/e/a/ea13440b-3f7b-4182-9541-27c1fa3121e5.webp?1783907280"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "jungle-hollow-normal.jpg",
+        "art_crop": "jungle-hollow-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3904,7 +4979,10 @@
         "art": "https://cards.scryfall.io/art/front/1/3/135946fc-fe67-401f-821d-d7145c63f030.webp?1783939902",
         "crop": "https://cards.scryfall.io/crop/front/1/3/135946fc-fe67-401f-821d-d7145c63f030.webp?1783939902"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "kalonian-tusker-normal.jpg",
+        "art_crop": "kalonian-tusker-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3959,7 +5037,10 @@
         "art": "https://cards.scryfall.io/art/front/6/c/6c957c94-3d2d-4b98-8990-cd8909462081.webp?1783930386",
         "crop": "https://cards.scryfall.io/crop/front/6/c/6c957c94-3d2d-4b98-8990-cd8909462081.webp?1783930386"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "kiln-fiend-normal.jpg",
+        "art_crop": "kiln-fiend-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4020,7 +5101,65 @@
         "art": "https://cards.scryfall.io/art/front/a/8/a844d537-df73-422d-a154-f1c6b92d0469.webp?1783933770",
         "crop": "https://cards.scryfall.io/crop/front/a/8/a844d537-df73-422d-a154-f1c6b92d0469.webp?1783933770"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "kitchen-finks-normal.jpg",
+        "art_crop": "kitchen-finks-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b079f9db-974d-4525-a894-57b754ba9dcc",
+      "name": "Kitesail",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/+0 and has flying.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "mom",
+      "collectorNumber": "261",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.jpg?1783916936",
+        "normal": "https://cards.scryfall.io/normal/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.jpg?1783916936",
+        "large": "https://cards.scryfall.io/large/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.jpg?1783916936",
+        "png": "https://cards.scryfall.io/png/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.png?1783916936",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.jpg?1783916936",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.jpg?1783916936",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.webp?1783916936",
+        "grid": "https://cards.scryfall.io/grid/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.webp?1783916936",
+        "display": "https://cards.scryfall.io/display/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.webp?1783916936",
+        "art": "https://cards.scryfall.io/art/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.webp?1783916936",
+        "crop": "https://cards.scryfall.io/crop/front/f/d/fdc3bf6e-e011-4334-a142-c09941c6f213.webp?1783916936"
+      },
+      "localImages": {
+        "normal": "kitesail-normal.jpg",
+        "art_crop": "kitesail-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4072,7 +5211,10 @@
         "art": "https://cards.scryfall.io/art/front/b/0/b07d96a1-87a0-45ff-ae6e-230deaf44dca.webp?1783912539",
         "crop": "https://cards.scryfall.io/crop/front/b/0/b07d96a1-87a0-45ff-ae6e-230deaf44dca.webp?1783912539"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "krenko-s-command-normal.jpg",
+        "art_crop": "krenko-s-command-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4124,7 +5266,10 @@
         "art": "https://cards.scryfall.io/art/front/6/d/6d9c8d6b-b49f-4777-baa3-6381a624e3c6.webp?1785981178",
         "crop": "https://cards.scryfall.io/crop/front/6/d/6d9c8d6b-b49f-4777-baa3-6381a624e3c6.webp?1785981178"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "last-gasp-normal.jpg",
+        "art_crop": "last-gasp-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4178,7 +5323,10 @@
         "art": "https://cards.scryfall.io/art/front/7/9/79c21c1f-eaa4-454d-a1c7-b41466d0a428.webp?1783933803",
         "crop": "https://cards.scryfall.io/crop/front/7/9/79c21c1f-eaa4-454d-a1c7-b41466d0a428.webp?1783933803"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "lava-spike-normal.jpg",
+        "art_crop": "lava-spike-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4231,7 +5379,10 @@
         "art": "https://cards.scryfall.io/art/front/3/a/3a709559-fec3-44f4-a2bf-3396989b9189.webp?1783941705",
         "crop": "https://cards.scryfall.io/crop/front/3/a/3a709559-fec3-44f4-a2bf-3396989b9189.webp?1783941705"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "leaden-myr-normal.jpg",
+        "art_crop": "leaden-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4285,7 +5436,65 @@
         "art": "https://cards.scryfall.io/art/front/5/5/55f97b4c-42c7-4986-a150-0b8de11f0537.webp?1783942043",
         "crop": "https://cards.scryfall.io/crop/front/5/5/55f97b4c-42c7-4986-a150-0b8de11f0537.webp?1783942043"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "leatherback-baloth-normal.jpg",
+        "art_crop": "leatherback-baloth-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "cde26d69-f3e7-4dd0-a53b-cd0ec812d717",
+      "name": "Leonin Scimitar",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/+1.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "10e",
+      "collectorNumber": "331",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.jpg?1783942983",
+        "normal": "https://cards.scryfall.io/normal/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.jpg?1783942983",
+        "large": "https://cards.scryfall.io/large/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.jpg?1783942983",
+        "png": "https://cards.scryfall.io/png/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.png?1783942983",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.jpg?1783942983",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.jpg?1783942983",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.webp?1783942983",
+        "grid": "https://cards.scryfall.io/grid/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.webp?1783942983",
+        "display": "https://cards.scryfall.io/display/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.webp?1783942983",
+        "art": "https://cards.scryfall.io/art/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.webp?1783942983",
+        "crop": "https://cards.scryfall.io/crop/front/a/8/a8cceb7b-7166-491f-b471-8e0bc42f611e.webp?1783942983"
+      },
+      "localImages": {
+        "normal": "leonin-scimitar-normal.jpg",
+        "art_crop": "leonin-scimitar-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4342,7 +5551,10 @@
         "art": "https://cards.scryfall.io/art/front/1/5/15d6476c-1944-48e8-9af6-6db78edd58e5.webp?1783941350",
         "crop": "https://cards.scryfall.io/crop/front/1/5/15d6476c-1944-48e8-9af6-6db78edd58e5.webp?1783941350"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "leonin-skyhunter-normal.jpg",
+        "art_crop": "leonin-skyhunter-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4404,7 +5616,10 @@
         "art": "https://cards.scryfall.io/art/front/3/8/384cf91c-6cea-4279-b66d-d81b5791d411.webp?1783939108",
         "crop": "https://cards.scryfall.io/crop/front/3/8/384cf91c-6cea-4279-b66d-d81b5791d411.webp?1783939108"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "lightning-angel-normal.jpg",
+        "art_crop": "lightning-angel-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4456,7 +5671,10 @@
         "art": "https://cards.scryfall.io/art/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp?1783903008",
         "crop": "https://cards.scryfall.io/crop/front/7/6/7673784e-db4b-43a1-8d55-1bb9fc1e284f.webp?1783903008"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "lightning-bolt-normal.jpg",
+        "art_crop": "lightning-bolt-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4512,7 +5730,10 @@
         "art": "https://cards.scryfall.io/art/front/5/f/5f2a959e-7c17-4226-afcb-bc0bb5a4492b.webp?1783930383",
         "crop": "https://cards.scryfall.io/crop/front/5/f/5f2a959e-7c17-4226-afcb-bc0bb5a4492b.webp?1783930383"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "lightning-elemental-normal.jpg",
+        "art_crop": "lightning-elemental-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4566,7 +5787,10 @@
         "art": "https://cards.scryfall.io/art/front/4/1/4101e3fe-b0e7-4f0f-b9ac-9b61a4d628b3.webp?1783912843",
         "crop": "https://cards.scryfall.io/crop/front/4/1/4101e3fe-b0e7-4f0f-b9ac-9b61a4d628b3.webp?1783912843"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "lightning-helix-normal.jpg",
+        "art_crop": "lightning-helix-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4618,7 +5842,10 @@
         "art": "https://cards.scryfall.io/art/front/8/8/88b13bc0-da54-4c3b-917c-7c8345a329f5.webp?1783902927",
         "crop": "https://cards.scryfall.io/crop/front/8/8/88b13bc0-da54-4c3b-917c-7c8345a329f5.webp?1783902927"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "lightning-strike-normal.jpg",
+        "art_crop": "lightning-strike-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4674,7 +5901,10 @@
         "art": "https://cards.scryfall.io/art/front/e/f/efbb7256-9337-4183-8bda-a419f3f2c501.webp?1783907977",
         "crop": "https://cards.scryfall.io/crop/front/e/f/efbb7256-9337-4183-8bda-a419f3f2c501.webp?1783907977"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "liliana-of-the-veil-normal.jpg",
+        "art_crop": "liliana-of-the-veil-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4729,7 +5959,10 @@
         "art": "https://cards.scryfall.io/art/front/6/a/6a0b230b-d391-4998-a3f7-7b158a0ec2cd.webp?1783909057",
         "crop": "https://cards.scryfall.io/crop/front/6/a/6a0b230b-d391-4998-a3f7-7b158a0ec2cd.webp?1783909057"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "llanowar-elves-normal.jpg",
+        "art_crop": "llanowar-elves-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4784,7 +6017,65 @@
         "art": "https://cards.scryfall.io/art/front/6/d/6d31d5b6-0973-43d2-aae0-a3f3e7a61800.webp?1783936681",
         "crop": "https://cards.scryfall.io/crop/front/6/d/6d31d5b6-0973-43d2-aae0-a3f3e7a61800.webp?1783936681"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "lone-missionary-normal.jpg",
+        "art_crop": "lone-missionary-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "dba35ac5-7ad3-488a-a006-6b9a1d54eea5",
+      "name": "Loxodon Warhammer",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +3/+0 and has trample and lifelink.\nEquip {3}",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "c21",
+      "collectorNumber": "249",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.jpg?1783927510",
+        "normal": "https://cards.scryfall.io/normal/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.jpg?1783927510",
+        "large": "https://cards.scryfall.io/large/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.jpg?1783927510",
+        "png": "https://cards.scryfall.io/png/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.png?1783927510",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.jpg?1783927510",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.jpg?1783927510",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.webp?1783927510",
+        "grid": "https://cards.scryfall.io/grid/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.webp?1783927510",
+        "display": "https://cards.scryfall.io/display/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.webp?1783927510",
+        "art": "https://cards.scryfall.io/art/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.webp?1783927510",
+        "crop": "https://cards.scryfall.io/crop/front/1/3/13eeff85-9e4a-46c9-841f-f3b1c556ef18.webp?1783927510"
+      },
+      "localImages": {
+        "normal": "loxodon-warhammer-normal.jpg",
+        "art_crop": "loxodon-warhammer-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4832,7 +6123,10 @@
         "art": "https://cards.scryfall.io/art/front/f/0/f0d7d904-f29b-4524-9223-27910d748bdb.webp?1783933970",
         "crop": "https://cards.scryfall.io/crop/front/f/0/f0d7d904-f29b-4524-9223-27910d748bdb.webp?1783933970"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "manalith-normal.jpg",
+        "art_crop": "manalith-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4882,7 +6176,124 @@
         "art": "https://cards.scryfall.io/art/front/0/9/0930f71c-c3c8-4bdd-8468-6a61349cc8ca.webp?1783922673",
         "crop": "https://cards.scryfall.io/crop/front/0/9/0930f71c-c3c8-4bdd-8468-6a61349cc8ca.webp?1783922673"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "marble-diamond-normal.jpg",
+        "art_crop": "marble-diamond-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "af942d30-a191-4306-846d-6c26755ca3e6",
+      "name": "Mark of the Vampire",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +2/+2 and has lifelink.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "jmp",
+      "collectorNumber": "254",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.jpg?1783930418",
+        "normal": "https://cards.scryfall.io/normal/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.jpg?1783930418",
+        "large": "https://cards.scryfall.io/large/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.jpg?1783930418",
+        "png": "https://cards.scryfall.io/png/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.png?1783930418",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.jpg?1783930418",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.jpg?1783930418",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.webp?1783930418",
+        "grid": "https://cards.scryfall.io/grid/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.webp?1783930418",
+        "display": "https://cards.scryfall.io/display/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.webp?1783930418",
+        "art": "https://cards.scryfall.io/art/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.webp?1783930418",
+        "crop": "https://cards.scryfall.io/crop/front/d/9/d908bf00-86ba-4911-b15b-1af2a79dff85.webp?1783930418"
+      },
+      "localImages": {
+        "normal": "mark-of-the-vampire-normal.jpg",
+        "art_crop": "mark-of-the-vampire-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "ab66f8a8-eb3d-4c2d-95e9-26a53c66b237",
+      "name": "Mask of Avacyn",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/+2 and has hexproof. (It can't be the target of spells or abilities your opponents control.)\nEquip {3}",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "cmr",
+      "collectorNumber": "466",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.jpg?1783928691",
+        "normal": "https://cards.scryfall.io/normal/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.jpg?1783928691",
+        "large": "https://cards.scryfall.io/large/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.jpg?1783928691",
+        "png": "https://cards.scryfall.io/png/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.png?1783928691",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.jpg?1783928691",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.jpg?1783928691",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.webp?1783928691",
+        "grid": "https://cards.scryfall.io/grid/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.webp?1783928691",
+        "display": "https://cards.scryfall.io/display/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.webp?1783928691",
+        "art": "https://cards.scryfall.io/art/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.webp?1783928691",
+        "crop": "https://cards.scryfall.io/crop/front/0/a/0aa1b193-c80e-4026-bd82-f16314e14431.webp?1783928691"
+      },
+      "localImages": {
+        "normal": "mask-of-avacyn-normal.jpg",
+        "art_crop": "mask-of-avacyn-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4933,7 +6344,10 @@
         "art": "https://cards.scryfall.io/art/front/9/7/975459ba-e1c2-4800-a3fa-5c0cf8ce728f.webp?1783941285",
         "crop": "https://cards.scryfall.io/crop/front/9/7/975459ba-e1c2-4800-a3fa-5c0cf8ce728f.webp?1783941285"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "memnite-normal.jpg",
+        "art_crop": "memnite-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4985,7 +6399,61 @@
         "art": "https://cards.scryfall.io/art/front/4/3/438a324b-cf3e-4a0f-95c4-cd548586f7e5.webp?1783942360",
         "crop": "https://cards.scryfall.io/crop/front/4/3/438a324b-cf3e-4a0f-95c4-cd548586f7e5.webp?1783942360"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "might-of-oaks-normal.jpg",
+        "art_crop": "might-of-oaks-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c97361b5-af16-4a7b-af85-a429dbaf4ad2",
+      "name": "Mind Stone",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{T}: Add {C}.\n{1}, {T}, Sacrifice this artifact: Draw a card.",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "mbc",
+      "collectorNumber": "76",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.jpg?1785759375",
+        "normal": "https://cards.scryfall.io/normal/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.jpg?1785759375",
+        "large": "https://cards.scryfall.io/large/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.jpg?1785759375",
+        "png": "https://cards.scryfall.io/png/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.png?1785759375",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.jpg?1785759375",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.jpg?1785759375",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.webp?1785759375",
+        "grid": "https://cards.scryfall.io/grid/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.webp?1785759375",
+        "display": "https://cards.scryfall.io/display/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.webp?1785759375",
+        "art": "https://cards.scryfall.io/art/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.webp?1785759375",
+        "crop": "https://cards.scryfall.io/crop/front/b/3/b30a8f92-ce42-4b27-a893-bcf97fde228d.webp?1785759375"
+      },
+      "localImages": {
+        "normal": "mind-stone-normal.jpg",
+        "art_crop": "mind-stone-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5043,7 +6511,10 @@
         "art": "https://cards.scryfall.io/art/front/d/6/d6bfa227-4309-40ed-952c-279595eab17e.webp?1783920066",
         "crop": "https://cards.scryfall.io/crop/front/d/6/d6bfa227-4309-40ed-952c-279595eab17e.webp?1783920066"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "monastery-swiftspear-normal.jpg",
+        "art_crop": "monastery-swiftspear-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5093,7 +6564,10 @@
         "art": "https://cards.scryfall.io/art/front/9/6/96fcae3a-d58c-4832-8280-3f65b5dfd853.webp?1783922671",
         "crop": "https://cards.scryfall.io/crop/front/9/6/96fcae3a-d58c-4832-8280-3f65b5dfd853.webp?1783922671"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "moss-diamond-normal.jpg",
+        "art_crop": "moss-diamond-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5147,7 +6621,10 @@
         "art": "https://cards.scryfall.io/art/front/2/a/2a844b96-6616-4c39-8f4f-5d14a3b2bd55.webp?1785981666",
         "crop": "https://cards.scryfall.io/crop/front/2/a/2a844b96-6616-4c39-8f4f-5d14a3b2bd55.webp?1785981666"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "mountain-normal.jpg",
+        "art_crop": "mountain-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5199,7 +6676,10 @@
         "art": "https://cards.scryfall.io/art/front/2/c/2c249609-9cf7-46f1-b94c-9329add966bb.webp?1783909477",
         "crop": "https://cards.scryfall.io/crop/front/2/c/2c249609-9cf7-46f1-b94c-9329add966bb.webp?1783909477"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "murder-normal.jpg",
+        "art_crop": "murder-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5254,7 +6734,124 @@
         "art": "https://cards.scryfall.io/art/front/4/6/4697f3aa-abde-4379-af82-f30115f59be0.webp?1783939743",
         "crop": "https://cards.scryfall.io/crop/front/4/6/4697f3aa-abde-4379-af82-f30115f59be0.webp?1783939743"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "nessian-courser-normal.jpg",
+        "art_crop": "nessian-courser-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7ffae8f8-3006-4969-a339-6d30678f87ea",
+      "name": "Night's Whisper",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "You draw two cards and lose 2 life.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "hoc",
+      "collectorNumber": "189",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.jpg?1785497515",
+        "normal": "https://cards.scryfall.io/normal/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.jpg?1785497515",
+        "large": "https://cards.scryfall.io/large/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.jpg?1785497515",
+        "png": "https://cards.scryfall.io/png/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.png?1785497515",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.jpg?1785497515",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.jpg?1785497515",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.webp?1785497515",
+        "grid": "https://cards.scryfall.io/grid/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.webp?1785497515",
+        "display": "https://cards.scryfall.io/display/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.webp?1785497515",
+        "art": "https://cards.scryfall.io/art/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.webp?1785497515",
+        "crop": "https://cards.scryfall.io/crop/front/e/8/e8399c2e-ecc8-41c9-a690-a0eeafb27f77.webp?1785497515"
+      },
+      "localImages": {
+        "normal": "night-s-whisper-normal.jpg",
+        "art_crop": "night-s-whisper-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "0f35e73b-6a38-4185-a7d3-d237d67ba1cd",
+      "name": "Nimbus Wings",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +1/+2 and has flying.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "zen",
+      "collectorNumber": "28",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.jpg?1783942169",
+        "normal": "https://cards.scryfall.io/normal/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.jpg?1783942169",
+        "large": "https://cards.scryfall.io/large/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.jpg?1783942169",
+        "png": "https://cards.scryfall.io/png/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.png?1783942169",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.jpg?1783942169",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.jpg?1783942169",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.webp?1783942169",
+        "grid": "https://cards.scryfall.io/grid/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.webp?1783942169",
+        "display": "https://cards.scryfall.io/display/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.webp?1783942169",
+        "art": "https://cards.scryfall.io/art/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.webp?1783942169",
+        "crop": "https://cards.scryfall.io/crop/front/5/d/5dae4042-8806-437c-8fc1-2d6996ff38c6.webp?1783942169"
+      },
+      "localImages": {
+        "normal": "nimbus-wings-normal.jpg",
+        "art_crop": "nimbus-wings-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5307,7 +6904,10 @@
         "art": "https://cards.scryfall.io/art/front/3/0/305078a5-ac18-4721-bba2-3434eba5b1cf.webp?1783918410",
         "crop": "https://cards.scryfall.io/crop/front/3/0/305078a5-ac18-4721-bba2-3434eba5b1cf.webp?1783918410"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "ornithopter-normal.jpg",
+        "art_crop": "ornithopter-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5360,7 +6960,10 @@
         "art": "https://cards.scryfall.io/art/front/a/9/a917be03-0c17-4454-b044-c4375e5c8085.webp?1783908900",
         "crop": "https://cards.scryfall.io/crop/front/a/9/a917be03-0c17-4454-b044-c4375e5c8085.webp?1783908900"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "orzhov-guildgate-normal.jpg",
+        "art_crop": "orzhov-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5411,7 +7014,10 @@
         "art": "https://cards.scryfall.io/art/front/f/7/f7c6aba3-38c3-45d1-83e1-40829eb07862.webp?1783915400",
         "crop": "https://cards.scryfall.io/crop/front/f/7/f7c6aba3-38c3-45d1-83e1-40829eb07862.webp?1783915400"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "palladium-myr-normal.jpg",
+        "art_crop": "palladium-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5463,7 +7069,10 @@
         "art": "https://cards.scryfall.io/art/front/9/5/95ca89ea-1200-4bb4-ae4b-af35d3ccd35b.webp?1783903242",
         "crop": "https://cards.scryfall.io/crop/front/9/5/95ca89ea-1200-4bb4-ae4b-af35d3ccd35b.webp?1783903242"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "path-to-exile-normal.jpg",
+        "art_crop": "path-to-exile-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5519,7 +7128,10 @@
         "art": "https://cards.scryfall.io/art/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.webp?1783903945",
         "crop": "https://cards.scryfall.io/crop/front/3/0/304c635c-de4d-46ee-8ab0-e5c4d55b61b3.webp?1783903945"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "pelakka-wurm-normal.jpg",
+        "art_crop": "pelakka-wurm-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5571,7 +7183,10 @@
         "art": "https://cards.scryfall.io/art/front/9/f/9f8a3979-2947-4692-8b2f-d4c07c534777.webp?1783946973",
         "crop": "https://cards.scryfall.io/crop/front/9/f/9f8a3979-2947-4692-8b2f-d4c07c534777.webp?1783946973"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "phyrexian-walker-normal.jpg",
+        "art_crop": "phyrexian-walker-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5625,7 +7240,10 @@
         "art": "https://cards.scryfall.io/art/front/8/a/8ab0f4c0-b331-4c57-b68f-2e24bb5ba06c.webp?1785981632",
         "crop": "https://cards.scryfall.io/crop/front/8/a/8ab0f4c0-b331-4c57-b68f-2e24bb5ba06c.webp?1785981632"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "plains-normal.jpg",
+        "art_crop": "plains-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5677,7 +7295,65 @@
         "art": "https://cards.scryfall.io/art/front/d/c/dc69f960-68ba-4315-8146-6a7a82047503.webp?1783907102",
         "crop": "https://cards.scryfall.io/crop/front/d/c/dc69f960-68ba-4315-8146-6a7a82047503.webp?1783907102"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "ponder-normal.jpg",
+        "art_crop": "ponder-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e4bcd4ea-e7cd-4471-8f3b-18bb51d3d70c",
+      "name": "Pyroclasm",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Pyroclasm deals 2 damage to each creature.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "dsk",
+      "collectorNumber": "149",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.jpg?1783909464",
+        "normal": "https://cards.scryfall.io/normal/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.jpg?1783909464",
+        "large": "https://cards.scryfall.io/large/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.jpg?1783909464",
+        "png": "https://cards.scryfall.io/png/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.png?1783909464",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.jpg?1783909464",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.jpg?1783909464",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.webp?1783909464",
+        "grid": "https://cards.scryfall.io/grid/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.webp?1783909464",
+        "display": "https://cards.scryfall.io/display/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.webp?1783909464",
+        "art": "https://cards.scryfall.io/art/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.webp?1783909464",
+        "crop": "https://cards.scryfall.io/crop/front/4/3/4391b0af-2f26-4a45-9e2a-5bd8e9838107.webp?1783909464"
+      },
+      "localImages": {
+        "normal": "pyroclasm-normal.jpg",
+        "art_crop": "pyroclasm-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5725,7 +7401,10 @@
         "art": "https://cards.scryfall.io/art/front/7/e/7ee5e77f-ca43-480d-ac37-48336d3bf044.webp?1783927486",
         "crop": "https://cards.scryfall.io/crop/front/7/e/7ee5e77f-ca43-480d-ac37-48336d3bf044.webp?1783927486"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "radiant-fountain-normal.jpg",
+        "art_crop": "radiant-fountain-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5782,7 +7461,10 @@
         "art": "https://cards.scryfall.io/art/front/3/4/3480927c-10da-4817-9954-10aea2bc7100.webp?1783934405",
         "crop": "https://cards.scryfall.io/crop/front/3/4/3480927c-10da-4817-9954-10aea2bc7100.webp?1783934405"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "raging-goblin-normal.jpg",
+        "art_crop": "raging-goblin-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5834,7 +7516,10 @@
         "art": "https://cards.scryfall.io/art/front/6/c/6c7c8527-55f6-494d-b4f7-c427a5735053.webp?1783928875",
         "crop": "https://cards.scryfall.io/crop/front/6/c/6c7c8527-55f6-494d-b4f7-c427a5735053.webp?1783928875"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "raise-the-alarm-normal.jpg",
+        "art_crop": "raise-the-alarm-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5887,7 +7572,10 @@
         "art": "https://cards.scryfall.io/art/front/e/1/e1f01964-c610-4d0f-a2b4-f52e46dc50d2.webp?1783908899",
         "crop": "https://cards.scryfall.io/crop/front/e/1/e1f01964-c610-4d0f-a2b4-f52e46dc50d2.webp?1783908899"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "rakdos-guildgate-normal.jpg",
+        "art_crop": "rakdos-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5938,7 +7626,10 @@
         "art": "https://cards.scryfall.io/art/front/3/1/31261eca-28ad-407c-84ef-0c124d0d7451.webp?1783907274",
         "crop": "https://cards.scryfall.io/crop/front/3/1/31261eca-28ad-407c-84ef-0c124d0d7451.webp?1783907274"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "rugged-highlands-normal.jpg",
+        "art_crop": "rugged-highlands-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5992,7 +7683,10 @@
         "art": "https://cards.scryfall.io/art/front/d/1/d1995238-79cc-4381-9595-71ef11ea1e36.webp?1783939162",
         "crop": "https://cards.scryfall.io/crop/front/d/1/d1995238-79cc-4381-9595-71ef11ea1e36.webp?1783939162"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "runeclaw-bear-normal.jpg",
+        "art_crop": "runeclaw-bear-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6047,7 +7741,10 @@
         "art": "https://cards.scryfall.io/art/front/7/a/7a8b1c49-8594-426d-b585-41140235bb0e.webp?1783903761",
         "crop": "https://cards.scryfall.io/crop/front/7/a/7a8b1c49-8594-426d-b585-41140235bb0e.webp?1783903761"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "sakura-tribe-elder-normal.jpg",
+        "art_crop": "sakura-tribe-elder-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6101,7 +7798,10 @@
         "art": "https://cards.scryfall.io/art/front/9/c/9c9ac1bc-cdf3-4fa6-8319-a7ea164e9e47.webp?1783909083",
         "crop": "https://cards.scryfall.io/crop/front/9/c/9c9ac1bc-cdf3-4fa6-8319-a7ea164e9e47.webp?1783909083"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "savannah-lions-normal.jpg",
+        "art_crop": "savannah-lions-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6152,7 +7852,10 @@
         "art": "https://cards.scryfall.io/art/front/b/4/b4b47b80-69ed-44b0-afa0-ca90206dc16d.webp?1783907273",
         "crop": "https://cards.scryfall.io/crop/front/b/4/b4b47b80-69ed-44b0-afa0-ca90206dc16d.webp?1783907273"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "scoured-barrens-normal.jpg",
+        "art_crop": "scoured-barrens-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6204,7 +7907,10 @@
         "art": "https://cards.scryfall.io/art/front/4/4/44c5f884-d071-40c2-bb2c-925dc2197ea3.webp?1783936148",
         "crop": "https://cards.scryfall.io/crop/front/4/4/44c5f884-d071-40c2-bb2c-925dc2197ea3.webp?1783936148"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "searing-spear-normal.jpg",
+        "art_crop": "searing-spear-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6260,7 +7966,10 @@
         "art": "https://cards.scryfall.io/art/front/9/8/9864f811-db2e-4d6d-ad59-a491a790bdd4.webp?1783932958",
         "crop": "https://cards.scryfall.io/crop/front/9/8/9864f811-db2e-4d6d-ad59-a491a790bdd4.webp?1783932958"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "sedge-scorpion-normal.jpg",
+        "art_crop": "sedge-scorpion-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6313,7 +8022,10 @@
         "art": "https://cards.scryfall.io/art/front/6/7/6718d4e7-768e-473f-8064-a68422e977f6.webp?1783908899",
         "crop": "https://cards.scryfall.io/crop/front/6/7/6718d4e7-768e-473f-8064-a68422e977f6.webp?1783908899"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "selesnya-guildgate-normal.jpg",
+        "art_crop": "selesnya-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6370,7 +8082,128 @@
         "art": "https://cards.scryfall.io/art/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.webp?1783903955",
         "crop": "https://cards.scryfall.io/crop/front/b/8/b8c5e74c-96e7-4a1f-93b7-14d776fe4b2d.webp?1783903955"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "serra-angel-normal.jpg",
+        "art_crop": "serra-angel-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6d6ba936-4a15-4c40-aaa6-71605fb732d1",
+      "name": "Serra's Embrace",
+      "manaCost": {
+        "generic": 2,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +2/+2 and has flying and vigilance. (Attacking doesn't cause it to tap.)",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "dvd",
+      "collectorNumber": "21",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.jpg?1783938784",
+        "normal": "https://cards.scryfall.io/normal/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.jpg?1783938784",
+        "large": "https://cards.scryfall.io/large/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.jpg?1783938784",
+        "png": "https://cards.scryfall.io/png/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.png?1783938784",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.jpg?1783938784",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.jpg?1783938784",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.webp?1783938784",
+        "grid": "https://cards.scryfall.io/grid/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.webp?1783938784",
+        "display": "https://cards.scryfall.io/display/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.webp?1783938784",
+        "art": "https://cards.scryfall.io/art/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.webp?1783938784",
+        "crop": "https://cards.scryfall.io/crop/front/2/c/2c45c4b3-f652-4b55-a316-55a864ac2342.webp?1783938784"
+      },
+      "localImages": {
+        "normal": "serra-s-embrace-normal.jpg",
+        "art_crop": "serra-s-embrace-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "711eea87-0fa3-46e0-a42b-fa5a86455f04",
+      "name": "Shivan Dragon",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dragon"
+        ]
+      },
+      "rawTypeLine": "Creature — Dragon",
+      "oracleText": "Flying\n{R}: This creature gets +1/+0 until end of turn.",
+      "power": 5,
+      "toughness": 5,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "fdn",
+      "collectorNumber": "763",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
+        "normal": "https://cards.scryfall.io/normal/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
+        "large": "https://cards.scryfall.io/large/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
+        "png": "https://cards.scryfall.io/png/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.png?1783903946",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.jpg?1783903946",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.webp?1783903946",
+        "grid": "https://cards.scryfall.io/grid/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.webp?1783903946",
+        "display": "https://cards.scryfall.io/display/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.webp?1783903946",
+        "art": "https://cards.scryfall.io/art/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.webp?1783903946",
+        "crop": "https://cards.scryfall.io/crop/front/7/0/702c4781-670b-49ae-b511-90ed119841b0.webp?1783903946"
+      },
+      "localImages": {
+        "normal": "shivan-dragon-normal.jpg",
+        "art_crop": "shivan-dragon-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6422,7 +8255,10 @@
         "art": "https://cards.scryfall.io/art/front/b/2/b23900fb-efe9-43ab-9f67-4545dd01fb9c.webp?1783903007",
         "crop": "https://cards.scryfall.io/crop/front/b/2/b23900fb-efe9-43ab-9f67-4545dd01fb9c.webp?1783903007"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "shock-normal.jpg",
+        "art_crop": "shock-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6475,7 +8311,10 @@
         "art": "https://cards.scryfall.io/art/front/3/e/3ebcc053-21c6-4708-b9fc-532e3749962f.webp?1783923938",
         "crop": "https://cards.scryfall.io/crop/front/3/e/3ebcc053-21c6-4708-b9fc-532e3749962f.webp?1783923938"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "silver-myr-normal.jpg",
+        "art_crop": "silver-myr-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6528,7 +8367,10 @@
         "art": "https://cards.scryfall.io/art/front/9/6/96590855-1ee5-4d69-9070-776e23f71976.webp?1783908898",
         "crop": "https://cards.scryfall.io/crop/front/9/6/96590855-1ee5-4d69-9070-776e23f71976.webp?1783908898"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "simic-guildgate-normal.jpg",
+        "art_crop": "simic-guildgate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6578,7 +8420,10 @@
         "art": "https://cards.scryfall.io/art/front/d/4/d47abfb2-9bcf-485c-9bd4-2c09b714eb32.webp?1783922666",
         "crop": "https://cards.scryfall.io/crop/front/d/4/d47abfb2-9bcf-485c-9bd4-2c09b714eb32.webp?1783922666"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "sky-diamond-normal.jpg",
+        "art_crop": "sky-diamond-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6636,7 +8481,10 @@
         "art": "https://cards.scryfall.io/art/front/a/d/adbf772f-ebdf-4c04-996f-0dbf1826049b.webp?1783938424",
         "crop": "https://cards.scryfall.io/crop/front/a/d/adbf772f-ebdf-4c04-996f-0dbf1826049b.webp?1783938424"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "skyhunter-skirmisher-normal.jpg",
+        "art_crop": "skyhunter-skirmisher-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6696,7 +8544,10 @@
         "art": "https://cards.scryfall.io/art/front/e/2/e22b3239-0f4f-4628-b8fb-0bdeb9b744b1.webp?1783913275",
         "crop": "https://cards.scryfall.io/crop/front/e/2/e22b3239-0f4f-4628-b8fb-0bdeb9b744b1.webp?1783913275"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "skyknight-legionnaire-normal.jpg",
+        "art_crop": "skyknight-legionnaire-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6753,7 +8604,10 @@
         "art": "https://cards.scryfall.io/art/front/2/2/22b36ad5-bf4d-436a-9c3c-fa4acd0052fe.webp?1783907976",
         "crop": "https://cards.scryfall.io/crop/front/2/2/22b36ad5-bf4d-436a-9c3c-fa4acd0052fe.webp?1783907976"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "snapcaster-mage-normal.jpg",
+        "art_crop": "snapcaster-mage-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6801,7 +8655,10 @@
         "art": "https://cards.scryfall.io/art/front/9/1/91fdb56b-54d5-4272-8319-505ff987fe9b.webp?1783903215",
         "crop": "https://cards.scryfall.io/crop/front/9/1/91fdb56b-54d5-4272-8319-505ff987fe9b.webp?1783903215"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "sol-ring-normal.jpg",
+        "art_crop": "sol-ring-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6853,7 +8710,10 @@
         "art": "https://cards.scryfall.io/art/front/2/c/2cb62846-c5da-4c7c-b0d7-9b677dce68d1.webp?1783941077",
         "crop": "https://cards.scryfall.io/crop/front/2/c/2cb62846-c5da-4c7c-b0d7-9b677dce68d1.webp?1783941077"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "sorin-s-vengeance-normal.jpg",
+        "art_crop": "sorin-s-vengeance-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6906,7 +8766,65 @@
         "art": "https://cards.scryfall.io/art/front/4/3/43dc4ff6-c26c-4dba-ac7f-6dee7c9e5345.webp?1783941285",
         "crop": "https://cards.scryfall.io/crop/front/4/3/43dc4ff6-c26c-4dba-ac7f-6dee7c9e5345.webp?1783941285"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "steel-wall-normal.jpg",
+        "art_crop": "steel-wall-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "bd4ad383-8c40-4dda-bc9c-ba8a001d6882",
+      "name": "Strider Harness",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/+1 and has haste.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "rix",
+      "collectorNumber": "183",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.jpg?1783935264",
+        "normal": "https://cards.scryfall.io/normal/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.jpg?1783935264",
+        "large": "https://cards.scryfall.io/large/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.jpg?1783935264",
+        "png": "https://cards.scryfall.io/png/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.png?1783935264",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.jpg?1783935264",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.jpg?1783935264",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.webp?1783935264",
+        "grid": "https://cards.scryfall.io/grid/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.webp?1783935264",
+        "display": "https://cards.scryfall.io/display/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.webp?1783935264",
+        "art": "https://cards.scryfall.io/art/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.webp?1783935264",
+        "crop": "https://cards.scryfall.io/crop/front/5/e/5e94daa9-5b9b-4fd2-829e-081eed22c18f.webp?1783935264"
+      },
+      "localImages": {
+        "normal": "strider-harness-normal.jpg",
+        "art_crop": "strider-harness-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6962,7 +8880,10 @@
         "art": "https://cards.scryfall.io/art/front/2/8/28a1f83c-a9ef-463e-97b5-2ca3b7232f82.webp?1783939938",
         "crop": "https://cards.scryfall.io/crop/front/2/8/28a1f83c-a9ef-463e-97b5-2ca3b7232f82.webp?1783939938"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "suntail-hawk-normal.jpg",
+        "art_crop": "suntail-hawk-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7016,7 +8937,10 @@
         "art": "https://cards.scryfall.io/art/front/b/7/b7387103-1df1-4fd0-9e91-1544509792c7.webp?1785981659",
         "crop": "https://cards.scryfall.io/crop/front/b/7/b7387103-1df1-4fd0-9e91-1544509792c7.webp?1785981659"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "swamp-normal.jpg",
+        "art_crop": "swamp-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7067,7 +8991,65 @@
         "art": "https://cards.scryfall.io/art/front/c/a/ca53fb19-b8ca-485b-af1a-5117ae54bfe3.webp?1783907271",
         "crop": "https://cards.scryfall.io/crop/front/c/a/ca53fb19-b8ca-485b-af1a-5117ae54bfe3.webp?1783907271"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "swiftwater-cliffs-normal.jpg",
+        "art_crop": "swiftwater-cliffs-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e366afb3-c447-4bde-b358-41c8568142d5",
+      "name": "Sword of Vengeance",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +2/+0 and has first strike, vigilance, trample, and haste.\nEquip {3}",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "blb",
+      "collectorNumber": "395",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.jpg?1783910739",
+        "normal": "https://cards.scryfall.io/normal/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.jpg?1783910739",
+        "large": "https://cards.scryfall.io/large/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.jpg?1783910739",
+        "png": "https://cards.scryfall.io/png/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.png?1783910739",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.jpg?1783910739",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.jpg?1783910739",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.webp?1783910739",
+        "grid": "https://cards.scryfall.io/grid/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.webp?1783910739",
+        "display": "https://cards.scryfall.io/display/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.webp?1783910739",
+        "art": "https://cards.scryfall.io/art/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.webp?1783910739",
+        "crop": "https://cards.scryfall.io/crop/front/f/2/f21b5fc1-7611-44ac-ad8d-1f0c6d4fc9a3.webp?1783910739"
+      },
+      "localImages": {
+        "normal": "sword-of-vengeance-normal.jpg",
+        "art_crop": "sword-of-vengeance-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7119,7 +9101,10 @@
         "art": "https://cards.scryfall.io/art/front/b/4/b4e9c870-23c0-413a-ae39-265f09da16d1.webp?1783903243",
         "crop": "https://cards.scryfall.io/crop/front/b/4/b4e9c870-23c0-413a-ae39-265f09da16d1.webp?1783903243"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "swords-to-plowshares-normal.jpg",
+        "art_crop": "swords-to-plowshares-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7173,7 +9158,10 @@
         "art": "https://cards.scryfall.io/art/front/6/9/69daba76-96e8-4bcc-ab79-2f00189ad8fb.webp?1783927768",
         "crop": "https://cards.scryfall.io/crop/front/6/9/69daba76-96e8-4bcc-ab79-2f00189ad8fb.webp?1783927768"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "tarmogoyf-normal.jpg",
+        "art_crop": "tarmogoyf-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7227,7 +9215,10 @@
         "art": "https://cards.scryfall.io/art/front/3/7/379ffc67-4142-4ead-a871-0f851523745e.webp?1783903230",
         "crop": "https://cards.scryfall.io/crop/front/3/7/379ffc67-4142-4ead-a871-0f851523745e.webp?1783903230"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "terminate-normal.jpg",
+        "art_crop": "terminate-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7278,7 +9269,10 @@
         "art": "https://cards.scryfall.io/art/front/e/b/ebb502c2-5fd0-46a9-b77d-010f4a942056.webp?1783907271",
         "crop": "https://cards.scryfall.io/crop/front/e/b/ebb502c2-5fd0-46a9-b77d-010f4a942056.webp?1783907271"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "thornwood-falls-normal.jpg",
+        "art_crop": "thornwood-falls-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7330,7 +9324,67 @@
         "art": "https://cards.scryfall.io/art/front/b/2/b281a308-ab6b-47b6-bec7-632c9aaecede.webp?1783930173",
         "crop": "https://cards.scryfall.io/crop/front/b/2/b281a308-ab6b-47b6-bec7-632c9aaecede.webp?1783930173"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "thoughtseize-normal.jpg",
+        "art_crop": "thoughtseize-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "0dd0e91a-d16b-4718-8d11-1a3fcf8e0753",
+      "name": "Thragtusk",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Beast"
+        ]
+      },
+      "rawTypeLine": "Creature — Beast",
+      "oracleText": "When this creature enters, you gain 5 life.\nWhen this creature leaves the battlefield, create a 3/3 green Beast creature token.",
+      "power": 5,
+      "toughness": 3,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "ncc",
+      "collectorNumber": "316",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/e/beda7acd-e970-4222-9577-5133765d6052.jpg?1783923239",
+        "normal": "https://cards.scryfall.io/normal/front/b/e/beda7acd-e970-4222-9577-5133765d6052.jpg?1783923239",
+        "large": "https://cards.scryfall.io/large/front/b/e/beda7acd-e970-4222-9577-5133765d6052.jpg?1783923239",
+        "png": "https://cards.scryfall.io/png/front/b/e/beda7acd-e970-4222-9577-5133765d6052.png?1783923239",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/e/beda7acd-e970-4222-9577-5133765d6052.jpg?1783923239",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/e/beda7acd-e970-4222-9577-5133765d6052.jpg?1783923239",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/e/beda7acd-e970-4222-9577-5133765d6052.webp?1783923239",
+        "grid": "https://cards.scryfall.io/grid/front/b/e/beda7acd-e970-4222-9577-5133765d6052.webp?1783923239",
+        "display": "https://cards.scryfall.io/display/front/b/e/beda7acd-e970-4222-9577-5133765d6052.webp?1783923239",
+        "art": "https://cards.scryfall.io/art/front/b/e/beda7acd-e970-4222-9577-5133765d6052.webp?1783923239",
+        "crop": "https://cards.scryfall.io/crop/front/b/e/beda7acd-e970-4222-9577-5133765d6052.webp?1783923239"
+      },
+      "localImages": {
+        "normal": "thragtusk-normal.jpg",
+        "art_crop": "thragtusk-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7382,7 +9436,10 @@
         "art": "https://cards.scryfall.io/art/front/6/a/6a123f44-0a72-46d0-a73d-b4ab01b6c2df.webp?1783934303",
         "crop": "https://cards.scryfall.io/crop/front/6/a/6a123f44-0a72-46d0-a73d-b4ab01b6c2df.webp?1783934303"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "tidings-normal.jpg",
+        "art_crop": "tidings-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7434,7 +9491,10 @@
         "art": "https://cards.scryfall.io/art/front/4/6/46917de3-5e98-4dd6-8950-fc10338515df.webp?1783915076",
         "crop": "https://cards.scryfall.io/crop/front/4/6/46917de3-5e98-4dd6-8950-fc10338515df.webp?1783915076"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "titanic-growth-normal.jpg",
+        "art_crop": "titanic-growth-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7485,7 +9545,65 @@
         "art": "https://cards.scryfall.io/art/front/1/c/1c4efa6c-4f29-41cd-a728-bf0e479ace05.webp?1783907271",
         "crop": "https://cards.scryfall.io/crop/front/1/c/1c4efa6c-4f29-41cd-a728-bf0e479ace05.webp?1783907271"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "tranquil-cove-normal.jpg",
+        "art_crop": "tranquil-cove-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "394fae8f-3757-4e08-b97c-5d7c451f4e72",
+      "name": "Trusty Machete",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +2/+1.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "zen",
+      "collectorNumber": "209",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.jpg?1783942125",
+        "normal": "https://cards.scryfall.io/normal/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.jpg?1783942125",
+        "large": "https://cards.scryfall.io/large/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.jpg?1783942125",
+        "png": "https://cards.scryfall.io/png/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.png?1783942125",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.jpg?1783942125",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.jpg?1783942125",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.webp?1783942125",
+        "grid": "https://cards.scryfall.io/grid/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.webp?1783942125",
+        "display": "https://cards.scryfall.io/display/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.webp?1783942125",
+        "art": "https://cards.scryfall.io/art/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.webp?1783942125",
+        "crop": "https://cards.scryfall.io/crop/front/8/6/86c9838e-aa72-49fc-bae2-f880bcbc9313.webp?1783942125"
+      },
+      "localImages": {
+        "normal": "trusty-machete-normal.jpg",
+        "art_crop": "trusty-machete-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7541,7 +9659,185 @@
         "art": "https://cards.scryfall.io/art/front/d/1/d13cb90b-50c3-46ef-83f8-812dfb7ff881.webp?1783938691",
         "crop": "https://cards.scryfall.io/crop/front/d/1/d13cb90b-50c3-46ef-83f8-812dfb7ff881.webp?1783938691"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "typhoid-rats-normal.jpg",
+        "art_crop": "typhoid-rats-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "0e969a27-1609-4ab4-b0db-46b1af8066a9",
+      "name": "Unflinching Courage",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +2/+2 and has trample and lifelink. (Damage dealt by the creature also causes its controller to gain that much life.)",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "G",
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "fdn",
+      "collectorNumber": "722",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.jpg?1783908888",
+        "normal": "https://cards.scryfall.io/normal/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.jpg?1783908888",
+        "large": "https://cards.scryfall.io/large/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.jpg?1783908888",
+        "png": "https://cards.scryfall.io/png/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.png?1783908888",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.jpg?1783908888",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.jpg?1783908888",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.webp?1783908888",
+        "grid": "https://cards.scryfall.io/grid/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.webp?1783908888",
+        "display": "https://cards.scryfall.io/display/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.webp?1783908888",
+        "art": "https://cards.scryfall.io/art/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.webp?1783908888",
+        "crop": "https://cards.scryfall.io/crop/front/a/1/a1201875-b3d8-4f95-801e-bf18ee77919b.webp?1783908888"
+      },
+      "localImages": {
+        "normal": "unflinching-courage-normal.jpg",
+        "art_crop": "unflinching-courage-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "090d88a9-7f2d-4bd1-a30a-7c48d05068be",
+      "name": "Unholy Strength",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +2/+1.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "dvd",
+      "collectorNumber": "47",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.jpg?1783938778",
+        "normal": "https://cards.scryfall.io/normal/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.jpg?1783938778",
+        "large": "https://cards.scryfall.io/large/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.jpg?1783938778",
+        "png": "https://cards.scryfall.io/png/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.png?1783938778",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.jpg?1783938778",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.jpg?1783938778",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.webp?1783938778",
+        "grid": "https://cards.scryfall.io/grid/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.webp?1783938778",
+        "display": "https://cards.scryfall.io/display/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.webp?1783938778",
+        "art": "https://cards.scryfall.io/art/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.webp?1783938778",
+        "crop": "https://cards.scryfall.io/crop/front/f/4/f42c9574-2f09-4cb0-80cb-10fb8c592e6f.webp?1783938778"
+      },
+      "localImages": {
+        "normal": "unholy-strength-normal.jpg",
+        "art_crop": "unholy-strength-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "837182db-1bf3-4a2c-bd01-1af9d9873561",
+      "name": "Unsummon",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Return target creature to its owner's hand.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "750",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
+        "normal": "https://cards.scryfall.io/normal/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
+        "large": "https://cards.scryfall.io/large/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
+        "png": "https://cards.scryfall.io/png/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.png?1783903950",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.jpg?1783903950",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.webp?1783903950",
+        "grid": "https://cards.scryfall.io/grid/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.webp?1783903950",
+        "display": "https://cards.scryfall.io/display/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.webp?1783903950",
+        "art": "https://cards.scryfall.io/art/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.webp?1783903950",
+        "crop": "https://cards.scryfall.io/crop/front/2/8/2815d8e6-3668-4b9d-abe6-eca6a500707d.webp?1783903950"
+      },
+      "localImages": {
+        "normal": "unsummon-normal.jpg",
+        "art_crop": "unsummon-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7589,7 +9885,10 @@
         "art": "https://cards.scryfall.io/art/front/7/a/7a2ea921-8ef9-4a31-b484-73375e828d34.webp?1783938814",
         "crop": "https://cards.scryfall.io/crop/front/7/a/7a2ea921-8ef9-4a31-b484-73375e828d34.webp?1783938814"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "ur-golem-s-eye-normal.jpg",
+        "art_crop": "ur-golem-s-eye-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7648,7 +9947,10 @@
         "art": "https://cards.scryfall.io/art/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.webp?1783903949",
         "crop": "https://cards.scryfall.io/crop/front/7/a/7aff07f9-9528-4149-9af0-f4e3c66c9dc5.webp?1783903949"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "vampire-nighthawk-normal.jpg",
+        "art_crop": "vampire-nighthawk-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7705,7 +10007,65 @@
         "art": "https://cards.scryfall.io/art/front/4/6/4683fa31-da33-4313-82b5-0ed91f33e8d3.webp?1783938761",
         "crop": "https://cards.scryfall.io/crop/front/4/6/4683fa31-da33-4313-82b5-0ed91f33e8d3.webp?1783938761"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "vine-trellis-normal.jpg",
+        "art_crop": "vine-trellis-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "12a8adc4-927f-4314-b2ef-9c647ace68d5",
+      "name": "Vulshok Morningstar",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +2/+2.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "power": null,
+      "toughness": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "ddi",
+      "collectorNumber": "66",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.jpg?1783940759",
+        "normal": "https://cards.scryfall.io/normal/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.jpg?1783940759",
+        "large": "https://cards.scryfall.io/large/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.jpg?1783940759",
+        "png": "https://cards.scryfall.io/png/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.png?1783940759",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.jpg?1783940759",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.jpg?1783940759",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.webp?1783940759",
+        "grid": "https://cards.scryfall.io/grid/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.webp?1783940759",
+        "display": "https://cards.scryfall.io/display/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.webp?1783940759",
+        "art": "https://cards.scryfall.io/art/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.webp?1783940759",
+        "crop": "https://cards.scryfall.io/crop/front/0/3/033aa2cd-531c-4594-a7eb-b3cbeb2c5a3c.webp?1783940759"
+      },
+      "localImages": {
+        "normal": "vulshok-morningstar-normal.jpg",
+        "art_crop": "vulshok-morningstar-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7759,7 +10119,10 @@
         "art": "https://cards.scryfall.io/art/front/0/5/053b59b4-a22c-4228-aadc-ae9da6bb465e.webp?1783930696",
         "crop": "https://cards.scryfall.io/crop/front/0/5/053b59b4-a22c-4228-aadc-ae9da6bb465e.webp?1783930696"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "walking-corpse-normal.jpg",
+        "art_crop": "walking-corpse-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7816,7 +10179,10 @@
         "art": "https://cards.scryfall.io/art/front/4/0/40595366-8601-40e0-a070-fc218723270d.webp?1783943044",
         "crop": "https://cards.scryfall.io/crop/front/4/0/40595366-8601-40e0-a070-fc218723270d.webp?1783943044"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wall-of-air-normal.jpg",
+        "art_crop": "wall-of-air-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7873,7 +10239,10 @@
         "art": "https://cards.scryfall.io/art/front/d/f/df901113-e273-4fe0-a264-8e9e26e70905.webp?1783907035",
         "crop": "https://cards.scryfall.io/crop/front/d/f/df901113-e273-4fe0-a264-8e9e26e70905.webp?1783907035"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wall-of-blossoms-normal.jpg",
+        "art_crop": "wall-of-blossoms-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7929,7 +10298,10 @@
         "art": "https://cards.scryfall.io/art/front/3/d/3d134bb2-17ec-4e65-976e-f06fa983f3fb.webp?1783907116",
         "crop": "https://cards.scryfall.io/crop/front/3/d/3d134bb2-17ec-4e65-976e-f06fa983f3fb.webp?1783907116"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wall-of-omens-normal.jpg",
+        "art_crop": "wall-of-omens-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7979,7 +10351,10 @@
         "art": "https://cards.scryfall.io/art/front/b/a/baf8f4f2-9f25-4cd2-8d78-1041e134aeac.webp?1783906001",
         "crop": "https://cards.scryfall.io/crop/front/b/a/baf8f4f2-9f25-4cd2-8d78-1041e134aeac.webp?1783906001"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wastes-normal.jpg",
+        "art_crop": "wastes-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8035,7 +10410,69 @@
         "art": "https://cards.scryfall.io/art/front/6/8/682af5e9-26b5-4f88-99e1-ab2aa34fba86.webp?1783935110",
         "crop": "https://cards.scryfall.io/crop/front/6/8/682af5e9-26b5-4f88-99e1-ab2aa34fba86.webp?1783935110"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "watchwolf-normal.jpg",
+        "art_crop": "watchwolf-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f07a24c0-bf3c-4733-9473-c6be3b16950e",
+      "name": "Weakness",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets -2/-1.",
+      "power": null,
+      "toughness": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "me4",
+      "collectorNumber": "101",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.jpg?1783941440",
+        "normal": "https://cards.scryfall.io/normal/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.jpg?1783941440",
+        "large": "https://cards.scryfall.io/large/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.jpg?1783941440",
+        "png": "https://cards.scryfall.io/png/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.png?1783941440",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.jpg?1783941440",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.jpg?1783941440",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.webp?1783941440",
+        "grid": "https://cards.scryfall.io/grid/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.webp?1783941440",
+        "display": "https://cards.scryfall.io/display/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.webp?1783941440",
+        "art": "https://cards.scryfall.io/art/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.webp?1783941440",
+        "crop": "https://cards.scryfall.io/crop/front/c/f/cffbac05-7e36-4c6b-a572-04706d5d2799.webp?1783941440"
+      },
+      "localImages": {
+        "normal": "weakness-normal.jpg",
+        "art_crop": "weakness-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8091,7 +10528,10 @@
         "art": "https://cards.scryfall.io/art/front/5/e/5e227a63-abea-494e-9d66-6ff0a3da14ca.webp?1783937211",
         "crop": "https://cards.scryfall.io/crop/front/5/e/5e227a63-abea-494e-9d66-6ff0a3da14ca.webp?1783937211"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wind-drake-normal.jpg",
+        "art_crop": "wind-drake-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8142,7 +10582,10 @@
         "art": "https://cards.scryfall.io/art/front/4/9/4912e4d0-b16a-4aa6-a583-3430d26bd591.webp?1783907269",
         "crop": "https://cards.scryfall.io/crop/front/4/9/4912e4d0-b16a-4aa6-a583-3430d26bd591.webp?1783907269"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wind-scarred-crag-normal.jpg",
+        "art_crop": "wind-scarred-crag-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8190,7 +10633,10 @@
         "art": "https://cards.scryfall.io/art/front/a/c/ace686ad-9e3f-41b3-b8eb-d1b6d45eb4e1.webp?1783911207",
         "crop": "https://cards.scryfall.io/crop/front/a/c/ace686ad-9e3f-41b3-b8eb-d1b6d45eb4e1.webp?1783911207"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "worn-powerstone-normal.jpg",
+        "art_crop": "worn-powerstone-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8242,7 +10688,10 @@
         "art": "https://cards.scryfall.io/art/front/5/3/537d2b05-3f52-45d6-8fe3-26282085d0c6.webp?1783915706",
         "crop": "https://cards.scryfall.io/crop/front/5/3/537d2b05-3f52-45d6-8fe3-26282085d0c6.webp?1783915706"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wrath-of-god-normal.jpg",
+        "art_crop": "wrath-of-god-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8294,7 +10743,10 @@
         "art": "https://cards.scryfall.io/art/front/d/6/d6b77692-08aa-40b6-b21b-c29a2dc87709.webp?1783939918",
         "crop": "https://cards.scryfall.io/crop/front/d/6/d6b77692-08aa-40b6-b21b-c29a2dc87709.webp?1783939918"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "wring-flesh-normal.jpg",
+        "art_crop": "wring-flesh-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8349,7 +10801,10 @@
         "art": "https://cards.scryfall.io/art/front/c/0/c0d74ecd-a595-4012-81b4-083264b40c94.webp?1783907139",
         "crop": "https://cards.scryfall.io/crop/front/c/0/c0d74ecd-a595-4012-81b4-083264b40c94.webp?1783907139"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "young-pyromancer-normal.jpg",
+        "art_crop": "young-pyromancer-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8406,7 +10861,10 @@
         "art": "https://cards.scryfall.io/art/front/3/d/3d1a3fec-39de-4223-9da2-22749a58cd62.webp?1783932662",
         "crop": "https://cards.scryfall.io/crop/front/3/d/3d1a3fec-39de-4223-9da2-22749a58cd62.webp?1783932662"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "youthful-knight-normal.jpg",
+        "art_crop": "youthful-knight-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8461,7 +10919,10 @@
         "art": "https://cards.scryfall.io/art/front/a/4/a4897302-7726-4827-9fa7-66ac0c264bd4.webp?1783939352",
         "crop": "https://cards.scryfall.io/crop/front/a/4/a4897302-7726-4827-9fa7-66ac0c264bd4.webp?1783939352"
       },
-      "localImages": {},
+      "localImages": {
+        "normal": "zombie-goliath-normal.jpg",
+        "art_crop": "zombie-goliath-art_crop.jpg"
+      },
       "isDoubleFaced": false,
       "faces": []
     }

@@ -9,7 +9,7 @@
  */
 
 import type { PlayerId } from '@jonny-boi/core';
-import { MCTS_PILOT_ID } from '@jonny-boi/ai';
+import { HYBRID_PILOT_ID, MCTS_PILOT_ID } from '@jonny-boi/ai';
 
 /**
  * The seat the deck under test always occupies. `evaluateSwap`, the gauntlet and
@@ -145,12 +145,28 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
 
 /**
  * Pilots that reason over information the *player* cannot see — specifically, the
- * real contents of the library, which a look-ahead pilot draws from when it rolls
- * out hypothetical lines.
+ * real contents of the library, which a look-ahead pilot draws from when it
+ * advances a hypothetical line past a draw step.
  *
  * For such a pilot the swapped card influences decisions from turn one whether or
  * not it is ever drawn, so "the game never saw the card" is false and the
  * identical-game skip is unsound. The runner detects a seated pilot by id and
  * disables the optimisation, recording the reason in the report.
+ *
+ * ⚠️ **The test is "does it search real engine states past a draw step", NOT
+ * "does it roll out to a terminal".** `hybrid` was missing from this set for
+ * exactly that reason: it deleted the rollout, so it *looked* like it had stopped
+ * reading the library. It has not. Its tree spans **56–78 engine plies per
+ * simulation** (measured on the tree-reuse branch) — many turns, and every draw
+ * step inside that span deals the real, seeded library. Deleting the rollout
+ * changed how DEEP it looks, not WHAT it may see.
+ *
+ * The consequence of the omission was not a slow test but a **wrong verdict**: a
+ * paired A/B run under `--pilot hybrid` would skip variant games it believed
+ * could not differ, when the swapped card had in fact been steering the search
+ * from turn one. Any new searching pilot belongs here on the day it lands.
  */
-export const PILOTS_THAT_READ_HIDDEN_LIBRARY: ReadonlySet<string> = new Set([MCTS_PILOT_ID]);
+export const PILOTS_THAT_READ_HIDDEN_LIBRARY: ReadonlySet<string> = new Set([
+  MCTS_PILOT_ID,
+  HYBRID_PILOT_ID,
+]);

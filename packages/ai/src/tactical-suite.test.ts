@@ -184,7 +184,7 @@ describe('curated tactical suite — evaluator ordering', () => {
   /**
    * ⚠️ The SHIPPED DEFAULT gets every one of them wrong, and it still ships —
    * because "more correct" and "stronger" turned out to be different claims and
-   * only the second one decides a default (DESIGN §3.4c). This test exists so the
+   * only the second one decides a default (DESIGN §3.4d). This test exists so the
    * cost of that decision is written down and visible rather than implied.
    */
   it('the DEFAULT evaluator gets all of them wrong — the known, measured cost of shipping it off', () => {

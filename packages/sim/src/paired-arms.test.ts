@@ -17,7 +17,14 @@
 
 import { describe, expect, it } from 'vitest';
 import { loadCardPool, buildRegistry, CORE_PRIMITIVE_IDS } from '@jonny-boi/cards';
-import { createDefaultAiRegistry, HEURISTIC_PILOT_ID, MCTS_PILOT_ID } from '@jonny-boi/ai';
+import {
+  createDefaultAiRegistry,
+  HEURISTIC_PILOT_ID,
+  HYBRID_PILOT_ID,
+  MCTS_PILOT_ID,
+  RANDOM_PILOT_ID,
+  SELECTABLE_PILOT_IDS,
+} from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
 import { loadDeck } from './deck.js';
 import type { Deck } from './deck.js';
@@ -161,6 +168,36 @@ describe('the identical-game skip is exact', () => {
     const usage = makeRunner({ pilotId: MCTS_PILOT_ID }).usage();
     expect(usage.identicalGameSkipEnabled).toBe(false);
     expect(usage.identicalGameSkipDisabledReason).toMatch(/hidden library|rolls out/i);
+  });
+
+  it('switches itself off for HYBRID too — deleting the rollout did not stop it reading the library', () => {
+    // Regression. `hybrid` was missing from PILOTS_THAT_READ_HIDDEN_LIBRARY because
+    // it replaced rollouts with leaf evaluation and so *looked* like it had stopped
+    // looking ahead. It had not: its tree spans 56-78 engine plies per simulation,
+    // and every draw step in that span deals the real, seeded library. The test is
+    // "does it search real states past a draw step", never "does it roll out".
+    //
+    // This was not a slow-test bug. A paired A/B run under --pilot hybrid would skip
+    // variant games it believed could not differ, while the swapped card had been
+    // steering the search from turn one — a WRONG verdict, printed confidently.
+    const usage = makeRunner({ pilotId: HYBRID_PILOT_ID }).usage();
+    expect(usage.identicalGameSkipEnabled).toBe(false);
+    expect(usage.identicalGameSkipDisabledReason).toMatch(/hidden library|rolls out/i);
+  });
+
+  it('every SELECTABLE pilot is deliberately classified as library-reading or not', () => {
+    // The failure mode this guards is silence: a new searching pilot lands, nobody
+    // adds it to the set, and the runner keeps skipping games for it. Listing every
+    // id here forces the decision to be made — and made visibly — the day it lands.
+    const classified = new Set<string>([
+      HEURISTIC_PILOT_ID, // decides from the view it is lent; no look-ahead
+      RANDOM_PILOT_ID, // no look-ahead
+      MCTS_PILOT_ID, // searches; reads the library
+      HYBRID_PILOT_ID, // searches; reads the library
+    ]);
+    for (const id of SELECTABLE_PILOT_IDS) {
+      expect(classified.has(id), `pilot "${id}" is unclassified — decide whether it reads the hidden library, add it to PILOTS_THAT_READ_HIDDEN_LIBRARY if it searches, then list it here`).toBe(true);
+    }
   });
 });
 

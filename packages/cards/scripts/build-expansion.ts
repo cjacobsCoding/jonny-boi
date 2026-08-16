@@ -130,7 +130,11 @@ function inlineValue(value: unknown): string {
     const entries = Object.entries(value as Record<string, unknown>).map(
       ([key, item]) => `${quoteKey(key)}: ${inlineValue(item)}`,
     );
-    return `{ ${entries.join(', ')} }`;
+    // An empty record is `{}`, not `{  }` — the padding is a separator between
+    // braces and content, and with no content it is just stray whitespace. The
+    // first cards to print one were the attachments (a modification that grants
+    // no keywords), so nothing before them exposed it.
+    return entries.length === 0 ? '{}' : `{ ${entries.join(', ')} }`;
   }
   // Single-quoted strings to match the repo's Prettier style, so the generated
   // module reads like the hand-authored one next to it.
