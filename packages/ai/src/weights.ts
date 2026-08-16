@@ -124,6 +124,17 @@ export interface HeuristicWeights {
   /** Answer to a "you may …" that carries no `ChoiceValence` steer. Yes by default:
    *  an optional clause on a card you chose to cast is normally its upside. */
   readonly choiceConfirmNeutralYes: boolean;
+  /** Answer to a "pay {N} or lose it" that carries no `ChoiceValence` steer. Yes
+   *  by default: something is being taken away unless the mana is spent, and the
+   *  engine only ever asks a player who can actually spend it. */
+  readonly choicePayManaNeutralYes: boolean;
+  /**
+   * What a soft counter ("counter target spell **unless** its controller pays
+   * {3}") is worth as a fraction of a hard counter, WHEN that player can pay. It
+   * is not zero — paying strips them of the mana, which is most of why the card
+   * is played — and it is not one, because the spell probably resolves.
+   */
+  readonly softCounterPayableFactor: number;
   /** Lands in play below which the ranker treats a land in hand as a lifeline
    *  rather than chaff. Roughly "enough mana to operate the deck". */
   readonly choiceLandsWanted: number;
@@ -239,6 +250,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   choiceSpellBaseValue: 8,
   choiceSpellPerManaValue: 2,
   choiceConfirmNeutralYes: true,
+  choicePayManaNeutralYes: true,
+  // A third of a hard counter: the tax lands every time, the counter only when
+  // they are tapped out. Tuned as a fraction rather than an absolute so it tracks
+  // the value of the specific card being countered.
+  softCounterPayableFactor: 1 / 3,
   // Four lands casts essentially everything in the pool, so that is where a land
   // in hand stops being a lifeline. Below it a land outranks a cheap spell and a
   // small body (a 2/2 scores 18) but still loses to a genuine bomb (a 6/6 scores 34).

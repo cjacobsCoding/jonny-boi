@@ -64,7 +64,9 @@ function sessionAwaiting(request: ChoiceRequest): { session: GameSession; lifeBe
           ? answer.instanceIds.length > 0
           : answer.kind === 'selectPlayers'
             ? answer.players.length > 0
-            : answer.modeIds.length > 0;
+            : answer.kind === 'chooseModes'
+              ? answer.modeIds.length > 0
+              : answer.pay;
     if (gained) ctx.state.players[ctx.controller].life += TEST_LIFE_GAIN;
   });
 

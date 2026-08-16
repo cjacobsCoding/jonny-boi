@@ -15,7 +15,7 @@ import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
 import type { ActivatedAbility, CardDefinition, EffectRef } from './card.js';
 import { castTiming, isLand, isPermanentType, manaModesOf } from './card.js';
-import type { ChoiceAnswer, PendingChoice, ResolutionFrame } from './choices.js';
+import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame } from './choices.js';
 import {
   choiceOptionCount,
   cloneChoiceAnswer,
@@ -33,6 +33,7 @@ import type { ChoiceChannel, EffectRegistry } from './effects.js';
 import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './effects.js';
 import type { GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
+import type { ManaCost, ManaProduction } from './mana.js';
 import {
   addProduction,
   canPay,
@@ -41,6 +42,8 @@ import {
   payCost,
   poolTotal,
 } from './mana.js';
+import type { ManaTapPlan } from './mana-plan.js';
+import { planManaPayment } from './mana-plan.js';
 import type {
   CardInstance,
   GameState,
@@ -708,7 +711,14 @@ function createChoiceChannel(
       if (frame.askCount >= MAX_CHOICES_PER_RESOLUTION) {
         return abandon(`asked more than ${MAX_CHOICES_PER_RESOLUTION} questions in one resolution`);
       }
-      const choice = normalizeChoiceRequest(request, {
+      // Only the ENGINE can say whether a payment is affordable — it is the one
+      // that knows what is still untapped — so a `payMana` request is enriched
+      // here rather than trusted from the effect that raised it.
+      const asked: ChoiceRequest =
+        request.kind === 'payMana'
+          ? { ...request, affordable: canAffordManaCost(state, request.chooser, request.cost) }
+          : request;
+      const choice = normalizeChoiceRequest(asked, {
         id: state.nextInstanceId++,
         sourceInstanceId: source.instanceId,
         sourceName: source.def.name,
@@ -962,7 +972,18 @@ function applyAnswerChoice(
 
   // Copy the answer out of the caller's action: it is about to live in both the
   // event log and the resumed frame, and neither may alias caller-owned data.
-  const answer = cloneChoiceAnswer(action.answer);
+  let answer = cloneChoiceAnswer(action.answer);
+  // A payment happens HERE, once, as the answer is accepted — not inside the
+  // effect that asked. The effect is re-run from the top when it resumes (see
+  // `ResolutionFrame`), so a payment made there would be made again for every
+  // later question it asks. What the effect is then told is what actually
+  // happened: an agreement the board could not honour is recorded as a decline,
+  // so the effect can never act on a payment that did not occur.
+  if (choice.kind === 'payMana' && answer.kind === 'payMana' && answer.pay) {
+    if (!payManaCostFromBoard(state, choice.chooser, choice.cost, emit)) {
+      answer = { kind: 'payMana', pay: false };
+    }
+  }
   emit({
     type: 'choiceAnswered',
     choiceId: choice.id,
@@ -1051,6 +1072,121 @@ function canActivateManaAbility(
   return Boolean(effectiveKeywords(perm, cont?.get(perm.instanceId) ?? NO_MOD).haste);
 }
 
+/**
+ * Append every `tapForMana` activation `player` could make right now.
+ *
+ * ONE definition of "which sources can this player tap", used by the two places
+ * that ask: `generateLegalActions` (what a pilot may do with priority) and the
+ * mid-resolution payment path (what a player could produce to pay "unless its
+ * controller pays {3}"). A second copy would be free to disagree with the engine
+ * about summoning sickness or modal sources — and a payment path that offers a tap
+ * the engine would refuse is a payment that fails for no visible reason.
+ *
+ * A MODAL source contributes one action per mode, so choosing the colour is part
+ * of the action an AI scores rather than a hidden engine default. Summoning-sick
+ * creature sources are excluded (rule 302.6 — see `canActivateManaAbility`).
+ *
+ * Pushes into the caller's array rather than returning a new one: the caller in
+ * the hot path is building an action list anyway, so this adds no allocation and
+ * no closure to it.
+ */
+function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[]): void {
+  // Built only when a sick creature source actually raises the granted-haste
+  // question — the ordinary board never pays for it.
+  let manaCont: ReturnType<typeof indexContinuous> | undefined;
+  const battlefield = state.battlefield;
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
+    if (perm.controller !== player || perm.tapped) continue;
+    const modes = manaModesOf(perm.def);
+    if (modes.length === 0) continue;
+    if (perm.summoningSick && isCreature(perm.def)) {
+      manaCont ??= indexContinuous(state);
+      if (!canActivateManaAbility(perm, manaCont)) continue;
+    }
+    for (let mode = 0; mode < modes.length; mode++) {
+      out.push({ kind: 'tapForMana', player, instanceId: perm.instanceId, mode });
+    }
+  }
+}
+
+/**
+ * Whether `player` could produce `cost` right now: what is already floating plus
+ * what they could still tap. Answers {@link PayManaChoice.affordable}.
+ *
+ * Delegates to `planManaPayment`, which is the same planner the pilots and the
+ * client fund a spell with — so "can you pay this?" cannot answer differently
+ * from "here is how you would pay it".
+ *
+ * Exported because the AI asks the same question from the other side: a soft
+ * counter ("unless its controller pays {3}") is worth far less against an
+ * opponent holding three untapped lands, and a pilot working that out from its own
+ * copy of the rules would be free to disagree with the engine that will actually
+ * offer the payment.
+ */
+export function canAffordManaCost(state: GameState, player: PlayerId, cost: ManaCost): boolean {
+  return planPaymentFor(state, player, cost) !== undefined;
+}
+
+/** The taps that would fund `cost` for `player`, or undefined if it cannot be paid. */
+function planPaymentFor(state: GameState, player: PlayerId, cost: ManaCost): ManaTapPlan[] | undefined {
+  const taps: GameAction[] = [];
+  pushManaTapActions(state, player, taps);
+  return planManaPayment(state, player, cost, taps);
+}
+
+/**
+ * Spend `cost` from `player`'s mana, tapping sources as needed. Returns false —
+ * having changed NOTHING — when the cost cannot be produced.
+ *
+ * This is how a payment agreed to mid-resolution actually happens ("unless its
+ * controller pays {3}"). Rule 605.3 lets a player activate mana abilities to pay
+ * a cost during resolution, which is exactly what the taps here are; the engine
+ * picks the sources with the shared planner (least-flexible source first) instead
+ * of asking a second question about *which* land, and the whole plan is computed
+ * before anything is tapped so a failure cannot leave a half-tapped board.
+ */
+function payManaCostFromBoard(
+  state: GameState,
+  player: PlayerId,
+  cost: ManaCost,
+  emit: (e: GameEvent) => void,
+): boolean {
+  const plan = planPaymentFor(state, player, cost);
+  if (!plan) return false;
+  for (const tap of plan) {
+    const source = findOnBattlefield(state, tap.instanceId);
+    // The plan was built from this same board a moment ago, so a missing or
+    // already-tapped source is not reachable — but a payment that silently taps
+    // nothing and then "pays" would be worse than a refusal, so it is checked.
+    if (!source || source.tapped) return false;
+    tapPermanentForMana(state, source, player, tap.production, emit);
+  }
+  const result = payCost(state.players[player].manaPool, cost);
+  if (!result.ok) return false;
+  state.players[player].manaPool = result.pool;
+  emit({ type: 'manaCostPaid', player, cost: { ...cost } });
+  return true;
+}
+
+/** Tap a source and add its production to its controller's pool, with events. */
+function tapPermanentForMana(
+  state: GameState,
+  source: CardInstance,
+  player: PlayerId,
+  production: ManaProduction,
+  emit: (e: GameEvent) => void,
+): void {
+  source.tapped = true;
+  emit({ type: 'tapped', instanceId: source.instanceId });
+  const owner = state.players[player];
+  owner.manaPool = addProduction(owner.manaPool, production);
+  for (const color of MANA_COLORS) {
+    const amount = production[color] ?? 0;
+    if (amount > 0) emit({ type: 'manaAdded', player, color, amount });
+  }
+}
+
 function applyTapForMana(
   state: GameState,
   prevState: GameState,
@@ -1075,14 +1211,7 @@ function applyTapForMana(
   const production = modes[mode];
   if (!production) return rejectWith(prevState, `${source.def.name} has no mana mode ${mode}`);
 
-  source.tapped = true;
-  emit({ type: 'tapped', instanceId: source.instanceId });
-  const player = state.players[action.player];
-  player.manaPool = addProduction(player.manaPool, production);
-  for (const color of MANA_COLORS) {
-    const amount = production[color] ?? 0;
-    if (amount > 0) emit({ type: 'manaAdded', player: action.player, color, amount });
-  }
+  tapPermanentForMana(state, source, action.player, production, emit);
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
 }
@@ -1425,10 +1554,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // Pass priority is always available to the priority-holder.
   actions.push({ kind: 'passPriority', player: me });
 
-  // Tap untapped mana sources you control for mana. A MODAL source offers one
-  // action per mode, so choosing the color is part of the action an AI scores
-  // rather than a hidden engine default. Summoning-sick creature sources are
-  // excluded (rule 302.6 — see `canActivateManaAbility`).
+  // Tap untapped mana sources you control for mana.
   //
   // Every array walk in this function is indexed rather than `for...of`. That is
   // not style: V8 does not reliably elide the array-iterator object here, and this
@@ -1436,23 +1562,8 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // the largest remaining source of per-action garbage once cloning is out of the
   // picture. Confined to this function and the mana helpers it calls, which are
   // the only places it has ever measured.
-  let manaCont: ReturnType<typeof indexContinuous> | undefined;
+  pushManaTapActions(state, me, actions);
   const battlefield = state.battlefield;
-  for (let b = 0; b < battlefield.length; b++) {
-    const perm = battlefield[b] as CardInstance;
-    if (perm.controller !== me || perm.tapped) continue;
-    const modes = manaModesOf(perm.def);
-    if (modes.length === 0) continue;
-    // Build the continuous index only when a sick creature source actually raises
-    // the granted-haste question — the ordinary board never pays for it.
-    if (perm.summoningSick && isCreature(perm.def)) {
-      manaCont ??= indexContinuous(state);
-      if (!canActivateManaAbility(perm, manaCont)) continue;
-    }
-    for (let mode = 0; mode < modes.length; mode++) {
-      actions.push({ kind: 'tapForMana', player: me, instanceId: perm.instanceId, mode });
-    }
-  }
 
   const sorcerySpeedWindow = me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
 

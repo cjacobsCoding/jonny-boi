@@ -139,6 +139,8 @@ function clonePendingChoice(choice: PendingChoice): PendingChoice {
       return { ...choice, candidates: [...choice.candidates] };
     case 'chooseModes':
       return { ...choice, modes: choice.modes.map((m) => ({ ...m })) };
+    case 'payMana':
+      return { ...choice, cost: { ...choice.cost } };
     default:
       return { ...choice };
   }

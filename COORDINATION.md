@@ -84,6 +84,7 @@ throughput (games/sec) from regressing.
 | feat/attachment-cards | worker | packages/cards (data + compile/text.ts + build-expansion.ts + 2 tests), packages/data-tools/data, apps/web/src/data (generated), 1 stale comment in apps/web LabView.tsx, DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/pilot-observation | worker | packages/sim (new observation.ts + test + bench; match.ts, index.ts, package.json) + MINIMAL packages/ai (new observation.ts, reveal-tally.ts + test; additive edits to pilot.ts, index.ts, one comment in tree-reuse.ts), DESIGN §2 + §3.4c | 🚧 PUSHED, not merged |
 | feat/tactical-eval | worker | packages/ai (new: tactical.ts + tactical-suite.ts + 2 test files; evaluator/hybrid/hybrid-config/index/tsconfig/bench + 2 existing tests), DESIGN §3.4d | 🚧 PUSHED, not merged — branches off main |
+| feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -119,6 +120,72 @@ _Append dated notes here; keep them short. Newest at top._
   **optional payment during resolution** ("unless its controller pays") is the one genuinely
   reachable next: it happens INSIDE a resolution frame, where `ctx.ask` already works. Whoever
   takes it needs a mana-payment answer kind, not a new choice mechanism.
+  (Integrator)
+
+- 2026-08-15 integrator: **`feat/optional-payment` MERGED + DEPLOYED** — "counter target spell
+  **unless its controller pays {3}**" (Mana Leak, Force Spike, Miscalculation) plays for real.
+  `npx vitest run` **2274 passed / 0 failed** (main baseline 2244 + 30), `npm run verify` exit 0,
+  `npm run build` exit 0.
+  ❗ **THE PAYMENT IS MADE BY THE ENGINE, NOT BY THE EFFECT, AND THAT IS THE WHOLE DESIGN.** A
+  resolving effect is re-run FROM THE TOP every time it asks a further question (`ResolutionFrame`),
+  so a primitive that charged its own cost would charge it again for every later ask. The mana is
+  therefore spent inside `applyAnswerChoice`, exactly once, and `ctx.payOrDecline` returning `true`
+  means **already paid**, never "agreed to pay". Pinned by a test with a fixture that asks a SECOND
+  question after the payment — **verified RED by sabotage** (calling the payment twice fails it).
+  👉 **NEW CHOICE KIND `payMana`** (core `choices.ts`) — not a `confirm` with a cost in the prompt,
+  because the engine has to know the cost to answer two questions only it can: *can this player pay?*
+  and *what leaves their board?* `PayManaChoice.affordable` is filled in BY THE ENGINE (a request from
+  an effect leaves it off), so an effect cannot lie about it, a UI can grey out Pay, and
+  `validateChoiceAnswer` rejects "I pay" when the board cannot produce it rather than silently
+  downgrading it to a decline.
+  ⚠️ **A PLAYER WHO CANNOT PAY IS NEVER ASKED.** Affordability is the new exported
+  `canAffordManaCost(state, player, cost)` = pool + everything still untappable, planned through the
+  SAME `planManaPayment` that funds a cast — so "can you pay?" cannot disagree with "here is how".
+  Unaffordable ⇒ `isTrivialChoice` ⇒ the engine settles it, so the clause never stops a game nobody
+  could have paid in. That also keeps the sim's decision count unchanged on boards where it is moot.
+  👉 **WHICH LANDS GET TAPPED IS DELEGATED ON PURPOSE, and it is the one judgement call here.**
+  Rule 605.3 lets a player activate mana abilities to pay during resolution; the engine does that
+  through the shared planner (least-flexible source first) instead of asking a second question about
+  *which* Island. The decision the card PRINTS is modelled in full; the sub-decision is the planner's,
+  in one place, for the AI and both clients. If someone later wants that as a real choice, the seam is
+  `payManaCostFromBoard`.
+  👉 **ONE DEFINITION, TWICE OVER.** (1) `pushManaTapActions` now answers "which sources can this
+  player tap" for BOTH `generateLegalActions` and the payment path — a second copy would have been
+  free to disagree with the engine about summoning sickness. It pushes into the caller's array, so the
+  hot path allocates nothing new. (2) The compiler had **two identical private mana-symbol parsers**
+  (`parseEquipCost` in `rules.ts`, `parseManaSymbols` in `compile.ts`); they are now one
+  `parseManaSymbols` in `compile/text.ts`, used by all three callers.
+  ⚠️ **RULE 7 — measured, interleaved, on this box.** `npm run sim -- gauntlet "Mono-Red Aggro"
+  --games 40 --seed 99`: main **212 / 212 / 218 games/sec**, branch **223 / 229 / 230**, and the result
+  is **byte-identical (92/280 = 32.9%)**, so behaviour is unchanged on decks with no soft counter.
+  ❌ **WHAT I DELIBERATELY DID NOT DO — the mechanism is general, the TEMPLATE is one line of Oracle.**
+  Only `^counter target spell unless its controller pays {N}$` compiles. Still reported, correctly:
+  Rune Snag (cost derived from both graveyards — charging the flat {2} would be strictly weaker than
+  printed), `{X}` taxes, a payment attached to some other effect ("destroy … unless its controller
+  pays"), and paying with a sacrifice/discard instead of mana. The hint was reworded to **"an
+  optional-payment template the compiler does not recognize yet"** — the system is no longer missing,
+  and a stale hint would send the next agent to rebuild finished work.
+  ❌ **The choice does not carry the STAKE, and the pilot therefore does not compare cost to value.**
+  A `payMana` question says what it costs, not what dies if you decline, so the valence rule pays
+  whenever it can afford to (declining loses the spell AND the mana already spent on it). Making that
+  comparison needs the stake in the choice — and a choice must stay renderable by a UI that knows no
+  rules, so it belongs to a pilot that searches, not to the valence rule that answers every card ever
+  printed. Said out loud in `answerPayMana`.
+  ⚠️ **TRAP FOR ANYONE VERIFYING IN THE APP: `preview_start` runs the dev server in the SESSION'S
+  PRIMARY CHECKOUT, not in your worktree.** I "verified" Mana Leak and got the OLD answer — the page
+  was serving `@fs/D:/Cool Stuff/Claude/jonny-boi/packages/cards/dist/...`, i.e. main's build plus
+  another agent's uncommitted edits. Check `performance.getEntriesByType('resource')` for the `@fs`
+  path before believing any browser check on a branch. (Also on this box: several Vite servers, ports
+  5173-5178 taken, `localhost` resolving to `::1` first — the port a tool reports is not necessarily
+  the server you are talking to.)
+  ⚠️ **SECOND TRAP, same session: the app CACHES an imported card and its verdict in localStorage**
+  (`jonny-boi:imported-cards:v1`, `jonny-boi:unsupported-mechanics:v1`). Re-adding a card after a
+  compiler change re-reports the STORED verdict, so "still unsupported" in the app can be a stale
+  cache rather than a stale build. Clear both keys before trusting an à-la-carte add.
+  👉 **One existing test changed, and it had to.** `compile.test.ts`'s `explainUnsupported` table
+  listed "counter target spell unless its controller pays {3}" as an unsupported example — that clause
+  COMPILES now, so the example is a payment shape that still does not
+  ("destroy target creature unless its controller pays {2}").
   (Integrator)
 
 - 2026-08-15 worker: `feat/tactical-eval` 🚧 PUSHED — **an exact combat solver + the curated tactical

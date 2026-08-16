@@ -25,6 +25,7 @@
  */
 import {
   choiceOptionCount,
+  formatManaCost,
   validateChoiceAnswer,
   type AnswerValidation,
   type ChoiceAnswer,
@@ -53,7 +54,18 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
   selectPlayers: { one: 'player', many: 'players' },
   chooseModes: { one: 'mode', many: 'modes' },
   confirm: { one: 'answer', many: 'answers' },
+  payMana: { one: 'answer', many: 'answers' },
 });
+
+/**
+ * The kinds whose answer is a single BINARY decision rather than a selection —
+ * a yes/no and a pay/decline. They share every rule below (nothing to toggle,
+ * nothing to clear, undecided until the human presses one of two buttons), so
+ * they are named once here instead of as a two-kind test repeated six times.
+ */
+function isBinaryKind(kind: ChoiceKind): boolean {
+  return kind === 'confirm' || kind === 'payMana';
+}
 
 /** A readable zone name, degrading to the raw id for a zone we have no copy for. */
 export function zoneLabel(zone: string | undefined): string | undefined {
@@ -77,7 +89,8 @@ export type ChoiceDraft =
   | { readonly kind: 'selectCards'; readonly instanceIds: readonly InstanceId[] }
   | { readonly kind: 'selectPlayers'; readonly players: readonly PlayerId[] }
   | { readonly kind: 'chooseModes'; readonly modeIds: readonly string[] }
-  | { readonly kind: 'confirm'; readonly yes: boolean | null };
+  | { readonly kind: 'confirm'; readonly yes: boolean | null }
+  | { readonly kind: 'payMana'; readonly pay: boolean | null };
 
 /** The value one selectable option contributes to the draft. */
 export type ChoiceOptionValue = InstanceId | PlayerId | string;
@@ -91,6 +104,8 @@ export function emptyDraft(choice: PendingChoice): ChoiceDraft {
       return { kind: 'selectPlayers', players: [] };
     case 'chooseModes':
       return { kind: 'chooseModes', modeIds: [] };
+    case 'payMana':
+      return { kind: 'payMana', pay: null };
     default:
       return { kind: 'confirm', yes: null };
   }
@@ -136,7 +151,7 @@ function withValues(draft: ChoiceDraft, values: readonly ChoiceOptionValue[]): C
  * over-picking.
  */
 export function toggleOption(choice: PendingChoice, draft: ChoiceDraft, value: ChoiceOptionValue): ChoiceDraft {
-  if (draft.kind === 'confirm') return draft;
+  if (isBinaryKind(draft.kind)) return draft;
   const values = draftValues(draft);
   const at = values.indexOf(value);
   if (at >= 0) return withValues(draft, values.filter((v) => v !== value));
@@ -155,9 +170,14 @@ export function setConfirm(draft: ChoiceDraft, yes: boolean): ChoiceDraft {
   return draft.kind === 'confirm' ? { kind: 'confirm', yes } : draft;
 }
 
+/** Set a pay/decline draft's answer (a no-op on any other kind). */
+export function setPayMana(draft: ChoiceDraft, pay: boolean): ChoiceDraft {
+  return draft.kind === 'payMana' ? { kind: 'payMana', pay } : draft;
+}
+
 /** Clear every pick — the "choose none" path of a `may` selection. */
 export function clearDraft(choice: PendingChoice, draft: ChoiceDraft): ChoiceDraft {
-  return draft.kind === 'confirm' ? draft : emptyDraft(choice);
+  return isBinaryKind(draft.kind) ? draft : emptyDraft(choice);
 }
 
 /**
@@ -182,6 +202,8 @@ export function draftToAnswer(draft: ChoiceDraft): ChoiceAnswer | null {
       return { kind: 'selectPlayers', players: [...draft.players] };
     case 'chooseModes':
       return { kind: 'chooseModes', modeIds: [...draft.modeIds] };
+    case 'payMana':
+      return draft.pay === null ? null : { kind: 'payMana', pay: draft.pay };
     default:
       return draft.yes === null ? null : { kind: 'confirm', yes: draft.yes };
   }
@@ -204,7 +226,9 @@ export interface DraftStatus {
  */
 export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftStatus {
   const answer = draftToAnswer(draft);
-  if (!answer) return { answer: null, canSubmit: false, hint: 'Choose Yes or No.' };
+  if (!answer) {
+    return { answer: null, canSubmit: false, hint: choice.kind === 'payMana' ? PAY_UNDECIDED_HINT : CONFIRM_UNDECIDED_HINT };
+  }
   const verdict: AnswerValidation = validateChoiceAnswer(choice, answer);
   if (!verdict.ok) return { answer, canSubmit: false, hint: capitalize(verdict.reason) };
   return { answer, canSubmit: true, hint: readyHint(choice, draft) };
@@ -212,7 +236,7 @@ export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftSta
 
 /** The hint shown once the draft is already legal (it may still take more picks). */
 function readyHint(choice: PendingChoice, draft: ChoiceDraft): string {
-  if (choice.kind === 'confirm') return 'Confirm your answer.';
+  if (isBinaryKind(choice.kind)) return 'Confirm your answer.';
   const picked = draftValues(draft).length;
   if (picked < choice.max) {
     const room = choice.max - picked;
@@ -220,6 +244,10 @@ function readyHint(choice: PendingChoice, draft: ChoiceDraft): string {
   }
   return picked === 0 ? 'Choosing nothing is allowed here.' : 'Ready to confirm.';
 }
+
+/** The two undecided-draft hints, named so the copy is not buried in a branch. */
+const CONFIRM_UNDECIDED_HINT = 'Choose Yes or No.';
+const PAY_UNDECIDED_HINT = 'Choose whether to pay.';
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
@@ -252,6 +280,16 @@ export interface ChoicePromptView {
  */
 function requirementText(choice: PendingChoice): string {
   if (choice.kind === 'confirm') return 'Answer yes or no.';
+  if (choice.kind === 'payMana') {
+    const cost = formatManaCost(choice.cost);
+    // An unaffordable payment is normally settled by the engine without ever
+    // reaching a human. Saying WHY the only answer is "don't pay" still matters:
+    // a hand-built state or a future cost the board stopped being able to produce
+    // would otherwise look like a broken button.
+    return choice.affordable
+      ? `Pay ${cost}, or decline and let the effect happen.`
+      : `You cannot produce ${cost}, so the only answer is to decline.`;
+  }
   const { min, max, kind } = choice;
   const zone = choice.kind === 'selectCards' ? zoneLabel(choice.fromZone) : undefined;
   const suffix = zone ? ` from the ${zone}` : '';
@@ -275,7 +313,7 @@ export function choicePromptView(
     prompt: choice.prompt,
     requirement: requirementText(choice),
     ordered: choice.kind === 'selectCards' && choice.ordered,
-    optional: choice.kind !== 'confirm' && choice.min === 0,
+    optional: !isBinaryKind(choice.kind) && choice.min === 0,
     optionCount: choiceOptionCount(choice),
   };
 }

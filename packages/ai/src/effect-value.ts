@@ -32,12 +32,14 @@
  * keeps a seeded sim reproducible.
  */
 
-import type { CardInstance, EffectRef, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
+import type { CardInstance, EffectRef, GameState, InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
 import {
+  canAffordManaCost,
   convertedManaCost,
   effectivePower,
   effectiveToughness,
   isCreature,
+  MANA_COLORS,
   opponentOf,
   remainingToughness,
 } from '@jonny-boi/core';
@@ -98,6 +100,23 @@ function boolParam(params: Readonly<Record<string, unknown>>, key: string): bool
 function strArrayParam(params: Readonly<Record<string, unknown>>, key: string): readonly string[] {
   const v = params[key];
   return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
+}
+
+/**
+ * Read a `ManaCost`-shaped param (the "unless its controller pays {3}" rider).
+ * Mirrors `cards`' own reader: only the fields core charges for, and an empty or
+ * ill-typed cost reads as absent rather than as a free payment.
+ */
+function manaCostParam(params: Readonly<Record<string, unknown>>, key: string): ManaCost | undefined {
+  const v = params[key];
+  if (typeof v !== 'object' || v === null) return undefined;
+  const src = v as Record<string, unknown>;
+  const cost: Record<string, number> = {};
+  for (const field of ['generic', ...MANA_COLORS]) {
+    const amount = src[field];
+    if (typeof amount === 'number' && Number.isFinite(amount) && amount > 0) cost[field] = amount;
+  }
+  return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
 }
 
 /**
@@ -201,6 +220,29 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     if (!spell) return 0; // already resolved / never on the stack — a dead mode
     if (spell.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
     return ctx.weights.removalBaseScore + cardValue(spell.card, ctx.weights, ctx.cards);
+  },
+
+  /**
+   * The SOFT counter is the hard counter's price, **scaled by whether it will
+   * actually counter anything**: "unless its controller pays {3}" against an
+   * opponent with three untapped lands mostly taxes them, and against a tapped-out
+   * opponent it is a Counterspell.
+   *
+   * Affordability is asked of `canAffordManaCost` — the very function the engine
+   * will use to decide whether that player is even offered the payment — rather
+   * than re-derived here, so the pilot cannot price a payment the engine would not
+   * offer (or miss one it would).
+   */
+  counterUnlessPaid: (params, ctx) => {
+    const spell = firstTargetSpell(ctx);
+    if (!spell) return 0;
+    if (spell.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
+    const full = ctx.weights.removalBaseScore + cardValue(spell.card, ctx.weights, ctx.cards);
+    const cost = manaCostParam(params, 'unlessPaid');
+    if (!cost) return full; // no rider — it is simply a counter
+    return canAffordManaCost(ctx.state, spell.controller, cost)
+      ? full * ctx.weights.softCounterPayableFactor
+      : full;
   },
 
   /**

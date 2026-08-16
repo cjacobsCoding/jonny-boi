@@ -9,8 +9,14 @@
  *     "Liliana of the Veil") — becomes `~`, so one pattern matches every card;
  *   - whitespace collapses, the trailing period goes, everything lowercases.
  *
- * Nothing here decides what a clause *means*; that is the rule table's job.
+ * Nothing here decides what a clause *means*; that is the rule table's job. The
+ * one structured reader that lives here — {@link parseManaSymbols} — is still pure
+ * transcription: `{1}{G}` into the cost the engine charges, with no opinion about
+ * what the cost is for.
  */
+
+import type { ManaCost } from '@jonny-boi/core';
+import { MANA_COLORS } from '@jonny-boi/core';
 
 /**
  * Number words Oracle text uses for counts, mapped to their values. Oracle never
@@ -47,6 +53,35 @@ export function parseCount(token: string | undefined): number | null {
   if (/^\d+$/.test(word)) return Number.parseInt(word, 10);
   const value = NUMBER_WORDS[word];
   return value !== undefined && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Parse a printed run of mana symbols (`{1}{G}`, `{3}`) into a `ManaCost`.
+ *
+ * Returns `null` for ANY symbol the engine cannot pay from a pool — hybrid,
+ * Phyrexian, `{X}` — so a cost containing one is never half-read into something
+ * cheaper than printed; the clause carrying it stays reported instead.
+ *
+ * One parser, three callers (equip costs, activation costs, "unless its
+ * controller pays {N}"). It used to be two identical private copies, one in
+ * `./rules` and one in `./compile`, which is precisely the shape a rule gains in
+ * one place and not the other.
+ */
+export function parseManaSymbols(text: string): ManaCost | null {
+  const cost: Record<string, number> = {};
+  for (const match of text.matchAll(/\{([^}]+)\}/g)) {
+    const symbol = match[1]!.toUpperCase();
+    if (/^\d+$/.test(symbol)) {
+      cost.generic = (cost.generic ?? 0) + Number.parseInt(symbol, 10);
+      continue;
+    }
+    if ((MANA_COLORS as readonly string[]).includes(symbol)) {
+      cost[symbol] = (cost[symbol] ?? 0) + 1;
+      continue;
+    }
+    return null;
+  }
+  return Object.keys(cost).length > 0 ? (cost as ManaCost) : null;
 }
 
 /**

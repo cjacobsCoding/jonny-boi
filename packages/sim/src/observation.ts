@@ -148,6 +148,10 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // for the brief's §35–37 "represented mana" reasoning.
   manaAdded: 'public',
   manaPoolEmptied: 'public',
+  // Paying "unless its controller pays {3}" happens on the table, in front of
+  // everyone: the cost is printed on the card that asked and the mana leaving the
+  // pool is visible. Nothing here is anybody's hidden information.
+  manaCostPaid: 'public',
   controlChanged: 'public',
   // How MANY cards were milled. The cards themselves arrive as `zoneChange`s into
   // a graveyard, which is public, so nothing is lost by this being a count.

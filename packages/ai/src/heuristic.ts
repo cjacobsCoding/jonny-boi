@@ -95,6 +95,14 @@ const PRIMITIVE = Object.freeze({
   pumpUntilEndOfTurn: 'pumpUntilEndOfTurn',
   /** Counter target spell. Only ever castable with a spell on the stack. */
   counterSpell: 'counterSpell',
+  /**
+   * The SOFT counter — "counter target spell unless its controller pays {3}". It
+   * is played exactly like a hard counter (hold it up, cast it in response); what
+   * differs is what it is WORTH, which `effect-value` prices by asking whether
+   * that player can actually pay. Missing from this list, a Mana Leak would be a
+   * "generic spell" and the pilot would never hold it up at all.
+   */
+  counterUnlessPaid: 'counterUnlessPaid',
   /** A symmetric board sweeper (Wrath of God / Day of Judgment). */
   destroyAll: 'destroyAll',
   gainLife: 'gainLife',
@@ -1191,7 +1199,9 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
     if (ref.primitive === PRIMITIVE.destroyTarget || ref.primitive === PRIMITIVE.exileTarget) {
       return { kind: 'destroyCreature' };
     }
-    if (ref.primitive === PRIMITIVE.counterSpell) return { kind: 'counter' };
+    if (ref.primitive === PRIMITIVE.counterSpell || ref.primitive === PRIMITIVE.counterUnlessPaid) {
+      return { kind: 'counter' };
+    }
     if (ref.primitive === PRIMITIVE.destroyAll) return { kind: 'sweeper' };
     if (ref.primitive === PRIMITIVE.pumpUntilEndOfTurn) {
       const power = numberParam(ref.params, 'power', 0);

@@ -63,6 +63,7 @@ export {
   modal,
   returnToHand,
   tapPermanents,
+  counterUnlessPaid,
 } from './choice-primitives.js';
 
 // Pool loader + registry builder.

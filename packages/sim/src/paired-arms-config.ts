@@ -134,6 +134,9 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'destroyAll',
   'addMana',
   'counterSpell',
+  // Countering with an optional payment reads the stack and a mana pool, and the
+  // question it asks ("pay {3}?") is answered from the board, never from a library.
+  'counterUnlessPaid',
   'createToken',
   'tapTarget',
   'discardCard',

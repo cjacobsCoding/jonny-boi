@@ -36,7 +36,8 @@ import {
 } from '@jonny-boi/core';
 import { createEffectRegistry } from '@jonny-boi/core';
 import type { EffectRef, ResolutionFrame } from '@jonny-boi/core';
-import { answerChoiceHeuristically, cardValue, safeFallbackAction } from './choices.js';
+import { answerChoiceHeuristically, cardValue, cardValueContext, safeFallbackAction } from './choices.js';
+import { resolutionValueContext, valueOfEffects } from './effect-value.js';
 import { createHeuristicPilot } from './heuristic.js';
 import { createMctsPilot } from './mcts.js';
 import { FAST_MCTS_CONFIG } from './mcts-config.js';
@@ -264,6 +265,52 @@ describe('the heuristic answers every choice kind sensibly', () => {
     expect(no.answer.yes).toBe(false);
   });
 
+  it('pays a tax that keeps its own spell, and never one it cannot afford', () => {
+    const state = newGame().state;
+    const payable = park({
+      kind: 'payMana',
+      chooser: 'A',
+      prompt: 'Pay {3}',
+      cost: { generic: 3 },
+      affordable: true,
+      valence: 'gain',
+    });
+    const broke = park({
+      kind: 'payMana',
+      chooser: 'A',
+      prompt: 'Pay {3}',
+      cost: { generic: 3 },
+      affordable: false,
+      valence: 'gain',
+    });
+
+    const paid = answerChoiceHeuristically(state, payable, WEIGHTS);
+    const declined = answerChoiceHeuristically(state, broke, WEIGHTS);
+    if (paid.kind !== 'answerChoice' || paid.answer.kind !== 'payMana') throw new Error('wrong shape');
+    if (declined.kind !== 'answerChoice' || declined.answer.kind !== 'payMana') throw new Error('wrong shape');
+    expect(paid.answer.pay).toBe(true);
+    expect(declined.answer.pay).toBe(false);
+    // Both must be answers the ENGINE would accept — "pay" is illegal when the
+    // board cannot produce the cost, so this is the property, not the preference.
+    expect(validateChoiceAnswer(payable, paid.answer).ok).toBe(true);
+    expect(validateChoiceAnswer(broke, declined.answer).ok).toBe(true);
+  });
+
+  it('declines a payment somebody else is making it consider (a "loss" valence)', () => {
+    const state = newGame().state;
+    const choice = park({
+      kind: 'payMana',
+      chooser: 'A',
+      prompt: 'Pay {1}',
+      cost: { generic: 1 },
+      affordable: true,
+      valence: 'loss',
+    });
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'payMana') throw new Error('wrong shape');
+    expect(action.answer.pay).toBe(false);
+  });
+
   it('always addresses the answer to the choice\'s own chooser, never itself', () => {
     const state = newGame().state;
     state.players.B.hand = [];
@@ -378,6 +425,40 @@ function chosenModes(state: GameState, choice: PendingChoice): readonly string[]
   expect(validateChoiceAnswer(choice, action.answer).ok).toBe(true);
   return action.answer.modeIds;
 }
+
+describe('what a SOFT counter is worth ("unless its controller pays {3}")', () => {
+  /** Price one effect ref against a board where B is casting a Dragon. */
+  function priceAgainstDragon(ref: EffectRef, bLands: number): number {
+    const state = newGame().state;
+    const dragon = putOnStack(state, 'B', DRAGON);
+    putOnBattlefield(state, 'B', Array.from({ length: bLands }, () => ISLAND));
+    const context = resolutionValueContext(state, 'A', WEIGHTS, cardValueContext(state));
+    return valueOfEffects([ref], { ...context, targets: [dragon.instanceId] });
+  }
+
+  const SOFT: EffectRef = { primitive: 'counterUnlessPaid', params: { unlessPaid: { generic: 3 } } };
+  const HARD: EffectRef = { primitive: 'counterSpell' };
+
+  it('is worth a full counter against a player who cannot pay the tax', () => {
+    expect(priceAgainstDragon(SOFT, 2)).toBe(priceAgainstDragon(HARD, 2));
+  });
+
+  it('is worth LESS than a hard counter against a player who can', () => {
+    const soft = priceAgainstDragon(SOFT, 5);
+    const hard = priceAgainstDragon(HARD, 5);
+    expect(soft).toBeLessThan(hard);
+    // Still worth something — paying strips them of three mana.
+    expect(soft).toBeGreaterThan(0);
+    expect(soft).toBeCloseTo(hard * WEIGHTS.softCounterPayableFactor);
+  });
+
+  it('is a mistake to point at your OWN spell, exactly like a hard counter', () => {
+    const state = newGame().state;
+    const own = putOnStack(state, 'A', DRAGON);
+    const context = resolutionValueContext(state, 'A', WEIGHTS, cardValueContext(state));
+    expect(valueOfEffects([SOFT], { ...context, targets: [own.instanceId] })).toBeLessThan(0);
+  });
+});
 
 describe('choosing modal-spell modes (scripted positions)', () => {
   it('DRAWS instead of bouncing a permanent that is not worth bouncing', () => {

@@ -106,6 +106,28 @@ export function convertedManaCost(cost: ManaCost): number {
   );
 }
 
+/**
+ * A cost written the way a card prints it — `{2}{U}`, `{G/W}{G/W}`, `{0}`.
+ *
+ * Lives here rather than in a UI helper because a cost is *asked about* in three
+ * places that must all say the same thing: the prompt a payment choice raises
+ * (`choices.ts`), the event log, and the client rendering that prompt. Generic
+ * comes first and colours follow {@link MANA_COLORS} order, which is the printed
+ * convention.
+ */
+export function formatManaCost(cost: ManaCost): string {
+  const parts: string[] = [];
+  const generic = cost.generic ?? 0;
+  // A wholly free cost still has to render as something a player can read, and
+  // "{0}" is how Magic prints one.
+  if (generic > 0 || convertedManaCost(cost) === 0) parts.push(`{${generic}}`);
+  for (const color of MANA_COLORS) {
+    for (let i = 0; i < (cost[color] ?? 0); i++) parts.push(`{${color}}`);
+  }
+  for (const symbol of cost.hybrid ?? []) parts.push(`{${symbol.join('/')}}`);
+  return parts.join('');
+}
+
 /** Outcome of attempting to pay a cost from a pool. */
 export type PaymentResult =
   | { readonly ok: true; readonly pool: ManaPool }

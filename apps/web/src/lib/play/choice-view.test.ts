@@ -11,6 +11,7 @@ import {
   isChoiceForViewer,
   orderBadge,
   setConfirm,
+  setPayMana,
   toggleOption,
   waitingForChoiceText,
   zoneLabel,
@@ -176,6 +177,62 @@ describe('choice-view — the submit gate agrees with the engine', () => {
   it('does not offer a decline for a mandatory choice', () => {
     expect(choicePromptView(selectCards({ min: 1, max: 1 }), NAMES).optional).toBe(false);
     expect(choicePromptView(selectCards({ min: 0, max: 2 }), NAMES).optional).toBe(true);
+  });
+});
+
+function payMana(over: Partial<Extract<PendingChoice, { kind: 'payMana' }>> = {}): PendingChoice {
+  return {
+    ...BASE,
+    kind: 'payMana',
+    prompt: 'Pay {3} or Mana Leak counters Opt',
+    sourceName: 'Mana Leak',
+    cost: { generic: 3 },
+    affordable: true,
+    min: 1,
+    max: 1,
+    ...over,
+  } as PendingChoice;
+}
+
+describe('choice-view — a pay/decline choice', () => {
+  it('is undecided until one of the two is pressed, then submits that answer', () => {
+    const choice = payMana();
+    const draft = emptyDraft(choice);
+    expect(draftToAnswer(draft)).toBeNull();
+    expect(draftStatus(choice, draft).canSubmit).toBe(false);
+    expect(draftStatus(choice, draft).hint).toContain('pay');
+
+    for (const pay of [true, false]) {
+      const status = draftStatus(choice, setPayMana(draft, pay));
+      expect(status.answer).toEqual({ kind: 'payMana', pay });
+      expect(status.canSubmit).toBe(true);
+      expect(validateChoiceAnswer(choice, status.answer!)).toEqual({ ok: true });
+    }
+  });
+
+  it('agrees with the ENGINE that paying an unaffordable cost cannot be submitted', () => {
+    const choice = payMana({ affordable: false });
+    const status = draftStatus(choice, setPayMana(emptyDraft(choice), true));
+    expect(status.canSubmit).toBe(false);
+    // Declining stays available, so the prompt can always be answered.
+    expect(draftStatus(choice, setPayMana(emptyDraft(choice), false)).canSubmit).toBe(true);
+  });
+
+  it('spells out the cost, and says so when the board cannot produce it', () => {
+    expect(choicePromptView(payMana(), NAMES).requirement).toContain('Pay {3}');
+    expect(choicePromptView(payMana({ affordable: false }), NAMES).requirement).toContain('cannot produce {3}');
+    // It is not a selection: there is nothing to "choose none" of.
+    expect(choicePromptView(payMana(), NAMES).optional).toBe(false);
+  });
+
+  it('ignores selection gestures — it is a two-button question', () => {
+    const choice = payMana();
+    const draft = setPayMana(emptyDraft(choice), true);
+    expect(toggleOption(choice, draft, 1)).toBe(draft);
+    expect(clearDraft(choice, draft)).toBe(draft);
+    expect(draftValues(draft)).toEqual([]);
+    // The yes/no setter and the pay/decline setter do not cross-talk.
+    expect(setConfirm(draft, false)).toBe(draft);
   });
 });
 

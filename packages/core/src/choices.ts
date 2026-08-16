@@ -20,13 +20,18 @@
  *     the only seat whose answer the engine accepts.
  *
  * ## The kinds are composable, not per-card
- * Four small kinds cover every "you may / choose / search / modal" clause in the
- * card pool (DESIGN §1 composition over inheritance — no choice type per card):
+ * Five small kinds cover every "you may / choose / search / modal / unless you
+ * pay" clause in the card pool (DESIGN §1 composition over inheritance — no
+ * choice type per card):
  *   - {@link SelectCardsChoice}  — pick `min..max` cards from a candidate list,
  *     optionally ORDERED (that is what "put them back in any order" is).
  *   - {@link SelectPlayersChoice} — pick `min..max` players.
  *   - {@link ChooseModesChoice}  — pick `min..max` of the listed modes.
  *   - {@link ConfirmChoice}      — yes/no ("you may …").
+ *   - {@link PayManaChoice}      — pay a mana cost, or decline ("unless its
+ *     controller pays {3}"). It is NOT a `confirm` with a cost in the prompt: the
+ *     engine has to know the cost to decide whether paying is even possible, and
+ *     to actually spend the mana when the answer says yes.
  * Library search is `selectCards` over library candidates plus the shuffle that
  * follows (`EffectContext.shuffleLibrary`), not a fifth kind.
  *
@@ -39,7 +44,8 @@
 
 import type { CardType, EffectRef } from './card.js';
 import { hasSubtype } from './card.js';
-import { convertedManaCost } from './mana.js';
+import type { ManaCost } from './mana.js';
+import { convertedManaCost, formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
 
@@ -283,8 +289,27 @@ export interface ConfirmRequest extends ChoiceRequestBase {
   readonly kind: 'confirm';
 }
 
+export interface PayManaRequest extends ChoiceRequestBase {
+  readonly kind: 'payMana';
+  /** What paying costs. The chooser either pays this in full or pays nothing. */
+  readonly cost: ManaCost;
+  /**
+   * Whether the chooser can produce that cost right now. **The engine fills this
+   * in** (only it can see the mana sources still untappable), so a primitive
+   * raising the request leaves it off. A request that arrives without it — one
+   * asked outside a resolution, where nobody can tap anything — is treated as
+   * unaffordable, which is the answer that spends nothing.
+   */
+  readonly affordable?: boolean;
+}
+
 /** Everything a resolving effect may ask. */
-export type ChoiceRequest = SelectCardsRequest | SelectPlayersRequest | ChooseModesRequest | ConfirmRequest;
+export type ChoiceRequest =
+  | SelectCardsRequest
+  | SelectPlayersRequest
+  | ChooseModesRequest
+  | ConfirmRequest
+  | PayManaRequest;
 
 /** The kinds, as a discriminator. */
 export type ChoiceKind = ChoiceRequest['kind'];
@@ -330,8 +355,29 @@ export interface ConfirmChoice extends PendingChoiceBase {
   readonly kind: 'confirm';
 }
 
+export interface PayManaChoice extends PendingChoiceBase {
+  readonly kind: 'payMana';
+  readonly cost: ManaCost;
+  /**
+   * Whether the chooser can produce {@link cost} right now — floating pool plus
+   * every mana source they could still tap.
+   *
+   * This is the field that keeps the choice honest in both directions. False
+   * makes declining the ONLY legal answer, so a player who cannot pay is never
+   * asked and never accidentally "pays" mana that does not exist; true is what a
+   * UI reads to offer the Pay button, and what the engine re-checks before it
+   * spends anything.
+   */
+  readonly affordable: boolean;
+}
+
 /** A question parked in `GameState.pendingChoice`, awaiting an `answerChoice`. */
-export type PendingChoice = SelectCardsChoice | SelectPlayersChoice | ChooseModesChoice | ConfirmChoice;
+export type PendingChoice =
+  | SelectCardsChoice
+  | SelectPlayersChoice
+  | ChooseModesChoice
+  | ConfirmChoice
+  | PayManaChoice;
 
 // --- answers ----------------------------------------------------------------------
 
@@ -352,9 +398,24 @@ export interface ConfirmAnswer {
   readonly kind: 'confirm';
   readonly yes: boolean;
 }
+export interface PayManaAnswer {
+  readonly kind: 'payMana';
+  /**
+   * True = "I pay". The mana is spent by the ENGINE as it accepts this answer,
+   * not by the effect that asked — a primitive is re-run from the top when its
+   * question is answered (see `ResolutionFrame`), so a payment it made itself
+   * would be made again on every later question in the same effect.
+   */
+  readonly pay: boolean;
+}
 
 /** What an `answerChoice` action carries. Plain data — clones and serializes. */
-export type ChoiceAnswer = SelectCardsAnswer | SelectPlayersAnswer | ChooseModesAnswer | ConfirmAnswer;
+export type ChoiceAnswer =
+  | SelectCardsAnswer
+  | SelectPlayersAnswer
+  | ChooseModesAnswer
+  | ConfirmAnswer
+  | PayManaAnswer;
 
 // --- normalisation ----------------------------------------------------------------
 
@@ -373,6 +434,9 @@ export function choiceOptionCount(choice: PendingChoice): number {
       return choice.modes.length;
     case 'confirm':
       return CONFIRM_OPTION_COUNT;
+    case 'payMana':
+      // Declining is always on offer; paying only when the mana is actually there.
+      return choice.affordable ? CONFIRM_OPTION_COUNT : DECLINE_ONLY_OPTION_COUNT;
     default:
       return 0;
   }
@@ -380,6 +444,9 @@ export function choiceOptionCount(choice: PendingChoice): number {
 
 /** A yes/no offers exactly two answers. Named so no bare `2` appears in logic. */
 const CONFIRM_OPTION_COUNT = 2;
+
+/** A payment nobody can afford offers one: decline. */
+const DECLINE_ONLY_OPTION_COUNT = 1;
 
 /** Resolve + clamp `{min,max}` so `0 <= min <= max <= optionCount` always holds. */
 function normalizeCounts(request: ChoiceCountRequest, optionCount: number): { min: number; max: number } {
@@ -439,6 +506,17 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
     }
     case 'confirm':
       return { ...base, kind: 'confirm', min: 1, max: 1 };
+    case 'payMana':
+      return {
+        ...base,
+        kind: 'payMana',
+        // Copied, not aliased: the request's cost usually IS a card definition's
+        // frozen cost object, and a parked choice outlives the call that raised it.
+        cost: { ...request.cost },
+        affordable: request.affordable ?? false,
+        min: 1,
+        max: 1,
+      };
     default:
       return null;
   }
@@ -511,6 +589,15 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
       );
     case 'confirm':
       return typeof (answer as ConfirmAnswer).yes === 'boolean' ? VALID : invalid('a yes/no answer must be a boolean');
+    case 'payMana': {
+      const pay = (answer as PayManaAnswer).pay;
+      if (typeof pay !== 'boolean') return invalid('a pay/decline answer must be a boolean');
+      // Agreeing to pay mana the board cannot produce is rejected rather than
+      // silently downgraded to a decline: the answer is wrong about the game, and
+      // an engine that quietly reinterprets it would hide the disagreement.
+      if (pay && !choice.affordable) return invalid(`you cannot produce ${formatManaCost(choice.cost)}`);
+      return VALID;
+    }
     default:
       return invalid('unknown choice kind');
   }
@@ -538,6 +625,11 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
     case 'confirm':
       // Declining is the no-op branch of "you may", so it is the safe default.
       return { kind: 'confirm', yes: false };
+    case 'payMana':
+      // Never spend mana on the chooser's behalf. Declining is always legal, and
+      // it is the only branch that cannot take something the chooser did not agree
+      // to give — the reason this is safe as the degraded answer.
+      return { kind: 'payMana', pay: false };
     default:
       return { kind: 'confirm', yes: false };
   }
@@ -562,6 +654,12 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       return choice.min === choice.max && (choice.min === 0 || choice.min === choice.modes.length);
     case 'confirm':
       return false;
+    case 'payMana':
+      // A cost the chooser cannot produce has exactly one legal answer, so the
+      // engine takes it instead of stopping the game to collect the inevitable.
+      // This is also what stops a "pays {3}" clause from interrupting a game in
+      // which nobody could ever have paid.
+      return !choice.affordable;
     default:
       return true;
   }
@@ -648,6 +746,14 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
         { kind: 'confirm', yes: true },
         { kind: 'confirm', yes: false },
       ];
+    case 'payMana':
+      // Paying is only offered when it is legal; declining always is.
+      return choice.affordable
+        ? [
+            { kind: 'payMana', pay: true },
+            { kind: 'payMana', pay: false },
+          ]
+        : [{ kind: 'payMana', pay: false }];
     default:
       return [defaultAnswerFor(choice)];
   }
@@ -683,6 +789,8 @@ export function describeChoiceAnswer(answer: ChoiceAnswer): string {
       return answer.modeIds.length === 0 ? 'no modes' : `modes [${answer.modeIds.join(', ')}]`;
     case 'confirm':
       return answer.yes ? 'yes' : 'no';
+    case 'payMana':
+      return answer.pay ? 'paid' : 'declined to pay';
     default:
       return 'answer';
   }

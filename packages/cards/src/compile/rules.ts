@@ -18,7 +18,6 @@ import type {
   CardType,
   EffectRef,
   ManaColor,
-  ManaCost,
   ManaProduction,
   TargetRestriction,
   TriggerCondition,
@@ -26,7 +25,7 @@ import type {
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
-import { COUNT_TOKEN, parseCount } from './text.js';
+import { COUNT_TOKEN, parseCount, parseManaSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 
 /** Mana symbols as they appear in normalized (lowercased) Oracle text. */
@@ -715,6 +714,27 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'counter-target-spell-unless-pays',
+    description: '"Counter target spell unless its controller pays {3}" (Mana Leak)',
+    // Anchored to the end ON PURPOSE. Rune Snag's "…pays {2} plus an additional
+    // {2} for each card named Rune Snag in each graveyard" must NOT match: its
+    // cost is derived from both graveyards, and a rule that quietly charged the
+    // flat {2} would make the card strictly weaker than printed.
+    pattern: /^counter target spell unless its controller pays ((?:\{[^}]+\})+)$/,
+    needsChosenTarget: true,
+    build(match) {
+      // A cost with a symbol the engine cannot charge ({X}, hybrid, Phyrexian)
+      // returns null here, so the clause keeps reporting rather than compiling to
+      // a cheaper payment than printed.
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return effects({
+        primitive: 'counterUnlessPaid',
+        params: { targets: SPELL_TARGET, unlessPaid: cost },
+      });
+    },
+  },
+  {
     id: 'pump-until-eot',
     description: '"Target creature gets +X/+Y until end of turn"',
     pattern: /^target creature gets ([+-]\d+)\/([+-]\d+) until end of turn$/,
@@ -1182,7 +1202,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // does not implement, so they must keep reporting.
     pattern: /^equip ((?:\{[^}]+\})+)$/,
     build(match) {
-      const mana = parseEquipCost(match[1]!);
+      const mana = parseManaSymbols(match[1]!);
       if (!mana) return null;
       return {
         attachesAs: {
@@ -1238,31 +1258,6 @@ function parseKeywordList(text: string): Record<string, boolean> | null {
   }
   return flags;
 }
-
-/**
- * Parse an equip cost's mana symbols. Rejects anything the engine cannot pay as an
- * activation cost ({X}, hybrid, Phyrexian), which keeps those Equipment reporting
- * rather than becoming cheaper than printed.
- */
-function parseEquipCost(symbols: string): ManaCost | null {
-  const cost: Record<string, number> = {};
-  for (const match of symbols.matchAll(/\{([^}]+)\}/g)) {
-    const symbol = match[1]!.toUpperCase();
-    if (/^\d+$/.test(symbol)) {
-      cost.generic = (cost.generic ?? 0) + Number.parseInt(symbol, 10);
-      continue;
-    }
-    if (MANA_LETTERS.includes(symbol)) {
-      cost[symbol] = (cost[symbol] ?? 0) + 1;
-      continue;
-    }
-    return null;
-  }
-  return Object.keys(cost).length > 0 ? (cost as ManaCost) : null;
-}
-
-/** The mana symbols an activation cost can be paid in. */
-const MANA_LETTERS: readonly string[] = ['W', 'U', 'B', 'R', 'G', 'C'];
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
@@ -1477,8 +1472,14 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an opponent-targeting template the compiler does not recognize yet',
   },
   {
+    // Optional payment during resolution IS implemented now (core's `payMana`
+    // choice kind + the `counterUnlessPaid` primitive), so this hint no longer
+    // claims the system is missing — that would send the next agent to rebuild
+    // it. What still lands here is a TEMPLATE: a payment attached to some other
+    // effect ("destroy … unless its controller pays"), a cost derived from the
+    // board (Rune Snag), a sacrifice or discard offered instead of mana, or {X}.
     pattern: /unless (?:its controller|that player|you) pays?/,
-    missingEngineSystem: 'optional payment during resolution ("unless its controller pays")',
+    missingEngineSystem: 'an optional-payment template the compiler does not recognize yet',
   },
   {
     pattern: /leaves the battlefield/,

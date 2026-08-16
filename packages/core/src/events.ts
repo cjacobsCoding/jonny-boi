@@ -6,7 +6,7 @@
  */
 
 import type { InstanceId, PlayerId, Step, ZoneName } from './state.js';
-import type { ManaColor } from './mana.js';
+import type { ManaColor, ManaCost } from './mana.js';
 import type { CardType } from './card.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import type { ChoiceAnswer, ChoiceKind } from './choices.js';
@@ -46,6 +46,17 @@ export type GameEvent =
       readonly amount: number;
     }
   | { readonly type: 'manaPoolEmptied'; readonly player: PlayerId }
+  | {
+      /**
+       * A mana cost was paid OUTSIDE of casting — the "unless its controller pays
+       * {3}" branch of a resolving spell. Casting needs no such event (the spell
+       * itself is the record); a payment that keeps a spell alive would otherwise
+       * leave nothing in the log but a pool that quietly shrank.
+       */
+      readonly type: 'manaCostPaid';
+      readonly player: PlayerId;
+      readonly cost: ManaCost;
+    }
   | {
       /** A permanent changed controller (gained control, or handed back). */
       readonly type: 'controlChanged';

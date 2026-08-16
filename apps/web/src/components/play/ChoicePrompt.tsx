@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import type { ChoiceAnswer, PendingChoice, PlayerId } from '@jonny-boi/core';
+import { formatManaCost, type ChoiceAnswer, type PendingChoice, type PlayerId } from '@jonny-boi/core';
 import {
   choicePromptView,
   clearDraft,
@@ -7,6 +7,7 @@ import {
   emptyDraft,
   orderBadge,
   setConfirm,
+  setPayMana,
   toggleOption,
   type ChoiceDraft,
   type ChoiceOptionValue,
@@ -15,9 +16,10 @@ import { PlayCard } from './PlayCard.js';
 
 /**
  * The modal a human answers a {@link PendingChoice} in — the UI half of DESIGN
- * §3.11. One component covers all four kinds because the kinds differ only in what
- * an "option" looks like (a card, a seat, a mode, yes/no); the count rules, the
- * ordering and the submit gate are shared and live in the pure `choice-view` model.
+ * §3.11. One component covers every kind because the kinds differ only in what an
+ * "option" looks like (a card, a seat, a mode, yes/no, pay/decline); the count
+ * rules, the ordering and the submit gate are shared and live in the pure
+ * `choice-view` model.
  *
  * ## Two guarantees this component keeps
  * 1. **An illegal answer cannot be submitted.** Confirm is disabled unless the
@@ -94,9 +96,21 @@ export function ChoicePrompt({
           )}
           {choice.kind === 'chooseModes' && <ModeOptions choice={choice} draft={draft} onPick={pick} />}
           {choice.kind === 'confirm' && (
-            <ConfirmOptions
-              yes={draft.kind === 'confirm' ? draft.yes : null}
+            <BinaryOptions
+              chosen={draft.kind === 'confirm' ? draft.yes : null}
+              labels={CONFIRM_LABELS}
               onSet={(yes) => setDraft((d) => setConfirm(d, yes))}
+            />
+          )}
+          {choice.kind === 'payMana' && (
+            <BinaryOptions
+              chosen={draft.kind === 'payMana' ? draft.pay : null}
+              labels={{ yes: `Pay ${formatManaCost(choice.cost)}`, no: 'Don’t pay' }}
+              // The engine only ever parks an UNAFFORDABLE payment when a state was
+              // hand-built, but a Pay button that cannot be honoured would still be
+              // a lie, so it is disabled rather than left to fail on submit.
+              yesDisabled={!choice.affordable}
+              onSet={(pay) => setDraft((d) => setPayMana(d, pay))}
             />
           )}
         </div>
@@ -221,32 +235,45 @@ function ModeOptions({
   );
 }
 
-/** Yes/no. Still routed through Confirm so every kind commits the same way. */
-function ConfirmOptions({
-  yes,
+/**
+ * The two BINARY kinds — a yes/no and a pay/decline — share one control. Only the
+ * button copy differs, so the labels are a prop rather than a second component
+ * whose selection and submit wiring could drift from this one. Still routed
+ * through Confirm so every kind commits the same way.
+ */
+function BinaryOptions({
+  chosen,
+  labels,
+  yesDisabled = false,
   onSet,
 }: {
-  yes: boolean | null;
+  chosen: boolean | null;
+  labels: { readonly yes: string; readonly no: string };
+  yesDisabled?: boolean;
   onSet: (yes: boolean) => void;
 }): ReactElement {
   return (
     <div className="choice-prompt__list choice-prompt__list--inline">
       <button
         type="button"
-        className={`choice-option${yes === true ? ' choice-option--selected' : ''}`}
-        aria-pressed={yes === true}
+        className={`choice-option${chosen === true ? ' choice-option--selected' : ''}`}
+        aria-pressed={chosen === true}
+        disabled={yesDisabled}
         onClick={() => onSet(true)}
       >
-        Yes
+        {labels.yes}
       </button>
       <button
         type="button"
-        className={`choice-option${yes === false ? ' choice-option--selected' : ''}`}
-        aria-pressed={yes === false}
+        className={`choice-option${chosen === false ? ' choice-option--selected' : ''}`}
+        aria-pressed={chosen === false}
         onClick={() => onSet(false)}
       >
-        No
+        {labels.no}
       </button>
     </div>
   );
 }
+
+/** The plain yes/no copy, named so the component body reads as data + wiring. */
+const CONFIRM_LABELS = Object.freeze({ yes: 'Yes', no: 'No' });

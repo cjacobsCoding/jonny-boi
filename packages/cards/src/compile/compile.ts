@@ -47,7 +47,7 @@ import {
   explainUnsupported,
   isVacuousClause,
 } from './rules.js';
-import { frontFaceName, normalizeClause, prepareOracle, splitSentences } from './text.js';
+import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
 
 /**
  * Scryfall's keyword names for the two printed attachment abilities. They are
@@ -337,27 +337,6 @@ function parseActivationCost(text: string, ctx: RuleContext): ActivationCost | n
   }
 
   return Object.keys(cost).length > 0 ? (cost as ActivationCost) : null;
-}
-
-/**
- * Parse a run of mana symbols (`{1}{g}`) into a `ManaCost`. Returns null for any
- * symbol the engine cannot pay from a pool, so those lines stay reported.
- */
-function parseManaSymbols(text: string): ManaCost | null {
-  const cost: Record<string, number> = {};
-  for (const match of text.matchAll(/\{([^}]+)\}/g)) {
-    const symbol = match[1]!.toUpperCase();
-    if (/^\d+$/.test(symbol)) {
-      cost.generic = (cost.generic ?? 0) + Number.parseInt(symbol, 10);
-      continue;
-    }
-    if (['W', 'U', 'B', 'R', 'G', 'C'].includes(symbol)) {
-      cost[symbol] = (cost[symbol] ?? 0) + 1;
-      continue;
-    }
-    return null; // hybrid / Phyrexian / {X} — not payable as an activation cost
-  }
-  return Object.keys(cost).length > 0 ? (cost as ManaCost) : null;
 }
 
 /** Capitalize the first character, for a readable ability label. */

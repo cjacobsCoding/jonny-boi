@@ -654,6 +654,22 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   because Thoughtseize's candidates ARE the opponent's hand). Brainstorm, Ponder, Thoughtseize,
   Eternal Witness, Cryptic Command and Path to Exile now play as printed.
 - ✅ *library search* — closed with the above (`searchLibrary`, filtered, optional, with a seeded shuffle).
+- ✅ *optional payment during resolution* — "counter target spell **unless its controller pays {3}**"
+  (Mana Leak, Force Spike, Miscalculation). A fifth choice kind, `payMana`, rather than a `confirm`
+  with the cost written into the prompt: the engine has to know the cost to decide whether paying is
+  possible at all, and to spend the mana itself. Three consequences worth knowing:
+  **(1) the engine pays, not the effect** — a resolving effect is re-run from the top whenever it asks
+  a further question, so a primitive that paid for itself would pay again for every later ask; the
+  charge happens once, in `applyAnswerChoice`, and what the effect is then told is what actually
+  happened. **(2) a player who cannot pay is never asked** — affordability is `canAffordManaCost`
+  (pool + everything still untappable, via the same `planManaPayment` that funds a cast), and an
+  unaffordable payment is a trivial choice the engine settles itself, so the clause never stops a game
+  nobody could have paid in. **(3) which lands get tapped is delegated, deliberately** — rule 605.3
+  lets a player activate mana abilities to pay during resolution, and the shared planner picks the
+  least-flexible source, exactly as it does for a cast. The *decision the card prints* is modelled in
+  full; the sub-decision of which Island is the planner's, in one place, for every seat.
+  The pilot holds a soft counter like a hard one and prices it by asking whether the victim can pay
+  (`softCounterPayableFactor`); the hotseat prompt renders "Pay {3}" / "Don't pay".
 - ✅ *target restrictions* — a card narrows its own aim with the reserved `targets` param
   (`'any'|'creature'|'player'|'spell'`), enforced at offer, at cast, and again at resolution. A
   fidelity audit of all 156 definitions found **19 cards that did not play as printed** and fixed them:

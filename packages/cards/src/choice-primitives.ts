@@ -11,7 +11,8 @@
  * choose / put back" card is a DATA edit, never a new branch in here.
  *
  * ## The one contract every primitive below obeys: ASK FIRST, THEN MUTATE
- * `ctx.ask` (and the typed `chooseCards` / `confirm` / `chooseModes` helpers)
+ * `ctx.ask` (and the typed `chooseCards` / `confirm` / `chooseModes` /
+ * `payOrDecline` helpers)
  * returns `undefined` when the question has been PARKED. The engine then re-runs
  * this same effect ref from the top once the answer arrives, replaying the
  * already-answered questions. So anything mutated *before* an unanswered ask would
@@ -36,18 +37,21 @@ import type {
   PlayerId,
   CardType,
 } from '@jonny-boi/core';
-import { collectCardOptions, isCreature, matchesCardFilter } from '@jonny-boi/core';
+import { collectCardOptions, formatManaCost, isCreature, matchesCardFilter } from '@jonny-boi/core';
 import {
   boolParam,
+  counterSpellOnStack,
   firstPlayerTarget,
   firstTargetInstance,
   intParam,
+  manaCostParam,
   moveOwnedCard,
   movePermanentTo,
   otherPlayer,
   putOntoBattlefield,
   strArrayParam,
   strParam,
+  targetedSpellOnStack,
 } from './effect-helpers.js';
 
 // --- param shapes shared by several primitives -----------------------------------
@@ -454,6 +458,53 @@ export const tapPermanents: EffectPrimitive = (ctx) => {
 /** "Tap all creatures" is the overwhelmingly common form, so it is the default. */
 const DEFAULT_TAP_TYPES: readonly CardType[] = Object.freeze(['creature'] as const);
 
+// --- optional payment ------------------------------------------------------------------
+
+/**
+ * `counterUnlessPaid` — "Counter target spell **unless its controller pays {N}**"
+ * (Mana Leak, Force Spike, Miscalculation, Daze's printed half).
+ *
+ * The question goes to the SPELL'S CONTROLLER, not to this card's — they are the
+ * one being asked to pay, and on a counterspell they are always the opponent. The
+ * cost is `params.unlessPaid`; the counter itself is the same move
+ * `counterSpell` makes.
+ *
+ * ## Why this cannot be "ask, then pay yourself"
+ * `ctx.payOrDecline` returning `true` means the mana is ALREADY SPENT — the engine
+ * charges it as it accepts the answer (see `PayManaAnswer.pay`). So there is
+ * exactly one thing left to decide here, and it is the thing the card prints:
+ * whether the spell dies.
+ *
+ * ## The two ways to get this card wrong, both refused
+ * A player who *cannot* pay is never asked (core settles an unaffordable payment
+ * as a decline), so this never stops a game to collect an impossible answer — and
+ * it never lets one through either: a cost of nothing is not a payment, which is
+ * why `manaCostParam` rejects an empty cost and this primitive then counters
+ * unconditionally rather than treating "paid {0}" as a save.
+ */
+export const counterUnlessPaid: EffectPrimitive = (ctx) => {
+  const spell = targetedSpellOnStack(ctx);
+  if (!spell) return; // already gone, or not a spell — safe no-op
+  const cost = manaCostParam(ctx, UNLESS_PAID_PARAM);
+  if (cost) {
+    // ASK FIRST, THEN MUTATE: nothing above this line has touched the state.
+    const paid = ctx.payOrDecline({
+      chooser: spell.controller,
+      cost,
+      prompt: `Pay ${formatManaCost(cost)} or ${ctx.source.def.name} counters ${spell.card.def.name}`,
+      // Paying keeps your spell, so agreeing is the favourable branch FOR THE
+      // CHOOSER — which is what tells a pilot holding the mana to pay.
+      valence: 'gain',
+    });
+    if (paid === undefined) return; // parked — resume later, nothing mutated
+    if (paid) return; // paid in full: the spell resolves as normal
+  }
+  counterSpellOnStack(ctx, spell);
+};
+
+/** Where the optional payment's cost lives in a card's params. */
+const UNLESS_PAID_PARAM = 'unlessPaid';
+
 // --- registry ------------------------------------------------------------------------
 
 /**
@@ -472,4 +523,5 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   modal,
   returnToHand,
   tapPermanents,
+  counterUnlessPaid,
 });

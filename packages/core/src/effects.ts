@@ -22,6 +22,7 @@ import type {
   ChoiceAnswer,
   ChoiceRequest,
   ConfirmRequest,
+  PayManaRequest,
   SelectCardsRequest,
   SelectPlayersRequest,
 } from './choices.js';
@@ -112,6 +113,21 @@ export interface EffectContext {
   chooseModes(request: ChoiceRequestArgs<ChooseModesRequest>): readonly string[] | undefined;
   /** Ask a yes/no ("you may …"). `undefined` ⇒ parked; `false` ⇒ declined. */
   confirm(request: ChoiceRequestArgs<ConfirmRequest>): boolean | undefined;
+  /**
+   * Ask a player to pay a mana cost, or decline — the "**unless** its controller
+   * pays {3}" half of a card. `undefined` ⇒ parked; `true` ⇒ **the mana has
+   * already been spent** by the engine; `false` ⇒ they did not (or could not) pay,
+   * and nothing was taken.
+   *
+   * `chooser` is usually NOT the source's controller: the player who has to pay is
+   * the one being punished, so a countering spell passes the target's controller.
+   *
+   * The engine, not the effect, works out whether the cost is affordable and
+   * performs the payment (tapping what it must). That division is deliberate — see
+   * {@link PayManaAnswer.pay} — and it is why `true` means "paid", never "agreed
+   * to pay".
+   */
+  payOrDecline(request: ChoiceRequestArgs<PayManaRequest>): boolean | undefined;
   /**
    * Schedule further effect refs to run inside THIS resolution, immediately after
    * the current one. The composition seam for modal spells and for any effect
@@ -263,6 +279,10 @@ export function applyEffectRef(
     confirm(request) {
       const answer = ask({ ...request, kind: 'confirm', chooser: request.chooser ?? base.controller });
       return answer && answer.kind === 'confirm' ? answer.yes : undefined;
+    },
+    payOrDecline(request) {
+      const answer = ask({ ...request, kind: 'payMana', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'payMana' ? answer.pay : undefined;
     },
     enqueueEffects(refs) {
       channel?.enqueueEffects(refs);

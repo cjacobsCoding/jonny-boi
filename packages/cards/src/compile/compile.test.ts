@@ -636,7 +636,11 @@ describe('explainUnsupported — every common rejection names a real engine feat
     ['when ~ enters, return target creature to its owner\'s hand', 'targets chosen by a triggered ability'],
     ['destroy target artifact or enchantment', 'a filtered-targeting template the compiler does not recognize yet'],
     ['counter target noncreature spell', 'a filtered-targeting template the compiler does not recognize yet'],
-    ['counter target spell unless its controller pays {3}', 'optional payment during resolution ("unless its controller pays")'],
+    // "Counter target spell unless its controller pays {3}" COMPILES now (Mana
+    // Leak — see `optional-payment.test.ts`), so the example here has to be a
+    // payment shape that still does not: the mechanism exists, this template
+    // does not.
+    ['destroy target creature unless its controller pays {2}', 'an optional-payment template the compiler does not recognize yet'],
     ['other creatures you control get +1/+1', 'a static-buff template the compiler does not recognize yet'],
     ['gain control of target creature until end of turn', 'a gain-control template the compiler does not recognize yet'],
     ['target creature you control fights target creature you don\'t control', 'a fight template the compiler does not recognize yet'],

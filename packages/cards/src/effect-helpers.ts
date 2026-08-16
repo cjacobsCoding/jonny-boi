@@ -19,7 +19,9 @@ import type {
   GameState,
   InstanceId,
   KeywordFlags,
+  ManaCost,
   PlayerId,
+  SpellStackObject,
   TargetRestriction,
 } from '@jonny-boi/core';
 import {
@@ -29,6 +31,7 @@ import {
   isCreature,
   isPlayerTarget,
   isTargetRestriction,
+  MANA_COLORS,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
 
@@ -143,6 +146,34 @@ export function keywordsParam(ctx: EffectContext): KeywordFlags {
   }
   return out as KeywordFlags;
 }
+
+/**
+ * Read a `ManaCost`-shaped param (`{ generic: 3 }`, `{ generic: 1, U: 1 }`) — the
+ * cost half of an "unless its controller pays {3}" rider.
+ *
+ * Only the numeric fields core can actually charge for are kept, and an ill-typed
+ * or empty param yields `undefined` so the caller degrades to "no payment offered"
+ * rather than charging a cost of nothing (which every player could "pay",
+ * silently turning a counterspell into a blank).
+ */
+export function manaCostParam(ctx: EffectContext, key: string): ManaCost | undefined {
+  const v = ctx.params[key];
+  if (typeof v !== 'object' || v === null) return undefined;
+  const src = v as Record<string, unknown>;
+  const cost: Record<string, number> = {};
+  for (const field of MANA_COST_FIELDS) {
+    const amount = src[field];
+    if (typeof amount === 'number' && Number.isFinite(amount) && amount > 0) cost[field] = Math.trunc(amount);
+  }
+  return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
+}
+
+/**
+ * The `ManaCost` fields a param may carry. `hybrid` is deliberately absent: a
+ * hybrid symbol in an *optional* payment would need the payer to choose colours,
+ * and no rule emits one, so a cost carrying it is not silently half-read.
+ */
+const MANA_COST_FIELDS: readonly string[] = Object.freeze(['generic', ...MANA_COLORS]);
 
 /** Whether a keyword flag object has no true flags. */
 export function isEmptyKeywords(k: KeywordFlags): boolean {
@@ -340,6 +371,41 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   // *controller* only after the creature has already been exiled).
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
+}
+
+/**
+ * The SPELL this effect's first target names, if it is still on the stack.
+ *
+ * "Counter target spell" only ever affects spells: the stack also holds trigger
+ * objects (a triggered ability, an activated ability), which have no card and
+ * cannot be countered by these cards. A target that has already left the stack —
+ * countered by something else, or resolved — yields `undefined`, and every caller
+ * degrades to a safe no-op.
+ */
+export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | undefined {
+  const target = ctx.targets[0];
+  if (target === undefined || isPlayerTarget(target)) return undefined;
+  const object = ctx.state.stack.find((o) => o.instanceId === target);
+  return object && object.kind === 'spell' ? object : undefined;
+}
+
+/**
+ * Counter `spell`: take it off the stack and put its card into its owner's
+ * graveyard without resolving.
+ *
+ * One implementation, shared by the plain counterspell and the "unless its
+ * controller pays" one. They differ ONLY in whether the payment happens first, and
+ * a second copy of the zone move is exactly how two primitives start disagreeing
+ * about what countering emits.
+ */
+export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject): void {
+  const idx = ctx.state.stack.indexOf(spell);
+  if (idx < 0) return;
+  ctx.state.stack.splice(idx, 1);
+  const card = spell.card;
+  card.zone = 'graveyard';
+  ctx.state.players[card.owner].graveyard.push(card);
+  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
 }
 
 // --- misc -----------------------------------------------------------------------

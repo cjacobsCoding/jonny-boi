@@ -41,6 +41,7 @@ export {
   productionTotal,
   poolTotal,
   convertedManaCost,
+  formatManaCost,
   payCost,
   canPay,
 } from './mana.js';
@@ -203,8 +204,8 @@ export { DEFAULT_MANA_MODE } from './actions.js';
  * spell/ability asks a typed question, the engine parks it in
  * `GameState.pendingChoice`, and an `answerChoice` action resumes the resolution.
  * Card authors ask via `EffectContext.chooseCards / choosePlayers / chooseModes /
- * confirm`; the AI, the hotseat UI and the online server all answer through the
- * ordinary action seam.
+ * confirm / payOrDecline`; the AI, the hotseat UI and the online server all answer
+ * through the ordinary action seam.
  */
 export type {
   CardFilter,
@@ -217,16 +218,19 @@ export type {
   SelectPlayersRequest,
   ChooseModesRequest,
   ConfirmRequest,
+  PayManaRequest,
   PendingChoice,
   SelectCardsChoice,
   SelectPlayersChoice,
   ChooseModesChoice,
   ConfirmChoice,
+  PayManaChoice,
   ChoiceAnswer,
   SelectCardsAnswer,
   SelectPlayersAnswer,
   ChooseModesAnswer,
   ConfirmAnswer,
+  PayManaAnswer,
   AnswerValidation,
   ResolutionFrame,
   CollectOptions,
@@ -261,6 +265,7 @@ export {
   applyActionInPlace,
   generateLegalActions,
   choiceActionsFor,
+  canAffordManaCost,
 } from './engine.js';
 /**
  * Deep-copy the mutable parts of a state (card definitions stay shared). Paired

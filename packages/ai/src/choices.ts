@@ -34,6 +34,7 @@ import type {
   ConfirmChoice,
   GameAction,
   GameState,
+  PayManaChoice,
   PendingChoice,
   PlayerId,
   SelectCardsChoice,
@@ -92,6 +93,8 @@ export function answerChoiceHeuristically(
       return answerAction(choice, answerChooseModes(state, choice, weights));
     case 'confirm':
       return answerAction(choice, answerConfirm(choice, weights));
+    case 'payMana':
+      return answerAction(choice, answerPayMana(choice, weights));
     default:
       // A kind this build does not know: take the smallest legal answer the engine
       // itself would take. Robustness over cleverness — never a throw.
@@ -203,4 +206,29 @@ function answerConfirm(choice: ConfirmChoice, weights: HeuristicWeights): Choice
   if (choice.valence === 'gain') return { kind: 'confirm', yes: true };
   if (choice.valence === 'loss') return { kind: 'confirm', yes: false };
   return { kind: 'confirm', yes: weights.choiceConfirmNeutralYes };
+}
+
+/**
+ * Answer "pay {N}, or lose the thing this is attached to".
+ *
+ * The same valence rule as a "you may", with one hard gate in front of it: an
+ * UNAFFORDABLE payment is declined, always. That branch is not judgement — paying
+ * is not a legal answer there — and asserting it here rather than relying on the
+ * engine's own clamp keeps the pilot's answer legal on its own terms.
+ *
+ * Otherwise: `'gain'` (paying keeps something of yours, which is every
+ * "unless its controller pays" card) is paid, `'loss'` declined, and an unmarked
+ * one follows `choicePayManaNeutralYes`.
+ *
+ * ⚠️ What this deliberately does NOT do is compare the cost to what is at stake.
+ * That comparison needs the *stake* — which card dies if you decline — and the
+ * choice does not carry it (nor should it: a choice is renderable by a UI that
+ * knows no rules). A pilot that reasons about the stake belongs with the pilots
+ * that search, not in the valence rule that answers every card ever printed.
+ */
+function answerPayMana(choice: PayManaChoice, weights: HeuristicWeights): ChoiceAnswer {
+  if (!choice.affordable) return { kind: 'payMana', pay: false };
+  if (choice.valence === 'gain') return { kind: 'payMana', pay: true };
+  if (choice.valence === 'loss') return { kind: 'payMana', pay: false };
+  return { kind: 'payMana', pay: weights.choicePayManaNeutralYes };
 }

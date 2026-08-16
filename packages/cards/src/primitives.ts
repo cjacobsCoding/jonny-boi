@@ -38,6 +38,7 @@ import { MINUS_ONE_COUNTER, PLUS_ONE_COUNTER, effectivePower, isCreature, isLega
 import {
   boolParam,
   changeLife,
+  counterSpellOnStack,
   moveOwnedCard,
   restrictionParam,
   firstPermanentTarget,
@@ -53,6 +54,7 @@ import {
   selfIfCreature,
   strArrayParam,
   strParam,
+  targetedSpellOnStack,
 } from './effect-helpers.js';
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 
@@ -331,21 +333,15 @@ export const addMana: EffectPrimitive = (ctx) => {
  * resolves the stack LIFO and this primitive runs during *this* spell's
  * resolution, a real counter would need stack targeting at cast time; we counter
  * by instance id if present.
+ *
+ * The conditional form — "counter target spell **unless** its controller pays
+ * {3}" — is `counterUnlessPaid` in `./choice-primitives`, because it has to ask a
+ * question. Both share the counter itself (`counterSpellOnStack`).
  */
 export const counterSpell: EffectPrimitive = (ctx) => {
-  const target = ctx.targets[0];
-  if (target === undefined || isPlayerTarget(target)) return;
-  const idx = ctx.state.stack.findIndex((o) => o.instanceId === target);
-  if (idx < 0) return; // not on the stack — safe no-op
-  const targeted = ctx.state.stack[idx];
-  // "Counter target spell" only affects spells, not triggered abilities on the
-  // stack (the engine-v2 StackObject union includes 'trigger' objects with no card).
-  if (!targeted || targeted.kind !== 'spell') return; // safe no-op
-  ctx.state.stack.splice(idx, 1);
-  const card = targeted.card;
-  card.zone = 'graveyard';
-  ctx.state.players[card.owner].graveyard.push(card);
-  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
+  const spell = targetedSpellOnStack(ctx);
+  if (!spell) return; // already gone, or not a spell — safe no-op
+  counterSpellOnStack(ctx, spell);
 };
 
 /**
