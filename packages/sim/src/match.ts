@@ -11,6 +11,13 @@
  * loop, so a stalled board records a timeout draw and never hangs (DESIGN §6
  * robustness). The match optionally records a trace (event log + decisions) for
  * the future match viewer, gated off by default to stay allocation-light.
+ *
+ * The loop is also where a pilot gets to watch the half of the game it does not
+ * play: a pilot that implements `createGameObserver` is fed a spectator-level
+ * projection of every event, masked by `observation.ts`. See the comment beside
+ * `observers` below — the interesting parts are that the feed cannot leak (it
+ * contains nothing anybody is entitled to hide) and that it cannot cross a game
+ * boundary (the observer's lifetime is this function call).
  */
 
 import type {
@@ -30,9 +37,10 @@ import {
   generateLegalActions,
 } from '@jonny-boi/core';
 import type { EffectRegistry } from '@jonny-boi/core';
-import type { Pilot } from '@jonny-boi/ai';
+import type { GameObserver, Pilot } from '@jonny-boi/ai';
 import type { LoadedDeck } from './deck.js';
 import { DEFAULT_SIM_CONFIG, type SimConfig } from './config.js';
+import { deliverObservation, type MatchObservers } from './observation.js';
 
 /** Why a game ended — a win by a player, or a draw on the turn/action cap. */
 export type MatchOutcome =
@@ -156,7 +164,40 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
   const events: GameEvent[] | undefined = record ? [...created.events] : undefined;
   const decisions: TracedDecision[] | undefined = record ? [] : undefined;
   const observe = opts.onEvent;
+  /*
+   * THE OBSERVATION SEAM (`docs/plans/superhuman-ai-program.md` §13–17). A pilot's
+   * `chooseAction` runs only while that pilot holds priority, so a pilot could not
+   * see the opponent act at all — which blocks every belief-model item in the
+   * program brief, since a belief model is an update rule with no evidence to
+   * update on.
+   *
+   * Created ONCE PER GAME and dropped when this function returns, which is the
+   * whole of the per-game isolation argument: a pilot instance is reused across
+   * hundreds of games (`makeSeats` builds the bundle once) and the Lab shards the
+   * game grid across workers, so a belief that outlived a game would make a paired
+   * A/B verdict depend on the worker count. The seam gives a pilot nowhere to put
+   * cross-game state; `observation.test.ts` proves a game plays identically
+   * whether or not other games preceded it.
+   *
+   * `observers` is `null` unless a pilot actually asked to watch, so the four
+   * built-in pilots — none of which implement `createGameObserver` — run this loop
+   * exactly as they did before the seam existed.
+   */
+  const observerA = seats.pilotA.createGameObserver?.({
+    seat: 'A',
+    opponent: 'B',
+    startingPlayer,
+  });
+  const observerB = seats.pilotB.createGameObserver?.({
+    seat: 'B',
+    opponent: 'A',
+    startingPlayer,
+  });
+  const observers: MatchObservers | null =
+    observerA || observerB ? { A: observerA, B: observerB } : null;
+  const observerBySeat: Record<PlayerId, GameObserver | undefined> = { A: observerA, B: observerB };
   if (observe) for (const e of created.events) observe(e);
+  if (observers) for (const e of created.events) deliverObservation(observers, e);
   // Chosen ONCE per game, not per action: the branch is in the hot loop.
   const apply = sim.applyActionsInPlace ? applyActionInPlace : applyAction;
 
@@ -184,6 +225,11 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
       rng: rngs[seat],
       registry: seats.registry,
       rulesConfig: config,
+      // This seat's per-game observer, or `undefined`. Always present as a field
+      // so the context keeps ONE object shape across every decision of every
+      // pilot — a shape that appeared and disappeared would make this literal
+      // polymorphic in the hottest loop in the harness.
+      observer: observerBySeat[seat],
     });
     // Stuck on rejections → take the one move that always advances the game.
     const action: GameAction =
@@ -202,6 +248,7 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
       if (e.type === 'actionRejected') rejected = true;
       if (events) events.push(e);
       if (observe) observe(e);
+      if (observers) deliverObservation(observers, e);
     }
     if (rejected) {
       rejectedActions++;

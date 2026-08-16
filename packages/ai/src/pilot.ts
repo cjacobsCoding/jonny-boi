@@ -14,6 +14,7 @@
  */
 
 import type { EffectRegistry, GameAction, GameState, Rng, RulesConfig } from '@jonny-boi/core';
+import type { GameObserver, GameStartInfo } from './observation.js';
 
 /**
  * A **read-only** view of the game a pilot reasons over. It is structurally the
@@ -45,8 +46,13 @@ export interface DecisionTrace {
  * The decision context handed to a pilot for one choice. Bundling the view, the
  * legal actions, and the RNG keeps the `Pilot` interface to a single method and
  * leaves room to add fields (e.g. the event log) without breaking pilots.
+ *
+ * `TObserver` is the pilot's own per-game observer type (see
+ * {@link Pilot.createGameObserver}); it defaults to the bare {@link GameObserver}
+ * so every existing pilot, and every existing `DecisionContext` annotation, is
+ * unchanged.
  */
-export interface DecisionContext {
+export interface DecisionContext<TObserver extends GameObserver = GameObserver> {
   readonly view: PilotView;
   readonly legalActions: readonly GameAction[];
   /** Seeded RNG for any tie-breaking/random choice — reproducible per seed. */
@@ -83,6 +89,19 @@ export interface DecisionContext {
    * Absent ⇒ the pilot rolls out with core's `DEFAULT_RULES`.
    */
   readonly rulesConfig?: RulesConfig;
+  /**
+   * **The observation seam's read side.** The per-game observer this pilot
+   * returned from {@link Pilot.createGameObserver}, carrying everything the
+   * harness has shown it since the game began — including the actions and events
+   * this pilot did not initiate, which `chooseAction` alone can never see
+   * (it is only ever called while this seat holds priority).
+   *
+   * Absent when the pilot declined to create one, and absent in any harness that
+   * does not drive the seam. A pilot that reads it must therefore tolerate
+   * `undefined` and simply play as it did before — which is what makes the seam
+   * optional rather than a new requirement on every pilot.
+   */
+  readonly observer?: TObserver;
 }
 
 /**
@@ -92,13 +111,28 @@ export interface DecisionContext {
  * subset of an offered composite action. It must never throw and never mutate
  * the view.
  */
-export interface Pilot {
+export interface Pilot<TObserver extends GameObserver = GameObserver> {
   /** Stable id this pilot registers under and is selected by from data. */
   readonly id: string;
   /** A one-line description for the inspector / profile picker. */
   readonly description: string;
   /** Choose one action for the current decision. Pure w.r.t. the view. */
-  chooseAction(ctx: DecisionContext): GameAction;
+  chooseAction(ctx: DecisionContext<TObserver>): GameAction;
+  /**
+   * **The observation seam's write side — optional.** Return a fresh observer and
+   * the harness will feed it every public thing that happens in this one game,
+   * whichever seat caused it, then hand it back on every `DecisionContext`.
+   * Return nothing (or omit the method entirely, as all four built-in pilots do)
+   * and the harness skips the whole path: an unobserving pilot is bit-for-bit
+   * unaffected by this seam.
+   *
+   * **Called once per game, and the result must be fresh every time.** Its
+   * lifetime is the game's — see {@link GameObserver} for why that is the load-
+   * bearing property and not a detail: a pilot instance is reused across hundreds
+   * of games and sharded across workers, so any belief that outlives a game makes
+   * a paired A/B verdict depend on how the work was divided up.
+   */
+  createGameObserver?(info: GameStartInfo): TObserver | undefined;
 }
 
 /**
