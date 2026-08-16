@@ -72,41 +72,51 @@ describe('curated tactical suite', () => {
     }
   });
 
-  it('is discriminating — it separates the pilots and no pilot sweeps it', () => {
+  it('is discriminating — it separates the pilots and still has headroom', () => {
     // Both properties matter and they are different. "Separates" means the suite
-    // can see a difference in playing strength at all; "nobody sweeps" means it
-    // still has headroom, so a future improvement has somewhere to show up. A
-    // suite that everything passes has stopped being an instrument.
-    for (const { label } of pilots) {
-      expect(report(label).solved, `${label} solves everything — the suite needs harder puzzles`).toBeLessThan(
-        report(label).total,
-      );
-    }
+    // can see a difference in playing strength at all; "headroom" means a future
+    // improvement still has somewhere to show up. A suite that everything passes
+    // has stopped being an instrument.
+    //
+    // ⚠️ THE HEADROOM CLAIM IS WEAKER THAN IT WAS, AND `fix/land-sequencing` IS WHY.
+    // It used to demand that NO pilot sweep. Both search arms now do (12/12), because
+    // the sequencing puzzle they used to miss was the one this suite was written to
+    // catch and it has since been fixed — so "nobody sweeps" would now be a test
+    // demanding that the defect come back. What survives is the honest form: the
+    // suite must still tell two pilots apart, and at least one pilot must still be
+    // short of a sweep (the heuristic is, on the anti-lethal crackback). The real
+    // headroom moved to the EVALUATOR half below, which is still 0/5 by default.
+    const anyHeadroom = pilots.some(({ label }) => report(label).solved < report(label).total);
+    expect(anyHeadroom, 'every pilot sweeps — the suite needs harder puzzles').toBe(true);
     expect(report('hybrid (tactical)').solved).toBeGreaterThan(report('heuristic').solved);
   });
 
   /**
-   * A LIVE DEFECT THE SUITE FOUND, pinned as a failing-behaviour test rather than
-   * silently tolerated.
+   * A DEFECT THIS SUITE FOUND, NOW FIXED — kept as a permanent regression test.
    *
-   * Every pilot — including the shipped `heuristic` default — plays the Mountain
-   * instead of the Swamp and leaves its own removal spell uncastable for a turn.
-   * The land-drop candidates in `heuristic.ts` score each land on its own merits
-   * and never ask what the land UNLOCKS, so two lands of different colours are
-   * indistinguishable to it.
+   * Until `fix/land-sequencing`, every pilot — including the shipped `heuristic`
+   * default — played the Mountain instead of the Swamp and left its own removal
+   * spell uncastable for a turn. The land-drop candidates in `heuristic.ts` scored
+   * each land on its own merits and never asked what the land UNLOCKS, so two lands
+   * of different colours were indistinguishable to it.
    *
-   * NOT fixed on this branch, deliberately: `collectPriorityCandidates` feeds the
-   * DEFAULT pilot, so changing how it picks a land changes every recorded baseline
-   * in DESIGN §3.4 and every A/B verdict measured against them. That is its own
-   * branch with its own measurement. This assertion exists so the day someone
-   * fixes it, this test fails and tells them they succeeded.
+   * `land-sequencing.ts` scores a land by what it makes castable (through core's own
+   * `planManaPayment`, so the pilot and the search cannot drift on "can I pay for
+   * this"), and this assertion is the inverse of the one that used to be here: it
+   * was written to fail the day somebody fixed the bug, and it did.
+   *
+   * It covers EVERY pilot on purpose. The heuristic is `DEFAULT_PILOT_ID` and also
+   * the search's rollout/prior policy, so a regression in one is a regression in all
+   * three — and the search arms only solved this because the policy underneath them
+   * started offering the right land as a distinguishable option.
    */
-  it('DEFECT (unfixed): no pilot plays the land its own spell needs', () => {
+  it('every pilot plays the land its own spell needs', () => {
     for (const { label } of pilots) {
       const solved = solvedIds(label);
-      expect(solved.has('sequencing/play-the-land-that-casts-the-spell'), `${label} now solves it — remove this test`).toBe(
-        false,
-      );
+      expect(
+        solved.has('sequencing/play-the-land-that-casts-the-spell'),
+        `${label} plays the wrong land — land sequencing has regressed`,
+      ).toBe(true);
     }
   });
 

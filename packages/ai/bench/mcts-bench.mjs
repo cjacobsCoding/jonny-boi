@@ -534,7 +534,7 @@ function eloFromWinRate(p) {
   return -400 * Math.log10(1 / p - 1);
 }
 
-async function headToHead(makeChallenger, label, games, seedBase) {
+async function headToHead(makeChallenger, label, games, seedBase, makeBaseline = () => createHeuristicPilot()) {
   // `wilsonInterval` REQUIRES the z multiplier — omitting it yields NaN bounds,
   // which is what the older `strength` mode below was silently doing. The 95%
   // two-sided value is named data in the sim's own config, so it is read from
@@ -542,12 +542,14 @@ async function headToHead(makeChallenger, label, games, seedBase) {
   const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
   const challengerTimes = [];
   const baselineTimes = [];
+  /** Per game: did the challenger win it? Kept so arms can be compared PAIRWISE. */
+  const won = new Uint8Array(games);
   let wins = 0;
   let draws = 0;
   const t0 = performance.now();
   for (let g = 0; g < games; g++) {
     const challenger = timedPilot(makeChallenger(), challengerTimes);
-    const baseline = timedPilot(createHeuristicPilot(), baselineTimes);
+    const baseline = timedPilot(makeBaseline(), baselineTimes);
     const isA = g % 2 === 0;
     const seats = makeSeats(
       deckA,
@@ -557,7 +559,10 @@ async function headToHead(makeChallenger, label, games, seedBase) {
     );
     const r = runMatch(seats, gameSeedFor(seedBase, g), { startingPlayer: g % 4 < 2 ? 'A' : 'B' });
     if (r.outcome.kind === 'timeout') draws++;
-    else if ((r.outcome.winner === 'A') === isA) wins++;
+    else if ((r.outcome.winner === 'A') === isA) {
+      wins++;
+      won[g] = 1;
+    }
   }
   const wall = performance.now() - t0;
   const ci = wilsonInterval(wins, games, DEFAULT_STATS_CONFIG.z);
@@ -581,16 +586,74 @@ async function headToHead(makeChallenger, label, games, seedBase) {
     eloPerMs: elo / meanC,
     wallSec: wall / 1000,
     decisions: challengerTimes.length,
+    won,
   };
+}
+
+/**
+ * PAIRED comparison of two arms over the identical seeded games (McNemar).
+ *
+ * This is the sensitive instrument, and on a deterministic sim it is the RIGHT one:
+ * two arms that differ on 3% of land drops agree on the vast majority of games, and
+ * an unpaired win-rate difference throws all of that agreement into the noise term.
+ * Only the DISCORDANT games — the ones one arm won and the other lost — carry any
+ * information about which arm is better, so those are what gets a confidence
+ * interval. `b` is games the arm won and the control lost; `c` is the reverse.
+ *
+ * Reported as the arm's share of discordant games: 50% means "no difference", and
+ * an interval that excludes 50% is a real effect. The raw win DELTA is printed
+ * alongside because that is what a win rate on a report card actually moves by.
+ */
+async function printPaired(label, armWon, controlWon) {
+  const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
+  let b = 0;
+  let c = 0;
+  for (let g = 0; g < armWon.length; g++) {
+    if (armWon[g] === controlWon[g]) continue;
+    if (armWon[g]) b++;
+    else c++;
+  }
+  const discordant = b + c;
+  if (discordant === 0) {
+    console.log(`  ${label.padEnd(26)} paired: IDENTICAL on all ${armWon.length} games`);
+    return;
+  }
+  const ci = wilsonInterval(b, discordant, DEFAULT_STATS_CONFIG.z);
+  const delta = ((b - c) / armWon.length) * 100;
+  console.log(
+    `  ${label.padEnd(26)} paired vs control: won ${b}, lost ${c} of ${discordant} discordant ` +
+      `(${((discordant / armWon.length) * 100).toFixed(1)}% of games)  ` +
+      `share=${(ci.p * 100).toFixed(1)}% CI=[${(ci.low * 100).toFixed(1)}%, ${(ci.high * 100).toFixed(1)}%]  ` +
+      `winRate delta=${delta >= 0 ? '+' : ''}${delta.toFixed(2)}pts`,
+  );
 }
 
 function printHeadToHead(r) {
   console.log(
     `  ${r.label.padEnd(26)} ${String(r.wins).padStart(4)}/${r.games}  ` +
       `winRate=${(r.p * 100).toFixed(1)}% CI=[${(r.low * 100).toFixed(1)}%, ${(r.high * 100).toFixed(1)}%]  ` +
+      `draws=${String(r.draws).padStart(4)}  ` +
       `elo=${r.elo.toFixed(0).padStart(5)}  ` +
       `decision mean=${r.meanMs.toFixed(2)}ms p95=${r.p95Ms.toFixed(2)}ms  ` +
       `(heuristic ${r.baselineMeanMs.toFixed(3)}ms)  elo/ms=${r.eloPerMs.toFixed(1)}  ${r.wallSec.toFixed(0)}s`,
+  );
+}
+
+/**
+ * The same result restated over DECISIVE games only, with its own Wilson interval.
+ *
+ * `winRate` above is wins/GAMES and a timeout draw is a loss for both sides in it,
+ * so two identical pilots score well under 50% on any matchup that draws. That is
+ * fine for comparing two arms against each other and wrong for reading any single
+ * arm as "better or worse than even". Both are printed because both get quoted.
+ */
+async function printDecisive(r) {
+  const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
+  const decisive = r.games - r.draws;
+  const ci = wilsonInterval(r.wins, decisive, DEFAULT_STATS_CONFIG.z);
+  console.log(
+    `  ${''.padEnd(26)} decisive ${String(r.wins).padStart(4)}/${decisive}  ` +
+      `winRate=${(ci.p * 100).toFixed(1)}% CI=[${(ci.low * 100).toFixed(1)}%, ${(ci.high * 100).toFixed(1)}%]`,
   );
 }
 
@@ -601,6 +664,173 @@ if (mode === 'hybrid-strength') {
   console.log(`\n=== HEURISTIC vs HYBRID (${deckA.name} vs ${deckB.name}, seat+play rotated) ===`);
   console.log(`  budget: ${JSON.stringify(config.budget)}  leafRolloutDepth=${config.leafRolloutDepth}`);
   printHeadToHead(await headToHead(() => createHybridPilot(config), 'hybrid', count, GAMES_SEED));
+  console.log('');
+}
+
+// --- LAND SEQUENCING: is the fixed heuristic actually STRONGER? --------------
+/**
+ * `fix/land-sequencing`'s load-bearing number.
+ *
+ * The heuristic is `DEFAULT_PILOT_ID`, the search's rollout/prior policy, and the
+ * thing that produced every recorded baseline in this repo — so "the pilot now
+ * plays the right land in a curated puzzle" is not evidence that it is stronger.
+ * The only evidence that counts is the fixed pilot beating the pilot it replaces
+ * over seeded games with seat AND play rotated.
+ *
+ * BOTH ARMS ARE THIS BUILD. The control is the same code with the three sequencing
+ * weights zeroed (`LAND_SEQUENCING_OFF_WEIGHTS`), which makes every land drop tie
+ * and a tie resolve to the first offered action — bit-for-bit the pre-fix pilot.
+ * That matters twice over: it removes the "did you rebuild the other branch?" class
+ * of error entirely, and it lets both arms run inside ONE process on interleaved
+ * games, which is the only honest way to compare on a box whose wall clock drifts
+ * ±19% between runs of identical code.
+ *
+ * Three arms in one command, because they answer three different questions:
+ *   duel        — ON vs OFF head to head. Strength.  (the headline)
+ *   throughput  — the SAME games played by ON-vs-ON and OFF-vs-OFF, interleaved
+ *                 game by game, reported as games/sec. Rule 7.
+ *   digest      — a sha256 over every action both seats chose, per arm. Proves the
+ *                 OFF arm really is the old pilot (its digest must match the same
+ *                 games played on `main`) and that the ON arm really changed
+ *                 something (its digest must not).
+ */
+function recordingPilot(pilot, sink) {
+  return {
+    id: pilot.id,
+    description: pilot.description,
+    chooseAction(ctx) {
+      const action = pilot.chooseAction(ctx);
+      sink.push(action);
+      return action;
+    },
+  };
+}
+
+/**
+ * Play `games` mirror games (both seats the same weights) and time them.
+ *
+ * Plies are counted as well as games, and both get reported, because the two arms
+ * do NOT play the same games: a different land changes the whole trajectory, so one
+ * arm's games can simply be longer. games/sec is the number the Lab actually feels;
+ * µs/ply is the one that says whether the CODE got slower.
+ */
+function selfPlayArm(weights, games, seedBase, sink) {
+  let plies = 0;
+  const t0 = performance.now();
+  for (let g = 0; g < games; g++) {
+    const make = () => {
+      const pilot = createHeuristicPilot(weights);
+      if (sink) return recordingPilot(pilot, sink);
+      return {
+        id: pilot.id,
+        description: pilot.description,
+        chooseAction(ctx) {
+          plies++;
+          return pilot.chooseAction(ctx);
+        },
+      };
+    };
+    const seats = makeSeats(deckA, deckB, { pilotA: make(), pilotB: make() }, registry);
+    runMatch(seats, gameSeedFor(seedBase, g), { startingPlayer: onPlayFor(g) });
+    if (sink) plies = sink.length;
+  }
+  return { ms: performance.now() - t0, plies };
+}
+
+if (mode === 'land-sequencing') {
+  const { DEFAULT_HEURISTIC_WEIGHTS, LAND_SEQUENCING_OFF_WEIGHTS } = await import('@jonny-boi/ai');
+  const ON = DEFAULT_HEURISTIC_WEIGHTS;
+  const OFF = { ...DEFAULT_HEURISTIC_WEIGHTS, ...LAND_SEQUENCING_OFF_WEIGHTS };
+  console.log(`\n=== LAND SEQUENCING (${deckA.name} vs ${deckB.name}, seat+play rotated) ===`);
+
+  // Per-term ablation. Three terms went in together and "the blend is worse" is not
+  // a finding anyone can act on — the actionable question is which of them earned
+  // its place. Each arm is the OFF pilot with exactly ONE term restored, measured
+  // against the same OFF baseline on the same seeded games, so the arms are directly
+  // comparable with each other and with `full`.
+  const ARMS = {
+    // The SELF-VS-SELF control, and it is not optional. `winRate` here is
+    // wins/GAMES, so every timeout draw depresses both sides below 50% — an arm
+    // identical to the baseline reads ~47% on a matchup that draws 6% of the time,
+    // and reading that as "3 points worse" is exactly the mistake this arm exists to
+    // stop. Quote arms against THIS number, never against 50%.
+    none: OFF,
+    full: ON,
+    unlock: { ...OFF, landUnlocksSpellWeight: DEFAULT_HEURISTIC_WEIGHTS.landUnlocksSpellWeight },
+    color: { ...OFF, landFixesNeededColorScore: DEFAULT_HEURISTIC_WEIGHTS.landFixesNeededColorScore },
+    tapland: { ...OFF, landTaplandFreerollScore: DEFAULT_HEURISTIC_WEIGHTS.landTaplandFreerollScore },
+  };
+  const armNames = (process.env.BENCH_LANDSEQ_ARMS ?? 'none,full').split(',');
+  console.log('  -- strength: heuristic(new) vs heuristic(old) --');
+  let control;
+  for (const name of armNames) {
+    const arm = ARMS[name];
+    if (!arm) {
+      console.log(`     (unknown arm "${name}" — known: ${Object.keys(ARMS).join(',')})`);
+      continue;
+    }
+    const result = await headToHead(
+      () => createHeuristicPilot(arm),
+      `+${name}`,
+      count,
+      GAMES_SEED,
+      () => createHeuristicPilot(OFF),
+    );
+    printHeadToHead(result);
+    await printDecisive(result);
+    if (name === 'none') control = result.won;
+    else if (control) await printPaired(`+${name}`, result.won, control);
+  }
+
+  // Throughput, interleaved game by game rather than arm by arm: a sequential run
+  // of the identical build has already "shown" a 17% swing on this box.
+  const rounds = Number(process.env.BENCH_THROUGHPUT_ROUNDS ?? 6);
+  const perRound = Math.max(10, Math.round(count / 4));
+  const onMs = [];
+  const offMs = [];
+  const onUs = [];
+  const offUs = [];
+  for (let r = 0; r < rounds; r++) {
+    // Alternate which arm goes first WITHIN the round as well, so a round that
+    // starts cold does not systematically favour whichever arm always runs second.
+    const runOn = () => {
+      const a = selfPlayArm(ON, perRound, GAMES_SEED + r, null);
+      onMs.push(a.ms);
+      onUs.push((a.ms * 1000) / a.plies);
+    };
+    const runOff = () => {
+      const a = selfPlayArm(OFF, perRound, GAMES_SEED + r, null);
+      offMs.push(a.ms);
+      offUs.push((a.ms * 1000) / a.plies);
+    };
+    if (r % 2 === 0) {
+      runOn();
+      runOff();
+    } else {
+      runOff();
+      runOn();
+    }
+  }
+  const onRate = perRound / (median(onMs) / 1000);
+  const offRate = perRound / (median(offMs) / 1000);
+  console.log(
+    `  -- throughput (heuristic self-play, ${rounds} interleaved rounds x ${perRound} games) --\n` +
+      `     OFF ${offRate.toFixed(1)} games/sec   ON ${onRate.toFixed(1)} games/sec   ` +
+      `ratio ${(onRate / offRate).toFixed(3)}x\n` +
+      `     OFF ${median(offUs).toFixed(2)} us/ply   ON ${median(onUs).toFixed(2)} us/ply   ` +
+      `ratio ${(median(offUs) / median(onUs)).toFixed(3)}x  (>1 means ON is cheaper per decision)`,
+  );
+
+  const onPicks = [];
+  const offPicks = [];
+  const digestGames = Math.min(20, count);
+  selfPlayArm(ON, digestGames, GAMES_SEED, onPicks);
+  selfPlayArm(OFF, digestGames, GAMES_SEED, offPicks);
+  console.log(
+    `  -- digests over ${digestGames} mirror games --\n` +
+      `     OFF ${fingerprint(offPicks)} (${offPicks.length} plies)   ` +
+      `ON ${fingerprint(onPicks)} (${onPicks.length} plies)`,
+  );
   console.log('');
 }
 
