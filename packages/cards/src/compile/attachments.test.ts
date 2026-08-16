@@ -176,6 +176,60 @@ describe('Equipment compiles from its printed text', () => {
   });
 });
 
+describe('an attachment refers to ITSELF by its subtype', () => {
+  it('Angelic Gift — "When this Aura enters, draw a card" is an ability about the Aura', () => {
+    // Oracle templates an attachment's self-reference as "this Aura" / "this
+    // Equipment", never "this enchantment" / "this artifact". Until those two
+    // phrases normalized to `~` the line survived intact and looked like an
+    // ability about some OTHER object, so a plain Aura reported its trigger as
+    // unrecognized and could not be pooled at all.
+    const result = compileCard(
+      card({
+        name: 'Angelic Gift',
+        cost: { generic: 1, W: 1 },
+        types: ['Enchantment'],
+        subtypes: ['Aura'],
+        keywords: ['Enchant'],
+        oracleText: 'Enchant creature\nWhen this Aura enters, draw a card.\nEnchanted creature has flying.',
+      }),
+    );
+    expect(result.missing, JSON.stringify(result.missing)).toEqual([]);
+    expect(result.status).toBe('complete');
+    expect(result.definition.triggers).toEqual([
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Enters: draw a card',
+      },
+    ]);
+    // …and the attachment half is still whole: the trigger must not have eaten it.
+    expect(result.definition.attachment?.modifies).toEqual({
+      power: 0,
+      toughness: 0,
+      keywords: { flying: true },
+    });
+  });
+
+  it('reports an unreadable "this Equipment" line against `~`, not the raw phrase', () => {
+    // Normalizing is not the same as understanding. Ghostfire Blade's cost
+    // reduction is still refused — what changes is that the report now names the
+    // clause in the same canonical form every other diagnostic uses.
+    const result = compileCard(
+      card({
+        name: 'Ghostfire Blade',
+        cost: { generic: 1 },
+        types: ['Artifact'],
+        subtypes: ['Equipment'],
+        keywords: ['Equip'],
+        oracleText:
+          "Equipped creature gets +2/+2.\nEquip {3}\nThis Equipment's equip ability costs {2} less to activate if it targets a colorless creature.",
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.map((m) => m.text).join(' ')).toContain('~');
+  });
+});
+
 describe('the compiler still refuses what it cannot do faithfully', () => {
   it('reports an Equip whose cost narrows the host ("Equip only to a Human")', () => {
     const result = compileCard(

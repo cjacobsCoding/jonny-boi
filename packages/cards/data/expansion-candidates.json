@@ -246,6 +246,57 @@
         "Solemn Simulacrum",
         "Signal Pest"
       ]
+    },
+    {
+      "role": "auras — the 'Enchant creature' half of the attachment seam, one per colour plus removal auras and two gold payoffs",
+      "names": [
+        "Holy Strength",
+        "Nimbus Wings",
+        "Serra's Embrace",
+        "Angelic Gift",
+        "Flight",
+        "Unholy Strength",
+        "Dead Weight",
+        "Weakness",
+        "Enfeeblement",
+        "Dark Favor",
+        "Mark of the Vampire",
+        "Goblin War Paint",
+        "Unflinching Courage",
+        "Gift of Orzhova",
+        "Pacifism",
+        "Spirit Mantle",
+        "Ethereal Armor",
+        "Firebreathing",
+        "Aqueous Form",
+        "Elephant Guide",
+        "Armadillo Cloak"
+      ]
+    },
+    {
+      "role": "equipment — the 'Equip {N}' half; colourless, so every archetype can play them",
+      "names": [
+        "Bone Saw",
+        "Accorder's Shield",
+        "Leonin Scimitar",
+        "Bonesplitter",
+        "Trusty Machete",
+        "Bladed Pinions",
+        "Cobbled Wings",
+        "Kitesail",
+        "Mask of Avacyn",
+        "Vulshok Morningstar",
+        "Fireshrieker",
+        "Loxodon Warhammer",
+        "Strider Harness",
+        "Sword of Vengeance",
+        "Darksteel Axe",
+        "Flayer Husk",
+        "Ghostfire Blade",
+        "Grafted Wargear",
+        "Skullclamp",
+        "Whispersilk Cloak"
+      ]
     }
   ]
 }
