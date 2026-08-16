@@ -41,7 +41,7 @@ export interface SimDeckPayload {
  *
  * A win rate is a measurement of a deck *as played by one pilot on both seats*,
  * not a property of the deck: running the gauntlet with `hybrid` instead of
- * `heuristic` moved Mono-Red Aggro from 32.9% to 19.0%. Both are right; they
+ * `heuristic` moved Mono-Red Aggro from 32.9% to 19.0% (both pre-date the land-sequencing fix; the gauntlet baseline is now 28.2%). Both are right; they
  * answer different questions. So `pilotId` is REQUIRED on every request rather
  * than optional-with-a-default — an optional field is a field a call site can
  * forget, and the one that forgets it would silently answer a different question

@@ -16,8 +16,26 @@
 export interface HeuristicWeights {
   // --- land / tempo --------------------------------------------------------
   /** Score for playing a land when one is available. Lands come first: developing
-   *  mana is almost always correct, so this outranks most spells on a given turn. */
+   *  mana is almost always correct, so this outranks most spells on a given turn.
+   *  This is the score of the BEST land drop; the three weights below only order
+   *  the land drops against EACH OTHER, so land-vs-spell ordering is unaffected. */
   readonly playLandScore: number;
+  /** How much a land is worth for the spell it UNLOCKS — a multiplier on the
+   *  `cardValue` of the best spell in hand that this land makes castable and that
+   *  is not castable without it. At 1 the ordering is "play the land that casts the
+   *  best thing you are holding", which is the whole point: a Mountain and a Swamp
+   *  are the same card until one of them is the one your removal spell needs. */
+  readonly landUnlocksSpellWeight: number;
+  /** Worth of a land adding a colour our HAND is asking for that none of our
+   *  permanents can make yet — the future-turn half of sequencing ("don't strand a
+   *  colour"). Below unlocking a real spell now, above a pure tempo preference. */
+  readonly landFixesNeededColorScore: number;
+  /** Worth of spending a land that arrives TAPPED on a turn where no land drop
+   *  unlocks anything anyway. A tapland costs a mana on the turn it is played, so
+   *  the right turn to play it is one where that mana was never going to be spent —
+   *  holding it merely defers the cost onto a turn you do not get to choose. It is a
+   *  tie-break, not a reason, so it sits below fixing a colour. */
+  readonly landTaplandFreerollScore: number;
 
   // --- removal -------------------------------------------------------------
   /** Base score for casting a removal/burn spell that kills an opposing creature. */
@@ -195,8 +213,22 @@ export interface HeuristicWeights {
  * all editable here.
  */
 export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
-  // land / tempo
+  // land / tempo. Sequencing terms are in `cardValue` units (a spell is 8 + 2 per
+  // mana value, a creature 10 + 2 per stat point), so at weight 1 "unlock the
+  // removal spell you are holding" is worth ~14 — enough to order two land drops
+  // against each other, never enough to reorder a land against a spell.
+  // ⚠️ ALL THREE SHIP ON, and the near-miss that established that is worth knowing:
+  // on ONE matchup the unlock term alone measured better than the blend (52.6% of
+  // discordant games vs 50.9%), which is a tempting reason to zero the other two.
+  // On the SECOND matchup it reversed exactly (blend 52.0%, unlock alone 50.9%).
+  // Pooled over 80,000 paired games the blend is 51.7% [50.5, 52.8] and unlock alone
+  // is 51.4% [50.1, 52.7] — both real, neither separable from the other. Choosing
+  // the default from the first matchup would have been picking the best of four arms
+  // on one sample. See DESIGN §3.4e.
   playLandScore: 90,
+  landUnlocksSpellWeight: 1,
+  landFixesNeededColorScore: 6,
+  landTaplandFreerollScore: 2,
 
   // removal
   removalBaseScore: 60,

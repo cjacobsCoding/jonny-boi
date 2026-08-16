@@ -6,7 +6,9 @@
  * all weighted by the tunable `HeuristicWeights` (DESIGN §1 — no magic numbers):
  *
  *   Main phase (priority windows):
- *     - Develop mana: always play a land if able (lands outrank most spells).
+ *     - Develop mana: always play a land if able (lands outrank most spells), and
+ *       play the land that UNLOCKS the most — the one that makes a spell in hand
+ *       castable, or stops a colour being stranded (see `land-sequencing.ts`).
  *     - Cast the most impactful affordable spell: removal on the opponent's
  *       biggest threat; burn to the face when it's lethal (or there's no better
  *       target); creatures to develop the board. Mana is tapped only as needed to
@@ -50,7 +52,6 @@ import type {
   PlayerId,
 } from '@jonny-boi/core';
 import {
-  bestManaYield,
   castTiming,
   convertedManaCost,
   effectivePower,
@@ -68,6 +69,7 @@ import {
 import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
+import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
 import type { HeuristicWeights } from './weights.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
@@ -236,13 +238,22 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
+  //
+  // WHICH land is its own question (`land-sequencing.ts`) and it is not the same
+  // question as WHETHER to play one: the land drop is worth `playLandScore` however
+  // we resolve it, so the comparison below is unchanged and only the action chosen
+  // inside the branch differs. Taking the first offered land here is what left the
+  // pilot's own removal spell uncastable for a turn.
   const landScore = canPlayLand ? weights.playLandScore : -Infinity;
   const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
   const equipScore = equip ? equip.score : -Infinity;
 
   if (landScore >= spellScore && landScore >= equipScore && canPlayLand) {
-    const landAction = firstActionOfKind(legalActions, 'playLand');
-    if (landAction) return emit(ctx, landAction, 'develop mana — play a land', weights.playLandScore);
+    const landAction = bestLandDrop(view, legalActions, weights);
+    if (landAction) {
+      const why = ctx.trace ? describeLandDrop(view, landAction, legalActions, weights) : NO_REASON;
+      return emit(ctx, landAction, why, weights.playLandScore);
+    }
   }
 
   if (equip && equipScore >= spellScore && equipScore > weights.passScore) {
@@ -1219,29 +1230,10 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
 
 // --- evaluation helpers --------------------------------------------------------
 
-/**
- * Total mana a player could produce this turn: current pool + untapped sources.
- *
- * A source contributes the value of its BEST single mode, because tapping it
- * activates exactly one — a five-color source is worth one mana, not five. (Reading
- * the mode count as an amount is what convinced the old pilot it could afford
- * spells it could not, so it tapped toward them and stranded the mana.)
- *
- * This is a cheap upper bound used only to skip obviously-unaffordable spells;
- * `planManaTaps` is the authority on whether a cost can actually be paid.
- */
-function totalAvailableMana(view: PilotView, player: PlayerId): number {
-  let total = 0;
-  const pool = view.players[player].manaPool;
-  for (const color of MANA_COLORS) total += pool[color];
-  for (const perm of view.battlefield) {
-    if (perm.controller !== player || perm.tapped) continue;
-    total += bestManaYield(perm.def);
-  }
-  return total;
-}
-
-
+// `totalAvailableMana` — the pilot's cheap "mana I could make this turn" upper
+// bound — now lives in `land-sequencing.ts` and is imported back. Both modules need
+// the identical bound and that one is the leaf of the two, so keeping it here would
+// have meant two copies of a number that must agree.
 
 /** Creatures a player controls on the battlefield. */
 function creaturesControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
@@ -1340,14 +1332,6 @@ function anyActionOfKind(actions: readonly GameAction[], kind: GameAction['kind'
     if ((actions[i] as GameAction).kind === kind) return true;
   }
   return false;
-}
-
-function firstActionOfKind(actions: readonly GameAction[], kind: GameAction['kind']): GameAction | undefined {
-  for (let i = 0; i < actions.length; i++) {
-    const action = actions[i] as GameAction;
-    if (action.kind === kind) return action;
-  }
-  return undefined;
 }
 
 /**
@@ -1574,15 +1558,23 @@ function collectPriorityCandidates(
   const state = view as GameState;
 
   // Land drops. One candidate per DISTINCT land, because playing either of two
-  // Mountains from hand is the same decision (brief §4 Level 1).
-  const seenLands = new Set<string>();
-  for (const action of legalActions) {
-    if (action.kind !== 'playLand') continue;
-    const card = view.players[me].hand.find((c) => c.instanceId === action.instanceId);
-    const name = card?.def.name ?? String(action.instanceId);
-    if (seenLands.has(name)) continue;
-    seenLands.add(name);
-    out.push({ plies: [action], score: weights.playLandScore, label: explain ? `play ${name}` : NO_REASON });
+  // Mountains from hand is the same decision (brief §4 Level 1) — and ranked by
+  // what each one UNLOCKS, so the prior does not tell a search that the Mountain
+  // and the Swamp are the same move when only the Swamp casts the removal spell.
+  //
+  // The BEST land keeps exactly `playLandScore`; a worse one is discounted by how
+  // much less it unlocks. That shape is deliberate: it changes land-versus-land
+  // ordering (the defect) without moving land-versus-spell ordering (every recorded
+  // baseline's most load-bearing assumption).
+  const landOptions = rankLandDrops(view, legalActions, weights);
+  let bestLandMerit = -Infinity;
+  for (const option of landOptions) if (option.merit > bestLandMerit) bestLandMerit = option.merit;
+  for (const option of landOptions) {
+    out.push({
+      plies: [option.action],
+      score: weights.playLandScore - (bestLandMerit - option.merit),
+      label: explain ? `play ${option.name}` : NO_REASON,
+    });
   }
 
   // Fetchland-style abilities the heuristic understands. Offered by the engine

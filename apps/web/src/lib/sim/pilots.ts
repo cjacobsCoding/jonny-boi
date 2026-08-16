@@ -10,7 +10,7 @@
  * is. But it has a measured, large consequence:
  *
  * > Running the gauntlet with the `hybrid` pilot on BOTH seats moved Mono-Red
- * > Aggro from **32.9% → 19.0%**. When both sides block better, an aggro deck's
+ * > Aggro from **32.9% → 19.0% (both figures pre-date the land-sequencing fix; the gauntlet is now 28.2%)**. When both sides block better, an aggro deck's
  * > edge shrinks, because much of that edge was punishing weak blocking.
  *
  * Both numbers are correct. They answer different questions. So the pilot travels
@@ -103,7 +103,14 @@ const PILOT_COPY: Readonly<Record<string, { label: string; blurb: string }>> = {
   [HYBRID_PILOT_ID]: {
     label: 'Hybrid search',
     blurb:
-      'Policy-guided search over funded plays. Beats the heuristic 60.0% head-to-head (95% CI 51.1–68.3) on fast tactical boards; on grindy control boards the win is not proven (53.8%, CI 42.9–64.3).',
+      // ⚠️ These are MEASURED numbers shown to the user; they are not marketing.
+      // They previously read 60.0% / 53.8% and were correct when written — then the
+      // heuristic got better at land sequencing, and since it is BOTH the baseline
+      // and the hybrid's own prior, the margin shrank. Nothing about the hybrid
+      // changed. Re-measure and rewrite this line whenever either pilot changes;
+      // an overstated blurb is worse than none, because the whole product is a
+      // claim to measure honestly.
+      'Policy-guided search over funded plays. Head-to-head against the current heuristic it measures 55.8% on fast tactical boards (95% CI 46.9–64.4) and 48.8% on grindy control boards (CI 38.1–59.5) — both intervals include 50%, so at this sample size it is not a proven improvement. Costs ~1,400× the run time.',
   },
   [MCTS_PILOT_ID]: {
     label: 'MCTS',
