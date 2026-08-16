@@ -1,8 +1,11 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { CardInstance, GameAction, InstanceId, PlayerId } from '@jonny-boi/core';
 import { stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
 import { castSequence, castableWithTaps } from '../../lib/online/auto-tap.js';
+import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
+import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
+import { AUTO_PASS_DELAY_MS, AUTO_PASS_EMPTY_PRIORITY } from '../../lib/online/online-config.js';
 import { legalTargets, optionToTarget, targetRequirement } from '../../lib/play/targeting.js';
 import type { GameFrame } from '../../lib/online/online-state.js';
 import {
@@ -111,6 +114,42 @@ export function OnlineBoard({
     reset();
     for (const action of actions) onAction(action);
   };
+
+  /**
+   * Advance automatically through priority windows where passing is the ONLY legal
+   * action. Without this a new game opens in `upkeep` and needs four `Pass / advance`
+   * clicks (two per seat, through `upkeep` and `draw`) before the first land can be
+   * played — with the whole hand greyed out and the bar still reading "Your move".
+   *
+   * `passedWindow` makes it fire at most once per window: the server re-sends `state`
+   * for reasons unrelated to priority, and a repeat frame must not spend a second pass.
+   */
+  const passedFrame = useRef<GameFrame | null>(null);
+  const autoPass =
+    AUTO_PASS_EMPTY_PRIORITY &&
+    !!pass &&
+    shouldAutoPass({
+      yourTurn,
+      legalActions,
+      stackSize: masked.stack.length,
+      awaitingOwnChoice: !!ownChoice,
+      tapCastableCount: tapCastable.size,
+    });
+
+  useEffect(() => {
+    if (!autoPass || !pass) return;
+    if (alreadyPassedFrame(passedFrame.current, frame)) return;
+    const handle = window.setTimeout(() => {
+      // Mark the frame only once the pass actually GOES OUT. Marking it at
+      // schedule time instead deadlocks under StrictMode's double-invoke: the
+      // first run marks and schedules, the cleanup cancels the timer, and the
+      // second run sees the mark and declines to reschedule — so the game sits
+      // saying "advancing…" forever.
+      passedFrame.current = frame;
+      onAction(pass);
+    }, AUTO_PASS_DELAY_MS);
+    return () => window.clearTimeout(handle);
+  }, [autoPass, pass, frame, onAction]);
 
   // --- casting -------------------------------------------------------------------
   const onCastClick = (choice: CastChoice): void => {
@@ -251,6 +290,30 @@ export function OnlineBoard({
   const statusText = `Turn ${view.turnNumber} · ${stepLabel(step)} · ${names[view.activePlayer]}'s turn`;
   const inAttackStep = yourTurn && step === 'declareAttackers' && !!attackTemplate;
 
+  // Context a greyed hand card explains itself against. `anyLandOffered` is the
+  // server's own answer to "may a land be played this window", which is what
+  // separates "wrong step" from "already played one".
+  const disabledContext = useMemo(
+    () => ({
+      yourTurn,
+      yourTurnToAct: masked.activePlayer === masked.viewer,
+      step,
+      waitingOn: names[masked.priorityPlayer],
+      anyLandOffered: lands.size > 0,
+    }),
+    [yourTurn, masked, step, names, lands],
+  );
+
+  /** Is there ANY move available — a card, a mana source, or a combat declaration? */
+  const hasAnyPlay =
+    lands.size > 0 ||
+    casts.size > 0 ||
+    tapCastable.size > 0 ||
+    tappable.size > 0 ||
+    inAttackStep ||
+    inBlockStep;
+  const idleNote = idleTurnNote({ yourTurn, hasAnyPlay, step });
+
   return (
     <div className="play-board">
       <div className="play-board__status">
@@ -307,6 +370,7 @@ export function OnlineBoard({
                 name={c.name}
                 badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
                 disabled={!actionable}
+                reason={actionable ? undefined : reasonCardIsDisabled(disabledContext, c)}
                 onClick={
                   actionable
                     ? isLand
@@ -368,7 +432,14 @@ export function OnlineBoard({
               </button>
             )}
             <span className="action-bar__hint">
-              {ownChoice ? 'Answer the question above to continue.' : hintFor(step)}
+              {ownChoice
+                ? 'Answer the question above to continue.'
+                : // A seat that holds priority with nothing to do is the state that
+                  // read as a frozen app — say so plainly instead of giving the
+                  // generic step hint next to a hand of dead cards.
+                  autoPass
+                  ? 'Nothing to do this step — advancing…'
+                  : (idleNote ?? hintFor(step))}
             </span>
           </>
         )}

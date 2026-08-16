@@ -84,11 +84,61 @@ throughput (games/sec) from regressing.
 | feat/attachment-cards | worker | packages/cards (data + compile/text.ts + build-expansion.ts + 2 tests), packages/data-tools/data, apps/web/src/data (generated), 1 stale comment in apps/web LabView.tsx, DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/pilot-observation | worker | packages/sim (new observation.ts + test + bench; match.ts, index.ts, package.json) + MINIMAL packages/ai (new observation.ts, reveal-tally.ts + test; additive edits to pilot.ts, index.ts, one comment in tree-reuse.ts), DESIGN §2 + §3.4c | 🚧 PUSHED, not merged |
 | feat/tactical-eval | worker | packages/ai (new: tactical.ts + tactical-suite.ts + 2 test files; evaluator/hybrid/hybrid-config/index/tsconfig/bench + 2 existing tests), DESIGN §3.4d | 🚧 PUSHED, not merged — branches off main |
+| fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass.ts, why-disabled.ts, online-config.ts + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, apps/server land-playability.test.ts, COORDINATION.md | 🚧 PUSHED, not merged — 2273 tests, build exit 0 |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
-- 2026-08-15 DESKTOP-90PJPM4: 🔴 **HANDOFF — ONLINE MULTIPLAYER IS UNPLAYABLE.** User report,
+- 2026-08-15 DESKTOP-90PJPM4: ✅ **RESOLVED — the "unplayable online" report, diagnosed and fixed.**
+  Branch `fix/online-playability` (worktree `D:\Cool Stuff\Claude\jb-online`). Suite **2273 passed,
+  0 failed** (was 2250); `npm run build -w @jonny-boi/web` exit 0; lint clean. The handoff brief
+  below is now HISTORY — read this entry first.
+
+  **ROOT CAUSE (not a bug in the server, the masking, or the adapter — all were sound, as the brief
+  had already proven).** A game opens in the `upkeep` step, and BOTH seats are given priority in
+  `upkeep` and again in `draw`, where the server's only legal action is `passPriority`. So the board
+  said **"Your move"** over a hand in which every card — the Mountain included — was
+  `play-card--disabled`, and the first land could not be played until **four `Pass / advance` clicks**
+  (two per seat) had gone by. Reproduced exactly, on both seats, before changing anything: that is
+  the user's "I can't even drag lands out… clicking, dragging, nothing works."
+
+  - **LEAD 2 split: UX defect, not an adapter bug.** The waiting seat DID render "Waiting for Alice…"
+    correctly, so `board-adapter.ts` is exonerated. The dead-hand-on-your-own-turn half is the real
+    fault.
+  - **LEAD 1 confirmed and still open.** There is no drag-and-drop anywhere in the online board; hand
+    cards are click-only. Dragging never worked and still doesn't — a missing feature, not a regression.
+  - **LEAD 3 looks unreachable.** `screen: 'mulligan'` is only ever set by `mulliganPrompt`, which
+    always carries a hand, so the `OnlinePlay.tsx:137` "Waiting for your hand…" dead end appears to be
+    dead code. NOT proven; left alone.
+
+  **THE FIX** (all in `apps/web`, disjoint from other branches):
+  - `lib/online/auto-pass.ts` (new, pure) — advance automatically when passing is the ONLY thing the
+    seat may do. Narrow by construction: it stops on any non-pass legal action, a non-empty stack, a
+    parked choice, or a card fundable by tapping — so it cannot skip a decision. Verified live that
+    `declareBlockers` stops it, so blocks are never auto-skipped.
+  - `lib/online/why-disabled.ts` (new, pure) — every greyed card now says WHY on hover
+    ("Lands can only be played in your main phase", "You've already played a land this turn",
+    "Waiting for Alice — you don't have priority yet").
+  - `AUTO_PASS_EMPTY_PRIORITY` / `AUTO_PASS_DELAY_MS` in `online-config.ts`; `PlayCard` gained an
+    optional `reason` tooltip (additive — hotseat unchanged).
+
+  **TWO TRAPS worth knowing, both found only by running it:**
+  1. **StrictMode kills a naive auto-advance.** Marking the window as "passed" at *schedule* time
+     deadlocks: run 1 marks + schedules, the cleanup cancels the timer, run 2 sees the mark and
+     declines to reschedule → the board sits on "advancing…" forever. Mark it when the pass FIRES.
+  2. **Do not dedupe on a `turn:step:priority` key.** A seat legitimately needs to pass TWICE in one
+     `declareBlockers` step with the stack empty throughout (priority returns after blocks are
+     declared). That key calls the second window a duplicate and hangs the game — observed. Dedupe on
+     the identity of the frame the server pushed instead.
+
+  **STILL OPEN (not mine, not done):** drag-and-drop (LEAD 1); the lobby defaults the deck picker to
+  the user's *invalid* imported deck ("deck size 2 is below the minimum of 60") so a new player's
+  first sight is a wall of red errors and a disabled button; the web app has **no debug inspector
+  panel at all**, so rule 3 has no seam to register against; and online play has no DESIGN.md §3
+  entry to flip. (Integrator)
+
+- 2026-08-15 DESKTOP-90PJPM4: 🔴 **HANDOFF — ONLINE MULTIPLAYER IS UNPLAYABLE.** *(superseded by the
+  entry above — kept for the elimination trail.)* User report,
   verbatim: "I joined with someone but I cant even drag lands out to play them. Tried clicking,
   dragging, nothing works." NOT FIXED. Branch `fix/online-playability` carries only the
   investigation. **Read this before touching online play so you do not redo the elimination.**
