@@ -88,6 +88,39 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 integrator: **`feat/blocking-restrictions` + `feat/derived-values` MERGED + DEPLOYED**
+  (both Deploy PWA green). main = **2244 tests, build exit 0**.
+  - **Menace / can't-be-blocked.** Menace is NOT a keyword flag — it constrains the block
+    DECLARATION, not any pair: each blocker individually *can* block a menacing creature, and the
+    rule forbids exactly one doing it. `canBlock` is per-pair and structurally cannot see that, so a
+    flag-only version silently does nothing. New `illegalBlockDeclaration` judges the assignment as
+    a whole. Zero blockers stays legal.
+  - **Derived values** are implemented at `intParam`, the chokepoint every numeric param already
+    reads — so damage, draw, life, mill and pump ALL got "equal to the number of…" with no
+    primitive touched, and future primitives inherit it. Closed vocabulary on purpose.
+
+  ⛔ **THE REMAINING SEVEN ARE EACH BLOCKED ON A NAMED, MISSING SUBSYSTEM.** They are not more
+  rule-table work, and I stopped rather than half-build them. In dependency order:
+  1. **Choice outside a resolution frame.** `pendingChoice` can only be parked by a resolution
+     frame, so anything asking a question at another moment is blocked. This gates **targets chosen
+     by a triggered ability** (targets are chosen when it goes ON THE STACK) and **shocklands**
+     ("pay 2 life" at land-play). ⚠️ Do NOT "fix" trigger targets by auto-picking when exactly one
+     legal target exists — the compiler would report COMPLETE and the card would then fizzle
+     whenever the board has two, which is worse than reporting it.
+  2. **Source-aware targeting.** `isLegalTarget` knows the CASTER, not the source card, so
+     **protection from a color** cannot be checked (protection is about the source's colour). The
+     blocking and damage halves are reachable today; shipping only those would be a card that obeys
+     a third of its text.
+  3. **Cost modification at cast time** — gates **{X}, kicker, suspend, spectacle**.
+  4. **Casting from a non-hand zone** — gates **flashback**.
+  5. **A second card face** — gates **transform/DFC**.
+  6. **Loyalty counters + planeswalkers as an attackable object with damage redirection** — gates
+     **planeswalker loyalty**, the largest of the set.
+  **optional payment during resolution** ("unless its controller pays") is the one genuinely
+  reachable next: it happens INSIDE a resolution frame, where `ctx.ask` already works. Whoever
+  takes it needs a mana-payment answer kind, not a new choice mechanism.
+  (Integrator)
+
 - 2026-08-15 worker: `feat/tactical-eval` 🚧 PUSHED — **an exact combat solver + the curated tactical
   suite the brief asks for. The evaluator half is MORE CORRECT and NOT STRONGER, so it ships OFF; the
   measurement and the suite ARE the deliverable.** `packages/ai` only, plus DESIGN §3.4d. Branches off
