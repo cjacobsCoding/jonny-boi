@@ -88,6 +88,48 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-15 DESKTOP-90PJPM4: 🔴 **HANDOFF — ONLINE MULTIPLAYER IS UNPLAYABLE.** User report,
+  verbatim: "I joined with someone but I cant even drag lands out to play them. Tried clicking,
+  dragging, nothing works." NOT FIXED. Branch `fix/online-playability` carries only the
+  investigation. **Read this before touching online play so you do not redo the elimination.**
+
+  **ALREADY RULED OUT — do not re-investigate.** `apps/server/src/land-playability.test.ts` drives
+  a real two-player game through the transport-free `Room` with fake connections and asserts, FOR
+  BOTH SEATS: priority is held in its own precombat main, ≥1 `playLand` is offered, every offered
+  `instanceId` is in that seat's own MASKED hand, and submitting it puts the land on the
+  battlefield. All 6 pass (suite 2250, 0 failed). So the server, the masking, the legal-action
+  path and the id alignment are SOUND. The fault is above them: client rendering, input wiring, or
+  the user simply not holding priority.
+
+  **LEAD 1 — there is no drag-and-drop at all.** `apps/web/src/components/online/OnlineBoard.tsx`
+  wires only `onClick`: no `draggable`, no `onDragStart`/`onDrop`, no drop targets anywhere.
+  Dragging a land can never have worked. This is a MISSING FEATURE, not a regression — so half the
+  report is explained outright, and "clicking does nothing" is the part still unaccounted for.
+
+  **LEAD 2 (most likely for the click half) — a waiting seat is indistinguishable from a broken
+  app.** The seat without priority is sent `legalActions: []`, so every card greys out. Pinned
+  deliberately as the last test in that file, because it is correct behaviour that LOOKS like the
+  bug. The user JOINED someone else's game, i.e. was seat B on seat A's turn. Check what the action
+  bar actually rendered: if it said "Waiting for <name>…" the app was working and this is a UX
+  defect (make the waiting state loud, and say WHY the hand is dead). If it said "Your move" and
+  clicking still did nothing, the fault is in `apps/web/src/lib/online/board-adapter.ts`
+  (`maskedViewToBoardView`, line ~126: `self: seatView(view.players[viewer], …)`) or in
+  OnlineBoard's disabled predicate — everything beneath those is already proven good.
+
+  **LEAD 3 — a real dead end, unproven as this bug.** `apps/web/src/components/online/OnlinePlay.tsx`
+  ~line 137: when phase is `mulligan` but `mulliganHand` is missing, it renders a bare "Waiting for
+  your hand…" with NO Keep button and no recovery. A player who lands there is stuck forever.
+
+  **START HERE:** run the app, open two browsers, join a room, and screenshot BOTH seats' action
+  bars on turn 1. That single observation splits LEAD 2 into "UX defect" vs "adapter bug" and costs
+  minutes. Do not start by reading the server.
+
+  ⚠️ FIXTURE TRAP that cost a cycle, now commented in the test: `DeckList.cardId` is the card
+  **NAME** (`'Forest'`, not `'forest'`). A wrong id is SILENTLY an unknown card → deck rejected →
+  the room never starts a game → every assertion fails with "never sent a state", pointing nowhere
+  near the deck. Worth checking whether the real deck-selection screen fails as silently.
+  (Integrator — handing off with ~0 context left.)
+
 - 2026-08-15 integrator: **`feat/blocking-restrictions` + `feat/derived-values` MERGED + DEPLOYED**
   (both Deploy PWA green). main = **2244 tests, build exit 0**.
   - **Menace / can't-be-blocked.** Menace is NOT a keyword flag — it constrains the block
