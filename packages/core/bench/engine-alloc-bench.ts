@@ -33,7 +33,9 @@ import { applyAction, createGame, generateLegalActions } from '../src/engine.js'
 import { DEFAULT_RULES } from '../src/config.js';
 import { cloneState } from '../src/internal/clone.js';
 import { createRng } from '../src/rng.js';
+import { planManaPayment } from '../src/mana-plan.js';
 import type { GameAction } from '../src/actions.js';
+import type { ManaCost } from '../src/mana.js';
 import type { GameState } from '../src/state.js';
 import { playSelfPlayGame, selfPlayDecks, SELF_PLAY_ACTION_CAP } from '../src/test-fixtures.js';
 
@@ -46,6 +48,12 @@ const FIRST_SEED = 0xbeef;
 const MIDGAME_ACTIONS = 400;
 const CLONE_ITERATIONS = 200_000;
 const CLONE_ROUNDS = 7;
+/** How many mid-game boards the mana-planning microbench sweeps, and how often. */
+const PLAN_POSITIONS = 60;
+/** Sample every Nth board that offers a tap, so positions span the game's arc. */
+const PLAN_POSITION_STRIDE = 3;
+const PLAN_SWEEPS = 400;
+const PLAN_ROUNDS = 7;
 
 const decks = selfPlayDecks();
 
@@ -133,3 +141,76 @@ const clonedInstances =
 console.log(`\ncloneState — mid-game board (${zoneSizes})`);
 console.log(`  ${((cloneMs * 1e6) / CLONE_ITERATIONS).toFixed(0)} ns/clone (median of ${CLONE_ROUNDS} x ${CLONE_ITERATIONS.toLocaleString()})`);
 console.log(`  ${(((cloneMs * 1e6) / CLONE_ITERATIONS) / clonedInstances).toFixed(1)} ns per cloned instance (${clonedInstances} instances)`);
+
+// --- 3: mana-payment planning ------------------------------------------------------
+//
+// `planManaPayment` is the most expensive primitive a search pilot touches — it plans
+// a funding for every castable card at every node — but the self-play picker above
+// never calls it (it picks a uniformly random legal action), so a change to it is
+// invisible in section 1. Measured here on real mid-game boards, core-only so the
+// number stays comparable across branches that touch `cards`/`ai`.
+
+interface PlanPosition {
+  readonly state: GameState;
+  readonly legal: readonly GameAction[];
+  readonly cost: ManaCost;
+}
+
+/** Mid-game boards that actually offer a tap, each paired with a real card's cost. */
+function planPositions(): PlanPosition[] {
+  const positions: PlanPosition[] = [];
+  const rng = createRng(FIRST_SEED);
+  let state = createGame({ seed: FIRST_SEED, decks, config: DEFAULT_RULES }).state;
+  let offered = 0;
+  while (positions.length < PLAN_POSITIONS && !state.gameOver) {
+    const legal = generateLegalActions(state, DEFAULT_RULES);
+    if (legal.length === 0) break;
+    const seat = state.priorityPlayer;
+    const canTap = legal.some((a) => a.kind === 'tapForMana' && a.player === seat);
+    if (canTap && ++offered % PLAN_POSITION_STRIDE === 0) {
+      const card = state.players[seat].hand.find((c) => c.def.cost);
+      if (card?.def.cost) positions.push({ state: cloneState(state), legal: [...legal], cost: card.def.cost });
+    }
+    state = applyAction(state, legal[rng.nextInt(legal.length)] as GameAction, DEFAULT_RULES).state;
+  }
+  return positions;
+}
+
+function timePlanSweep(positions: readonly PlanPosition[]): number {
+  const start = process.hrtime.bigint();
+  let sink = 0;
+  for (let s = 0; s < PLAN_SWEEPS; s++) {
+    for (let i = 0; i < positions.length; i++) {
+      const p = positions[i] as PlanPosition;
+      const plan = planManaPayment(p.state, p.state.priorityPlayer, p.cost, p.legal);
+      sink += plan ? plan.length : 0;
+    }
+  }
+  if (sink === -1) throw new Error('unreachable');
+  return Number(process.hrtime.bigint() - start) / 1e6;
+}
+
+const planPositionList = planPositions();
+if (planPositionList.length === 0) {
+  console.log('\nplanManaPayment — no mid-game board offered a tap; nothing to measure');
+} else {
+  timePlanSweep(planPositionList); // warm
+  const planRounds: number[] = [];
+  for (let r = 0; r < PLAN_ROUNDS; r++) planRounds.push(timePlanSweep(planPositionList));
+  const planMs = median(planRounds);
+  const calls = planPositionList.length * PLAN_SWEEPS;
+  const meanBattlefield =
+    planPositionList.reduce((n, p) => n + p.state.battlefield.length, 0) / planPositionList.length;
+  const meanTaps =
+    planPositionList.reduce(
+      (n, p) => n + p.legal.filter((a) => a.kind === 'tapForMana' && a.player === p.state.priorityPlayer).length,
+      0,
+    ) / planPositionList.length;
+  console.log(
+    `\nplanManaPayment — ${planPositionList.length} mid-game boards ` +
+      `(mean battlefield ${meanBattlefield.toFixed(1)}, mean offered taps ${meanTaps.toFixed(1)})`,
+  );
+  console.log(
+    `  ${((planMs * 1000) / calls).toFixed(3)} us/call (median of ${PLAN_ROUNDS} x ${calls.toLocaleString()} calls)`,
+  );
+}

@@ -78,9 +78,72 @@ throughput (games/sec) from regressing.
 | feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
 | spike/engine-representation | worker | spikes/engine-representation (new) + 2 narrow eslint.config.js additions | 🚧 PUSHED, not merged — DECISION SPIKE, no product code |
 | feat/hybrid-search | worker | packages/ai (new: search-stats/evaluator/hybrid/hybrid-config + heuristic policy seam + bench), DESIGN §3.4a | 🚧 PUSHED, not merged |
+| perf/core-hotpath | worker | packages/core (mana-plan.ts + new mana-plan.test.ts + bench/engine-alloc-bench.ts) | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `perf/core-hotpath` 🚧 PUSHED — **`planManaPayment` is 1.9–2.7x faster and allocates
+  86% less; the "kill the clone" ceiling is NOT 1.53x and the reason is that the clone is already gone.**
+  `packages/core` only (`mana-plan.ts`, new `mana-plan.test.ts`, a new section in
+  `bench/engine-alloc-bench.ts`). `npm run verify` exit 0 — **1957 passed / 0 failed** (baseline 1939 + 18
+  new), lint 0 errors, `npm run build` exit 0.
+  👉 **THE COST WAS THE OBJECT SHAPE, NOT THE SCAN — and the brief's suggested fix is the one thing that
+  makes it slower.** Building a `Map` index of the battlefield per call measured **0.92–0.98x at 2,272
+  B/call** against 1,854 for the linear scan, on 600 real mid-game positions. The 20-odd `===` the scan
+  performs are nearly free; what was NOT free is that a `ManaCost` and a `ManaProduction` are SPARSE
+  partial records (`{R:1}`, `{generic:2,W:1}`), so **every card in a deck presents a different hidden
+  class and `cost[color]` in the ranking loop is a MEGAMORPHIC load** — six of them per candidate tap per
+  step of the plan. Reading each sparse record ONCE into a dense `Int32Array` and ranking against that is
+  where the whole win lives. The scan stayed; the old comment defending it was right and is kept (with
+  the re-measured numbers).
+  👉 **Measured, in-process, interleaved A/B of seven variants** (600 real positions, Mono-Red vs Boros,
+  old implementation copied verbatim as the control so both run in one process):
+  linear scan → allocation-free indexed scan **1.08–1.14x**; + array-of-groups instead of
+  `Map.values()` **1.19–1.38x**; + dense reused buffers **1.77–2.73x at 262 B/call vs 1,854 (−86%)**.
+  Re-measured on `packages/core/bench/engine-alloc-bench.ts`, interleaved, core-only: **4.03 → 2.13
+  µs/call (1.89x median, 1.95x best-of)**, with actions/sec and ns/clone at parity.
+  `packages/ai/bench/mcts-bench.mjs instrument`: **8.21 → 6.36 µs and 5.32 → 0.34 KB per call (−94%)**,
+  allocation/decision 19.75 → 16.25 MB. End to end, interleaved by swapping `packages/core/dist`:
+  heuristic gauntlet **+5% median**, hybrid match **1.12x best-of / 1.24x median**.
+  ⚠️ **DETERMINISM, proved four ways, not asserted.** (1) A full-decision-sequence sha256 over **28,108
+  plies** — heuristic on two matchups (20 games each) and the HYBRID pilot on two matchups — is
+  **identical** before and after. (2) `npm run sim -- gauntlet "Mono-Red Aggro" --games 40 --seed 99` and
+  `-- match … --pilot hybrid` diff **byte-identical except the throughput line**. (3) The seven variants
+  were required to return the identical plan on all 600 positions. (4) `selfplay-lock.test.ts` unchanged.
+  👉 **NEW: `packages/core/src/mana-plan.test.ts` (18 tests) — the hottest function in the engine had NO
+  direct test.** It is public API for both pilots, the hotseat auto-tap and the online client, and it was
+  only ever exercised indirectly. The tests pass against the OLD implementation too (checked), so they
+  are a real equivalence guard rather than a rubber stamp for the new one. They pin the two tie-breaks,
+  "a source's modes are alternatives", grouping when the offered modes are **non-contiguous** (the online
+  client filters its own action list, so grouping must not depend on engine ordering), and the three ways
+  the new reused module-level buffers could leak between calls.
+  ❗ **THE CLONE ANSWER IS "ALREADY DONE", AND ANYONE QUOTING 1.53–1.58x IS QUOTING A DEAD NUMBER.**
+  `DEFAULT_SIM_CONFIG.applyActionsInPlace` is **true**, so `match.ts` already runs `applyActionInPlace`;
+  MCTS and the hybrid roll out in place too. **There is no remaining hot-path caller of the cloning
+  `applyAction` in this repo** — the others are `apps/web` session + replay-build and `apps/server` room,
+  all one action per human/network event, all genuinely needing the previous state. So the spike's ~1.58x
+  ceiling (correct for clone-per-ACTION) no longer describes the code.
+  👉 **What IS left is one clone per SIMULATION in the search, and I measured its real ceiling:**
+  the hybrid's budget is 160 simulations = 160 clones per decision, which is **19.0% (median) / 16.9%
+  (best-of) of a decision** → **ceiling 1.23x / 1.20x if cloning were FREE**, on 10 real positions,
+  9 interleaved rounds.
+  👉 **The one structural lever, measured but deliberately NOT taken: 85% of the instances a clone copies
+  are LIBRARY cards.** Sharing library instances instead of copying them makes the clone **3.3x cheaper**
+  (2.61 vs 8.66 µs, 4.12 vs 14.70 KB) — but that is worth only **1.15x** on a hybrid decision and NOTHING
+  on the Lab's default heuristic gauntlet, and it buys that by introducing an invariant ("no `CardInstance`
+  is mutated while it sits in a library") that is unenforced today, whose violation aliases two states and
+  corrupts the search's root **silently**. That trade needs its own branch with the invariant made
+  mechanical (a dev-mode freeze + a sabotage test), not the tail of a perf branch. ⚠️ Note the byte
+  counters in that comparison are distorted by V8 escape analysis on the inlinable control arm; the time
+  ratio, the byte ratio and the 85% instance share agree, which is why it is quoted as "3–4x".
+  ❌ Also NOT done and NOT mine: `packages/ai` could reuse ONE state buffer across simulations
+  (refresh-in-place instead of `cloneState` per simulation) — that removes the ALLOCATION without removing
+  the copying, and it is a `hybrid.ts`/`mcts.ts` change. Reported, not made.
+  ⚠️ **Measurement discipline:** sequential runs "showed" this change as a 17% SLOWDOWN (143 → 119
+  games/sec) — pure drift; the interleaved run of the same builds showed +5%. Every number above is
+  interleaved inside one process or by alternating `packages/core/dist` between two prebuilt copies.
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-15 integrator: **`fix/room-code-length` MERGED + DEPLOYED** (Deploy PWA success).
   main = **1887 tests, build exit 0**. USER-REPORTED: PC hosted, phone entered the code, Join stayed

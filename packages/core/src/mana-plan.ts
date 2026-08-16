@@ -14,7 +14,7 @@
 
 import type { GameAction } from './actions.js';
 import { manaModesOf } from './card.js';
-import type { ManaCost, ManaPool, ManaProduction } from './mana.js';
+import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { canPay, MANA_COLORS } from './mana.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 
@@ -65,6 +65,86 @@ export function distanceToPayable(pool: ManaPool, cost: ManaCost): number {
 }
 
 /**
+ * ## Why this function keeps its working set in module-level scratch buffers
+ *
+ * `planManaPayment` is the hottest primitive the hybrid search touches — it runs
+ * once per castable card per search node — and its cost was NOT where the code
+ * assumed. Measured on 600 real mid-game positions (Mono-Red Aggro vs Boros
+ * Aggro, interleaved A/B in one process), the dominant cost was not the number of
+ * comparisons but the SHAPE of the objects being compared:
+ *
+ *  - A `ManaCost` and a `ManaProduction` are sparse partial records — `{R:1}`,
+ *    `{generic:2, W:1}`, `{}` — so every card in a deck presents a DIFFERENT
+ *    hidden class. Reading `cost[color]` in the ranking loop is therefore a
+ *    megamorphic property load, and the loop performed six of them per candidate
+ *    tap per step of the plan.
+ *  - `for (const color of MANA_COLORS)` allocated an array iterator per pass, in
+ *    the same loop `canPayFixed` had already been converted away from for exactly
+ *    this reason (see mana.ts).
+ *
+ * Both are fixed by reading each sparse record ONCE into a dense, fixed-length
+ * `Int32Array` in the colour order of `MANA_COLORS`, and doing all of the ranking
+ * arithmetic against those. The buffers are module-level and reused so the fix
+ * does not simply move the cost into the allocator.
+ *
+ * ⚠️ SAFETY OF THE SHARED BUFFERS. This is a pure function and must stay one, so
+ * the buffers may never outlive a call or be observable from outside it:
+ *  - `planManaPayment` is fully synchronous and calls nothing that can re-enter
+ *    it (`canPay` and `manaModesOf` are leaves), so no second call can interleave.
+ *  - Every buffer slot is WRITTEN before it is read on each call; nothing is
+ *    carried over between calls.
+ *  - Nothing backed by a buffer escapes: the returned plans are fresh objects and
+ *    the `production` they carry is the definition's own frozen mode record.
+ * A module instance is per-realm, so a Web Worker gets its own set.
+ */
+const COLOR_COUNT = MANA_COLORS.length;
+/** Taps a board is expected to offer before the production buffer has to grow. */
+const INITIAL_TAP_CAPACITY = 16;
+
+/** The colour amounts of a sparse record, dense and in `MANA_COLORS` order. */
+function densifyInto(record: Partial<Record<ManaColor, number>>, into: Int32Array, at: number): void {
+  for (let i = 0; i < COLOR_COUNT; i++) into[at + i] = record[MANA_COLORS[i] as ManaColor] ?? 0;
+}
+
+/** {@link distanceToPayable} over dense colour arrays — the ranking hot loop. */
+function denseDistanceToPayable(pool: Int32Array, cost: Int32Array, generic: number): number {
+  let short = 0;
+  let spare = 0;
+  for (let i = 0; i < COLOR_COUNT; i++) {
+    const need = cost[i] as number;
+    const have = pool[i] as number;
+    if (have < need) short += need - have;
+    else spare += have - need;
+  }
+  return short + (generic > spare ? generic - spare : 0);
+}
+
+/**
+ * The reused working set. Grouped in one object so the invariant above ("written
+ * before read, never escapes") has a single place to hold.
+ */
+const scratch = {
+  /** Dense colour amounts, one row of `COLOR_COUNT` per offered tap. */
+  production: new Int32Array(COLOR_COUNT * INITIAL_TAP_CAPACITY),
+  /** Dense forms of the cost being paid, the running pool, and one trial tap. */
+  cost: new Int32Array(COLOR_COUNT),
+  pool: new Int32Array(COLOR_COUNT),
+  trial: new Int32Array(COLOR_COUNT),
+  /** Per offered tap, parallel to `production`'s rows. */
+  tapSource: [] as InstanceId[],
+  tapMode: [] as number[],
+  tapProduction: [] as ManaProduction[],
+  tapGroup: [] as number[],
+  /** Per source permanent (a "group" — its modes are alternatives). */
+  sourceId: [] as InstanceId[],
+  sourceUntapped: [] as boolean[],
+  /** Tap indices ordered by group, so a group's modes are contiguous. */
+  order: [] as number[],
+  groupBegin: [] as number[],
+  groupSize: [] as number[],
+};
+
+/**
  * Plan the taps that fund `cost`, or undefined when this board cannot pay it.
  *
  * An EMPTY plan means the floating pool already covers the cost — i.e. stop
@@ -85,9 +165,9 @@ export function planManaPayment(
 ): ManaTapPlan[] | undefined {
   // ALLOCATION NOTE. This is the hottest function in the sim profile (8.7% of self
   // time), and it is dominated by the cheap cases rather than the hard ones: the
-  // recorded corpus of real games is 44% "no untapped sources at all" and mean 1.4
-  // sources. So both trivial answers are returned before anything is allocated —
-  // no pool copy, no Map, no per-mode objects. The planning below is unchanged.
+  // recorded corpus of real games is 44% "no untapped sources at all". So both
+  // trivial answers are returned before anything is allocated — no pool copy, no
+  // per-mode objects. The planning below is unchanged.
   const current: ManaPool = view.players[player].manaPool;
   // `canPay` is the authority on "done"; the distance heuristic only orders taps.
   // Checked against the LIVE pool: `canPay` only reads, so the copy can wait until
@@ -95,9 +175,11 @@ export function planManaPayment(
   if (canPay(current, cost)) return [];
 
   // Nothing to tap ⇒ nothing can change ⇒ unpayable. Returning here skips the
-  // grouping pass entirely for nearly half of all calls.
+  // grouping pass entirely for nearly half of all calls. Indexed rather than
+  // `for...of`, which allocates an array iterator on every call.
   let hasTap = false;
-  for (const action of legalActions) {
+  for (let i = 0; i < legalActions.length; i++) {
+    const action = legalActions[i] as GameAction;
     if (action.kind === 'tapForMana' && action.player === player) {
       hasTap = true;
       break;
@@ -105,63 +187,122 @@ export function planManaPayment(
   }
   if (!hasTap) return undefined;
 
-  let pool: ManaPool = { ...current };
-
-  // Group the offered activations by permanent: the modes of one source are
-  // alternatives, and tapping it spends the whole permanent.
+  // Collect the offered activations, grouped by permanent: the modes of one source
+  // are alternatives, and tapping it spends the whole permanent.
   //
-  // The lookup stays a linear `find` ON PURPOSE. Indexing the battlefield into a
-  // Map first was tried and is a net LOSS at this size: real games offer a mean of
-  // 1.4 tappable sources against a battlefield of ~10-20, so building the index
-  // costs more inserts than the scans it saves — the same trap the WASM spike
-  // recorded when 23 typed arrays lost to a deep copy. Measure before "optimising"
-  // a scan away at this scale.
-  const candidates = new Map<InstanceId, ManaTapPlan[]>();
-  for (const action of legalActions) {
+  // The battlefield lookup stays a linear scan ON PURPOSE. Indexing the battlefield
+  // into a Map first was tried again here and is still a net LOSS — it measured
+  // 0.81x at 2,272 B/call against 1,854 for the scan, because a board offers a
+  // handful of tappable sources (mean 3.4 in real games) against a battlefield of
+  // ~13, so the index costs more inserts than the scans it saves. What DID pay was
+  // making the scan allocation-free: `Array.prototype.find` needs a closure over
+  // the action, so it allocated one per offered tap. Measure before "optimising" a
+  // scan away at this scale.
+  const bf = view.battlefield;
+  const s = scratch;
+  let tapCount = 0;
+  let sourceCount = 0;
+  // The engine offers every mode of one permanent consecutively, so remembering the
+  // last permanent resolves a modal source (a dual land, an any-colour rock) with
+  // one scan instead of one per mode.
+  let lastSource: InstanceId | undefined;
+  let lastModes: readonly ManaProduction[] | undefined;
+  for (let i = 0; i < legalActions.length; i++) {
+    const action = legalActions[i] as GameAction;
     if (action.kind !== 'tapForMana' || action.player !== player) continue;
-    const perm = view.battlefield.find((c) => c.instanceId === action.instanceId);
-    if (!perm) continue;
-    const production = manaModesOf(perm.def)[action.mode ?? 0];
+    let modes: readonly ManaProduction[] | undefined;
+    if (action.instanceId === lastSource) {
+      modes = lastModes;
+    } else {
+      const perm = findOnBattlefield(bf, action.instanceId);
+      modes = perm ? manaModesOf(perm.def) : undefined;
+      lastSource = action.instanceId;
+      lastModes = modes;
+    }
+    if (!modes) continue;
+    const mode = action.mode ?? 0;
+    const production = modes[mode];
     if (!production) continue;
-    const tap: ManaTapPlan = { instanceId: action.instanceId, mode: action.mode ?? 0, production };
-    const list = candidates.get(action.instanceId);
-    if (list) list.push(tap);
-    else candidates.set(action.instanceId, [tap]);
+
+    if ((tapCount + 1) * COLOR_COUNT > s.production.length) {
+      const grown = new Int32Array(s.production.length * 2);
+      grown.set(s.production);
+      s.production = grown;
+    }
+    densifyInto(production, s.production, tapCount * COLOR_COUNT);
+    s.tapSource[tapCount] = action.instanceId;
+    s.tapMode[tapCount] = mode;
+    s.tapProduction[tapCount] = production;
+    let group = -1;
+    for (let g = 0; g < sourceCount; g++) {
+      if (s.sourceId[g] === action.instanceId) {
+        group = g;
+        break;
+      }
+    }
+    if (group < 0) {
+      group = sourceCount;
+      s.sourceId[sourceCount] = action.instanceId;
+      s.sourceUntapped[sourceCount] = true;
+      sourceCount += 1;
+    }
+    s.tapGroup[tapCount] = group;
+    tapCount += 1;
   }
 
+  // Lay the taps out grouped, keeping offer order inside each group, so the ranking
+  // below sees a source's modes together and ties break exactly as they always have.
+  let placed = 0;
+  for (let g = 0; g < sourceCount; g++) {
+    s.groupBegin[g] = placed;
+    for (let t = 0; t < tapCount; t++) {
+      if (s.tapGroup[t] === g) s.order[placed++] = t;
+    }
+    s.groupSize[g] = placed - (s.groupBegin[g] as number);
+  }
+
+  densifyInto(cost, s.cost, 0);
+  densifyInto(current, s.pool, 0);
+  const genericOwed = cost.generic ?? 0;
+  // `canPay` is the authority on "done" and reads a `ManaPool`, so one mutable pool
+  // object tracks the dense running total for it. It is this function's own copy.
+  const pool: ManaPool = { ...current };
   const plan: ManaTapPlan[] = [];
-  // One reusable scratch pool: this inner loop runs for every source × mode on
-  // every step of the plan, and the AI calls it on its hot path.
-  const scratch: ManaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
 
   while (!canPay(pool, cost)) {
     // At least one pip is still owed (canPay said so). Flooring at 1 matters when
     // the heuristic can't see the shortfall — a hybrid symbol reads as satisfied
     // by either colour — so a useful tap is still accepted instead of the planner
     // concluding the cost is unpayable.
-    const current = Math.max(distanceToPayable(pool, cost), 1);
-    let best: ManaTapPlan | undefined;
-    let bestDistance = current;
+    const owed = Math.max(denseDistanceToPayable(s.pool, s.cost, genericOwed), 1);
+    let bestTap = -1;
+    let bestGroup = -1;
+    let bestDistance = owed;
     let bestFlexibility = Infinity;
     let bestSize = Infinity;
 
-    for (const taps of candidates.values()) {
-      const flexibility = taps.length; // how many colours this source could have made
-      for (const tap of taps) {
+    for (let g = 0; g < sourceCount; g++) {
+      if (!s.sourceUntapped[g]) continue;
+      const flexibility = s.groupSize[g] as number; // how many colours this source could have made
+      const begin = s.groupBegin[g] as number;
+      for (let k = 0; k < flexibility; k++) {
+        const tap = s.order[begin + k] as number;
+        const at = tap * COLOR_COUNT;
         let size = 0;
-        for (const color of MANA_COLORS) {
-          const add = tap.production[color] ?? 0;
-          scratch[color] = pool[color] + add;
+        for (let i = 0; i < COLOR_COUNT; i++) {
+          const add = s.production[at + i] as number;
+          s.trial[i] = (s.pool[i] as number) + add;
           size += add;
         }
-        const distance = distanceToPayable(scratch, cost);
-        if (distance >= current) continue; // buys us nothing — never make this tap
+        const distance = denseDistanceToPayable(s.trial, s.cost, genericOwed);
+        if (distance >= owed) continue; // buys us nothing — never make this tap
         const better =
           distance < bestDistance ||
           (distance === bestDistance && flexibility < bestFlexibility) ||
           (distance === bestDistance && flexibility === bestFlexibility && size < bestSize);
         if (better) {
-          best = tap;
+          bestTap = tap;
+          bestGroup = g;
           bestDistance = distance;
           bestFlexibility = flexibility;
           bestSize = size;
@@ -169,13 +310,34 @@ export function planManaPayment(
       }
     }
 
-    if (!best) return undefined; // nothing left that helps — the cost is unpayable
-    candidates.delete(best.instanceId);
-    const chosen = best;
-    const next: ManaPool = { ...pool };
-    for (const color of MANA_COLORS) next[color] += chosen.production[color] ?? 0;
-    pool = next;
-    plan.push(chosen);
+    if (bestTap < 0) return undefined; // nothing left that helps — the cost is unpayable
+    s.sourceUntapped[bestGroup] = false; // spending the permanent spends all of its modes
+    const at = bestTap * COLOR_COUNT;
+    for (let i = 0; i < COLOR_COUNT; i++) {
+      const total = (s.pool[i] as number) + (s.production[at + i] as number);
+      s.pool[i] = total;
+      pool[MANA_COLORS[i] as ManaColor] = total;
+    }
+    plan.push({
+      instanceId: s.tapSource[bestTap] as InstanceId,
+      mode: s.tapMode[bestTap] as number,
+      production: s.tapProduction[bestTap] as ManaProduction,
+    });
   }
   return plan;
+}
+
+/**
+ * The battlefield permanent with this id, by indexed scan.
+ *
+ * Spelled out rather than `battlefield.find(...)`: the predicate has to close over
+ * the id, and V8 allocates that closure on every offered tap — which is per source
+ * per castable card per search node.
+ */
+function findOnBattlefield(battlefield: readonly CardInstance[], id: InstanceId): CardInstance | undefined {
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.instanceId === id) return perm;
+  }
+  return undefined;
 }
