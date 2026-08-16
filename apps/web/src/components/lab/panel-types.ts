@@ -28,6 +28,12 @@ export interface PanelProps {
   readonly heroLegal: boolean;
   readonly chosenOpponents: readonly string[];
   readonly seed: number;
+  /**
+   * The AI pilot both seats play with. Every panel sends it with its request and
+   * shows it with its result: a win rate or a verdict is a measurement of a deck
+   * AS PLAYED BY this pilot, not a property of the deck on its own.
+   */
+  readonly pilotId: string;
   readonly sim: SimWorkerApi;
   /**
    * Apply a tested swap to the hero deck, or `undefined` when the hero cannot be

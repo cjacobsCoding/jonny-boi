@@ -19,6 +19,7 @@ import {
 } from '../lib/lab-config.js';
 import { RunStatus } from '../components/RunStatus.js';
 import { GauntletPanel } from '../components/lab/GauntletPanel.js';
+import { PilotPicker } from '../components/lab/PilotControls.js';
 import { SwapPanel } from '../components/lab/SwapPanel.js';
 import { SuggestPanel } from '../components/lab/SuggestPanel.js';
 import type { CardOption } from '../components/lab/panel-types.js';
@@ -37,7 +38,7 @@ const LAB_TABS = [
  * or a ranked suggestions search — all in a Web Worker so the UI never freezes.
  */
 export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWorkerApi; selection: LabSelection }): ReactElement {
-  const { tab, setTab, heroId, setHeroId, seed, setSeed, opponentNames, setOpponentNames, applyNote, setApplyNote } = selection;
+  const { tab, setTab, heroId, setHeroId, seed, setSeed, pilotId, setPilotId, opponentNames, setOpponentNames, applyNote, setApplyNote } = selection;
 
 
   // Anything selectable as the hero: your saved decks, then the gauntlet decks.
@@ -98,6 +99,7 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
     heroLegal,
     chosenOpponents,
     seed,
+    pilotId,
     sim,
     onApplySwap,
   };
@@ -113,6 +115,16 @@ export function LabView({ decks, sim, selection }: { decks: DecksApi; sim: SimWo
         }}
         seed={seed}
         onSeed={setSeed}
+        pilotId={pilotId}
+        onPilot={(id) => {
+          // Same reasoning as changing the hero: the result on screen was measured
+          // by the OLD pilot, and leaving it up next to a picker that now says
+          // something else is how a user comes to believe a win rate is a property
+          // of the deck rather than of the run that produced it.
+          setPilotId(id);
+          sim.reset();
+        }}
+        runDisabled={sim.status === 'running'}
         eligibleOpponents={eligibleOpponents.map((d) => d.name)}
         chosen={chosenOpponents}
         onToggleOpponent={(name) =>
@@ -237,6 +249,9 @@ function LabConfigBar({
   onHero,
   seed,
   onSeed,
+  pilotId,
+  onPilot,
+  runDisabled,
   eligibleOpponents,
   chosen,
   onToggleOpponent,
@@ -246,6 +261,9 @@ function LabConfigBar({
   onHero: (id: string) => void;
   seed: number;
   onSeed: (seed: number) => void;
+  pilotId: string;
+  onPilot: (id: string) => void;
+  runDisabled: boolean;
   eligibleOpponents: readonly string[];
   chosen: readonly string[];
   onToggleOpponent: (name: string) => void;
@@ -285,6 +303,12 @@ function LabConfigBar({
             style={{ width: '9rem' }}
           />
         </label>
+      </div>
+
+      {/* The pilot sits with the hero and the seed, not with the sliders: it
+          changes what the numbers MEAN, not merely how long they take to get. */}
+      <div className="lab-config__row">
+        <PilotPicker pilotId={pilotId} onPilot={onPilot} disabled={runDisabled} />
       </div>
 
       <div className="lab-field">

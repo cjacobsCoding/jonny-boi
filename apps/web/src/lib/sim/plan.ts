@@ -23,7 +23,13 @@
  *
  * No literals: every bound comes from `pool-config.ts`.
  */
-import { GAMES_PER_PAIRED_GAME, type PairedBaseRecord, type SwapScope } from '@jonny-boi/sim';
+import {
+  DEFAULT_ADAPTIVE_CONFIG,
+  GAMES_PER_PAIRED_GAME,
+  planWaves,
+  type PairedBaseRecord,
+  type SwapScope,
+} from '@jonny-boi/sim';
 import { MIN_GAMES_PER_SHARD, SHARDS_PER_WORKER } from './pool-config.js';
 import type {
   BaseSlotShardJob,
@@ -252,6 +258,36 @@ export function planVariantSliceShards(
     }
   }
   return jobs;
+}
+
+/**
+ * Roughly how many games a suggestions search will play, WITHOUT building a plan.
+ *
+ * The real total is only known once a worker has enumerated the candidate pool, and
+ * `run.ts` refines it every round from the actual plan. This is the version the UI
+ * can compute on the main thread, before anything is dispatched, so a user can see
+ * what a run costs *while choosing* rather than after committing to it.
+ *
+ * It walks the same ladder the search will: each wave plays one shared base game
+ * per new slot plus one variant game per surviving arm per new slot, and the field
+ * shrinks to each wave's `survivorTarget`. It over-states in two known ways — the
+ * roster is capped at the requested maximum (the pool may generate fewer) and the
+ * identical-game skip answers some variant games for free — and over-stating is the
+ * right direction for a "how long will this take?" number.
+ */
+export function estimateSuggestionGames(maxCandidates: number, gamesPerCandidate: number): number {
+  const roster = Math.max(1, Math.floor(maxCandidates));
+  const waves = planWaves(roster, gamesPerCandidate, DEFAULT_ADAPTIVE_CONFIG);
+  let arms = roster;
+  let previous = 0;
+  let games = 0;
+  for (const spec of waves) {
+    const newSlots = Math.max(0, spec.cumulativeGames - previous);
+    games += newSlots * (arms + 1); // one variant game per arm, one shared base game
+    previous = spec.cumulativeGames;
+    arms = Math.min(arms, spec.survivorTarget);
+  }
+  return games;
 }
 
 /** Total games a set of gauntlet shards will play (for the progress denominator). */

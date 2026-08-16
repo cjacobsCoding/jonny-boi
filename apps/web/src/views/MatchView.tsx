@@ -12,6 +12,13 @@ import {
 import { RunStatus } from '../components/RunStatus.js';
 import { FidelityNote } from '../components/FidelityNote.js';
 import { MatchReplay } from '../components/match/MatchReplay.js';
+import { PilotPicker, RunCostNote } from '../components/lab/PilotControls.js';
+import { DEFAULT_PILOT_ID, pilotLabel } from '../lib/sim/pilots.js';
+
+/** One game per run — the honest denominator for the cost estimate. */
+const GAMES_PER_MATCH = 1;
+/** …played on exactly one worker, because a single traced game cannot be sharded. */
+const MATCH_WORKERS = 1;
 
 /**
  * The Match view (DESIGN §3.7 — watch a single AI-vs-AI game): pick a saved deck as
@@ -23,6 +30,9 @@ export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }
   const [heroId, setHeroId] = useState<string | null>(decks.activeDeck?.id ?? null);
   const [opponentName, setOpponentName] = useState<string>('');
   const [seed, setSeed] = useState(DEFAULT_REPLAY_SEED);
+  // Watching a game is the one place the pilot is visible rather than inferred, so
+  // the viewer picks it here too — and the trace records it per seat.
+  const [pilotId, setPilotId] = useState<string>(DEFAULT_PILOT_ID);
 
 
   const hero = decks.decks.find((d) => d.id === heroId) ?? decks.activeDeck ?? decks.decks[0] ?? null;
@@ -104,6 +114,17 @@ export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }
             />
           </label>
         </div>
+
+        <div className="lab-config__row">
+          <PilotPicker
+            pilotId={pilotId}
+            onPilot={(id) => {
+              setPilotId(id);
+              sim.reset();
+            }}
+            disabled={running}
+          />
+        </div>
       </div>
 
       {!heroLegal && (
@@ -131,6 +152,7 @@ export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }
               opponentName: chosenOpponent,
               seed,
               maxEvents: MAX_REPLAY_EVENTS,
+              pilotId,
             })
           }
         >
@@ -140,6 +162,10 @@ export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }
           One AI-vs-AI game from this seed — step or play through it below.
         </span>
       </div>
+
+      {/* One worker, not the pool: a traced game is never sharded — it has to be
+          played start to finish in one place to produce one coherent replay. */}
+      <RunCostNote pilotId={pilotId} games={GAMES_PER_MATCH} workerCount={MATCH_WORKERS} />
 
       {running && <RunStatus progress={sim.progress} onCancel={sim.cancel} />}
       {sim.status === 'error' && (
@@ -154,7 +180,8 @@ export function MatchView({ decks, sim }: { decks: DecksApi; sim: SimWorkerApi }
             <MatchReplay key={`${trace.seed}-${trace.seats.A.deckName}-${trace.seats.B.deckName}`} trace={trace} />
             <div className="replay-footer">
               <span>
-                {trace.turns} turns · {trace.actions.toLocaleString()} actions · seed {trace.seed}
+                {trace.turns} turns · {trace.actions.toLocaleString()} actions · seed {trace.seed} ·
+                both seats played by {pilotLabel(trace.seats.A.pilot)}
               </span>
               <FidelityNote />
             </div>

@@ -45,6 +45,16 @@ export interface ShardContext {
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
   readonly seed: number;
+  /**
+   * The pilot BOTH seats are played by, resolved from `@jonny-boi/ai`'s registry
+   * in the worker.
+   *
+   * It belongs in the context — the part of a job that is identical across every
+   * shard of a run — for the same reason the seed does: two shards playing the
+   * same run with different pilots would merge two different experiments into one
+   * win rate, and nothing downstream could tell.
+   */
+  readonly pilotId: string;
 }
 
 /** A half-open range of game indices `[gameStart, gameEnd)` within one matchup. */

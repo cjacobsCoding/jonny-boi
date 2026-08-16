@@ -4,7 +4,8 @@ import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { ciStr, signedPct, pValueStr, throughputText, verdictDisplay } from '../../lib/sim-format.js';
 import { VERDICT_ALPHA } from '../../lib/lab-config.js';
-import { DEFAULT_SWAP_SCOPE, type SwapScope } from '@jonny-boi/sim';
+import { DEFAULT_SWAP_SCOPE, GAMES_PER_PAIRED_GAME, type SwapScope } from '@jonny-boi/sim';
+import { PilotStamp, RunCostNote } from './PilotControls.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 import type { CardOption } from './panel-types.js';
 import './swap-scope.css';
@@ -21,6 +22,7 @@ export function SwapPanel({
   heroLegal,
   chosenOpponents,
   seed,
+  pilotId,
   sim,
   onApplySwap,
   gamesConfig,
@@ -50,6 +52,9 @@ export function SwapPanel({
 
   const result = sim.status === 'done' && sim.result?.kind === 'swap' ? sim.result : null;
   const e = result ? result.result : null;
+  // A paired run plays BOTH decks on every game index — the honest game count is
+  // twice the pairs, which is also what the progress bar counts.
+  const plannedGames = games * chosenOpponents.length * GAMES_PER_PAIRED_GAME;
   const verdict = e ? verdictDisplay(e.verdict) : null;
 
   return (
@@ -143,6 +148,7 @@ export function SwapPanel({
               gamesPerOpponent: games,
               seed,
               swapScope: scope,
+              pilotId,
             })
           }
         >
@@ -150,6 +156,10 @@ export function SwapPanel({
         </button>
         {sameCard && <span className="lab-hint">Pick two different cards.</span>}
       </div>
+
+      {chosenOpponents.length > 0 && (
+        <RunCostNote pilotId={pilotId} games={plannedGames} workerCount={sim.workerCount} />
+      )}
 
       {result && e && verdict && (
         <div className="lab-results">
@@ -170,6 +180,8 @@ export function SwapPanel({
               </button>
             )}
           </div>
+
+          <PilotStamp pilotId={result.pilotId} />
 
           <div className="swap-compare">
             <div className="swap-compare__row">
@@ -224,8 +236,8 @@ export function SwapPanel({
           </table>
 
           <p className="lab-throughput">
-            {(e.nGames * 2).toLocaleString()} matches · {throughputText(result.gamesPerSecond)}
-            · seed {seed}
+            {(e.nGames * GAMES_PER_PAIRED_GAME).toLocaleString()} matches ·{' '}
+            {throughputText(result.gamesPerSecond)} · seed {seed} · pilot {result.pilotId}
           </p>
           <FidelityNote />
         </div>

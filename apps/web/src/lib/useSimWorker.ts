@@ -34,6 +34,13 @@ export interface SimWorkerApi {
   readonly progress: SimProgress | null;
   readonly result: SimResultPayload | null;
   readonly error: string | null;
+  /**
+   * How many workers a run will be spread over — a property of this machine,
+   * decided once per mount. Exposed so the panels can turn a pilot's relative
+   * decision cost into a wall-clock estimate BEFORE the user starts a run that
+   * could take hours on this hardware and minutes on another.
+   */
+  readonly workerCount: number;
   /** Kick off a run. Replaces any in-flight run (terminates it first). */
   run: (request: SimRequest) => void;
   /** Cancel the current run (terminate every worker) and reset to idle. */
@@ -129,5 +136,5 @@ export function useSimWorker(): SimWorkerApi {
     setStatus('idle');
   }, []);
 
-  return { status, progress, result, error, run, cancel, reset };
+  return { status, progress, result, error, workerCount, run, cancel, reset };
 }

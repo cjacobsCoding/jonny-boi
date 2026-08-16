@@ -5,9 +5,14 @@ import { ciStr, pct, signedPct, pValueStr, throughputText, verdictDisplay } from
 import {
   clearSuggestionHistory,
   historyRejectionText,
+  otherPilotHistories,
   readSuggestionHistory,
   writeSuggestionHistory,
+  type OtherPilotHistory,
 } from '../../lib/sim/history-store.js';
+import { estimateSuggestionGames } from '../../lib/sim/plan.js';
+import { pilotLabel } from '../../lib/sim/pilots.js';
+import { PilotStamp, RunCostNote } from './PilotControls.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 import type { SimDeckPayload } from '../../lib/sim-protocol.js';
 import type { SuggestionHistory } from '@jonny-boi/sim';
@@ -32,12 +37,23 @@ import type { SuggestionHistory } from '@jonny-boi/sim';
  * start over when they want a clean read. Hence the banner above the button and
  * the Reset next to it — and hence the honest line when a saved record was
  * rejected because the deck changed underneath it.
+ *
+ * ## The record belongs to a DECK **and a PILOT**
+ *
+ * The record accumulates across runs, and its `candidates` list is the
+ * Holm–Bonferroni family every verdict is corrected against. Both of those make it
+ * evidence, not a cache — so it is partitioned by pilot as well as by decklist, and
+ * each pilot's search is kept side by side rather than one overwriting the other
+ * (`lib/sim/history-store.ts` explains why pooling would be statistically invalid).
+ * The banner names the pilot, the Reset button names the pilot it will forget, and
+ * a line lists the searches other pilots still hold.
  */
 export function SuggestPanel({
   heroPayload,
   heroLegal,
   chosenOpponents,
   seed,
+  pilotId,
   sim,
   onApplySwap,
   gamesConfig,
@@ -52,16 +68,20 @@ export function SuggestPanel({
   const result = sim.status === 'done' && sim.result?.kind === 'suggest' ? sim.result : null;
   const report = result?.result ?? null;
 
-  const { stored, rejected, refresh } = useStoredHistory(heroPayload);
+  const { stored, rejected, others, refresh } = useStoredHistory(heroPayload, pilotId);
 
-  // A finished run's record replaces the stored one. Writing it here — where the
-  // deck that was tuned is in hand — keeps persistence out of the worker pool,
+  // A finished run's record replaces the stored one FOR THE PILOT THAT PLAYED IT —
+  // `result.pilotId`, not the picker's current value, because the picker may have
+  // moved while the run was in flight and filing evidence under the wrong pilot is
+  // exactly the pooling this partition exists to prevent. Writing it here — where
+  // the deck that was tuned is in hand — keeps persistence out of the worker pool,
   // which has no business knowing about localStorage.
+  const reportPilotId = result?.pilotId;
   useEffect(() => {
-    if (!report) return;
-    writeSuggestionHistory(report.history);
+    if (!report || !reportPilotId) return;
+    writeSuggestionHistory(report.history, reportPilotId);
     refresh();
-  }, [report, refresh]);
+  }, [report, reportPilotId, refresh]);
 
   const cappedCount = report?.skipped.filter((s) => s.reason === 'capped').length ?? 0;
   const illegalCount = report?.skipped.filter((s) => s.reason === 'illegal').length ?? 0;
@@ -78,9 +98,11 @@ export function SuggestPanel({
       <SearchMemory
         stored={stored}
         rejected={rejected}
+        others={others}
+        pilotId={pilotId}
         disabled={running}
         onReset={() => {
-          if (heroPayload) clearSuggestionHistory(heroPayload);
+          if (heroPayload) clearSuggestionHistory(heroPayload, pilotId);
           refresh();
         }}
       />
@@ -119,6 +141,7 @@ export function SuggestPanel({
               gamesPerCandidate: games,
               maxCandidates,
               seed,
+              pilotId,
               // Carrying the record is what makes a re-run explore new ground.
               ...(stored ? { history: stored } : {}),
             })
@@ -128,8 +151,18 @@ export function SuggestPanel({
         </button>
       </div>
 
-      {report && (
+      {chosenOpponents.length > 0 && (
+        <RunCostNote
+          pilotId={pilotId}
+          games={estimateSuggestionGames(maxCandidates, games)}
+          workerCount={sim.workerCount}
+          approximate
+        />
+      )}
+
+      {report && result && (
         <div className="lab-results">
+          <PilotStamp pilotId={result.pilotId} />
           <p className="lab-section__intro">
             Base deck gauntlet win rate: <strong>{ciStr(report.baseGauntletWinRate)}</strong>
           </p>
@@ -237,7 +270,7 @@ export function SuggestPanel({
               <> · {throughputText(report.notes.gamesPerSecond)}</>
             )}
             {report.notes.workersUsed !== undefined && <> · {report.notes.workersUsed} workers</>}{' '}
-            · seed {seed}
+            · seed {seed} · pilot {result.pilotId}
           </p>
           <FidelityNote text={report.notes.fidelityCaveat} />
         </div>
@@ -254,35 +287,58 @@ export function SuggestPanel({
 }
 
 /**
- * What earlier runs on THIS deck already know, and the button to forget it.
+ * What earlier runs on THIS deck WITH THIS PILOT already know, the searches other
+ * pilots have saved, and the button to forget this one.
  *
  * Kept a separate component so the "is this a fresh search or run four?" question
  * has one obvious answer on screen rather than being inferable from the results
  * table after the fact.
+ *
+ * The "other pilots" line is not decoration. Records are partitioned by pilot
+ * because pooling them would invalidate the Holm–Bonferroni correction and let one
+ * pilot's "settled loser" hide a card the other pilot would love — but a partition
+ * the user cannot see is indistinguishable from a deletion, and a user who thinks
+ * their evidence is gone will press Reset and make it true.
  */
 function SearchMemory({
   stored,
   rejected,
+  others,
+  pilotId,
   disabled,
   onReset,
 }: {
   stored: SuggestionHistory | null;
   rejected: string | null;
+  others: readonly OtherPilotHistory[];
+  pilotId: string;
   disabled: boolean;
   onReset: () => void;
 }): ReactElement | null {
+  const kept =
+    others.length === 0 ? null : (
+      <span className="lab-memory__aside">
+        Kept separately:{' '}
+        {others
+          .map((o) => `${pilotLabel(o.pilotId)} (${o.runsCompleted} run${o.runsCompleted === 1 ? '' : 's'})`)
+          .join(', ')}
+        . Switch pilot to resume.
+      </span>
+    );
+
   if (rejected) {
     return (
       <p className="lab-memory lab-memory--stale">
-        Starting a fresh search — {rejected}.
+        Starting a fresh search — {rejected}.{kept}
       </p>
     );
   }
   if (!stored || stored.runsCompleted === 0) {
     return (
       <p className="lab-memory">
-        First search on this deck. The next run will build on what this one finds instead of
-        repeating it.
+        First search on this deck with the <strong>{pilotLabel(pilotId)}</strong> pilot. The next
+        run will build on what this one finds instead of repeating it.
+        {kept}
       </p>
     );
   }
@@ -292,46 +348,57 @@ function SearchMemory({
         Run {stored.runsCompleted + 1} · {stored.candidates.length} candidate
         {stored.candidates.length === 1 ? '' : 's'} carried over
       </strong>{' '}
-      from {stored.runsCompleted} earlier {stored.runsCompleted === 1 ? 'run' : 'runs'}. Settled
-      losers are skipped and the budget goes to untried swaps.
+      from {stored.runsCompleted} earlier {stored.runsCompleted === 1 ? 'run' : 'runs'} with the{' '}
+      {pilotLabel(pilotId)} pilot. Settled losers are skipped and the budget goes to untried swaps.
+      {kept}
       <button
         type="button"
         className="btn btn--ghost lab-memory__reset"
         disabled={disabled}
         onClick={onReset}
+        title={`Forget what the ${pilotLabel(pilotId)} pilot has learned about this deck. Other pilots’ searches are untouched.`}
       >
-        Reset search
+        Reset {pilotLabel(pilotId)} search
       </button>
     </p>
   );
 }
 
-/** The stored record for the current hero, re-read whenever the deck changes. */
-function useStoredHistory(hero: SimDeckPayload | null): {
+/**
+ * The stored record for the current hero AND pilot, re-read whenever either
+ * changes — plus a summary of what the other pilots have saved for this deck.
+ */
+function useStoredHistory(
+  hero: SimDeckPayload | null,
+  pilotId: string,
+): {
   stored: SuggestionHistory | null;
   rejected: string | null;
+  others: readonly OtherPilotHistory[];
   refresh: () => void;
 } {
-  const [state, setState] = useState<{ stored: SuggestionHistory | null; rejected: string | null }>({
-    stored: null,
-    rejected: null,
-  });
+  const [state, setState] = useState<{
+    stored: SuggestionHistory | null;
+    rejected: string | null;
+    others: readonly OtherPilotHistory[];
+  }>({ stored: null, rejected: null, others: [] });
 
   const fingerprint = hero ? JSON.stringify(hero.cards) : null;
   const refresh = useCallback(() => {
     if (!hero) {
-      setState({ stored: null, rejected: null });
+      setState({ stored: null, rejected: null, others: [] });
       return;
     }
-    const found = readSuggestionHistory(hero);
+    const found = readSuggestionHistory(hero, pilotId);
     setState({
       stored: found.history ?? null,
       rejected: found.rejected ? historyRejectionText(found.rejected) : null,
+      others: otherPilotHistories(hero, pilotId),
     });
     // `hero` is re-created on every render; its CONTENT is what matters, and the
     // fingerprint below is what actually changes when the deck does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fingerprint]);
+  }, [fingerprint, pilotId]);
 
   useEffect(refresh, [refresh]);
   return { ...state, refresh };

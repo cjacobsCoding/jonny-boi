@@ -36,8 +36,27 @@ export interface SimDeckPayload {
   readonly cards: ReadonlyArray<{ readonly cardId: string; readonly count: number }>;
 }
 
+/**
+ * **THE PILOT IS PART OF THE QUESTION, SO IT IS PART OF EVERY REQUEST.**
+ *
+ * A win rate is a measurement of a deck *as played by one pilot on both seats*,
+ * not a property of the deck: running the gauntlet with `hybrid` instead of
+ * `heuristic` moved Mono-Red Aggro from 32.9% to 19.0%. Both are right; they
+ * answer different questions. So `pilotId` is REQUIRED on every request rather
+ * than optional-with-a-default — an optional field is a field a call site can
+ * forget, and the one that forgets it would silently answer a different question
+ * than the UI is displaying. (This repo has already paid for a constant that two
+ * packages each defaulted separately; see COORDINATION.md on the room-code bug.)
+ *
+ * The id is a plain string resolved against `@jonny-boi/ai`'s registry in the
+ * worker — the same seam the CLI's `--pilot` flag uses.
+ */
+export interface PilotedRequest {
+  readonly pilotId: string;
+}
+
 /** Run the hero against the chosen gauntlet decks (by sample-deck name). */
-export interface GauntletRequest {
+export interface GauntletRequest extends PilotedRequest {
   readonly kind: 'gauntlet';
   readonly hero: SimDeckPayload;
   /** Sample-deck names to test against (the worker resolves them to decks). */
@@ -47,7 +66,7 @@ export interface GauntletRequest {
 }
 
 /** Evaluate a single-card swap (out → in) on the hero against the gauntlet. */
-export interface SwapRequest {
+export interface SwapRequest extends PilotedRequest {
   readonly kind: 'swap';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -64,7 +83,7 @@ export interface SwapRequest {
 }
 
 /** Rank candidate single-card swaps that improve the hero (the suggestion loop). */
-export interface SuggestRequest {
+export interface SuggestRequest extends PilotedRequest {
   readonly kind: 'suggest';
   readonly hero: SimDeckPayload;
   readonly opponentNames: readonly string[];
@@ -88,7 +107,7 @@ export interface SuggestRequest {
  * sits in seat A, the opponent in seat B; the worker resolves the opponent by
  * sample-deck name. A `maxEvents` cap bounds a pathological game's trace.
  */
-export interface MatchRequest {
+export interface MatchRequest extends PilotedRequest {
   readonly kind: 'match';
   readonly hero: SimDeckPayload;
   /** Sample-deck name to play against (resolved by the worker). */
@@ -124,10 +143,27 @@ export interface SimProgress {
   readonly label: string;
 }
 
-/** A finished run's payload — discriminated by the request `kind`. */
+/**
+ * A finished run's payload — discriminated by the request `kind`.
+ *
+ * Every variant carries the `pilotId` that produced it, echoed from the request.
+ * A result that travelled without its pilot would be a number with no units: the
+ * UI could not label it, and a result left on screen while the picker moved would
+ * describe a run nobody made.
+ */
 export type SimResultPayload =
-  | { readonly kind: 'gauntlet'; readonly result: GauntletResult; readonly gamesPerSecond: number }
-  | { readonly kind: 'swap'; readonly result: SwapEvaluation; readonly gamesPerSecond: number }
-  | { readonly kind: 'suggest'; readonly result: SuggestionReport }
-  | { readonly kind: 'match'; readonly result: MatchTrace };
+  | {
+      readonly kind: 'gauntlet';
+      readonly result: GauntletResult;
+      readonly gamesPerSecond: number;
+      readonly pilotId: string;
+    }
+  | {
+      readonly kind: 'swap';
+      readonly result: SwapEvaluation;
+      readonly gamesPerSecond: number;
+      readonly pilotId: string;
+    }
+  | { readonly kind: 'suggest'; readonly result: SuggestionReport; readonly pilotId: string }
+  | { readonly kind: 'match'; readonly result: MatchTrace; readonly pilotId: string };
 

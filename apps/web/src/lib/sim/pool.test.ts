@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import { SimWorkerPool } from './pool.js';
 import { isCancellation, ShardFailure } from './run.js';
+import { DEFAULT_PILOT_ID } from './pilots.js';
 import type {
   MainToWorkerMessage,
   ShardJob,
@@ -102,7 +103,12 @@ const STUB_RESULT: ShardResult = {
 function job(opponentIndex: number): ShardJob {
   return {
     kind: 'gauntlet-shard',
-    context: { hero: { name: 'Hero', archetype: 'Hero', cards: [] }, opponentNames: [], seed: 1 },
+    context: {
+      hero: { name: 'Hero', archetype: 'Hero', cards: [] },
+      opponentNames: [],
+      seed: 1,
+      pilotId: DEFAULT_PILOT_ID,
+    },
     opponentIndex,
     gameStart: 0,
     gameEnd: 1,
