@@ -30,7 +30,7 @@
  *
  *  1. `candidates[].settled` / `provenNotBetter` retire a swap from future runs.
  *     "Not better" is a claim about a level of play: the hybrid pilot moved
- *     Mono-Red Aggro's gauntlet win rate from 32.9% to 19.0% by blocking better,
+ *     Mono-Red Aggro's gauntlet win rate from 32.9% to 19.0% (both pre-date the land-sequencing fix; the gauntlet baseline is now 28.2%) by blocking better,
  *     and a card whose value is punishing bad blocks is settled-as-useless under
  *     one pilot and a real improvement under another. A pooled record would hide
  *     the candidate that a pilot change had just made good.
