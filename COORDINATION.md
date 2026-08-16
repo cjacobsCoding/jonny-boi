@@ -80,10 +80,99 @@ throughput (games/sec) from regressing.
 | feat/hybrid-search | worker | packages/ai (new: search-stats/evaluator/hybrid/hybrid-config + heuristic policy seam + bench), DESIGN §3.4a | 🚧 PUSHED, not merged |
 | feat/pilot-relative-verdicts | worker | apps/web ONLY (lib/sim/pilots+history-store+protocols+run/plan/execute, lab panels, LabView/MatchView), DESIGN §3.7a | 🚧 PUSHED, not merged |
 | perf/core-hotpath | worker | packages/core (mana-plan.ts + new mana-plan.test.ts + bench/engine-alloc-bench.ts) | 🚧 PUSHED, not merged |
-| feat/tree-reuse | worker | packages/ai (new: tree-reuse.ts + tests; hybrid/hybrid-config/search-stats/index/bench), DESIGN §3.4b | 🚧 PUSHED, not merged — stacks on feat/hybrid-search |
+| feat/tree-reuse | worker | packages/ai (new: tree-reuse.ts + tests; hybrid/hybrid-config/search-stats/index/bench), DESIGN §3.4b | ✅ INTEGRATED (on main) |
+| feat/tactical-eval | worker | packages/ai (new: tactical.ts + tactical-suite.ts + 2 test files; evaluator/hybrid/hybrid-config/index/tsconfig/bench + 2 existing tests), DESIGN §3.4c | 🚧 PUSHED, not merged — branches off main |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/tactical-eval` 🚧 PUSHED — **an exact combat solver + the curated tactical
+  suite the brief asks for. The evaluator half is MORE CORRECT and NOT STRONGER, so it ships OFF; the
+  measurement and the suite ARE the deliverable.** `packages/ai` only, plus DESIGN §3.4c. Branches off
+  `main` (which already has hybrid-search + tree-reuse). `npm run verify` exit 0 — **2058 passed / 0
+  failed** (baseline 2012 + 46), lint 0 errors, `npm run build` exit 0.
+  ❗ **HEADLINE: 5/5 versus 0/5 on correctness, 50.4% over 240 games on strength.** The tactical blend
+  orders every curated position pair correctly where the shipped evaluator orders **none** of them
+  correctly — and head to head over 240 paired games it is **121/240 = 50.4%**. Both statements are
+  true, they are about different things, and only the second one decides a default. So
+  `TACTICAL_EVALUATION_WEIGHTS` / `TACTICAL_HYBRID_CONFIG` exist, are tested, and are not the default;
+  `DEFAULT_HYBRID_CONFIG` is unchanged to the byte and still reproduces **72/120** and **43/80**.
+  · Mono-Red vs Boros, n=120 vs heuristic: **60.0%** [51.1, 68.3] -> **60.0%** [51.1, 68.3]; 6.83 -> 6.70–6.97 ms
+  · UW Control vs Golgari, n=80 vs heuristic: **53.8%** [42.9, 64.3] -> **55.0%** [44.1, 65.4]; **14.33 -> 13.63 ms**
+  · head to head, aggro n=120: **48.3%** [39.6, 57.2] · head to head, UW n=120: **52.5%** [43.6, 61.2]
+  ⚠️ **Cost is NOT why it ships off — it is FREE, and slightly cheaper on the control matchup.** That is
+  the opposite of `feat/tree-reuse` (which cost +35–60% per decision) and it changes what "off" means:
+  this is not a throughput call, it is the brief's rule that a change which does not measurably help does
+  not become the default. If a later branch finds a reason to want it, turning it on costs nothing.
+  👉 **THE PER-TERM ABLATION IS WHY THE CONCLUSION IS SAFE RATHER THAN LUCKY.** `bench tactical` with
+  `BENCH_TACTICAL_ARMS=control,lethal,router,facing,pressure,clock,no-router`, same 120 seeded games:
+  **every single arm landed on 72/120** except `+clock` (71). So this is not one good term cancelling one
+  bad one — there is no winning subset hiding inside the blend, and nobody needs to re-tune the weights
+  hoping to find it.
+  👉 **TWO REAL DEFECTS IN THE SHIPPED EVALUATOR, FOUND AND DOCUMENTED (still live on `main`).** The
+  second one has a SIGN, which is why it is worth knowing even though the fix did not pay:
+  · `lethalThreatWeight` fires on *summed untapped power ≥ their life* and **ignores blockers entirely** —
+    15 power behind three 0/4 walls reads as a kill, and scores ABOVE a board with 6 unblockable damage.
+  · **Attackers TAP when declared**, so the bonus is paid for the board that has not swung yet and
+    withdrawn the instant it does: `evaluateState` scores **taking a proven kill (0.9047) BELOW declining
+    it (0.9399)**. The evaluator actively prices attacking as *losing* the lethal bonus.
+  ⚠️ **WHY §39's COMBINATORIAL TRAP DOES NOT APPLY HERE, and it is structural rather than clever.** Two
+  facts collapse it: (1) **damage assignment is not a decision in this engine** (`internal/combat.ts`
+  assigns lethal in declared order and tramples the rest), and (2) **block legality is NESTED** — core's
+  `canBlock` refuses exactly one thing, a flier blocked by a non-flying non-reach creature. So the
+  feasible attacker sets form a **matroid** and greedy by damage-prevented descending is *exactly*
+  optimal with no matching algorithm at all. A test pins that legality claim against the real engine, not
+  against the comment. Attacker subsets are not searched either: adding an attacker can never lower
+  guaranteed damage, so "swing with everything eligible" is optimal by construction.
+  ⚠️ **Every bound over-estimates the DEFENCE, on purpose**, so `guaranteedDamage` is a lower bound and a
+  claimed lethal is never one that is not there. It can miss a kill; it cannot invent one. That asymmetry
+  is what makes `takeProvenLethal` (brief §45's router branch) safe to *act* on rather than merely score.
+  A first-striking blocker that kills a trampler stops ALL of its damage — that one is easy to get wrong
+  in the unsafe direction and is the only place the bound is not "generous by default".
+  👉 **THE SUITE HAS TWO HALVES BECAUSE ONE WAS NOT ENOUGH, and finding that out is itself a result.**
+  12 pilot puzzles (lethal · anti-lethal · combat · removal · sequencing · mana) score heuristic 10/12 and
+  BOTH hybrid arms 11/12 — **a pilot-level puzzle cannot isolate a leaf evaluator**, because on any board
+  small enough to state as a puzzle a 160-simulation search just plays it out and reaches the terminal
+  whatever its evaluator believes. So the second half grades `evaluateState` DIRECTLY on 5 position PAIRS
+  that are both reachable successors of one decision. There: **default 0/5, tactical 5/5** — three pairs
+  the default cannot tell apart at all (identical to 4 d.p.) and two it orders backwards.
+  👉 **That also explains the null result and says when to re-ask it.** These terms describe positions
+  near a terminal, which is exactly where the search does not need help. **Re-ask when the SEARCH
+  changes, not when the weights do** — `THRIFTY_HYBRID_CONFIG`, a shallower `maxTreeDepth`, or decks whose
+  games are decided further from a terminal all move that balance. A learned value function (§31) is the
+  other consumer these terms were built for.
+  ⛔ **A LIVE DEFECT THE SUITE CAUGHT IN THE *DEFAULT* PILOT — reported, deliberately NOT fixed.** Given a
+  Mountain in play and a Mountain, a Swamp and a `{1}{B}` removal spell in hand, **every pilot plays the
+  Mountain** and leaves its own removal uncastable for a turn: `heuristic.ts`'s land-drop candidates score
+  each land on its own merits and never ask what a land UNLOCKS. Fixing it changes `heuristic`, which is
+  `DEFAULT_PILOT_ID`, so it invalidates every recorded baseline in DESIGN §3.4a and every A/B verdict
+  measured against them — that needs its own branch and its own measurement. Pinned as an explicit
+  `DEFECT (unfixed)` test that FAILS the day someone fixes it.
+  ⚠️ **RULE 7 — the heuristic path is untouched and provably so.** `heuristic.ts`, `weights.ts`,
+  `card-value.ts`, `effect-value.ts`, `choices.ts` are **byte-identical to `main`** (`git diff` empty),
+  the heuristic never calls `evaluator.ts`/`tactical.ts`, and `npm run sim -- gauntlet "Mono-Red Aggro"
+  --games 40 --seed 99` reproduces **92/280 = 32.9%** at 113 games/sec — inside the recorded 109–118 band
+  *while two benchmarks were running on the same box*. The hybrid default is unchanged too: with the
+  tactical weights at zero the solver is never called, proven by a behavioural test rather than by
+  inspection (two boards that differ only in something only the solver can see must score identically).
+  👉 **NEW SEAMS in `packages/ai`, all additive:** `assessAttack` / `assessPosition` / `lethalAttackers`
+  over a `CombatAssessment` (`maxDamage`, `guaranteedDamage`, `lethal`, `turnsToKill`), plus
+  `AttackHorizon` — `'now'` vs `'next'`, which is the seam that lets an evaluator see a crack-back. Two
+  bench modes: `tactical <n>` (interleaved arms + the ablation via `BENCH_TACTICAL_ARMS`) and
+  `tactical-duel <n>` (the two evaluators playing each other — the sensitive form, since everything they
+  share then cancels per game rather than only in expectation).
+  ⚠️ **I touched TWO existing tests, both because they were over-specified, not because behaviour
+  regressed.** `evaluator.test.ts`'s "zeroing the blend" now zeroes the new weights too. And
+  `tree-reuse.test.ts`'s maxNodes-cap test asserted `reuseHitRate === 0`, which is a claim about which
+  tree SHAPES one particular game happens to produce — a matched node with no children is one node and
+  legitimately fits under a cap of one. It now states the intent as a COLLAPSE against an uncapped arm on
+  the same seeded game (>0.5 vs <0.1), which is the property the test was actually for.
+  ❌ **NOT done, and not mine:** burn-to-face lethal is not in the router (it needs `effect-value` to say
+  how much damage a card in hand deals to a face — a different question with different failure modes; the
+  policy already scores lethal burn at the top of its range). No belief model, no determinization
+  (§13–17) — still blocked on `DecisionContext` having no way to observe the OPPONENT's actions, which
+  `feat/tree-reuse` also reported and which is a `packages/sim` seam change.
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-15 worker: `feat/pilot-relative-verdicts` 🚧 PUSHED — **every result now says which pilot
   produced it, and the suggestion engine refuses to pool two pilots' evidence.** `apps/web` ONLY; nothing

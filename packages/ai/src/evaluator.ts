@@ -27,6 +27,20 @@
  * cannot see a hand full of removal, a mana screw, or a board it cannot deploy.
  * {@link DEFAULT_EVALUATION_WEIGHTS} names one weight per term so the blend is
  * data, tunable, and — per §10 — learnable later rather than hand-tuned forever.
+ *
+ * ## The tactical half (`tactical.ts`) — built, measured, shipped OFF
+ * Four of the terms are not positional counts at all: they are answers from an
+ * exact combat solver — can I force lethal through their best blocks, can they
+ * force it through mine, how much damage does each board push per turn, and how
+ * many turns each side needs. Those are the §11–12 questions, and they were built
+ * because the search was measured to be limited by *this* function rather than by
+ * its budget (256 → 1024 simulations bought +1.7 points; a 2.4×-deeper reused tree
+ * bought nothing at all).
+ *
+ * ⚠️ They make the evaluator **measurably more correct and not measurably
+ * stronger**, so they are a named non-default blend rather than the default. The
+ * whole argument, with the table, is on {@link TACTICAL_EVALUATION_WEIGHTS}.
+ * Do not turn them on without reading it.
  */
 
 import type { CardInstance, GameState, PlayerId } from '@jonny-boi/core';
@@ -44,6 +58,7 @@ import type { PilotView } from './pilot.js';
 import type { GameAction } from '@jonny-boi/core';
 import type { HeuristicWeights } from './weights.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
+import { assessPosition } from './tactical.js';
 
 /**
  * The two questions a search asks about a position. Named exactly as the brief
@@ -96,11 +111,60 @@ export interface EvaluationWeights {
    */
   readonly creatureCountWeight: number;
   /**
-   * Bonus when our board can deal lethal to their remaining life this turn — the
-   * cheapest possible read on the brief's §11 "can we kill this turn?", without
-   * building the full tactical solver.
+   * Bonus when our board can force lethal through the defender's BEST blocks —
+   * the brief's §11 "can we kill this turn?", answered exactly by `tactical.ts`
+   * rather than guessed.
+   *
+   * ⚠️ This used to be `sum of untapped attackers' power >= their life`, which is
+   * wrong in both directions and wrong in a way that *punished the right play*.
+   * It ignored blockers entirely, so a wall of chump blockers read as a kill; and
+   * because attackers TAP when they are declared, the bonus vanished one ply into
+   * the very combat it was recommending — the search saw attacking with a lethal
+   * board as *losing* the lethal bonus. The solver reads the declared attackers
+   * once combat has begun, so the signal is stable across the whole step.
    */
   readonly lethalThreatWeight: number;
+  /**
+   * Penalty when the OPPONENT can force lethal through our best blocks on their
+   * next attack (brief §11 anti-lethal, §12 opponent-threat).
+   *
+   * The evaluator had no term of any kind for being dead on board. On a grindy
+   * matchup that is the single most important fact about a position, and its
+   * absence is a plausible reason the pilot's edge on UW Control vs Golgari never
+   * cleared 50% while it was clear on aggro boards. It also prices the crack-back:
+   * a player who alpha strikes is tapped out of blockers during the opponent's
+   * turn, and this is the term that can see that.
+   */
+  readonly facingLethalWeight: number;
+  /**
+   * Per point of *guaranteed* combat damage differential — damage each side can
+   * force through the other's best blocks (brief §9 "combat potential").
+   *
+   * This is what `boardWeight` cannot say. Four 0/4 walls are 16 points of stats
+   * and zero pressure; a lone 5/1 flier facing no fliers is 6 points of stats and
+   * a five-turn clock. Summed power and toughness measures how much board there
+   * is; this measures whether any of it can end the game.
+   */
+  readonly pressureWeight: number;
+  /**
+   * Per attack step of clock advantage — how many turns their board needs to kill
+   * us, minus how many ours needs to kill them (brief §10 "inevitability", §44
+   * "threat horizon"). Saturated by `TacticalConfig.maxClockTurns`, so a board
+   * that cannot break through is "slow", never infinite.
+   */
+  readonly clockWeight: number;
+  /**
+   * Which "can I kill this turn" read {@link lethalThreatWeight} pays for: the
+   * blocker-aware solver (`true`) or the original `untapped-power >= their life`
+   * guess (`false`, the shipped default — see {@link TACTICAL_EVALUATION_WEIGHTS}
+   * for why the more correct one is not the default one).
+   *
+   * A boolean rather than a second weight because these are two *implementations*
+   * of one term, not two terms — and keeping the old one runnable is what lets the
+   * claim "the solver is better" be measured on identical seeds in one process
+   * instead of asserted.
+   */
+  readonly useTacticalLethal: boolean;
   /**
    * Half-saturation constant for the logistic squash: this many eval points maps
    * to roughly a 0.73 score. Keeps every term on one [0,1] scale so no single
@@ -127,10 +191,64 @@ export const DEFAULT_EVALUATION_WEIGHTS: EvaluationWeights = Object.freeze({
   untappedManaWeight: 0.25,
   creatureCountWeight: 0.5,
   lethalThreatWeight: 6,
+  // ⚠️ THE TACTICAL TERMS SHIP OFF — a MEASURED decision, not an oversight. See
+  // `TACTICAL_EVALUATION_WEIGHTS` for the table, and `evaluator.test.ts` for the
+  // test that pins it. Zero here also means the solver is never called, so this
+  // blend is the previous evaluator exactly: same play, same cost, and every
+  // recorded baseline in DESIGN §3.4a/§3.4b still reproduces byte for byte.
+  facingLethalWeight: 0,
+  pressureWeight: 0,
+  clockWeight: 0,
+  useTacticalLethal: false,
   scale: 12,
   winScore: 1,
   lossScore: 0,
   drawScore: 0.5,
+});
+
+/**
+ * THE TACTICAL BLEND — the solver's four terms switched on. **Built, measured,
+ * and NOT the default.** Read the numbers before turning it on.
+ *
+ * It is unambiguously the more *correct* evaluator: on the curated ordering suite
+ * (`tactical-suite.ts`) it scores **5/5** against the default's **0/5**, and two
+ * of those five the default gets actively backwards — it scores taking a proven
+ * kill BELOW declining it, and scores fifteen power that three walls stop ABOVE
+ * six power that nothing stops.
+ *
+ * It is also, on every measurement taken, **not stronger**:
+ *
+ * | measurement | default | tactical |
+ * |---|---|---|
+ * | Mono-Red vs Boros, n=120, vs heuristic | 60.0% [51.1, 68.3] | 60.0% [51.1, 68.3] |
+ * | UW Control vs Golgari, n=80, vs heuristic | 53.8% [42.9, 64.3] | 55.0% [44.1, 65.4] |
+ * | head to head, aggro, n=120 | — | 48.3% [39.6, 57.2] |
+ *
+ * A per-term ablation on the aggro matchup (`bench tactical`, arms `lethal`,
+ * `router`, `facing`, `pressure`, `clock` each alone) put **every single arm on the
+ * identical 72/120**, so this is not one good term cancelling one bad one — no
+ * term moves that matchup at all.
+ *
+ * Cost is NOT the reason it ships off; it is free or slightly cheaper (6.83 →
+ * 6.70–6.97 ms on aggro, **14.33 → 13.63 ms on control**). The reason is simply
+ * that the brief's rule applies: a change that does not measurably help does not
+ * become the default. Keeping the default identical also keeps every baseline the
+ * other in-flight branches measure against intact.
+ *
+ * 👉 **Worth re-asking when the search changes, not just when the weights do.**
+ * The most likely explanation for "more correct, no stronger" is that at 160
+ * simulations on these two matchups the search already reaches the terminal on the
+ * positions these terms describe — which is exactly what the pilot half of the
+ * tactical suite showed. A cheaper search (`THRIFTY_HYBRID_CONFIG`), a shallower
+ * budget, or a deck whose games are decided further from a terminal would all move
+ * that balance.
+ */
+export const TACTICAL_EVALUATION_WEIGHTS: EvaluationWeights = Object.freeze({
+  ...DEFAULT_EVALUATION_WEIGHTS,
+  facingLethalWeight: 6,
+  pressureWeight: 0.6,
+  clockWeight: 0.75,
+  useTacticalLethal: true,
 });
 
 /**
@@ -194,8 +312,10 @@ export function evaluatePosition(
       if (mine) {
         myStats += stats;
         myCreatures++;
-        // Only an untapped, non-sick creature can attack this turn. `summoningSick`
-        // is the engine's own flag, so this read cannot drift from the combat rules.
+        // Untapped, non-sick power. Feeds ONLY the legacy blocker-blind lethal
+        // read, kept runnable as `PRE_TACTICAL_EVALUATION_WEIGHTS`'s control arm.
+        // The shipped lethal answer comes from `tactical.ts`, which also knows
+        // about blockers, evasion, trample and first strike.
         if (!perm.tapped && !perm.summoningSick) myPower += power;
       } else {
         theirStats += stats;
@@ -222,8 +342,6 @@ export function evaluatePosition(
   let floating = 0;
   for (const color of MANA_COLORS) floating += me.manaPool[color];
 
-  const lethalNow = myPower >= them.life && myPower > 0 ? weights.lethalThreatWeight : 0;
-
   const points =
     weights.lifeWeight * (me.life - them.life) +
     weights.boardWeight * (myStats - theirStats) +
@@ -231,7 +349,57 @@ export function evaluatePosition(
     weights.cardAdvantageWeight * (me.hand.length - them.hand.length) +
     weights.manaDevelopmentWeight * (mySources - theirSources) +
     weights.untappedManaWeight * (myUntapped + floating - theirUntapped) +
-    lethalNow;
+    tacticalPoints(state, player, weights, myPower, them.life);
 
   return 1 / (1 + Math.exp(-points / weights.scale));
+}
+
+/**
+ * The combat-derived half of the score (`tactical.ts`): lethal, anti-lethal,
+ * pressure, and clock.
+ *
+ * ## The cost gate, and why it is shaped like this
+ * The solver is skipped entirely when every tactical weight is zero AND the old
+ * lethal read is selected — which is the shipped {@link DEFAULT_EVALUATION_WEIGHTS}.
+ * That is not a micro-optimisation, it is what makes the default a true control
+ * arm: it runs the *previous* code at the previous cost, in the same process, on
+ * the same seeds as {@link TACTICAL_EVALUATION_WEIGHTS}. An A/B whose control
+ * still pays for the feature measures nothing useful — and a default that pays for
+ * a feature it has switched off is a rule-7 regression for nothing.
+ *
+ * ## No continuous index, deliberately
+ * `assessPosition` is called with no `ContinuousIndex`, so it reads base + counters
+ * — consistent with every other term in this file, and with the heuristic's own
+ * combat judgement. Building the index allocates a `Map` per call, and this runs
+ * once per simulation on a 160-simulation budget. The *decision* path, where an
+ * answer is acted on rather than scored, builds the real index (see `hybrid.ts`).
+ */
+function tacticalPoints(
+  state: GameState,
+  player: PlayerId,
+  weights: EvaluationWeights,
+  untappedAttackPower: number,
+  opponentLife: number,
+): number {
+  const wantsSolver =
+    weights.useTacticalLethal ||
+    weights.facingLethalWeight !== 0 ||
+    weights.pressureWeight !== 0 ||
+    weights.clockWeight !== 0;
+  if (!wantsSolver) {
+    // The original blocker-blind read, kept runnable as the measurement control.
+    return untappedAttackPower > 0 && untappedAttackPower >= opponentLife ? weights.lethalThreatWeight : 0;
+  }
+
+  const { offence, threat } = assessPosition(state, player);
+  let points = 0;
+  if (weights.useTacticalLethal) {
+    if (offence.lethal) points += weights.lethalThreatWeight;
+  } else if (untappedAttackPower > 0 && untappedAttackPower >= opponentLife) {
+    points += weights.lethalThreatWeight;
+  }
+  if (threat.lethal) points -= weights.facingLethalWeight;
+  points += weights.pressureWeight * (offence.guaranteedDamage - threat.guaranteedDamage);
+  points += weights.clockWeight * (threat.turnsToKill - offence.turnsToKill);
+  return points;
 }

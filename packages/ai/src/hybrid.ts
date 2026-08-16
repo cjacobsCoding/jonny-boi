@@ -82,6 +82,7 @@ import {
   createEffectRegistry,
   DEFAULT_RULES,
   generateLegalActions,
+  indexContinuous,
 } from '@jonny-boi/core';
 import type { DecisionContext, Pilot } from './pilot.js';
 import type { PolicyCandidate } from './heuristic.js';
@@ -96,6 +97,7 @@ import type { SearchStatsSink, StatsAccumulator } from './search-stats.js';
 import { createStatsAccumulator, finishStats } from './search-stats.js';
 import type { PositionFingerprint } from './tree-reuse.js';
 import { decayAndCountSubtree, findNodeByFingerprint, fingerprintPosition } from './tree-reuse.js';
+import { lethalAttackers } from './tactical.js';
 
 /** The id the hybrid pilot registers under and is selected by from data. */
 export const HYBRID_PILOT_ID = 'hybrid';
@@ -307,6 +309,15 @@ function search(
 
   if (legalActions.length === 0) return { action: fallback(ctx), remaining: undefined };
 
+  // DECISION ROUTER, first branch (brief §45): `if (IsImmediateLethal) ...`.
+  // A kill the solver has PROVEN cannot be blocked out is not a position to search
+  // — searching it can only find the same answer, or fail to. See `takeLethal`.
+  const kill = takeLethal(ctx, config);
+  if (kill) {
+    ctx.trace?.({ action: kill, reason: 'tactical: lethal attack, unblockable by any assignment' });
+    return { action: kill, remaining: undefined, tree: undefined };
+  }
+
   const raw = evaluator.evaluatePolicy(view, legalActions);
   const candidates = prepareCandidates(rootState, raw, config);
 
@@ -373,6 +384,61 @@ function search(
     decider,
     config.reuse.enabled ? { root, decider, seed: rootState.seed } : undefined,
   );
+}
+
+/**
+ * The lethal attack, when the solver can prove one — otherwise `undefined`.
+ *
+ * ## Why this is a ROUTER BRANCH and not just an evaluator term (brief §45)
+ * `evaluateState` already scores a proven kill highly, but scoring is not taking.
+ * A search still has to *find* the line, and a 160-simulation PUCT search that has
+ * widened to three children and is splitting its visits can fail to. Worse, the
+ * alpha strike is deliberately given a LOWER prior than the value-judged attack
+ * (`collectAttackCandidates`), which is right in general and exactly wrong here.
+ * A kill that has been proven unblockable is not a judgement call, so it does not
+ * go to the judge.
+ *
+ * ## Why acting on it is safe
+ * `guaranteedDamage` is a lower bound on what gets through (`tactical.ts` prices
+ * the defence generously and never optimistically), and the candidate set is the
+ * ENGINE's own offered eligibility list, so the returned declaration is a legal
+ * narrowing by construction. What it does not model is cards — a trick, a removal
+ * spell, a flashed-in blocker. That is the same bet a human makes attacking into
+ * open mana, and the previous behaviour (not seeing the kill at all) is strictly
+ * worse than making it.
+ *
+ * ## Combat only, on purpose
+ * "Burn them out from 3" is also a lethal line, and it is NOT handled here: it
+ * needs the effect-value layer to say how much damage a card in hand deals to a
+ * face, which is a different question with different failure modes. The policy
+ * already scores lethal burn at the top of its range, so the search reaches it;
+ * combat is the case the search demonstrably could not see, because the evaluator
+ * dropped the lethal signal the instant attackers tapped.
+ */
+function takeLethal(ctx: DecisionContext, config: HybridConfig): GameAction | undefined {
+  if (!config.takeProvenLethal) return undefined;
+  const view = ctx.view;
+  if (view.step !== 'declareAttackers') return undefined;
+  const me = view.priorityPlayer;
+  if (me !== view.activePlayer) return undefined;
+  const offered = ctx.legalActions.find((a) => a.kind === 'declareAttackers') as
+    | Extract<GameAction, { kind: 'declareAttackers' }>
+    | undefined;
+  if (!offered || offered.attackers.length === 0) return undefined;
+
+  // The one place the REAL continuous index is built. It costs a `Map`, which is
+  // why the leaf evaluator does without it — but this answer is about to be
+  // played, and an anthem or an until-EOT pump changes whether the kill is there.
+  const state = view as GameState;
+  const attackers = lethalAttackers(
+    state,
+    me,
+    indexContinuous(state),
+    config.tactical,
+    offered.attackers,
+  );
+  if (!attackers || attackers.length === 0) return undefined;
+  return { kind: 'declareAttackers', player: me, attackers: [...attackers] };
 }
 
 /** Package a chosen macro into "play this now, remember the rest". */

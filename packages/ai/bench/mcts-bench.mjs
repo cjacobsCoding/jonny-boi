@@ -24,6 +24,17 @@
  *                    rotated — win rate, Wilson CI, mean/p95 decision time, and
  *                    ELO/ms. The brief's §47/§59-61 metric: strength per
  *                    millisecond, not simulations per second.
+ *   tactical         BRIEF §11-12/§39: the tactical solver in the leaf evaluator,
+ *                    A/B'd against the shipped default. Arms interleaved in ONE
+ *                    process on paired seeds; the control is `DEFAULT_HYBRID_CONFIG`,
+ *                    whose zeroed tactical weights make it skip the solver
+ *                    entirely, so "before" pays none of the new cost.
+ *                    `BENCH_TACTICAL_ARMS=control,lethal,router,facing,pressure,clock,no-router,full`
+ *                    runs the per-term ablation — which terms EARNED their place.
+ *   tactical-duel    The same question asked head to head (tactical vs
+ *                    shipped default directly) instead of through the heuristic.
+ *                    More sensitive: everything the two arms share cancels per
+ *                    game rather than only in expectation.
  *   scaling          The user's stated success metric: hybrid vs heuristic at
  *                    increasing simulation budgets. More search time MUST make
  *                    measurably stronger play, or it is not a search.
@@ -699,6 +710,99 @@ if (mode === 'reuse') {
     );
   }
   console.log('');
+}
+
+if (mode === 'tactical') {
+  // BRIEF §11-12/§39: does an exact combat solver in the leaf evaluator make the
+  // pilot STRONGER PER MILLISECOND? Arms are interleaved in one process on paired
+  // seeds — the control arm is the SHIPPED DEFAULT (`DEFAULT_HYBRID_CONFIG`),
+  // whose tactical weights are all zero and which therefore never calls the solver
+  // at all, so "before" pays none of the new cost and the millisecond comparison is
+  // honest as well as the win rate.
+  //
+  // `BENCH_TACTICAL_ARMS` selects which of the ablation arms to run. Running them
+  // one term at a time is the only way to say which terms EARNED their place
+  // rather than which ones happened to be built together — and here it is what
+  // established that NONE of them move the aggro matchup, individually or together.
+  const { createHybridPilot, DEFAULT_HYBRID_CONFIG, TACTICAL_HYBRID_CONFIG, TACTICAL_EVALUATION_WEIGHTS } =
+    await import('@jonny-boi/ai');
+
+  const base = { ...DEFAULT_HYBRID_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') };
+  /** One arm = the shipped default with exactly the named terms switched on. */
+  const withTerms = (terms, takeProvenLethal = false) => ({
+    ...base,
+    takeProvenLethal,
+    evaluation: { ...base.evaluation, ...terms },
+  });
+  const ALL_ARMS = {
+    control: { label: 'control (default, no solver)', config: base },
+    lethal: { label: '+ solver lethal read', config: withTerms({ useTacticalLethal: true }) },
+    router: { label: '+ take proven lethal', config: withTerms({ useTacticalLethal: true }, true) },
+    facing: {
+      label: '+ facing lethal',
+      config: withTerms({ facingLethalWeight: TACTICAL_EVALUATION_WEIGHTS.facingLethalWeight }),
+    },
+    pressure: {
+      label: '+ pressure',
+      config: withTerms({ pressureWeight: TACTICAL_EVALUATION_WEIGHTS.pressureWeight }),
+    },
+    clock: { label: '+ clock', config: withTerms({ clockWeight: TACTICAL_EVALUATION_WEIGHTS.clockWeight }) },
+    'no-router': {
+      label: 'full eval, no router',
+      config: { ...base, evaluation: TACTICAL_EVALUATION_WEIGHTS, takeProvenLethal: false },
+    },
+    full: { label: 'full tactical', config: { ...base, ...TACTICAL_HYBRID_CONFIG, budget: base.budget } },
+  };
+  const names = (process.env.BENCH_TACTICAL_ARMS ?? 'control,full').split(',');
+  const arms = names.map((name) => {
+    const arm = ALL_ARMS[name];
+    if (!arm) throw new Error(`unknown arm "${name}". Known: ${Object.keys(ALL_ARMS).join(', ')}`);
+    return { label: arm.label, make: () => createHybridPilot(arm.config) };
+  });
+
+  console.log(`\n=== TACTICAL EVALUATOR (${deckA.name} vs ${deckB.name}, interleaved, paired seeds) ===`);
+  console.log(`  budget: ${JSON.stringify(base.budget)}  arms: ${names.join(', ')}`);
+  for (const r of await interleavedArms(arms, count, GAMES_SEED)) printHeadToHead(r);
+  console.log('');
+}
+
+if (mode === 'tactical-duel') {
+  // The SENSITIVE form: the two evaluators playing EACH OTHER rather than each
+  // playing the heuristic and being subtracted. Everything the arms share — the
+  // shuffles, the matchup, the decks — then cancels PER GAME instead of only in
+  // expectation, which matters because the effect being looked for is small: the
+  // whole 256->1024 simulation budget step was worth +1.7 points.
+  const { createHybridPilot, DEFAULT_HYBRID_CONFIG, TACTICAL_EVALUATION_WEIGHTS } = await import('@jonny-boi/ai');
+  const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
+  const overrides = JSON.parse(process.env.BENCH_CONFIG ?? '{}');
+  // The two arms are the SAME config with only the tactical fields differing, so a
+  // `BENCH_CONFIG` budget override applies to both rather than to one.
+  const offConfig = { ...DEFAULT_HYBRID_CONFIG, ...overrides };
+  const onConfig = { ...offConfig, evaluation: TACTICAL_EVALUATION_WEIGHTS, takeProvenLethal: true };
+  const onTimes = [];
+  const offTimes = [];
+  let onWins = 0;
+  let draws = 0;
+  const t0 = performance.now();
+  for (let g = 0; g < count; g++) {
+    const on = timedPilot(createHybridPilot(onConfig), onTimes);
+    const off = timedPilot(createHybridPilot(offConfig), offTimes);
+    const onIsA = g % 2 === 0;
+    const seats = makeSeats(deckA, deckB, { pilotA: onIsA ? on : off, pilotB: onIsA ? off : on }, registry);
+    const r = runMatch(seats, gameSeedFor(GAMES_SEED, g), { startingPlayer: g % 4 < 2 ? 'A' : 'B' });
+    if (r.outcome.kind === 'timeout') draws++;
+    else if ((r.outcome.winner === 'A') === onIsA) onWins++;
+    if ((g + 1) % 20 === 0) console.log(`  ${g + 1}/${count}: tactical ${onWins} wins, ${draws} draws`);
+  }
+  const ci = wilsonInterval(onWins, count, DEFAULT_STATS_CONFIG.z);
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  console.log(
+    `\n=== TACTICAL vs DEFAULT (no solver), head to head (${deckA.name} vs ${deckB.name}, seat+play rotated) ===\n` +
+      `  n=${count} tacticalWins=${onWins} draws=${draws} winRate=${(ci.p * 100).toFixed(1)}% ` +
+      `95%CI=[${(ci.low * 100).toFixed(1)}%, ${(ci.high * 100).toFixed(1)}%]\n` +
+      `  decision mean: tactical ${mean(onTimes).toFixed(2)}ms  default ${mean(offTimes).toFixed(2)}ms  ` +
+      `(${((mean(onTimes) / mean(offTimes) - 1) * 100).toFixed(0)}%)  ${((performance.now() - t0) / 60000).toFixed(1)}min`,
+  );
 }
 
 if (mode === 'reuse-duel') {

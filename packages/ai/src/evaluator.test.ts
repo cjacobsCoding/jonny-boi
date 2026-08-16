@@ -4,7 +4,9 @@ import {
   createHeuristicEvaluator,
   DEFAULT_EVALUATION_WEIGHTS,
   evaluatePosition,
+  TACTICAL_EVALUATION_WEIGHTS,
 } from './evaluator.js';
+import { DEFAULT_HYBRID_CONFIG, TACTICAL_HYBRID_CONFIG } from './hybrid-config.js';
 import { creatureDef, giveHand, landDef, putOnBattlefield } from './test-support.js';
 
 function deck(): DeckList {
@@ -120,8 +122,70 @@ describe('evaluateState — the leaf evaluator', () => {
       untappedManaWeight: 0,
       creatureCountWeight: 0,
       lethalThreatWeight: 0,
+      // The tactical terms are weights like any other and must zero out too. The
+      // lethal READ still has to be switched off explicitly: it is selected by a
+      // boolean, and its weight is already zero above, so this line is about the
+      // solver not being consulted at all rather than about the score.
+      facingLethalWeight: 0,
+      pressureWeight: 0,
+      clockWeight: 0,
+      useTacticalLethal: false,
     });
     expect(flat).toBeCloseTo(0.5, 10);
+  });
+
+  /**
+   * ⚠️ THE SHIPPED DEFAULT KEEPS THE TACTICAL SOLVER OFF, AND THAT IS A MEASURED
+   * DECISION — the same shape as `DEFAULT_HYBRID_CONFIG.reuse` (DESIGN §3.4b/c).
+   *
+   * The tactical blend is the more CORRECT evaluator by a wide margin (5/5 against
+   * 0/5 on the curated ordering suite; two of the default's answers are backwards,
+   * not merely blind) and it is free or slightly cheaper. It is also, on every
+   * strength measurement taken, a wash:
+   *
+   *   Mono-Red vs Boros,       n=120, vs heuristic:  60.0% -> 60.0%
+   *   UW Control vs Golgari,   n=80,  vs heuristic:  53.8% -> 55.0%
+   *   head to head, aggro,     n=120:                48.3% [39.6, 57.2]
+   *   per-term ablation, aggro, n=120: EVERY arm 72/120, identical to the control
+   *
+   * So the brief's rule decides it: a change that does not measurably help does not
+   * become the default. Flipping it needs a fresh measurement, not an opinion —
+   * this test is here so the flip cannot happen quietly.
+   */
+  it('the shipped default keeps the tactical terms OFF — measured, not accidental', () => {
+    expect(DEFAULT_EVALUATION_WEIGHTS.useTacticalLethal).toBe(false);
+    expect(DEFAULT_EVALUATION_WEIGHTS.facingLethalWeight).toBe(0);
+    expect(DEFAULT_EVALUATION_WEIGHTS.pressureWeight).toBe(0);
+    expect(DEFAULT_EVALUATION_WEIGHTS.clockWeight).toBe(0);
+    expect(DEFAULT_HYBRID_CONFIG.takeProvenLethal).toBe(false);
+    // ...and the alternative really is different, so "off" is a choice between two
+    // live options rather than a description of the only one that exists.
+    expect(TACTICAL_EVALUATION_WEIGHTS.useTacticalLethal).toBe(true);
+    expect(TACTICAL_HYBRID_CONFIG.takeProvenLethal).toBe(true);
+  });
+
+  it('with the tactical terms off, the solver is never consulted at all', () => {
+    // The cost half of "ships off": a default that still paid for a feature it had
+    // switched off would be a rule-7 regression for nothing. Proven by behaviour —
+    // a board whose ONLY difference is one the solver can see and the old read
+    // cannot must score identically under the default.
+    const build = (wallIsTapped: boolean): GameState => {
+      const state = evenPosition(11);
+      putOnBattlefield(state, 'A', [creatureDef('Ogre', 3, 3)]);
+      const [wall] = putOnBattlefield(state, 'B', [creatureDef('Wall', 0, 4)]);
+      wall!.tapped = wallIsTapped;
+      return state;
+    };
+    const walled = build(false);
+    const open = build(true);
+
+    // A Wall taps for no mana, so no positional term the default reads can see the
+    // difference and the scores must match exactly; under the tactical blend the
+    // tapped wall stops blocking and the pressure/clock terms separate them.
+    expect(evaluatePosition(walled, 'A')).toBe(evaluatePosition(open, 'A'));
+    expect(evaluatePosition(walled, 'A', TACTICAL_EVALUATION_WEIGHTS)).not.toBe(
+      evaluatePosition(open, 'A', TACTICAL_EVALUATION_WEIGHTS),
+    );
   });
 });
 

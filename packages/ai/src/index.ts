@@ -49,10 +49,23 @@ export {
   DEFAULT_HYBRID_CONFIG,
   FAST_HYBRID_CONFIG,
   PLAY_HYBRID_CONFIG,
+  TACTICAL_HYBRID_CONFIG,
   THRIFTY_HYBRID_CONFIG,
   TREE_REUSE_ON,
   TREE_REUSE_OFF,
 } from './hybrid-config.js';
+
+/**
+ * THE TACTICAL SOLVER (brief §11–12, §39) — exact answers to "can I kill this
+ * turn", "can they kill me", "how fast is each board".
+ *
+ * Exported as a standalone seam rather than buried in the evaluator because three
+ * different consumers want the same answers and must not each grow their own:
+ * the leaf evaluator scores them, the pilot's decision router ACTS on them, and
+ * the curated tactical suite (`tactical-suite.ts`, brief §48) asserts them.
+ */
+export type { AttackHorizon, CombatAssessment, TacticalConfig, TacticalPicture } from './tactical.js';
+export { assessAttack, assessPosition, lethalAttackers, DEFAULT_TACTICAL_CONFIG } from './tactical.js';
 
 /**
  * SEARCH REUSE BETWEEN DECISIONS (brief §21-22). The position fingerprint and the
@@ -73,6 +86,7 @@ export {
   createHeuristicEvaluator,
   evaluatePosition,
   DEFAULT_EVALUATION_WEIGHTS,
+  TACTICAL_EVALUATION_WEIGHTS,
 } from './evaluator.js';
 
 // Tunable heuristic weights (data-driven, designer-tunable).

@@ -273,6 +273,137 @@ Re-runnable: `node packages/ai/bench/mcts-bench.mjs reuse <n>` (interleaved OFF/
 `BENCH_DECAYS=1,0.5` to re-ask the decay question) and `... reuse-duel <n>` with `BENCH_ON_SIMS=<k>` (the
 two arms playing each other, which is the sensitive form of the question).
 
+### 3.4c Tactical solver + curated tactical suite — ✅ built, measured, **evaluator ships OFF**  *(brief §11–12, §39, §48)*
+`packages/ai/src/tactical.ts` answers three combat questions **exactly** instead of sampling them, and
+`packages/ai/src/tactical-suite.ts` is the curated position suite §48 asks for. `packages/ai` only.
+
+❗ **HEADLINE, and read it before turning anything on: the solver makes the evaluator measurably MORE
+CORRECT and not measurably STRONGER.** It scores **5/5** on the curated ordering suite against the
+default evaluator's **0/5** — including two answers the default gets actively *backwards* — it is free
+or slightly cheaper, and on every strength measurement taken it is a wash. So it lands as a named,
+tested, exported blend (`TACTICAL_EVALUATION_WEIGHTS` / `TACTICAL_HYBRID_CONFIG`) and
+`DEFAULT_HYBRID_CONFIG` is **unchanged, to the byte**. Same shape as §3.4b: the measurement is the
+deliverable.
+
+**Why here.** §3.4a and §3.4b both landed on the same conclusion from opposite directions: 256 → 1024
+simulations bought **+1.7 points**, and tree reuse ran a search **2.4× deeper in information** (95% hit
+rate, 217–284 inherited visits into a 160-simulation budget) and produced **identical play**. Search
+depth is not the binding constraint; the leaf evaluation is.
+
+**What the solver computes, and why it is cheap.** Two structural facts collapse the §39 combinatorial
+trap so nothing has to be enumerated:
+1. **Damage assignment is not a decision in this engine** — `internal/combat.ts` assigns lethal in
+   declared order and tramples the remainder. That dimension does not exist.
+2. **Block legality is *nested*.** core's `canBlock` refuses exactly one thing: a flier blocked by a
+   creature with neither flying nor reach. So the blockers eligible for a flier are a **subset** of those
+   eligible for a ground creature, a set of attackers is blockable iff `fliers(S) ≤ evasion-capable
+   blockers` and `|S| ≤ blockers` (Hall's condition, two tight sets), and the feasible sets form a
+   **matroid** — greedy by damage-prevented descending is exactly optimal, with no matching algorithm.
+   Pinned against the real engine by a test rather than by this paragraph.
+
+And the attacker subset is not searched either: adding an attacker adds power on one side and a blocking
+constraint on the other, so "attack with everything eligible" maximises guaranteed damage by
+construction. The interesting attack question — which subset *trades* best when the kill is not there —
+stays with the policy and the search.
+
+⚠️ **Every bound is conservative in ONE direction, deliberately.** Prevention is over-estimated (a
+trampler is priced as if every legal blocker could gang up on it; a first-striking blocker that kills it
+stops *all* of its damage), so `guaranteedDamage` is a **lower** bound and a claimed lethal is never a
+lethal that is not there. It can miss one; it cannot invent one. That asymmetry is what makes it safe for
+the pilot to **act** on the answer rather than merely score it (`takeProvenLethal`, the brief's §45
+router branch: a proven-unblockable kill is played, not searched).
+
+**Two real defects in the default evaluator that this found**, both pinned in the suite:
+- `lethalThreatWeight` fires on *summed untapped power ≥ their life*, which **ignores blockers entirely**
+  — 15 power behind three 0/4 walls reads as a kill, and is scored ABOVE a board with 6 genuinely
+  unblockable damage.
+- Worse, and this one has a sign: **attackers TAP when they are declared**, so the bonus is paid for the
+  board that has not swung yet and withdrawn the instant it does. The default evaluator scores **taking a
+  proven kill (0.9047) BELOW declining it (0.9399)**. The solver reads the *declared* attackers once
+  combat has begun, so the signal is stable across the step.
+
+**The four new terms**, each a named weight, each zeroable, all zero by default: blocker-aware
+`lethalThreatWeight` (`useTacticalLethal`), `facingLethalWeight` (the evaluator has **no** term of any
+kind for being dead on board — the §11 anti-lethal / §12 opponent-threat question, and the term that can
+see a player tapping out into a lethal crack-back), `pressureWeight` (guaranteed-damage differential —
+two 0/6 walls and two 3/3s are the same 12 points of `boardWeight` and are not the same board), and
+`clockWeight` (§10 inevitability, saturated at `TacticalConfig.maxClockTurns` so a board that cannot
+break through is "slow", never infinite).
+
+**Measured — interleaved arms in one process, paired seeds.** The control is the shipped default, whose
+zeroed weights make it skip the solver entirely, so "before" pays none of the new cost and the
+millisecond comparison is as honest as the win rate. The control arm reproduced **both** recorded
+baselines exactly (72/120 and 43/80), which is what makes the rest trustworthy.
+
+| measurement | default | tactical |
+|---|---|---|
+| Mono-Red vs Boros, n=120, vs heuristic | **60.0%** [51.1, 68.3] | **60.0%** [51.1, 68.3] |
+| UW Control vs Golgari, n=80, vs heuristic | **53.8%** [42.9, 64.3] | **55.0%** [44.1, 65.4] |
+| head to head, Mono-Red vs Boros, n=120 | — | **48.3%** [39.6, 57.2] |
+| head to head, UW vs Golgari, n=120 | — | **52.5%** [43.6, 61.2] |
+| mean decision, aggro / control | 6.83 / 14.33 ms | 6.70–6.97 / **13.63** ms |
+| p95 decision, aggro / control | 56.8 / 114.3 ms | 56.5 / **111.6** ms |
+
+Pooled over the two head-to-head runs the tactical arm is **121/240 = 50.4%** — dead even. Cost is *not*
+the reason it ships off; it is free or slightly cheaper on both matchups. The reason is the brief's own
+rule: a change that does not measurably help does not become the default.
+
+❗ **The per-term ablation is what makes that conclusion safe rather than lucky.** Each term alone, on the
+same 120 seeded aggro games (`BENCH_TACTICAL_ARMS=control,lethal,router,facing,pressure,clock,no-router`):
+
+| arm | wins | mean decision |
+|---|---|---|
+| control (default, no solver) | 72/120 | 6.83 ms |
+| + solver lethal read | 72/120 | 6.74 ms |
+| + take proven lethal | 72/120 | 6.70 ms |
+| + facing lethal | 72/120 | 6.85 ms |
+| + pressure | 72/120 | 6.95 ms |
+| + clock | 71/120 | 6.77 ms |
+| full eval, no router | 72/120 | 6.97 ms |
+
+**Every arm lands on the identical 72/120.** This is not one good term cancelling one bad one — no term
+moves that matchup at all, so there is no winning subset hiding inside the blend.
+
+👉 **The most likely explanation, and it says when to re-ask the question.** The pilot half of the
+curated suite showed the same thing directly: on any board small enough to state as a puzzle, a
+160-simulation search simply **plays the position out and reaches the terminal**, whatever its leaf
+evaluator believes. These terms describe positions near a terminal, which is exactly where the search
+does not need help. Re-ask when the SEARCH changes, not when the weights do — a cheaper budget
+(`THRIFTY_HYBRID_CONFIG`), a shallower `maxTreeDepth`, or decks whose games are decided further from a
+terminal would all move that balance. A learned value function (§31) is the other consumer these terms
+were built for.
+
+**The curated suite (§48) is a deliverable in its own right, and it has two halves because one was not
+enough.** `packages/ai/src/tactical-suite.ts`, run by `tactical-suite.test.ts`:
+- **12 pilot puzzles** across lethal · anti-lethal · combat · removal · sequencing · mana, each graded by
+  a *predicate over the chosen action* rather than one blessed move (several positions have more than one
+  strong line, and a suite that raises false alarms gets ignored). Scores: heuristic **10/12**, both
+  hybrid arms **11/12**.
+- ⚠️ **The pilot half cannot isolate a leaf evaluator** — see above. So the second half grades
+  `evaluateState` **directly**, on **5 position PAIRS** that are both reachable successors of one decision,
+  exactly the comparison a search performs when it backs a reward up. There the two evaluators are not
+  close: **default 0/5, tactical 5/5**, and the 0/5 breaks down into **three pairs it cannot tell apart at
+  all** (identical scores to four decimal places) and **two it orders backwards**.
+
+👉 **The suite immediately caught a live defect nobody had noticed, in the DEFAULT pilot.** Given a
+Mountain in play and a Mountain, a Swamp and a `{1}{B}` removal spell in hand, **every** pilot plays the
+Mountain and leaves its own removal uncastable for a turn: `heuristic.ts`'s land-drop candidates score
+each land on its own merits and never ask what a land *unlocks*. **Not fixed here, deliberately** — that
+code feeds the default pilot, so changing it invalidates every recorded baseline in §3.4a and every A/B
+verdict measured against them. It is pinned as an explicit "DEFECT (unfixed)" test that will fail the day
+someone fixes it.
+
+**Rule 7 — the heuristic path is untouched, and provably so.** `heuristic.ts`, `weights.ts`,
+`card-value.ts`, `effect-value.ts` and `choices.ts` are **byte-identical to `main`**, the heuristic pilot
+never calls `evaluator.ts` or `tactical.ts`, and `npm run sim -- gauntlet "Mono-Red Aggro" --games 40
+--seed 99` reproduces the recorded **92/280 = 32.9%** at 113 games/sec — inside the recorded 109–118 band
+while two benchmarks were running on the same box. The hybrid default is unchanged too: with the tactical
+weights at zero the solver is never called, which a test proves by behaviour rather than by inspection.
+
+Re-runnable: `node packages/ai/bench/mcts-bench.mjs tactical <n>` (interleaved arms; `BENCH_TACTICAL_ARMS`
+= `control,lethal,router,facing,pressure,clock,no-router,full` runs the per-term ablation) and
+`... tactical-duel <n>` (the two evaluators playing each other, the sensitive form of the question).
+
 ### 3.5 Sim harness + statistics — ✅ done
 Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B
 single-card-swap** test (paired / common-random-numbers + **McNemar's test**) that returns a significance

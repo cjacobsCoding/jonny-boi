@@ -7,7 +7,9 @@
  */
 
 import type { EvaluationWeights } from './evaluator.js';
-import { DEFAULT_EVALUATION_WEIGHTS } from './evaluator.js';
+import { DEFAULT_EVALUATION_WEIGHTS, TACTICAL_EVALUATION_WEIGHTS } from './evaluator.js';
+import type { TacticalConfig } from './tactical.js';
+import { DEFAULT_TACTICAL_CONFIG } from './tactical.js';
 
 /**
  * ⚠️ **THE TWO BUDGET POLICIES, AND WHY THEY MUST STAY SEPARATE.**
@@ -165,6 +167,24 @@ export interface HybridConfig {
    */
   readonly winSpeedDiscount: number;
 
+  // --- tactical solver (brief §11–12, §39) ------------------------------------
+  /**
+   * Bounds the exact combat solver reads (`tactical.ts`).
+   */
+  readonly tactical: TacticalConfig;
+  /**
+   * The decision router's `if (IsImmediateLethal)` branch (brief §45): play a
+   * proven-unblockable lethal attack instead of searching the position.
+   *
+   * A separate flag from the evaluator's tactical weights because they are two
+   * distinct claims that deserve two distinct measurements — "the evaluator judges
+   * combat better" and "some positions should bypass the search entirely" can be
+   * true independently, and bundling them would leave nobody able to say which one
+   * paid. Measured alone on Mono-Red vs Boros, n=120: **72/120, identical to the
+   * control**. Ships off with the rest; see {@link TACTICAL_HYBRID_CONFIG}.
+   */
+  readonly takeProvenLethal: boolean;
+
   // --- reuse between decisions (brief §21–22) ---------------------------------
   readonly reuse: TreeReuseConfig;
 }
@@ -235,7 +255,44 @@ export const DEFAULT_HYBRID_CONFIG: HybridConfig = Object.freeze({
   maxAutoResolveSteps: 64,
   evaluation: DEFAULT_EVALUATION_WEIGHTS,
   winSpeedDiscount: 0.005,
+  tactical: DEFAULT_TACTICAL_CONFIG,
+  // ⚠️ OFF, and measured — see `TACTICAL_HYBRID_CONFIG` and DESIGN §3.4c. With
+  // this false and the evaluation weights at their defaults, the pilot is the one
+  // §3.4a/§3.4b measured, to the byte.
+  takeProvenLethal: false,
   reuse: TREE_REUSE_OFF,
+});
+
+/**
+ * The pilot with the **tactical solver switched on** — the exact combat evaluation
+ * plus the decision router's proven-lethal branch (brief §11–12, §39, §45).
+ *
+ * ⚠️ **Built, measured, and NOT the default.** It is the more *correct* evaluator
+ * by a wide margin (5/5 against 0/5 on the curated ordering suite, with two of the
+ * default's five answers actively backwards) and it is **free or slightly cheaper**
+ * — and on every strength measurement taken it is a wash:
+ *
+ * | measurement | default | this |
+ * |---|---|---|
+ * | Mono-Red vs Boros, n=120, vs heuristic | 60.0% [51.1, 68.3] | 60.0% [51.1, 68.3] |
+ * | UW Control vs Golgari, n=80, vs heuristic | 53.8% [42.9, 64.3] | 55.0% [44.1, 65.4] |
+ * | head to head, aggro, n=120 | — | 48.3% [39.6, 57.2] |
+ * | mean decision, aggro / control | 6.83 / 14.33 ms | 6.70–6.97 / 13.63 ms |
+ *
+ * The full argument — including the per-term ablation that put every arm on the
+ * identical 72/120 — is on {@link TACTICAL_EVALUATION_WEIGHTS}. A test pins that
+ * the default keeps it off.
+ *
+ * It exists as a shipped export rather than a bench-local literal for a second
+ * reason too: an A/B on this box is only trustworthy INTERLEAVED IN ONE PROCESS
+ * (wall clock drifts ±19% between runs of identical code, and a sequential
+ * comparison here has already produced a confident wrong answer). An arm you
+ * cannot construct from the library is an arm you cannot interleave.
+ */
+export const TACTICAL_HYBRID_CONFIG: HybridConfig = Object.freeze({
+  ...DEFAULT_HYBRID_CONFIG,
+  evaluation: TACTICAL_EVALUATION_WEIGHTS,
+  takeProvenLethal: true,
 });
 
 /**

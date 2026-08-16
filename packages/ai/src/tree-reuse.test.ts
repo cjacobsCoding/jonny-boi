@@ -326,10 +326,23 @@ describe('hybrid pilot with tree reuse — behaviour', () => {
     // The cap is a real guard, not decoration: a tree over the limit is discarded
     // whole (a partly-trimmed tree is one whose visit counts no longer add up),
     // and the pilot simply searches from scratch.
-    const sink = createCollectingStatsSink();
-    const config = { ...FAST_HYBRID_CONFIG, reuse: { ...TREE_REUSE_ON, maxNodes: 1 } };
-    const transcript = playGame(63, createHybridPilot(config, undefined, sink), createHeuristicPilot());
-    expect(sink.summary().reuseHitRate).toBe(0);
+    //
+    // Stated as a COLLAPSE against the uncapped arm rather than as "hit rate is
+    // exactly zero". A matched node that happens to have no children is one node
+    // and legitimately fits under a cap of one, so an absolute zero is a claim
+    // about which shapes this particular game happens to produce — it held for one
+    // evaluator and stopped holding for the next, which is a test measuring the
+    // wrong thing rather than a regression. Both arms play the same seeded game.
+    const capped = createCollectingStatsSink();
+    const uncapped = createCollectingStatsSink();
+    const cappedConfig = { ...FAST_HYBRID_CONFIG, reuse: { ...TREE_REUSE_ON, maxNodes: 1 } };
+    const uncappedConfig = { ...FAST_HYBRID_CONFIG, reuse: TREE_REUSE_ON };
+    const transcript = playGame(63, createHybridPilot(cappedConfig, undefined, capped), createHeuristicPilot());
+    playGame(63, createHybridPilot(uncappedConfig, undefined, uncapped), createHeuristicPilot());
+
+    expect(uncapped.summary().reuseHitRate).toBeGreaterThan(0.5);
+    expect(capped.summary().reuseHitRate).toBeLessThan(0.1);
+    expect(capped.summary().maxReusedNodes).toBeLessThanOrEqual(cappedConfig.reuse.maxNodes);
     expect(transcript.length).toBeGreaterThan(20);
   });
 
