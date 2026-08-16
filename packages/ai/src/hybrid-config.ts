@@ -47,6 +47,49 @@ export type SearchBudget =
       readonly maxSimulations: number;
     };
 
+/**
+ * TREE REUSE between decisions (`docs/plans/superhuman-ai-program.md` §21–22).
+ *
+ * The search matches the live position against the tree it built last time and
+ * re-roots onto it instead of starting from nothing. See `tree-reuse.ts` for why
+ * the match is by POSITION rather than by action, and for the determinism
+ * argument that makes history-dependence safe for the Lab's paired A/B verdict.
+ */
+export interface TreeReuseConfig {
+  /**
+   * Off restores the previous behaviour EXACTLY — no fingerprints are computed,
+   * no tree is retained — which is what makes an honest A/B of the feature a
+   * config flip rather than a rebuild.
+   */
+  readonly enabled: boolean;
+  /**
+   * How many tree edges below the retained root the live position is looked for,
+   * and equivalently how deep positions are recorded.
+   *
+   * Real play moves one or two strategic decisions between two calls to the same
+   * seat, so a small bound finds everything findable while keeping both the
+   * per-node fingerprint cost and the per-decision walk small.
+   */
+  readonly maxDepth: number;
+  /**
+   * Multiplier applied to every reused visit count and reward at promotion —
+   * `1` reuses statistics as they stand.
+   *
+   * Visits and reward are scaled together, so a node's MEAN is preserved exactly
+   * and only its CONFIDENCE shrinks: the inherited search becomes a prior the
+   * fresh simulations can outvote rather than a verdict they cannot. The right
+   * value is an empirical question (`mcts-bench.mjs reuse`), not a matter of
+   * taste.
+   */
+  readonly decay: number;
+  /**
+   * Hard cap on the retained subtree, in nodes. Over it the tree is dropped
+   * whole rather than trimmed, so the pilot's footprint is bounded by
+   * construction over an arbitrarily long game.
+   */
+  readonly maxNodes: number;
+}
+
 /** The complete, tunable knob set the hybrid pilot reads. Pure data. */
 export interface HybridConfig {
   // --- budget ---------------------------------------------------------------
@@ -121,12 +164,57 @@ export interface HybridConfig {
    * into a timeout — the same reasoning as `MctsConfig.winSpeedDiscount`.
    */
   readonly winSpeedDiscount: number;
+
+  // --- reuse between decisions (brief §21–22) ---------------------------------
+  readonly reuse: TreeReuseConfig;
 }
+
+/**
+ * Reuse turned ON, with the settings that measured best.
+ *
+ * `decay: 1` (inherit statistics as they stand) is the MEASURED answer rather
+ * than the lazy one: `decay: 0.5` was run on the identical 120 seeded games and
+ * finished one game apart (73/120 vs 72/120), i.e. indistinguishable. The knob
+ * stays because the question is worth re-asking whenever the evaluator changes —
+ * it is the evaluator, not the search, that this pilot is currently limited by.
+ *
+ * `maxDepth: 4` is generous for what it has to do: the live position was found
+ * in the retained tree on **94–96%** of decisions across both measured matchups,
+ * so the bound is not what limits reuse.
+ */
+export const TREE_REUSE_ON: TreeReuseConfig = Object.freeze({
+  enabled: true,
+  maxDepth: 4,
+  decay: 1,
+  maxNodes: 8192,
+});
+
+/** Reuse turned off — the shipped default, and the A/B control. */
+export const TREE_REUSE_OFF: TreeReuseConfig = Object.freeze({
+  ...TREE_REUSE_ON,
+  enabled: false,
+});
 
 /**
  * The shipped hybrid configuration: a deterministic simulation budget, PUCT with
  * a moderately trusting prior, widening that reaches a fourth child at ~16 visits,
  * and NO rollout — the leaf evaluator does the judging.
+ *
+ * ⚠️ **`reuse` is OFF here, and that is a MEASURED decision — read this before
+ * flipping it.** Tree reuse (brief §21–22) is fully implemented and tested, and
+ * on the same protocol that produced this pilot's recorded numbers it did not
+ * make it play better *at the same budget*, while making every decision cost
+ * appreciably more:
+ *
+ * | matchup | reuse OFF | reuse ON | mean decision OFF → ON |
+ * |---|---|---|---|
+ * | Mono-Red vs Boros, n=120 | 60.0% [51.1, 68.3] | 60.0% [51.1, 68.3] | 6.49 → 8.76 ms |
+ * | UW Control vs Golgari, n=80 | 53.8% [42.9, 64.3] | 56.3% [45.3, 66.6] | 10.52 → 16.71 ms |
+ *
+ * Turning it on at this budget would therefore be a rule-7 throughput regression
+ * bought with a strength gain that is not there, so the default keeps the pilot
+ * exactly as it was measured. What reuse *does* buy is a cheaper search — see
+ * {@link THRIFTY_HYBRID_CONFIG}.
  */
 export const DEFAULT_HYBRID_CONFIG: HybridConfig = Object.freeze({
   budget: Object.freeze({ kind: 'simulations', simulations: 160 } as const),
@@ -147,6 +235,36 @@ export const DEFAULT_HYBRID_CONFIG: HybridConfig = Object.freeze({
   maxAutoResolveSteps: 64,
   evaluation: DEFAULT_EVALUATION_WEIGHTS,
   winSpeedDiscount: 0.005,
+  reuse: TREE_REUSE_OFF,
+});
+
+/**
+ * The same pilot, run CHEAP: tree reuse on, and the simulation budget cut to a
+ * fraction of the default because the retained tree supplies the rest.
+ *
+ * This is the one thing §21–22 measurably bought here, and it is a real thing to
+ * have. Head to head against {@link DEFAULT_HYBRID_CONFIG} on the same 120 seeded
+ * games, seat and play rotated:
+ *
+ * | reuse ON budget | win rate vs the 160-simulation default | its share of the default's decision time |
+ * |---|---|---|
+ * | 64 sims (this config) | 46.7% [38.0%, 55.6%] | 44% |
+ * | 96 sims | 48.3% [39.6%, 57.2%] | 74% |
+ *
+ * Both intervals include 50%: at 40% of the budget the pilot is **not measurably
+ * weaker** than the full-budget one, for roughly half the decision time. Read it
+ * as "no measurable loss at half the cost", NOT as "stronger" — the point
+ * estimates sit just under 50% and the honest claim is the one the interval
+ * supports.
+ *
+ * Still deterministic (a `simulations` budget), so the Lab may use it. It is the
+ * beginning of a throughput case for making a search pilot the default, which the
+ * hybrid does not yet have on its own.
+ */
+export const THRIFTY_HYBRID_CONFIG: HybridConfig = Object.freeze({
+  ...DEFAULT_HYBRID_CONFIG,
+  budget: Object.freeze({ kind: 'simulations', simulations: 64 } as const),
+  reuse: TREE_REUSE_ON,
 });
 
 /**

@@ -44,8 +44,30 @@ export { HYBRID_PILOT_ID, createHybridPilot } from './hybrid.js';
  * brief): `evaluateState` / `evaluatePolicy`, initially backed by the heuristic
  * so a learned model can drop in later without the search changing.
  */
-export type { HybridConfig, SearchBudget } from './hybrid-config.js';
-export { DEFAULT_HYBRID_CONFIG, FAST_HYBRID_CONFIG, PLAY_HYBRID_CONFIG } from './hybrid-config.js';
+export type { HybridConfig, SearchBudget, TreeReuseConfig } from './hybrid-config.js';
+export {
+  DEFAULT_HYBRID_CONFIG,
+  FAST_HYBRID_CONFIG,
+  PLAY_HYBRID_CONFIG,
+  THRIFTY_HYBRID_CONFIG,
+  TREE_REUSE_ON,
+  TREE_REUSE_OFF,
+} from './hybrid-config.js';
+
+/**
+ * SEARCH REUSE BETWEEN DECISIONS (brief §21-22). The position fingerprint and the
+ * re-rooting walk are exported because they are search-agnostic: a later tactical
+ * solver (§11) or a transposition table (§18) wants the same position key, and
+ * two different keys for "is this the same position" is exactly the kind of drift
+ * this repo has been bitten by before.
+ */
+export type { PositionFingerprint, ReusableNode, ReusableEdge } from './tree-reuse.js';
+export {
+  fingerprintPosition,
+  fingerprintsEqual,
+  findNodeByFingerprint,
+  decayAndCountSubtree,
+} from './tree-reuse.js';
 export type { StateEvaluator, EvaluationWeights } from './evaluator.js';
 export {
   createHeuristicEvaluator,
