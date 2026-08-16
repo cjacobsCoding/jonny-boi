@@ -34,10 +34,80 @@ import {
 
 // --- param reading (typed, defaulted — no magic numbers leak in) ---------------
 
-/** Read a non-negative integer param by key, falling back to `fallback`. */
+/**
+ * What a DERIVED numeric value counts — the "equal to the number of …" half of
+ * a printed card.
+ *
+ * Deliberately a closed vocabulary rather than an arbitrary expression: each
+ * entry is a countable set the engine can evaluate exactly, so a card either
+ * names one of these or is reported unsupported. An open expression language
+ * would let the compiler accept text it only approximately understands, which
+ * is the one thing the whole compiler contract forbids.
+ */
+export type DerivedCount =
+  | 'creaturesYouControl'
+  | 'creaturesOpponentControls'
+  | 'creaturesOnBattlefield'
+  | 'landsYouControl'
+  | 'cardsInYourHand'
+  | 'cardsInYourGraveyard';
+
+/** A numeric param that is computed at resolution instead of printed. */
+export interface DerivedValue {
+  readonly countOf: DerivedCount;
+}
+
+/** Whether a param value is a derived-value descriptor. */
+function isDerivedValue(value: unknown): value is DerivedValue {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { countOf?: unknown }).countOf === 'string'
+  );
+}
+
+/**
+ * Evaluate a derived count against the CURRENT state.
+ *
+ * "Current" matters: the value is computed when the effect resolves, not when
+ * the spell was cast, which is what the printed cards mean and what makes a
+ * sweeper-then-pump sequence behave correctly.
+ */
+export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number {
+  const you = ctx.controller;
+  const them = otherPlayer(you);
+  const battlefield = ctx.state.battlefield;
+  switch (value.countOf) {
+    case 'creaturesYouControl':
+      return battlefield.filter((c) => c.controller === you && isCreature(c.def)).length;
+    case 'creaturesOpponentControls':
+      return battlefield.filter((c) => c.controller === them && isCreature(c.def)).length;
+    case 'creaturesOnBattlefield':
+      return battlefield.filter((c) => isCreature(c.def)).length;
+    case 'landsYouControl':
+      return battlefield.filter((c) => c.controller === you && c.def.types.includes('land')).length;
+    case 'cardsInYourHand':
+      return ctx.state.players[you].hand.length;
+    case 'cardsInYourGraveyard':
+      return ctx.state.players[you].graveyard.length;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * Read a non-negative integer param by key, falling back to `fallback`.
+ *
+ * Accepts either a printed number or a {@link DerivedValue} descriptor. Putting
+ * that here rather than in each primitive means EVERY numeric param in the
+ * library — damage, cards drawn, life gained, mill depth, a pump's +X/+X —
+ * understands "equal to the number of …" without a single primitive changing.
+ */
 export function intParam(ctx: EffectContext, key: string, fallback: number): number {
   const v = ctx.params[key];
-  return typeof v === 'number' && Number.isFinite(v) ? Math.trunc(v) : fallback;
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v);
+  if (isDerivedValue(v)) return evaluateDerived(ctx, v);
+  return fallback;
 }
 
 /** Read a string param by key, or `undefined` if absent/ill-typed. */

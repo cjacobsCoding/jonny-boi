@@ -128,6 +128,34 @@ const MODAL_COUNTS: Readonly<Record<string, number>> = Object.freeze({
 });
 const OPPONENT_TARGET: TargetRestriction = 'opponent';
 
+
+/**
+ * Printed "the number of …" phrases → the {@link DerivedCount} that evaluates
+ * them. A closed table on purpose: a phrase not listed here is NOT compiled,
+ * because a derived value the engine only half-understands would silently make
+ * a card stronger or weaker than printed.
+ */
+const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
+  'creatures you control': 'creaturesYouControl',
+  'creatures your opponents control': 'creaturesOpponentControls',
+  'creatures your opponent controls': 'creaturesOpponentControls',
+  'creatures on the battlefield': 'creaturesOnBattlefield',
+  'lands you control': 'landsYouControl',
+  'cards in your hand': 'cardsInYourHand',
+  'cards in your graveyard': 'cardsInYourGraveyard',
+});
+
+/** The alternation of the phrases above, longest-first so none is truncated. */
+const DERIVED_PHRASE = `(${Object.keys(DERIVED_COUNTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/** The derived descriptor a printed phrase means, or null when unlisted. */
+function derivedValue(phrase: string): { countOf: string } | null {
+  const countOf = DERIVED_COUNTS[phrase.trim().toLowerCase()];
+  return countOf ? { countOf } : null;
+}
+
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
 
@@ -323,6 +351,40 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         { primitive: 'dealDamage', params: damageParams(damage, restriction) },
         { primitive: 'gainLife', params: { amount: life } },
       );
+    },
+  },
+  {
+    id: 'damage-equal-to-count',
+    description: '"~ deals damage to any target equal to the number of X"',
+    pattern: new RegExp(
+      `^~ deals damage to ${DAMAGE_TARGET_PHRASE} equal to the number of ${DERIVED_PHRASE}$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const restriction = damageRestriction(match[1]!);
+      const amount = derivedValue(match[2]!);
+      if (!restriction || !amount) return null;
+      return effects({ primitive: 'dealDamage', params: damageParams(amount as never, restriction) });
+    },
+  },
+  {
+    id: 'draw-equal-to-count',
+    description: '"Draw cards equal to the number of X"',
+    pattern: new RegExp(`^draw cards equal to the number of ${DERIVED_PHRASE}$`),
+    build(match) {
+      const count = derivedValue(match[1]!);
+      if (!count) return null;
+      return effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
+    id: 'gain-life-equal-to-count',
+    description: '"You gain life equal to the number of X"',
+    pattern: new RegExp(`^you gain life equal to the number of ${DERIVED_PHRASE}$`),
+    build(match) {
+      const amount = derivedValue(match[1]!);
+      if (!amount) return null;
+      return effects({ primitive: 'gainLife', params: { amount } });
     },
   },
   {
