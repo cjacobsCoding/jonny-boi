@@ -207,6 +207,12 @@ export interface SuggestOptions {
    */
   readonly history?: SuggestionHistory;
   /**
+   * The pilot playing this run. Stamps the returned record and lets a supplied
+   * one be refused if it was gathered at a different level of play — evidence is
+   * not comparable across pilots (see `SuggestionHistory.pilotId`).
+   */
+  readonly pilotId?: string;
+  /**
    * Use the adaptive wave scheduler (default). Set false for the legacy
    * fixed-budget sweep — retained so the two can be compared head-to-head.
    */
@@ -255,6 +261,7 @@ export function suggestSwaps(base: Deck, options: SuggestOptions): SuggestionRep
     deckRules: rules,
     swapScope,
     ...(options.history ? { history: options.history } : {}),
+    ...(options.pilotId === undefined ? {} : { pilotId: options.pilotId }),
     ...(options.cutOnly ? { cutOnly: options.cutOnly } : {}),
     ...(options.inOnly ? { inOnly: options.inOnly } : {}),
   });

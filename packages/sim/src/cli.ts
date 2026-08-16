@@ -34,7 +34,7 @@ import { makeSeats, runMatchup, type MatchupPilots, type MatchupResult } from '.
 import { runGauntlet, type GauntletResult } from './gauntlet.js';
 import { evaluateSwap, type SwapEvaluation } from './swap.js';
 import { suggestSwaps, type SuggestionReport } from './suggest.js';
-import type { SuggestionHistory } from './suggest-history.js';
+import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
 import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, FIDELITY_CAVEAT, type SwapScope } from './config.js';
 import type { ProportionCI } from './stats.js';
@@ -255,6 +255,29 @@ function ciStr(ci: ProportionCI): string {
 }
 
 /**
+ * What happened to a supplied `--history` file, in the user's terms.
+ *
+ * Not every outcome is "ignored": `pilot-unstamped` ADOPTS the record (it
+ * predates pilot tracking, and a record can be hours of compute — discarding it
+ * silently would be the worse failure). Printing "IGNORED" for that would be a
+ * lie about the user's data, so the two cases read differently.
+ */
+function historyNote(rejection: HistoryRejection | undefined): string {
+  switch (rejection) {
+    case undefined:
+      return '';
+    case 'pilot-unstamped':
+      return ' — supplied history predates pilot tracking; ADOPTED as this run\'s pilot';
+    case 'pilot-changed':
+      return ' — supplied history DISCARDED: it was gathered with a different pilot, and evidence is not comparable across levels of play';
+    case 'deck-changed':
+      return ' — supplied history DISCARDED: the decklist changed since it was recorded';
+    case 'version':
+      return ' — supplied history DISCARDED: unrecognised record version';
+  }
+}
+
+/**
  * Throughput, with enough precision to still be a MEASUREMENT at low rates.
  *
  * This was `toFixed(0)`, which was fine while every pilot ran hundreds of games
@@ -459,6 +482,10 @@ function cmdSuggest(flags: Flags): number {
       cutOnly: flags.cut.length > 0 ? flags.cut : undefined,
       adaptive: !flags.noAdaptive,
       ...(priorHistory ? { history: priorHistory } : {}),
+      // Stamps the record and lets `acceptHistory` refuse one gathered at a
+      // different level of play. Without this the CLI would happily pool a
+      // `--pilot hybrid` run into a `--pilot heuristic` family.
+      pilotId: flags.pilot ?? DEFAULT_PILOT_ID,
     });
   } catch (err) {
     if (err instanceof DeckLoadError) throw new CliError(err.message);
@@ -474,7 +501,7 @@ function cmdSuggest(flags: Flags): number {
   console.log(
     `Run #${(n.runIndex ?? 0) + 1} for this deck` +
       (priorHistory ? ` (continuing a search that already covered ${priorHistory.candidates.length} candidates)` : '') +
-      (n.historyRejected ? ` — supplied history IGNORED (${n.historyRejected})` : ''),
+      historyNote(n.historyRejected),
   );
   console.log(`Base gauntlet win rate: ${ciStr(report.baseGauntletWinRate)}\n`);
 

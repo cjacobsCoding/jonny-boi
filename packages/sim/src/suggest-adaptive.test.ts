@@ -367,6 +367,32 @@ describe('the cross-run search record', () => {
     expect(acceptHistory(stale, MONO_RED_AGGRO).rejected).toBe('version');
   });
 
+  it('DISCARDS a record gathered with a different pilot', () => {
+    // Not tidiness: `candidates.length` is the Holm-Bonferroni family size and
+    // `settled` retires candidates. Pooling two levels of play corrupts the
+    // correction and hides the very card the stronger pilot just made good.
+    const fromHeuristic = emptyHistory(MONO_RED_AGGRO, 'heuristic');
+    const accepted = acceptHistory(fromHeuristic, MONO_RED_AGGRO, 'hybrid');
+    expect(accepted.rejected).toBe('pilot-changed');
+    expect(accepted.history.candidates).toHaveLength(0);
+    expect(accepted.history.pilotId).toBe('hybrid');
+  });
+
+  it('ADOPTS (never discards) a record that predates pilot tracking, and says so', () => {
+    // A record can be hours of compute. Silently dropping it is the worse
+    // failure; the caveat is reported instead so the assumption is visible.
+    const unstamped = emptyHistory(MONO_RED_AGGRO);
+    expect(unstamped.pilotId).toBeUndefined();
+    const accepted = acceptHistory(unstamped, MONO_RED_AGGRO, 'hybrid');
+    expect(accepted.rejected).toBe('pilot-unstamped');
+    expect(accepted.history.pilotId).toBe('hybrid');
+  });
+
+  it('accepts a matching pilot with no caveat', () => {
+    const same = emptyHistory(MONO_RED_AGGRO, 'heuristic');
+    expect(acceptHistory(same, MONO_RED_AGGRO, 'heuristic').rejected).toBeUndefined();
+  });
+
   it('keys the fingerprint on CONTENT, not decklist order or deck name', () => {
     const reordered: Deck = { ...MONO_RED_AGGRO, name: 'Renamed', cards: [...MONO_RED_AGGRO.cards].reverse() };
     expect(deckFingerprint(reordered)).toBe(deckFingerprint(MONO_RED_AGGRO));

@@ -81,6 +81,29 @@ export interface SuggestionHistory {
   readonly deckFingerprint: string;
   /** Human-facing deck name at the time of recording (for UI/debugging). */
   readonly deckName: string;
+  /**
+   * The pilot that played the games behind this evidence.
+   *
+   * Evidence is NOT comparable across pilots, and pooling it is statistically
+   * invalid rather than merely untidy — for two independent reasons:
+   *   1. `settled` / `provenNotBetter` retire a candidate from future runs, but
+   *      "not better" is a claim about a LEVEL OF PLAY. A card whose value is
+   *      punishing bad blocks is a settled loser under a weak pilot and a real
+   *      gain under a strong one; pooling hides exactly the card a pilot change
+   *      just made good.
+   *   2. `candidates.length` IS the Holm–Bonferroni family size. Mixing pilots
+   *      both inflates the family and corrects a family spanning two different
+   *      hypotheses, so the correction stops controlling the error rate of
+   *      anything a user could name.
+   *
+   * Optional because records written before pilot tracking existed have no
+   * stamp. Those are ADOPTED (never discarded — a record can be hours of
+   * compute) and reported as `'pilot-unstamped'` so the assumption is visible
+   * rather than silent. The CLI's `--pilot` flag predates this field, so an
+   * unstamped file genuinely is of unknown provenance; saying so is the honest
+   * behaviour.
+   */
+  readonly pilotId?: string;
   /** How many suggestion runs have contributed. Also offsets the next run's seed. */
   readonly runsCompleted: number;
   /** Every candidate any run has evaluated, in a stable order. */
@@ -110,34 +133,56 @@ export function deckFingerprint(deck: Deck): string {
 }
 
 /** An empty record for a deck nobody has tuned yet. */
-export function emptyHistory(deck: Deck): SuggestionHistory {
+export function emptyHistory(deck: Deck, pilotId?: string): SuggestionHistory {
   return {
     version: SUGGESTION_HISTORY_VERSION,
     deckFingerprint: deckFingerprint(deck),
     deckName: deck.name,
+    ...(pilotId === undefined ? {} : { pilotId }),
     runsCompleted: 0,
     candidates: [],
   };
 }
 
-/** Why a supplied history was not used. `undefined` = it was used. */
-export type HistoryRejection = 'version' | 'deck-changed';
+/**
+ * Why a supplied history was not used, or was used with a caveat.
+ *
+ * `pilot-changed` DISCARDS (the evidence describes a different level of play —
+ * see `SuggestionHistory.pilotId`). `pilot-unstamped` does NOT discard: the
+ * record predates pilot tracking, so it is adopted into the current pilot and
+ * the assumption is reported rather than made silently.
+ */
+export type HistoryRejection = 'version' | 'deck-changed' | 'pilot-changed' | 'pilot-unstamped';
 
 /**
- * Validate a caller-supplied record against the deck being tuned. Robust by
- * design (CLAUDE.md rule 6): anything unusable degrades to "no history" with a
- * reason the report prints, never a thrown error mid-run.
+ * Validate a caller-supplied record against the deck being tuned AND the pilot
+ * about to play. Robust by design (CLAUDE.md rule 6): anything unusable degrades
+ * to "no history" with a reason the report prints, never a thrown error mid-run.
+ *
+ * `pilotId` is optional only so a caller that genuinely has no pilot context
+ * (a pure planning test) can still call this. Production callers MUST pass it —
+ * without it the cross-pilot check cannot run, which is the whole point.
  */
 export function acceptHistory(
   history: SuggestionHistory | undefined,
   deck: Deck,
+  pilotId?: string,
 ): { readonly history: SuggestionHistory; readonly rejected?: HistoryRejection } {
-  if (!history) return { history: emptyHistory(deck) };
+  if (!history) return { history: emptyHistory(deck, pilotId) };
   if (history.version !== SUGGESTION_HISTORY_VERSION) {
-    return { history: emptyHistory(deck), rejected: 'version' };
+    return { history: emptyHistory(deck, pilotId), rejected: 'version' };
   }
   if (history.deckFingerprint !== deckFingerprint(deck)) {
-    return { history: emptyHistory(deck), rejected: 'deck-changed' };
+    return { history: emptyHistory(deck, pilotId), rejected: 'deck-changed' };
+  }
+  if (pilotId !== undefined) {
+    if (history.pilotId === undefined) {
+      // Adopt and stamp — never discard evidence that may be hours of compute.
+      return { history: { ...history, pilotId }, rejected: 'pilot-unstamped' };
+    }
+    if (history.pilotId !== pilotId) {
+      return { history: emptyHistory(deck, pilotId), rejected: 'pilot-changed' };
+    }
   }
   return { history };
 }

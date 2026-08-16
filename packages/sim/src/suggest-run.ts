@@ -109,6 +109,14 @@ export interface PrepareSuggestionRunOptions {
   readonly swapScope?: SwapScope;
   /** The record a previous run returned. Omit for a first run. */
   readonly history?: SuggestionHistory;
+  /**
+   * The pilot that will play this run's games. Supplying it is what lets
+   * `acceptHistory` refuse a record gathered at a DIFFERENT level of play —
+   * pooling those is statistically invalid, not just untidy (it corrupts the
+   * Holm–Bonferroni family and resurrects/retires the wrong candidates). See
+   * `SuggestionHistory.pilotId`. Omit only in pure planning tests.
+   */
+  readonly pilotId?: string;
   /** FOCUSED MODE — restrict which cards may be cut (names or ids). */
   readonly cutOnly?: readonly string[];
   /** FOCUSED MODE — restrict the `in` candidates to this shortlist. */
@@ -140,7 +148,7 @@ export function prepareSuggestionRun(base: Deck, options: PrepareSuggestionRunOp
   const candidatesGenerated = generated.candidates.length + generated.skipped.length;
 
   // What previous runs learned, if the caller kept it and it still applies.
-  const accepted = acceptHistory(options.history, base);
+  const accepted = acceptHistory(options.history, base, options.pilotId);
   const history = accepted.history;
   const priors = priorEvidenceFrom(history, exploration);
 
