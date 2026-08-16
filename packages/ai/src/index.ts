@@ -71,6 +71,23 @@ export { createOpponentRevealObserver, createRevealTrackingPilot } from './revea
 export { RANDOM_PILOT_ID, createRandomPilot } from './random.js';
 export { HEURISTIC_PILOT_ID, createHeuristicPilot, policyCandidates } from './heuristic.js';
 export type { PolicyCandidate } from './heuristic.js';
+
+/**
+ * LAND SEQUENCING — "which land does this hand want?", scored by what each land
+ * UNLOCKS through core's own `planManaPayment` rather than by the fact that it is a
+ * land. Exported as a seam because the ranking is useful to anything that has to
+ * explain or override a land drop (the Lab's inspector, a future learned policy),
+ * and because `LAND_SEQUENCING_OFF_WEIGHTS` is how the before/after strength
+ * measurement runs both arms in one process.
+ */
+export type { LandDropOption } from './land-sequencing.js';
+export {
+  bestLandDrop,
+  describeLandDrop,
+  rankLandDrops,
+  totalAvailableMana,
+  LAND_SEQUENCING_OFF_WEIGHTS,
+} from './land-sequencing.js';
 export { MCTS_PILOT_ID, createMctsPilot } from './mcts.js';
 export { HYBRID_PILOT_ID, createHybridPilot } from './hybrid.js';
 

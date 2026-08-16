@@ -84,6 +84,7 @@ throughput (games/sec) from regressing.
 | feat/attachment-cards | worker | packages/cards (data + compile/text.ts + build-expansion.ts + 2 tests), packages/data-tools/data, apps/web/src/data (generated), 1 stale comment in apps/web LabView.tsx, DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/pilot-observation | worker | packages/sim (new observation.ts + test + bench; match.ts, index.ts, package.json) + MINIMAL packages/ai (new observation.ts, reveal-tally.ts + test; additive edits to pilot.ts, index.ts, one comment in tree-reuse.ts), DESIGN §2 + §3.4c | 🚧 PUSHED, not merged |
 | feat/tactical-eval | worker | packages/ai (new: tactical.ts + tactical-suite.ts + 2 test files; evaluator/hybrid/hybrid-config/index/tsconfig/bench + 2 existing tests), DESIGN §3.4d | 🚧 PUSHED, not merged — branches off main |
+| fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -120,6 +121,119 @@ _Append dated notes here; keep them short. Newest at top._
   reachable next: it happens INSIDE a resolution frame, where `ctx.ask` already works. Whoever
   takes it needs a mana-payment answer kind, not a new choice mechanism.
   (Integrator)
+- 2026-08-15 worker: `fix/land-sequencing` 🚧 PUSHED — **`feat/tactical-eval`'s `DEFECT (unfixed)` is
+  fixed: the default pilot now plays the land its own spell needs. It moves every recorded heuristic
+  baseline in this repo, on purpose, and all of them are re-measured below.** `packages/ai` only, plus
+  DESIGN §3.4e and baseline notes in §3.4a/§3.4b/§3.4d. Branches off `main`. `npm run verify` exit 0 —
+  **2246 passed / 0 failed** (main baseline 2226 + 20 new), lint 0 errors, `npm run build` exit 0.
+  ❗ **HEADLINE: the fixed pilot beats the pilot it replaces 51.7% of discordant games
+  [50.5, 52.8] over 80,000 PAIRED games — real, and small (+0.33 win-rate points).** The interval
+  excludes 50%. It took 80,000 games to say that, and the reason is in the next bullet.
+  ⚠️ **PAIRED (McNemar) IS THE ONLY INSTRUMENT THAT CAN SEE THIS, and unpaired win rates at the sample
+  sizes on record here cannot.** Two pilots that differ on a few percent of land drops agree on the vast
+  majority of games; only the DISCORDANT games carry information. Unpaired, the same change is
+  50.3% vs 50.3% — indistinguishable. **At n=120 (the size of every hybrid baseline in DESIGN) an effect
+  this size is invisible**, so do not try to detect a similar one that way.
+  · Boros vs Orzhov, n=40,000: **50.9%** [48.6, 53.1] of 1,856 discordant (4.6% of games), +0.08 pts
+  · UW Control vs Golgari, n=40,000: **52.0%** [50.6, 53.3] of 5,071 discordant (12.7%), +0.50 pts
+  ⛔ **I ALMOST SHIPPED A DEFAULT CHOSEN BY THE GARDEN OF FORKING PATHS, AT n=40,000. READ THIS ONE.**
+  The per-term ablation on Boros vs Orzhov said the unlock term ALONE beat the three-term blend — 52.6%
+  [50.2, 55.1] (excludes 50%) against the blend's 50.9% [48.6, 53.1] (does not). That is a clean,
+  well-powered case for zeroing the other two terms, and I wrote it into the defaults. Re-running the
+  identical comparison on UW vs Golgari **reversed it exactly**: blend 52.0% [50.6, 53.3], unlock alone
+  50.9% [49.4, 52.5]. n=40,000 is large enough to feel authoritative and not large enough to be, when the
+  thing you are choosing is the best of four arms. **All three terms ship on**; the near-miss is recorded
+  in `weights.ts` next to the numbers so the next person does not re-derive the wrong half of it.
+  ❗ **EVERY RECORDED NUMBER THIS INVALIDATED, RE-MEASURED — DO NOT QUOTE THE OLD ONES.**
+  · Gauntlet `Mono-Red Aggro` 40 games/deck seed 99: **92/280 = 32.9% → 79/280 = 28.2%**
+  · `hybrid` vs `heuristic`, Mono-Red vs Boros, n=120: **60.0%** [51.1, 68.3] → **55.8%** [46.9, 64.4]
+  · `hybrid` vs `heuristic`, UW Control vs Golgari, n=80: **53.8%** [42.9, 64.3] → **48.8%** [38.1, 59.5]
+  · Curated suite: heuristic **10/12 → 11/12**, both hybrid arms **11/12 → 12/12**
+  ⚠️ **MONO-RED'S GAUNTLET WIN RATE FELL AND THAT IS THE FIX WORKING, NOT A REGRESSION.** Mono-Red Aggro
+  is 24 Mountains — its own play is byte-identical — and six of its seven opponents are two-colour decks
+  that got better at sequencing. Its one mono-coloured opponent (Mono-Green Ramp) is **8/40 in every run
+  before and after**. Same story for the hybrid: the heuristic is both the baseline it is measured
+  against AND its own prior/rollout policy, so both sides improved and the gap narrowed. **`hybrid.ts`
+  and `DEFAULT_HYBRID_CONFIG` are untouched.** The honest consequence is that the hybrid's headline
+  "significantly stronger on fast tactical boards" **no longer holds at n=120** — its interval now
+  includes 50% on both matchups.
+  👉 **THE CONTROL ARM IS THIS BUILD, WHICH IS WHY THE A/B IS TRUSTWORTHY.**
+  `LAND_SEQUENCING_OFF_WEIGHTS` zeroes the three new weights; every land then ties and a tie resolves to
+  the first offered action — the pre-fix pilot exactly. **Verified, not asserted:** a sha256 over every
+  action both seats chose, three matchups, **48,064 plies**, is **identical to the same games played by a
+  separate checkout of `main`**. So both arms run in ONE process on interleaved games.
+  👉 **PROVABLY CONFINED TO DECKS HOLDING MORE THAN ONE LAND TYPE.** Mono-Red vs Mono-Green produces the
+  **identical digest** with the fix on and off (`40f2a1b619c0f171`, 10,621 plies).
+  ⛔ **A METHODOLOGICAL BUG IN HOW WE HAVE ALL BEEN READING `headToHead`, and it is worth 3 points.**
+  `winRate` is wins / **games**, so a timeout draw counts against **both** sides. An arm byte-identical to
+  its baseline scores **46.4%–49.8%**, not 50%, on any matchup that draws — I spent a measurement round
+  reading that as "my change is 3 points worse". The bench now ships a `none` self-versus-self arm and a
+  decisive-games-only restatement. **Every `hybrid`-vs-`heuristic` number on record here is depressed by
+  the same amount**; they are comparable with each other and are NOT comparable with 50%.
+  👉 **PER-TERM ABLATION — one term carries the effect and the other two do not** (Boros vs Orzhov,
+  n=8000 paired, share of discordant games): `+unlock` **55.4%** [49.9, 60.6] · `+color` **54.9%**
+  [48.4, 61.2] · `+tapland` **50.5%** [41.3, 59.6] · all three **52.8%** [47.7, 57.8]. The colour term has
+  little to do on this pool (8+8 basics plus four Guildgates is already well fixed) and the tapland term
+  fires on 1.4% of games. Both are kept as correct play that costs nothing, not because they measured.
+  👉 **THE TAPLAND RULE IS THE INVERSE OF THE ONE I FIRST SHIPPED, and the ablation is why.** The first
+  draft preferred the land that arrives UNTAPPED and measured **49.3%** [44.5, 54.1] — nothing. That is
+  wrong twice over: the unlock term already covers the only reason to want untapped mana *today*, and
+  holding a tapland does not avoid its cost, it defers it onto a turn you do not get to choose. So the
+  term now says **spend the tapland on a turn where no land drop unlocks anything anyway**.
+  ⚠️ **RULE 7 — the first implementation WAS a real regression (0.80×) and the fix is a filter, not a
+  cache.** `planManaPayment` once per spell in hand per candidate land put the engine's hottest function
+  on the pilot's hot path. Every spell now passes a NECESSARY payability condition first (`couldPay`:
+  the total fits and no colour is asked for more times than the board could ever make it), which can only
+  remove planner calls whose answer was already known. Final: **11 interleaved rounds × 800 games**, quiet
+  box — games/sec **1.027× / 0.895× / 0.998×** (median 0.998×), µs/decision **1.026× / 0.926× / 1.030×**
+  (median 1.026×). The one column under parity is the matchup where the fixed pilot also plays 3.3% LONGER
+  games, so part of it is more game rather than slower code. ⚠️ Single-round
+  runs of the *identical* builds read **0.76×–0.88×** while other work shared the box. A one-round
+  "interleaved" run is a sequential run wearing a hat.
+  👉 **NEW SEAMS in `packages/ai`, all additive:** `rankLandDrops` / `bestLandDrop` / `describeLandDrop`
+  over a `LandDropOption`, plus `LAND_SEQUENCING_OFF_WEIGHTS`. `totalAvailableMana` MOVED from
+  `heuristic.ts` into `land-sequencing.ts` and is imported back (both need it; that module is the leaf, so
+  the alternative was two copies of a bound that must agree). New bench mode `land-sequencing <n>` with
+  `BENCH_LANDSEQ_ARMS=none,full,unlock,color,tapland`; `headToHead` gained an optional baseline factory
+  and per-game outcomes so arms can be compared **pairwise**.
+  ⚠️ **I touched ONE existing test beyond the flip.** `tactical-suite.test.ts`'s "no pilot sweeps it" now
+  says "at least one pilot still has headroom": both search arms now solve 12/12 because the puzzle they
+  used to miss was the one this branch fixed, so the old form would be a test demanding the defect come
+  back. The heuristic still misses the anti-lethal crackback, and the evaluator half is still 0/5.
+  ❌ **SECONDARY TASK ANSWERED, AND THE ANSWER CLOSES THE QUESTION: the tactical evaluator does NOT earn
+  its place at a low budget either.** §3.4d's hypothesis on record was that at 160 simulations the search
+  simply plays these positions out to a terminal, so a better leaf evaluator has nothing to add — and
+  that a THRIFTY budget would give it room. Measured at 64 and at 32 simulations, interleaved arms on
+  paired seeds, control = `DEFAULT_HYBRID_CONFIG` at the same budget:
+  · 64 sims, Mono-Red vs Boros n=120: control **53.3%** [44.4, 62.0] · tactical **47.5%** [38.8, 56.4]
+  · 64 sims, UW vs Golgari n=80: control **48.8%** [38.1, 59.5] · tactical **46.3%** [35.7, 57.1]
+  · 32 sims, Mono-Red vs Boros n=120: control **48.3%** [39.6, 57.2] · tactical **45.0%** [36.4, 53.9]
+  · 32 sims, UW vs Golgari n=80: control **48.8%** [38.1, 59.5] · tactical **45.0%** [34.6, 55.9]
+  Pooled: control **200/400 = 50.0%**, tactical **184/400 = 46.0%**. The tactical arm is **behind in all
+  four cells** — not significantly in any one of them, but never ahead, which is the opposite of what the
+  hypothesis predicted. Cost is identical to two decimal places (1.71 vs 1.74 ms, 1.14 vs 1.14 ms), so
+  this is not a throughput trade either. `TACTICAL_HYBRID_CONFIG` and `TACTICAL_EVALUATION_WEIGHTS` stay
+  **off**, and "try it at a smaller budget" is now a closed line rather than an open one. §3.4d's other
+  suggestion — re-ask when the SEARCH changes, or when a learned value function needs these terms — is
+  untouched by this.
+  Re-runnable: `BENCH_CONFIG='{"budget":{"kind":"simulations","simulations":64}}'
+  BENCH_TACTICAL_ARMS=control,full node packages/ai/bench/mcts-bench.mjs tactical 120`.
+  ⛔ **NEEDS AN OWNER ELSEWHERE — reported, not done (I own only `packages/ai`):**
+  · **Three comments in `apps/web` now quote a dead number**: `lib/sim/history-store.ts:33`,
+    `lib/sim/pilots.ts:13` and `lib/sim-protocol.ts:44` all cite the heuristic gauntlet at **32.9%** (now
+    28.2%) to illustrate "deck verdicts are pilot-relative". The *point* they make is still true; the
+    figure is not. Also `lib/sim/pilots.ts:106` sells the Hybrid pilot to the user as "Beats the heuristic
+    60.0% head-to-head (95% CI 51.1–68.3)… 53.8%" — that is now **55.8% [46.9, 64.4]** and **48.8%
+    [38.1, 59.5]**, i.e. **user-facing copy that overstates the pilot**. This is the one worth fixing
+    soon.
+  · **`19.0%` (the hybrid-both-seats gauntlet figure) is also stale** and I did not re-measure it — a full
+    gauntlet under `--pilot hybrid` is an hours-long run. It is quoted in DESIGN §3.4a, COORDINATION and
+    the same three `apps/web` comments.
+  · The `cardValue` ruler used to price an unlocked spell is the CARD-RANKING ruler (a big creature
+    outranks a removal spell), not the pilot's own PLAY ranking (removal outranks a creature). It only
+    matters when two lands unlock two different spells, which is rare, and giving `land-sequencing.ts` a
+    second scoring vocabulary is exactly the drift this repo has been bitten by. Left as is, flagged.
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-15 worker: `feat/tactical-eval` 🚧 PUSHED — **an exact combat solver + the curated tactical
   suite the brief asks for. The evaluator half is MORE CORRECT and NOT STRONGER, so it ships OFF; the
