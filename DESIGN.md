@@ -693,18 +693,44 @@ Still open, roughly by how often they block a real decklist:
   *revolt-style "a permanent left the battlefield this turn" trackers*.
 
 ### 3.12 Scan a deck from a photo — ✅ done
-Lay the physical cards out, take one photo, get a decklist — entirely on-device, no upload.
-Cards are located by **variance profiling** (a laid-out deck is busy card faces separated by a flat
-surface, so per-column/row variance yields the grid) rather than a contour/perspective pipeline: no CV
-library, and pure array work that is unit-tested against synthetic images. A manual rows × columns
-fallback covers photos the detector can't read. Only each card's **title strip** is OCR'd (greyscaled,
-contrast-stretched, upscaled) — the biggest accuracy win, since art and rules text otherwise generate
-confident nonsense. Raw OCR is never trusted: card names are a **closed vocabulary**, so the text is
-corrected against Scryfall's full name catalog by edit distance, which turns recognition into cheap
-spelling correction. A **review grid** shows each card's own crop with its match, flags anything
-unconfident, and lets any guess be re-picked or cleared; only then does the list flow into §3.11's
-importer, so scanned cards get the same Oracle-compiler treatment as typed ones. Tesseract is
-dynamically imported so its WASM core stays off the initial bundle.
+Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
+
+The unit is a **fanned pile**, not a card, because that is how a deck actually gets photographed: the
+copies of a card go in a pile slid apart so every title bar peeks out, and the piles go in rows. One
+photo then carries the names *and the quantities*. Piles are located by **variance profiling** (busy
+card faces separated by a flat surface, so per-column/row variance yields the layout) rather than a
+contour/perspective pipeline: no CV library, and pure array work unit-tested against synthetic images.
+
+Two pieces of fixed geometry carry the rest. A pile is exactly **one card wide**, so the column bands
+give the card width and the card's fixed 63:88 shape gives its height for free — which is what lets the
+detector cut apart cards laid **touching**, as a gap-hunting detector cannot. And each pile is read down
+**its own column**, because piles in a row are different depths and a shared row band would give a pile
+of one its tall neighbour's overhang.
+
+Down a pile's column the content comes in **stripes**: a title bar is a plate with a name on it and
+varies a lot across its width, while the card edge above it is flat. So copies are counted from
+busyness, not brightness — whose sign flips between a white-bordered card and a black one. What
+separates the copies from the bottom card's own art and its per-line rules text (which stripe too) is
+that **only the copies are regular**: a pile is fanned in one motion, so its title bars are evenly
+spaced and equally tall. Simpler boundaries were tried and are not enough — "end at a card-tall stripe"
+misses a bottom card whose body fragments into bands, and "end at a card-height gap" misses it too,
+because those bands are never that far apart. A single card looks like a pile of two (title bar, then
+art) and is told apart by spanning only one card's height. A plain grid of loose cards is read as piles
+of one; a manual rows × columns fallback covers photos neither reader can make sense of.
+
+Only each card's **title strip** is OCR'd (greyscaled, contrast-stretched, upscaled to a target height)
+— the biggest accuracy win, since art and rules text otherwise generate confident nonsense. The crop
+comes from the **detected stripe** rather than from a fraction of a card rect, because a fanned copy's
+true top edge is buried under the copy above it: "the top 4–17% of the card" measured from the wrong
+edge lands squarely in the art. It is capped at a title bar's printed height so the bottom card, whose
+title and body merge into one stripe, does not hand OCR the whole card back. The bottom card is read
+first, and when that read is weak the fanned copies above it are read too and the best match wins:
+every copy in a pile is the same card, so extra looks are free accuracy paid for only where needed. Raw OCR is never trusted: card names are a **closed vocabulary**,
+so the text is corrected against Scryfall's full name catalog by edit distance, which turns recognition
+into cheap spelling correction. A **review grid** shows each pile's own crop with its match and its
+count, flags anything unconfident, and lets the name *and the quantity* be corrected; only then does the
+list flow into §3.11's importer, so scanned cards get the same Oracle-compiler treatment as typed ones.
+Tesseract is dynamically imported so its WASM core stays off the initial bundle.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

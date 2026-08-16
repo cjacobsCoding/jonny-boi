@@ -6,17 +6,20 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { loadCardNames } from './catalog.js';
-import { detectCards, gridCells, type PixelImage, type Rect } from './detect.js';
+import { detectCards, gridCells, type DetectionResult, type PixelImage } from './detect.js';
 import { buildNameIndex, type NameIndex } from './match.js';
 import { createOcrEngine, decodeImageFile, toDataUrl } from './ocr.js';
 import {
   chooseName as chooseNameIn,
+  chooseQuantity as chooseQuantityIn,
   scanCards,
   toDecklistText,
+  totalCopies,
   unrecognizedCount,
   type ScanProgress,
   type ScannedCard,
 } from './pipeline.js';
+import { detectStacks, stacksFromGrid, type CardStack } from './stacks.js';
 
 /** Where the scan flow currently is. */
 export type ScanPhase = 'idle' | 'preparing' | 'scanning' | 'review' | 'error';
@@ -32,17 +35,47 @@ export interface CardScanApi {
   readonly progress: ScanProgress | null;
   readonly error: string | null;
   readonly scanned: readonly ScannedCard[];
-  /** How many detected cards the scanner could not name. */
+  /** How many detected piles the scanner could not name. */
   readonly unrecognized: number;
+  /** Copies the scan would import — the number to check against sixty. */
+  readonly copies: number;
   /** Every known card name, for the review grid's correction dropdown. */
   readonly nameIndex: NameIndex | null;
   /** Scan a photo, optionally forcing a manual rows × columns layout. */
   scan: (file: File, manual?: ManualGrid) => Promise<void>;
   /** Change (or clear) the card chosen for one detected slot. */
   chooseName: (index: number, name: string | null) => void;
+  /** Change how many copies a pile holds. */
+  chooseQuantity: (index: number, qty: number) => void;
   /** The reviewed scan as decklist text, ready for the deck importer. */
   decklistText: () => string;
   reset: () => void;
+}
+
+/**
+ * Work out what the photo shows.
+ *
+ * The grid reader runs first because it is the stricter of the two — it only
+ * succeeds when every band is a whole number of cards on BOTH axes, which also
+ * lets it split cards laid side by side with no gap. Piles never tile that way
+ * (a pile is taller than a card by whatever the fan adds), so a photo that
+ * satisfies the grid reader really is a grid, and everything else goes to the
+ * pile reader.
+ */
+function readLayout(image: PixelImage): readonly CardStack[] {
+  const grid = detectCards(image);
+  if (grid.cells.length > 0) return stacksFromGrid(grid).stacks;
+  return detectStacks(image).stacks;
+}
+
+/** A user-supplied rows × columns, shaped like a detection so it reads the same way. */
+function gridCellsAsDetection(
+  width: number,
+  height: number,
+  rows: number,
+  columns: number,
+): DetectionResult {
+  return { cells: gridCells(width, height, rows, columns), rows, columns };
 }
 
 /** Browser `fetch` shaped for the catalog loader. */
@@ -79,15 +112,17 @@ export function useCardScan(): CardScanApi {
       try {
         const image: PixelImage = await decodeImageFile(file);
 
-        // Auto-detect unless the user has told us the layout; fall back to a
-        // detect attempt's own result being empty → ask for the grid.
-        const cells: Rect[] = manual
-          ? gridCells(image.width, image.height, manual.rows, manual.columns)
-          : [...detectCards(image).cells];
+        // Auto-detect unless the user has told us the layout; a manual grid is
+        // always one card per slot, so it is piles of one.
+        const stacks: readonly CardStack[] = manual
+          ? stacksFromGrid(
+              gridCellsAsDetection(image.width, image.height, manual.rows, manual.columns),
+            ).stacks
+          : readLayout(image);
 
-        if (cells.length === 0) {
+        if (stacks.length === 0) {
           setError(
-            'Could not pick out the cards in that photo. Lay them in a grid on a plain surface — or enter the rows and columns below and scan again.',
+            'Could not pick out the cards in that photo. Lay the cards (or piles of the same card, fanned so every name shows) in rows on a plain surface — or enter the rows and columns below and scan again.',
           );
           setPhase('error');
           return;
@@ -99,11 +134,11 @@ export function useCardScan(): CardScanApi {
         setNameIndex(index);
 
         setPhase('scanning');
-        setProgress({ done: 0, total: cells.length });
+        setProgress({ done: 0, total: stacks.length });
         engine = await createOcrEngine();
         if (run !== runId.current) return;
 
-        const results = await scanCards(image, cells, engine, index, {
+        const results = await scanCards(image, stacks, engine, index, {
           onProgress: (value) => {
             if (run === runId.current) setProgress(value);
           },
@@ -133,6 +168,10 @@ export function useCardScan(): CardScanApi {
     setScanned((current) => chooseNameIn(current, index, name));
   }, []);
 
+  const chooseQuantity = useCallback((index: number, qty: number) => {
+    setScanned((current) => chooseQuantityIn(current, index, qty));
+  }, []);
+
   const decklistText = useCallback(() => toDecklistText(scanned), [scanned]);
 
   return {
@@ -141,9 +180,11 @@ export function useCardScan(): CardScanApi {
     error,
     scanned,
     unrecognized: unrecognizedCount(scanned),
+    copies: totalCopies(scanned),
     nameIndex,
     scan,
     chooseName,
+    chooseQuantity,
     decklistText,
     reset,
   };
