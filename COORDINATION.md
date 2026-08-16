@@ -78,9 +78,75 @@ throughput (games/sec) from regressing.
 | feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
 | spike/engine-representation | worker | spikes/engine-representation (new) + 2 narrow eslint.config.js additions | 🚧 PUSHED, not merged — DECISION SPIKE, no product code |
 | feat/hybrid-search | worker | packages/ai (new: search-stats/evaluator/hybrid/hybrid-config + heuristic policy seam + bench), DESIGN §3.4a | 🚧 PUSHED, not merged |
+| feat/pilot-relative-verdicts | worker | apps/web ONLY (lib/sim/pilots+history-store+protocols+run/plan/execute, lab panels, LabView/MatchView), DESIGN §3.7a | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/pilot-relative-verdicts` 🚧 PUSHED — **every result now says which pilot
+  produced it, and the suggestion engine refuses to pool two pilots' evidence.** `apps/web` ONLY; nothing
+  in `packages/*` touched. Suite **1969 passed / 0 failed** (baseline 1939 + 30), `npm run lint` 0 errors,
+  card-index `--check` clean, `npm run build` exit 0. DESIGN §3.7a added.
+  👉 **THE HEADLINE IS THE ONE `feat/hybrid-search` LEFT BEHIND.** Its own note said "deck verdicts are
+  pilot-relative — worth stating in the Lab UI at some point". Doing it turned out not to be a label job:
+  a win rate is a measurement of a deck AS PLAYED BY a pilot, so the pilot had to become a first-class
+  field on the request, the shard context, the result payload and the stored record. `pilotId` is
+  **REQUIRED** on `SimRequest`, not optional-with-a-default — an optional field is one a call site can
+  forget, and the call site that forgot it would silently answer a different question than the screen
+  displays. (Same lesson as the room-code bug: a value two layers each default separately is a bug
+  waiting.)
+  ⚠️ **THE STATISTICALLY LOAD-BEARING PART IS THE HISTORY PARTITION, and "invalidate on change" would
+  have been wrong.** `lib/sim/history-store.ts` accumulates cross-run evidence, and TWO of its fields make
+  pooling across pilots invalid rather than untidy: (1) `settled`/`provenNotBetter` retire a candidate
+  from future runs, and "not better" is a claim about a LEVEL OF PLAY — a card whose value is punishing
+  bad blocks is settled-as-useless under one pilot and a real gain under another; (2) `candidates.length`
+  IS the Holm–Bonferroni family size, so pooling both inflates the family and corrects a family that mixes
+  two different hypotheses. **Chosen: partition by pilot in the storage key, keep every record side by
+  side.** Deleting on change was rejected outright — a record can be hours of compute and "you moved a
+  dropdown, so your afternoon is gone" is not a trade to make on a user's behalf. The UI PROVES the
+  partition is not a deletion ("Kept separately: Heuristic (3 runs). Switch pilot to resume."), because a
+  partition nobody can see is indistinguishable from losing the data, and a user who believes it is gone
+  will hit Reset and make it true.
+  👉 **Pre-partition records are ADOPTED, not dropped.** Everything written before this branch was played
+  by `DEFAULT_PILOT_ID` — nothing else could be run — so the old key is read once, re-filed under the
+  default pilot's key, and only then removed. If the migration WRITE fails (quota), the old key is kept:
+  a migration is the one moment a storage failure could destroy evidence rather than merely fail to add
+  to it. Both paths are unit-tested.
+  ⚠️ **THE COST WARNING HAD TO COME BEFORE THE RUN, AND MY FIRST CALIBRATION WAS 4× TOO OPTIMISTIC.**
+  Hybrid is ~1400× the heuristic, so the same gauntlet is 3 seconds or an hour on one dropdown. Each panel
+  now shows its planned game count and a wall-clock estimate NEXT TO the Run button before it is pressed.
+  I first calibrated `REFERENCE_GAMES_PER_SECOND_PER_WORKER` from the headless figures on this board
+  (110–206 games/sec on one core) and the estimate came out ~4× short of what the Lab actually did. **The
+  browser numbers are the only honest calibration for a browser estimate:** a real 700-game gauntlet in
+  the running Lab reported **192 games/sec on 11 workers** (~17.5/worker), so the constant is 20 — the
+  pessimistic end, because an estimate that runs short is the one that gets somebody to start an overnight
+  run by accident. If you re-measure, measure END TO END (games/sec), not per decision: under the
+  heuristic the ENGINE dominates a game's cost, so scaling a whole game by a per-DECISION ratio overstates
+  a search pilot badly.
+  👉 **Verified in the running app, not just in tests** (dev server on the worktree, `localStorage`
+  inspected): a 700-game heuristic gauntlet renders the provenance stamp + "· pilot heuristic"; a
+  suggestions run files itself under `jonny-boi.suggest-history.v1.heuristic.<fingerprint>`; switching to
+  Hybrid shows a FRESH search plus "Kept separately: Heuristic (1 run)"; switching back restores "Run 2 ·
+  28 candidates carried over"; the Hybrid estimate reads "~780 games · estimated 1 hour on 11 workers —
+  this is a long run".
+  ⛔ **ONE CHANGE WANTED OUTSIDE `apps/web`, reported not made** (`packages/sim` is live for other
+  branches): `SuggestionHistory` has `version` + `deckFingerprint` but no `pilotId`, so the sim's own
+  `acceptHistory` cannot reject a cross-pilot record — only this web layer can. It works because the web
+  layer wraps the record in an envelope carrying the pilot and checks it, but the CLI's `--history <file>`
+  has **no such guard**: `npm run sim -- suggest deck --pilot hybrid --history h.json` will happily accept
+  a file gathered with `--pilot heuristic`. The right fix is a `pilotId` field on `SuggestionHistory` and
+  a third clause in `acceptHistory`; then the web envelope becomes belt-and-braces instead of the only
+  belt.
+  ⚠️ Also for whoever owns `packages/ai`: adding a pilot to `SELECTABLE_PILOT_IDS` will fail ONE assertion
+  in `apps/web/src/lib/sim/pilots.test.ts` ("has display copy and a measured cost for every selectable
+  pilot"). That is deliberate and the fix is two rows in `lib/sim/pilots.ts` — the app already runs
+  without them (unknown pilots are shown, priced as "not measured", and treated as costly), so it is a
+  reminder, not a blocker.
+  ❌ **Not done:** no hook/component tests — `apps/web` still has no `@testing-library/react`/jsdom, and
+  adding that stack is the separate decision the board already flagged. All new logic is pure and unit
+  tested instead (`pilots.test.ts`, the rewritten `history-store.test.ts`, `estimateSuggestionGames`).
+  The pilot choice is also NOT persisted across a reload (it lives in `useLabSelection`, like the seed).
+  (Worker — pushed, NOT merged.)
 
 - 2026-08-15 integrator: **`fix/room-code-length` MERGED + DEPLOYED** (Deploy PWA success).
   main = **1887 tests, build exit 0**. USER-REPORTED: PC hosted, phone entered the code, Join stayed

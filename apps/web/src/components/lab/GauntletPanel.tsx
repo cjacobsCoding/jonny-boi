@@ -3,6 +3,7 @@ import { WinRateBar } from '../WinRateBar.js';
 import { FidelityNote } from '../FidelityNote.js';
 import { RunSlider } from './RunSlider.js';
 import { ciStr, pct, throughputText } from '../../lib/sim-format.js';
+import { PilotStamp, RunCostNote } from './PilotControls.js';
 import type { PanelProps, GamesConfig } from './panel-types.js';
 
 /**
@@ -15,6 +16,7 @@ export function GauntletPanel({
   heroLegal,
   chosenOpponents,
   seed,
+  pilotId,
   sim,
   gamesConfig,
 }: PanelProps & { gamesConfig: GamesConfig }): ReactElement {
@@ -24,6 +26,8 @@ export function GauntletPanel({
 
   const result =
     sim.status === 'done' && sim.result?.kind === 'gauntlet' ? sim.result : null;
+  // Exactly what the plan will play: one game per opponent per game index.
+  const plannedGames = games * chosenOpponents.length;
 
   return (
     <div className="lab-section">
@@ -55,6 +59,7 @@ export function GauntletPanel({
               opponentNames: chosenOpponents,
               gamesPerOpponent: games,
               seed,
+              pilotId,
             })
           }
         >
@@ -65,8 +70,13 @@ export function GauntletPanel({
         )}
       </div>
 
+      {chosenOpponents.length > 0 && (
+        <RunCostNote pilotId={pilotId} games={plannedGames} workerCount={sim.workerCount} />
+      )}
+
       {result && (
         <div className="lab-results">
+          <PilotStamp pilotId={result.pilotId} />
           <table className="lab-table">
             <thead>
               <tr>
@@ -112,7 +122,7 @@ export function GauntletPanel({
             {result.result.totalGames.toLocaleString()} games ·{' '}
             {throughputText(result.gamesPerSecond)}
             {result.result.totalDraws > 0 && <> · {result.result.totalDraws} timeout draws</>} ·
-            seed {seed}
+            seed {seed} · pilot {result.pilotId}
           </p>
           <FidelityNote />
         </div>

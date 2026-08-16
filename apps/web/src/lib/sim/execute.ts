@@ -31,8 +31,8 @@
  */
 import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import type { CardPool } from '@jonny-boi/cards';
-import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
-import type { Pilot } from '@jonny-boi/ai';
+import { createDefaultAiRegistry, SELECTABLE_PILOT_IDS } from '@jonny-boi/ai';
+import type { AiRegistry, Pilot } from '@jonny-boi/ai';
 import type { CardDefinition, EffectRegistry } from '@jonny-boi/core';
 import {
   DEFAULT_SUGGEST_CONFIG,
@@ -75,7 +75,8 @@ import { MAX_REPLAY_FRAMES } from '../replay-config.js';
 import type { ReplaySeat } from '../replay-types.js';
 
 /**
- * The per-worker sim context: the card pool, the effect registry and the pilots.
+ * The per-worker sim context: the card pool, the effect registry, and the pilot
+ * registry a job's `pilotId` is resolved against.
  *
  * Building this is the expensive part of starting a run (indexing the whole card
  * pool), so a worker builds it ONCE and reuses it for every shard it is handed —
@@ -85,7 +86,17 @@ import type { ReplaySeat } from '../replay-types.js';
 export interface SimContext {
   readonly pool: CardPool;
   readonly registry: EffectRegistry;
-  readonly pilots: MatchupPilots;
+  /** The pilot registry this worker resolves a job's `pilotId` against. */
+  readonly aiRegistry: AiRegistry;
+  /**
+   * Instantiated seat pairs, memoised by pilot id.
+   *
+   * A worker serves whatever run the pool hands it, and a run names its pilot, so
+   * the pilots cannot be built once at construction time any more. They are still
+   * built once PER PILOT and reused, which is what the cache is for — a search
+   * pilot allocates its evaluator and weights up front.
+   */
+  readonly pilotCache: Map<string, MatchupPilots>;
   /** Loaded gauntlet decks, memoised by name (loading is pure but not free). */
   readonly deckCache: Map<string, LoadedDeck>;
   /**
@@ -108,20 +119,42 @@ export function createSimContext(importedCards: readonly CardDefinition[] = []):
   // Pool validation warnings are silenced: stubbed mechanics are intentional,
   // documented in UNSUPPORTED-MECHANICS.md, and not news at every worker start.
   const pool = loadCardPool({ onWarn: () => {}, extraCards: importedCards });
-  const registry = buildRegistry();
-  const aiRegistry = createDefaultAiRegistry();
-  const pilotA = aiRegistry.getPilot(DEFAULT_PILOT_ID);
-  const pilotB = aiRegistry.getPilot(DEFAULT_PILOT_ID);
-  if (!pilotA || !pilotB) {
-    throw new Error(`could not instantiate the "${DEFAULT_PILOT_ID}" pilot`);
-  }
   return {
     pool,
-    registry,
-    pilots: { pilotA: pilotA as Pilot, pilotB: pilotB as Pilot },
+    registry: buildRegistry(),
+    aiRegistry: createDefaultAiRegistry(),
+    pilotCache: new Map(),
     deckCache: new Map(),
     runnerCache: null,
   };
+}
+
+/**
+ * The two seats for one pilot id, built once per worker per pilot.
+ *
+ * BOTH seats get the same pilot on purpose. A gauntlet win rate is only meaningful
+ * as "this deck against that deck, at this level of play"; pitting a strong pilot
+ * against a weak one would measure the pilots, not the decks. (Two seats, not one
+ * shared instance, because a pilot may carry per-seat state — the hybrid search
+ * keeps a committed macro-plan between decisions.)
+ *
+ * An unknown id fails LOUDLY rather than falling back to the default: a run that
+ * quietly substituted a different pilot would report numbers labelled with a pilot
+ * that never played, which is the exact failure this whole change exists to stop.
+ */
+export function pilotsFor(context: SimContext, pilotId: string): MatchupPilots {
+  const cached = context.pilotCache.get(pilotId);
+  if (cached) return cached;
+  const pilotA = context.aiRegistry.getPilot(pilotId);
+  const pilotB = context.aiRegistry.getPilot(pilotId);
+  if (!pilotA || !pilotB) {
+    throw new Error(
+      `unknown AI pilot "${pilotId}" — expected one of: ${SELECTABLE_PILOT_IDS.join(', ')}`,
+    );
+  }
+  const pilots: MatchupPilots = { pilotA: pilotA as Pilot, pilotB: pilotB as Pilot };
+  context.pilotCache.set(pilotId, pilots);
+  return pilots;
 }
 
 /** The hero payload as the sim's `Deck` shape. */
@@ -174,7 +207,12 @@ export function runGauntletShard(
 ): GauntletShardResult {
   const hero = loadDeck(heroDeck(job.context.hero), context.pool);
   const opponent = opponentAt(context, job.context, job.opponentIndex);
-  const seats = makeSeats(hero, opponent, context.pilots, context.registry);
+  const seats = makeSeats(
+    hero,
+    opponent,
+    pilotsFor(context, job.context.pilotId),
+    context.registry,
+  );
   const matchupSeed = gameSeedFor(job.context.seed, job.opponentIndex);
 
   const slice = runMatchup(seats, job.gameEnd, matchupSeed, {
@@ -227,7 +265,7 @@ export function runPairedShard(
     base,
     { out: job.outCardId, in: job.inCardId },
     allOpponents(context, job.context),
-    context.pilots,
+    pilotsFor(context, job.context.pilotId),
     job.gameEnd,
     job.swapSeed,
     context.pool,
@@ -340,7 +378,15 @@ function suggestionRunner(
   shardContext: ShardContext,
   runSeed: number,
 ): SuggestionRunner {
-  const key = JSON.stringify([shardContext.hero, shardContext.opponentNames, runSeed]);
+  // The pilot is part of the key: base games played by one pilot are not the base
+  // games of a run piloted by another, and adopting them would silently compare a
+  // variant arm against the wrong control.
+  const key = JSON.stringify([
+    shardContext.hero,
+    shardContext.opponentNames,
+    runSeed,
+    shardContext.pilotId,
+  ]);
   const cached = context.runnerCache;
   if (cached?.key === key) return cached.runner;
 
@@ -348,7 +394,7 @@ function suggestionRunner(
   const holder: { tick: OnGamePlayed | undefined } = { tick: undefined };
   const runner = createPairedArmRunner(heroDeck(shardContext.hero), {
     gauntletDecks: allOpponents(context, shardContext),
-    pilots: context.pilots,
+    pilots: pilotsFor(context, shardContext.pilotId),
     pool: context.pool,
     registry: context.registry,
     seed: runSeed,
@@ -448,9 +494,12 @@ export function runMatchJob(job: MatchJob, context: SimContext): MatchJobResult 
   }
   const opponent = opponentDeck(context, job.opponentName);
 
+  const pilots = pilotsFor(context, job.context.pilotId);
+  // The trace records the pilot per seat, so a saved replay can always say who
+  // was playing — the same fact the Lab's win rates are relative to.
   const seatNames: Record<'A' | 'B', ReplaySeat> = {
-    A: { player: 'A', deckName: hero.name, pilot: DEFAULT_PILOT_ID },
-    B: { player: 'B', deckName: opponent.name, pilot: DEFAULT_PILOT_ID },
+    A: { player: 'A', deckName: hero.name, pilot: job.context.pilotId },
+    B: { player: 'B', deckName: opponent.name, pilot: job.context.pilotId },
   };
   // The frame count tracks the event count; cap events generously and frames a bit
   // lower so a runaway game still yields a usable, bounded trace.
@@ -464,8 +513,8 @@ export function runMatchJob(job: MatchJob, context: SimContext): MatchJobResult 
     {
       deckA: hero,
       deckB: opponent,
-      pilotA: context.pilots.pilotA,
-      pilotB: context.pilots.pilotB,
+      pilotA: pilots.pilotA,
+      pilotB: pilots.pilotB,
       registry: context.registry,
       seatNames,
     },

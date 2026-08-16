@@ -23,6 +23,7 @@ import {
   DEFAULT_EXPLORATION_WEIGHTS,
   DEFAULT_STATS_CONFIG,
   DEFAULT_SWAP_SCOPE,
+  GAMES_PER_PAIRED_GAME,
   driveAdaptiveSearch,
   finishSuggestionRun,
   summarizePairedSwap,
@@ -164,13 +165,27 @@ class ProgressTally {
   }
 }
 
-/** Build the shard context shared by every job in a run. */
+/**
+ * Build the shard context shared by every job in a run.
+ *
+ * Taking the whole request rather than loose fields is what makes it impossible
+ * to plan a run that forgot the pilot: the context is built once per run, from the
+ * one object the user's choices arrived in.
+ */
 function contextFor(
-  hero: GauntletRequest['hero'],
+  request: {
+    readonly hero: GauntletRequest['hero'];
+    readonly seed: number;
+    readonly pilotId: string;
+  },
   opponentNames: readonly string[],
-  seed: number,
 ): ShardContext {
-  return { hero, opponentNames, seed };
+  return {
+    hero: request.hero,
+    opponentNames,
+    seed: request.seed,
+    pilotId: request.pilotId,
+  };
 }
 
 /** The opponents a request will actually face, in canonical order. */
@@ -197,7 +212,7 @@ export async function runGauntlet(
   progressIntervalSeconds: number,
 ): Promise<SimResultPayload> {
   const opponentNames = opponentsFor(request);
-  const context = contextFor(request.hero, opponentNames, request.seed);
+  const context = contextFor(request, opponentNames);
   const jobs = planGauntletShards(context, request.gamesPerOpponent, runner.workerCount);
   const total = totalGauntletGames(jobs);
 
@@ -224,6 +239,7 @@ export async function runGauntlet(
     kind: 'gauntlet',
     result: merged,
     gamesPerSecond: elapsedSeconds > 0 ? merged.totalGames / elapsedSeconds : 0,
+    pilotId: request.pilotId,
   };
 }
 
@@ -236,7 +252,7 @@ export async function runSwap(
   progressIntervalSeconds: number,
 ): Promise<SimResultPayload> {
   const opponentNames = opponentsFor(request);
-  const context = contextFor(request.hero, opponentNames, request.seed);
+  const context = contextFor(request, opponentNames);
   const jobs = planPairedShards(
     context,
     {
@@ -271,12 +287,12 @@ export async function runSwap(
   const elapsedSeconds = tally.elapsedSeconds;
   const evaluation = mergePairedEvaluation(results);
   tally.emit(label, true);
-  const GAMES_PER_PAIR = 2;
   return {
     kind: 'swap',
     result: evaluation,
     gamesPerSecond:
-      elapsedSeconds > 0 ? (evaluation.nGames * GAMES_PER_PAIR) / elapsedSeconds : 0,
+      elapsedSeconds > 0 ? (evaluation.nGames * GAMES_PER_PAIRED_GAME) / elapsedSeconds : 0,
+    pilotId: request.pilotId,
   };
 }
 
@@ -312,7 +328,7 @@ export async function runSuggest(
   progressIntervalSeconds: number,
 ): Promise<SimResultPayload> {
   const opponentNames = opponentsFor(request);
-  const context = contextFor(request.hero, opponentNames, request.seed);
+  const context = contextFor(request, opponentNames);
   const startedAt = nowSeconds();
 
   // Phase 1 is a SINGLE job, so left alone the pool would spawn one worker now
@@ -521,7 +537,7 @@ export async function runSuggest(
   // The estimate has served its purpose; end on the number actually played.
   tally.setTotal(tally.gamesDone);
   tally.emit(`${report.candidatesEvaluated} candidates · ${workersLabel(runner.workerCount)}`, true);
-  return { kind: 'suggest', result: report };
+  return { kind: 'suggest', result: report, pilotId: request.pilotId };
 }
 
 const EMPTY_TABLE: PairedTable = Object.freeze({
@@ -578,7 +594,7 @@ export async function runMatchRequest(
   runner: ShardRunner,
   sink: ProgressSink,
 ): Promise<SimResultPayload> {
-  const context = contextFor(request.hero, [request.opponentName], request.seed);
+  const context = contextFor(request, [request.opponentName]);
   sink({
     type: 'progress',
     done: 0,
@@ -591,7 +607,7 @@ export async function runMatchRequest(
     { kind: 'match', context, opponentName: request.opponentName, maxEvents: request.maxEvents },
     () => {},
   )) as MatchJobResult;
-  return { kind: 'match', result: result.trace };
+  return { kind: 'match', result: result.trace, pilotId: request.pilotId };
 }
 
 // --- dispatch ------------------------------------------------------------------

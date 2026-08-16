@@ -42,7 +42,8 @@ import {
   type SwapEvaluation,
   type SwapScope,
 } from '@jonny-boi/sim';
-import { createSimContext, executeShard, type SimContext } from './execute.js';
+import { createSimContext, executeShard, pilotsFor, type SimContext } from './execute.js';
+import { DEFAULT_PILOT_ID } from './pilots.js';
 import { resolveOpponentNames } from './opponents.js';
 import { runGauntlet, runSuggest, runSwap, ShardFailure, type ShardRunner } from './run.js';
 import type { ShardJob, ShardResult } from './shard-protocol.js';
@@ -114,6 +115,14 @@ const context = createSimContext();
 // fewest seconds. Any deck would do — equality is what is under test.
 const HERO: Deck = SAMPLE_DECKS[0] as Deck;
 const SEED = 0xc0ffee;
+/**
+ * Every request names its pilot, and the reference calls into the sim use the SAME
+ * one. Equality is what is under test, so the choice does not matter — but the two
+ * sides agreeing on it does: a pooled run and a single-threaded run played by
+ * different pilots would differ for a reason this suite is not looking for.
+ */
+const PILOT = DEFAULT_PILOT_ID;
+const PILOTS = pilotsFor(context, PILOT);
 /** Small on purpose: this suite proves equality, not statistical power. */
 const GAUNTLET_GAMES = 6;
 const SWAP_GAMES = 5;
@@ -162,6 +171,7 @@ describe('a parallel gauntlet', () => {
     opponentNames: [...TWO_OPPONENTS],
     gamesPerOpponent: GAUNTLET_GAMES,
     seed: SEED,
+    pilotId: PILOT,
   };
 
   async function runAt(workers: number, completion: 'forward' | 'reverse'): Promise<unknown> {
@@ -192,7 +202,7 @@ describe('a parallel gauntlet', () => {
     const reference = simRunGauntlet(
       loadDeck(HERO, context.pool),
       opponents(TWO_OPPONENTS),
-      context.pilots,
+      PILOTS,
       GAUNTLET_GAMES,
       SEED,
       context.registry,
@@ -233,6 +243,7 @@ describe('a parallel A/B swap test', () => {
       inCardId: candidate!.inId,
       gamesPerOpponent: SWAP_GAMES,
       seed: SEED,
+    pilotId: PILOT,
       swapScope: scope,
     };
   }
@@ -274,7 +285,7 @@ describe('a parallel A/B swap test', () => {
       HERO,
       { out: candidate.outId, in: candidate.inId },
       opponents(TWO_OPPONENTS),
-      context.pilots,
+      PILOTS,
       SWAP_GAMES,
       SEED,
       context.pool,
@@ -292,7 +303,7 @@ describe('a parallel A/B swap test', () => {
         HERO,
         { out: candidate.outId, in: candidate.inId },
         opponents(TWO_OPPONENTS),
-        context.pilots,
+        PILOTS,
         SWAP_GAMES,
         SEED,
         context.pool,
@@ -351,6 +362,7 @@ describe('a parallel suggestions search', () => {
     gamesPerCandidate: SUGGEST_GAMES,
     maxCandidates: SUGGEST_CANDIDATES,
     seed: SEED,
+    pilotId: PILOT,
   };
 
   async function runAt(workers: number, completion: 'forward' | 'reverse') {
@@ -398,7 +410,7 @@ describe('a parallel suggestions search', () => {
   it('equals the sim’s own suggestSwaps, rank for rank', async () => {
     const reference = suggestSwaps(HERO, {
       gauntletDecks: opponents(ONE_OPPONENT),
-      pilots: context.pilots,
+      pilots: PILOTS,
       pool: context.pool,
       registry: context.registry,
       baseSeed: SEED,

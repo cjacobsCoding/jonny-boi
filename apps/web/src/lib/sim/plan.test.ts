@@ -27,16 +27,18 @@ import {
   splitSlotRange,
   totalGauntletGames,
   totalPairedGames,
+  estimateSuggestionGames,
   type ArmSlice,
 } from './plan.js';
 import { resolveOpponentNames } from './opponents.js';
+import { DEFAULT_PILOT_ID } from './pilots.js';
 import type { ShardContext } from './shard-protocol.js';
 import type { PairedBaseRecord } from '@jonny-boi/sim';
 
 const hero = { name: 'Hero', archetype: 'Hero', cards: [{ cardId: 'x', count: 60 }] };
 
 function contextWith(opponentNames: readonly string[]): ShardContext {
-  return { hero, opponentNames, seed: 0xc0ffee };
+  return { hero, opponentNames, seed: 0xc0ffee, pilotId: DEFAULT_PILOT_ID };
 }
 
 describe('poolWorkerCount', () => {
@@ -290,5 +292,32 @@ describe('resolveOpponentNames', () => {
     const reversed = resolveOpponentNames([...picked].reverse(), 'Hero');
     expect(forward).toEqual(reversed);
     expect(forward).toEqual([SAMPLE_DECKS[1]?.name, SAMPLE_DECKS[3]?.name]);
+  });
+});
+
+/**
+ * The pre-flight game count the UI multiplies by a pilot's cost to answer "is this
+ * run a moment or an afternoon?". It is genuinely an estimate; what must hold is
+ * that it is MONOTONE in both sliders and never zero, because those are the
+ * properties a user reasons with while dragging them.
+ */
+describe('estimateSuggestionGames', () => {
+  it('grows with both the candidate cap and the depth', () => {
+    const base = estimateSuggestionGames(8, 60);
+    expect(base).toBeGreaterThan(0);
+    expect(estimateSuggestionGames(16, 60)).toBeGreaterThan(base);
+    expect(estimateSuggestionGames(8, 120)).toBeGreaterThan(base);
+  });
+
+  it('always plays at least the base arm plus one candidate at full depth', () => {
+    // One shared base game per slot, one variant game per surviving arm per slot —
+    // so a single candidate played to N slots is already 2N games.
+    const depth = 40;
+    expect(estimateSuggestionGames(1, depth)).toBeGreaterThanOrEqual(2 * depth);
+  });
+
+  it('is total for degenerate inputs rather than returning NaN', () => {
+    expect(estimateSuggestionGames(0, 0)).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(estimateSuggestionGames(-5, 10))).toBe(true);
   });
 });

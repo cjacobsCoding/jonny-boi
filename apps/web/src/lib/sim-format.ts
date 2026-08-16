@@ -88,6 +88,32 @@ export function throughputText(gamesPerSec: number): string {
 
 /** Above this many seconds, a remaining-time estimate reads better in minutes. */
 const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const SECONDS_PER_HOUR = SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+const SECONDS_PER_DAY = SECONDS_PER_HOUR * HOURS_PER_DAY;
+
+/**
+ * A duration as a coarse human phrase — "12 seconds", "4 minutes", "6 hours",
+ * "2 days".
+ *
+ * Deliberately coarse (one significant unit, no decimals below the hour): this
+ * renders ESTIMATES, and a figure like "5 h 47 m" claims a precision the estimate
+ * does not have. What the reader needs is the order of magnitude — is this run a
+ * moment, a coffee break, or an overnight job?
+ */
+export function durationText(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 'no time at all';
+  if (seconds < SECONDS_PER_MINUTE) return plural(Math.max(1, Math.round(seconds)), 'second');
+  if (seconds < SECONDS_PER_HOUR) return plural(Math.round(seconds / SECONDS_PER_MINUTE), 'minute');
+  if (seconds < SECONDS_PER_DAY) return plural(Math.round(seconds / SECONDS_PER_HOUR), 'hour');
+  return plural(Math.round(seconds / SECONDS_PER_DAY), 'day');
+}
+
+/** "1 hour" / "6 hours" — the only pluralisation this module needs. */
+function plural(count: number, unit: string): string {
+  return `${count.toLocaleString()} ${unit}${count === 1 ? '' : 's'}`;
+}
 
 /**
  * A remaining-time estimate for a run, extrapolated from what it has done so far,

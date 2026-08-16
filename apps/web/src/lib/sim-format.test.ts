@@ -10,6 +10,7 @@ import {
   gamesPerSecond,
   throughputText,
   etaText,
+  durationText,
 } from './sim-format.js';
 import type { Deck } from './deck.js';
 
@@ -126,5 +127,32 @@ describe('etaText', () => {
     expect(etaText(2, 10, 0)).toBeNull();
     expect(etaText(10, 10, 50)).toBeNull();
     expect(etaText(2, 0, 5)).toBeNull();
+  });
+});
+
+describe('durationText', () => {
+  it('names one unit, coarsely — it renders ESTIMATES, not stopwatch readings', () => {
+    expect(durationText(12)).toBe('12 seconds');
+    expect(durationText(90)).toBe('2 minutes');
+    expect(durationText(3 * 3600)).toBe('3 hours');
+    expect(durationText(2 * 86400)).toBe('2 days');
+  });
+
+  it('says "seconds" for anything under a minute, and never "0 seconds"', () => {
+    expect(durationText(0.2)).toBe('1 second');
+    expect(durationText(59)).toBe('59 seconds');
+  });
+
+  it('singularises exactly one of each unit', () => {
+    expect(durationText(1)).toBe('1 second');
+    expect(durationText(60)).toBe('1 minute');
+    expect(durationText(3600)).toBe('1 hour');
+    expect(durationText(86400)).toBe('1 day');
+  });
+
+  it('degrades on nonsense instead of printing NaN', () => {
+    expect(durationText(0)).toBe('no time at all');
+    expect(durationText(-5)).toBe('no time at all');
+    expect(durationText(Number.NaN)).toBe('no time at all');
   });
 });

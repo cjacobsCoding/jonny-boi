@@ -1,0 +1,72 @@
+/*
+ * The pilot picker, its cost estimate, and the provenance stamp under a result.
+ * Own file (like swap-scope.css) so it does not collide with other in-flight work
+ * in styles.css.
+ *
+ * Visual weight is deliberate: the STAMP is quiet — it is context, present on
+ * every result, and shouting it would read as an error message. The COST NOTE is
+ * quiet too until the pilot is an expensive one, at which point it takes the
+ * warning border, because that is the only moment the user is about to spend
+ * hours by accident.
+ */
+
+.pilot-field {
+  flex: 1 1 22rem;
+  min-width: 18rem;
+}
+
+.pilot-field .select {
+  width: 100%;
+  max-width: 34rem;
+}
+
+.pilot-field__blurb {
+  display: block;
+  margin-top: var(--space-1);
+  max-width: 40rem;
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+/* Shown next to the Run button, BEFORE a run starts. */
+.pilot-cost {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.pilot-cost--costly {
+  border-left-color: var(--color-warning);
+  color: var(--color-fg);
+}
+
+/*
+ * "Kept separately: Heuristic (3 runs)" — the proof, inside the search-memory
+ * banner, that partitioning by pilot did not throw anything away. Its own line so
+ * it never competes with the run counter for the reader's attention.
+ */
+.lab-memory__aside {
+  flex-basis: 100%;
+  color: var(--color-fg-faint);
+  font-size: var(--text-xs);
+}
+
+/* Shown under a finished result, always. */
+.pilot-stamp {
+  margin: 0;
+  max-width: 46rem;
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.pilot-stamp strong {
+  color: var(--color-accent-soft);
+}

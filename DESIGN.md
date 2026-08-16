@@ -251,8 +251,9 @@ The **suggestions** path drives §3.6's adaptive search *round by round with a b
 plays the shared base games for the slots it newly needs, joins, plays every surviving arm's variant
 games (cut by slot range, so a two-survivor final round still fills the machine), joins, and lets the
 sim decide who survives. Cross-run history is persisted per deck in `localStorage`, keyed by the
-record's deck fingerprint, and surfaced ("Run 3 · 26 candidates carried over", with a Reset); a record
-from another decklist or an older version is rejected with a reason on screen.
+record's deck fingerprint **and the pilot that played it** (§3.7a), and surfaced ("Run 3 · 26 candidates
+carried over", with a Reset); a record from another decklist, another pilot, or an older version is
+rejected with a reason on screen.
 *The match viewer landed:* a **"Watch a Game"** surface plays ONE traced AI-vs-AI game in the sim
 Web Worker (new `match` protocol request; `runMatch(..., {recordTrace:true})` composed with the same
 core primitives to capture a serializable per-action board snapshot) and replays it with a
@@ -262,6 +263,45 @@ graveyard counts, and a scrolling event log built from one shared event→text f
 (a creature dies, a player crosses into lethal range, the winner) are marked on the scrubber. The pure
 event→state fold, the formatter, and the playback config are unit-tested; long games are capped with an
 honest truncation note; an illegal deck / worker error lands in a friendly state, never a blank screen.
+
+
+### 3.7a Pilot-relative verdicts — the pilot is part of every result — ✅ done
+**The problem, stated plainly:** every win rate, swap verdict and suggestion this app produces is a
+measurement of a deck *as played by one pilot on both seats*. It is not a property of the deck. §3.4a
+measured how large that is — running the gauntlet with `hybrid` on both seats moved Mono-Red Aggro from
+**32.9% → 19.0%**, because when both sides block better an aggro deck loses the edge it got from
+punishing weak blocking. Both numbers are correct; they answer different questions. Until now the UI
+presented them as if they were absolute, so a user could change the pilot and get a different verdict
+with nothing on screen explaining why.
+
+*Recorded.* `pilotId` is a **required** field on every `SimRequest` and is echoed on every
+`SimResultPayload`; it rides in the `ShardContext`, so every shard of a run is played by the same pilot
+and a worker resolves it through `@jonny-boi/ai`'s registry (an unknown id fails loudly instead of
+falling back to the default). Replay traces record it per seat.
+
+*Shown.* A pilot picker sits in the Lab's config bar beside the hero and the seed — because it changes
+what the numbers MEAN, not merely how long they take — with the options and their measured relative cost
+derived from `SELECTABLE_PILOT_IDS` (never a second hand-kept list). Every finished result carries a
+provenance stamp above it, present for the default pilot too. Changing the picker clears the result, the
+same as changing the hero.
+
+*Priced before the run, not after.* The hybrid pilot is ~1400× the heuristic's cost, so the identical
+gauntlet is seconds or an hour depending on one dropdown. Each panel shows its own planned game count and
+an honest wall-clock estimate next to the Run button *before* it is pressed
+(`estimateRunSeconds`, calibrated from a real in-Lab measurement: 700 games at 192 games/sec on eleven
+browser workers). An unmeasured pilot reads "run time not measured" and is treated as costly — unknown is
+not the same as cheap.
+
+*Refuses to mix.* ⚠️ The suggestion engine's cross-run record accumulates evidence and its `candidates`
+list is the **Holm–Bonferroni family** every verdict is corrected against, so pooling two pilots' runs
+into one record would be statistically invalid twice over: a candidate one pilot settled as "not better"
+would be skipped under a pilot that would love it, and the correction would cover a family mixing tests of
+two different hypotheses. `localStorage` records are therefore **partitioned by pilot**, not invalidated —
+switching the picker starts a fresh search and leaves the other pilot's exactly where it was, with a line
+on screen naming what is kept ("Kept separately: Heuristic (3 runs). Switch pilot to resume."), because a
+partition the user cannot see is indistinguishable from a deletion. Records written before the pilot was
+selectable carry no pilot; they were all played by `DEFAULT_PILOT_ID`, so they are adopted into its slot
+and re-filed rather than dropped, and the old key is only removed once the new one holds the record.
 
 ### 3.8 Meta-deck gauntlet content — ✅ done
 **Eight** curated, distinct 60-card meta decks (data) define the baseline gauntlet, each a
