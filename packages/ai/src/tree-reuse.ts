@@ -14,14 +14,16 @@
  * not implementable against this repo's pilot seam, for three separate reasons,
  * and all three vanish if the key is the position instead:
  *
- *  1. **A pilot never observes the opponent's actions.** `Pilot.chooseAction` is
+ *  1. **A pilot is not told the opponent's ACTIONS.** `Pilot.chooseAction` is
  *     called only when *we* hold priority (`packages/sim/src/match.ts`). Between
- *     two of our decisions the opponent may take any number of actions and we are
- *     told about none of them. Action-keyed reuse for §22 ("after opponent
- *     actions") would therefore need a new observation callback on
- *     `DecisionContext` — a change in `packages/sim`, which this branch does not
- *     own. Position-keyed reuse needs nothing: the next position we are handed
- *     already encodes everything that happened.
+ *     two of our decisions the opponent may take any number of actions.
+ *     `Pilot.createGameObserver` (DESIGN §3.4c) has since opened an observation
+ *     channel, but it reports spectator-level **events**, not the `GameAction` the
+ *     opponent chose — deliberately, since an action payload can name cards from a
+ *     hidden zone. So action-keyed reuse for §22 ("after opponent actions") is
+ *     still not on the table, and reasons 2 and 3 below hold regardless of it.
+ *     Position-keyed reuse needs nothing: the next position we are handed already
+ *     encodes everything that happened.
  *  2. **The number of engine actions between two of our decisions is unbounded
  *     and mostly invisible.** The search compresses forced windows away
  *     (`advanceToDecision`), our own macros span several plies, and a committed

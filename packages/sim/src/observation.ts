@@ -238,7 +238,15 @@ export interface MatchObservers {
   readonly B: GameObserver | undefined;
 }
 
-/** Push one event to whichever observers exist. Public events are not copied. */
+/**
+ * Push one event to whichever observers exist.
+ *
+ * A public observation is the engine's own event object, handed to both observers
+ * by reference — no copy, which is where the seam's affordability comes from. The
+ * `Observation` type is read-only in every field core declares, so an observer that
+ * tried to scribble on it would not compile; this is the same borrow-not-give
+ * contract `PilotView` and `MatchEventObserver` already run on.
+ */
 export function deliverObservation(observers: MatchObservers, event: GameEvent): void {
   const observation = observationOf(event);
   if (observation === null) return;

@@ -29,13 +29,7 @@ import { performance } from 'node:perf_hooks';
 import { createHash } from 'node:crypto';
 import { loadCardPool, buildRegistry } from '@jonny-boi/cards';
 import { SAMPLE_DECKS, loadDeck, makeSeats, runMatch, gameSeedFor, onPlayFor } from '@jonny-boi/sim';
-import {
-  createDefaultAiRegistry,
-  createRevealTrackingPilot,
-  HEURISTIC_PILOT_ID,
-  HYBRID_PILOT_ID,
-  RANDOM_PILOT_ID,
-} from '@jonny-boi/ai';
+import { createDefaultAiRegistry, HEURISTIC_PILOT_ID, HYBRID_PILOT_ID, RANDOM_PILOT_ID } from '@jonny-boi/ai';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -106,25 +100,63 @@ function timeArm(pilotA, pilotB, deckAName, deckBName, games) {
   return (games / (performance.now() - t0)) * 1000;
 }
 
-function throughput(rounds, games) {
+/**
+ * Games/sec for a pilot that does NOT implement the seam — the arm that answers
+ * "did adding this seam cost the pilots that ignore it anything?".
+ *
+ * It uses nothing this branch introduced, deliberately: run it alternately against
+ * a pre-seam build and a post-seam build of `packages/sim/dist` to get a genuinely
+ * INTERLEAVED comparison. Sequential comparisons on this box have already produced
+ * a confident wrong answer.
+ */
+function plain(rounds, games) {
+  const [a, b] = MATCHUPS[0];
+  const rates = [];
+  for (let r = 0; r < rounds; r++) {
+    rates.push(timeArm(ai.getPilot(HEURISTIC_PILOT_ID), ai.getPilot(HEURISTIC_PILOT_ID), a, b, games));
+  }
+  console.log(`plain ${median(rates).toFixed(1)} games/sec (median of ${rounds} x ${games} games)`);
+}
+
+async function throughput(rounds, games) {
+  // Lazy, for the same reason `volume` is: the control arm of the interleaved
+  // A/B is a build that predates this seam and exports neither symbol.
+  const { createRevealTrackingPilot } = await import('@jonny-boi/ai');
   const [a, b] = MATCHUPS[0];
   const off = [];
   const on = [];
+  const ratios = [];
+  const timeOff = () =>
+    timeArm(ai.getPilot(HEURISTIC_PILOT_ID), ai.getPilot(HEURISTIC_PILOT_ID), a, b, games);
+  const timeOn = () =>
+    timeArm(
+      createRevealTrackingPilot(ai.getPilot(HEURISTIC_PILOT_ID)),
+      createRevealTrackingPilot(ai.getPilot(HEURISTIC_PILOT_ID)),
+      a,
+      b,
+      games,
+    );
+  timeOff();
+  timeOn();
   for (let r = 0; r < rounds; r++) {
-    // Fresh pilots per round so neither arm benefits from the other's warm-up.
-    const plainA = ai.getPilot(HEURISTIC_PILOT_ID);
-    const plainB = ai.getPilot(HEURISTIC_PILOT_ID);
-    off.push(timeArm(plainA, plainB, a, b, games));
-    const watchA = createRevealTrackingPilot(ai.getPilot(HEURISTIC_PILOT_ID));
-    const watchB = createRevealTrackingPilot(ai.getPilot(HEURISTIC_PILOT_ID));
-    on.push(timeArm(watchA, watchB, a, b, games));
+    // Alternate which arm runs first: this box warms up over a run, so a fixed
+    // order inside a round systematically favours whichever arm goes second.
+    if (r % 2 === 0) {
+      off.push(timeOff());
+      on.push(timeOn());
+    } else {
+      on.push(timeOn());
+      off.push(timeOff());
+    }
+    ratios.push(on[on.length - 1] / off[off.length - 1]);
   }
-  const offMedian = median(off);
-  const onMedian = median(on);
   console.log(`throughput — ${a} vs ${b}, ${games} games x ${rounds} interleaved rounds`);
-  console.log(`  feed OFF (no observer): median ${offMedian.toFixed(1)} games/sec  [${Math.min(...off).toFixed(0)}..${Math.max(...off).toFixed(0)}]`);
-  console.log(`  feed ON  (both seats):  median ${onMedian.toFixed(1)} games/sec  [${Math.min(...on).toFixed(0)}..${Math.max(...on).toFixed(0)}]`);
-  console.log(`  ON/OFF ratio: ${(onMedian / offMedian).toFixed(3)}x`);
+  console.log(`  feed OFF (no observer): median ${median(off).toFixed(1)} games/sec  [${Math.min(...off).toFixed(0)}..${Math.max(...off).toFixed(0)}]`);
+  console.log(`  feed ON  (both seats):  median ${median(on).toFixed(1)} games/sec  [${Math.min(...on).toFixed(0)}..${Math.max(...on).toFixed(0)}]`);
+  console.log(`  paired ratio per round: ${ratios.map((x) => x.toFixed(3)).join(' ')}`);
+  // The PAIRED median is the quotable figure: it cancels the drift both arms share
+  // in a round, which a ratio of two separately-taken medians does not.
+  console.log(`  PAIRED MEDIAN RATIO on/off: ${median(ratios).toFixed(3)}x`);
 }
 
 async function volume(games) {
@@ -163,9 +195,10 @@ async function volume(games) {
 
 const [, , mode = 'digest', ...rest] = process.argv;
 if (mode === 'digest') digest();
-else if (mode === 'throughput') throughput(Number(rest[0] ?? 7), Number(rest[1] ?? 200));
+else if (mode === 'throughput') await throughput(Number(rest[0] ?? 7), Number(rest[1] ?? 200));
+else if (mode === 'plain') plain(Number(rest[0] ?? 3), Number(rest[1] ?? 200));
 else if (mode === 'volume') await volume(Number(rest[0] ?? 20));
 else {
-  console.error(`unknown mode '${mode}' — use digest | throughput | volume`);
+  console.error(`unknown mode '${mode}' — use digest | throughput | plain | volume`);
   process.exit(1);
 }
