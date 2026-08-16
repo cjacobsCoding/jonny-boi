@@ -72,6 +72,7 @@ import { checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.
 import {
   assignAndDealCombatDamage,
   canBlock,
+  illegalBlockDeclaration,
   defendingPlayerOf,
   hasAnyFirstStrike,
   tapAttackers,
@@ -1383,6 +1384,13 @@ function applyDeclareBlockers(
     }
     if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
   }
+
+  // Declaration-level restrictions (menace), which no per-pair check can see.
+  const attackingCreatures = state.combat.attackers
+    .map((id) => findOnBattlefield(state, id))
+    .filter((c): c is CardInstance => c !== undefined);
+  const declarationProblem = illegalBlockDeclaration(attackingCreatures, action.blocks, cont);
+  if (declarationProblem) return rejectWith(prevState, declarationProblem);
 
   const blocks: Record<InstanceId, InstanceId> = {};
   for (const { blocker, attacker } of action.blocks) blocks[blocker] = attacker;

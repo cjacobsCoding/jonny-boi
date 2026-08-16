@@ -57,8 +57,34 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
   const idx = index;
   const ak = kw(attacker, idx);
   const bk = kw(blocker, idx);
+  // "Can't be blocked" is absolute — checked before evasion, which it subsumes.
+  if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
   return true;
+}
+
+/**
+ * Why this whole block DECLARATION is illegal, or `undefined` if it stands.
+ *
+ * Menace lives here rather than in {@link canBlock} because it constrains the
+ * assignment as a whole: each blocker individually *can* block a menacing
+ * creature, and what the rule forbids is exactly one of them doing it. A
+ * per-pair check cannot see that, so it would let a single blocker through.
+ */
+export function illegalBlockDeclaration(
+  attackers: readonly CardInstance[],
+  blocks: ReadonlyArray<{ readonly blocker: InstanceId; readonly attacker: InstanceId }>,
+  index: ContinuousIndex,
+): string | undefined {
+  for (const attacker of attackers) {
+    if (!kw(attacker, index).menace) continue;
+    const assigned = blocks.filter((b) => b.attacker === attacker.instanceId).length;
+    // Zero is fine — menace forbids being blocked by ONE, not being unblocked.
+    if (assigned === 1) {
+      return `${attacker.def.name} has menace and can't be blocked by exactly one creature`;
+    }
+  }
+  return undefined;
 }
 
 /** Does this creature deal damage in the first-strike step? */

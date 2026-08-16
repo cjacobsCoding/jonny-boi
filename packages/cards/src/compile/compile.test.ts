@@ -457,9 +457,31 @@ describe('compileCard — templated cards outside the curated pool', () => {
   });
 
   it('reports an unmodelled keyword rather than dropping the ability', () => {
+    // Menace used to be the example here; it is implemented now (it constrains
+    // the block DECLARATION, which no per-pair check can express). Ward is the
+    // right stand-in: it needs a cost paid to target, which the engine has no
+    // way to demand. The point of the test is unchanged — an ability we cannot
+    // model must be REPORTED, never silently dropped.
     const result = compileCard(
       makeCard({
         name: 'Sneaky Beast',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
+        manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
+        power: 3,
+        toughness: 3,
+        oracleText: 'Ward {2}',
+        keywords: ['Ward'],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.some((gap) => /ward/i.test(gap.text))).toBe(true);
+  });
+
+  it('compiles menace, which IS modelled now', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Menacing Beast',
         typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Beast'] },
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
@@ -469,8 +491,8 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /menace/i.test(gap.text))).toBe(true);
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.keywords).toMatchObject({ menace: true });
   });
 
   it('compiles "enters tapped" onto the definition', () => {

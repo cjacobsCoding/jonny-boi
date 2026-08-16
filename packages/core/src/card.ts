@@ -53,6 +53,14 @@ export interface KeywordFlags {
    * including its own controller's. Strictly stronger than hexproof.
    */
   readonly shroud?: boolean;
+  /**
+   * Menace — can't be blocked except by two or more creatures. A restriction on
+   * the whole block DECLARATION rather than on any single pair, so it is checked
+   * where blockers are declared, not in `canBlock`.
+   */
+  readonly menace?: boolean;
+  /** Can't be blocked at all. Checked per pair in `canBlock`. */
+  readonly unblockable?: boolean;
 }
 
 /**

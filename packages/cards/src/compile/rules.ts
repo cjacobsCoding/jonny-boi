@@ -153,6 +153,9 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   flash: 'flash',
   hexproof: 'hexproof',
   shroud: 'shroud',
+  // Blocking restrictions: menace constrains the whole declaration, and
+  // "can't be blocked" is checked per pair. Both are engine-enforced.
+  menace: 'menace',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
@@ -1013,6 +1016,14 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       if (amount === null) return null;
       // The permanent's own ETB script counters itself.
       return { effects: [{ primitive: 'addCounters', params: { amount, self: true } }] };
+    },
+  },
+  {
+    id: 'cant-be-blocked',
+    description: `"~ can't be blocked"`,
+    pattern: /^~ can'?t be blocked$/,
+    build() {
+      return { keywords: { unblockable: true } };
     },
   },
   {
