@@ -476,10 +476,16 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   reads "Enchant creature", "Enchanted/Equipped creature gets …", and "Equip {N}", and the heuristic
   pilot casts Auras on a sensible creature (its own for a buff, the opponent's for a shrink) and
   activates Equip, funding it through the same `planManaPayment` a spell uses.
-  ⚠️ **Not yet in the curated pool.** The canonical Scryfall index (`packages/data-tools/data`) contains
-  no Aura or Equipment, and a pool card must have a display row with art there — so these cards arrive
-  through the DECK IMPORTER (the Oracle compiler), not `CARD_POOL`. Adding a playset to the pool is a
-  data-tools re-fetch + a web card-index regeneration, and belongs to whoever owns those.
+  ✅ **In the curated pool** — 14 Auras + 14 Equipment, so the seam is reachable from the deck builder,
+  the Lab's suggestions and every sim, not only through the deck importer. They came in as a DATA edit
+  (names → `packages/cards/data/expansion-candidates.json` → `build-expansion.ts` → a data-tools
+  re-fetch → the web card-index regeneration); nothing was hand-written into either index.
+  `attachment-cards-in-pool.test.ts` plays the shipped definitions with the real pilot and asserts a
+  floor on how many of each form the pool carries, so it cannot silently regress to the empty state it
+  started in. The colour spread is W/U/B/R/G plus colourless Equipment (playable in any deck).
+  ⚠️ Green has **no mono-green Aura in the pool and that is not an oversight**: essentially every green
+  Aura is an umbra (totem armor), a regenerate-granter, or dynamic (`+1/+1 for each Forest`), none of
+  which the engine models. Green is served by Unflinching Courage ({1}{G}{W}) and by the Equipment.
 Still open, roughly by how often they block a real decklist:
 - *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
   pool (fetchlands, mana rocks, sac outlets).

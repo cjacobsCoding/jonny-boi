@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 124 cards.
+ * 159 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -31,6 +31,28 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { primitive: 'gainLife', params: { amount: 3 } },
     ],
   },
+  // Equipped creature gets +0/+3 and has vigilance. (Attacking doesn't cause it to tap.)
+  // Equip {3} ({3}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'dd70d439-bd60-43d1-ac26-13b744cc4a37',
+    name: 'Accorder\'s Shield',
+    types: ['artifact'],
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 0, toughness: 3, keywords: { vigilance: true } },
+    },
+  },
   // Flying, vigilance, lifelink
   {
     id: '69b1b0ec-9db0-48d1-a7b5-71281aca16fe',
@@ -40,6 +62,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 3,
     keywords: { flying: true, vigilance: true, lifelink: true },
+    subtypes: ['dwarf', 'soldier'],
   },
   // Flying
   {
@@ -50,6 +73,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 4,
     toughness: 4,
     keywords: { flying: true },
+    subtypes: ['elemental'],
   },
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   {
@@ -60,6 +84,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     keywords: { lifelink: true },
+    subtypes: ['cat', 'cleric'],
   },
   // {T}: Add one mana of any color.
   {
@@ -69,6 +94,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 3 },
     power: 2,
     toughness: 2,
+    subtypes: ['myr'],
     producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
   },
   {
@@ -78,6 +104,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     power: 2,
     toughness: 1,
+    subtypes: ['myr'],
   },
   // Flying
   // When this creature enters, you gain 3 life.
@@ -89,6 +116,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 3,
     keywords: { flying: true },
+    subtypes: ['angel'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -105,6 +133,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2, W: 2 },
     effects: [{ primitive: 'gainLife', params: { amount: 7 } }],
   },
+  // Enchant creature
+  // When this Aura enters, draw a card.
+  // Enchanted creature has flying.
+  {
+    id: 'e5e04968-d9b7-4bd5-b826-be9502360cd3',
+    name: 'Angelic Gift',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Enters: draw a card',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 0, keywords: { flying: true } },
+    },
+  },
   // First strike
   // When this creature enters, create a 1/1 white Soldier creature token.
   {
@@ -115,6 +167,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     keywords: { firstStrike: true },
+    subtypes: ['human', 'knight'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -131,6 +184,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { G: 1 },
     power: 1,
     toughness: 1,
+    subtypes: ['human', 'monk'],
     produces: ['W'],
   },
   // This land enters tapped.
@@ -139,6 +193,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: 'ad1712d8-809f-410c-8b91-ffe6fb8a69a1',
     name: 'Azorius Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ W: 1 }, { U: 1 }],
   },
@@ -150,6 +205,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2, R: 2 },
     power: 2,
     toughness: 2,
+    subtypes: ['goblin', 'warrior'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -157,6 +213,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: create two 1/1 red goblin creature tokens',
       },
     ],
+  },
+  // Equipped creature has flying and first strike.
+  // Equip {2}
+  {
+    id: 'c8cdc08a-975b-475f-8e30-85d61f6f3a9b',
+    name: 'Bladed Pinions',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { flying: true, firstStrike: true } },
+    },
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -192,12 +271,58 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Equipped creature gets +1/+0.
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '16e555f2-5aa8-4100-a036-eed48db0e84a',
+    name: 'Bone Saw',
+    types: ['artifact'],
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 1, toughness: 0, keywords: {} },
+    },
+  },
+  // Equipped creature gets +2/+0.
+  // Equip {1}
+  {
+    id: '452e3f5f-ce17-4682-966b-5cc100210aee',
+    name: 'Bonesplitter',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 2, toughness: 0, keywords: {} },
+    },
+  },
   // This land enters tapped.
   // {T}: Add {R} or {W}.
   {
     id: '73c423b7-cab8-4e69-8070-9edbf96a6c2c',
     name: 'Boros Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ R: 1 }, { W: 1 }],
   },
@@ -208,6 +333,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     power: 2,
     toughness: 1,
+    subtypes: ['sable'],
   },
   // Counter target spell.
   {
@@ -232,6 +358,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2, G: 1 },
     power: 3,
     toughness: 3,
+    subtypes: ['centaur', 'warrior'],
   },
   // This artifact enters tapped.
   // {T}: Add {B}.
@@ -252,6 +379,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 1,
     keywords: { lifelink: true },
+    subtypes: ['vampire'],
   },
   // Flying
   // When this creature enters, draw a card.
@@ -263,6 +391,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 1,
     keywords: { flying: true },
+    subtypes: ['elemental', 'wizard'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -270,6 +399,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: draw a card',
       },
     ],
+  },
+  // Equipped creature has flying.
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '8d8682f3-9ef3-4aa7-9ea6-8a2ce09bff6f',
+    name: 'Cobbled Wings',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 0, toughness: 0, keywords: { flying: true } },
+    },
   },
   // Draw three cards.
   {
@@ -287,6 +439,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     power: 1,
     toughness: 1,
+    subtypes: ['myr'],
     produces: ['G'],
   },
   {
@@ -296,6 +449,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, U: 1 },
     power: 2,
     toughness: 1,
+    subtypes: ['merfolk'],
   },
   {
     id: '6a462a69-3e42-41de-a3aa-a488d9f38d69',
@@ -304,6 +458,31 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 4, G: 2 },
     power: 6,
     toughness: 4,
+    subtypes: ['wurm'],
+  },
+  // Enchant creature
+  // When this Aura enters, you lose 1 life.
+  // Enchanted creature gets +3/+1.
+  {
+    id: 'c1f4a440-638a-4e3e-8a3e-af4a4a73ec91',
+    name: 'Dark Favor',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'loseLife', params: { amount: 1 } }],
+        label: 'Enters: you lose 1 life',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 3, toughness: 1, keywords: {} },
+    },
   },
   // Destroy all creatures.
   {
@@ -312,6 +491,22 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, W: 2 },
     effects: [{ primitive: 'destroyAll' }],
+  },
+  // Enchant creature
+  // Enchanted creature gets -2/-2.
+  {
+    id: 'b1804304-fac1-4b19-a48d-6ade9407972a',
+    name: 'Dead Weight',
+    types: ['enchantment'],
+    cost: { B: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: -2, toughness: -2, keywords: {} },
+    },
   },
   // Reach (This creature can block creatures with flying.)
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
@@ -323,6 +518,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 2,
     keywords: { reach: true, deathtouch: true },
+    subtypes: ['spider'],
   },
   // This land enters tapped.
   // {T}: Add {U} or {B}.
@@ -330,6 +526,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '52d14717-0cbc-4d7e-b546-54ea91580338',
     name: 'Dimir Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ U: 1 }, { B: 1 }],
   },
@@ -341,6 +538,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { B: 1 },
     power: 2,
     toughness: 2,
+    subtypes: ['zombie'],
     entersTapped: true,
   },
   // Target creature gets -2/-2 until end of turn.
@@ -403,6 +601,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { W: 1 },
     power: 2,
     toughness: 1,
+    subtypes: ['human', 'soldier'],
   },
   // {T}: Add {G}.
   {
@@ -412,6 +611,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { G: 1 },
     power: 1,
     toughness: 1,
+    subtypes: ['elf', 'druid'],
     produces: ['G'],
   },
   // When this creature enters, draw a card.
@@ -422,6 +622,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 1 },
     power: 1,
     toughness: 1,
+    subtypes: ['elf', 'shaman'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -429,6 +630,22 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: draw a card',
       },
     ],
+  },
+  // Enchant creature (Target a creature as you cast this. This card enters attached to that creature.)
+  // Enchanted creature gets -2/-2.
+  {
+    id: '42b2db4c-4a1d-436f-9eeb-53a04db46c58',
+    name: 'Enfeeblement',
+    types: ['enchantment'],
+    cost: { B: 2 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: -2, toughness: -2, keywords: {} },
+    },
   },
   // Double strike (This creature deals both first-strike and regular combat damage.)
   {
@@ -439,6 +656,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 1,
     keywords: { doubleStrike: true },
+    subtypes: ['human', 'soldier'],
   },
   // This artifact enters tapped.
   // {T}: Add {R}.
@@ -457,6 +675,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 3, R: 2 },
     power: 5,
     toughness: 4,
+    subtypes: ['elemental'],
+  },
+  // Equipped creature has double strike. (It deals both first-strike and regular combat damage.)
+  // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'a02e1ca7-23c5-41e3-a744-72fc9e9dd8ba',
+    name: 'Fireshrieker',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { doubleStrike: true } },
+    },
   },
   // Flame Slash deals 4 damage to target creature.
   {
@@ -466,6 +708,22 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creature' } }],
   },
+  // Enchant creature
+  // Enchanted creature has flying.
+  {
+    id: '6a4068b0-fb4f-429c-a94e-47849f3eb7ef',
+    name: 'Flight',
+    types: ['enchantment'],
+    cost: { U: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 0, keywords: { flying: true } },
+    },
+  },
   // {T}: Add {G}.
   {
     id: 'df317532-7d36-40fd-938f-e972749c8792',
@@ -474,6 +732,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { G: 1 },
     power: 1,
     toughness: 1,
+    subtypes: ['elf', 'druid'],
     produces: ['G'],
   },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
@@ -485,6 +744,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 2,
     keywords: { trample: true },
+    subtypes: ['beast'],
   },
   // Reach (This creature can block creatures with flying.)
   {
@@ -495,6 +755,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 4,
     keywords: { reach: true },
+    subtypes: ['spider'],
+  },
+  // Enchant creature
+  // Enchanted creature gets +1/+1 and has flying and lifelink.
+  {
+    id: 'dcb6d317-5c55-4973-8e3d-2e98211dc30e',
+    name: 'Gift of Orzhova',
+    types: ['enchantment'],
+    cost: { generic: 1, hybrid: [['W', 'B'], ['W', 'B']] },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 1, toughness: 1, keywords: { flying: true, lifelink: true } },
+    },
   },
   // When this creature enters, create a 1/1 red Goblin creature token.
   {
@@ -504,6 +781,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, R: 1 },
     power: 1,
     toughness: 1,
+    subtypes: ['goblin', 'rogue'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -519,6 +797,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, R: 1 },
     power: 2,
     toughness: 1,
+    subtypes: ['goblin', 'warrior'],
+  },
+  // Enchant creature
+  // Enchanted creature gets +2/+2 and has haste.
+  {
+    id: '67ca79d7-9064-4605-8625-b1cfe5cb1b45',
+    name: 'Goblin War Paint',
+    types: ['enchantment'],
+    cost: { generic: 1, R: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 2, keywords: { haste: true } },
+    },
   },
   // {T}: Add {W}.
   {
@@ -528,6 +823,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     power: 1,
     toughness: 1,
+    subtypes: ['myr'],
     produces: ['W'],
   },
   // This land enters tapped.
@@ -536,6 +832,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: 'fa2da325-6859-45bb-b185-35526b01bcc1',
     name: 'Golgari Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ B: 1 }, { G: 1 }],
   },
@@ -554,6 +851,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 1 },
     power: 2,
     toughness: 2,
+    subtypes: ['bear'],
   },
   // This land enters tapped.
   // {T}: Add {R} or {G}.
@@ -561,8 +859,31 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: 'd38476e9-2e47-4c0c-8129-483c0bd09ec0',
     name: 'Gruul Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ R: 1 }, { G: 1 }],
+  },
+  // Whenever you cast an instant or sorcery spell, this creature deals 2 damage to each opponent.
+  {
+    id: 'c6bdaf76-6a03-4695-9c4b-f040e73435af',
+    name: 'Guttersnipe',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['goblin', 'shaman'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, opponents: true } }],
+        label: 'Cast instant: ~ deals 2 damage to each opponent',
+      },
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
+        effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, opponents: true } }],
+        label: 'Cast sorcery: ~ deals 2 damage to each opponent',
+      },
+    ],
   },
   // Flying
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
@@ -574,6 +895,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 1,
     keywords: { flying: true, lifelink: true },
+    subtypes: ['bird'],
   },
   {
     id: '342199e0-15b6-4824-83da-25caef2592b3',
@@ -582,6 +904,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 3, R: 1 },
     power: 3,
     toughness: 3,
+    subtypes: ['giant'],
+  },
+  // Enchant creature
+  // Enchanted creature gets +1/+2.
+  {
+    id: '9357de36-f8be-4f49-b2c8-9fe9eaf82b07',
+    name: 'Holy Strength',
+    types: ['enchantment'],
+    cost: { W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 1, toughness: 2, keywords: {} },
+    },
   },
   // {T}: Add {R}.
   {
@@ -591,6 +930,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     power: 1,
     toughness: 1,
+    subtypes: ['myr'],
     produces: ['R'],
   },
   // This land enters tapped.
@@ -599,6 +939,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: 'bf75a3d1-f184-4b48-a913-21caee1db084',
     name: 'Izzet Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ U: 1 }, { R: 1 }],
   },
@@ -626,6 +967,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { G: 2 },
     power: 3,
     toughness: 3,
+    subtypes: ['beast'],
   },
   // Whenever you cast an instant or sorcery spell, this creature gets +3/+0 until end of turn.
   {
@@ -635,6 +977,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, R: 1 },
     power: 1,
     toughness: 2,
+    subtypes: ['elemental', 'beast'],
     triggers: [
       {
         condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
@@ -647,6 +990,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Cast sorcery: ~ gets +3/+0 until end of turn',
       },
     ],
+  },
+  // Equipped creature gets +1/+0 and has flying.
+  // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'b079f9db-974d-4525-a894-57b754ba9dcc',
+    name: 'Kitesail',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 0, keywords: { flying: true } },
+    },
   },
   // Create two 1/1 red Goblin creature tokens.
   {
@@ -670,6 +1036,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Lava Spike',
     types: ['sorcery'],
     cost: { R: 1 },
+    subtypes: ['arcane'],
     effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'player' } }],
   },
   // {T}: Add {B}.
@@ -680,6 +1047,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     power: 1,
     toughness: 1,
+    subtypes: ['myr'],
     produces: ['B'],
   },
   {
@@ -689,6 +1057,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { G: 3 },
     power: 4,
     toughness: 5,
+    subtypes: ['beast'],
+  },
+  // Equipped creature gets +1/+1.
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'cde26d69-f3e7-4dd0-a53b-cd0ec812d717',
+    name: 'Leonin Scimitar',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
   },
   // Flying
   {
@@ -699,6 +1091,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     keywords: { flying: true },
+    subtypes: ['cat', 'knight'],
   },
   // Flying, vigilance, haste
   {
@@ -709,6 +1102,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 4,
     keywords: { flying: true, vigilance: true, haste: true },
+    subtypes: ['angel'],
   },
   // Haste (This creature can attack and {T} as soon as it comes under your control.)
   {
@@ -719,6 +1113,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 4,
     toughness: 1,
     keywords: { haste: true },
+    subtypes: ['elemental'],
   },
   // Lightning Helix deals 3 damage to any target and you gain 3 life.
   {
@@ -747,6 +1142,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, W: 1 },
     power: 2,
     toughness: 1,
+    subtypes: ['kor', 'monk'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -754,6 +1150,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 4 life',
       },
     ],
+  },
+  // Equipped creature gets +3/+0 and has trample and lifelink.
+  // Equip {3}
+  {
+    id: 'dba35ac5-7ad3-488a-a006-6b9a1d54eea5',
+    name: 'Loxodon Warhammer',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 3, toughness: 0, keywords: { trample: true, lifelink: true } },
+    },
   },
   // {T}: Add one mana of any color.
   {
@@ -773,12 +1192,52 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     produces: ['W'],
   },
+  // Enchant creature
+  // Enchanted creature gets +2/+2 and has lifelink.
+  {
+    id: 'af942d30-a191-4306-846d-6c26755ca3e6',
+    name: 'Mark of the Vampire',
+    types: ['enchantment'],
+    cost: { generic: 3, B: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 2, keywords: { lifelink: true } },
+    },
+  },
+  // Equipped creature gets +1/+2 and has hexproof. (It can't be the target of spells or abilities your opponents control.)
+  // Equip {3}
+  {
+    id: 'ab66f8a8-eb3d-4c2d-95e9-26a53c66b237',
+    name: 'Mask of Avacyn',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: { power: 1, toughness: 2, keywords: { hexproof: true } },
+    },
+  },
   {
     id: '7663ac7c-1de3-4250-b96a-fae9dbd66a27',
     name: 'Memnite',
     types: ['artifact', 'creature'],
     power: 1,
     toughness: 1,
+    subtypes: ['construct'],
   },
   // Target creature gets +7/+7 until end of turn.
   {
@@ -787,6 +1246,22 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 3, G: 1 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 7, toughness: 7, targets: 'creature' } }],
+  },
+  // {T}: Add {C}.
+  // {1}, {T}, Sacrifice this artifact: Draw a card.
+  {
+    id: 'c97361b5-af16-4a7b-af85-a429dbaf4ad2',
+    name: 'Mind Stone',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    produces: ['C'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, tap: true, sacrificeSelf: true },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: '{1}, {t}, sacrifice ~: draw a card',
+      },
+    ],
   },
   // This artifact enters tapped.
   // {T}: Add {G}.
@@ -813,6 +1288,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2, G: 1 },
     power: 3,
     toughness: 3,
+    subtypes: ['centaur', 'warrior'],
+  },
+  // You draw two cards and lose 2 life.
+  {
+    id: '7ffae8f8-3006-4969-a339-6d30678f87ea',
+    name: 'Night\'s Whisper',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 1 },
+    effects: [
+      { primitive: 'drawCards', params: { count: 2 } },
+      { primitive: 'loseLife', params: { amount: 2 } },
+    ],
+  },
+  // Enchant creature
+  // Enchanted creature gets +1/+2 and has flying.
+  {
+    id: '0f35e73b-6a38-4185-a7d3-d237d67ba1cd',
+    name: 'Nimbus Wings',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 1, toughness: 2, keywords: { flying: true } },
+    },
   },
   // Flying
   {
@@ -822,6 +1325,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 0,
     toughness: 2,
     keywords: { flying: true },
+    subtypes: ['thopter'],
   },
   // This land enters tapped.
   // {T}: Add {W} or {B}.
@@ -829,6 +1333,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '57b37df5-fee4-4720-931f-f0cb0a8b338c',
     name: 'Orzhov Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ W: 1 }, { B: 1 }],
   },
@@ -840,6 +1345,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 3 },
     power: 2,
     toughness: 2,
+    subtypes: ['myr'],
     produces: ['C', 'C'],
   },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
@@ -853,6 +1359,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 7,
     toughness: 7,
     keywords: { trample: true },
+    subtypes: ['wurm'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -872,6 +1379,15 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['artifact', 'creature'],
     power: 0,
     toughness: 3,
+    subtypes: ['phyrexian', 'construct'],
+  },
+  // Pyroclasm deals 2 damage to each creature.
+  {
+    id: 'e4bcd4ea-e7cd-4471-8f3b-18bb51d3d70c',
+    name: 'Pyroclasm',
+    types: ['sorcery'],
+    cost: { generic: 1, R: 1 },
+    effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, creatures: true } }],
   },
   // When this land enters, you gain 2 life.
   // {T}: Add {C}.
@@ -897,6 +1413,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 1,
     keywords: { haste: true },
+    subtypes: ['goblin', 'berserker'],
   },
   // Create two 1/1 white Soldier creature tokens.
   {
@@ -912,6 +1429,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '361f534b-39d1-4421-b5a8-d3813c62f86d',
     name: 'Rakdos Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ B: 1 }, { R: 1 }],
   },
@@ -939,6 +1457,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 1 },
     power: 2,
     toughness: 2,
+    subtypes: ['bear'],
   },
   {
     id: '60ba93eb-39e6-4af2-9c66-cd38f72daff2',
@@ -947,6 +1466,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { W: 1 },
     power: 2,
     toughness: 1,
+    subtypes: ['cat'],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -982,6 +1502,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 1,
     keywords: { deathtouch: true },
+    subtypes: ['scorpion'],
   },
   // This land enters tapped.
   // {T}: Add {G} or {W}.
@@ -989,8 +1510,44 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '75b235d3-595a-4859-be45-9559d8445db5',
     name: 'Selesnya Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ G: 1 }, { W: 1 }],
+  },
+  // Enchant creature
+  // Enchanted creature gets +2/+2 and has flying and vigilance. (Attacking doesn't cause it to tap.)
+  {
+    id: '6d6ba936-4a15-4c40-aaa6-71605fb732d1',
+    name: 'Serra\'s Embrace',
+    types: ['enchantment'],
+    cost: { generic: 2, W: 2 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 2, keywords: { flying: true, vigilance: true } },
+    },
+  },
+  // Flying
+  // {R}: This creature gets +1/+0 until end of turn.
+  {
+    id: '711eea87-0fa3-46e0-a42b-fa5a86455f04',
+    name: 'Shivan Dragon',
+    types: ['creature'],
+    cost: { generic: 4, R: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true },
+    subtypes: ['dragon'],
+    activated: [
+      {
+        cost: { mana: { R: 1 } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 0 } }],
+        label: '{r}: ~ gets +1/+0 until end of turn',
+      },
+    ],
   },
   // Shock deals 2 damage to any target.
   {
@@ -1008,6 +1565,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     power: 1,
     toughness: 1,
+    subtypes: ['myr'],
     produces: ['U'],
   },
   // This land enters tapped.
@@ -1016,6 +1574,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: 'e8705df9-6439-4930-91b6-229f818559af',
     name: 'Simic Guildgate',
     types: ['land'],
+    subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ G: 1 }, { U: 1 }],
   },
@@ -1038,6 +1597,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 1,
     keywords: { flying: true, doubleStrike: true },
+    subtypes: ['cat', 'knight'],
   },
   // Flying, haste
   {
@@ -1048,6 +1608,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     keywords: { flying: true, haste: true },
+    subtypes: ['human', 'knight'],
   },
   // Sorin's Vengeance deals 10 damage to target player or planeswalker and you gain 10 life.
   {
@@ -1069,6 +1630,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 0,
     toughness: 4,
     keywords: { defender: true },
+    subtypes: ['wall'],
+  },
+  // Equipped creature gets +1/+1 and has haste.
+  // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: 'bd4ad383-8c40-4dda-bc9c-ba8a001d6882',
+    name: 'Strider Harness',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 1, toughness: 1, keywords: { haste: true } },
+    },
   },
   // Flying
   {
@@ -1079,6 +1664,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 1,
     keywords: { flying: true },
+    subtypes: ['bird'],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1096,6 +1682,33 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 1 life',
       },
     ],
+  },
+  // Equipped creature gets +2/+0 and has first strike, vigilance, trample, and haste.
+  // Equip {3}
+  {
+    id: 'e366afb3-c447-4bde-b358-41c8568142d5',
+    name: 'Sword of Vengeance',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 3 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {3}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {3}',
+      modifies: {
+        power: 2,
+        toughness: 0,
+        keywords: { firstStrike: true, vigilance: true, trample: true, haste: true },
+      },
+    },
   },
   // Destroy target creature. It can't be regenerated.
   {
@@ -1119,6 +1732,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         condition: { on: 'etb' },
         effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
         label: 'Enters: you gain 1 life',
+      },
+    ],
+  },
+  // When this creature enters, you gain 5 life.
+  // When this creature leaves the battlefield, create a 3/3 green Beast creature token.
+  {
+    id: '0dd0e91a-d16b-4718-8d11-1a3fcf8e0753',
+    name: 'Thragtusk',
+    types: ['creature'],
+    cost: { generic: 4, G: 1 },
+    power: 5,
+    toughness: 3,
+    subtypes: ['beast'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 5 } }],
+        label: 'Enters: you gain 5 life',
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'makeToken', params: { power: 3, toughness: 3, name: 'Beast' } }],
+        label: 'Leaves: create a 3/3 green beast creature token',
       },
     ],
   },
@@ -1155,6 +1791,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Equipped creature gets +2/+1.
+  // Equip {2}
+  {
+    id: '394fae8f-3757-4e08-b97c-5d7c451f4e72',
+    name: 'Trusty Machete',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 2, toughness: 1, keywords: {} },
+    },
+  },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   {
     id: 'd6ee6cc1-902d-4f56-afa5-6fa4813bfbbc',
@@ -1164,6 +1823,47 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 1,
     keywords: { deathtouch: true },
+    subtypes: ['rat'],
+  },
+  // Enchant creature
+  // Enchanted creature gets +2/+2 and has trample and lifelink. (Damage dealt by the creature also causes its controller to gain that much life.)
+  {
+    id: '0e969a27-1609-4ab4-b0db-46b1af8066a9',
+    name: 'Unflinching Courage',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1, G: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 2, keywords: { trample: true, lifelink: true } },
+    },
+  },
+  // Enchant creature
+  // Enchanted creature gets +2/+1.
+  {
+    id: '090d88a9-7f2d-4bd1-a30a-7c48d05068be',
+    name: 'Unholy Strength',
+    types: ['enchantment'],
+    cost: { B: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 1, keywords: {} },
+    },
+  },
+  // Return target creature to its owner's hand.
+  {
+    id: '837182db-1bf3-4a2c-bd01-1af9d9873561',
+    name: 'Unsummon',
+    types: ['instant'],
+    cost: { U: 1 },
+    effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
   },
   // {T}: Add {C}{C}.
   {
@@ -1184,6 +1884,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 3,
     keywords: { flying: true, deathtouch: true, lifelink: true },
+    subtypes: ['vampire', 'shaman'],
   },
   // Defender (This creature can't attack.)
   // {T}: Add {G}.
@@ -1195,7 +1896,31 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 0,
     toughness: 4,
     keywords: { defender: true },
+    subtypes: ['plant', 'wall'],
     produces: ['G'],
+  },
+  // Equipped creature gets +2/+2.
+  // Equip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)
+  {
+    id: '12a8adc4-927f-4314-b2ef-9c647ace68d5',
+    name: 'Vulshok Morningstar',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 2, toughness: 2, keywords: {} },
+    },
   },
   {
     id: 'fea95888-e16a-4209-9cd4-623f7f4d2f67',
@@ -1204,6 +1929,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, B: 1 },
     power: 2,
     toughness: 2,
+    subtypes: ['zombie'],
   },
   // Defender, flying (This creature can't attack, and it can block creatures with flying.)
   {
@@ -1214,6 +1940,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 1,
     toughness: 5,
     keywords: { defender: true, flying: true },
+    subtypes: ['wall'],
   },
   // Defender
   // When this creature enters, draw a card.
@@ -1225,6 +1952,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 0,
     toughness: 4,
     keywords: { defender: true },
+    subtypes: ['plant', 'wall'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -1243,6 +1971,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 0,
     toughness: 4,
     keywords: { defender: true },
+    subtypes: ['wall'],
     triggers: [
       {
         condition: { on: 'etb' },
@@ -1260,6 +1989,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { W: 1, G: 1 },
     power: 3,
     toughness: 3,
+    subtypes: ['wolf'],
+  },
+  // Enchant creature
+  // Enchanted creature gets -2/-1.
+  {
+    id: 'f07a24c0-bf3c-4733-9473-c6be3b16950e',
+    name: 'Weakness',
+    types: ['enchantment'],
+    cost: { B: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: -2, toughness: -1, keywords: {} },
+    },
   },
   // Flying
   {
@@ -1270,6 +2016,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     keywords: { flying: true },
+    subtypes: ['drake'],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -1315,6 +2062,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 1,
     keywords: { firstStrike: true },
+    subtypes: ['human', 'knight'],
   },
   {
     id: 'eadd88b6-e75a-4482-8382-561718121772',
@@ -1323,5 +2071,6 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 4, B: 1 },
     power: 4,
     toughness: 3,
+    subtypes: ['zombie', 'giant'],
   },
 ]);

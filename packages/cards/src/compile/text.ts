@@ -69,6 +69,12 @@ const SELF_PHRASES: readonly string[] = [
   'this creature',
   'this permanent',
   'this artifact',
+  // An Aura or an Equipment names itself by its SUBTYPE, not by its card type
+  // ("When this Aura enters, draw a card" — Angelic Gift). Without these two the
+  // phrase survives normalization and the line looks like an ability about some
+  // other object, so an otherwise plain Aura reports its trigger as unknown.
+  'this aura',
+  'this equipment',
   'this enchantment',
   'this land',
   'this card',

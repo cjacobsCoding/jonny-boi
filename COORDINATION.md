@@ -81,9 +81,75 @@ throughput (games/sec) from regressing.
 | feat/pilot-relative-verdicts | worker | apps/web ONLY (lib/sim/pilots+history-store+protocols+run/plan/execute, lab panels, LabView/MatchView), DESIGN §3.7a | 🚧 PUSHED, not merged |
 | perf/core-hotpath | worker | packages/core (mana-plan.ts + new mana-plan.test.ts + bench/engine-alloc-bench.ts) | 🚧 PUSHED, not merged |
 | feat/tree-reuse | worker | packages/ai (new: tree-reuse.ts + tests; hybrid/hybrid-config/search-stats/index/bench), DESIGN §3.4b | 🚧 PUSHED, not merged — stacks on feat/hybrid-search |
+| feat/attachment-cards | worker | packages/cards (data + compile/text.ts + build-expansion.ts + 2 tests), packages/data-tools/data, apps/web/src/data (generated), 1 stale comment in apps/web LabView.tsx, DESIGN §3.11 | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-15 worker: `feat/attachment-cards` 🚧 PUSHED — **the attachment seam is no longer inert: the
+  pool went from ZERO Auras and ZERO Equipment to 14 + 14.** `npm run verify` exit 0 — **2156 passed /
+  0 failed** (main baseline 2117 + 39 new), lint 0 errors, `npm run build` exit 0. Pool **156 → 191**;
+  both card indexes regenerated, never hand-edited.
+  👉 **NOTHING WAS HAND-WRITTEN INTO EITHER INDEX.** Names → `expansion-candidates.json` →
+  `build-expansion.ts --fetch` → `build-expansion.ts` → `npm run fetch -w @jonny-boi/data-tools` →
+  `npm run cards:index -w @jonny-boi/web`. Every accepted card is the OUTPUT of the real Oracle
+  compiler on its real Scryfall text, so `fidelity.test.ts` (which re-compiles every pool card and
+  demands an exact match) covers the new cards automatically. **Art verified live with GET, not HEAD**
+  — Scryfall's CDN answers 400 to HEAD — all 35 new rows resolve.
+  ❗ **THE RE-RUN CAUGHT UP A STALE POOL: 7 NON-ATTACHMENT CARDS CAME IN FOR FREE, and that is the
+  finding worth acting on.** `expanded-pool.ts` had not been regenerated since several compiler
+  branches landed, so the pool was behind the COMPILER, not behind Scryfall. Re-running the generator
+  admitted **Shivan Dragon, Mind Stone, Guttersnipe, Pyroclasm, Thragtusk, Night's Whisper, Unsummon**
+  — all faithful, all checked by eye against the printed text committed above each definition.
+  ⚠️ **So `build-expansion.ts` should be re-run whenever a compile rule lands, not only when the
+  candidate list changes.** Nothing enforces that today and nothing failed while the pool was stale:
+  the generator's output is committed, so a compiler that got smarter is invisible until someone
+  re-runs it. Verified this re-run drifted NOTHING else: of the 156 existing index rows, **0 changed
+  id, 0 changed art, 0 changed oracle text**, and every one of the 124 previously-compiled definitions
+  is byte-identical.
+  👉 **OBSERVED PLAYING, not just green.** Real games, real heuristic pilot, real pool definitions:
+  · `Serra's Embrace` onto Savannah Lions — **2/1 → 4/3**, `flying`+`vigilance` granted; a second copy
+    stacks it to **6/5** (so my first assertion of a flat +2/+2 was wrong and the ENGINE was right).
+  · `Dead Weight` aimed at the opponent — 2/2 Walking Corpse becomes a 0/0, **dies to an SBA**, the Aura
+    unattaches and is **put into the graveyard** (CR 704.5m).
+  · `Bonesplitter` — Equip {1} **activated** by the pilot, host **2/2 → 4/2**; when the host dies the
+    Equipment **unattaches and STAYS on the battlefield** (CR 704.5n, the whole difference from an Aura)
+    and is then re-equipped onto a new creature. Three copies stack to 8/2.
+  · `Loxodon Warhammer` — host **2/2 → 5/2** with `trample` and `lifelink`.
+  ⛔ **NEEDS AN OWNER IN `packages/ai` (reported, not fixed — that package is live for two branches).
+  The pilot PING-PONGS an Equipment between two creatures.** Measured, one game, seed 4242, two
+  IDENTICAL vanilla 2/2s: Loxodon Warhammer was equipped **5 times, hosts 1 → 13 → 1 → 13 → 1**, i.e.
+  **3 of the 5 activations returned it to the host it had just left**, paying {3} each time for a board
+  it already had. The existing guard in `attachments-play.test.ts` only covers the ONE-creature case
+  ("does NOT re-equip the creature it is already on"), which is why this survived. The equip heuristic
+  needs hysteresis — a move should have to beat staying put by a margin, not merely tie.
+  👉 **ONE COMPILER FIX, and it is a normalization gap rather than a new template** (`compile/text.ts`):
+  `SELF_PHRASES` folded "this creature/permanent/artifact/enchantment/land/card" into `~` but **not
+  "this Aura" / "this Equipment"** — the subtype is how Oracle templates an attachment's self-reference.
+  Without it "When this Aura enters, draw a card" survived normalization and looked like an ability
+  about some other object. Two words unlocked **Angelic Gift** and **Dark Favor**, and it also makes
+  Rancor/Claustrophobia report a clean `~`-normalized clause instead of a raw one. Blast radius is
+  confined to Aura/Equipment-typed cards, of which the pool previously had none.
+  ⚠️ **`paired-arms-config.ts` NOT touched and did not need to be** — every new card compiles to
+  primitives that already exist (`attachToTarget` was classified LIBRARY_SAFE by `feat/attachments`,
+  and the ETB triggers reuse `drawCards`/`loseLife`). No new primitive, no classification decision.
+  ❌ **Rejected on fidelity grounds, deliberately** (each named in `expansion-report.json` with the
+  system it needs): **Pacifism** (can't attack or block), **Rancor** (returns itself from the graveyard),
+  **Spirit Mantle** (protection), **Ethereal Armor** (dynamic P/T), **Firebreathing** / **Shiv's
+  Embrace** / **Gaea's Embrace** (an ability granted to the HOST), **Aqueous Form** / **Whispersilk
+  Cloak** / **Madcap Skills** (can't-be-blocked and menace), **Skullclamp** / **Elephant Guide** /
+  **Armadillo Cloak** (triggers on the equipped/enchanted creature), **Flayer Husk** (living weapon),
+  **Ghostfire Blade** (a conditional equip cost — the plain half compiles, the narrowed half must keep
+  reporting or it would be cheaper than printed), **Darksteel Axe** (indestructible), **Silverskin
+  Armor** / **Sinister Strength** (type/colour changes), **Hyena Umbra** / **Snake Umbra** (totem armor).
+  ⚠️ **Green has no mono-green Aura and that is a real gap, not a shortfall of effort.** Nearly every
+  green Aura in Magic is an umbra, a regenerate-granter or dynamic. The single highest-value engine
+  work for Auras is **"can't attack or block"** — it alone unlocks Pacifism and its whole family.
+  👉 Two small leave-it-better fixes: `build-expansion.ts` emitted `{  }` for an empty record (my
+  cards were the first to print one — a modification granting no keywords), now `{}`; and the stale
+  "Both lists are 156 cards today" comment in `apps/web/src/views/LabView.tsx` is replaced with a
+  count-free sentence so it cannot go stale again. **That LabView line is my only edit outside my
+  owned files** — expect at most a one-line conflict there.
 
 - 2026-08-15 worker: `feat/pilot-relative-verdicts` 🚧 PUSHED — **every result now says which pilot
   produced it, and the suggestion engine refuses to pool two pilots' evidence.** `apps/web` ONLY; nothing
