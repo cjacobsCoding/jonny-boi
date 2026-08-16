@@ -37,7 +37,11 @@ Features must NOT edit the core engine loop to integrate. They plug into these s
   AI observe events without coupling to each other. This log is also the replay/inspector source.
 - **AI-strategy registry** — an AI pilot implements `chooseAction(view, legalActions) → action` against
   a **read-only game view**. Strategies self-register by id (e.g. `random`, `heuristic`, `mcts`) and are
-  selected by data (deck/match config), never hard-wired.
+  selected by data (deck/match config), never hard-wired. `chooseAction` runs only while that pilot holds
+  priority, so a pilot that also needs to watch the opponent implements the optional **observation seam**
+  (`createGameObserver`, §3.4c): the harness feeds it a spectator-level projection of every event for the
+  duration of ONE game. The projection is the harness's job — the pilot is the untrusted side, exactly as
+  an online client is, and `packages/sim/src/observation.ts` is its single chokepoint.
 - **Sim harness & reporter registry** — the harness plays `runMatch(deckA, deckB, aiA, aiB, n)` headless
   and streams results to **reporters** (win-rate, mana-curve stats, A/B significance). Reporters
   self-register; adding a metric doesn't touch the match loop.
@@ -206,9 +210,11 @@ built last time** instead. It is implemented, tested, and instrumented — and t
 appreciably more**, so `DEFAULT_HYBRID_CONFIG.reuse` ships **off**. Pinned by a test. `packages/ai` only.
 
 **The match is by POSITION, not by action, and that is forced rather than stylistic** (`tree-reuse.ts`).
-`Pilot.chooseAction` is called only when *we* hold priority, so a pilot **never observes the opponent's
-actions at all** — §22 ("reuse after opponent actions") is not implementable on action matching without a
-new observation callback in `packages/sim`. Nor does a pilot know how many engine actions passed: forced
+`Pilot.chooseAction` is called only when *we* hold priority, so a pilot **could not observe the
+opponent's actions at all** — §22 ("reuse after opponent actions") was not implementable on action
+matching. (That gap is now closed by the observation seam, §3.4c, but position matching remains the right
+mechanism here and tree reuse is unchanged: the seam reports *events*, not the opponent's chosen
+`GameAction`, and the reasons below are independent of it.) Nor does a pilot know how many engine actions passed: forced
 windows are compressed away inside the search, our own macros span several plies, and a committed macro
 can be abandoned half-way. So each node records a 64-bit `fingerprintPosition` of the whole game state
 and the live position is looked up in the retained tree. Our move, the opponent's moves, and any run of
@@ -272,6 +278,64 @@ within `maxDepth` edges of the root and is a small part of it.
 Re-runnable: `node packages/ai/bench/mcts-bench.mjs reuse <n>` (interleaved OFF/ON arms on paired seeds,
 `BENCH_DECAYS=1,0.5` to re-ask the decay question) and `... reuse-duel <n>` with `BENCH_ON_SIMS=<k>` (the
 two arms playing each other, which is the sensitive form of the question).
+
+### 3.4c The pilot observation seam — ✅ done  *(brief §13–17, §32–33, §37 — the unblocker)*
+`Pilot.chooseAction` is called **only while that pilot holds priority**, so until now a pilot never saw
+the opponent act at all. That single gap blocked the whole imperfect-information half of the program: an
+opponent belief model, `P(card in opponent hand)`, "what could they have?", archetype inference and
+reading represented mana are all **update rules applied to evidence**, and there was no evidence channel.
+There is one now. `packages/sim` owns the channel; `packages/ai` owns the vocabulary.
+
+**The feed is SPECTATOR-LEVEL, not per-seat, and that is the anti-cheat argument.** An `Observation`
+carries only what someone standing beside the table holding no cards would know, so there is no seat whose
+entitlement could be computed wrongly — and it is therefore projected **once per event rather than once
+per seat**. A pilot combines it with the view it is already lent, which contains its own hand, so nothing
+a seat is entitled to is lost. Six of core's 41 event types carry a secret and are replaced by narrower
+shapes: `gameStart` (**the seed — the whole shuffle**, the least obvious leak in the union and the
+worst), `drawCard` (that a draw happened, never which card), `zoneChange` (the instance id survives only
+when the card came to rest somewhere **public**), and the three choice events (an effect authors its own
+prompt and may name the cards it is asking about — the same reason `@jonny-boi/protocol` redacts it).
+
+**Default-deny, three independent gates.** (1) `OBSERVATION_POLICY` is a mapped type over
+`GameEvent['type']`, so a new core event breaks the build until it is classified — the same shape as
+`paired-arms-config.ts`'s primitive classification. (2) `'public'` is *unspellable* for the six redacted
+types: each redacted shape declares its dropped field as `?: never`, so the raw event is not assignable
+to it, and `REDACTION_IS_UNSPELLABLE` in `observation.ts` fails to compile if any of them is weakened
+(it lives in shipped source, not a test, because `tsconfig` excludes `*.test.ts` and Vitest does not
+type-check — a `@ts-expect-error` in a test file here is evaluated by nothing). (3) The one that actually
+proves it: `observation.test.ts` plays real games and scans every delivered observation with
+`@jonny-boi/protocol`'s `collectInstanceIds` against the cards **actually sitting in a hand or library at
+that instant**. Verified red by sabotage — un-redacting `drawCard` and `zoneChange` each make the scan
+name the exact leaked cards.
+
+**Per-game isolation is structural, not a convention.** The seam is `Pilot.createGameObserver`, **not**
+`Pilot.observe`: the harness creates one observer per game, hands it back on every `DecisionContext`, and
+drops it when the game ends, so a pilot has *nowhere* to put cross-game state. This is load-bearing —
+every real consumer builds ONE pilot and runs MANY games through it, and the Lab shards the game grid
+across workers by range, so a belief that outlived a game would make a paired A/B verdict **depend on the
+worker count**. Pinned by a test that plays a game standalone and again after three other games through
+the same pilot and demands a byte-identical transcript.
+
+**Determinism: proved, not asserted.** A sha256 over the FULL chosen-action sequence — **131,524 plies**
+across `heuristic`, `random` and `hybrid` on three matchups — is **identical** before and after, all nine
+digests. `npm run sim -- gauntlet "Mono-Red Aggro" --games 40 --seed 99` is **byte-identical except the
+throughput line**. The seam is optional: none of the four built-in pilots implement it, so `observers` is
+`null` and the loop runs exactly as before.
+
+**Cost.** Public events are delivered **by reference**; only the redacted ones allocate. Measured over 20
+games: 1,128 events per game, **96.9% passed by reference, 3.1% (35 per game) copied**. Interleaved
+in-process A/B of the pre-seam and post-seam harness, 21 rounds × 250 games, alternating which arm runs
+first: **paired median 0.989×** — parity, against a per-round spread of 0.79–1.18 that shows why only the
+paired median is quotable. With the feed **ON at both seats** (the proof-of-life tracker doing real work
+on every observation): **paired median 0.963×**, n=15.
+
+**Proof of life, deliberately not a belief model.** `createOpponentRevealObserver` tallies what the
+opponent has publicly revealed this game — cards drawn, lands, spells by name, mana by colour, the
+instance ids that have entered public view. It is the *evidence* every §13–17 system consumes, not the
+inference. `createRevealTrackingPilot(base)` wraps any pilot with it and delegates the decision unchanged,
+which is what lets a test prove observation costs no change in play.
+
+Re-runnable: `node packages/sim/bench/observation-bench.mjs digest | throughput | plain | volume`.
 
 ### 3.5 Sim harness + statistics — ✅ done
 Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B

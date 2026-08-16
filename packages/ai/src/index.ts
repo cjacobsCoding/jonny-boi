@@ -32,6 +32,41 @@ export type {
 } from './pilot.js';
 export { createAiRegistry } from './pilot.js';
 
+/**
+ * THE OBSERVATION SEAM (`docs/plans/superhuman-ai-program.md` §13–17, §32–33,
+ * §37). `chooseAction` is called only while this pilot holds priority, so a pilot
+ * could not see the opponent act at all; `Pilot.createGameObserver` is how it now
+ * can. The vocabulary lives here, the masking chokepoint that produces it lives in
+ * `@jonny-boi/sim` — the harness is the trusted side.
+ *
+ * The feed is SPECTATOR-LEVEL by construction: nothing in an `Observation` is
+ * anybody's secret, so there is no seat whose entitlement could be computed
+ * wrongly. See `observation.ts` for the type-level enforcement.
+ */
+export type {
+  Observation,
+  ObservedGameStart,
+  ObservedDraw,
+  ObservedZoneChange,
+  ObservedChoiceAsked,
+  ObservedChoiceAnswered,
+  ObservedChoiceAutoAnswered,
+  RedactedObservationType,
+  HiddenZoneName,
+  PublicZoneName,
+  GameObserver,
+  GameStartInfo,
+} from './observation.js';
+export { HIDDEN_ZONES, isHiddenZone, isPublicZone, REDACTED_OBSERVATION_TYPES } from './observation.js';
+
+/**
+ * The seam's proof-of-life consumer: a per-game tally of what the opponent has
+ * publicly revealed (cards drawn, lands, spells by name, mana by colour). It is
+ * the evidence a belief model will consume — not the belief model itself.
+ */
+export type { OpponentReveals, OpponentRevealObserver } from './reveal-tally.js';
+export { createOpponentRevealObserver, createRevealTrackingPilot } from './reveal-tally.js';
+
 // Built-in pilots + their ids.
 export { RANDOM_PILOT_ID, createRandomPilot } from './random.js';
 export { HEURISTIC_PILOT_ID, createHeuristicPilot, policyCandidates } from './heuristic.js';

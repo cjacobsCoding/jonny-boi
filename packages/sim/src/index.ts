@@ -60,6 +60,19 @@ export type {
 } from './match.js';
 export { runMatch } from './match.js';
 
+/**
+ * THE OBSERVATION CHOKEPOINT — the one place an engine event becomes something a
+ * pilot may see (`docs/plans/superhuman-ai-program.md` §13–17). The vocabulary is
+ * `@jonny-boi/ai`'s `Observation`; the masking is here, because the harness holds
+ * the secrets and the pilot is the untrusted consumer.
+ *
+ * `hiddenInstanceIds` is exported for the same reason `@jonny-boi/protocol`
+ * exports `collectInstanceIds`: an anti-cheat guarantee that cannot be re-run by
+ * the next person to add a field is not a guarantee.
+ */
+export type { MatchObservers, ObservationPolicy } from './observation.js';
+export { OBSERVATION_POLICY, observationOf, deliverObservation, hiddenInstanceIds } from './observation.js';
+
 // Matchup (n games + CI). `RunRange` is the shard seam: a slice of the
 // (opponent, game) grid, so a parallel host reuses these loops instead of
 // restating them.
