@@ -593,6 +593,162 @@ if (mode === 'hybrid-strength') {
   console.log('');
 }
 
+/**
+ * INTERLEAVED paired A/B over the SAME seeded games (brief §21–22's measurement).
+ *
+ * Two defences against this box, which drifts ~19% between runs of identical
+ * code, and they are different defences:
+ *   - INTERLEAVING (arm A game 0, arm B game 0, arm A game 1, …) is what makes
+ *     the TIMING comparable. A sequential run has already "proved" a change free
+ *     on this machine that a proper interleaved run showed cost 4%.
+ *   - PAIRING on the seed is what makes the STRENGTH comparable: both arms play
+ *     the identical games, so the difference is the arm and not the shuffle.
+ *
+ * Worth stating plainly: the win rates here do NOT need interleaving, because the
+ * sim is deterministic in the seed — arm A's wins are the same number whenever it
+ * runs. Interleaving is purely for the milliseconds. That is also why these
+ * numbers are directly comparable with the `hybrid-strength` figures already on
+ * record: same seeds, same seat/play rotation, same opponent.
+ */
+async function interleavedArms(arms, games, seedBase) {
+  const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
+  const state = arms.map((arm) => ({
+    arm,
+    wins: 0,
+    draws: 0,
+    times: [],
+    baselineTimes: [],
+    wall: 0,
+  }));
+  for (let g = 0; g < games; g++) {
+    for (const s of state) {
+      const challenger = timedPilot(s.arm.make(), s.times);
+      const baseline = timedPilot(createHeuristicPilot(), s.baselineTimes);
+      const isA = g % 2 === 0;
+      const seats = makeSeats(
+        deckA,
+        deckB,
+        { pilotA: isA ? challenger : baseline, pilotB: isA ? baseline : challenger },
+        registry,
+      );
+      const t0 = performance.now();
+      const r = runMatch(seats, gameSeedFor(seedBase, g), { startingPlayer: g % 4 < 2 ? 'A' : 'B' });
+      s.wall += performance.now() - t0;
+      if (r.outcome.kind === 'timeout') s.draws++;
+      else if ((r.outcome.winner === 'A') === isA) s.wins++;
+    }
+    if ((g + 1) % 20 === 0) {
+      console.log(`  ${g + 1}/${games}: ${state.map((s) => `${s.arm.label}=${s.wins}`).join('  ')}`);
+    }
+  }
+  return state.map((s) => {
+    const ci = wilsonInterval(s.wins, games, DEFAULT_STATS_CONFIG.z);
+    const sorted = [...s.times].sort((a, b) => a - b);
+    return {
+      label: s.arm.label,
+      games,
+      wins: s.wins,
+      draws: s.draws,
+      p: ci.p,
+      low: ci.low,
+      high: ci.high,
+      meanMs: s.times.reduce((a, b) => a + b, 0) / s.times.length,
+      p95Ms: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))],
+      baselineMeanMs: s.baselineTimes.reduce((a, b) => a + b, 0) / s.baselineTimes.length,
+      elo: eloFromWinRate(ci.p),
+      eloPerMs: eloFromWinRate(ci.p) / (s.times.reduce((a, b) => a + b, 0) / s.times.length),
+      wallSec: s.wall / 1000,
+      decisions: s.times.length,
+      sink: s.arm.sink,
+    };
+  });
+}
+
+if (mode === 'reuse') {
+  // The §21–22 verdict: does keeping the tree between decisions make the pilot
+  // STRONGER PER MILLISECOND? Arms are supplied as `label:decay` pairs so the
+  // stale-statistics question ("age the inherited counts, or trust them?") is
+  // measured on the same games rather than argued.
+  const { createHybridPilot, DEFAULT_HYBRID_CONFIG, TREE_REUSE_ON, TREE_REUSE_OFF, createCollectingStatsSink } =
+    await import('@jonny-boi/ai');
+  const base = { ...DEFAULT_HYBRID_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') };
+  const decays = (process.env.BENCH_DECAYS ?? '1').split(',').map(Number);
+  const arms = [
+    {
+      label: 'reuse OFF (control)',
+      sink: createCollectingStatsSink(),
+      config: { ...base, reuse: TREE_REUSE_OFF },
+    },
+    ...decays.map((decay) => ({
+      label: `reuse ON decay=${decay}`,
+      sink: createCollectingStatsSink(),
+      config: { ...base, reuse: { ...TREE_REUSE_ON, decay } },
+    })),
+  ].map((arm) => ({ ...arm, make: () => createHybridPilot(arm.config, undefined, arm.sink) }));
+
+  console.log(`\n=== TREE REUSE (${deckA.name} vs ${deckB.name}, interleaved, paired seeds) ===`);
+  console.log(`  budget: ${JSON.stringify(base.budget)}  maxDepth=${TREE_REUSE_ON.maxDepth}`);
+  for (const r of await interleavedArms(arms, count, GAMES_SEED)) {
+    printHeadToHead(r);
+    const s = r.sink.summary();
+    console.log(
+      `      reuse: hitRate=${(s.reuseHitRate * 100).toFixed(1)}%  ` +
+        `meanInheritedVisits=${s.meanReusedVisits.toFixed(1)}  ` +
+        `maxRetainedNodes=${s.maxReusedNodes}  ` +
+        `nodes/decision=${s.meanNodes.toFixed(0)}  treePlies/sim=${(s.totalTreePlies / s.totalSimulations).toFixed(2)}`,
+    );
+  }
+  console.log('');
+}
+
+if (mode === 'reuse-duel') {
+  // The SENSITIVE version of the §21–22 question: play reuse-ON directly against
+  // reuse-OFF instead of measuring each against the heuristic and subtracting.
+  //
+  // Why bother: the two arms differ only in whether the tree survives a decision,
+  // so almost all the variance in "hybrid vs heuristic" — the shuffles, the
+  // matchup, the heuristic's own play — is COMMON to them and cancels when they
+  // are subtracted through a third pilot only in expectation, not per game. Head
+  // to head it cancels exactly, per game. The plateau already on record (256 →
+  // 1024 simulations is worth +1.7 points) says the effect being looked for here
+  // is small, and a small effect measured by subtracting two wide intervals is
+  // not measured at all.
+  const { createHybridPilot, DEFAULT_HYBRID_CONFIG, TREE_REUSE_ON, TREE_REUSE_OFF } = await import('@jonny-boi/ai');
+  const { wilsonInterval, DEFAULT_STATS_CONFIG } = await import('@jonny-boi/sim');
+  const base = { ...DEFAULT_HYBRID_CONFIG, ...JSON.parse(process.env.BENCH_CONFIG ?? '{}') };
+  // The ON arm may be given a SMALLER budget than the OFF arm, which is the
+  // strength-per-millisecond question stated as an experiment: if reuse lets a
+  // cheaper search hold its own, the reuse is paying for itself.
+  const onSims = Number(process.env.BENCH_ON_SIMS ?? base.budget.simulations);
+  const onConfig = { ...base, budget: { kind: 'simulations', simulations: onSims }, reuse: TREE_REUSE_ON };
+  const offConfig = { ...base, reuse: TREE_REUSE_OFF };
+  const onTimes = [];
+  const offTimes = [];
+  let onWins = 0;
+  let draws = 0;
+  const t0 = performance.now();
+  for (let g = 0; g < count; g++) {
+    const on = timedPilot(createHybridPilot(onConfig), onTimes);
+    const off = timedPilot(createHybridPilot(offConfig), offTimes);
+    const onIsA = g % 2 === 0;
+    const seats = makeSeats(deckA, deckB, { pilotA: onIsA ? on : off, pilotB: onIsA ? off : on }, registry);
+    const r = runMatch(seats, gameSeedFor(GAMES_SEED, g), { startingPlayer: g % 4 < 2 ? 'A' : 'B' });
+    if (r.outcome.kind === 'timeout') draws++;
+    else if ((r.outcome.winner === 'A') === onIsA) onWins++;
+    if ((g + 1) % 20 === 0) console.log(`  ${g + 1}/${count}: reuse-ON ${onWins} wins, ${draws} draws`);
+  }
+  const ci = wilsonInterval(onWins, count, DEFAULT_STATS_CONFIG.z);
+  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  console.log(
+    `\n=== REUSE ON (${onSims} sims) vs REUSE OFF (${base.budget.simulations} sims), ` +
+      `${deckA.name} vs ${deckB.name}, seat+play rotated ===\n` +
+      `  n=${count} onWins=${onWins} draws=${draws} winRate=${(ci.p * 100).toFixed(1)}% ` +
+      `95%CI=[${(ci.low * 100).toFixed(1)}%, ${(ci.high * 100).toFixed(1)}%]\n` +
+      `  decision mean: ON ${mean(onTimes).toFixed(2)}ms  OFF ${mean(offTimes).toFixed(2)}ms  ` +
+      `(${((mean(onTimes) / mean(offTimes) - 1) * 100).toFixed(0)}%)  ${((performance.now() - t0) / 60000).toFixed(1)}min`,
+  );
+}
+
 if (mode === 'scaling') {
   // The user's stated success metric: does MORE SEARCH TIME make it measurably
   // STRONGER? A hybrid that does not scale is not a search, it is a constant.

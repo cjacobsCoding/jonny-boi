@@ -45,12 +45,27 @@
  * maximises the decider's reward at every node, i.e. it assumes the opponent
  * helpfully plays into it.
  *
+ * ## 4. The tree survives the decision (brief §21–22)
+ * A search used to be thrown away the moment it answered. It is now retained and
+ * re-rooted onto the live position at the next decision — ours or after the
+ * opponent has moved — so the visits spent on a line are still there when that
+ * line becomes the present. The match is by POSITION, not by action, for reasons
+ * that are load-bearing rather than stylistic; they are in `tree-reuse.ts`, along
+ * with the argument that this stays a deterministic function of the seed.
+ *
  * ## Determinism
  * Every tie-break comes from the injected seeded `Rng`. With the default
  * simulation budget no clock is consulted at all, so the same seed reproduces the
  * same action on any machine — the property the Lab's paired A/B verdict depends
  * on. A `millis` budget (play only) deliberately trades that away; see
  * {@link SearchBudget}.
+ *
+ * Tree reuse makes a decision depend on what this pilot instance searched
+ * earlier, which is a real change to that story and is safe for a specific,
+ * checkable reason: the retained tree is keyed on a fingerprint that includes
+ * `GameState.seed` and on the deciding seat, so it can only ever be reused within
+ * the one game and the one seat it was built in, where the whole sequence of
+ * positions is itself a function of the seed. See `tree-reuse.ts`.
  */
 
 import type {
@@ -79,6 +94,8 @@ import { DEFAULT_HYBRID_CONFIG } from './hybrid-config.js';
 import { actionEquivalenceKey } from './search-stats.js';
 import type { SearchStatsSink, StatsAccumulator } from './search-stats.js';
 import { createStatsAccumulator, finishStats } from './search-stats.js';
+import type { PositionFingerprint } from './tree-reuse.js';
+import { decayAndCountSubtree, findNodeByFingerprint, fingerprintPosition } from './tree-reuse.js';
 
 /** The id the hybrid pilot registers under and is selected by from data. */
 export const HYBRID_PILOT_ID = 'hybrid';
@@ -100,6 +117,8 @@ export function createHybridPilot(
   const rolloutPilot = config.leafRolloutDepth > 0 ? createHeuristicPilot() : undefined;
   // Per-pilot commitment state: see `PendingMacro`.
   let pending: PendingMacro | undefined;
+  // Per-pilot search memory across decisions: see `RetainedTree`.
+  let retained: RetainedTree | undefined;
 
   return {
     id: HYBRID_PILOT_ID,
@@ -119,11 +138,17 @@ export function createHybridPilot(
           return replay.action;
         }
         pending = undefined;
-        const decision = search(ctx, config, evaluator, rolloutPilot, stats);
+        const decision = search(ctx, config, evaluator, rolloutPilot, retained, stats);
         pending = decision.remaining;
+        // A forced position returns no tree and deliberately leaves the retained
+        // one alone: the search compresses forced windows away internally
+        // (`advanceToDecision`), so the tree already accounts for the play about
+        // to be made and will still match afterwards.
+        if (decision.tree) retained = decision.tree;
         return decision.action;
       } catch {
         pending = undefined;
+        retained = undefined;
         return fallback(ctx);
       }
     },
@@ -218,6 +243,31 @@ interface HybridNode {
   /** Who is choosing here — the reason PUCT can back up adversarially. */
   readonly mover: PlayerId;
   visits: number;
+  /**
+   * The position this node stands for, recorded while the search was standing in
+   * it. Present only within `reuse.maxDepth` edges of the root — deeper nodes can
+   * never be a re-rooting target, and fingerprinting them would be pure cost.
+   * Filled in lazily, so a node inherited from a previous decision acquires one
+   * the first time the new search walks through it.
+   */
+  fingerprint?: PositionFingerprint;
+}
+
+/**
+ * The tree kept between two decisions, together with the two facts that say
+ * whether it may be reused at all (brief §21–22).
+ *
+ * `seed` and `decider` are not belt-and-braces. A pilot instance outlives a game
+ * in every real consumer (`sim/cli.ts`, `apps/web/lib/sim/execute.ts`, the sim
+ * harness), and one instance may serve BOTH seats, so "this tree belongs to
+ * another game" and "this tree was scored from the other player's point of view"
+ * are ordinary situations, not corner cases. See `tree-reuse.ts` for why letting
+ * either one through would break the Lab's paired A/B verdict.
+ */
+interface RetainedTree {
+  readonly root: HybridNode;
+  readonly decider: PlayerId;
+  readonly seed: number;
 }
 
 /** An edge: the strategic action taken, and its statistics. */
@@ -234,6 +284,11 @@ interface HybridEdge {
 interface SearchDecision {
   readonly action: GameAction;
   readonly remaining: PendingMacro | undefined;
+  /**
+   * The tree to keep for the next decision, or `undefined` to keep whatever is
+   * already retained (the forced path, which builds no tree).
+   */
+  readonly tree?: RetainedTree;
 }
 
 function search(
@@ -241,6 +296,7 @@ function search(
   config: HybridConfig,
   evaluator: StateEvaluator,
   rolloutPilot: Pilot | undefined,
+  retained: RetainedTree | undefined,
   stats?: SearchStatsSink,
 ): SearchDecision {
   const { view, legalActions, rng } = ctx;
@@ -272,7 +328,16 @@ function search(
     acc.nodes = 1;
   }
 
-  const root: HybridNode = { candidates, children: [], mover: decider, visits: 0 };
+  // §21–22: re-root onto last decision's tree when it contains this position.
+  // The candidate list is ALWAYS the freshly-derived one — only statistics and
+  // subtrees are inherited — so a wrong match can cost accuracy but can never
+  // produce an action the engine did not just offer.
+  const fingerprint = config.reuse.enabled ? fingerprintPosition(rootState) : undefined;
+  const reused = fingerprint
+    ? reuseRoot(retained, rootState, decider, fingerprint, candidates, config, acc)
+    : undefined;
+  const root: HybridNode =
+    reused ?? { candidates, children: [], mover: decider, visits: 0, fingerprint };
   const path: HybridEdge[] = [];
   const budget = config.budget;
   const simulationCap = budget.kind === 'simulations' ? budget.simulations : budget.maxSimulations;
@@ -295,10 +360,19 @@ function search(
     reason:
       `hybrid: ${root.visits} sims, ${root.children.length}/${candidates.length} widened, ` +
       `best ${best.scored.candidate.label || 'play'} (${best.visits} visits, ` +
-      `${(best.totalReward / Math.max(1, best.visits)).toFixed(3)} mean, prior ${best.scored.prior.toFixed(2)})`,
+      `${(best.totalReward / Math.max(1, best.visits)).toFixed(3)} mean, prior ${best.scored.prior.toFixed(2)})` +
+      (reused ? ' [reused tree]' : ''),
     score: best.visits,
   });
-  return commit(best.scored.candidate, view.turnNumber, view.step, decider);
+  // With reuse off nothing is retained at all — not merely never matched — so the
+  // disabled pilot is the previous one exactly, down to what it holds on to.
+  return commit(
+    best.scored.candidate,
+    view.turnNumber,
+    view.step,
+    decider,
+    config.reuse.enabled ? { root, decider, seed: rootState.seed } : undefined,
+  );
 }
 
 /** Package a chosen macro into "play this now, remember the rest". */
@@ -307,13 +381,14 @@ function commit(
   turnNumber: number,
   step: string,
   player: PlayerId,
+  tree?: RetainedTree,
 ): SearchDecision {
   const action = candidate.plies[0] as GameAction;
   const remaining =
     candidate.plies.length > 1
       ? { plies: candidate.plies, index: 1, turnNumber, step, player }
       : undefined;
-  return { action, remaining };
+  return { action, remaining, tree };
 }
 
 /**
@@ -334,10 +409,7 @@ function prepareCandidates(
   const seen = new Set<string>();
   const unique: PolicyCandidate[] = [];
   for (const candidate of raw) {
-    let key = '';
-    for (let i = 0; i < candidate.plies.length; i++) {
-      key += actionEquivalenceKey(state, candidate.plies[i] as GameAction) + '|';
-    }
+    const key = macroKey(state, candidate);
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(candidate);
@@ -362,6 +434,102 @@ function prepareCandidates(
     out[i] = { candidate: kept[i]!, prior: floor + scaled * (weights[i]! / total) };
   }
   return out;
+}
+
+/**
+ * The canonical key for a whole macro, from one position.
+ *
+ * Two jobs, and it is the right key for both because both ask the same question
+ * *within a single position*: collapsing interchangeable candidates in
+ * {@link prepareCandidates}, and lining a retained edge up against the freshly
+ * derived candidate list in {@link reuseRoot}. It is emphatically NOT the right
+ * key for deciding which node the game moved to — see `tree-reuse.ts`.
+ */
+function macroKey(state: GameState, candidate: PolicyCandidate): string {
+  let key = '';
+  for (let i = 0; i < candidate.plies.length; i++) {
+    key += actionEquivalenceKey(state, candidate.plies[i] as GameAction) + '|';
+  }
+  return key;
+}
+
+/**
+ * Re-root the retained tree onto the live position (brief §21–22), or return
+ * `undefined` to search from scratch.
+ *
+ * The shape of the answer is deliberate: a NEW root node over the FRESH candidate
+ * list, into which the matched node's edge statistics and subtrees are adopted by
+ * macro key. Reusing the matched node itself would carry its candidate list along
+ * — a list derived inside a simulation — and one bad fingerprint match would then
+ * put the pilot's own action set out of step with what the engine is offering.
+ * This way the worst a wrong match can do is contribute misleading numbers.
+ *
+ * Adoption keeps `children` a strict prefix of `candidates`, which is the
+ * invariant progressive widening relies on: everything up to the deepest adopted
+ * index is expanded, adopting statistics where a match exists and starting from
+ * zero where it does not.
+ */
+function reuseRoot(
+  retained: RetainedTree | undefined,
+  state: GameState,
+  decider: PlayerId,
+  fingerprint: PositionFingerprint,
+  candidates: readonly ScoredCandidate[],
+  config: HybridConfig,
+  acc: StatsAccumulator | undefined,
+): HybridNode | undefined {
+  if (!retained) return undefined;
+  if (acc) acc.reuseAttempts = 1;
+  // The two guards that keep reuse inside the one game and the one seat it was
+  // built for. `seed` is redundant with the fingerprint (which mixes it in) but
+  // is checked first because it is one comparison and states the intent in code.
+  if (retained.seed !== state.seed || retained.decider !== decider) return undefined;
+
+  // `findNodeByFingerprint` is deliberately structural (`ReusableNode`) so the
+  // reuse machinery knows nothing about PUCT; every node it can reach from a
+  // `HybridNode` root is one, hence the narrowing here.
+  const matched = findNodeByFingerprint(retained.root, fingerprint, config.reuse.maxDepth) as
+    | HybridNode
+    | undefined;
+  if (!matched) return undefined;
+
+  // One walk does both remaining jobs: age the statistics and enforce the memory
+  // cap. Over the cap the tree is dropped rather than trimmed — a partly-trimmed
+  // tree is a tree whose visit counts no longer add up.
+  const nodes = decayAndCountSubtree(matched, config.reuse.decay, config.reuse.maxNodes);
+  if (nodes < 0) return undefined;
+
+  const byKey = new Map<string, HybridEdge>();
+  for (const edge of matched.children) byKey.set(macroKey(state, edge.scored.candidate), edge);
+
+  let lastAdopted = -1;
+  const adopted = new Array<HybridEdge | undefined>(candidates.length);
+  for (let i = 0; i < candidates.length; i++) {
+    const edge = byKey.get(macroKey(state, (candidates[i] as ScoredCandidate).candidate));
+    if (!edge) continue;
+    adopted[i] = edge;
+    lastAdopted = i;
+  }
+  if (lastAdopted < 0) return undefined;
+
+  const children: HybridEdge[] = [];
+  let visits = 0;
+  for (let i = 0; i <= lastAdopted; i++) {
+    const scored = candidates[i] as ScoredCandidate;
+    const old = adopted[i];
+    if (old) {
+      children.push({ scored, node: old.node, visits: old.visits, totalReward: old.totalReward });
+      visits += old.visits;
+    } else {
+      children.push({ scored, node: undefined, visits: 0, totalReward: 0 });
+    }
+  }
+  if (acc) {
+    acc.reuseHits = 1;
+    acc.reusedNodes = nodes;
+    acc.reusedVisits = visits;
+  }
+  return { candidates, children, mover: decider, visits, fingerprint };
 }
 
 /**
@@ -412,7 +580,15 @@ function runSimulation(
       if (edge.visits === 0) break;
       const prepared = prepareCandidates(state, settled.candidates, config);
       if (prepared.length === 0) break;
-      edge.node = { candidates: prepared, children: [], mover: state.priorityPlayer, visits: 0 };
+      edge.node = {
+        candidates: prepared,
+        children: [],
+        mover: state.priorityPlayer,
+        visits: 0,
+        // Only shallow nodes can ever be a re-rooting target (`reuse.maxDepth`),
+        // so only shallow nodes pay for a fingerprint.
+        fingerprint: recordsPosition(config, depth) ? fingerprintPosition(state) : undefined,
+      };
       if (acc) {
         acc.nodes++;
         acc.branchingSum += prepared.length;
@@ -422,6 +598,13 @@ function runSimulation(
       break;
     }
     node = edge.node;
+    // Lazy fill: a node inherited from a previous decision sits one level nearer
+    // the root than it did, so positions it never needed to record before are now
+    // within re-rooting range. Recording them here — where the simulation is
+    // already standing in the position — costs one fingerprint per node, once.
+    if (node.fingerprint === undefined && recordsPosition(config, depth)) {
+      node.fingerprint = fingerprintPosition(state);
+    }
   }
 
   const reward = evaluateLeaf(state, decider, config, evaluator, rolloutPilot, rules, registry, rng, acc);
@@ -434,6 +617,15 @@ function runSimulation(
     if (edge.node) edge.node.visits++;
   }
   if (acc && depth > acc.maxTreeDepth) acc.maxTreeDepth = depth;
+}
+
+/**
+ * Is a node at this tree depth close enough to the root to be worth a position
+ * fingerprint? Reuse can only re-root onto something within `reuse.maxDepth`
+ * edges, so anything deeper would be paying for a lookup that cannot happen.
+ */
+function recordsPosition(config: HybridConfig, depth: number): boolean {
+  return config.reuse.enabled && depth <= config.reuse.maxDepth;
 }
 
 /**

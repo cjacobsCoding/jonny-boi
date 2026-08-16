@@ -190,6 +190,19 @@ export interface DecisionStats {
   readonly leafEvaluations: number;
   /** Leaf evaluations that landed on a terminal (decided) position. */
   readonly terminalEvaluations: number;
+  /**
+   * TREE REUSE (brief §21-22). `reuseAttempts` is 1 when a tree was carried in
+   * from the previous decision at all; `reuseHits` is 1 when the live position
+   * was actually found inside it. The ratio is the number that says whether
+   * reuse is doing anything, and it is a COUNT rather than a rate so a summary
+   * over many decisions can add them up honestly.
+   */
+  readonly reuseAttempts: number;
+  readonly reuseHits: number;
+  /** Nodes in the adopted subtree — the retained-memory measurement. */
+  readonly reusedNodes: number;
+  /** Visits inherited by the new root's edges, i.e. free search. */
+  readonly reusedVisits: number;
 }
 
 /**
@@ -216,6 +229,10 @@ export interface StatsAccumulator {
   clones: number;
   leafEvaluations: number;
   terminalEvaluations: number;
+  reuseAttempts: number;
+  reuseHits: number;
+  reusedNodes: number;
+  reusedVisits: number;
 }
 
 /** A zeroed accumulator. */
@@ -234,6 +251,10 @@ export function createStatsAccumulator(): StatsAccumulator {
     clones: 0,
     leafEvaluations: 0,
     terminalEvaluations: 0,
+    reuseAttempts: 0,
+    reuseHits: 0,
+    reusedNodes: 0,
+    reusedVisits: 0,
   };
 }
 
@@ -252,6 +273,10 @@ export function finishStats(acc: StatsAccumulator): DecisionStats {
     clones: acc.clones,
     leafEvaluations: acc.leafEvaluations,
     terminalEvaluations: acc.terminalEvaluations,
+    reuseAttempts: acc.reuseAttempts,
+    reuseHits: acc.reuseHits,
+    reusedNodes: acc.reusedNodes,
+    reusedVisits: acc.reusedVisits,
   };
 }
 
@@ -282,6 +307,12 @@ export interface SearchStatsSummary {
   readonly totalClones: number;
   readonly meanPliesPerSimulation: number;
   readonly terminalRate: number;
+  /** Share of decisions that CARRIED a tree in and found the live position in it. */
+  readonly reuseHitRate: number;
+  /** Mean inherited visits per decision that hit — how much search was free. */
+  readonly meanReusedVisits: number;
+  /** Largest retained subtree seen, in nodes — the memory bound, measured. */
+  readonly maxReusedNodes: number;
 }
 
 export function createCollectingStatsSink(): CollectingStatsSink {
@@ -308,6 +339,10 @@ export function createCollectingStatsSink(): CollectingStatsSink {
       let clones = 0;
       let terminals = 0;
       let leaves = 0;
+      let reuseAttempts = 0;
+      let reuseHits = 0;
+      let reusedVisits = 0;
+      let maxReusedNodes = 0;
       for (const d of decisions) {
         rootSum += d.rootBranching;
         if (d.rootBranching > rootMax) rootMax = d.rootBranching;
@@ -323,6 +358,10 @@ export function createCollectingStatsSink(): CollectingStatsSink {
         clones += d.clones;
         terminals += d.terminalEvaluations;
         leaves += d.leafEvaluations + d.terminalEvaluations;
+        reuseAttempts += d.reuseAttempts;
+        reuseHits += d.reuseHits;
+        reusedVisits += d.reusedVisits;
+        if (d.reusedNodes > maxReusedNodes) maxReusedNodes = d.reusedNodes;
       }
       return {
         decisions: n,
@@ -340,6 +379,9 @@ export function createCollectingStatsSink(): CollectingStatsSink {
         totalClones: clones,
         meanPliesPerSimulation: sims === 0 ? 0 : (treePlies + rolloutPlies) / sims,
         terminalRate: leaves === 0 ? 0 : terminals / leaves,
+        reuseHitRate: reuseAttempts === 0 ? 0 : reuseHits / reuseAttempts,
+        meanReusedVisits: reuseHits === 0 ? 0 : reusedVisits / reuseHits,
+        maxReusedNodes,
       };
     },
   };
@@ -361,4 +403,7 @@ const EMPTY_SUMMARY: SearchStatsSummary = Object.freeze({
   totalClones: 0,
   meanPliesPerSimulation: 0,
   terminalRate: 0,
+  reuseHitRate: 0,
+  meanReusedVisits: 0,
+  maxReusedNodes: 0,
 });

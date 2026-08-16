@@ -199,6 +199,80 @@ play only. A wall-clock budget makes the search machine-dependent and destroys t
 property the paired A/B verdict rests on — the same trap `MctsConfig.maxDecisionMillis` documents. Pinned
 by a test.
 
+### 3.4b Tree reuse between decisions — ✅ built, measured, shipped OFF  *(brief §21–22)*
+The hybrid used to throw its whole search away after every macro. It can now **re-root onto the tree it
+built last time** instead. It is implemented, tested, and instrumented — and the honest headline is that
+**it did not make the pilot play measurably better, and at the same budget it makes every decision cost
+appreciably more**, so `DEFAULT_HYBRID_CONFIG.reuse` ships **off**. Pinned by a test. `packages/ai` only.
+
+**The match is by POSITION, not by action, and that is forced rather than stylistic** (`tree-reuse.ts`).
+`Pilot.chooseAction` is called only when *we* hold priority, so a pilot **never observes the opponent's
+actions at all** — §22 ("reuse after opponent actions") is not implementable on action matching without a
+new observation callback in `packages/sim`. Nor does a pilot know how many engine actions passed: forced
+windows are compressed away inside the search, our own macros span several plies, and a committed macro
+can be abandoned half-way. So each node records a 64-bit `fingerprintPosition` of the whole game state
+and the live position is looked up in the retained tree. Our move, the opponent's moves, and any run of
+forced actions in between all reduce to "the position moved from here to there".
+
+`actionEquivalenceKey` is the **wrong** key for that and the **right** key for the job it already does.
+It answers "are these two offered actions the same DECISION", which is what collapsing five
+interchangeable Islands needs — and it deliberately merges actions whose *states* differ. It is still used
+to line a retained edge up against the freshly-derived candidate list, which is the same question asked
+*within one position*.
+
+**Determinism — the property the Lab's paired A/B verdict rests on.** Reuse makes a decision depend on
+what the pilot searched earlier, which is safe here for a structural reason, not a careful one:
+`GameState.seed` is mixed into the fingerprint and the retained tree records its deciding seat, so a tree
+can only ever be reused **inside the one game and the one seat it was built in**, where the whole
+sequence of positions is itself a function of the seed. That matters because every real consumer builds
+ONE pilot and runs many games through it, and the Lab shards the game grid across workers by range — a
+tree that survived a game boundary would make a verdict depend on the worker count. Three tests pin it,
+including "a pilot that already played two other games plays this one byte-identically".
+
+Statistics are inherited **as they stand** (`decay: 1`); visits and reward would decay together so a mean
+is preserved and only confidence shrinks, and `decay: 0.5` finished one game apart over the identical 120
+seeded games. Memory is bounded by construction: promotion prunes every sibling subtree, and a retained
+tree over `maxNodes` is dropped whole rather than trimmed. Measured peak over full games: **294–353
+nodes** against a cap of 8192.
+
+**Measured — HEURISTIC vs HYBRID, same protocol, interleaved arms on identical seeds.** The reuse-OFF arm
+**reproduced both recorded baselines exactly** (72/120 and 43/80), which is what makes the comparison
+trustworthy:
+
+| matchup | reuse OFF | reuse ON | mean decision | p95 | reuse hit rate |
+|---|---|---|---|---|---|
+| Mono-Red vs Boros, n=120 | **60.0%** [51.1, 68.3] | **60.0%** [51.1, 68.3] | 6.49 → 8.76 ms | 59 → 83 ms | 94.6% |
+| UW Control vs Golgari, n=80 | **53.8%** [42.9, 64.3] | **56.3%** [45.3, 66.6] | 10.52 → 16.71 ms | 97 → 136 ms | 95.5% |
+
+The tree is found on ~95% of decisions and carries **217–284 inherited visits** into a 160-simulation
+budget, so the mechanism plainly works — the search really is ~2.4× deeper in information. It buys no
+measurable strength. That is consistent with §3.4a's own plateau finding (256→1024 simulations was worth
++1.7 points): **this pilot is limited by its evaluator, not by how much it searches**, and reuse only
+buys more search.
+
+**What it DOES buy — a cheaper search** (`THRIFTY_HYBRID_CONFIG`). Head to head against the 160-simulation
+default over the same 120 games:
+
+| reuse ON budget | vs the default | its share of the default's decision time |
+|---|---|---|
+| 64 simulations | 46.7% [38.0%, 55.6%] | 44% |
+| 96 simulations | 48.3% [39.6%, 57.2%] | 74% |
+
+Both intervals include 50%: at 40% of the budget it is **not measurably weaker** for roughly half the
+decision time. Read that as "no measurable loss at half the cost", **not** as "stronger" — the point
+estimates sit just under 50%. It is the beginning of the throughput case a search pilot needs before it
+could ever become `DEFAULT_PILOT_ID`, which it still does not have.
+
+⚠️ **Why reuse costs more per decision, since it is not obvious:** in-tree engine plies per simulation go
+from **56 → 78** (aggro) and **82 → 119** (control). An inherited tree is deeper, and every simulation
+re-applies every macro from the root to its leaf, so a deeper tree is a more expensive simulation. The
+extra cost is the search going deeper, not overhead — the position fingerprint is computed only for nodes
+within `maxDepth` edges of the root and is a small part of it.
+
+Re-runnable: `node packages/ai/bench/mcts-bench.mjs reuse <n>` (interleaved OFF/ON arms on paired seeds,
+`BENCH_DECAYS=1,0.5` to re-ask the decay question) and `... reuse-duel <n>` with `BENCH_ON_SIMS=<k>` (the
+two arms playing each other, which is the sensitive form of the question).
+
 ### 3.5 Sim harness + statistics — ✅ done
 Headless `runMatch`/`runMatchup`/`runGauntlet`; win-rate with **Wilson confidence intervals**; the **A/B
 single-card-swap** test (paired / common-random-numbers + **McNemar's test**) that returns a significance
