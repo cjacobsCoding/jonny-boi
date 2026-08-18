@@ -241,6 +241,65 @@ export function estimateCardWidth(
 }
 
 /**
+ * The single tile size that best explains a set of bands as whole multiples.
+ *
+ * A band's own extent is NOT that size: piles or cards that sit close enough
+ * merge into one band, so the observed extents are small multiples of the true
+ * card — a photo of eight piles can come back as bands of one, one, two and
+ * four cards. Taking any average of those extents picks a multiple of the card
+ * instead of the card, and every measurement downstream (columns, crops,
+ * copy-counting) inherits the doubling. That is exactly what a real photo of a
+ * deck on dark cloth did: two merged piles became the "card", and the scanner
+ * read half the piles at twice the width.
+ *
+ * So instead of averaging, every band nominates candidates — its extent divided
+ * by each plausible card count — and the candidate whose multiples best fit ALL
+ * the bands wins. Ties inside the tolerance go to the LARGEST candidate,
+ * because every harmonic of the true card (half, a third…) also tiles the bands
+ * perfectly, but no whole multiple of it does.
+ *
+ * Returns `null` when nothing fits, e.g. bands with no common tile.
+ */
+export function estimateTileExtent(
+  bands: readonly Band[],
+  minExtent: number,
+  maxResidual: number = MAX_LAYOUT_RESIDUAL,
+): number | null {
+  const extents = bands.map(extentOf);
+  const candidates = new Set<number>();
+  for (const extent of extents) {
+    for (let count = 1; count <= MAX_CARDS_PER_BAND; count += 1) {
+      const candidate = extent / count;
+      if (candidate < minExtent) break;
+      candidates.add(candidate);
+    }
+  }
+
+  let best: number | null = null;
+  let bestResidual = Number.POSITIVE_INFINITY;
+  for (const candidate of candidates) {
+    const residual = axisResidual(bands, candidate);
+    if (residual > maxResidual) continue;
+    const better =
+      residual < bestResidual - TILE_RESIDUAL_TIE_BREAK ||
+      (Math.abs(residual - bestResidual) <= TILE_RESIDUAL_TIE_BREAK && candidate > (best ?? 0));
+    if (better) {
+      best = candidate;
+      bestResidual = residual;
+    }
+  }
+  return best;
+}
+
+/**
+ * Two candidate tile sizes whose residuals are within this of each other fit
+ * the bands equally well as far as the measurement can tell — the difference is
+ * noise, and the tie-break (prefer the larger tile) decides. Without a band of
+ * slack, a half-card harmonic that fits 0.001 "better" would beat the real card.
+ */
+const TILE_RESIDUAL_TIE_BREAK = 0.02;
+
+/**
  * Cut each band into the whole number of cards it holds. A band of one card is
  * returned as-is; a row of ten touching cards becomes ten evenly-spaced bands.
  */

@@ -11,7 +11,7 @@
  * Pure and dependency-free; the vocabulary is passed in.
  */
 
-import { MATCH_CANDIDATES, MIN_MATCH_SCORE } from './config.js';
+import { MATCH_CANDIDATES, MIN_MATCH_SCORE, MIN_QUERY_LENGTH } from './config.js';
 
 /** One candidate name for a scanned card, with how well it matched. */
 export interface NameMatch {
@@ -118,7 +118,66 @@ export function matchCardName(
   index: NameIndex,
   limit = MATCH_CANDIDATES,
 ): NameMatch[] {
-  const query = normalizeForMatch(ocrText);
+  // OCR of a title crop can return more than one line — a tilted pile puts a
+  // sliver of the neighbouring copy's title into the crop, and the engine reads
+  // it as its own line of junk. The real name is ONE of the lines, so each line
+  // competes separately (plus the whole, for names OCR broke across lines) and
+  // the best result per candidate name wins.
+  //
+  // Within a line, the name is often FLANKED by junk words — a frame edge read
+  // as "f", a mana symbol read as "od" — which whole-line distance punishes
+  // enough to lose the match ("Hend Hunter od" landed on the wrong card until
+  // "hend hunter" alone could compete). So every contiguous run of words is a
+  // query too; the runs are few and the distance scan is budget-limited, so
+  // this stays cheap.
+  const lines = ocrText
+    .split('\n')
+    .map((line) => normalizeForMatch(line))
+    .filter((line) => line.length > 0);
+  const whole = normalizeForMatch(ocrText);
+  const candidates = new Set<string>(whole.length > 0 ? [whole, ...lines] : lines);
+  for (const line of lines) {
+    const words = line.split(' ');
+    for (let from = 0; from < words.length; from += 1) {
+      for (let to = from + 1; to <= words.length; to += 1) {
+        const run = words.slice(from, to).join(' ');
+        if (run.length >= MIN_QUERY_LENGTH) candidates.add(run);
+      }
+    }
+  }
+  const queries = [...candidates];
+
+  // A name's best score, remembering how LONG the query that earned it was:
+  // when two names tie, the one matched from more characters of evidence wins
+  // ("her Priest" naming Banisher Priest must not lose a tie to a short junk
+  // word's coincidental match).
+  const byName = new Map<string, { match: NameMatch; queryLength: number }>();
+  for (const query of queries) {
+    for (const match of matchOneQuery(query, index)) {
+      const existing = byName.get(match.name);
+      if (
+        !existing ||
+        match.score > existing.match.score ||
+        (match.score === existing.match.score && query.length > existing.queryLength)
+      ) {
+        byName.set(match.name, { match, queryLength: query.length });
+      }
+    }
+  }
+
+  return [...byName.values()]
+    .sort(
+      (a, b) =>
+        b.match.score - a.match.score ||
+        b.queryLength - a.queryLength ||
+        a.match.name.localeCompare(b.match.name),
+    )
+    .map((entry) => entry.match)
+    .slice(0, limit);
+}
+
+/** Match one normalized query string against the vocabulary. */
+function matchOneQuery(query: string, index: NameIndex): NameMatch[] {
   if (query.length === 0) return [];
 
   const matches: NameMatch[] = [];
@@ -149,7 +208,5 @@ export function matchCardName(
 
     if (score >= MIN_MATCH_SCORE) matches.push({ name: entry.name, score });
   }
-
-  matches.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
-  return matches.slice(0, limit);
+  return matches;
 }

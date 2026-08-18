@@ -97,9 +97,32 @@ throughput (games/sec) from regressing.
 | feat/cast-cost-modification | worker | packages/core (card/choices/state/effects/engine/index + internal/clone + new cast-cost.test.ts), packages/cards (effect-helpers/primitives/index; compile types+compile+rules + compile.test; new cast-cost-cards.test.ts), packages/ai (choices + heuristic + choices.test), packages/sim (paired-arms-config classification only), apps/web (play/choice-view + ChoicePrompt + choice tests, about/mechanics.ts), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
 | feat/planeswalkers | worker | packages/core (card/state/actions/events/targeting/engine/effects/serialize/index + internal stats/combat/sba/clone/zones + NEW planeswalker.test.ts), packages/cards (compile types/compile/rules loyalty + NEW rules, choice-primitives sacrificeChosen+pileSplitSacrifice, primitives dealDamage-to-walker, data/pool.ts Liliana + 2 refreshed expanded entries, index.ts STUBBED, NEW planeswalker-play.test.ts), packages/ai (heuristic walker attack/burn/loyalty + effect-value + weights + NEW planeswalker-pilot.test.ts), packages/data-tools (loyalty capture + Liliana index record), packages/sim (observation +2, paired-arms +2, fidelity copy), apps/web (play board walker UI + about/mechanics + card-index regen), DESIGN §3.9/§3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
+| fix/scan-real-photo | worker | apps/web/src/lib/scan (config/detect/stacks/crop/ocr/match/pipeline + stacks.test rewrite + pipeline.test tweak + NEW real-photo.test.ts + NEW fixtures/user-deck-photo.jpg + fixtures/card-names-catalog.json), apps/web/package.json (+jpeg-js dev), package-lock.json, .gitignore (traineddata cache), DESIGN §3.12 | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `fix/scan-real-photo` 🚧 PUSHED — **the deck-photo scanner now reads the user's
+  REAL photo** (16 sleeved piles / 59 cards, fanned on dark cloth), which the fanned-piles feature —
+  verified only on synthetic images — failed badly on: doubled card width, 20 piles instead of 16, 44
+  cards instead of 59. **Root causes, measured off the photo, all in `apps/web/src/lib/scan/`**:
+  (1) column bands MERGE when piles sit shoulder to shoulder, so "median band = card width" picked a
+  multiple — replaced by `estimateTileExtent` (`detect.ts`): the tile size that explains every band as
+  whole multiples, residual ties to the LARGER (harmonics also tile). (2) Copy counting by
+  variance-stripe rhythm cannot see sleeved copy boundaries (glare + jpeg noise make the dark line
+  between copies as "busy" as a title bar) — counting is now by BRIGHTNESS: one pale **title plate**
+  per copy (`titlePlates`/`countCopies`, `stacks.ts`), guarded against pale art (photo-global fan
+  pitch — every pile fanned by one hand), nearly-flush copies (deep-valley escape), sleeve-rim glare,
+  and black borders sunk into dark cloth. All 16 piles count EXACTLY right, not merely sum right.
+  (3) OCR at phone resolution: nearest-neighbour upscale → **bilinear** (`crop.ts`), Tesseract
+  single-line → **block** mode (`ocr.ts`), and the matcher scores each OCR line and each contiguous
+  word-run separately, ties to the longer-evidence query (`match.ts`) — 15/16 names resolve exactly;
+  the one miss (Gatecreeper Vine, glare-buried title) is LOW-CONFIDENCE and flagged for review.
+  **The fixture pins it**: `fixtures/user-deck-photo.jpg` + `real-photo.test.ts` assert 2×8 piles, the
+  exact per-pile count vector, 59 total, ≥14/16 names via REAL Tesseract, and every miss flagged
+  non-confident (eng.traineddata caches into fixtures/, gitignored; first run downloads ~5MB).
+  Sabotage-checked RED→GREEN. Stripe-rhythm unit tests rewritten to the plate counter; DESIGN §3.12
+  updated. Full suite 2513 passed / 0 failed; `npm run verify` exit 0; `npm run build` exit 0.
 
 - 2026-08-18 worker: `feat/planeswalkers` 🚧 PUSHED — **planeswalkers are real: loyalty
   counters, walkers as attackable objects, Liliana of the Veil un-stubbed.** Loyalty lives in the

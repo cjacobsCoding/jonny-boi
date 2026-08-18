@@ -1022,30 +1022,43 @@ detector cut apart cards laid **touching**, as a gap-hunting detector cannot. An
 **its own column**, because piles in a row are different depths and a shared row band would give a pile
 of one its tall neighbour's overhang.
 
-Down a pile's column the content comes in **stripes**: a title bar is a plate with a name on it and
-varies a lot across its width, while the card edge above it is flat. So copies are counted from
-busyness, not brightness — whose sign flips between a white-bordered card and a black one. What
-separates the copies from the bottom card's own art and its per-line rules text (which stripe too) is
-that **only the copies are regular**: a pile is fanned in one motion, so its title bars are evenly
-spaced and equally tall. Simpler boundaries were tried and are not enough — "end at a card-tall stripe"
-misses a bottom card whose body fragments into bands, and "end at a card-height gap" misses it too,
-because those bands are never that far apart. A single card looks like a pile of two (title bar, then
-art) and is told apart by spanning only one card's height. A plain grid of loose cards is read as piles
-of one; a manual rows × columns fallback covers photos neither reader can make sense of.
+Down a pile's column, **where** the pile is comes from busyness (its stripes of content, split from the
+next pile by the flat cloth between them), but **how many** copies it holds comes from **brightness** —
+and that split was learned from a real photo, not chosen up front. Busyness cannot count sleeved copies:
+with glare and jpeg noise, the dark line between two copies is every bit as "busy" as the title bars
+around it, and the stripe-rhythm counter this section used to describe misread nearly every pile of a
+real deck. What IS invariant is that every fanned copy shows the pale **title plate** its name is
+printed on, and that plate is the brightest thing in its sliver on every kind of card — dark art or
+pale, white border or black. So copies are counted as bright plate bands in the pile's brightness
+profile, one per copy, bottom card included, with three guards (all measured off the real photo): a band
+too close below another on the photo's fan pitch is the same copy's pale **art**, not a copy — unless a
+deep dark valley proves a card edge between two nearly-**flush** copies; a deep valley within the glare
+cap of the pile's top marks sleeve-rim **glare** above the first copy; and a plate cannot start lower
+than the pile's height minus a card (plus slack for a black border sunk into dark cloth). The fan pitch
+is measured across the whole photo — every pile was fanned by the same hand. A plain grid of loose cards
+is read as piles of one; a manual rows × columns fallback covers photos neither reader can make sense
+of.
 
-Only each card's **title strip** is OCR'd (greyscaled, contrast-stretched, upscaled to a target height)
-— the biggest accuracy win, since art and rules text otherwise generate confident nonsense. The crop
-comes from the **detected stripe** rather than from a fraction of a card rect, because a fanned copy's
-true top edge is buried under the copy above it: "the top 4–17% of the card" measured from the wrong
-edge lands squarely in the art. It is capped at a title bar's printed height so the bottom card, whose
-title and body merge into one stripe, does not hand OCR the whole card back. The bottom card is read
-first, and when that read is weak the fanned copies above it are read too and the best match wins:
-every copy in a pile is the same card, so extra looks are free accuracy paid for only where needed. Raw OCR is never trusted: card names are a **closed vocabulary**,
-so the text is corrected against Scryfall's full name catalog by edit distance, which turns recognition
-into cheap spelling correction. A **review grid** shows each pile's own crop with its match and its
-count, flags anything unconfident, and lets the name *and the quantity* be corrected; only then does the
-list flow into §3.11's importer, so scanned cards get the same Oracle-compiler treatment as typed ones.
-Tesseract is dynamically imported so its WASM core stays off the initial bundle.
+Only each card's **title strip** is OCR'd (greyscaled, contrast-stretched, **bilinearly** upscaled to a
+target height — nearest-neighbour blocks defeated Tesseract on a real photo's ~10px text) — the biggest
+accuracy win, since art and rules text otherwise generate confident nonsense. The crop comes from the
+**detected plate** rather than from a fraction of a card rect, because a fanned copy's true top edge is
+buried under the copy above it, and is capped at a title bar's printed height. The bottom card is read
+first; when a read is weak, each band is retried shifted down a little (a tilted photo puts the glyphs
+at the plate's lower edge) and the fanned copies above are read too, best match winning: every copy in a
+pile is the same card, so extra looks are free accuracy paid for only where needed. Tesseract runs in
+text-**block** mode, not single-line mode — a tilted crop with a sliver of the neighbouring title in it
+makes single-line mode return nothing at all. Raw OCR is never trusted: card names are a **closed
+vocabulary**, so the text is corrected against Scryfall's full name catalog by edit distance — each OCR
+line and each contiguous word run competes separately, so a name flanked by junk words still wins, with
+score ties broken toward the longer-evidence query. A **review grid** shows each pile's own crop with
+its match and its count, flags anything unconfident, and lets the name *and the quantity* be corrected;
+only then does the list flow into §3.11's importer, so scanned cards get the same Oracle-compiler
+treatment as typed ones. Tesseract is dynamically imported so its WASM core stays off the initial
+bundle. **The acceptance gate is a real photo**: `apps/web/src/lib/scan/fixtures/user-deck-photo.jpg`
+(16 sleeved piles, 59 cards, dark cloth, glare) is decoded by `real-photo.test.ts` to its exact per-pile
+counts, with real-Tesseract OCR required to resolve ≥14/16 names and to flag every miss unconfident —
+synthetic-only verification is what let this feature ship broken the first time.
 
 ### 3.13 Transforming double-faced cards — ✅ done
 A second card face, and the mechanic it gates: **transform** (Innistrad-style DFCs — front face

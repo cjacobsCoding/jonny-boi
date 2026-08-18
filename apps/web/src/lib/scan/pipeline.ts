@@ -17,7 +17,11 @@
  * and the user confirms before anything becomes a deck.
  */
 
-import { CONFIDENT_MATCH_SCORE, STACK_CONSENSUS_READS } from './config.js';
+import {
+  CONFIDENT_MATCH_SCORE,
+  STACK_CONSENSUS_READS,
+  TITLE_CROP_SHIFT_FRACTION,
+} from './config.js';
 import { cropRegion, prepareForOcr, type MutablePixelImage } from './crop.js';
 import type { PixelImage, Rect } from './detect.js';
 import { matchCardName, type NameIndex, type NameMatch } from './match.js';
@@ -91,7 +95,19 @@ export async function scanCards(
 
   for (let index = 0; index < stacks.length; index += 1) {
     const stack = stacks[index]!;
-    const [firstBand, ...otherBands] = stack.titleBands;
+
+    // Each title band is tried as detected and again shifted DOWN a little:
+    // the band hugs the bright plate, but on a tilted photo the name's glyphs
+    // can sit at the plate's lower edge, and the shifted crop is the one that
+    // reads them (a real photo's Thragtusk resolved only through it).
+    const crops = stack.titleBands.flatMap((band) => [
+      band,
+      {
+        ...band,
+        y: band.y + Math.round(band.height * TITLE_CROP_SHIFT_FRACTION),
+      },
+    ]);
+    const [firstBand, ...otherBands] = crops;
 
     let ocrText = firstBand ? await readTitle(image, firstBand, engine) : '';
     let matches = matchCardName(ocrText, nameIndex);
