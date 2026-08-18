@@ -48,8 +48,33 @@ export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile
  */
 export interface CardInstance {
   readonly instanceId: InstanceId;
-  /** The immutable card data this instance is an instance of. */
-  readonly def: CardDefinition;
+  /**
+   * The card data this instance is CURRENTLY an instance of — the **active
+   * face**. For every single-faced card this is simply the printed definition
+   * and never changes. For a transforming double-faced card it is the front
+   * face until the permanent transforms, and the nested `backFace` definition
+   * after — which is what routes EVERY characteristic read (name, types, P/T,
+   * keywords, triggers, statics, mana production, the AI's evaluation, the
+   * renderer's art lookup) through the face that is up, with no second code
+   * path anywhere.
+   *
+   * The ONLY writer is `transformPermanent` (transform.ts) plus the
+   * leave-the-battlefield reset (`resetInstanceForNewZone`), which turns the
+   * card front-face-up again as CR 712.8a requires. Everything else must treat
+   * it as read-only.
+   */
+  def: CardDefinition;
+  /**
+   * While this permanent is TRANSFORMED (back face up), the printed front-face
+   * definition it reverts to — the way back that keeps `CardDefinition` itself
+   * acyclic. `null`/absent means the card is front-face-up, which is every
+   * instance in the game except a transformed DFC on the battlefield.
+   *
+   * OPTIONAL and written only when a card actually transforms, for the same
+   * object-shape/throughput reason as {@link CardInstance.attachedTo} — readers
+   * test `!= null`, and `cloneInstance` copies it conditionally.
+   */
+  printedDef?: CardDefinition | null;
   /** Controller (who plays/controls it). For MVP, owner === controller. */
   controller: PlayerId;
   owner: PlayerId;

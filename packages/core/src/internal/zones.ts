@@ -136,4 +136,13 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // and adding the property would migrate most of the game's instances onto a
   // second object shape that `cloneInstance` then has to copy (see clone.ts).
   if (inst.attachedTo != null) inst.attachedTo = null;
+  // CR 712.8a: a double-faced card is front-face-up everywhere except the
+  // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
+  // reverts to its printed front face here — the same single chokepoint that
+  // clears the rest of its battlefield-only state. A bounced Delver is a 1/1
+  // Delver of Secrets in hand, never a 3/2 Aberration.
+  if (inst.printedDef != null) {
+    inst.def = inst.printedDef;
+    inst.printedDef = null;
+  }
 }

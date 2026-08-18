@@ -37,7 +37,7 @@ import type {
   PlayerId,
   CardType,
 } from '@jonny-boi/core';
-import { collectCardOptions, formatManaCost, isCreature, matchesCardFilter } from '@jonny-boi/core';
+import { collectCardOptions, formatManaCost, isCreature, matchesCardFilter, transformPermanent } from '@jonny-boi/core';
 import {
   boolParam,
   counterSpellOnStack,
@@ -533,6 +533,57 @@ export const counterUnlessPaid: EffectPrimitive = (ctx) => {
 /** Where the optional payment's cost lives in a card's params. */
 const UNLESS_PAID_PARAM = 'unlessPaid';
 
+// --- transforming double-faced cards -------------------------------------------------
+
+/**
+ * `transformRevealTop` — Delver of Secrets' upkeep body: "look at the top card of
+ * your library. You may reveal that card. If a card matching `params.filter` is
+ * revealed this way, transform ~."
+ *
+ * The look and the "you may reveal" are ONE question: a `min: 0, max: 1`
+ * selection whose single candidate is the top card. Offering the candidate IS
+ * the look (the choice travels only to its chooser, so nobody else sees it — the
+ * `choiceAsked` event carries just a count), selecting it is the reveal, and the
+ * PROMPT is deliberately constant so the public log cannot leak whether the top
+ * card matched when the reveal is declined.
+ *
+ * Valence is computed from the top card: revealing a matching card transforms
+ * the source (`'gain'`), revealing a non-matching one does nothing but hand the
+ * opponent information (`'loss'`) — so a pilot reveals exactly when it should,
+ * with no card knowledge. Both answers stay legal either way; a human may still
+ * reveal a blank to bluff.
+ *
+ * Same documented gap as {@link revealTopCard}: the engine has no
+ * `cardsRevealed` event yet, so the reveal itself is not in the log — every
+ * MECHANICAL consequence (the transform, or nothing) is exact.
+ *
+ * The transform itself is core's `transformPermanent` (CR 701.28/712): a source
+ * that is not on the battlefield, or is not a transforming DFC, transforms
+ * nothing — never a crash.
+ */
+export const transformRevealTop: EffectPrimitive = (ctx) => {
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const candidates = collectCardOptions(ctx.state, 'library', { controller: who, limit: 1, fromTop: true });
+  if (candidates.length === 0) return; // empty library — nothing to look at
+  const filter = filterParam(ctx);
+  const top = ctx.state.players[who].library[0];
+  const matches = top !== undefined && matchesCardFilter(top, filter);
+  const chosen = ctx.chooseCards({
+    chooser: who,
+    prompt: 'You may reveal the top card of your library',
+    candidates,
+    min: 0,
+    max: 1,
+    valence: matches ? 'gain' : 'loss',
+    fromZone: 'library',
+  });
+  if (chosen === undefined) return; // parked — nothing mutated
+  if (chosen.length === 0) return; // declined — the card stays hidden on top
+  if (!matches) return; // revealed a non-matching card — nothing happens
+  transformPermanent(ctx.state, ctx.source.instanceId, ctx.emit);
+};
+
 // --- registry ------------------------------------------------------------------------
 
 /**
@@ -552,4 +603,5 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  transformRevealTop,
 });

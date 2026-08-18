@@ -462,12 +462,36 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: 'edd531b9-f615-4399-8c8c-1c5e18c4acbf',
     name: 'Delver of Secrets',
     types: ['creature'],
+    subtypes: ['human', 'wizard'],
     cost: { U: 1 },
     power: 1,
     toughness: 1,
-    keywords: { flying: false },
-    // Transform (upkeep trigger flipping to a 3/2 flyer) needs a transform system;
-    // the front-face vanilla 1/1 plays correctly.
+    // "At the beginning of your upkeep, look at the top card of your library.
+    // You may reveal that card. If an instant or sorcery card is revealed this
+    // way, transform this creature." — played for real: the look/reveal is one
+    // top-of-library selection, and a matching reveal transforms the permanent
+    // to the nested back face below (core swaps `CardInstance.def`; CR 712:
+    // counters/damage/auras persist, and it turns back front-face-up on leaving
+    // the battlefield).
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'transformRevealTop', params: { filter: { anyOfTypes: ['instant', 'sorcery'] } } },
+        ],
+        label: 'Upkeep: you may reveal the top card of your library — an instant or sorcery transforms this',
+      },
+    ],
+    backFace: {
+      id: 'edd531b9-f615-4399-8c8c-1c5e18c4acbf#back',
+      name: 'Insectile Aberration',
+      isBackFace: true,
+      types: ['creature'],
+      subtypes: ['human', 'insect'],
+      power: 3,
+      toughness: 2,
+      keywords: { flying: true },
+    },
   },
   {
     id: '45900b2f-f6a9-4c42-9642-008f3c1cf6dd',

@@ -899,8 +899,10 @@ Still open, roughly by how often they block a real decklist:
   it a go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta
   the lab measures — a bias in the verdicts themselves, not just missing cards.
 - *alternative and additional costs* (suspend, spectacle, kicker), *{X} and Phyrexian costs*,
-  *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*, *flash + casting from the graveyard*,
+  *dynamic P/T*, *planeswalker loyalty*, *flash + casting from the graveyard*,
   *revolt-style "a permanent left the battlefield this turn" trackers*.
+  (*Transforming DFCs* left this list — §3.13. Modal DFCs / split cards still wait on the cast-time
+  face choice, which belongs with the alternative-costs / cast-choice work.)
 
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
@@ -941,6 +943,37 @@ into cheap spelling correction. A **review grid** shows each pile's own crop wit
 count, flags anything unconfident, and lets the name *and the quantity* be corrected; only then does the
 list flow into §3.11's importer, so scanned cards get the same Oracle-compiler treatment as typed ones.
 Tesseract is dynamically imported so its WASM core stays off the initial bundle.
+
+### 3.13 Transforming double-faced cards — ✅ done
+A second card face, and the mechanic it gates: **transform** (Innistrad-style DFCs — front face
+castable, back face never castable, transform instructions flip which face's characteristics apply).
+
+The seam is deliberately ONE swap, not a parallel read path: a front-face `CardDefinition` nests its
+complete back face (`backFace`, marked `isBackFace`, id `<frontId>#back`), and **which face is up is
+per-permanent state** — `CardInstance.def` IS the active face, with `printedDef` holding the front to
+revert to (definitions stay acyclic, so the generated pool module still writes them as literals).
+Because every consumer already reads characteristics through `inst.def`, the swap routes name, types,
+P/T, keywords, triggers, statics, mana production, targeting, the AI's evaluation and the renderer's
+art lookup through the active face with **no second code path anywhere**. `transformPermanent`
+(core `transform.ts`) is the only writer; it emits a dedicated `transformed` event.
+
+CR 712 is the contract: transforming is **not** a zone change — counters, marked damage, attachments,
+tapped state and continuous effects persist, no `zoneChange` is emitted (so no ETB/leaves trigger can
+fire off a flip) — and a permanent that leaves the battlefield turns front-face-up again in the same
+`resetInstanceForNewZone` chokepoint every leave path runs (a bounced Aberration is a Delver in hand).
+The trigger collector re-checks the active face's trigger list identity per event, so a permanent that
+transforms mid-action stops/starts triggering with the face it actually shows. Back faces are refused
+by cast/play (CR 712.8b) and never appear in the deck-builder pool; the web resolves `<id>#back`
+through per-face Scryfall data, so the board and CardHover show the active face's own art.
+
+Compiler: a `layout: 'transform'` (or `Transform`-keyword) record compiles BOTH faces through the full
+rule table and links them; it is `'complete'` only when every printed ability of both faces compiled —
+a half-modelled back face is worse than reporting it. Scryfall's card-level keyword union is attributed
+to faces by their own text, never guessed. **Delver of Secrets is un-stubbed**: the upkeep
+look/may-reveal/transform body is one primitive (`transformRevealTop`, classified library-reading for
+paired arms), asked as a single top-of-library selection whose valence follows the top card, with a
+constant public prompt so the log cannot leak a declined reveal. Modal DFCs / split / adventure cards
+keep reporting `SECOND_CASTABLE_FACE_GAP` — their gap is the cast-time face choice, a different system.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

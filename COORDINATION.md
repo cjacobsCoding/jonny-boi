@@ -90,9 +90,53 @@ throughput (games/sec) from regressing.
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
+| feat/double-faced-cards | worker | packages/core (card/state/events/engine guards + NEW transform.ts, internal/zones+clone+triggers-runtime, NEW transform.test.ts), packages/cards (choice-primitives transformRevealTop, effect-helpers face-revert, compile types/compile/rules/index, data/pool.ts Delver, src/index.ts STUBBED_MECHANICS, NEW transform-play.test.ts), packages/sim (paired-arms-config +1 classification; fidelity copy in config/cli/swap), apps/web (lib/cards.ts back-face records + NEW cards.test.ts, lib/about/mechanics.ts + test), DESIGN §3.13 | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `feat/double-faced-cards` 🚧 PUSHED — **the second card face + transform,
+  and Delver of Secrets is UN-STUBBED (both faces play as printed).** The seam is one swap, not a
+  parallel read path: a front `CardDefinition` nests its full back face (`backFace`, `isBackFace`,
+  id `<frontId>#back`), and **`CardInstance.def` IS the active face** (`printedDef` holds the front
+  to revert to, keeping definitions acyclic/serializable). Every characteristic read — combat,
+  targeting, triggers, statics, mana, AI evaluation, board/CardHover art — already goes through
+  `inst.def`, so the swap routes them all with no second code path. `transformPermanent`
+  (core `transform.ts`) is the ONLY writer; new `transformed` event; CR 712 pinned by tests
+  (counters/damage/auras/tapped/continuous persist; NO zoneChange; leave-the-battlefield reverts to
+  front in `resetInstanceForNewZone` — a bounced Aberration is a Delver in hand); back faces refused
+  by cast/play (CR 712.8b) and offered nowhere.
+  ⚠️ **Two traps found and fixed — read these before touching faces.** (1) `cloneInstance` copies
+  field by field: `printedDef` is copied conditionally (like `attachedTo`) or a transformed permanent
+  silently untransforms at the NEXT action boundary — pinned by a two-boundary test. (2) The trigger
+  collector cached sources per instance keyed on controller only ("abilities are immutable") — false
+  once `def` can swap mid-action. It now compares the trigger-list IDENTITY and *deletes* the entry
+  when the active face is triggerless (a transformed-away face must not keep firing as
+  last-known-info — that rule is for permanents that LEFT). Both directions tested in one action:
+  transform-then-die fires the back face's dies-trigger, never the front's.
+  ⚠️ **`movePermanentTo` in `packages/cards/src/effect-helpers.ts` is a SECOND copy of core's
+  leave-the-battlefield reset** (bounce/exile primitives use it, core paths use
+  `resetInstanceForNewZone`). It now does the face revert too, but it is a duplication that will bite
+  the next per-object field — worth unifying when someone owns both packages.
+  👉 Compiler: a `layout:'transform'` / `Transform`-keyword record compiles BOTH faces through the
+  full rule table and links them; complete ONLY if both faces are. Detection works without `layout`
+  because the committed index predates it (keyword fallback). Scryfall's card-level keyword list is
+  the UNION of both faces (Delver says Flying; only the back has it) — attributed by face text, never
+  guessed. Delver's upkeep body is ONE primitive `transformRevealTop` (look + may-reveal + transform):
+  a min-0/max-1 top-of-library selection whose valence follows the top card ('gain' if it matches, so
+  the pilot reveals exactly when it should) with a CONSTANT public prompt — `choiceAsked` carries only
+  a count, so a declined reveal leaks nothing (pinned by a test comparing both worlds' logs).
+  Classified library-reading in `paired-arms-config` (it looks and branches, same as `revealTopCard`).
+  ❌ **Deliberately NOT done, and why:** modal DFCs / split / adventure (second face is CASTABLE —
+  needs the cast-time face/cost choice a sibling branch owns; they report the named
+  `SECOND_CASTABLE_FACE_GAP`); werewolves/daybound (needs a day-night tracker — their lines still
+  report); generic "transform ~" from activated/other templates (no rule yet — hint reworded to a
+  TEMPLATE gap since the system now exists); copy/clone of a transformed permanent (engine has no copy
+  effects); no `cardsRevealed` event (same pre-existing gap as `revealTopCard` — mechanics exact, the
+  reveal itself absent from the log); UNSUPPORTED-BACKLOG.md not regenerated (coverage-audit needs a
+  live Scryfall fetch). Expanded pool untouched — Delver lives in the curated pool.
+  Verified: full suite **2469 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0
+  (numbers re-confirmed post-merge of origin/main). (Worker)
 
 - 2026-08-17 worker: `feat/shocklands` 🚧 PUSHED — **shocklands play as printed, on BOTH entry
   paths.** New `payLife` choice kind (engine charges the life once in `applyAnswerChoice`, CR 118.4

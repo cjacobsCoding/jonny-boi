@@ -63,6 +63,13 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // a field that is almost always null. Copying it conditionally keeps the ordinary
   // instance byte-for-byte the object it has always been.
   if (inst.attachedTo != null) copy.attachedTo = inst.attachedTo;
+  // Same conditional-copy rule as `attachedTo`, and the same stakes as a
+  // dropped stack-object field: `def` is the ACTIVE face (a transformed DFC
+  // points at its nested back face), and `printedDef` is the only way back to
+  // the front. Dropping it here would silently freeze a transformed permanent
+  // on its back face for the rest of the game — and losing the pair together
+  // would untransform it — on the very next action's clone.
+  if (inst.printedDef != null) copy.printedDef = inst.printedDef;
   return copy;
 }
 

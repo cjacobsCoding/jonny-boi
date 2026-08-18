@@ -64,6 +64,7 @@ export {
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  transformRevealTop,
 } from './choice-primitives.js';
 
 // Pool loader + registry builder.
@@ -88,11 +89,18 @@ export { EXPANDED_CARD_POOL } from '../data/expanded-pool.js';
 // get an honest list of the engine systems it would still need (`./compile`).
 export type {
   CompilableCard,
+  CompilableCardFace,
   CompileResult,
   CompileStatus,
   UnsupportedClause,
 } from './compile/index.js';
-export { compileCard, compileCards, explainUnsupported } from './compile/index.js';
+export {
+  compileCard,
+  compileCards,
+  explainUnsupported,
+  BACK_FACE_ID_SUFFIX,
+  SECOND_CASTABLE_FACE_GAP,
+} from './compile/index.js';
 
 // The compiler's own live registries, re-exported for the About view: the rule
 // tables and keyword map say what imports as fully playable TODAY, and the
@@ -128,12 +136,14 @@ export {
  * optional basic-land search) and **Goblin Guide** (reveal the top card, take it
  * only if it is a land). Earlier waves un-stubbed Young Pyromancer, Monastery
  * Swiftspear, Kitchen Finks and Giant Growth on the trigger + continuous layers.
+ * The second-face system (CardDefinition.backFace + core's transformPermanent)
+ * un-stubbed **Delver of Secrets** — both faces play as printed, upkeep reveal
+ * included.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
-  { card: 'Delver of Secrets', missingEngineSystem: 'transform (upkeep reveal + flip to a 3/2 flyer)' },
   {
     card: 'Snapcaster Mage',
     missingEngineSystem: 'flash timing + casting a card from the graveyard (flashback)',

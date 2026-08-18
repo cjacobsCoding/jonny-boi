@@ -182,6 +182,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'enters-tapped-unless-few-lands' },
       },
       {
+        title: 'Transforming double-faced cards',
+        detail:
+          'Innistrad-style DFCs play both faces: the front casts, a transform instruction flips the permanent to its back face (Delver of Secrets reveals for its 3/2 flyer), counters/damage/Auras persist across the flip (CR 712), and a bounced or killed DFC turns front-face-up again.',
+        witness: { kind: 'primitive', id: 'transformRevealTop' },
+      },
+      {
         title: 'Gaining control of a permanent',
         detail: '"Gain control of target creature until end of turn" — Act of Treason effects.',
         witness: { kind: 'rule', id: 'gain-control-until-eot' },
