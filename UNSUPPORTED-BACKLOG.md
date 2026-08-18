@@ -5,47 +5,33 @@
 
 | | cards | share |
 |---|---:|---:|
-| Fully playable today | 190 | 9.0% |
-| Blocked by a missing system | 1910 | 91.0% |
+| Fully playable today | 191 | 9.1% |
+| Blocked by a missing system | 1909 | 90.9% |
 
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Showing the top 25 of **1612** distinct gaps. The remaining 1587 account for 2479 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
+Showing the top 25 of **1699** distinct gaps. The remaining 1674 account for 2569 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
-## variable ({X}) and derived values
+## casting either face of a modal double-faced / split card (a cast-time face choice the engine cannot ask yet)
 
-- **Blocks 81 card(s)** (3.9% of corpus)
-- **Occurrences:** 82
-- **Cards:** Esper Sentinel, Feed the Swarm, The Great Henge, Gray Merchant of Asphodel, Rishkar's Expertise, Exsanguinate, Kessig Wolf Run, Psychosis Crawler, +73 more
-- **Example clause:** `Whenever an opponent casts their first noncreature spell each turn, draw a card unless that player pays {X}, where X is ~'s power.`
-
-## transform / double-faced cards
-
-- **Blocks 78 card(s)** (3.7% of corpus)
-- **Occurrences:** 85
-- **Cards:** Sink into Stupor, Fell the Profane, Malakir Rebirth, Witch Enchanter, Bala Ged Recovery, Disciple of Freyalise, Birgi, God of Storytelling, Valakut Awakening, +70 more
+- **Blocks 60 card(s)** (2.9% of corpus)
+- **Occurrences:** 60
+- **Cards:** Sink into Stupor, Fell the Profane, Malakir Rebirth, Witch Enchanter, Bala Ged Recovery, Disciple of Freyalise, Birgi, God of Storytelling, Valakut Awakening, +52 more
 - **Example clause:** `Sink into Stupor // Soporific Springs`
 
-## variable ({X}), Phyrexian, and monocolour hybrid mana costs
+## alternative casting costs and cost-bearing discards (cycling, buyback, madness)
 
-- **Blocks 55 card(s)** (2.6% of corpus)
-- **Occurrences:** 55
-- **Cards:** Exsanguinate, Phyrexian Metamorph, Finale of Devastation, Walking Ballista, The Meathook Massacre, Chord of Calling, Green Sun's Zenith, Noxious Revival, +47 more
-- **Example clause:** `{X}`
-
-## alternative and additional casting costs
-
-- **Blocks 48 card(s)** (2.3% of corpus)
-- **Occurrences:** 48
-- **Cards:** Ketria Triome, Jetmir's Garden, Spara's Headquarters, Zagoth Triome, Raffine's Tower, Xander's Lounge, Indatha Triome, Raugrin Triome, +40 more
+- **Blocks 40 card(s)** (1.9% of corpus)
+- **Occurrences:** 40
+- **Cards:** Ketria Triome, Jetmir's Garden, Spara's Headquarters, Zagoth Triome, Raffine's Tower, Xander's Lounge, Indatha Triome, Raugrin Triome, +32 more
 - **Example clause:** `Cycling {3}`
 
 ## the "//" card type
 
-- **Blocks 44 card(s)** (2.1% of corpus)
-- **Occurrences:** 44
-- **Cards:** Sink into Stupor, Fell the Profane, Malakir Rebirth, Bala Ged Recovery, Valakut Awakening, Growing Rites of Itlimoc, Sea Gate Restoration, Bridgeworks Battle, +36 more
+- **Blocks 38 card(s)** (1.8% of corpus)
+- **Occurrences:** 38
+- **Cards:** Sink into Stupor, Fell the Profane, Malakir Rebirth, Bala Ged Recovery, Valakut Awakening, Sea Gate Restoration, Bridgeworks Battle, Sundering Eruption, +30 more
 - **Example clause:** `//`
 
 ## a rules template the compiler does not recognize yet — starting "At the beginning of your…"
@@ -68,13 +54,6 @@ Showing the top 25 of **1612** distinct gaps. The remaining 1587 account for 247
 - **Occurrences:** 52
 - **Cards:** Elspeth, Storm Slayer, Liliana, Dreadhorde General, Elspeth, Sun's Champion, Narset, Parter of Veils, Ugin, the Ineffable, Jace, Wielder of Mysteries, Teferi, Time Raveler, Tezzeret, Cruel Captain, +22 more
 - **Example clause:** `Planeswalker`
-
-## ward and protection-from (cost-to-target and the protection bundle)
-
-- **Blocks 29 card(s)** (1.4% of corpus)
-- **Occurrences:** 30
-- **Cards:** Roaming Throne, Sword of Feast and Famine, Hexing Squelcher, Flowering of the White Tree, Yawgmoth, Thran Physician, Sword of Hearth and Home, Kappa Cannoneer, Karmic Guide, +21 more
-- **Example clause:** `Ward {2}`
 
 ## a "you may / choose" template the compiler does not recognize yet — starting "As ~ enters, choose a…"
 
@@ -99,9 +78,9 @@ Showing the top 25 of **1612** distinct gaps. The remaining 1587 account for 247
 
 ## a mana-ability template the compiler does not recognize yet — starting "{}: Add one mana of…"
 
-- **Blocks 20 card(s)** (1.0% of corpus)
-- **Occurrences:** 21
-- **Cards:** Command Tower, Arcane Signet, Exotic Orchard, Fellwar Stone, Cavern of Souls, Delighted Halfling, Reflecting Pool, Mox Amber, +12 more
+- **Blocks 21 card(s)** (1.0% of corpus)
+- **Occurrences:** 22
+- **Cards:** Command Tower, Arcane Signet, Exotic Orchard, Fellwar Stone, Cavern of Souls, Delighted Halfling, Reflecting Pool, Mox Amber, +13 more
 - **Example clause:** `{T}: Add one mana of any color in your commander's color identity.`
 
 ## blocking restrictions beyond evasion keywords
@@ -138,13 +117,6 @@ Showing the top 25 of **1612** distinct gaps. The remaining 1587 account for 247
 - **Occurrences:** 16
 - **Cards:** Garruk's Uprising, Bastion of Remembrance, Toski, Bearer of Secrets, The Meathook Massacre, Elemental Bond, Grave Pact, Shared Animosity, Liliana, Dreadhorde General, +8 more
 - **Example clause:** `Whenever a creature you control with power 4 or greater enters, draw a card.`
-
-## recasting a spell from the graveyard (flashback)
-
-- **Blocks 14 card(s)** (0.7% of corpus)
-- **Occurrences:** 15
-- **Cards:** Faithless Looting, Sevinne's Reclamation, Strike It Rich, Past in Flames, Deep Analysis, Snapcaster Mage, Bulk Up, Army of the Damned, +6 more
-- **Example clause:** `Flashback {2}{R}`
 
 ## a "you may / choose" template the compiler does not recognize yet — starting "At the beginning of your…"
 
@@ -187,3 +159,31 @@ Showing the top 25 of **1612** distinct gaps. The remaining 1587 account for 247
 - **Occurrences:** 13
 - **Cards:** Deadly Dispute, Village Rites, Harrow, Diabolic Intent, Corrupted Conviction, Eldritch Evolution, Fling, Kazuul's Fury, +5 more
 - **Example clause:** `As an additional cost to cast this spell, sacrifice an artifact or creature.`
+
+## a "you may / choose" template the compiler does not recognize yet — starting "As an additional cost to…"
+
+- **Blocks 13 card(s)** (0.6% of corpus)
+- **Occurrences:** 13
+- **Cards:** Big Score, Thrill of Possibility, Unexpected Windfall, Demand Answers, Seize the Spoils, Bitter Triumph, Plumb the Forbidden, Grab the Prize, +5 more
+- **Example clause:** `As an additional cost to cast this spell, discard a card.`
+
+## a rules template the compiler does not recognize yet — starting "Landfall — Whenever a land…"
+
+- **Blocks 13 card(s)** (0.6% of corpus)
+- **Occurrences:** 13
+- **Cards:** Tireless Provisioner, Scute Swarm, Rampaging Baloths, Evolution Sage, Tatyova, Benthic Druid, Omnath, Locus of Rage, Moraug, Fury of Akoum, Courser of Kruphix, +5 more
+- **Example clause:** `Landfall — Whenever a land you control enters, create a Food token or a Treasure token.`
+
+## a "you may / choose" template the compiler does not recognize yet — starting "You may have ~ enter…"
+
+- **Blocks 13 card(s)** (0.6% of corpus)
+- **Occurrences:** 13
+- **Cards:** Phyrexian Metamorph, Spark Double, Sculpting Steel, Mockingbird, Vesuva, Mirrormade, Glasspool Mimic, Clever Impersonator, +5 more
+- **Example clause:** `You may have ~ enter as a copy of any artifact or creature on the battlefield, except it's an artifact in addition to its other types.`
+
+## a library-look/reorder template the compiler does not recognize yet — starting "When ~ enters, surveil N…"
+
+- **Blocks 12 card(s)** (0.6% of corpus)
+- **Occurrences:** 12
+- **Cards:** Undercity Sewers, Underground Mortuary, Hedge Maze, Raucous Theater, Shadowy Backstreet, Thundering Falls, Commercial District, Meticulous Archive, +4 more
+- **Example clause:** `When ~ enters, surveil 1.`
