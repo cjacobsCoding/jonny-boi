@@ -48,8 +48,33 @@ export type ZoneName = 'library' | 'hand' | 'battlefield' | 'graveyard' | 'exile
  */
 export interface CardInstance {
   readonly instanceId: InstanceId;
-  /** The immutable card data this instance is an instance of. */
-  readonly def: CardDefinition;
+  /**
+   * The card data this instance is CURRENTLY an instance of — the **active
+   * face**. For every single-faced card this is simply the printed definition
+   * and never changes. For a transforming double-faced card it is the front
+   * face until the permanent transforms, and the nested `backFace` definition
+   * after — which is what routes EVERY characteristic read (name, types, P/T,
+   * keywords, triggers, statics, mana production, the AI's evaluation, the
+   * renderer's art lookup) through the face that is up, with no second code
+   * path anywhere.
+   *
+   * The ONLY writer is `transformPermanent` (transform.ts) plus the
+   * leave-the-battlefield reset (`resetInstanceForNewZone`), which turns the
+   * card front-face-up again as CR 712.8a requires. Everything else must treat
+   * it as read-only.
+   */
+  def: CardDefinition;
+  /**
+   * While this permanent is TRANSFORMED (back face up), the printed front-face
+   * definition it reverts to — the way back that keeps `CardDefinition` itself
+   * acyclic. `null`/absent means the card is front-face-up, which is every
+   * instance in the game except a transformed DFC on the battlefield.
+   *
+   * OPTIONAL and written only when a card actually transforms, for the same
+   * object-shape/throughput reason as {@link CardInstance.attachedTo} — readers
+   * test `!= null`, and `cloneInstance` copies it conditionally.
+   */
+  printedDef?: CardDefinition | null;
   /** Controller (who plays/controls it). For MVP, owner === controller. */
   controller: PlayerId;
   owner: PlayerId;
@@ -178,10 +203,37 @@ export interface SpellStackObject {
   readonly card: CardInstance;
   /** Who put it on the stack. */
   readonly controller: PlayerId;
-  /** Where the card goes after resolving (battlefield for permanents, graveyard for spells). */
-  readonly resolvesTo: 'battlefield' | 'graveyard';
+  /**
+   * Where the card goes after resolving: battlefield for permanents, graveyard
+   * for ordinary spells, exile for spells cast via flashback (CR 702.34a).
+   */
+  readonly resolvesTo: 'battlefield' | 'graveyard' | 'exile';
   /** Targets chosen at cast time (instance ids and/or players); empty if none. */
   readonly targets: ReadonlyArray<InstanceId | PlayerId>;
+  /**
+   * The zone this spell was CAST FROM. Optional, and absent means `'hand'` —
+   * which keeps every state serialized before non-hand casting existed (and
+   * every hand-built test literal) valid, exactly like `pendingChoice`.
+   *
+   * `'graveyard'` marks a flashback cast, and it is tracked HERE — on the stack
+   * object, not looked up from the card — because the exile replacement follows
+   * the CAST, not the card: the same card countered off an ordinary cast still
+   * goes to the graveyard. Every exit from the stack (resolution, countering)
+   * reads it through {@link spellLeaveDestination}.
+   */
+  readonly castFrom?: 'hand' | 'graveyard';
+}
+
+/**
+ * Where a spell's CARD goes when it leaves the stack WITHOUT resolving to the
+ * battlefield — the one answer both resolution (of a non-permanent) and
+ * countering must agree on. A spell cast from the graveyard (flashback) is
+ * exiled instead of going to the graveyard, and that applies even when it is
+ * COUNTERED (CR 702.34a: "…if it would leave the stack, exile it instead") —
+ * countering is precisely a way of leaving the stack.
+ */
+export function spellLeaveDestination(spell: SpellStackObject): 'graveyard' | 'exile' {
+  return spell.castFrom === 'graveyard' ? 'exile' : 'graveyard';
 }
 
 /**

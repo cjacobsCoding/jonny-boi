@@ -47,6 +47,33 @@ export interface CompilableCard {
   readonly toughness: number | null;
   /** Scryfall's keyword list (e.g. `['Flying', 'Prowess']`). */
   readonly keywords: readonly string[];
+  /**
+   * Per-face data for a double-faced card, when the record carries it
+   * (`NormalizedCard.faces`). The compiler uses it to compile a TRANSFORMING
+   * DFC as two linked faces; a single-faced card omits it or leaves it empty.
+   */
+  readonly faces?: readonly CompilableCardFace[];
+  /**
+   * Scryfall's `layout` when the record carries it (`'transform'`,
+   * `'modal_dfc'`, `'split'`, …). Optional because the committed index predates
+   * the field — the transform detection therefore also accepts the `Transform`
+   * keyword, which Scryfall stamps on every transforming DFC.
+   */
+  readonly layout?: string;
+}
+
+/**
+ * One face of a double-faced card, structurally matching
+ * `NormalizedCardFace` from `@jonny-boi/data-tools` (minus display-only
+ * fields) for the same no-import reason as {@link CompilableCard}.
+ */
+export interface CompilableCardFace {
+  readonly name: string;
+  readonly manaCost: CompilableCard['manaCost'];
+  readonly typeLine: CompilableCard['typeLine'];
+  readonly oracleText: string;
+  readonly power: number | null;
+  readonly toughness: number | null;
 }
 
 /** Whether every printed ability compiled to a real implementation. */
@@ -105,8 +132,19 @@ export interface ClauseContribution {
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   /** Set when the text charges a LIFE price to enter untapped (a shockland). */
   readonly entersTappedUnlessLifePaid?: number;
+  /**
+   * The card's printed flashback cost (`CardDefinition.flashback`) — the plain
+   * mana-cost form only; {X}/additional-cost flashback stays reported.
+   */
+  readonly flashback?: import('@jonny-boi/core').ManaCost;
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
+  /**
+   * Static ("anthem") abilities this clause prints ("Creatures you control get
+   * +1/+1") — continuous modifications applied by core's statics layer for as
+   * long as this permanent is on the battlefield.
+   */
+  readonly statics?: readonly import('@jonny-boi/core').StaticAbility[];
   /**
    * The half of an attachment that says WHAT it attaches to and what happens when
    * it isn't legally attached — the printed "Enchant creature" / "Equip {N}" line.

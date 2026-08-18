@@ -80,7 +80,7 @@ compiler refuses to reproduce them rather than fake them:
 | dynamic power/toughness (`*/*`) | Tarmogoyf | Characteristic-defining ability |
 | transform / double-faced cards | Delver of Secrets | Needs a second face + transform |
 | planeswalker loyalty abilities | Liliana of the Veil | Loyalty costs, one activation per turn |
-| flash / flashback | Snapcaster Mage | Alternate timing + graveyard casting |
+| granting flashback to a graveyard card | Snapcaster Mage | Flash timing and printed "Flashback {cost}" are implemented; the GRANT (targeting a graveyard card + a continuous effect on a non-battlefield card) is not |
 
 ## Picking one up
 

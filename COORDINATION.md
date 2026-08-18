@@ -91,6 +91,9 @@ throughput (games/sec) from regressing.
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
 | feat/source-aware-targeting | worker | packages/core (protection.ts NEW + card/targeting/attachments/events/engine/index + internal stats/continuous/combat + protection.test.ts NEW), packages/cards (primitives + choice-primitives `wardCounterUnlessPaid` + compile rules/compile + ward-protection.test.ts NEW + 2 reworded tests), packages/sim (2 classification lines), packages/ai (heuristic source threading), apps/web (2 formatter cases + about/mechanics.ts entries), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
+| feat/double-faced-cards | worker | packages/core (card/state/events/engine guards + NEW transform.ts, internal/zones+clone+triggers-runtime, NEW transform.test.ts), packages/cards (choice-primitives transformRevealTop, effect-helpers face-revert, compile types/compile/rules/index, data/pool.ts Delver, src/index.ts STUBBED_MECHANICS, NEW transform-play.test.ts), packages/sim (paired-arms-config +1 classification; fidelity copy in config/cli/swap), apps/web (lib/cards.ts back-face records + NEW cards.test.ts, lib/about/mechanics.ts + test), DESIGN §3.13 | 🚧 PUSHED, not merged |
+
+| feat/nonhand-casting | worker | packages/core (card/actions/state/events/choices/engine/index + internal/clone + test-fixtures + new flashback.test.ts), packages/cards (effect-helpers, compile types/rules/compile, index.ts STUBBED reword, data/pool.ts comments only, new flashback.test.ts), packages/ai (heuristic.ts + new flashback-pilot.test.ts), packages/sim (config/cli/swap + data/decks/uw-control — FIDELITY wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -121,6 +124,104 @@ _Append dated notes here; keep them short. Newest at top._
   alternating runs (quiet-box rounds: 97.0 vs 95.9, 90.8 vs 91.9, 100 vs 96.5 games/sec — median
   ratio ~1.01; absolute numbers below the recorded 109–118 band because several agents shared the
   box, which is why the comparison is paired). (Worker)
+- 2026-08-17 worker: `feat/template-gaps` 🚧 PUSHED — **six importer template gaps closed as
+  rule-table data**, each proven by a real card compiling `'complete'` with pinned params AND playing
+  correctly in an engine game (`packages/cards/src/compile/template-gaps.test.ts`). Closed:
+  **anthem statics** ("[Other] creatures you control get +X/+Y / have KEYWORD" — Glorious Anthem,
+  Fervor; new `ClauseContribution.statics` reaches the `statics.ts` layer that existed with no rule
+  able to emit it), **basic-land search** ("…for a basic land card, put it/that card onto the
+  battlefield [tapped]" — Rampant Growth, and it **UN-STUBS Sakura-Tribe Elder**, now removed from
+  `STUBBED_MECHANICS` with its full activated ability authored in the pool), **typed regrowth**
+  (Raise Dead), **targeted discard** (Mind Rot — victim chooses), **targeted draw/lose** (Sign in
+  Blood; `drawCards` gained `whichPlayer:'targetPlayer'` — param extension, NO new primitive, so
+  paired-arms-config is untouched), and **Act of Treason's exact templating** ("Untap that
+  creature."). The Treason play test caught a REAL engine bug: a control change from a resolving
+  SPELL silently no-oped (`applyControlChange` derives the stealer from the source's battlefield
+  presence; a sorcery is never there) — fixed with a fallback `stealer` param passed from the
+  resolution's controller, core regression test added. Every existing "gain control" import was
+  affected. Deliberately NOT built (need real systems; sibling branches own several): Tarmogoyf
+  (characteristic-defining P/T; `StaticAbility` deltas are fixed numbers), Fatal Push (no turn-scoped
+  event memory for revolt), scry/surveil (no bottom-of-library primitive), colored statics
+  (`CardFilter` has no color field), modal "choose three / one or both", {X}/kicker/cycling,
+  transform, planeswalkers. Coverage audit re-run: **178 → 190 playable (8.5% → 9.0%)**. About page
+  gains witness-pinned entries (anthems, ramp/sac-fetch). `npm run verify` exit 0, full suite green,
+  `npm run build` exit 0. (Worker)
+- 2026-08-17 worker: `feat/nonhand-casting` 🚧 PUSHED — **casting from a non-hand zone + flashback,
+  played as printed.** `CastSpellAction.fromZone` ('hand' default | 'graveyard') makes the source zone
+  explicit cast → stack → resolution: `applyCastSpell` validates against the LIVE zone (a card that
+  left the graveyard mid-response cleanly rejects) and pays `CardDefinition.flashback` instead of the
+  printed cost; the stack object records `castFrom`; and BOTH exits from the stack derive their
+  destination from that one field via core's new `spellLeaveDestination` — resolution → EXILE, and a
+  **countered flashback spell → EXILE too** (CR 702.34a; `counterSpellOnStack` uses the same helper, so
+  the two exits cannot disagree). Timing is the card's own (sorcery flashback only at sorcery speed —
+  tested both as not-offered and as rejected). ⚠️ `cloneStackObject` copies field-by-field: `castFrom`
+  is added there conditionally (ordinary spells keep their object shape) and PINNED by a test — drop it
+  and a cloned flashback cast silently resolves to the graveyard. `generateLegalActions` offers
+  flashback casts exactly as hand casts (timing + pool-funds-it + one offer per legal target).
+  **Pilots actually consider it**: the heuristic's `scoredSpellGoals` scores graveyard flashback
+  candidates through the same scorer/targeter as hand spells (goal carries `fromZone`; both
+  `pursueSpell` and the search-policy macro emit it), and `flashback-pilot.test.ts` proves the pilot
+  taps toward and submits a flashback cast the engine accepts. Compiler: new STATIC rule
+  `flashback-cost` ("Flashback {2}{U}", instants/sorceries only, PLAIN mana only) + the Scryfall
+  keyword sweep skips a compiled Flashback; hint reworded to a template gap. **Deliberately NOT done**:
+  {X}/additional-cost flashback ("Flashback—{1}{U}, Pay 3 life") stays `incomplete` — blocked on the
+  cast-cost-modification system a sibling is building; Snapcaster Mage stays STUBBED (reworded: the
+  GRANT needs targeting a graveyard card + a continuous effect on a non-battlefield card — neither
+  exists); no flashback card added to the curated pool (none is in the committed Scryfall index, and
+  the expansion pipeline is a full network re-fetch — importer path only for now); no graveyard-cast
+  affordance in the play UIs (hand-click only; the actions ARE in `legalActions`, follow-up for
+  whoever owns the boards); UNSUPPORTED-BACKLOG.md not regenerated (network corpus). Also fixed stale
+  claims: `FIDELITY_CAVEAT` + cli/swap/uw-control/pool.ts/UNSUPPORTED-MECHANICS no longer say
+  "flash/flashback unimplemented" (flash + printed flashback are real; only the GRANT isn't). 👉 NOTE
+  for the integrator: Snapcaster's pool entry could carry `flash` now, but that speeds up UW Control
+  and moves every recorded gauntlet baseline — left as a deliberate integrator call. Verified:
+  full suite **2456 passed, 0 failed** (baseline 2424 + 15 new + suite drift), `npm run verify` exit
+  0, `npm run build` exit 0; gauntlet seed 99 **79/280 = 28.2%, byte-identical to main's recorded
+  baseline** (no flashback card exists in the gauntlet, so identical is the right answer; the new
+  legal-action loop is one property read per graveyard card with an early-out). (Worker)
+- 2026-08-18 worker: `feat/double-faced-cards` 🚧 PUSHED — **the second card face + transform,
+  and Delver of Secrets is UN-STUBBED (both faces play as printed).** The seam is one swap, not a
+  parallel read path: a front `CardDefinition` nests its full back face (`backFace`, `isBackFace`,
+  id `<frontId>#back`), and **`CardInstance.def` IS the active face** (`printedDef` holds the front
+  to revert to, keeping definitions acyclic/serializable). Every characteristic read — combat,
+  targeting, triggers, statics, mana, AI evaluation, board/CardHover art — already goes through
+  `inst.def`, so the swap routes them all with no second code path. `transformPermanent`
+  (core `transform.ts`) is the ONLY writer; new `transformed` event; CR 712 pinned by tests
+  (counters/damage/auras/tapped/continuous persist; NO zoneChange; leave-the-battlefield reverts to
+  front in `resetInstanceForNewZone` — a bounced Aberration is a Delver in hand); back faces refused
+  by cast/play (CR 712.8b) and offered nowhere.
+  ⚠️ **Two traps found and fixed — read these before touching faces.** (1) `cloneInstance` copies
+  field by field: `printedDef` is copied conditionally (like `attachedTo`) or a transformed permanent
+  silently untransforms at the NEXT action boundary — pinned by a two-boundary test. (2) The trigger
+  collector cached sources per instance keyed on controller only ("abilities are immutable") — false
+  once `def` can swap mid-action. It now compares the trigger-list IDENTITY and *deletes* the entry
+  when the active face is triggerless (a transformed-away face must not keep firing as
+  last-known-info — that rule is for permanents that LEFT). Both directions tested in one action:
+  transform-then-die fires the back face's dies-trigger, never the front's.
+  ⚠️ **`movePermanentTo` in `packages/cards/src/effect-helpers.ts` is a SECOND copy of core's
+  leave-the-battlefield reset** (bounce/exile primitives use it, core paths use
+  `resetInstanceForNewZone`). It now does the face revert too, but it is a duplication that will bite
+  the next per-object field — worth unifying when someone owns both packages.
+  👉 Compiler: a `layout:'transform'` / `Transform`-keyword record compiles BOTH faces through the
+  full rule table and links them; complete ONLY if both faces are. Detection works without `layout`
+  because the committed index predates it (keyword fallback). Scryfall's card-level keyword list is
+  the UNION of both faces (Delver says Flying; only the back has it) — attributed by face text, never
+  guessed. Delver's upkeep body is ONE primitive `transformRevealTop` (look + may-reveal + transform):
+  a min-0/max-1 top-of-library selection whose valence follows the top card ('gain' if it matches, so
+  the pilot reveals exactly when it should) with a CONSTANT public prompt — `choiceAsked` carries only
+  a count, so a declined reveal leaks nothing (pinned by a test comparing both worlds' logs).
+  Classified library-reading in `paired-arms-config` (it looks and branches, same as `revealTopCard`).
+  ❌ **Deliberately NOT done, and why:** modal DFCs / split / adventure (second face is CASTABLE —
+  needs the cast-time face/cost choice a sibling branch owns; they report the named
+  `SECOND_CASTABLE_FACE_GAP`); werewolves/daybound (needs a day-night tracker — their lines still
+  report); generic "transform ~" from activated/other templates (no rule yet — hint reworded to a
+  TEMPLATE gap since the system now exists); copy/clone of a transformed permanent (engine has no copy
+  effects); no `cardsRevealed` event (same pre-existing gap as `revealTopCard` — mechanics exact, the
+  reveal itself absent from the log); UNSUPPORTED-BACKLOG.md not regenerated (coverage-audit needs a
+  live Scryfall fetch). Expanded pool untouched — Delver lives in the curated pool.
+  Verified: full suite **2469 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0
+  (origin/main had not moved at push time — no merge was needed). (Worker)
+
 - 2026-08-17 worker: `feat/shocklands` 🚧 PUSHED — **shocklands play as printed, on BOTH entry
   paths.** New `payLife` choice kind (engine charges the life once in `applyAnswerChoice`, CR 118.4
   re-checked against the live total; pay-to-exactly-zero legal and lethal). The price is a decision,

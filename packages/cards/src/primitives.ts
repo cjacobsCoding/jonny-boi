@@ -110,13 +110,22 @@ export const dealDamage: EffectPrimitive = (ctx) => {
 /**
  * `drawCards` — a player draws `params.count` cards. Defaults to the controller;
  * `params.whichPlayer: 'opponent'` makes the controller's opponent draw instead
- * (e.g. Goblin Guide's attack trigger gives the defending player a card). Drawing
- * from an empty library flags a loss via SBA on the next check (we move the top
- * card or stop). Used by Brainstorm (3), Ponder (1), Cryptic Command (1).
+ * (e.g. Goblin Guide's attack trigger gives the defending player a card), and
+ * `'targetPlayer'` the first targeted player ("Target player draws two cards" —
+ * Sign in Blood; falls back to the controller, matching the other primitives'
+ * target fallbacks). Drawing from an empty library flags a loss via SBA on the
+ * next check (we move the top card or stop). Used by Brainstorm (3), Ponder (1),
+ * Cryptic Command (1).
  */
 export const drawCards: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
-  const drawer = strParam(ctx, 'whichPlayer') === 'opponent' ? otherPlayer(ctx.controller) : ctx.controller;
+  const whichPlayer = strParam(ctx, 'whichPlayer');
+  const drawer =
+    whichPlayer === 'opponent'
+      ? otherPlayer(ctx.controller)
+      : whichPlayer === 'targetPlayer'
+        ? (firstPlayerTarget(ctx) ?? ctx.controller)
+        : ctx.controller;
   const player = ctx.state.players[drawer];
   for (let i = 0; i < count; i++) {
     const top = player.library.shift();

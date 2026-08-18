@@ -217,6 +217,12 @@ interface SpellGoal {
   readonly cost: ManaCost;
   readonly targets: readonly (InstanceId | PlayerId)[];
   readonly reason: string;
+  /**
+   * Set when this goal casts the card out of the GRAVEYARD (flashback) — the
+   * cast action must then carry `fromZone: 'graveyard'` and `cost` is the
+   * card's flashback cost, not its printed one.
+   */
+  readonly fromZone?: 'graveyard';
 }
 
 function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
@@ -530,6 +536,35 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
     // instead of being rejected by the engine and retried forever.
     const legal = goal ? withLegalTargets(view, opp, goal) : undefined;
     if (legal) scored.push(legal);
+  }
+
+  // Flashback casts out of OUR graveyard — the same scoring, targeting and
+  // timing rules as a hand cast, with the FLASHBACK cost in place of the
+  // printed one and the goal marked so the cast action carries its source
+  // zone. Without this loop a flashback card is inert to the pilot: legal,
+  // never considered, and silently corrupting every A/B verdict that swaps one
+  // in. (A card in the graveyard costs no card from hand, so the same score
+  // reads as at least as attractive — free spells win ties naturally.)
+  for (const card of view.players[me].graveyard) {
+    const def = card.def;
+    const flashbackCost = def.flashback;
+    if (flashbackCost === undefined || isLand(def)) continue;
+    const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
+    if (!timingOk) continue;
+    if (convertedManaCost(flashbackCost) > availableMana) continue;
+
+    const intent = classifySpell(def);
+    oppCreatures ??= creaturesControlledBy(view, opp);
+    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain);
+    const legal = goal ? withLegalTargets(view, opp, goal) : undefined;
+    if (legal) {
+      scored.push({
+        ...legal,
+        cost: flashbackCost,
+        fromZone: 'graveyard',
+        reason: explain ? `flashback — ${legal.reason}` : NO_REASON,
+      });
+    }
   }
 
   scored.sort((a, b) => b.score - a.score);
@@ -963,6 +998,8 @@ function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
       player: me,
       instanceId: goal.card.instanceId,
       targets: goal.targets.length > 0 ? goal.targets : undefined,
+      // A flashback goal must say so, or the engine looks for the card in hand.
+      fromZone: goal.fromZone,
     };
     return emit(ctx, cast, goal.reason, goal.score);
   }
@@ -1613,6 +1650,7 @@ function collectPriorityCandidates(
       player: me,
       instanceId: goal.card.instanceId,
       targets: goal.targets.length > 0 ? goal.targets : undefined,
+      fromZone: goal.fromZone,
     });
     out.push({ plies, score: goal.score, label: goal.reason });
   }

@@ -394,13 +394,17 @@ export function applyControlChange(
   targetInstanceId: InstanceId,
   sourceInstanceId: InstanceId,
   emit: (e: GameEvent) => void,
+  stealer?: PlayerId,
 ): ControlChange | undefined {
   const permanent = state.battlefield.find((c) => c.instanceId === targetInstanceId);
   if (!permanent) return undefined;
   const source = state.battlefield.find((c) => c.instanceId === sourceInstanceId);
-  // The stealing player is the source's controller; with no source on the
-  // battlefield (an instant that has already left) there is nobody to give it to.
-  const to = source?.controller;
+  // The stealing player is the source's controller when the source is a
+  // permanent — but the printed cards are overwhelmingly SPELLS (Act of
+  // Treason), whose source is never on the battlefield while they resolve, so
+  // the resolution passes the caster explicitly as `stealer`. With neither (a
+  // ghost id and no stealer named) there is nobody to give the permanent to.
+  const to = source?.controller ?? stealer;
   if (to === undefined || to === permanent.controller) return undefined;
 
   const from = permanent.controller;

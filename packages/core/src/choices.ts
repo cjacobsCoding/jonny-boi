@@ -983,8 +983,8 @@ export interface ResolutionFrame {
   askCount: number;
   /** The spell card mid-resolution (absent for a trigger). */
   card?: CardInstance;
-  /** Where that card goes when the resolution finishes. */
-  resolvesTo?: 'battlefield' | 'graveyard';
+  /** Where that card goes when the resolution finishes (exile for flashback). */
+  resolvesTo?: 'battlefield' | 'graveyard' | 'exile';
   /** The ability's source permanent + label (trigger frames only). */
   sourceInstanceId?: InstanceId;
   label?: string;
