@@ -55,9 +55,10 @@ const TOKEN_DEFAULT_COUNT = 1;
  * **player** or planeswalker" could kill creatures. Both played strictly better
  * than printed, which silently corrupts every A/B verdict that includes them.
  *
- * The "or planeswalker" variants collapse onto the non-planeswalker half because
- * the engine has no planeswalkers at all: the choice is vacuous, not approximated.
- * If planeswalkers are ever implemented, these entries need a third target kind.
+ * The "or planeswalker" variants map to their own restrictions now that
+ * planeswalkers exist: "target player or planeswalker" may not hit a creature,
+ * "target creature or planeswalker" may not hit a face, and "any target" is all
+ * three (CR 115.4).
  *
  * "target **opponent**" now maps to its own `'opponent'` restriction, which the
  * engine evaluates against the caster. It used to be absent here because
@@ -71,8 +72,8 @@ const DAMAGE_TARGET_RESTRICTIONS: Readonly<Record<string, TargetRestriction>> = 
   'target player': 'player',
   'target opponent': 'opponent',
   'target creature or player': 'any',
-  'target player or planeswalker': 'player',
-  'target creature or planeswalker': 'creature',
+  'target player or planeswalker': 'playerOrPlaneswalker',
+  'target creature or planeswalker': 'creatureOrPlaneswalker',
   'target creature, player, or planeswalker': 'any',
   'target creature, player or planeswalker': 'any',
 });
@@ -1176,6 +1177,57 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'each-player-discards',
+    description: '"Each player discards a card" (Liliana of the Veil\'s +1)',
+    pattern: new RegExp(`^each player discards ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null) return null;
+      // Both seats choose their own discards, APNAP — see `discardCard`'s
+      // eachPlayer branch. `count` is omitted at the primitive default of one.
+      const params: Record<string, unknown> = { who: 'eachPlayer' };
+      if (count !== 1) params.count = count;
+      return effects({ primitive: 'discardCard', params });
+    },
+  },
+  {
+    id: 'target-player-sacrifices',
+    description: '"Target player sacrifices a creature" (the edict template; Liliana\'s −2)',
+    pattern: /^target (player|opponent) sacrifices an? (creature|land|artifact|permanent)$/,
+    needsChosenTarget: true,
+    build(match) {
+      const restriction = match[1] === 'opponent' ? OPPONENT_TARGET : PLAYER_TARGET;
+      const kind = match[2]!;
+      // "a permanent" is any type; the rest narrow by card type. The VICTIM
+      // chooses which — that is the whole card (see `sacrificeChosen`).
+      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: {
+          targets: restriction,
+          who: 'targetPlayer',
+          ...(filter ? { filter } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'pile-split-sacrifice',
+    description:
+      '"Separate all permanents target player controls into two piles. That player sacrifices all permanents in the pile of their choice." (Liliana\'s −6)',
+    // One whole-line idiom, not two sentences: the second sentence is
+    // meaningless without the split the first one made.
+    pattern:
+      /^separate all permanents target player controls into two piles\. that player sacrifices all permanents in the pile of their choice$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({
+        primitive: 'pileSplitSacrifice',
+        params: { targets: PLAYER_TARGET, who: 'targetPlayer' },
+      });
+    },
+  },
+  {
     id: 'search-basic-land-to-battlefield',
     description:
       '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle." (Rampant Growth; Sakura-Tribe Elder\'s sacrifice body)',
@@ -1790,7 +1842,21 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },
   { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet' },
-  { pattern: /\bloyalty\b|^[+-]\d+:/, missingEngineSystem: 'planeswalker loyalty abilities' },
+  {
+    // Emblems live in the command zone and outlive their walker — a subsystem of
+    // their own. Checked before the loyalty hint so an ultimate that CREATES an
+    // emblem is named for the real blocker, not for the loyalty cost around it.
+    pattern: /\bemblem\b/,
+    missingEngineSystem: 'emblems (a command-zone object that persists after its planeswalker leaves)',
+  },
+  {
+    // Planeswalker loyalty IS a system now: walkers enter with printed loyalty,
+    // `[+N]/[−N]` lines compile to loyalty-cost activated abilities, walkers are
+    // attackable, and 0 loyalty is death by state-based action. What still lands
+    // here is a loyalty-ability BODY with no effect rule of its own.
+    pattern: /\bloyalty\b|^[+−-]\d+:/,
+    missingEngineSystem: 'a loyalty-ability template the compiler does not recognize yet',
+  },
   {
     // Transforming DFCs ARE implemented now (core's second face +
     // `transformPermanent`, the `transformRevealTop` primitive, the
@@ -1825,7 +1891,14 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bequip\b|\battach\b|\benchant\b/,
     missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
   },
-  { pattern: /\bsacrifice\b/, missingEngineSystem: 'a sacrifice/activated-ability template the compiler does not recognize yet' },
+  {
+    // "Target player sacrifices a creature" (the edict shape) and "sacrifice ~"
+    // as an activation cost both compile now, so what lands here is some OTHER
+    // sacrifice shape: a sacrifice as an additional cast cost, "sacrifice
+    // another creature", "at the beginning of your upkeep, sacrifice ~", …
+    pattern: /\bsacrifice\b/,
+    missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
+  },
   { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'a counters template the compiler does not recognize yet' },
   { pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/, missingEngineSystem: 'a graveyard template the compiler does not recognize yet' },
   {

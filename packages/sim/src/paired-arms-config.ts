@@ -163,6 +163,11 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'modal',
   'returnToHand',
   'tapPermanents',
+  // Sacrifices read and write the BATTLEFIELD only: the victim's (or the pile
+  // split's) choice is over permanents in play, and every card moved emits its
+  // zoneChange. No library is ever consulted, so paired arms stay comparable.
+  'sacrificeChosen',
+  'pileSplitSacrifice',
 ]);
 
 /**

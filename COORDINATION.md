@@ -96,9 +96,47 @@ throughput (games/sec) from regressing.
 | feat/nonhand-casting | worker | packages/core (card/actions/state/events/choices/engine/index + internal/clone + test-fixtures + new flashback.test.ts), packages/cards (effect-helpers, compile types/rules/compile, index.ts STUBBED reword, data/pool.ts comments only, new flashback.test.ts), packages/ai (heuristic.ts + new flashback-pilot.test.ts), packages/sim (config/cli/swap + data/decks/uw-control — FIDELITY wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 | feat/cast-cost-modification | worker | packages/core (card/choices/state/effects/engine/index + internal/clone + new cast-cost.test.ts), packages/cards (effect-helpers/primitives/index; compile types+compile+rules + compile.test; new cast-cost-cards.test.ts), packages/ai (choices + heuristic + choices.test), packages/sim (paired-arms-config classification only), apps/web (play/choice-view + ChoicePrompt + choice tests, about/mechanics.ts), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
+| feat/planeswalkers | worker | packages/core (card/state/actions/events/targeting/engine/effects/serialize/index + internal stats/combat/sba/clone/zones + NEW planeswalker.test.ts), packages/cards (compile types/compile/rules loyalty + NEW rules, choice-primitives sacrificeChosen+pileSplitSacrifice, primitives dealDamage-to-walker, data/pool.ts Liliana + 2 refreshed expanded entries, index.ts STUBBED, NEW planeswalker-play.test.ts), packages/ai (heuristic walker attack/burn/loyalty + effect-value + weights + NEW planeswalker-pilot.test.ts), packages/data-tools (loyalty capture + Liliana index record), packages/sim (observation +2, paired-arms +2, fidelity copy), apps/web (play board walker UI + about/mechanics + card-index regen), DESIGN §3.9/§3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-18 worker: `feat/planeswalkers` 🚧 PUSHED — **planeswalkers are real: loyalty
+  counters, walkers as attackable objects, Liliana of the Veil un-stubbed.** Loyalty lives in the
+  EXISTING counters record (`counters['loyalty']`); every entry path shares `applyEnteringLoyalty`.
+  Loyalty abilities are activated abilities with a SIGNED `cost.loyalty` — sorcery-speed, engine-
+  enforced once per walker per turn (compared against `turnNumber` via a conditionally-cloned
+  `CardInstance.loyaltyActivatedTurn`; anyone adding instance/combat fields: `internal/clone.ts`,
+  as ever), never payable below zero; paying to exactly 0 kills the walker immediately and the
+  ability still resolves. ⚠️ THE COMBAT SEAM IS GENERIC ON PURPOSE (the brief's battle
+  constraint): `DeclareAttackersAction.attackTargets` maps attacker → attacked PERMANENT, gated on
+  core's `isAttackable(def)` — battles plug in there without touching combat again. Damage to a
+  walker removes loyalty (CR 120.3c); trample past its loyalty carries to the player (CR 702.19i);
+  an attacked walker that leaves absorbs nothing and redirects NOTHING (the 2017 rules removed
+  redirection — do not "add it back"). Targeting: `'playerOrPlaneswalker'` + `'creatureOrPlaneswalker'`
+  restrictions; "any target" includes walkers (Lava Spike / Sorin's Vengeance refreshed in the
+  GENERATED expanded pool by targeted patch — full `build-expansion` re-run is blocked on the
+  gitignored scratch cache, which no machine currently has; the fidelity suite recompiles both from
+  real text so the data provably matches the compiler). Compiler: `planeswalker` left
+  TYPES_WITHOUT_SYSTEM; `+N:`/`−N:` lines compile via `compileLoyaltyAbility` (U+2212 minus
+  handled); a walker record without printed loyalty stays reported (the committed data-tools index
+  predates loyalty capture — `normalize.ts` captures it now; Liliana's cached record got the one
+  factual field). New primitives `sacrificeChosen` (edict — the VICTIM picks) and
+  `pileSplitSacrifice` (two questions, both collected before anything moves); `discardCard` grew
+  `who:'eachPlayer'` (APNAP). Emblems: NOT built — new `/emblem/` hint, checked before the
+  loyalty hint so ultimates report the real blocker. Legend rule: NOT built for walkers because the
+  engine has none for legendary creatures either — building it walker-only would be a partial rule;
+  it needs one shared owner. AI is not inert: the heuristic activates loyalty abilities (priced by
+  `valueOfEffects` + new `loyaltyAbilityBaseScore`/`loyaltyPerCounter` weights), diverts the
+  smallest sufficient attacker set to KILL a finishable walker (never chips, never over a lethal
+  race), burns killable walkers; the hybrid's policy candidates carry the same walker attack plan
+  plus the all-face alternative. Coverage audit re-run post-merge: **191/2100 playable (9.1%)**,
+  the "planeswalker loyalty abilities" system block (30 cards) dissolved into per-template gaps.
+  Merged origin/main (protection/ward + template-gaps + flashback + DFC) — rules.ts hint table and
+  sim fidelity caveats were 3-way rewordings, all kept. NOT done: online board UI for walker
+  attacks (hotseat only; the server passes `attackTargets` through untouched — deep action validity
+  is the engine's), no walker added to gauntlet meta decks (verdicts unchanged by construction),
+  emblems/battles. (Worker)
 - 2026-08-18 worker: `feat/cast-cost-modification` 🚧 PUSHED — **cost modification at cast time:
   {X} costs and kicker play as printed.** The subsystem the 2026-08-15 board note names as gate #3
   exists now; suspend/spectacle are rule-table work on top of it. The seam: casting a spell whose

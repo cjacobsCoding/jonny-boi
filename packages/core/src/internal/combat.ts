@@ -28,7 +28,8 @@
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import type { GameEvent } from '../events.js';
 import type { KeywordFlags } from '../card.js';
-import { effectivePower, effectiveKeywords, remainingToughness } from './stats.js';
+import { effectivePower, effectiveKeywords, loyaltyOf, remainingToughness, removeLoyalty } from './stats.js';
+import { isPlaneswalker } from '../card.js';
 import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
 import type { ContinuousIndex } from './continuous.js';
@@ -142,6 +143,15 @@ function applyDamage(
     player.life -= amount;
     emit({ type: 'damageDealt', source: source.instanceId, target, amount, combat: true });
     emit({ type: 'lifeChanged', player: target, delta: -amount, to: player.life });
+  } else if (isPlaneswalker(target.def)) {
+    // Damage to a planeswalker removes that many loyalty counters immediately
+    // (CR 120.3c) — loyalty is its life total, not marked damage cleared at
+    // cleanup. The 0-loyalty death is the SBA pass that follows the damage step.
+    const removed = removeLoyalty(target, amount);
+    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
+    if (removed > 0) {
+      emit({ type: 'loyaltyChanged', instanceId: target.instanceId, delta: -removed, to: loyaltyOf(target) });
+    }
   } else {
     // Protection's second half: damage from a source with a protected quality
     // is PREVENTED (CR 702.16e). Lifelink below is skipped with it — no damage
@@ -167,6 +177,55 @@ function applyDamage(
     emit({ type: 'gainLife', player: source.controller, amount });
     emit({ type: 'lifeChanged', player: source.controller, delta: amount, to: controller.life });
   }
+}
+
+/**
+ * Deal an attacker's player-facing damage to WHAT IT WAS DECLARED ATTACKING —
+ * the defending player, or an attacked permanent (a planeswalker).
+ *
+ * Three rules live here, and only here, so every damage site agrees:
+ *   - an attacked permanent that has LEFT the battlefield absorbs nothing and
+ *     redirects nothing: the attacker was attacking that object, the object is
+ *     gone, and it deals no combat damage (CR 506.4c / 510.1a — the old
+ *     planeswalker damage-redirection rule was removed in 2017);
+ *   - a TRAMPLING attacker attacking a planeswalker assigns at most the
+ *     walker's remaining loyalty to it and the excess to the defending player
+ *     (CR 702.19i);
+ *   - everything else goes to the attacked object whole.
+ */
+function dealToAttackedObject(
+  state: GameState,
+  attacker: CardInstance,
+  attacked: InstanceId | PlayerId,
+  amount: number,
+  index: ContinuousIndex,
+  defendingPlayer: PlayerId,
+  emit: (e: GameEvent) => void,
+): void {
+  if (amount <= 0) return;
+  if (typeof attacked === 'string') {
+    applyDamage(state, attacker, attacked, amount, index, emit);
+    return;
+  }
+  const object = findOnBattlefield(state, attacked);
+  if (!object) return; // the attacked permanent is gone — no damage, no redirect
+  if (isPlaneswalker(object.def) && kw(attacker, index).trample) {
+    const lethal = loyaltyOf(object);
+    const toWalker = Math.min(amount, lethal);
+    applyDamage(state, attacker, object, toWalker, index, emit);
+    applyDamage(state, attacker, defendingPlayer, amount - toWalker, index, emit);
+    return;
+  }
+  applyDamage(state, attacker, object, amount, index, emit);
+}
+
+/** What this attacker was declared attacking (the defending player by default). */
+export function attackedObjectOf(
+  combat: NonNullable<GameState['combat']>,
+  attackerId: InstanceId,
+  defendingPlayer: PlayerId,
+): InstanceId | PlayerId {
+  return combat.attackTargets?.[attackerId] ?? defendingPlayer;
 }
 
 /**
@@ -212,6 +271,9 @@ function runDamageStep(
     if (atkPower <= 0) continue;
     const blockers = blockersByAttacker.get(attackerId);
     const wasBlocked = blockedAttackers.has(attackerId);
+    // The player-facing half of this attacker's damage goes to what it was
+    // DECLARED attacking — the defending player, or that player's planeswalker.
+    const attacked = attackedObjectOf(combat, attackerId, defendingPlayer);
     if (!blockers || blockers.length === 0) {
       if (wasBlocked) {
         // Blocked, but no living blocker remains (blocker died earlier this
@@ -219,12 +281,12 @@ function runDamageStep(
         // no damage; with trample it tramples its full power through (all
         // "lethal" was absorbed by the now-dead blocker = 0 remaining to assign).
         if (kw(attacker, index).trample) {
-          applyDamage(state, attacker, defendingPlayer, atkPower, index, emit);
+          dealToAttackedObject(state, attacker, attacked, atkPower, index, defendingPlayer, emit);
         }
         continue;
       }
-      // Genuinely unblocked → straight to the defending player.
-      applyDamage(state, attacker, defendingPlayer, atkPower, index, emit);
+      // Genuinely unblocked → straight to the attacked player/permanent.
+      dealToAttackedObject(state, attacker, attacked, atkPower, index, defendingPlayer, emit);
       continue;
     }
     // Blocked → assign lethal to each blocker in order, trample overflow.
@@ -237,7 +299,7 @@ function runDamageStep(
       remaining -= assign;
     }
     if (remaining > 0 && kw(attacker, index).trample) {
-      applyDamage(state, attacker, defendingPlayer, remaining, index, emit);
+      dealToAttackedObject(state, attacker, attacked, remaining, index, defendingPlayer, emit);
     }
   }
 

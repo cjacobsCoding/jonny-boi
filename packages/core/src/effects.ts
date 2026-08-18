@@ -17,6 +17,7 @@ import { entersTapped } from './card.js';
 import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import { applyControlChange } from './internal/continuous.js';
+import { applyEnteringLoyalty } from './internal/stats.js';
 import type {
   ChooseModesRequest,
   ChoiceAnswer,
@@ -424,6 +425,9 @@ function createTokenInState(
     // shape must match the one `cloneInstance` produces.
   };
   state.battlefield.push(token);
+  // A planeswalker token (or copy) enters with its printed loyalty, exactly as
+  // the cast walker does — one shared helper so no entry path can disagree.
+  applyEnteringLoyalty(token, emit);
   emit({ type: 'tokenCreated', instanceId, controller, name: def.name });
   // A token entering is a zoneChange into the battlefield — this is what ETB
   // triggers (its own and others') observe, keeping one mechanism for "enters".

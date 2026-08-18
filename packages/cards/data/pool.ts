@@ -30,12 +30,12 @@
  * restriction declares it as data (`params.targets`) and the engine enforces it
  * when the cast is offered, when it is applied, and again when it resolves — so
  * "target creature", "target player" and "target spell" mean what they say, and a
- * spell with no legal target cannot be cast. Flash is a real timing flag and a
- * printed "Flashback {cost}" casts from the graveyard for real (then exiles);
- * what it still has no system for is transform, planeswalker loyalty, dynamic
- * P/T, flashback GRANTED by another card (Snapcaster), and target restrictions
- * finer than those three (an opponent-only
- * target, "nonblack creature" as a legality rather than a resolution-time fizzle).
+ * spell with no legal target cannot be cast. Activated abilities (including
+ * planeswalker LOYALTY abilities) are real: walkers enter with printed loyalty,
+ * are attackable, and die at 0. Flash is a real timing flag and a printed
+ * "Flashback {cost}" casts from the graveyard for real (then exiles). What it
+ * still has no system for is dynamic P/T and flashback GRANTED by another card
+ * (Snapcaster).
  * Cards whose identity needs one of those are authored as the closest faithful
  * subset (documented per-card); their
  * vanilla body (P/T, keywords, mana production) is always correct so they play on
@@ -534,12 +534,51 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
 
   // --- Planeswalker ------------------------------------------------------------
   {
+    // Liliana of the Veil — UN-STUBBED: she now plays exactly as printed. Enters
+    // at 3 loyalty; each line is a sorcery-speed activated ability with a SIGNED
+    // loyalty cost (the engine enforces one loyalty ability per walker per turn,
+    // and that a minus can only be paid from loyalty actually there); she can be
+    // attacked and burned ("any target" includes her), and dies at 0 loyalty to
+    // a state-based action. No legend rule is applied — the engine has none for
+    // legendary creatures either, so walkers get the same (absent) treatment.
     id: '0ba134d8-ee7d-48ec-8dc6-57942b8e9261',
     name: 'Liliana of the Veil',
     types: ['planeswalker'],
+    subtypes: ['liliana'],
     cost: { generic: 1, B: 2 },
-    // Loyalty abilities need a planeswalker/loyalty system the engine lacks. She
-    // enters as a permanent (correct zone/cost); her abilities are the stub.
+    loyalty: 3,
+    activated: [
+      {
+        cost: { loyalty: 1 },
+        timing: 'sorcery',
+        label: '+1: Each player discards a card.',
+        // Both seats choose their own discard, APNAP — see `discardCard`.
+        effects: [{ primitive: 'discardCard', params: { who: 'eachPlayer' } }],
+      },
+      {
+        cost: { loyalty: -2 },
+        timing: 'sorcery',
+        label: '−2: Target player sacrifices a creature.',
+        // The VICTIM picks which creature leaves — an edict, not targeted removal.
+        effects: [
+          {
+            primitive: 'sacrificeChosen',
+            params: { targets: 'player', who: 'targetPlayer', filter: { anyOfTypes: ['creature'] } },
+          },
+        ],
+      },
+      {
+        cost: { loyalty: -6 },
+        timing: 'sorcery',
+        label:
+          '−6: Separate all permanents target player controls into two piles. That player sacrifices all permanents in the pile of their choice.',
+        // Controller splits, victim picks the pile — two questions, then the
+        // sacrifice happens at once. See `pileSplitSacrifice`.
+        effects: [
+          { primitive: 'pileSplitSacrifice', params: { targets: 'player', who: 'targetPlayer' } },
+        ],
+      },
+    ],
   },
 ]);
 

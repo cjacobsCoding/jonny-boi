@@ -29,6 +29,7 @@
 
 import type {
   CardFilter,
+  CardInstance,
   CardOption,
   EffectContext,
   EffectPrimitive,
@@ -330,6 +331,15 @@ export const revealTopCard: EffectPrimitive = (ctx) => {
 export const discardCard: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
   if (count <= 0) return;
+  // "Each player discards a card" (Liliana of the Veil's +1): BOTH seats choose
+  // their own discards, in APNAP order — the active player answers first
+  // (CR 101.4). Handled inside this primitive because it is the same question
+  // asked twice, and BOTH answers are collected before either card moves, per
+  // the ask-first-then-mutate contract in this file's header.
+  if (strParam(ctx, 'who') === 'eachPlayer') {
+    discardEachPlayer(ctx, count);
+    return;
+  }
   const victim = playerParam(ctx, 'who', 'targetPlayer');
   if (!victim) return;
   const chooserIsController = strParam(ctx, 'chosenBy') === 'controller';
@@ -347,6 +357,35 @@ export const discardCard: EffectPrimitive = (ctx) => {
   if (!chosen) return; // parked
   for (const id of chosen) moveOwnedCard(ctx, victim, id, 'hand', 'graveyard');
 };
+
+/** The "each player discards" branch of {@link discardCard}. */
+function discardEachPlayer(ctx: EffectContext, count: number): void {
+  const active = ctx.state.activePlayer;
+  const order: readonly PlayerId[] = [active, otherPlayer(active)];
+  const chosen: (readonly InstanceId[])[] = [];
+  for (const victim of order) {
+    const candidates = collectCardOptions(ctx.state, 'hand', {
+      controller: victim,
+      filter: filterParam(ctx),
+    });
+    const picked = ctx.chooseCards({
+      chooser: victim,
+      prompt: `Discard ${count} card(s)`,
+      candidates,
+      min: count,
+      max: count,
+      valence: 'loss',
+      fromZone: 'hand',
+    });
+    if (!picked) return; // parked — nothing mutated yet
+    chosen.push(picked);
+  }
+  // Both answers are in; the discards happen "at the same time" (both were
+  // chosen from un-discarded hands, so neither choice saw the other's result).
+  for (let i = 0; i < order.length; i++) {
+    for (const id of chosen[i]!) moveOwnedCard(ctx, order[i]!, id, 'hand', 'graveyard');
+  }
+}
 
 /**
  * `returnFromGraveyard` — return `params.count` (default 1) **chosen** cards from a
@@ -657,6 +696,125 @@ export const transformRevealTop: EffectPrimitive = (ctx) => {
  * into `CORE_PRIMITIVES` by `./primitives`, so there is still exactly one registry
  * to register.
  */
+// --- sacrifice (a player chooses what leaves their own board) ----------------------
+
+/**
+ * Sacrifice a permanent: its controller's own choice moved to its owner's
+ * graveyard through the same zone path death uses, so dies-triggers and instance
+ * reset behave identically. `creatureDied` / `planeswalkerDied` are emitted for
+ * the kinds that have death events, because a sacrificed creature DIES.
+ */
+function sacrificePermanent(ctx: EffectContext, perm: CardInstance): void {
+  const wasCreature = isCreature(perm.def);
+  const wasWalker = perm.def.types.includes('planeswalker');
+  if (wasCreature) {
+    ctx.emit({ type: 'creatureDied', instanceId: perm.instanceId, name: perm.def.name });
+  } else if (wasWalker) {
+    ctx.emit({ type: 'planeswalkerDied', instanceId: perm.instanceId, name: perm.def.name });
+  }
+  movePermanentTo(ctx, perm, 'graveyard');
+}
+
+/**
+ * `sacrificeChosen` — "target player sacrifices a creature" (Liliana of the
+ * Veil's −2; every edict). The VICTIM chooses which of their own permanents is
+ * sacrificed — that choice is the entire card, which is why this is not
+ * `destroyTarget`: nothing here targets a creature, so hexproof does not save
+ * it and the victim gives up their worst body, not the caster's pick.
+ *
+ * Params: `who` (whose board — `'targetPlayer'` by default), `count` (how many,
+ * default 1), `filter` (what qualifies — `{ anyOfTypes: ['creature'] }` is
+ * "a creature"). A board with nothing that qualifies sacrifices nothing (zero
+ * candidates auto-answer as "none" — the printed card does nothing either).
+ */
+export const sacrificeChosen: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const victim = playerParam(ctx, 'who', 'targetPlayer');
+  if (!victim) return;
+  const candidates = collectCardOptions(ctx.state, 'battlefield', {
+    controller: victim,
+    filter: filterParam(ctx),
+  });
+  const chosen = ctx.chooseCards({
+    chooser: victim,
+    prompt: `Sacrifice ${count} permanent(s)`,
+    candidates,
+    min: count,
+    max: count,
+    valence: 'loss',
+    fromZone: 'battlefield',
+  });
+  if (!chosen) return; // parked
+  for (const id of chosen) {
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+    if (perm) sacrificePermanent(ctx, perm);
+  }
+};
+
+/** The two pile ids the split offers — data the UI/AI answer refers back to. */
+const PILE_ONE = 'pile1';
+const PILE_TWO = 'pile2';
+
+/**
+ * `pileSplitSacrifice` — Liliana of the Veil's −6: "Separate all permanents
+ * target player controls into two piles. That player sacrifices all permanents
+ * in the pile of their choice."
+ *
+ * Two questions, in the printed order, both collected before anything moves:
+ *   1. the CONTROLLER splits — a `selectCards` over every permanent the victim
+ *      controls; the chosen cards are pile one, the rest are pile two (choosing
+ *      none, or everything, is a legal — if poor — split);
+ *   2. the VICTIM picks which pile is sacrificed — a two-mode `chooseModes`
+ *      whose labels list each pile's contents so the decision is renderable by
+ *      a UI that knows no rules.
+ * Then every permanent in the chosen pile is sacrificed at once.
+ *
+ * The split is valence-`'neutral'` deliberately: "half my picks are good for me"
+ * has no per-card direction, and the searchless pilot's pile is built by the AI
+ * layer (which knows values), not by a valence hint.
+ */
+export const pileSplitSacrifice: EffectPrimitive = (ctx) => {
+  const victim = playerParam(ctx, 'who', 'targetPlayer');
+  if (!victim) return;
+  const all = collectCardOptions(ctx.state, 'battlefield', { controller: victim });
+  if (all.length === 0) return; // no permanents — nothing to split, nothing to do
+
+  const pileOne = ctx.chooseCards({
+    chooser: ctx.controller,
+    prompt: `Separate ${victim}'s permanents into two piles`,
+    candidates: all,
+    min: 0,
+    max: all.length,
+    valence: 'neutral',
+    fromZone: 'battlefield',
+  });
+  if (!pileOne) return; // parked
+
+  const inPileOne = new Set(pileOne);
+  const pileTwo = all.filter((option) => !inPileOne.has(option.instanceId));
+  const describe = (options: readonly CardOption[]): string =>
+    options.length === 0 ? '(empty)' : options.map((option) => option.name).join(', ');
+  const picked = ctx.chooseModes({
+    chooser: victim,
+    prompt: 'Sacrifice all permanents in the pile of your choice',
+    modes: [
+      { id: PILE_ONE, label: `Sacrifice pile 1: ${describe(all.filter((o) => inPileOne.has(o.instanceId)))}` },
+      { id: PILE_TWO, label: `Sacrifice pile 2: ${describe(pileTwo)}` },
+    ],
+    min: 1,
+    max: 1,
+    valence: 'neutral',
+  });
+  if (!picked) return; // parked — the split is replayed from `frame.answers`
+
+  const sacrificed = picked[0] === PILE_ONE ? [...inPileOne] : pileTwo.map((o) => o.instanceId);
+  for (const id of sacrificed) {
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+    if (perm) sacrificePermanent(ctx, perm);
+  }
+};
+
 export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   putFromHandOnTop,
   reorderTopOfLibrary,
@@ -669,6 +827,8 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  sacrificeChosen,
+  pileSplitSacrifice,
   wardCounterUnlessPaid,
   transformRevealTop,
 });

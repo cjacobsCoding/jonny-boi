@@ -11,7 +11,7 @@
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Showing the top 25 of **1699** distinct gaps. The remaining 1674 account for 2569 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
+Showing the top 25 of **1703** distinct gaps. The remaining 1678 account for 2570 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
 ## casting either face of a modal double-faced / split card (a cast-time face choice the engine cannot ask yet)
 
@@ -47,13 +47,6 @@ Showing the top 25 of **1699** distinct gaps. The remaining 1674 account for 256
 - **Occurrences:** 30
 - **Cards:** Mithril Coat, Darksteel Citadel, Toski, Bearer of Secrets, Purphoros, God of the Forge, Brash Taunter, Darksteel Plate, Heliod, Sun-Crowned, The Soul Stone, +22 more
 - **Example clause:** `Indestructible`
-
-## planeswalker loyalty abilities
-
-- **Blocks 30 card(s)** (1.4% of corpus)
-- **Occurrences:** 52
-- **Cards:** Elspeth, Storm Slayer, Liliana, Dreadhorde General, Elspeth, Sun's Champion, Narset, Parter of Veils, Ugin, the Ineffable, Jace, Wielder of Mysteries, Teferi, Time Raveler, Tezzeret, Cruel Captain, +22 more
-- **Example clause:** `Planeswalker`
 
 ## a "you may / choose" template the compiler does not recognize yet — starting "As ~ enters, choose a…"
 
@@ -153,7 +146,7 @@ Showing the top 25 of **1699** distinct gaps. The remaining 1674 account for 256
 - **Cards:** Mana Confluence, Spire of Industry, Starting Town, Fiery Islet, Waterlogged Grove, Mount Doom, Staff of Compleation, Sunbaked Canyon, +5 more
 - **Example clause:** `{T}, Pay 1 life: Add one mana of any color.`
 
-## a sacrifice/activated-ability template the compiler does not recognize yet — starting "As an additional cost to…"
+## a sacrifice template the compiler does not recognize yet — starting "As an additional cost to…"
 
 - **Blocks 13 card(s)** (0.6% of corpus)
 - **Occurrences:** 13
@@ -187,3 +180,10 @@ Showing the top 25 of **1699** distinct gaps. The remaining 1674 account for 256
 - **Occurrences:** 12
 - **Cards:** Undercity Sewers, Underground Mortuary, Hedge Maze, Raucous Theater, Shadowy Backstreet, Thundering Falls, Commercial District, Meticulous Archive, +4 more
 - **Example clause:** `When ~ enters, surveil 1.`
+
+## dynamic power/toughness (characteristic-defining */*)
+
+- **Blocks 12 card(s)** (0.6% of corpus)
+- **Occurrences:** 12
+- **Cards:** Psychosis Crawler, Adeline, Resplendent Cathar, Ashaya, Soul of the Wild, Lumra, Bellow of the Woods, Cultivator Colossus, Consuming Aberration, Daxos, Blessed by the Sun, Nighthawk Scavenger, +4 more
+- **Example clause:** `power/toughness`

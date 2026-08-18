@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
-import type { GameSession, CastOption, SubmitResult } from '../../lib/play/session.js';
+import type { AbilityOption, GameSession, CastOption, SubmitResult } from '../../lib/play/session.js';
 import { buildBoardView } from '../../lib/play/view-model.js';
 import { optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
 import { stepLabel } from '../../lib/play/play-config.js';
@@ -45,6 +45,13 @@ export function PlayBoard({
   const [pendingCast, setPendingCast] = useState<CastOption | null>(null);
   // Attacker selection (active player, declareAttackers).
   const [chosenAttackers, setChosenAttackers] = useState<Set<InstanceId>>(new Set());
+  // Per-attacker walker assignment: attacker -> the defending planeswalker it
+  // attacks. An attacker with no entry attacks the defending player (the default).
+  const [walkerAssign, setWalkerAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
+  // A permanent whose activated-ability menu is open (click a walker → its abilities).
+  const [abilitySource, setAbilitySource] = useState<InstanceId | null>(null);
+  // An ability chosen from that menu, awaiting its target choice.
+  const [pendingAbility, setPendingAbility] = useState<AbilityOption | null>(null);
   // Blocker assignment (defender, declareBlockers): blocker -> attacker.
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   // The attacker currently being assigned a blocker (click attacker, then blocker).
@@ -56,9 +63,12 @@ export function PlayBoard({
   const resetTransient = (): void => {
     setPendingCast(null);
     setChosenAttackers(new Set());
+    setWalkerAssign(new Map());
     setBlockAssign(new Map());
     setActiveBlockTarget(null);
     setPendingManaTap(null);
+    setAbilitySource(null);
+    setPendingAbility(null);
   };
 
   const run = (fn: () => SubmitResult): void => {
@@ -91,6 +101,30 @@ export function PlayBoard({
     () => tappableIds(tapMenu, session.state, viewer),
     [tapMenu, session, viewer],
   );
+
+  // --- activated abilities --------------------------------------------------------
+  // Grouped per source permanent, derived from the engine's offers alone: an
+  // ability the engine did not offer (used this turn, unpayable, wrong timing)
+  // never appears, so no dead buttons.
+  const abilityMenu = useMemo(() => {
+    const map = new Map<InstanceId, AbilityOption[]>();
+    if (!isViewersPriority) return map;
+    for (const opt of session.abilityOptions()) {
+      const list = map.get(opt.instanceId);
+      if (list) list.push(opt);
+      else map.set(opt.instanceId, [opt]);
+    }
+    return map;
+  }, [session, isViewersPriority]);
+
+  const onChooseAbility = (opt: AbilityOption): void => {
+    setAbilitySource(null);
+    if (opt.targets === null) {
+      run(() => session.activateAbility(opt.instanceId, opt.abilityIndex));
+    } else {
+      setPendingAbility(opt);
+    }
+  };
 
   const onTapForMana = (id: InstanceId): void => {
     const options = tapMenu.get(id);
@@ -134,10 +168,52 @@ export function PlayBoard({
   }, [session, step, isViewersPriority]);
 
   const toggleAttacker = (id: InstanceId): void => {
+    const deselecting = chosenAttackers.has(id);
     setChosenAttackers((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+    // A deselected attacker attacks nothing — drop its walker assignment too.
+    if (deselecting) {
+      setWalkerAssign((assign) => {
+        if (!assign.has(id)) return assign;
+        const cleaned = new Map(assign);
+        cleaned.delete(id);
+        return cleaned;
+      });
+    }
+  };
+
+  // Defending planeswalkers that can be attacked instead of the player.
+  const enemyWalkers = useMemo(
+    () =>
+      step === 'declareAttackers' && isViewersPriority
+        ? view.opponent.permanents.filter((p) => p.isPlaneswalker)
+        : [],
+    [step, isViewersPriority, view],
+  );
+
+  /**
+   * Clicking a defending walker routes the CURRENTLY selected attackers at it;
+   * clicking it again (when they all already attack it) sends them back at the
+   * player. Attackers selected afterwards default to the player, keeping the
+   * common all-at-the-face declaration untouched.
+   */
+  const onAssignAttackWalker = (walkerId: InstanceId): void => {
+    if (chosenAttackers.size === 0) {
+      setToast('Select attackers first, then click the planeswalker to attack it.');
+      window.setTimeout(() => setToast(null), 2600);
+      return;
+    }
+    setWalkerAssign((cur) => {
+      const next = new Map(cur);
+      const allAtWalker = [...chosenAttackers].every((a) => next.get(a) === walkerId);
+      for (const a of chosenAttackers) {
+        if (allAtWalker) next.delete(a);
+        else next.set(a, walkerId);
+      }
       return next;
     });
   };
@@ -181,10 +257,17 @@ export function PlayBoard({
 
   function buildSelfInteraction(): PermInteraction | undefined {
     if (step === 'declareAttackers' && isViewersPriority) {
+      // An attacker aimed at a walker says so on its marker; the rest read "ATK"
+      // (attacking the player) exactly as before.
+      const markers = new Map<InstanceId, string>();
+      for (const id of chosenAttackers) {
+        const walker = walkerAssign.get(id);
+        markers.set(id, walker !== undefined ? `ATK → ${session.nameOf(walker)}` : 'ATK');
+      }
       return {
         selectableIds: eligibleAttackers,
         selectedIds: chosenAttackers,
-        markers: markerMap(chosenAttackers, 'ATK'),
+        markers,
         onClick: toggleAttacker,
       };
     }
@@ -200,20 +283,52 @@ export function PlayBoard({
     }
     // Spell targeting: allow clicking own creatures as targets.
     if (pendingCast) return targetInteraction(view.self.permanents.map((p) => p.instanceId));
-    // Otherwise your untapped mana sources are tappable by hand. Last in the chain
-    // so it never steals a click from combat selection or targeting.
-    if (tappable.size > 0) {
+    // Otherwise your untapped mana sources are tappable by hand, and permanents
+    // with an engine-offered activated ability (a planeswalker's loyalty lines)
+    // open their ability menu. Last in the chain so neither steals a click from
+    // combat selection or targeting. Mana-tapping wins an overlap: it is the
+    // frequent action, and no pool permanent is both today.
+    const activatable = new Set(abilityMenu.keys());
+    if (tappable.size > 0 || activatable.size > 0) {
       const markers = new Map<InstanceId, string>();
+      for (const id of activatable) markers.set(id, 'activate');
       for (const id of tappable) {
         const options = tapMenu.get(id) ?? [];
         markers.set(id, isModalTap(options) ? 'tap: any' : `tap: ${options[0]?.label ?? ''}`);
       }
-      return { selectableIds: tappable, selectedIds: new Set(), markers, onClick: onTapForMana };
+      return {
+        selectableIds: new Set([...activatable, ...tappable]),
+        selectedIds: new Set(),
+        markers,
+        onClick: (id) => {
+          if (tappable.has(id)) onTapForMana(id);
+          else setAbilitySource(id);
+        },
+      };
     }
     return undefined;
   }
 
   function buildOpponentInteraction(): PermInteraction | undefined {
+    // Declaring attackers with defending walkers on the board: the walkers are
+    // clickable attack targets (see onAssignAttackWalker for the toggle semantics).
+    if (step === 'declareAttackers' && isViewersPriority && enemyWalkers.length > 0) {
+      const markers = new Map<InstanceId, string>();
+      const selected = new Set<InstanceId>();
+      for (const walker of enemyWalkers) {
+        const incoming = [...chosenAttackers].filter((a) => walkerAssign.get(a) === walker.instanceId).length;
+        if (incoming > 0) {
+          markers.set(walker.instanceId, `⚔ ${incoming}`);
+          selected.add(walker.instanceId);
+        }
+      }
+      return {
+        selectableIds: new Set(enemyWalkers.map((p) => p.instanceId)),
+        selectedIds: selected,
+        markers,
+        onClick: onAssignAttackWalker,
+      };
+    }
     if (inBlockStep) {
       // Opponent's attackers are the things you arm to assign a blocker to.
       const markers = new Map<InstanceId, string>();
@@ -231,12 +346,18 @@ export function PlayBoard({
 
   function targetInteraction(ownedIds: readonly InstanceId[]): PermInteraction | undefined {
     if (!pendingCast) return undefined;
-    const creatureTargets = new Set(
-      targetOptions.filter((o) => o.kind === 'creature' && ownedIds.includes(o.instanceId)).map((o) => (o as { instanceId: InstanceId }).instanceId),
+    // Board-clickable targets: creatures AND planeswalkers (both are permanents
+    // the player naturally clicks; players stay buttons in the prompt).
+    const permanentTargets = new Set(
+      targetOptions
+        .filter(
+          (o) => (o.kind === 'creature' || o.kind === 'planeswalker') && ownedIds.includes(o.instanceId),
+        )
+        .map((o) => (o as { instanceId: InstanceId }).instanceId),
     );
-    if (creatureTargets.size === 0) return undefined;
+    if (permanentTargets.size === 0) return undefined;
     return {
-      selectableIds: creatureTargets,
+      selectableIds: permanentTargets,
       selectedIds: new Set(),
       onClick: (id) => commitCast([id]),
     };
@@ -327,11 +448,14 @@ export function PlayBoard({
         }
         isViewersPriority={isViewersPriority}
         inBlockStep={inBlockStep}
+        hasEnemyWalkers={enemyWalkers.length > 0}
         chosenAttackers={chosenAttackers}
         blockAssign={blockAssign}
         eligibleAttackers={eligibleAttackers}
         onPass={() => run(() => session.passPriority())}
-        onDeclareAttackers={(ids) => run(() => session.declareAttackers(ids))}
+        onDeclareAttackers={(ids) =>
+          run(() => session.declareAttackers(ids, Object.fromEntries(walkerAssign)))
+        }
         onDeclareBlockers={(blocks) => run(() => session.declareBlockers(blocks))}
       />
 
@@ -370,6 +494,64 @@ export function PlayBoard({
               ))}
             </div>
             <button type="button" className="btn btn--ghost" onClick={() => setPendingManaTap(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Which ability of this permanent? (a planeswalker's loyalty lines). Only
+          engine-offered abilities are listed, so a used-this-turn or unpayable
+          line is simply absent rather than disabled. */}
+      {abilitySource !== null && (
+        <div className="target-prompt" role="dialog" aria-label="Choose an ability to activate">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">Activate which ability of {session.nameOf(abilitySource)}?</div>
+            <div className="target-prompt__options">
+              {(abilityMenu.get(abilitySource) ?? []).map((opt) => (
+                <button
+                  key={opt.abilityIndex}
+                  type="button"
+                  className="btn"
+                  onClick={() => onChooseAbility(opt)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setAbilitySource(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* The chosen ability targets — one button per engine-offered legal target. */}
+      {pendingAbility && pendingAbility.targets !== null && (
+        <div className="target-prompt" role="dialog" aria-label="Choose a target for the ability">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">
+              {pendingAbility.sourceName} — {pendingAbility.label} Choose a target.
+            </div>
+            <div className="target-prompt__options">
+              {pendingAbility.targets.map((choice) => (
+                <button
+                  key={typeof choice.target === 'string' ? `p:${choice.target}` : `i:${choice.target}`}
+                  type="button"
+                  className="btn"
+                  onClick={() =>
+                    run(() =>
+                      session.activateAbility(pendingAbility.instanceId, pendingAbility.abilityIndex, [
+                        choice.target,
+                      ]),
+                    )
+                  }
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setPendingAbility(null)}>
               Cancel
             </button>
           </div>
@@ -416,6 +598,7 @@ function ActionBar({
   step,
   isViewersPriority,
   inBlockStep,
+  hasEnemyWalkers,
   chosenAttackers,
   blockAssign,
   eligibleAttackers,
@@ -431,6 +614,8 @@ function ActionBar({
   waitingText?: string;
   isViewersPriority: boolean;
   inBlockStep: boolean;
+  /** The defender controls at least one attackable planeswalker (hint wording). */
+  hasEnemyWalkers: boolean;
   chosenAttackers: Set<InstanceId>;
   blockAssign: Map<InstanceId, InstanceId>;
   eligibleAttackers: Set<InstanceId>;
@@ -475,7 +660,7 @@ function ActionBar({
       <button type="button" className="btn" onClick={onPass}>
         {passLabel(step)}
       </button>
-      <span className="action-bar__hint">{hintFor(step)}</span>
+      <span className="action-bar__hint">{hintFor(step, hasEnemyWalkers)}</span>
     </div>
   );
 }
@@ -485,24 +670,20 @@ function passLabel(step: string): string {
   return 'Pass / advance';
 }
 
-function hintFor(step: string): string {
+function hintFor(step: string, hasEnemyWalkers = false): string {
   switch (step) {
     case 'precombatMain':
     case 'postcombatMain':
       return 'Play a land or cast a spell from your hand, or pass to advance.';
     case 'declareAttackers':
-      return 'Tap your creatures to attack, then confirm — or attack with none.';
+      return hasEnemyWalkers
+        ? 'Tap your creatures to attack, then click an enemy planeswalker to attack it instead of the player. Confirm when done.'
+        : 'Tap your creatures to attack, then confirm — or attack with none.';
     case 'declareBlockers':
       return 'Tap an attacker, then your creature, to block. Confirm when done.';
     default:
       return 'Cast instants in response, or pass priority to continue.';
   }
-}
-
-function markerMap(ids: Set<InstanceId>, label: string): Map<InstanceId, string> {
-  const m = new Map<InstanceId, string>();
-  for (const id of ids) m.set(id, label);
-  return m;
 }
 
 function otherOf(p: PlayerId): PlayerId {

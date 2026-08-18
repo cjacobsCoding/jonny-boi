@@ -181,13 +181,16 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
+    // Liliana COMPILES now (the planeswalker system landed), so the blocked half
+    // needs a genuinely unimplementable card: Tarmogoyf's */* P/T still is.
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
+    const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
 
-    const { playable, blocked } = compileCards([bolt, liliana]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf]);
 
-    expect(playable.map((card) => card.name)).toEqual(['Lightning Bolt']);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Liliana of the Veil']);
+    expect(playable.map((card) => card.name)).toEqual(['Lightning Bolt', 'Liliana of the Veil']);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Tarmogoyf']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });
@@ -258,18 +261,19 @@ describe('compileCard — templated cards outside the curated pool', () => {
   // unrestricted `dealDamage` is exactly what made Flame Slash a 1-mana 4-damage
   // any-target spell and let Lava Spike kill creatures.
   //
-  // "or planeswalker" collapses onto the non-planeswalker half because the engine
-  // has no planeswalkers — vacuous, not approximated. 'any' is omitted from the
+  // "or planeswalker" is a REAL third kind now that planeswalkers exist: the
+  // player-or-planeswalker and creature-or-planeswalker phrases compile to their
+  // own restrictions the engine enforces. 'any' is omitted from the
   // params because it IS the default, so an unrestricted card compiles to exactly
   // the data it always did.
   it.each([
     ['any target', undefined],
     ['target creature or player', undefined],
     ['target creature, player, or planeswalker', undefined],
-    ['target player or planeswalker', 'player'],
+    ['target player or planeswalker', 'playerOrPlaneswalker'],
     ['target player', 'player'],
     ['target creature', 'creature'],
-    ['target creature or planeswalker', 'creature'],
+    ['target creature or planeswalker', 'creatureOrPlaneswalker'],
   ])('compiles a damage spell targeting "%s" as targets=%s', (targetPhrase, restriction) => {
     const result = compileCard(
       makeCard({
@@ -307,7 +311,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
 
     expect(result.status, JSON.stringify(result.missing)).toBe('complete');
     expect(result.definition.effects).toEqual([
-      { primitive: 'dealDamage', params: { amount: 3, targets: 'player' } },
+      { primitive: 'dealDamage', params: { amount: 3, targets: 'playerOrPlaneswalker' } },
       { primitive: 'gainLife', params: { amount: 3 } },
     ]);
   });

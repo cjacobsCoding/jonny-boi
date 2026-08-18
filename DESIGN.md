@@ -756,7 +756,8 @@ baseline the §3.6 suggestion engine tunes against.
 The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta decks it needs: a
 **triggered-ability system** (ETB/attack/cast/death triggers → the stack), a **continuous-effects / "until
 end of turn" layer** with proper cleanup-step expiry (so `pumpUntilEndOfTurn` and similar wear off — current
-behavior persists the buff and biases combat sims), and later **planeswalkers**, **transform/DFC**, and
+behavior persists the buff and biases combat sims), and later **planeswalkers** (✅ landed — see §3.11),
+**transform/DFC**, and
 **dynamic P/T** (e.g. Tarmogoyf). Tracked here because §3.2 cards stubbed these mechanics against the MVP.
 Prioritize triggers + EOT-expiry before leaning on §3.5/§3.6 verdicts; the rest can follow.
 
@@ -978,18 +979,34 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   Deliberately NOT done: multikicker (needs a pay-count, reported), kicked ETB clauses on
   permanents (the flag dies with the resolution; needs instance memory), X divided among
   targets, and "where X is …" definitions (those X's are not the cast-time X and are refused).
+- ✅ *planeswalkers + loyalty* — walkers are real attackable permanents. A walker enters with its
+  printed loyalty as COUNTERS (`counters['loyalty']`, `CardDefinition.loyalty`); its `[+N]/[−N]` lines
+  compile to activated abilities with a SIGNED `cost.loyalty`, sorcery-speed, engine-enforced once per
+  walker per turn (CR 606) and never payable below zero (CR 118.5). Combat gained the GENERIC
+  attackable-object seam battles will reuse: `DeclareAttackersAction.attackTargets` maps attacker →
+  attacked permanent (gated on `isAttackable`, today = planeswalker), combat damage to a walker removes
+  loyalty (CR 120.3c), trample past a walker's loyalty carries to its controller (CR 702.19i), and a
+  walker whose attacked object left the battlefield deals no combat damage — the 2017 rules REMOVED
+  damage redirection, so none is modelled. 0 loyalty is death by state-based action (CR 704.5i).
+  Targeting gained `'playerOrPlaneswalker'` and `'creatureOrPlaneswalker'`; "any target" includes
+  walkers. **Liliana of the Veil is un-stubbed** — the +1 each-player discard (APNAP, both answers
+  collected before either card moves), the −2 edict (`sacrificeChosen` — the VICTIM picks), and the −6
+  pile split (`pileSplitSacrifice`: controller splits, victim picks the pile) all play as printed. The
+  heuristic pilot activates loyalty abilities (priced by `valueOfEffects`), diverts attackers to kill a
+  finishable walker (never chips one it cannot kill, never over a lethal race), and burns a killable
+  walker. NOT built, on purpose: emblems (ultimates that need them stay reported), the legend rule
+  (the engine has none for legendary creatures either — walkers get the same treatment), battles.
 Still open, roughly by how often they block a real decklist:
 - *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
   cast-time question step now that {X}/kicker built it), *multikicker*, *Phyrexian costs*,
   *dynamic P/T* (Tarmogoyf needs characteristic-defining P/T — `StaticAbility` deltas are fixed
-  numbers and `DerivedCount` has no "card types in all graveyards" entry), *planeswalker loyalty*,
+  numbers and `DerivedCount` has no "card types in all graveyards" entry), *emblems* (walker ultimates that create one stay reported),
   *modal DFCs / split / adventure (the cast-time face choice)*, *granting flashback to a graveyard card (Snapcaster Mage: needs targeting a
   graveyard card + a continuous effect on a non-battlefield card)*,
   *revolt-style "a permanent left the battlefield this turn" trackers* (no turn-scoped event memory
   exists to answer Fatal Push's question),
   *colored/filtered statics* ("White creatures you control…" — `CardFilter` has no color field),
   *scry/surveil* (bottom-of-library placement has no primitive yet).
-
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
 

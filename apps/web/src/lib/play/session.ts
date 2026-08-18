@@ -67,6 +67,55 @@ export interface CastOption {
   readonly affordableWithTap: boolean;
 }
 
+/** One legal target choice for an activated ability, labeled for the UI. */
+export interface AbilityTargetChoice {
+  readonly target: InstanceId | PlayerId;
+  readonly label: string;
+}
+
+/**
+ * One activatable ability of a permanent the priority-holder controls, derived
+ * ENTIRELY from the engine's legal-action menu — an ability the engine does not
+ * offer (already used this turn, unpayable minus loyalty, wrong timing) simply
+ * is not here, so the UI cannot present a dead control.
+ */
+export interface AbilityOption {
+  /** The source permanent. */
+  readonly instanceId: InstanceId;
+  readonly sourceName: string;
+  /** Index into the source's `CardDefinition.activated` list. */
+  readonly abilityIndex: number;
+  /** The printed label ("+1: Each player discards a card."). */
+  readonly label: string;
+  /** Legal target choices, or null when the ability takes no target. */
+  readonly targets: readonly AbilityTargetChoice[] | null;
+}
+
+/**
+ * Build the engine's declare-attackers action. Pure and exported for tests: entries
+ * for ids that are NOT in `attackers` are dropped, and when no entry survives the
+ * action carries NO `attackTargets` key at all — byte-identical to the pre-walker
+ * action, so every existing consumer and replay stays untouched.
+ */
+export function buildDeclareAttackersAction(
+  player: PlayerId,
+  attackers: readonly InstanceId[],
+  attackTargets?: Readonly<Record<InstanceId, InstanceId | PlayerId>>,
+): Extract<GameAction, { kind: 'declareAttackers' }> {
+  const attacking = new Set(attackers);
+  const kept: Record<InstanceId, InstanceId | PlayerId> = {};
+  let count = 0;
+  for (const [key, value] of Object.entries(attackTargets ?? {})) {
+    const attackerId = Number(key);
+    if (!attacking.has(attackerId)) continue;
+    kept[attackerId] = value;
+    count += 1;
+  }
+  return count > 0
+    ? { kind: 'declareAttackers', player, attackers, attackTargets: kept }
+    : { kind: 'declareAttackers', player, attackers };
+}
+
 /**
  * The session is constructed from an already-created game (see setup.ts). Player
  * names + the registry are immutable for the life of the game.
@@ -117,6 +166,7 @@ export class GameSession {
    */
   private memoLegalActions?: readonly GameAction[];
   private memoCastOptions?: CastOption[];
+  private memoAbilityOptions?: AbilityOption[];
 
   /** Legal actions for the current priority-holder (the raw engine menu). */
   legalActions(): readonly GameAction[] {
@@ -220,9 +270,17 @@ export class GameSession {
     return cast;
   }
 
-  /** Declare attackers (active player). */
-  declareAttackers(attackers: readonly InstanceId[]): SubmitResult {
-    return this.submit({ kind: 'declareAttackers', player: this.priorityPlayer, attackers });
+  /**
+   * Declare attackers (active player). `attackTargets` optionally routes attackers
+   * at a defending planeswalker (attacker id → walker instance id); an attacker
+   * with no entry attacks the defending player, exactly as the engine defines it.
+   * With no entries the submitted action is byte-identical to the pre-walker one.
+   */
+  declareAttackers(
+    attackers: readonly InstanceId[],
+    attackTargets?: Readonly<Record<InstanceId, InstanceId | PlayerId>>,
+  ): SubmitResult {
+    return this.submit(buildDeclareAttackersAction(this.priorityPlayer, attackers, attackTargets));
   }
 
   /** Declare blockers (defending player). */
@@ -374,6 +432,76 @@ export class GameSession {
   /** Legal target options for a card's requirement against the current state. */
   targetsFor(req: TargetRequirement): readonly TargetOption[] {
     return legalTargets(req, this.state, this.names);
+  }
+
+  /**
+   * The activatable abilities of the priority-holder's permanents, grouped from
+   * the engine's own offers (one offered action per legal target folds into one
+   * option carrying its target menu). Driven by `legalActions`, NOT by
+   * `def.activated` — a loyalty ability already used this turn, or a minus the
+   * walker cannot pay, is simply absent because the engine never offered it.
+   */
+  abilityOptions(): readonly AbilityOption[] {
+    return (this.memoAbilityOptions ??= this.computeAbilityOptions());
+  }
+
+  private computeAbilityOptions(): AbilityOption[] {
+    const byAbility = new Map<string, AbilityOption>();
+    for (const action of this.legalActions()) {
+      if (action.kind !== 'activateAbility') continue;
+      const key = `${action.instanceId}:${action.abilityIndex}`;
+      const source = this.findInstance(action.instanceId);
+      const printed = source?.def.activated?.[action.abilityIndex];
+      const existing = byAbility.get(key);
+      const offeredTarget = action.targets?.[0];
+      if (offeredTarget === undefined) {
+        // A bare offer: no target to choose.
+        if (!existing) {
+          byAbility.set(key, {
+            instanceId: action.instanceId,
+            sourceName: source?.def.name ?? `#${action.instanceId}`,
+            abilityIndex: action.abilityIndex,
+            label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
+            targets: null,
+          });
+        }
+        continue;
+      }
+      const choice: AbilityTargetChoice = {
+        target: offeredTarget,
+        label:
+          offeredTarget === 'A' || offeredTarget === 'B'
+            ? `${this.names[offeredTarget]} (player)`
+            : this.nameOf(offeredTarget),
+      };
+      byAbility.set(key, {
+        instanceId: action.instanceId,
+        sourceName: source?.def.name ?? `#${action.instanceId}`,
+        abilityIndex: action.abilityIndex,
+        label: printed?.label ?? `Ability ${action.abilityIndex + 1}`,
+        targets: [...(existing?.targets ?? []), choice],
+      });
+    }
+    return [...byAbility.values()];
+  }
+
+  /**
+   * Activate a permanent's ability with the chosen targets (empty for a target-less
+   * ability). Submits the SAME action shape the engine offered, so the engine —
+   * not the client — remains the validator.
+   */
+  activateAbility(
+    instanceId: InstanceId,
+    abilityIndex: number,
+    targets: readonly (InstanceId | PlayerId)[] = [],
+  ): SubmitResult {
+    return this.submit({
+      kind: 'activateAbility',
+      player: this.priorityPlayer,
+      instanceId,
+      abilityIndex,
+      ...(targets.length > 0 ? { targets } : {}),
+    });
   }
 
   /**

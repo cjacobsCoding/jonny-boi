@@ -115,6 +115,24 @@ export interface HeuristicWeights {
   readonly ownCreatureLossPerStat: number;
   /** How much killing an opponent's creature in a trade is worth, per stat point. */
   readonly killEnemyPerStat: number;
+  /** How much removing an enemy planeswalker is worth, per loyalty counter it has —
+   *  a walker generates value every turn it lives, so killing one prices like
+   *  removal: this per-loyalty term steers both attacks and burn toward walkers
+   *  that can actually be finished off. */
+  readonly walkerThreatPerLoyalty: number;
+  /** Flat value for finishing OFF an enemy planeswalker (on top of the per-loyalty
+   *  term) — the ability stream it stops is worth more than its remaining counters. */
+  readonly walkerKillBonus: number;
+
+  // --- activating loyalty abilities -----------------------------------------
+  /** Base score for activating a loyalty ability whose effects come out at least
+   *  neutral: a PLUS ability is nearly free value each turn, so this sits above
+   *  `passScore` — a walker whose controller never activates it is an inert card. */
+  readonly loyaltyAbilityBaseScore: number;
+  /** How much each point of loyalty GAINED (a plus cost) adds to the score, and
+   *  each point spent (a minus cost) subtracts — spending toward zero must be
+   *  bought by the ability's effect value. */
+  readonly loyaltyPerCounter: number;
 
   // --- blocking ------------------------------------------------------------
   /** Below this life total the defender blocks much more readily (preserve life /
@@ -272,6 +290,18 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   faceDamageValue: 1,
   ownCreatureLossPerStat: 1,
   killEnemyPerStat: 1,
+  // A walker at N loyalty prices like a creature with ~2N stats on the table
+  // (each turn it lives is another ability), plus a flat bonus for actually
+  // finishing it — together they outbid plain face damage whenever the walker
+  // can really be killed, and never when it cannot.
+  walkerThreatPerLoyalty: 2,
+  walkerKillBonus: 8,
+
+  // activating loyalty abilities: above genericSpellScore so a walker on the
+  // table is USED (a plus activation is close to free value every turn), with
+  // each spent counter priced so a minus must be bought by its effect value.
+  loyaltyAbilityBaseScore: 30,
+  loyaltyPerCounter: 3,
 
   // blocking
   desperateLifeThreshold: 10,

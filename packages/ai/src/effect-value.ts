@@ -40,9 +40,11 @@ import {
   effectiveToughness,
   isCreature,
   MANA_COLORS,
+  matchesCardFilter,
   opponentOf,
   remainingToughness,
 } from '@jonny-boi/core';
+import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
 import type { HeuristicWeights } from './weights.js';
 
@@ -117,6 +119,12 @@ function manaCostParam(params: Readonly<Record<string, unknown>>, key: string): 
     if (typeof amount === 'number' && Number.isFinite(amount) && amount > 0) cost[field] = amount;
   }
   return Object.keys(cost).length > 0 ? (cost as ManaCost) : undefined;
+}
+
+/** Read a `CardFilter`-shaped param (what a sacrifice/discard may pick from). */
+function filterParamOf(params: Readonly<Record<string, unknown>>): CardFilter | undefined {
+  const v = params.filter;
+  return typeof v === 'object' && v !== null ? (v as CardFilter) : undefined;
 }
 
 /**
@@ -356,6 +364,15 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
    * worth nothing at all against an empty hand.
    */
   discardCard: (params, ctx) => {
+    // "Each player discards" (Liliana's +1): symmetric on paper, ours in
+    // practice when we planned for it — we chose to fire it, so half-price the
+    // self half. An empty opposing hand makes the whole thing worthless.
+    if (strParam(params, 'who') === 'eachPlayer') {
+      const base = ctx.weights.modeDiscardBaseScore;
+      const theirs = ctx.state.players[opponentOf(ctx.player)].hand.length;
+      const mine = ctx.state.players[ctx.player].hand.length;
+      return (theirs > 0 ? base : 0) - (mine > 0 ? base / 2 : 0);
+    }
     const victim = subjectPlayer(params, 'who', 'targetPlayer', ctx);
     if (victim === undefined) return 0;
     const hand = ctx.state.players[victim].hand;
@@ -365,6 +382,45 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     const worst = bestCardIn(hand, ctx);
     const value = ctx.weights.modeDiscardBaseScore + worst * count;
     return victim === ctx.player ? -value : value;
+  },
+
+  /**
+   * An edict ("target player sacrifices a creature") is removal whose victim
+   * picks — so it is worth their WORST qualifying body, not their best, and it
+   * is worth nothing at all against an empty board.
+   */
+  sacrificeChosen: (params, ctx) => {
+    const victim = subjectPlayer(params, 'who', 'targetPlayer', ctx);
+    if (victim === undefined) return 0;
+    let worst: number | undefined;
+    for (const perm of ctx.state.battlefield) {
+      if (perm.controller !== victim) continue;
+      if (!matchesCardFilter(perm, filterParamOf(params))) continue;
+      const value = removalValue(perm, ctx.weights);
+      if (worst === undefined || value < worst) worst = value;
+    }
+    if (worst === undefined) return 0;
+    return victim === ctx.player ? -worst : worst;
+  },
+
+  /**
+   * The pile split (Liliana's −6) costs its victim about HALF their board by
+   * value: a fair split loses the lesser pile, an unfair one lets the victim
+   * keep the good half. Worth nothing against an empty board.
+   */
+  pileSplitSacrifice: (params, ctx) => {
+    const victim = subjectPlayer(params, 'who', 'targetPlayer', ctx);
+    if (victim === undefined) return 0;
+    let total = 0;
+    let any = false;
+    for (const perm of ctx.state.battlefield) {
+      if (perm.controller !== victim) continue;
+      any = true;
+      total += removalValue(perm, ctx.weights);
+    }
+    if (!any) return 0;
+    const half = total / 2;
+    return victim === ctx.player ? -half : half;
   },
 
   /** Regrowth is worth the best card actually sitting in the yard. */

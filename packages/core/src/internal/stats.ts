@@ -36,6 +36,61 @@ export const PLUS_ONE_COUNTER = '+1/+1';
 export const MINUS_ONE_COUNTER = '-1/-1';
 
 /**
+ * Counter kind for loyalty counters — a planeswalker's "life total". Stored in the
+ * same generic `CardInstance.counters` record as +1/+1 counters (they ARE counters,
+ * CR 306.5b), so cloning, serialization and the inspector all carry them for free.
+ */
+export const LOYALTY_COUNTER = 'loyalty';
+
+/**
+ * A planeswalker's current loyalty. Zero for anything that is not carrying loyalty
+ * counters — including a non-planeswalker, so callers gate on the card type, not
+ * on this returning 0.
+ */
+export function loyaltyOf(inst: CardInstance): number {
+  return inst.counters[LOYALTY_COUNTER] ?? 0;
+}
+
+/**
+ * Remove `amount` loyalty from a walker (damage, a minus ability), never below
+ * zero — there is no such thing as negative loyalty (CR 118.5). Returns how many
+ * counters actually left. Honors the counters replace-don't-mutate contract.
+ */
+export function removeLoyalty(inst: CardInstance, amount: number): number {
+  const current = inst.counters[LOYALTY_COUNTER] ?? 0;
+  const removed = Math.min(Math.max(amount, 0), current);
+  if (removed === 0) return 0;
+  inst.counters = { ...inst.counters, [LOYALTY_COUNTER]: current - removed };
+  return removed;
+}
+
+/** Add `amount` loyalty counters (a plus ability). Replace-don't-mutate. */
+export function addLoyalty(inst: CardInstance, amount: number): void {
+  if (amount <= 0) return;
+  const current = inst.counters[LOYALTY_COUNTER] ?? 0;
+  inst.counters = { ...inst.counters, [LOYALTY_COUNTER]: current + amount };
+}
+
+/**
+ * Give a just-entered planeswalker its printed starting loyalty (CR 306.5b).
+ * The ONE helper every battlefield-entry path calls — resolving the walker
+ * spell, a token copy, a mid-resolution put — so "enters with its loyalty"
+ * cannot be true on one path and false on another. A non-walker (or a walker
+ * definition with no printed loyalty, which the compiler refuses to produce) is
+ * left untouched.
+ */
+export function applyEnteringLoyalty(
+  inst: CardInstance,
+  emit: (e: import('../events.js').GameEvent) => void,
+): void {
+  const printed = inst.def.loyalty;
+  if (printed === undefined || printed <= 0) return;
+  if (!inst.def.types.includes('planeswalker')) return;
+  inst.counters = { ...inst.counters, [LOYALTY_COUNTER]: printed };
+  emit({ type: 'loyaltyChanged', instanceId: inst.instanceId, delta: printed, to: printed });
+}
+
+/**
  * Net power/toughness shift from counters on a permanent.
  *
  * Both standard kinds are read here. `-1/-1` used to be stored as a NEGATIVE

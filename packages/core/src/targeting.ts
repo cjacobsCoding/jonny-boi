@@ -32,6 +32,7 @@
 
 import type { CardDefinition, EffectRef } from './card.js';
 import { isCreature } from './card.js';
+import { isPlaneswalker } from './card.js';
 import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
@@ -41,12 +42,11 @@ import { protectionBlocksSource } from './protection.js';
 /**
  * What a targeted effect may point at.
  *
- * - `'any'` — MTG's "any target": a creature **or** a player. (Planeswalkers do
- *   not exist in this engine, so "creature, player or planeswalker" is exactly
- *   this — vacuous, not approximated.)
- * - `'creature'` — "target creature" only. Never a player's face.
- * - `'player'` — "target player" / "target player or planeswalker" only. Never a
- *   creature.
+ * - `'any'` — MTG's "any target": a creature, a player, **or a planeswalker**
+ *   (CR 115.4 — since planeswalkers exist in this engine, "any target" includes
+ *   them, exactly as the printed reminder text says).
+ * - `'creature'` — "target creature" only. Never a player's face, never a walker.
+ * - `'player'` — "target player" only. Never a creature or a planeswalker.
  * - `'spell'` — "target spell": an object on the stack. Its point is the *timing*
  *   rule rather than the aim — a counterspell with an empty stack has no legal
  *   target and therefore **cannot be cast at all**. Without it, "Counter target
@@ -82,7 +82,17 @@ export type TargetRestriction =
    * a pilot spend mana equipping the opponent's board, which is a card playing
    * differently from its printed text.
    */
-  | 'creatureYouControl';
+  | 'creatureYouControl'
+  /**
+   * "target player or planeswalker" — a face or a walker, never a creature.
+   * Lava Spike's printed line. Its own restriction (not `'player'`) because
+   * flattening it would make the card NARROWER than printed now that
+   * planeswalkers exist — the same infidelity this module polices, in the other
+   * direction.
+   */
+  | 'playerOrPlaneswalker'
+  /** "target creature or planeswalker" — a permanent of either kind, never a face. */
+  | 'creatureOrPlaneswalker';
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -107,7 +117,9 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'spell' ||
     value === 'artifact' ||
     value === 'opponent' ||
-    value === 'creatureYouControl'
+    value === 'creatureYouControl' ||
+    value === 'playerOrPlaneswalker' ||
+    value === 'creatureOrPlaneswalker'
   );
 }
 
@@ -176,7 +188,7 @@ export function isLegalTarget(
       // Unknown caster ⇒ illegal, never "probably fine" (see the type's note).
       return controller !== undefined && target !== controller;
     }
-    return restriction === 'any' || restriction === 'player';
+    return restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker';
   }
   if (restriction === 'player' || restriction === 'opponent') return false;
   if (restriction === 'spell') {
@@ -188,6 +200,12 @@ export function isLegalTarget(
   if (!permanent) return false;
   if (!isTargetableBy(state, permanent, controller, source)) return false;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
+  // "Target player or planeswalker": a permanent target must be a walker.
+  if (restriction === 'playerOrPlaneswalker') return isPlaneswalker(permanent.def);
+  // "Any target" and "creature or planeswalker" accept a walker permanent too.
+  if (restriction === 'any' || restriction === 'creatureOrPlaneswalker') {
+    return isCreature(permanent.def) || isPlaneswalker(permanent.def);
+  }
   if (restriction === 'creatureYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
     if (controller === undefined || permanent.controller !== controller) return false;
@@ -268,7 +286,9 @@ export function legalTargetsFor(
     return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
   }
   const targets: (InstanceId | PlayerId)[] = [];
-  if (restriction === 'any' || restriction === 'player') targets.push(...PLAYER_IDS);
+  if (restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker') {
+    targets.push(...PLAYER_IDS);
+  }
   if (restriction === 'opponent') {
     // With no caster there is no such thing as "an opponent", so nothing is
     // offered and the spell simply cannot be cast — the safe direction.
@@ -278,9 +298,20 @@ export function legalTargetsFor(
   }
   // A hexproof/shroud permanent is never OFFERED, so a consumer picking only
   // from this menu cannot try an illegal target in the first place.
-  if (restriction === 'any' || restriction === 'creature') {
+  if (restriction === 'any' || restriction === 'creature' || restriction === 'creatureOrPlaneswalker') {
+    // "Any target" (and "creature or planeswalker") includes planeswalkers —
+    // CR 115.4 — so a walker on the battlefield is a real member of this menu.
+    const walkersToo = restriction !== 'creature';
     for (const permanent of state.battlefield) {
-      if (isCreature(permanent.def) && isTargetableBy(state, permanent, controller, source)) {
+      const kindOk = isCreature(permanent.def) || (walkersToo && isPlaneswalker(permanent.def));
+      if (kindOk && isTargetableBy(state, permanent, controller, source)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'playerOrPlaneswalker') {
+    for (const permanent of state.battlefield) {
+      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source)) {
         targets.push(permanent.instanceId);
       }
     }
@@ -389,7 +420,11 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an opponent';
     case 'creatureYouControl':
       return 'a creature you control';
+    case 'playerOrPlaneswalker':
+      return 'a player or a planeswalker';
+    case 'creatureOrPlaneswalker':
+      return 'a creature or a planeswalker';
     case 'any':
-      return 'any target (a creature or a player)';
+      return 'any target (a creature, a player, or a planeswalker)';
   }
 }

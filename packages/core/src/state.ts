@@ -131,6 +131,18 @@ export interface CardInstance {
    * See `attachments.ts` for the relationship's rules.
    */
   attachedTo?: InstanceId | null;
+  /**
+   * The turn number on which a LOYALTY ability of this permanent was last
+   * activated — the once-per-turn rule (CR 606.3 modern form) is enforced by
+   * comparing this to `GameState.turnNumber`, so no per-turn reset pass is
+   * needed and a stale value from a previous turn is simply not equal.
+   *
+   * OPTIONAL and written only when a loyalty ability is actually activated, for
+   * the same object-shape/throughput reason as {@link attachedTo}: nearly every
+   * instance in a game never touches it, and `cloneInstance` copies it only when
+   * present. Anyone adding a field here must also edit `internal/clone.ts`.
+   */
+  loyaltyActivatedTurn?: number;
 }
 
 /**
@@ -305,6 +317,18 @@ export interface CombatState {
    */
   attackersDeclared: boolean;
   blockersDeclared: boolean;
+  /**
+   * What each attacker was declared attacking, when it is NOT the defending
+   * player: attacker instanceId → the attacked permanent (a planeswalker today;
+   * the seam is `isAttackable`, so battles reuse it). An attacker with no entry
+   * here attacks the defending player — the overwhelmingly common case, which is
+   * why the map is OPTIONAL and usually absent: every pre-existing consumer
+   * (tests, serialized states, the replay) reads combat exactly as before.
+   *
+   * Anyone adding a field here must also edit `cloneCombat` in
+   * `internal/clone.ts` — a field-by-field cloner drops what it does not know.
+   */
+  attackTargets?: Record<InstanceId, InstanceId | PlayerId>;
 }
 
 /** The whole game world as one plain-data object. */

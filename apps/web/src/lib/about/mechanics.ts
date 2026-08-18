@@ -228,6 +228,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
           '"[Other] creatures you control get +1/+1" and keyword-granting statics ("…have haste") compile onto the continuous layer, so the buff exists exactly while its source is on the battlefield.',
         witness: { kind: 'rule', id: 'static-buff-your-creatures' },
       },
+      {
+        title: 'Planeswalkers & loyalty',
+        detail:
+          'Walkers enter at printed loyalty; +N/−N abilities are sorcery-speed, once per walker per turn; creatures attack them, "any target" burns them, and 0 loyalty is death by state-based action. Liliana of the Veil plays all three abilities as printed.',
+        witness: { kind: 'card', name: 'Liliana of the Veil' },
+      },
     ],
   },
   {
@@ -311,10 +317,10 @@ export function compilerRuleGroups(): readonly CompilerRuleGroup[] {
 /** The compiler's TODO, split by what a gap means. */
 export interface TodoMechanics {
   /**
-   * Missing ENGINE SYSTEMS — real subsystems nobody has built (planeswalker
-   * loyalty, transform, {X} costs…). Implementing one unblocks every card
-   * waiting on it. Sourced from the compiler's own hint list plus the card
-   * types it cannot represent.
+   * Missing ENGINE SYSTEMS — real subsystems nobody has built (emblems,
+   * battles, {X} costs…). Implementing one unblocks every card waiting on it.
+   * Sourced from the compiler's own hint list plus the card types it cannot
+   * represent.
    */
   readonly systems: readonly string[];
   /**

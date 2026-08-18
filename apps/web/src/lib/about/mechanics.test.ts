@@ -68,9 +68,10 @@ describe('the TODO side', () => {
     const all = [...todo.systems, ...todo.templateGaps];
     expect(new Set(all).size).toBe(all.length);
     // A system everyone knows is missing — if it lands, delete the assertion
-    // and enjoy the moment. (Transform/DFC used to sit beside it; the second
-    // face landed, so its hint is a TEMPLATE gap now — asserted below.)
-    expect(todo.systems).toContain('planeswalker loyalty abilities');
+    // and enjoy the moment. (Transform/DFC and planeswalker loyalty both used
+    // to sit here; both landed, so their hints are TEMPLATE gaps now, and the
+    // walker system's one remaining named subsystem is emblems.)
+    expect(todo.systems).toContain('emblems (a command-zone object that persists after its planeswalker leaves)');
     expect(todo.templateGaps).toContain('a transform/double-faced template the compiler does not recognize yet');
     // Template wording must not leak into the systems list, or the page would
     // overstate how much engine work is left.

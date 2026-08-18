@@ -65,6 +65,8 @@ export {
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  sacrificeChosen,
+  pileSplitSacrifice,
   transformRevealTop,
 } from './choice-primitives.js';
 
@@ -143,6 +145,8 @@ export {
  * The second-face system (CardDefinition.backFace + core's transformPermanent)
  * un-stubbed **Delver of Secrets** — both faces play as printed, upkeep reveal
  * included.
+ * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
+ * abilities play as printed (each-player discard, the edict, the pile split).
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
@@ -162,7 +166,6 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
       'granting flashback to a card in a graveyard (targeting a graveyard card + a continuous effect on a non-battlefield card)',
   },
   { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
-  { card: 'Liliana of the Veil', missingEngineSystem: 'planeswalker loyalty abilities' },
   {
     card: 'Fatal Push',
     missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',

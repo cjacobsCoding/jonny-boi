@@ -63,6 +63,10 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // a field that is almost always null. Copying it conditionally keeps the ordinary
   // instance byte-for-byte the object it has always been.
   if (inst.attachedTo != null) copy.attachedTo = inst.attachedTo;
+  // Same conditional-copy argument as `attachedTo`: only a planeswalker whose
+  // loyalty ability has been activated ever carries this, and an unconditional
+  // extra property on every clone measurably costs sim throughput.
+  if (inst.loyaltyActivatedTurn !== undefined) copy.loyaltyActivatedTurn = inst.loyaltyActivatedTurn;
   // Same conditional-copy rule as `attachedTo`, and the same stakes as a
   // dropped stack-object field: `def` is the ACTIVE face (a transformed DFC
   // points at its nested back face), and `printedDef` is the only way back to
@@ -146,6 +150,9 @@ function cloneCombat(c: CombatState | null): CombatState | null {
     blocks: { ...c.blocks },
     attackersDeclared: c.attackersDeclared,
     blockersDeclared: c.blockersDeclared,
+    // Copied only when present — absent means "everyone attacks the player", and
+    // most combats never declare an attack on a permanent at all.
+    ...(c.attackTargets !== undefined ? { attackTargets: { ...c.attackTargets } } : {}),
   };
 }
 

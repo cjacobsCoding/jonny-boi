@@ -59,7 +59,9 @@ import {
   isCreature,
   isLand,
   isLegalTarget,
+  isPlaneswalker,
   legalTargetsFor,
+  loyaltyOf,
   MANA_COLORS,
   planManaPayment,
   remainingToughness,
@@ -68,6 +70,7 @@ import {
 } from '@jonny-boi/core';
 import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
+import { valueOfEffects } from './effect-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -120,6 +123,8 @@ type SpellIntent =
       readonly amount: number;
       readonly canTargetCreature: boolean;
       readonly canTargetPlayer: boolean;
+      /** "Any target" / "…or planeswalker" — burn that can finish off a walker. */
+      readonly canTargetWalker: boolean;
       /**
        * True when the printed amount is the cast-time X (`{ chosenX: true }`
        * param) rather than a number. The DEFINITION cannot know what X will be
@@ -312,7 +317,51 @@ function bestAbility(ctx: DecisionContext, weights: HeuristicWeights): GameActio
     if (!fetchesALand(ability)) continue;
     return emit(ctx, action, ctx.trace ? `activate ${ability.label}` : NO_REASON, weights.playLandScore);
   }
-  return undefined;
+  return bestLoyaltyActivation(ctx, weights);
+}
+
+/**
+ * The best LOYALTY activation offered right now, or `undefined`.
+ *
+ * A planeswalker on the table generates value exactly once per turn, so leaving
+ * its abilities unused is the same class of mistake as a land left in hand — the
+ * inert-card failure this pilot exists to avoid. Every offered loyalty action
+ * (the engine already enumerated one per legal target) is scored as
+ *
+ *     base + loyaltyPerCounter × (signed cost) + value of its effects
+ *
+ * with the effects priced by the same `valueOfEffects` ruler that picks a modal
+ * spell's modes and aims a trigger — so a plus that discards from both hands, an
+ * edict, and the pile-split ultimate all price themselves with no walker-specific
+ * card knowledge. The best positive-scoring activation wins; minus abilities pay
+ * for their counters through their effect value or don't happen.
+ */
+function bestLoyaltyActivation(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  let best: { action: GameAction; score: number; label: string } | undefined;
+  let cards: ReturnType<typeof cardValueContext> | undefined;
+  for (const action of legalActions) {
+    if (action.kind !== 'activateAbility') continue;
+    const source = findInstance(view, action.instanceId);
+    const ability = source?.def.activated?.[action.abilityIndex];
+    const loyalty = ability?.cost.loyalty;
+    if (!ability || loyalty === undefined) continue;
+    cards ??= cardValueContext(view as GameState);
+    const effectValue = valueOfEffects(ability.effects, {
+      state: view as GameState,
+      player: me,
+      targets: action.targets ?? [],
+      weights,
+      cards,
+    });
+    const score = weights.loyaltyAbilityBaseScore + weights.loyaltyPerCounter * loyalty + effectValue;
+    if (score <= weights.passScore) continue;
+    if (!best || score > best.score) {
+      best = { action, score, label: ctx.trace ? `activate ${ability.label}` : NO_REASON };
+    }
+  }
+  return best ? emit(ctx, best.action, best.label, best.score) : undefined;
 }
 
 /**
@@ -633,16 +682,23 @@ function defaultLegalTarget(
   restriction: TargetRestriction,
   source?: CardDefinition,
 ): InstanceId | PlayerId | undefined {
-  if (restriction === 'player') return opp;
+  if (restriction === 'player' || restriction === 'playerOrPlaneswalker') return opp;
   // Only creatures the spell may actually be aimed at are candidates —
   // a fallback the engine would reject (hexproof, shroud, protection) is a
-  // guaranteed rejected cast and a re-chosen goal, i.e. a live-lock.
+  // guaranteed rejected cast and a re-chosen goal, i.e. a live-lock. A
+  // creature-or-planeswalker restriction falls back to 'creature' for this
+  // legality probe — a creature candidate is legal for it exactly when it is
+  // legal as a creature target.
   const state = view as GameState;
+  const probe = restriction === 'any' || restriction === 'creatureOrPlaneswalker' ? 'creature' : restriction;
   const legal = creaturesControlledBy(view, opp).filter((creature) =>
-    isLegalTarget(state, restriction === 'any' ? 'creature' : restriction, creature.instanceId, undefined, source),
+    isLegalTarget(state, probe, creature.instanceId, undefined, source),
   );
   const biggest = biggestThreat(legal);
   if (biggest) return biggest.instanceId;
+  if (restriction === 'creatureOrPlaneswalker') {
+    return walkersControlledBy(view, opp)[0]?.instanceId;
+  }
   return restriction === 'any' ? opp : undefined;
 }
 
@@ -686,7 +742,23 @@ function scoreSpell(
         ? weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target)
         : -Infinity;
       const faceScore = intent.canTargetPlayer ? faceBurnScore(life, intent.amount, weights) : -Infinity;
+      // A walker the burn can FINISH is removal too — priced per loyalty plus the
+      // kill bonus, so Bolt answers a ticking walker but never chips one it
+      // cannot kill (chip damage buys tempo the burn deck does not want to buy).
+      const walker = intent.canTargetWalker ? biggestKillableWalker(view, opp, intent.amount) : undefined;
+      const walkerScore = walker
+        ? weights.removalBaseScore + weights.walkerThreatPerLoyalty * loyaltyOf(walker) + weights.walkerKillBonus
+        : -Infinity;
 
+      if (walkerScore > faceScore && walkerScore >= killScore && walker) {
+        return {
+          score: walkerScore,
+          card,
+          cost,
+          targets: [walker.instanceId],
+          reason: explain ? `burn removal — finish ${walker.def.name} (${loyaltyOf(walker)} loyalty)` : NO_REASON,
+        };
+      }
       if (faceScore >= killScore && faceScore > -Infinity) {
         return {
           score: faceScore,
@@ -1072,9 +1144,76 @@ function chooseAttack(ctx: DecisionContext, weights: HeuristicWeights): GameActi
     // Nothing profitable to attack with → declare no attackers (pass the step).
     return emit(ctx, passAction(view), 'no profitable attack — holding back', weights.passScore);
   }
-  const action: GameAction = { kind: 'declareAttackers', player: me, attackers: chosen };
-  const why = ctx.trace ? `attack with ${chosen.length} creature(s)` : NO_REASON;
+  const attackTargets = planWalkerAttack(view, opp, chosen, weights);
+  const action: GameAction = {
+    kind: 'declareAttackers',
+    player: me,
+    attackers: chosen,
+    ...(attackTargets !== undefined ? { attackTargets } : {}),
+  };
+  const why = ctx.trace
+    ? attackTargets !== undefined
+      ? `attack with ${chosen.length} creature(s), ${Object.keys(attackTargets).length} at a planeswalker`
+      : `attack with ${chosen.length} creature(s)`
+    : NO_REASON;
   return emit(ctx, action, why, weights.attackValueThreshold);
+}
+
+/**
+ * Decide which of the chosen attackers should be sent at an enemy PLANESWALKER
+ * instead of the player, or `undefined` when everyone should go face.
+ *
+ * The policy is deliberately simple and fully explainable:
+ *   - if the whole attack is lethal to the PLAYER, nothing is diverted — winning
+ *     now beats any walker;
+ *   - otherwise, take the enemy walker with the most loyalty that the chosen
+ *     attackers could actually FINISH if unblocked, and divert the smallest
+ *     (fewest, largest-first) set of attackers whose power covers its loyalty.
+ *     Chip damage on a walker nobody can kill is not bought: it trades real face
+ *     damage for a discount the opponent controls.
+ * The defender may still block the diverted attackers — that is combat.
+ */
+function planWalkerAttack(
+  view: PilotView,
+  opp: PlayerId,
+  chosen: readonly InstanceId[],
+  weights: HeuristicWeights,
+): Record<InstanceId, InstanceId | PlayerId> | undefined {
+  const walkers = walkersControlledBy(view, opp);
+  if (walkers.length === 0) return undefined;
+
+  const attackers = chosen
+    .map((id) => findInstance(view, id))
+    .filter((c): c is CardInstance => c !== undefined);
+  let totalPower = 0;
+  for (const attacker of attackers) totalPower += effectivePower(attacker);
+  // Lethal to the player → the walker can be dealt with after the handshake.
+  if (totalPower >= view.players[opp].life) return undefined;
+
+  // The best walker the whole attack could finish.
+  let target: CardInstance | undefined;
+  for (const walker of walkers) {
+    const loyalty = loyaltyOf(walker);
+    if (loyalty <= 0 || loyalty > totalPower) continue;
+    if (!target || loyalty > loyaltyOf(target)) target = walker;
+  }
+  if (!target) return undefined;
+  // Only divert when killing it is actually worth more than the face damage the
+  // diverted power gives up (walkers usually are, via the per-loyalty pricing).
+  const loyalty = loyaltyOf(target);
+  const walkerWorth = weights.walkerThreatPerLoyalty * loyalty + weights.walkerKillBonus;
+  if (walkerWorth < weights.faceDamageValue * loyalty) return undefined;
+
+  // Fewest attackers: biggest first until the loyalty is covered.
+  const byPowerDesc = [...attackers].sort((a, b) => effectivePower(b) - effectivePower(a));
+  const assigned: Record<InstanceId, InstanceId | PlayerId> = {};
+  let covered = 0;
+  for (const attacker of byPowerDesc) {
+    if (covered >= loyalty) break;
+    assigned[attacker.instanceId] = target.instanceId;
+    covered += effectivePower(attacker);
+  }
+  return covered >= loyalty ? assigned : undefined;
 }
 
 /**
@@ -1283,8 +1422,10 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
       return {
         kind: 'damage',
         amount,
-        canTargetCreature: targets === 'any' || targets === 'creature',
-        canTargetPlayer: targets === 'any' || targets === 'player',
+        canTargetCreature: targets === 'any' || targets === 'creature' || targets === 'creatureOrPlaneswalker',
+        canTargetPlayer: targets === 'any' || targets === 'player' || targets === 'playerOrPlaneswalker',
+        canTargetWalker:
+          targets === 'any' || targets === 'playerOrPlaneswalker' || targets === 'creatureOrPlaneswalker',
         ...(amountIsX ? { amountIsX: true } : {}),
       };
     }
@@ -1319,6 +1460,30 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
 /** Creatures a player controls on the battlefield. */
 function creaturesControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
   return view.battlefield.filter((c) => c.controller === player && isCreature(c.def)) as CardInstance[];
+}
+
+/** Planeswalkers a player controls on the battlefield. */
+function walkersControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
+  return view.battlefield.filter((c) => c.controller === player && isPlaneswalker(c.def)) as CardInstance[];
+}
+
+/**
+ * The most valuable enemy walker this much damage can FINISH (loyalty ≤ amount),
+ * "most valuable" being the one with the most loyalty — it is the one making the
+ * most trouble per turn it survives.
+ */
+function biggestKillableWalker(
+  view: PilotView,
+  opp: PlayerId,
+  amount: number,
+): CardInstance | undefined {
+  let best: CardInstance | undefined;
+  for (const walker of walkersControlledBy(view, opp)) {
+    const loyalty = loyaltyOf(walker);
+    if (loyalty <= 0 || loyalty > amount) continue;
+    if (!best || loyalty > loyaltyOf(best)) best = walker;
+  }
+  return best;
 }
 
 /**
@@ -1563,11 +1728,31 @@ function collectAttackCandidates(
     if (attacker && attackIsProfitable(attacker, enemyBlockers, weights)) profitable.push(id);
   }
   if (profitable.length > 0) {
+    // The value-judged attack carries the same walker assignment the plain
+    // heuristic would make, so the search's preferred line can actually kill a
+    // planeswalker rather than walkers being reachable only outside search.
+    const walkerPlan = planWalkerAttack(view, opp, profitable, weights);
     out.push({
-      plies: [{ kind: 'declareAttackers', player: me, attackers: profitable }],
+      plies: [
+        {
+          kind: 'declareAttackers',
+          player: me,
+          attackers: profitable,
+          ...(walkerPlan !== undefined ? { attackTargets: walkerPlan } : {}),
+        },
+      ],
       score: weights.attackValueThreshold,
       label: explain ? `attack with ${profitable.length}` : NO_REASON,
     });
+    // When a walker plan exists, the all-face version stays on the menu too —
+    // whether the race beats the walker kill is exactly a search question.
+    if (walkerPlan !== undefined) {
+      out.push({
+        plies: [{ kind: 'declareAttackers', player: me, attackers: profitable }],
+        score: weights.attackValueThreshold - 1,
+        label: explain ? `attack with ${profitable.length} (all at the player)` : NO_REASON,
+      });
+    }
   }
   if (offered.attackers.length !== profitable.length) {
     out.push({

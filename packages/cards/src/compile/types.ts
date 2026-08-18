@@ -45,6 +45,14 @@ export interface CompilableCard {
   /** Printed power/toughness; `null` for non-creatures and for `*` values. */
   readonly power: number | null;
   readonly toughness: number | null;
+  /**
+   * Printed starting loyalty — planeswalkers only. `null`/absent for everything
+   * else, and for a walker whose record predates loyalty being captured (an old
+   * cached index): the compiler then reports the missing datum rather than
+   * inventing a number, because a walker entering at the wrong loyalty is a
+   * different card.
+   */
+  readonly loyalty?: number | null;
   /** Scryfall's keyword list (e.g. `['Flying', 'Prowess']`). */
   readonly keywords: readonly string[];
   /**

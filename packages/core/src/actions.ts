@@ -83,11 +83,20 @@ export interface ActivateAbilityAction {
   readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
 }
 
-/** Declare attackers (active player, declareAttackers step). */
+/**
+ * Declare attackers (active player, declareAttackers step).
+ *
+ * `attackTargets` optionally names, per attacker, the ATTACKED OBJECT when it is
+ * not the defending player: a planeswalker the defender controls (any permanent
+ * for which core's `isAttackable` answers true — the seam battles will reuse).
+ * An attacker with no entry attacks the defending player, so every existing
+ * caller keeps meaning exactly what it always meant.
+ */
 export interface DeclareAttackersAction {
   readonly kind: 'declareAttackers';
   readonly player: PlayerId;
   readonly attackers: readonly InstanceId[];
+  readonly attackTargets?: Readonly<Record<InstanceId, InstanceId | PlayerId>>;
 }
 
 /**
