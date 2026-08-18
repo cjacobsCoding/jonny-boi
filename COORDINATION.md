@@ -90,10 +90,33 @@ throughput (games/sec) from regressing.
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
+| feat/template-gaps | worker | packages/cards (compile/rules.ts + types.ts + compile.ts + NEW compile/template-gaps.test.ts; primitives.ts drawCards; data/pool.ts Sakura-Tribe Elder; src/index.ts STUBBED_MECHANICS), packages/core (effects.ts + internal/continuous.ts spell-source control-change fix + gain-control.test.ts), packages/sim (1 stale deck comment), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-17 worker: `feat/template-gaps` 🚧 PUSHED — **six importer template gaps closed as
+  rule-table data**, each proven by a real card compiling `'complete'` with pinned params AND playing
+  correctly in an engine game (`packages/cards/src/compile/template-gaps.test.ts`). Closed:
+  **anthem statics** ("[Other] creatures you control get +X/+Y / have KEYWORD" — Glorious Anthem,
+  Fervor; new `ClauseContribution.statics` reaches the `statics.ts` layer that existed with no rule
+  able to emit it), **basic-land search** ("…for a basic land card, put it/that card onto the
+  battlefield [tapped]" — Rampant Growth, and it **UN-STUBS Sakura-Tribe Elder**, now removed from
+  `STUBBED_MECHANICS` with its full activated ability authored in the pool), **typed regrowth**
+  (Raise Dead), **targeted discard** (Mind Rot — victim chooses), **targeted draw/lose** (Sign in
+  Blood; `drawCards` gained `whichPlayer:'targetPlayer'` — param extension, NO new primitive, so
+  paired-arms-config is untouched), and **Act of Treason's exact templating** ("Untap that
+  creature."). The Treason play test caught a REAL engine bug: a control change from a resolving
+  SPELL silently no-oped (`applyControlChange` derives the stealer from the source's battlefield
+  presence; a sorcery is never there) — fixed with a fallback `stealer` param passed from the
+  resolution's controller, core regression test added. Every existing "gain control" import was
+  affected. Deliberately NOT built (need real systems; sibling branches own several): Tarmogoyf
+  (characteristic-defining P/T; `StaticAbility` deltas are fixed numbers), Fatal Push (no turn-scoped
+  event memory for revolt), scry/surveil (no bottom-of-library primitive), colored statics
+  (`CardFilter` has no color field), modal "choose three / one or both", {X}/kicker/cycling,
+  transform, planeswalkers. Coverage audit re-run: **178 → 190 playable (8.5% → 9.0%)**. About page
+  gains witness-pinned entries (anthems, ramp/sac-fetch). `npm run verify` exit 0, full suite green,
+  `npm run build` exit 0. (Worker)
 - 2026-08-17 worker: `feat/shocklands` 🚧 PUSHED — **shocklands play as printed, on BOTH entry
   paths.** New `payLife` choice kind (engine charges the life once in `applyAnswerChoice`, CR 118.4
   re-checked against the live total; pay-to-exactly-zero legal and lethal). The price is a decision,

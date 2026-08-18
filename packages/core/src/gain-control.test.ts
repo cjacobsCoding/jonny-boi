@@ -109,6 +109,22 @@ describe('taking control', () => {
     expect(applyControlChange(state, victim.instanceId, ghostId, collector().emit)).toBeUndefined();
     expect(victim.controller).toBe('B');
   });
+
+  it('a SPELL source steals for its named caster (the source is never on the battlefield)', () => {
+    // Act of Treason's shape: the stealing effect resolves from the stack, so
+    // there is no source permanent to read a controller from — the resolution
+    // passes the caster explicitly. Without the fallback this silently no-oped.
+    const state = board();
+    const victim = place(state, BEAR, 'B');
+    const spellId = 9999 as InstanceId;
+    const { emit, events } = collector();
+
+    const change = applyControlChange(state, victim.instanceId, spellId, emit, 'A');
+    expect(victim.controller).toBe('A');
+    expect(victim.summoningSick).toBe(true);
+    expect(change).toEqual({ instanceId: victim.instanceId, from: 'B', to: 'A' });
+    expect(events.some((e) => e.type === 'controlChanged')).toBe(true);
+  });
 });
 
 describe('handing it back', () => {

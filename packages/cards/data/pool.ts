@@ -455,8 +455,29 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 1 },
     power: 1,
     toughness: 1,
-    // Sacrifice for a land needs an activated sac-ability + land search; vanilla
-    // 1/1 plays correctly.
+    // "Sacrifice this creature: Search your library for a basic land card, put
+    // that card onto the battlefield tapped, then shuffle." — the full printed
+    // card: a sacrifice-self activation cost funding the basic-land search
+    // (same search shape as Path to Exile's compensation, on our own library).
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: LAND,
+              nameAnyOf: BASIC_LAND_NAMES,
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: 'Sacrifice ~: search for a basic land, tapped',
+      },
+    ],
   },
   {
     id: 'edd531b9-f615-4399-8c8c-1c5e18c4acbf',

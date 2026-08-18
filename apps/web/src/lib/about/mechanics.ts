@@ -186,6 +186,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail: '"Gain control of target creature until end of turn" — Act of Treason effects.',
         witness: { kind: 'rule', id: 'gain-control-until-eot' },
       },
+      {
+        title: 'Anthems (static buffs)',
+        detail:
+          '"[Other] creatures you control get +1/+1" and keyword-granting statics ("…have haste") compile onto the continuous layer, so the buff exists exactly while its source is on the battlefield.',
+        witness: { kind: 'rule', id: 'static-buff-your-creatures' },
+      },
     ],
   },
   {
@@ -210,7 +216,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Card flow',
         detail:
-          'Draw, discard (including targeted discard where the caster chooses), bounce, and graveyard recursion.',
+          'Draw, discard (targeted discard of the victim\'s choosing, Mind Rot-style, or where the caster chooses, Thoughtseize-style), bounce, and graveyard recursion — whole-graveyard or restricted by card type.',
         witness: { kind: 'rule', id: 'return-target-card-from-graveyard' },
       },
       {
@@ -218,6 +224,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail:
           'Brainstorm-style ordered put-backs, Ponder-style look-and-reorder, optional shuffles, reveals, and fetch-style searches that respect land subtypes.',
         witness: { kind: 'rule', id: 'fetch-land-by-subtype' },
+      },
+      {
+        title: 'Ramp & sacrifice-fetch',
+        detail:
+          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder).',
+        witness: { kind: 'rule', id: 'search-basic-land-to-battlefield' },
       },
       {
         title: 'Mill',
