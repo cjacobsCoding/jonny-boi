@@ -15,6 +15,7 @@ export function PlayCard({
   selected,
   disabled,
   badge,
+  reason,
   onClick,
 }: {
   cardId: string;
@@ -23,10 +24,17 @@ export function PlayCard({
   disabled?: boolean;
   /** Small corner annotation (e.g. "Land", "instant"). */
   badge?: string;
+  /**
+   * Why this card can't be used right now. Shown as the tooltip instead of the bare
+   * name, so a greyed card explains itself rather than looking like a dead control.
+   */
+  reason?: string;
   onClick?: () => void;
 }): ReactElement {
   const card = getCard(cardId);
   const art = card ? cardImage(card, 'art_crop') : undefined;
+  // The name alone is useless on a card the player just tried and failed to use.
+  const tooltip = reason ? `${name} — ${reason}` : name;
   const className = `play-card${selected ? ' play-card--selected' : ''}${
     disabled ? ' play-card--disabled' : ''
   }${onClick && !disabled ? ' play-card--actionable' : ''}`;
@@ -52,13 +60,13 @@ export function PlayCard({
 
   if (onClick) {
     return (
-      <button type="button" className={className} onClick={onClick} disabled={disabled} title={name}>
+      <button type="button" className={className} onClick={onClick} disabled={disabled} title={tooltip}>
         {inner}
       </button>
     );
   }
   return (
-    <div className={className} title={name}>
+    <div className={className} title={tooltip} aria-label={tooltip}>
       {inner}
     </div>
   );

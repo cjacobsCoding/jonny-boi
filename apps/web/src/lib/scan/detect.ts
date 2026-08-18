@@ -8,15 +8,25 @@
  * enough.
  *
  * Cards are visually BUSY (art, text, borders); the surface between them is
- * FLAT. So we measure per-column and per-row pixel variance, mark the busy runs
- * as card bands and the flat runs as gaps, and take the grid those bands imply.
- * That is a handful of array passes, needs no libraries, and — because it works
- * on plain pixel arrays — is fully unit-testable in Node with synthetic images.
+ * FLAT. So we measure per-column and per-row pixel variance and mark the busy
+ * runs as card bands. That is a handful of array passes, needs no libraries, and
+ * — because it works on plain pixel arrays — is fully unit-testable in Node with
+ * synthetic images.
  *
- * When the photo does not cooperate (a patterned tablecloth, cards touching),
- * detection is not the last word: {@link gridCells} builds the same cells from a
- * rows × columns the user types in, so the feature degrades to "tell us the
- * layout" instead of failing (DESIGN §1.6).
+ * Busy-versus-flat alone is not enough, though, because it only ever sees the
+ * gaps BETWEEN cards, and people lay cards out touching. The second half of the
+ * idea is that every Magic card is the same size and shape: once we know one
+ * card's width we know its height, and every band in the photo must be a whole
+ * number of cards across. So we search for the single card size that best
+ * explains the bands on BOTH axes at once and slice the bands up by it. A row of
+ * ten touching cards is one band of content, but only one card size makes that
+ * band ten cards wide AND the rows one card tall — which is why this reads a
+ * tightly-packed layout that gap-hunting alone cannot.
+ *
+ * When the photo still does not cooperate (a patterned tablecloth, a photo of
+ * something that is not a deck), detection is not the last word: {@link gridCells}
+ * builds the same cells from a rows × columns the user types in, so the feature
+ * degrades to "tell us the layout" instead of failing (DESIGN §1.6).
  *
  * Pure: no DOM, no canvas — callers hand in pixels.
  */
@@ -25,8 +35,12 @@ import {
   ASPECT_RATIO_TOLERANCE,
   CARD_ASPECT_RATIO,
   CONTENT_VARIANCE_THRESHOLD,
-  MIN_BAND_FRACTION,
-  MIN_GAP_FRACTION,
+  INTERNAL_GAP_FRACTION,
+  MAX_CARDS_PER_BAND,
+  MAX_LAYOUT_RESIDUAL,
+  MIN_BAND_OF_CARD,
+  MIN_CARD_EXTENT_FRACTION,
+  MIN_CELL_OCCUPANCY,
 } from './config.js';
 
 /** RGBA pixels plus dimensions — structurally compatible with `ImageData`. */
@@ -46,9 +60,21 @@ export interface Rect {
 }
 
 /** A contiguous run of "content" columns or rows. */
-interface Band {
+export interface Band {
   readonly start: number;
   readonly end: number;
+}
+
+/** How many columns/rows a band spans (bands are inclusive). */
+function extentOf(band: Band): number {
+  return band.end - band.start + 1;
+}
+
+/** Middle value of a list — robust to the odd speck in a way a mean is not. */
+function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 0;
 }
 
 /** The outcome of looking for cards in a photo. */
@@ -109,16 +135,8 @@ export function lineVariance(
   return variances;
 }
 
-/**
- * Group a normalized variance profile into content bands: runs above the
- * threshold, with narrow gaps bridged (a card's inner frame line is a dip, not a
- * card boundary) and short runs dropped as noise.
- */
-export function findBands(profile: Float32Array, total: number): Band[] {
-  const minBand = Math.max(1, Math.floor(total * MIN_BAND_FRACTION));
-  const minGap = Math.max(1, Math.floor(total * MIN_GAP_FRACTION));
-
-  // 1. Raw runs above the content threshold.
+/** Raw runs of the profile that sit above the content threshold. */
+export function contentRuns(profile: Float32Array): Band[] {
   const runs: Band[] = [];
   let start = -1;
   for (let i = 0; i < profile.length; i += 1) {
@@ -130,8 +148,27 @@ export function findBands(profile: Float32Array, total: number): Band[] {
     }
   }
   if (start >= 0) runs.push({ start, end: profile.length - 1 });
+  return runs;
+}
 
-  // 2. Bridge gaps too narrow to be a real separation between two cards.
+/**
+ * Group a normalized variance profile into content bands: runs above the
+ * threshold, with narrow gaps bridged (a card's inner frame line is a dip, not a
+ * card boundary) and short runs dropped as speckle.
+ *
+ * "Narrow" is measured against the typical run, i.e. against a card, rather than
+ * against the photo — see {@link INTERNAL_GAP_FRACTION}. Bridging is deliberately
+ * timid: separating cards that genuinely touch is not this function's job, it is
+ * {@link splitByCardSize}'s.
+ */
+export function findBands(profile: Float32Array): Band[] {
+  const runs = contentRuns(profile);
+  if (runs.length === 0) return [];
+
+  const typicalRun = median(runs.map(extentOf));
+  const minGap = Math.max(1, Math.round(typicalRun * INTERNAL_GAP_FRACTION));
+  const minBand = Math.max(1, Math.round(typicalRun * MIN_BAND_OF_CARD));
+
   const merged: Band[] = [];
   for (const run of runs) {
     const previous = merged[merged.length - 1];
@@ -142,8 +179,105 @@ export function findBands(profile: Float32Array, total: number): Band[] {
     }
   }
 
-  // 3. Drop runs too short to be a card.
-  return merged.filter((band) => band.end - band.start + 1 >= minBand);
+  return merged.filter((band) => extentOf(band) >= minBand);
+}
+
+/**
+ * How far a band sits from a whole number of cards, in cards. Zero means the
+ * band is exactly N cards across; 0.5 means it is N-and-a-half.
+ */
+function tilingResidual(extent: number, cardExtent: number): number {
+  const count = Math.max(1, Math.round(extent / cardExtent));
+  return Math.abs(extent - count * cardExtent) / cardExtent;
+}
+
+/** Mean tiling residual of a set of bands against one card size. */
+function axisResidual(bands: readonly Band[], cardExtent: number): number {
+  if (bands.length === 0) return 0;
+  let total = 0;
+  for (const band of bands) total += tilingResidual(extentOf(band), cardExtent);
+  return total / bands.length;
+}
+
+/**
+ * Estimate the card WIDTH that explains the photo. A card's height follows from
+ * its width, so this one number fixes the whole layout — which is what lets the
+ * next step cut a row of touching cards apart.
+ *
+ * Each axis offers an estimate: the typical (median) band on that axis. The two
+ * are then reconciled by taking the SMALLER, and the asymmetry is deliberate.
+ * The errors here are not symmetric — cards that touch merge into one oversized
+ * band and inflate an estimate, while nothing deflates one (a card split in two
+ * by a gap would, but {@link findBands} has already bridged gaps that narrow).
+ * So when the axes disagree it is because one of them merged, and the axis that
+ * still sees gaps is the one telling the truth. That is exactly the case of a
+ * deck laid out in tight rows with clear space between the rows.
+ *
+ * Returns `null` when the result cannot be trusted — a card implausibly small
+ * for the frame, or bands that are not a whole number of cards across after all.
+ * The caller then asks the user for the layout rather than inventing one.
+ */
+export function estimateCardWidth(
+  columnBands: readonly Band[],
+  rowBands: readonly Band[],
+  imageWidth: number,
+  imageHeight: number,
+): number | null {
+  if (columnBands.length === 0 || rowBands.length === 0) return null;
+
+  const fromColumns = median(columnBands.map(extentOf));
+  // A row band measures card HEIGHTS; convert to a width so the two compare.
+  const fromRows = median(rowBands.map(extentOf)) * CARD_ASPECT_RATIO;
+  const cardWidth = Math.min(fromColumns, fromRows);
+  const cardHeight = cardWidth / CARD_ASPECT_RATIO;
+
+  if (cardWidth < Math.max(imageWidth, imageHeight) * MIN_CARD_EXTENT_FRACTION) return null;
+  if (cardWidth > imageWidth || cardHeight > imageHeight) return null;
+
+  // Every band must now be a whole number of cards across. When it is not, we
+  // are not looking at a grid of cards at all.
+  const residual = axisResidual(columnBands, cardWidth) + axisResidual(rowBands, cardHeight);
+  return residual <= MAX_LAYOUT_RESIDUAL ? cardWidth : null;
+}
+
+/**
+ * Cut each band into the whole number of cards it holds. A band of one card is
+ * returned as-is; a row of ten touching cards becomes ten evenly-spaced bands.
+ */
+export function splitByCardSize(bands: readonly Band[], cardExtent: number): Band[] {
+  const out: Band[] = [];
+  for (const band of bands) {
+    const extent = extentOf(band);
+    const count = Math.min(MAX_CARDS_PER_BAND, Math.max(1, Math.round(extent / cardExtent)));
+    const step = extent / count;
+    for (let i = 0; i < count; i += 1) {
+      const start = Math.round(band.start + i * step);
+      const end = Math.round(band.start + (i + 1) * step) - 1;
+      if (end >= start) out.push({ start, end });
+    }
+  }
+  return out;
+}
+
+/** Mean squared deviation of a rectangle's luminance — "how busy is this cell". */
+function cellVariance(luma: Float32Array, imageWidth: number, cell: Rect): number {
+  const x1 = Math.min(imageWidth, cell.x + cell.width);
+  const y1 = cell.y + cell.height;
+  let count = 0;
+  let sum = 0;
+  let sumSquares = 0;
+  for (let y = Math.max(0, cell.y); y < y1; y += 1) {
+    const row = y * imageWidth;
+    for (let x = Math.max(0, cell.x); x < x1; x += 1) {
+      const value = luma[row + x] ?? 0;
+      sum += value;
+      sumSquares += value * value;
+      count += 1;
+    }
+  }
+  if (count === 0) return 0;
+  const mean = sum / count;
+  return Math.max(0, sumSquares / count - mean * mean);
 }
 
 /** Whether a rectangle is plausibly a single card, by aspect ratio. */
@@ -165,23 +299,55 @@ export function detectCards(image: PixelImage): DetectionResult {
   if (width <= 0 || height <= 0) return { cells: [], rows: 0, columns: 0 };
 
   const luma = toLuminance(image);
-  const columnBands = findBands(lineVariance(luma, width, height, 'x'), width);
-  const rowBands = findBands(lineVariance(luma, width, height, 'y'), height);
+  const columnBands = findBands(lineVariance(luma, width, height, 'x'));
+  const rowBands = findBands(lineVariance(luma, width, height, 'y'));
 
-  const cells: Rect[] = [];
-  for (const row of rowBands) {
-    for (const column of columnBands) {
+  const cardWidth = estimateCardWidth(columnBands, rowBands, width, height);
+  if (cardWidth === null) return { cells: [], rows: 0, columns: 0 };
+
+  const columns = splitByCardSize(columnBands, cardWidth);
+  const rows = splitByCardSize(rowBands, cardWidth / CARD_ASPECT_RATIO);
+
+  const candidates: Rect[] = [];
+  for (const row of rows) {
+    for (const column of columns) {
       const rect: Rect = {
         x: column.start,
         y: row.start,
         width: column.end - column.start + 1,
         height: row.end - row.start + 1,
       };
-      if (looksLikeCard(rect)) cells.push(rect);
+      if (looksLikeCard(rect)) candidates.push(rect);
     }
   }
 
-  return { cells, rows: rowBands.length, columns: columnBands.length };
+  return {
+    cells: keepOccupiedCells(luma, width, candidates),
+    rows: rows.length,
+    columns: columns.length,
+  };
+}
+
+/**
+ * Drop grid slots that hold no card.
+ *
+ * A grid is a rectangle but a deck is a count, so the last row of a laid-out
+ * sixty is nearly always short. Without this the empty slots would be cropped,
+ * OCR'd, and either wasted or — worse — matched to whatever the table grain
+ * happened to look like.
+ */
+function keepOccupiedCells(
+  luma: Float32Array,
+  imageWidth: number,
+  candidates: readonly Rect[],
+): Rect[] {
+  if (candidates.length === 0) return [];
+  const variances = candidates.map((cell) => cellVariance(luma, imageWidth, cell));
+  // Measured against the busiest cell rather than the average: card faces differ
+  // in busyness far less than a card differs from bare table.
+  const busiest = Math.max(...variances);
+  if (busiest <= 0) return [];
+  return candidates.filter((_, i) => (variances[i] ?? 0) >= busiest * MIN_CELL_OCCUPANCY);
 }
 
 /**

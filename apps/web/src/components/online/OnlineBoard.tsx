@@ -1,8 +1,12 @@
-import { useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { CardInstance, GameAction, InstanceId, PlayerId } from '@jonny-boi/core';
 import { stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
 import { castSequence, castableWithTaps } from '../../lib/online/auto-tap.js';
+import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
+import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/online/useDragToPlay.js';
+import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
+import { AUTO_PASS_DELAY_MS, AUTO_PASS_EMPTY_PRIORITY } from '../../lib/online/online-config.js';
 import { legalTargets, optionToTarget, targetRequirement } from '../../lib/play/targeting.js';
 import type { GameFrame } from '../../lib/online/online-state.js';
 import {
@@ -112,6 +116,43 @@ export function OnlineBoard({
     for (const action of actions) onAction(action);
   };
 
+  /**
+   * Advance automatically through priority windows where passing is the ONLY legal
+   * action. Without this a new game opens in `upkeep` and needs four `Pass / advance`
+   * clicks (two per seat, through `upkeep` and `draw`) before the first land can be
+   * played — with the whole hand greyed out and the bar still reading "Your move".
+   *
+   * `passedFrame` rate-limits it to once per server-pushed frame: a re-render must
+   * not spend a second pass, but a NEW frame in the same step legitimately may (see
+   * `alreadyPassedFrame` for the declareBlockers case that rules out a step key).
+   */
+  const passedFrame = useRef<GameFrame | null>(null);
+  const autoPass =
+    AUTO_PASS_EMPTY_PRIORITY &&
+    !!pass &&
+    shouldAutoPass({
+      yourTurn,
+      legalActions,
+      stackSize: masked.stack.length,
+      awaitingOwnChoice: !!ownChoice,
+      tapCastableCount: tapCastable.size,
+    });
+
+  useEffect(() => {
+    if (!autoPass || !pass) return;
+    if (alreadyPassedFrame(passedFrame.current, frame)) return;
+    const handle = window.setTimeout(() => {
+      // Mark the frame only once the pass actually GOES OUT. Marking it at
+      // schedule time instead deadlocks under StrictMode's double-invoke: the
+      // first run marks and schedules, the cleanup cancels the timer, and the
+      // second run sees the mark and declines to reschedule — so the game sits
+      // saying "advancing…" forever.
+      passedFrame.current = frame;
+      onAction(pass);
+    }, AUTO_PASS_DELAY_MS);
+    return () => window.clearTimeout(handle);
+  }, [autoPass, pass, frame, onAction]);
+
   // --- casting -------------------------------------------------------------------
   const onCastClick = (choice: CastChoice): void => {
     if (choice.canCastUntargeted) {
@@ -155,6 +196,34 @@ export function OnlineBoard({
       canCastUntargeted: false,
     });
   };
+
+  /**
+   * The ONE thing a hand card does right now — play the land, cast the offered
+   * spell, or start a tap-funded cast. Click and drag-to-play both route here, so
+   * a drag can never diverge from what clicking the same card would have done.
+   * Re-checks the frame's affordances on entry: a card that stopped being
+   * actionable mid-gesture (a new frame arrived) simply does nothing.
+   */
+  const activateHandCard = (id: InstanceId): void => {
+    if (!yourTurn) return;
+    if (lands.has(id)) {
+      submit({ kind: 'playLand', player: masked.viewer, instanceId: id });
+      return;
+    }
+    const cast = casts.get(id);
+    if (cast) {
+      onCastClick(cast);
+      return;
+    }
+    if (tapCastable.has(id)) {
+      const card = handCardOf(id);
+      if (card) onTapCastClick(card);
+    }
+  };
+
+  // Drag a hand card onto your battlefield — the gesture the original bug report
+  // reached for first. Same action as clicking; see useDragToPlay for the model.
+  const { drag, dropRef, handProps: dragHandProps } = useDragToPlay(activateHandCard);
 
   // --- mana ------------------------------------------------------------------------
   const onTapForMana = (id: InstanceId): void => {
@@ -251,6 +320,30 @@ export function OnlineBoard({
   const statusText = `Turn ${view.turnNumber} · ${stepLabel(step)} · ${names[view.activePlayer]}'s turn`;
   const inAttackStep = yourTurn && step === 'declareAttackers' && !!attackTemplate;
 
+  // Context a greyed hand card explains itself against. `anyLandOffered` is the
+  // server's own answer to "may a land be played this window", which is what
+  // separates "wrong step" from "already played one".
+  const disabledContext = useMemo(
+    () => ({
+      yourTurn,
+      yourTurnToAct: masked.activePlayer === masked.viewer,
+      step,
+      waitingOn: names[masked.priorityPlayer],
+      anyLandOffered: lands.size > 0,
+    }),
+    [yourTurn, masked, step, names, lands],
+  );
+
+  /** Is there ANY move available — a card, a mana source, or a combat declaration? */
+  const hasAnyPlay =
+    lands.size > 0 ||
+    casts.size > 0 ||
+    tapCastable.size > 0 ||
+    tappable.size > 0 ||
+    inAttackStep ||
+    inBlockStep;
+  const idleNote = idleTurnNote({ yourTurn, hasAnyPlay, step });
+
   return (
     <div className="play-board">
       <div className="play-board__status">
@@ -285,40 +378,55 @@ export function OnlineBoard({
         <ServerLog lines={log} />
       </div>
 
-      {/* Viewer (bottom) — own hand face-up. */}
+      {/* Viewer (bottom) — own hand face-up. The seat panel doubles as the drag-to-
+          play drop zone: it lights up while a card is in flight, and releasing a
+          dragged card over it plays that card (same action as clicking it). */}
       <div className="play-board__self">
-        <SeatPanel
-          seat={view.self}
-          isActive={view.activePlayer === view.self.id}
-          hasPriority={view.priorityPlayer === view.self.id}
-          interaction={selfInteraction}
-        />
-        <div className="play-hand" aria-label={`${view.self.name} hand`}>
+        <div
+          ref={dropRef}
+          className={`drop-zone${drag ? ' drop-zone--active' : ''}${drag?.overDrop ? ' drop-zone--over' : ''}`}
+        >
+          <SeatPanel
+            seat={view.self}
+            isActive={view.activePlayer === view.self.id}
+            hasPriority={view.priorityPlayer === view.self.id}
+            interaction={selfInteraction}
+          />
+        </div>
+        <div className="play-hand" aria-label={`${view.self.name} hand`} {...dragHandProps}>
           {(view.self.hand ?? []).map((c) => {
             const isLand = lands.has(c.instanceId);
             const cast = casts.get(c.instanceId);
             // A card the server hasn't offered but we can fund by tapping.
             const tapCard = !cast && tapCastable.has(c.instanceId) ? handCardOf(c.instanceId) : undefined;
             const actionable = yourTurn && (isLand || !!cast || !!tapCard);
+            const dragging = drag?.id === c.instanceId ? drag : null;
             return (
-              <PlayCard
+              // The wrapper is the drag handle: `data-drag-id` marks it draggable
+              // for the delegated pointer handlers, `touch-action: none` keeps
+              // mobile browsers from turning the drag into a page scroll, and the
+              // transform is the ghost following the pointer.
+              <div
                 key={c.instanceId}
-                cardId={c.cardId}
-                name={c.name}
-                badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
-                disabled={!actionable}
-                onClick={
-                  actionable
-                    ? isLand
-                      ? () => submit({ kind: 'playLand', player: masked.viewer, instanceId: c.instanceId })
-                      : cast
-                        ? () => onCastClick(cast)
-                        : tapCard
-                          ? () => onTapCastClick(tapCard)
-                          : undefined
-                    : undefined
+                className={`hand-card-slot${dragging ? ' hand-card-slot--dragging' : ''}`}
+                {...(actionable ? { [DRAG_ID_ATTR]: c.instanceId } : {})}
+                style={
+                  dragging
+                    ? { touchAction: 'none', transform: `translate(${dragging.dx}px, ${dragging.dy}px)` }
+                    : actionable
+                      ? { touchAction: 'none' }
+                      : undefined
                 }
-              />
+              >
+                <PlayCard
+                  cardId={c.cardId}
+                  name={c.name}
+                  badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
+                  disabled={!actionable}
+                  reason={actionable ? undefined : reasonCardIsDisabled(disabledContext, c)}
+                  onClick={actionable ? () => activateHandCard(c.instanceId) : undefined}
+                />
+              </div>
             );
           })}
           {(view.self.hand?.length ?? 0) === 0 && <span className="seat__empty">Empty hand</span>}
@@ -368,7 +476,16 @@ export function OnlineBoard({
               </button>
             )}
             <span className="action-bar__hint">
-              {ownChoice ? 'Answer the question above to continue.' : hintFor(step)}
+              {drag
+                ? 'Drop the card on your battlefield to play it.'
+                : ownChoice
+                  ? 'Answer the question above to continue.'
+                  : // A seat that holds priority with nothing to do is the state that
+                    // read as a frozen app — say so plainly instead of giving the
+                    // generic step hint next to a hand of dead cards.
+                    autoPass
+                    ? 'Nothing to do this step — advancing…'
+                    : (idleNote ?? hintFor(step))}
             </span>
           </>
         )}
