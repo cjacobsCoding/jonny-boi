@@ -73,9 +73,10 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
 /**
  * Card types the engine has no system for, with the reason. `planeswalker` maps
  * to a real `CardType` (so it is representable) but has no loyalty system, so a
- * planeswalker can never be complete.
+ * planeswalker can never be complete. Exported so the About view's TODO list can
+ * name these gaps from the same record the compiler judges by.
  */
-const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({
+export const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({
   planeswalker: 'planeswalker loyalty abilities',
   battle: 'battles (siege / defense counters)',
 });

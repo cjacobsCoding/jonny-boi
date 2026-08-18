@@ -94,6 +94,21 @@ export type {
 } from './compile/index.js';
 export { compileCard, compileCards, explainUnsupported } from './compile/index.js';
 
+// The compiler's own live registries, re-exported for the About view: the rule
+// tables and keyword map say what imports as fully playable TODAY, and the
+// hint list + system-less types are its honest TODO. Reading them here (rather
+// than keeping a prose copy) is what keeps that page correct by construction.
+export type { CompileRule } from './compile/index.js';
+export {
+  EFFECT_RULES,
+  TRIGGER_RULES,
+  MANA_RULES,
+  STATIC_RULES,
+  KEYWORD_FLAGS,
+  UNSUPPORTED_HINTS,
+  TYPES_WITHOUT_SYSTEM,
+} from './compile/index.js';
+
 /**
  * Mechanics intentionally stubbed because the engine lacks the system to model them
  * faithfully. Each listed card still LOADS and PLAYS (correct cost, zone, P/T,
