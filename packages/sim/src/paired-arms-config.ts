@@ -45,6 +45,17 @@ export const HERO_FIRST_INSTANCE_ID = 1;
  * failure mode is a red test, never a silently wrong verdict.
  */
 export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
+  /*
+   * `ifKicked` is classified CONSERVATIVELY, and deliberately so: it is a
+   * branch wrapper whose NESTED effect refs live inside its `effects` param,
+   * where the decklist scan (which reads top-level `EffectRef.primitive` ids)
+   * cannot see them. A kicked clause that wrapped a library reader would
+   * therefore be invisible to the identical-game argument. Treating the wrapper
+   * itself as library-reading withdraws the skip for any game that resolves a
+   * kicked clause — sound whatever the clause contains, at the cost of playing
+   * a few extra variant games in kicker decks.
+   */
+  'ifKicked',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
   // Reads the whole library to choose a card.

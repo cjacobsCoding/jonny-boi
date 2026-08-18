@@ -38,6 +38,9 @@
  *   - {@link PayLifeChoice}      — pay life, or decline (a shockland's "you may
  *     pay 2 life"). Separate from `payMana` for the same reason `payMana` is
  *     separate from `confirm`: the engine charges the price, so it must know it.
+ *   - {@link ChooseNumberChoice} — an integer in `[min, max]` ("choose a value
+ *     for X" at cast time), with the range computed by the ENGINE from what the
+ *     chooser can actually pay.
  * Library search is `selectCards` over library candidates plus the shuffle that
  * follows (`EffectContext.shuffleLibrary`), not a kind of its own.
  *
@@ -351,6 +354,20 @@ export interface PayLifeRequest extends ChoiceRequestBase {
   readonly affordable?: boolean;
 }
 
+/**
+ * Choose an integer in `[min, max]` — the "at what?" question. The engine asks
+ * it at cast time for an `{X}` cost ("choose a value for X"), with `max`
+ * computed BY THE ENGINE from what the caster could actually pay, so an
+ * unpayable X is never on offer (the same honesty rule as
+ * {@link PayManaRequest.affordable}). `min` defaults to 0, which is the printed
+ * floor for X.
+ */
+export interface ChooseNumberRequest extends ChoiceRequestBase {
+  readonly kind: 'chooseNumber';
+  readonly min?: number;
+  readonly max: number;
+}
+
 /** Everything a resolving effect may ask. */
 export type ChoiceRequest =
   | SelectCardsRequest
@@ -359,6 +376,7 @@ export type ChoiceRequest =
   | ConfirmRequest
   | PayManaRequest
   | PayLifeRequest
+  | ChooseNumberRequest
   | SelectTargetsRequest;
 
 /** The kinds, as a discriminator. */
@@ -434,6 +452,15 @@ export interface PayLifeChoice extends PendingChoiceBase {
   readonly affordable: boolean;
 }
 
+/**
+ * A number in `[min, max]` — the base's `min`/`max` ARE the numeric range here
+ * (not a selection count), so the shared normalisation and validation rules
+ * apply unchanged: `min <= answer <= max` always has at least one legal value.
+ */
+export interface ChooseNumberChoice extends PendingChoiceBase {
+  readonly kind: 'chooseNumber';
+}
+
 /** A question parked in `GameState.pendingChoice`, awaiting an `answerChoice`. */
 export type PendingChoice =
   | SelectCardsChoice
@@ -442,6 +469,7 @@ export type PendingChoice =
   | ConfirmChoice
   | PayManaChoice
   | PayLifeChoice
+  | ChooseNumberChoice
   | SelectTargetsChoice;
 
 // --- answers ----------------------------------------------------------------------
@@ -489,6 +517,16 @@ export interface PayLifeAnswer {
   readonly pay: boolean;
 }
 
+export interface ChooseNumberAnswer {
+  readonly kind: 'chooseNumber';
+  /**
+   * The chosen value. For an `{X}` cast the ENGINE charges `value × xCost`
+   * generic mana as it accepts this answer — same one-charge rule as the two
+   * payment kinds — and what the spell then resolves with is what was paid.
+   */
+  readonly value: number;
+}
+
 /** What an `answerChoice` action carries. Plain data — clones and serializes. */
 export type ChoiceAnswer =
   | SelectCardsAnswer
@@ -497,6 +535,7 @@ export type ChoiceAnswer =
   | ConfirmAnswer
   | PayManaAnswer
   | PayLifeAnswer
+  | ChooseNumberAnswer
   | SelectTargetsAnswer;
 
 // --- normalisation ----------------------------------------------------------------
@@ -523,6 +562,9 @@ export function choiceOptionCount(choice: PendingChoice): number {
       return choice.affordable ? CONFIRM_OPTION_COUNT : DECLINE_ONLY_OPTION_COUNT;
     case 'payLife':
       return choice.affordable ? CONFIRM_OPTION_COUNT : DECLINE_ONLY_OPTION_COUNT;
+    case 'chooseNumber':
+      // min..max inclusive — the range IS the option list.
+      return choice.max - choice.min + 1;
     default:
       return 0;
   }
@@ -623,6 +665,14 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
         min: 1,
         max: 1,
       };
+    case 'chooseNumber': {
+      // The base's min/max carry the NUMERIC RANGE. Clamped so `0 <= min <= max`
+      // always holds — a malformed request degrades to the single value 0 rather
+      // than to a question with no legal answer.
+      const max = Math.max(0, Math.trunc(request.max));
+      const min = Math.max(0, Math.min(Math.trunc(request.min ?? 0), max));
+      return { ...base, kind: 'chooseNumber', min, max };
+    }
     default:
       return null;
   }
@@ -719,6 +769,18 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
       if (pay && !choice.affordable) return invalid(`you do not have ${choice.amount} life to pay`);
       return VALID;
     }
+    case 'chooseNumber': {
+      const value = (answer as ChooseNumberAnswer).value;
+      if (typeof value !== 'number' || !Number.isInteger(value)) {
+        return invalid('the chosen value must be a whole number');
+      }
+      // The range was computed from what the chooser could actually pay, so a
+      // value outside it is an X the board cannot fund — refused, not clamped.
+      if (value < choice.min || value > choice.max) {
+        return invalid(`choose a value between ${choice.min} and ${choice.max}`);
+      }
+      return VALID;
+    }
     default:
       return invalid('unknown choice kind');
   }
@@ -756,6 +818,10 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
     case 'payLife':
       // Same rule, higher stakes: life is never taken without a yes.
       return { kind: 'payLife', pay: false };
+    case 'chooseNumber':
+      // The smallest legal value — for an X cost that is X = 0, the answer that
+      // spends nothing on the chooser's behalf (same rule as the payment kinds).
+      return { kind: 'chooseNumber', value: choice.min };
     default:
       return { kind: 'confirm', yes: false };
   }
@@ -794,6 +860,10 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       return !choice.affordable;
     case 'payLife':
       return !choice.affordable;
+    case 'chooseNumber':
+      // A range of one value is not a decision — notably X on a board that can
+      // only fund X = 0, which must not stop the game to ask the inevitable.
+      return choice.min === choice.max;
     default:
       return true;
   }
@@ -902,6 +972,17 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
             { kind: 'payLife', pay: false },
           ]
         : [{ kind: 'payLife', pay: false }];
+    case 'chooseNumber': {
+      // Ascending from min, capped like every other enumeration. The cap cannot
+      // starve anyone: `max` is bounded by what the board can pay, which no real
+      // board pushes past the enumeration limit — and `applyAction` accepts any
+      // valid value besides, exactly as it does for attack subsets.
+      const answers: ChoiceAnswer[] = [];
+      for (let value = choice.min; value <= choice.max && answers.length < limit; value++) {
+        answers.push({ kind: 'chooseNumber', value });
+      }
+      return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
+    }
     default:
       return [defaultAnswerFor(choice)];
   }
@@ -945,6 +1026,8 @@ export function describeChoiceAnswer(answer: ChoiceAnswer): string {
       return answer.pay ? 'paid' : 'declined to pay';
     case 'payLife':
       return answer.pay ? 'paid life' : 'declined to pay life';
+    case 'chooseNumber':
+      return `chose ${answer.value}`;
     default:
       return 'answer';
   }
@@ -985,6 +1068,15 @@ export interface ResolutionFrame {
   card?: CardInstance;
   /** Where that card goes when the resolution finishes (exile for flashback). */
   resolvesTo?: 'battlefield' | 'graveyard' | 'exile';
+  /**
+   * The value chosen for `{X}` when this spell was cast — carried off the stack
+   * object so "deals X damage" still reads the paid-for number AFTER the spell
+   * has left the stack (a resolution outlives its stack object). Absent for
+   * spells without an X cost and for triggers.
+   */
+  xValue?: number;
+  /** Whether the kicker was paid at cast time. Absent when there is no kicker. */
+  kicked?: boolean;
   /** The ability's source permanent + label (trigger frames only). */
   sourceInstanceId?: InstanceId;
   label?: string;

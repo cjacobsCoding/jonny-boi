@@ -163,6 +163,35 @@ export interface CardDefinition {
   readonly subtypes?: readonly string[];
   /** Mana cost. Absent for lands and other free-to-play cards. */
   readonly cost?: ManaCost;
+  /**
+   * How many `{X}` symbols the printed cost carries (1 for `{X}{R}`, 2 for
+   * `{X}{X}{U}`). The X portion is deliberately NOT part of {@link cost}: X is 0
+   * everywhere except on the stack (CR 107.3), so every existing consumer of
+   * `cost` — affordability gates, curve sorting, payment — is already correct
+   * reading the base cost, and none of the mana functions had to learn a new
+   * symbol.
+   *
+   * The VALUE of X is a cast-time decision, not card data: `applyCastSpell`
+   * parks a `chooseNumber` question after the base cost is paid, the engine
+   * charges `chosen × xCost` generic mana as it accepts the answer, and the
+   * chosen value rides the stack object into the resolution
+   * (`ResolutionFrame.xValue` → `EffectContext.xValue`) so "deals X damage"
+   * reads the number that was actually paid for.
+   */
+  readonly xCost?: number;
+  /**
+   * Kicker — "you may pay an additional [this] as you cast this spell". The
+   * decision is asked at cast time exactly like X (a `payMana` question the
+   * engine settles, charging the cost once as the answer is accepted), and the
+   * kicked flag rides the stack object into the resolution so "if this spell
+   * was kicked" branches read what actually happened. A caster who cannot
+   * produce the kicker cost is never asked — the spell simply casts unkicked,
+   * which is the printed default.
+   *
+   * Only the single-kicker form is modelled; multikicker (pay any number of
+   * times) needs a count, and cards printing it stay reported.
+   */
+  readonly kicker?: ManaCost;
   readonly power?: number;
   readonly toughness?: number;
   /**

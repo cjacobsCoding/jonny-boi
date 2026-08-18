@@ -6,6 +6,7 @@ import {
   draftStatus,
   emptyDraft,
   orderBadge,
+  setChooseNumber,
   setConfirm,
   setPayLife,
   setPayMana,
@@ -121,6 +122,14 @@ export function ChoicePrompt({
               labels={{ yes: `Pay ${choice.amount} life`, no: 'Enter tapped' }}
               yesDisabled={!choice.affordable}
               onSet={(pay) => setDraft((d) => setPayLife(d, pay))}
+            />
+          )}
+          {choice.kind === 'chooseNumber' && (
+            <NumberOptions
+              min={choice.min}
+              max={choice.max}
+              chosen={draft.kind === 'chooseNumber' ? draft.value : null}
+              onSet={(value) => setDraft((d) => setChooseNumber(d, value))}
             />
           )}
         </div>
@@ -318,6 +327,42 @@ function BinaryOptions({
       >
         {labels.no}
       </button>
+    </div>
+  );
+}
+
+/**
+ * The values a choose-a-number question offers ("choose a value for X"), one
+ * button per value. The range comes from the engine, which bounded it by what
+ * the board can actually pay, so every button here is a legal, fundable answer
+ * — no button ever needs disabling.
+ */
+function NumberOptions({
+  min,
+  max,
+  chosen,
+  onSet,
+}: {
+  min: number;
+  max: number;
+  chosen: number | null;
+  onSet: (value: number) => void;
+}): ReactElement {
+  const values: number[] = [];
+  for (let value = min; value <= max; value++) values.push(value);
+  return (
+    <div className="choice-prompt__list choice-prompt__list--inline">
+      {values.map((value) => (
+        <button
+          key={value}
+          type="button"
+          className={`choice-option${chosen === value ? ' choice-option--selected' : ''}`}
+          aria-pressed={chosen === value}
+          onClick={() => onSet(value)}
+        >
+          {value}
+        </button>
+      ))}
     </div>
   );
 }

@@ -31,6 +31,7 @@
 import type {
   ChoiceAnswer,
   ChooseModesChoice,
+  ChooseNumberChoice,
   ConfirmChoice,
   GameAction,
   GameState,
@@ -99,6 +100,8 @@ export function answerChoiceHeuristically(
       return answerAction(choice, answerPayMana(choice, weights));
     case 'payLife':
       return answerAction(choice, answerPayLife(state, choice, weights));
+    case 'chooseNumber':
+      return answerAction(choice, answerChooseNumber(choice));
     case 'selectTargets':
       return answerAction(choice, answerSelectTargets(state, choice, weights));
     default:
@@ -291,6 +294,24 @@ function answerPayLife(state: GameState, choice: PayLifeChoice, weights: Heurist
   if (choice.valence === 'loss') return { kind: 'payLife', pay: false };
   const remaining = state.players[choice.chooser].life - choice.amount;
   return { kind: 'payLife', pay: remaining > weights.desperateLifeThreshold };
+}
+
+/**
+ * Answer "choose a number" — today, always "choose a value for X" at cast time.
+ *
+ * The engine already bounded the range by what the board can actually fund, so
+ * every value on offer is legal and paid-for. The steer is the valence: `'gain'`
+ * (the engine's marking for X — more damage, more cards, more life is the upside
+ * the spell was cast for) takes the MAXIMUM affordable; `'loss'` — somebody else
+ * making us choose — takes the minimum; an unmarked question takes the minimum,
+ * the answer that spends nothing without a reason to spend.
+ *
+ * What this deliberately does NOT do is hold mana back for a second spell —
+ * that comparison needs the rest of the hand priced against the marginal X,
+ * which belongs to the pilots that search, not to the valence rule.
+ */
+function answerChooseNumber(choice: ChooseNumberChoice): ChoiceAnswer {
+  return { kind: 'chooseNumber', value: choice.valence === 'gain' ? choice.max : choice.min };
 }
 
 function answerPayMana(choice: PayManaChoice, weights: HeuristicWeights): ChoiceAnswer {

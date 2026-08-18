@@ -129,10 +129,16 @@ function cloneStackObject(o: StackObject): StackObject {
     controller: o.controller,
     resolvesTo: o.resolvesTo,
     targets: [...o.targets],
-    // Field-by-field on purpose (see the header): dropping this one would turn a
-    // cloned flashback cast back into an ordinary one, and the spell would slip
-    // into the graveyard on resolution instead of exile — silently, one action
-    // later. Conditional so the ordinary spell keeps its exact object shape.
+    // Conditional for the same reason as `awaitingTargets` above: dropping any
+    // of these would lose a chosen X / kicked flag (the spell would resolve as
+    // if unpaid), lose the "cast still being finished" marker, or turn a cloned
+    // flashback cast back into an ordinary one (slipping into the graveyard on
+    // resolution instead of exile) — on the clone made at every action
+    // boundary. Conditional so the ordinary spell object stays byte-for-byte
+    // what it always was.
+    ...(o.xValue !== undefined ? { xValue: o.xValue } : {}),
+    ...(o.kicked !== undefined ? { kicked: o.kicked } : {}),
+    ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
   };
 }

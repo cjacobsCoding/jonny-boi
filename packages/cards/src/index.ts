@@ -47,6 +47,7 @@ export {
   createToken,
   tapTarget,
   attachToTarget,
+  ifKicked,
 } from './primitives.js';
 
 // The choice-driven primitives (DESIGN §3.11): the ones that ask the player a

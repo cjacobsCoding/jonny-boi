@@ -11,14 +11,7 @@
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Showing the top 25 of **1647** distinct gaps. The remaining 1622 account for 2505 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
-
-## variable ({X}) and derived values
-
-- **Blocks 78 card(s)** (3.7% of corpus)
-- **Occurrences:** 80
-- **Cards:** Esper Sentinel, Feed the Swarm, The Great Henge, Gray Merchant of Asphodel, Rishkar's Expertise, Exsanguinate, Kessig Wolf Run, Psychosis Crawler, +70 more
-- **Example clause:** `Whenever an opponent casts their first noncreature spell each turn, draw a card unless that player pays {X}, where X is ~'s power.`
+Showing the top 25 of **1703** distinct gaps. The remaining 1678 account for 2570 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
 ## casting either face of a modal double-faced / split card (a cast-time face choice the engine cannot ask yet)
 
@@ -27,18 +20,11 @@ Showing the top 25 of **1647** distinct gaps. The remaining 1622 account for 250
 - **Cards:** Sink into Stupor, Fell the Profane, Malakir Rebirth, Witch Enchanter, Bala Ged Recovery, Disciple of Freyalise, Birgi, God of Storytelling, Valakut Awakening, +52 more
 - **Example clause:** `Sink into Stupor // Soporific Springs`
 
-## variable ({X}), Phyrexian, and monocolour hybrid mana costs
+## alternative casting costs and cost-bearing discards (cycling, buyback, madness)
 
-- **Blocks 55 card(s)** (2.6% of corpus)
-- **Occurrences:** 55
-- **Cards:** Exsanguinate, Phyrexian Metamorph, Finale of Devastation, Walking Ballista, The Meathook Massacre, Chord of Calling, Green Sun's Zenith, Noxious Revival, +47 more
-- **Example clause:** `{X}`
-
-## alternative and additional casting costs
-
-- **Blocks 48 card(s)** (2.3% of corpus)
-- **Occurrences:** 48
-- **Cards:** Ketria Triome, Jetmir's Garden, Spara's Headquarters, Zagoth Triome, Raffine's Tower, Xander's Lounge, Indatha Triome, Raugrin Triome, +40 more
+- **Blocks 40 card(s)** (1.9% of corpus)
+- **Occurrences:** 40
+- **Cards:** Ketria Triome, Jetmir's Garden, Spara's Headquarters, Zagoth Triome, Raffine's Tower, Xander's Lounge, Indatha Triome, Raugrin Triome, +32 more
 - **Example clause:** `Cycling {3}`
 
 ## the "//" card type
@@ -187,3 +173,17 @@ Showing the top 25 of **1647** distinct gaps. The remaining 1622 account for 250
 - **Occurrences:** 13
 - **Cards:** Phyrexian Metamorph, Spark Double, Sculpting Steel, Mockingbird, Vesuva, Mirrormade, Glasspool Mimic, Clever Impersonator, +5 more
 - **Example clause:** `You may have ~ enter as a copy of any artifact or creature on the battlefield, except it's an artifact in addition to its other types.`
+
+## a library-look/reorder template the compiler does not recognize yet — starting "When ~ enters, surveil N…"
+
+- **Blocks 12 card(s)** (0.6% of corpus)
+- **Occurrences:** 12
+- **Cards:** Undercity Sewers, Underground Mortuary, Hedge Maze, Raucous Theater, Shadowy Backstreet, Thundering Falls, Commercial District, Meticulous Archive, +4 more
+- **Example clause:** `When ~ enters, surveil 1.`
+
+## dynamic power/toughness (characteristic-defining */*)
+
+- **Blocks 12 card(s)** (0.6% of corpus)
+- **Occurrences:** 12
+- **Cards:** Psychosis Crawler, Adeline, Resplendent Cathar, Ashaya, Soul of the Wild, Lumra, Bellow of the Woods, Cultivator Colossus, Consuming Aberration, Daxos, Blessed by the Sun, Nighthawk Scavenger, +4 more
+- **Example clause:** `power/toughness`
