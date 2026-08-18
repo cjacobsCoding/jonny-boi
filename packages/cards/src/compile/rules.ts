@@ -7,8 +7,8 @@
  *
  * FAITHFULNESS IS THE WHOLE POINT. A rule exists only when the primitives can
  * reproduce the printed effect *as printed*. Where a template needs a system the
- * engine genuinely lacks — a player choosing which card to discard, an {X} cost,
- * a permanent entering tapped — there is deliberately NO rule, and the clause
+ * engine genuinely lacks — a planeswalker's loyalty, a transforming face, a
+ * multikicker count — there is deliberately NO rule, and the clause
  * falls through to `missing` with a plain-English explanation from
  * {@link UNSUPPORTED_HINTS}. A rule that "sort of" models a card would silently
  * bias every A/B verdict the deck lab produces, which is worse than saying no.
@@ -316,6 +316,25 @@ function effects(...refs: EffectRef[]): ClauseContribution {
   return { effects: refs };
 }
 
+/**
+ * The param value meaning "the X chosen (and paid for) at cast time" — the
+ * shape `intParam` in `../effect-helpers.ts` resolves from
+ * `EffectContext.xValue`. Mirrored here as data rather than imported so the
+ * compiler stays a pure table over the primitives' documented param vocabulary.
+ */
+const CHOSEN_X_PARAM = Object.freeze({ chosenX: true });
+
+/**
+ * Whether the card being compiled actually prints `{X}` in its mana cost. The
+ * X-reading effect rules are gated on this: "deals X damage" on a card whose X
+ * comes from somewhere OTHER than the cost (a "where X is …" definition) must
+ * not silently read the cast-time X — there is none, and the clause defining X
+ * will report on its own terms.
+ */
+function cardHasXCost(ctx: RuleContext): boolean {
+  return ctx.card.manaCost.other.some((symbol) => symbol.toUpperCase() === 'X');
+}
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-any-target',
@@ -384,6 +403,72 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = derivedValue(match[1]!);
       if (!amount) return null;
       return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  {
+    id: 'x-damage',
+    description:
+      '"~ deals X damage to any target / target creature / target player" — X is the value chosen (and paid for) at cast time',
+    pattern: new RegExp(`^~ deals x damage to ${DAMAGE_TARGET_PHRASE}$`),
+    needsChosenTarget: true,
+    build(match, ctx) {
+      if (!cardHasXCost(ctx)) return null; // an X defined elsewhere is not the cast-time X
+      const restriction = damageRestriction(match[1] ?? '');
+      if (restriction === null) return null;
+      return effects({ primitive: 'dealDamage', params: damageParams(CHOSEN_X_PARAM as never, restriction) });
+    },
+  },
+  {
+    id: 'x-draw',
+    description: '"Draw X cards" — X is the value chosen at cast time (Mind Spring)',
+    pattern: /^(?:you )?draw x cards$/,
+    build(_match, ctx) {
+      if (!cardHasXCost(ctx)) return null;
+      return effects({ primitive: 'drawCards', params: { count: CHOSEN_X_PARAM } });
+    },
+  },
+  {
+    id: 'x-gain-life',
+    description: '"You gain X life" — X is the value chosen at cast time',
+    pattern: /^you gain x life$/,
+    build(_match, ctx) {
+      if (!cardHasXCost(ctx)) return null;
+      return effects({ primitive: 'gainLife', params: { amount: CHOSEN_X_PARAM } });
+    },
+  },
+  {
+    id: 'kicked-damage-instead',
+    description:
+      '"~ deals N damage to TARGET. If this spell was kicked, it deals M damage to that target instead." (Burst Lightning, Shivan Fire) — one damage ref whose amount switches on the cast-time kicked flag',
+    pattern: new RegExp(
+      `^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}\\. if this spell was kicked, (?:it|~) deals ${COUNT_TOKEN} damage to (?:that target|that creature|that player|it) instead$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const base = parseCount(match[1]);
+      const restriction = damageRestriction(match[2] ?? '');
+      const kicked = parseCount(match[3]);
+      if (base === null || kicked === null || restriction === null) return null;
+      return effects({
+        primitive: 'dealDamage',
+        params: damageParams({ base, kicked } as never, restriction),
+      });
+    },
+  },
+  {
+    id: 'kicked-extra-effect',
+    description:
+      '"MAIN CLAUSE. If this spell was kicked, RIDER." — the rider runs only when the kicker was paid (the rider itself must be a target-free clause the table already compiles)',
+    pattern: /^(.+\S)\. if this spell was kicked, (.+)$/,
+    build(match, ctx) {
+      const main = ctx.compileEffectClause(match[1]!);
+      if (!main || main.length === 0) return null;
+      // Target-free by construction: the rider runs inside the same resolution
+      // and inherits the cast's chosen targets, so a rider that would CHOOSE a
+      // new target has no moment to do it — those templates stay reported.
+      const rider = ctx.compileEffectClause(match[2]!, { targetFree: true });
+      if (!rider || rider.length === 0) return null;
+      return effects(...main, { primitive: 'ifKicked', params: { effects: rider } });
     },
   },
   {
@@ -1099,6 +1184,18 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 /** Card-level static properties printed as their own ability line. */
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
+    id: 'kicker-cost',
+    description:
+      '"Kicker {COST}" — an optional additional cost the engine asks about at cast time (single kicker only; multikicker keeps reporting)',
+    pattern: /^kicker ((?:\{[^}]+\})+)$/,
+    build(match) {
+      // Only symbols the engine can charge; a kicker of {X} or Phyrexian mana
+      // would be a cost we cannot ask for, so the line stays reported.
+      const cost = parseManaSymbols(match[1]!);
+      return cost === null ? null : { kicker: cost };
+    },
+  },
+  {
     id: 'enters-with-counters',
     description: '"~ enters with N +1/+1 counters on it"',
     // A whole ability line like "enters tapped", not a split sentence — hence its
@@ -1473,8 +1570,37 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bward\b|\bprotection from\b/,
     missingEngineSystem: 'ward and protection-from (cost-to-target and the protection bundle)',
   },
-  { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
-  { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },
+  {
+    // Multikicker is the half of kicker still genuinely missing: it needs a
+    // COUNT ("paid N times"), not the single yes/no the engine asks.
+    pattern: /\bmultikicker\b/,
+    missingEngineSystem: 'multikicker (an additional cost paid any number of times)',
+  },
+  {
+    // Kicker ITSELF is implemented now (`CardDefinition.kicker` + the cast-time
+    // payMana question + the `ifKicked` branch primitive), so this hint no
+    // longer claims the system is missing — that would send the next agent to
+    // rebuild it. What still lands here is a TEMPLATE: a kicked clause the
+    // effect table cannot compile (a kicked ETB on a permanent, a rider that
+    // chooses its own target, "kicked with {COST1} and/or {COST2}").
+    pattern: /\bkicker\b|\bkicked\b/,
+    missingEngineSystem: 'a kicker template the compiler does not recognize yet',
+  },
+  {
+    // Cycling/buyback/madness are still real gaps: they cast (or discard) from
+    // moments and zones the engine does not model, which is not the cast-time
+    // cost question kicker and {X} now go through.
+    pattern: /\bcycling\b|\bbuyback\b|\bmadness\b/,
+    missingEngineSystem: 'alternative casting costs and cost-bearing discards (cycling, buyback, madness)',
+  },
+  {
+    // {X} costs ARE payable now (a cast-time chooseNumber the engine charges),
+    // and "equal to …" has the derived-value rules. What still lands here is a
+    // template: an X divided among targets, an X defined by a "where X is …"
+    // clause, an {X} in an activation cost.
+    pattern: /\{x\}|\bx damage\b|\bequal to\b/,
+    missingEngineSystem: 'an {X} or derived-value template the compiler does not recognize yet',
+  },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'an activated-ability template the compiler does not recognize yet' },
   // --- below here: patterns that only refine the DEFAULT explanation. Nothing
   // above changes; these exist so "this card didn't compile" names a buildable

@@ -227,6 +227,25 @@ describe('the heuristic answers every choice kind sensibly', () => {
     expect(picked).toEqual(['Bear', 'Island']);
   });
 
+  it('picks the MAXIMUM affordable X on a gain, and the minimum otherwise', () => {
+    const state = newGame().state;
+    // "Choose a value for X" as the engine parks it at cast time: 'gain', ranged
+    // by what the board can fund.
+    const gain = park({ kind: 'chooseNumber', chooser: 'A', prompt: 'Choose X', min: 0, max: 5, valence: 'gain' });
+    const gainAction = answerChoiceHeuristically(state, gain, WEIGHTS);
+    if (gainAction.kind !== 'answerChoice' || gainAction.answer.kind !== 'chooseNumber') throw new Error('wrong shape');
+    expect(gainAction.answer.value).toBe(5);
+    // The answer is legal by the engine's own validator — never an illegal X.
+    expect(validateChoiceAnswer(gain, gainAction.answer).ok).toBe(true);
+
+    const neutral = park({ kind: 'chooseNumber', chooser: 'A', prompt: 'Choose X', min: 0, max: 5 });
+    const neutralAction = answerChoiceHeuristically(state, neutral, WEIGHTS);
+    if (neutralAction.kind !== 'answerChoice' || neutralAction.answer.kind !== 'chooseNumber') {
+      throw new Error('wrong shape');
+    }
+    expect(neutralAction.answer.value).toBe(0); // no steer ⇒ spend nothing
+  });
+
   it('points a "loss" player choice at the opponent and a "gain" at itself', () => {
     const state = newGame().state;
     const loss = park({ kind: 'selectPlayers', chooser: 'A', prompt: 'who', candidates: ['A', 'B'], valence: 'loss' });

@@ -10,6 +10,7 @@ import {
   emptyDraft,
   isChoiceForViewer,
   orderBadge,
+  setChooseNumber,
   setConfirm,
   setPayMana,
   toggleOption,
@@ -319,5 +320,59 @@ describe('choice-view — prompt copy + viewer gating', () => {
     expect(zoneLabel('graveyard')).toBe('graveyard');
     expect(zoneLabel('somewhere-new')).toBe('somewhere-new');
     expect(zoneLabel(undefined)).toBeUndefined();
+  });
+});
+
+describe('choice-view — choosing a number (a value for X)', () => {
+  function chooseNumber(min = 0, max = 4): PendingChoice {
+    return {
+      ...BASE,
+      kind: 'chooseNumber',
+      prompt: 'Choose a value for X (Blaze)',
+      sourceName: 'Blaze',
+      min,
+      max,
+    } as PendingChoice;
+  }
+
+  it('starts undecided and cannot submit until a value is picked', () => {
+    const choice = chooseNumber();
+    const draft = emptyDraft(choice);
+    expect(draftToAnswer(draft)).toBeNull();
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(false);
+    expect(status.hint).toBe('Choose a value.');
+  });
+
+  it('a picked value submits as the engine-valid chooseNumber answer', () => {
+    const choice = chooseNumber();
+    const draft = setChooseNumber(emptyDraft(choice), 3);
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseNumber', value: 3 });
+    expect(validateChoiceAnswer(choice, status.answer!).ok).toBe(true);
+  });
+
+  it('X = 0 is a submittable answer (a legal cast, not a decline)', () => {
+    const choice = chooseNumber();
+    const status = draftStatus(choice, setChooseNumber(emptyDraft(choice), 0));
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseNumber', value: 0 });
+  });
+
+  it('an out-of-range value is refused by the engine validator the button obeys', () => {
+    const choice = chooseNumber(0, 2);
+    const status = draftStatus(choice, setChooseNumber(emptyDraft(choice), 9));
+    expect(status.canSubmit).toBe(false);
+  });
+
+  it('selection machinery no-ops on a scalar draft, and the prompt copy names the range', () => {
+    const choice = chooseNumber(0, 4);
+    const draft = setChooseNumber(emptyDraft(choice), 2);
+    expect(toggleOption(choice, draft, 1)).toBe(draft);
+    expect(clearDraft(choice, draft)).toBe(draft);
+    const view = choicePromptView(choice, NAMES);
+    expect(view.optional).toBe(false); // no "choose none" button — 0 is a real answer
+    expect(view.requirement).toContain('from 0 to 4');
   });
 });

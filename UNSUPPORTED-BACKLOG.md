@@ -11,14 +11,7 @@
 Ranked by **how many cards each system unblocks**, so the top row is the
 highest-value engine work available.
 
-Showing the top 25 of **1624** distinct gaps. The remaining 1599 account for 2502 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
-
-## variable ({X}) and derived values
-
-- **Blocks 81 card(s)** (3.9% of corpus)
-- **Occurrences:** 82
-- **Cards:** Esper Sentinel, Feed the Swarm, The Great Henge, Gray Merchant of Asphodel, Rishkar's Expertise, Exsanguinate, Kessig Wolf Run, Psychosis Crawler, +73 more
-- **Example clause:** `Whenever an opponent casts their first noncreature spell each turn, draw a card unless that player pays {X}, where X is ~'s power.`
+Showing the top 25 of **1682** distinct gaps. The remaining 1657 account for 2567 card-blocks between them — a long tail of one-off templates, not a second tier of systems. Re-run with a larger `--top` to see it.
 
 ## transform / double-faced cards
 
@@ -27,26 +20,19 @@ Showing the top 25 of **1624** distinct gaps. The remaining 1599 account for 250
 - **Cards:** Sink into Stupor, Fell the Profane, Malakir Rebirth, Witch Enchanter, Bala Ged Recovery, Disciple of Freyalise, Birgi, God of Storytelling, Valakut Awakening, +70 more
 - **Example clause:** `Sink into Stupor // Soporific Springs`
 
-## variable ({X}), Phyrexian, and monocolour hybrid mana costs
-
-- **Blocks 55 card(s)** (2.6% of corpus)
-- **Occurrences:** 55
-- **Cards:** Exsanguinate, Phyrexian Metamorph, Finale of Devastation, Walking Ballista, The Meathook Massacre, Chord of Calling, Green Sun's Zenith, Noxious Revival, +47 more
-- **Example clause:** `{X}`
-
-## alternative and additional casting costs
-
-- **Blocks 48 card(s)** (2.3% of corpus)
-- **Occurrences:** 48
-- **Cards:** Ketria Triome, Jetmir's Garden, Spara's Headquarters, Zagoth Triome, Raffine's Tower, Xander's Lounge, Indatha Triome, Raugrin Triome, +40 more
-- **Example clause:** `Cycling {3}`
-
 ## the "//" card type
 
 - **Blocks 44 card(s)** (2.1% of corpus)
 - **Occurrences:** 44
 - **Cards:** Sink into Stupor, Fell the Profane, Malakir Rebirth, Bala Ged Recovery, Valakut Awakening, Growing Rites of Itlimoc, Sea Gate Restoration, Bridgeworks Battle, +36 more
 - **Example clause:** `//`
+
+## alternative casting costs and cost-bearing discards (cycling, buyback, madness)
+
+- **Blocks 40 card(s)** (1.9% of corpus)
+- **Occurrences:** 40
+- **Cards:** Ketria Triome, Jetmir's Garden, Spara's Headquarters, Zagoth Triome, Raffine's Tower, Xander's Lounge, Indatha Triome, Raugrin Triome, +32 more
+- **Example clause:** `Cycling {3}`
 
 ## a rules template the compiler does not recognize yet — starting "At the beginning of your…"
 
@@ -187,3 +173,17 @@ Showing the top 25 of **1624** distinct gaps. The remaining 1599 account for 250
 - **Occurrences:** 13
 - **Cards:** Deadly Dispute, Village Rites, Harrow, Diabolic Intent, Corrupted Conviction, Eldritch Evolution, Fling, Kazuul's Fury, +5 more
 - **Example clause:** `As an additional cost to cast this spell, sacrifice an artifact or creature.`
+
+## a "you may / choose" template the compiler does not recognize yet — starting "As an additional cost to…"
+
+- **Blocks 13 card(s)** (0.6% of corpus)
+- **Occurrences:** 13
+- **Cards:** Big Score, Thrill of Possibility, Unexpected Windfall, Demand Answers, Seize the Spoils, Bitter Triumph, Plumb the Forbidden, Grab the Prize, +5 more
+- **Example clause:** `As an additional cost to cast this spell, discard a card.`
+
+## a rules template the compiler does not recognize yet — starting "Landfall — Whenever a land…"
+
+- **Blocks 13 card(s)** (0.6% of corpus)
+- **Occurrences:** 13
+- **Cards:** Tireless Provisioner, Scute Swarm, Rampaging Baloths, Evolution Sage, Tatyova, Benthic Druid, Omnath, Locus of Rage, Moraug, Fury of Akoum, Courser of Kruphix, +5 more
+- **Example clause:** `Landfall — Whenever a land you control enters, create a Food token or a Treasure token.`

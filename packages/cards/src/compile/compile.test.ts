@@ -415,22 +415,146 @@ describe('compileCard — templated cards outside the curated pool', () => {
     expect(result.definition.keywords).toEqual({ flying: true });
   });
 
-  it('reports an {X} cost instead of pretending it is free', () => {
+  it('compiles a plain {X} burn spell: the cost carries xCost and the damage reads the cast-time X', () => {
+    // A Blaze-shaped card. (Real Fireball adds "divided among any number of
+    // targets", which is still a template gap — see the test below.)
+    const result = compileCard(
+      makeCard({
+        name: 'Blaze',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: ['X'] },
+        power: null,
+        toughness: null,
+        oracleText: 'Blaze deals X damage to any target.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.xCost).toBe(1);
+    expect(result.definition.cost).toEqual({ R: 1 });
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: { chosenX: true } } },
+    ]);
+  });
+
+  it('still reports an {X} template the effect table cannot compile (real Fireball)', () => {
     const result = compileCard(
       makeCard({
         name: 'Fireball',
         typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
-        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: ['{X}'] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: ['X'] },
         power: null,
         toughness: null,
-        oracleText: 'Fireball deals X damage to any target.',
+        oracleText:
+          'This spell costs {1} more to cast for each target beyond the first.\nFireball deals X damage divided evenly, rounded down, among any number of targets.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.length).toBeGreaterThan(0);
+  });
+
+  it('does NOT read "deals X damage" as the cast-time X on a card whose cost has no {X}', () => {
+    // The X here is defined by a clause the compiler cannot read; compiling the
+    // damage against a cast-time X that does not exist would deal 0 forever.
+    const result = compileCard(
+      makeCard({
+        name: 'Not An X Cost',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText: 'Not An X Cost deals X damage to any target.',
+        keywords: [],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.xCost).toBeUndefined();
+  });
+
+  it('still reports a Phyrexian symbol, with the {X}-free wording', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Phyrexian Thing',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: ['W/P'] },
+        power: null,
+        toughness: null,
+        oracleText: 'You gain 2 life.',
         keywords: [],
       }),
     );
 
     expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'variable ({X}), Phyrexian, and monocolour hybrid mana costs',
+      'Phyrexian and monocolour hybrid mana costs',
+    );
+  });
+
+  it('compiles kicker: the cost line, and a kicked rider that runs only when paid', () => {
+    // Into-the-Roil-shaped rider on a supported main clause.
+    const result = compileCard(
+      makeCard({
+        name: 'Kicked Bolt',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText:
+          'Kicker {1}{U} (You may pay an additional {1}{U} as you cast this spell.)\nKicked Bolt deals 2 damage to any target. If this spell was kicked, draw a card.',
+        keywords: ['Kicker'],
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.kicker).toEqual({ generic: 1, U: 1 });
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: 2 } },
+      { primitive: 'ifKicked', params: { effects: [{ primitive: 'drawCards', params: { count: 1 } }] } },
+    ]);
+  });
+
+  it('compiles the "deals M damage instead" kicked form as one switched damage ref (Burst Lightning)', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Burst Lightning',
+        typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText:
+          'Kicker {4} (You may pay an additional {4} as you cast this spell.)\nBurst Lightning deals 2 damage to any target. If this spell was kicked, it deals 4 damage to that target instead.',
+        keywords: ['Kicker'],
+      }),
+    );
+
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.kicker).toEqual({ generic: 4 });
+    expect(result.definition.effects).toEqual([
+      { primitive: 'dealDamage', params: { amount: { base: 2, kicked: 4 } } },
+    ]);
+  });
+
+  it('reports multikicker rather than flattening it into a single kick', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Multi Thing',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+        power: null,
+        toughness: null,
+        oracleText: 'Multikicker {R}\nMulti Thing deals 2 damage to any target.',
+        keywords: ['Multikicker'],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.kicker).toBeUndefined();
+    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
+      'multikicker (an additional cost paid any number of times)',
     );
   });
 

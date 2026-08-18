@@ -182,6 +182,24 @@ export interface SpellStackObject {
   readonly resolvesTo: 'battlefield' | 'graveyard';
   /** Targets chosen at cast time (instance ids and/or players); empty if none. */
   readonly targets: ReadonlyArray<InstanceId | PlayerId>;
+  /**
+   * The value chosen for the spell's `{X}` cost, recorded once the caster has
+   * answered (and the mana has been charged). Absent while unanswered and for
+   * spells with no X — an unanswered X resolves as 0, the direction that can
+   * never play better than printed.
+   */
+  readonly xValue?: number;
+  /** Whether the kicker was paid. Absent for spells with no kicker / unanswered. */
+  readonly kicked?: boolean;
+  /**
+   * Set while this spell sits on the stack with a CAST-TIME question still
+   * unanswered — "choose X", "pay the kicker?". Like a trigger's
+   * `awaitingTargets`, the waiting lives ON the stack object so "is a cast still
+   * being finished?" is answered by the stack itself; it is cleared the instant
+   * the answer is recorded. Anyone adding a stack-object field must also copy it
+   * in `internal/clone.ts` (field-by-field cloning drops unknown fields).
+   */
+  readonly awaitingCastChoice?: 'x' | 'kicker';
 }
 
 /**

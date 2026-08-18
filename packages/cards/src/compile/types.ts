@@ -108,6 +108,11 @@ export interface ClauseContribution {
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
   /**
+   * The printed "Kicker {COST}" line — an optional additional cost the engine
+   * asks about at cast time (`CardDefinition.kicker`).
+   */
+  readonly kicker?: import('@jonny-boi/core').ManaCost;
+  /**
    * The half of an attachment that says WHAT it attaches to and what happens when
    * it isn't legally attached — the printed "Enchant creature" / "Equip {N}" line.
    */

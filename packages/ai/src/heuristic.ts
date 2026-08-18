@@ -115,7 +115,19 @@ const PRIMITIVE = Object.freeze({
 
 /** What we think a spell *does*, derived from its effect primitives. */
 type SpellIntent =
-  | { readonly kind: 'damage'; readonly amount: number; readonly canTargetCreature: boolean; readonly canTargetPlayer: boolean }
+  | {
+      readonly kind: 'damage';
+      readonly amount: number;
+      readonly canTargetCreature: boolean;
+      readonly canTargetPlayer: boolean;
+      /**
+       * True when the printed amount is the cast-time X (`{ chosenX: true }`
+       * param) rather than a number. The DEFINITION cannot know what X will be
+       * — that depends on the board's mana — so classification marks it and
+       * `scoreSpell` substitutes the X this board could actually fund.
+       */
+      readonly amountIsX?: boolean;
+    }
   | { readonly kind: 'destroyCreature' }
   | { readonly kind: 'shrink'; readonly toughness: number }
   | { readonly kind: 'pump'; readonly power: number; readonly toughness: number }
@@ -520,7 +532,17 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
     // Cheap upper-bound prefilter; `planManaTaps` below is the real test.
     if (convertedManaCost(cost) > availableMana) continue;
 
-    const intent = classifySpell(def);
+    let intent = classifySpell(def);
+    // An X spell's damage is whatever this board can fund: project X as the
+    // mana left after the base cost, so Blaze is scored as the burn it would
+    // actually be cast for. The engine will offer exactly this ceiling at cast
+    // time and the choice answerer takes the maximum, so score and play agree.
+    if (intent.kind === 'damage' && intent.amountIsX) {
+      const perX = Math.max(def.xCost ?? 1, 1);
+      const projected = Math.floor((availableMana - convertedManaCost(cost)) / perX);
+      if (projected <= 0) continue; // an X of zero is a cast with no payload — hold it
+      intent = { ...intent, amount: projected };
+    }
     oppCreatures ??= creaturesControlledBy(view, opp);
     const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain);
     // A spell that prints a target restriction is only a goal if we can point it
@@ -1196,7 +1218,17 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
   const effects = def.effects ?? [];
   for (const ref of effects) {
     if (ref.primitive === PRIMITIVE.dealDamage) {
-      const amount = numberParam(ref.params, 'amount', 0);
+      const raw = ref.params?.amount;
+      const amountIsX =
+        typeof raw === 'object' && raw !== null && (raw as { chosenX?: unknown }).chosenX === true;
+      // A base/kicked pair ("deals 2… deals 4 instead if kicked") is priced at
+      // its UNKICKED floor: the pilot may or may not kick, and the floor is the
+      // one number the cast is guaranteed to be worth.
+      const kickedPair =
+        typeof raw === 'object' && raw !== null && typeof (raw as { base?: unknown }).base === 'number'
+          ? ((raw as { base: number }).base)
+          : undefined;
+      const amount = amountIsX ? 0 : (kickedPair ?? numberParam(ref.params, 'amount', 0));
       // Convention: a damage primitive can target creatures and/or players. Default
       // to both unless params restrict it; robust if params are absent.
       const targets = stringParam(ref.params, 'targets', 'any');
@@ -1205,6 +1237,7 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
         amount,
         canTargetCreature: targets === 'any' || targets === 'creature',
         canTargetPlayer: targets === 'any' || targets === 'player',
+        ...(amountIsX ? { amountIsX: true } : {}),
       };
     }
     if (ref.primitive === PRIMITIVE.destroyTarget || ref.primitive === PRIMITIVE.exileTarget) {

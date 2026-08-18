@@ -136,6 +136,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail: 'Abilities with {T} and mana costs, funded through the same payment planner as spells.',
         witness: { kind: 'rule', id: 'equip-cost' },
       },
+      {
+        title: '{X} costs',
+        detail:
+          'Casting an {X} spell asks the caster to choose X — the range bounded by what the board can actually pay — charges it, and the resolved effect reads the chosen value (Blaze, Mind Spring). X = 0 is a legal cast.',
+        witness: { kind: 'rule', id: 'x-damage' },
+      },
+      {
+        title: 'Kicker',
+        detail:
+          'An affordable kicker is offered as a cast-time payment; a caster who cannot pay is never asked. The kicked half runs only when it was paid (Burst Lightning). Multikicker still reports.',
+        witness: { kind: 'rule', id: 'kicker-cost' },
+      },
     ],
   },
   {

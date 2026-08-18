@@ -70,6 +70,46 @@ function isDerivedValue(value: unknown): value is DerivedValue {
 }
 
 /**
+ * A numeric param whose value is the X chosen when the spell was cast — how
+ * "deals X damage" / "draw X cards" is authored. The value itself lives on the
+ * resolution (`EffectContext.xValue`), charged by the engine at cast time; the
+ * param only says "read it from there".
+ */
+export interface ChosenXValue {
+  readonly chosenX: true;
+}
+
+/** The one param value meaning "the X chosen at cast time". */
+export const CHOSEN_X: ChosenXValue = Object.freeze({ chosenX: true });
+
+/** Whether a param value is the chosen-X descriptor. */
+function isChosenX(value: unknown): value is ChosenXValue {
+  return typeof value === 'object' && value !== null && (value as { chosenX?: unknown }).chosenX === true;
+}
+
+/**
+ * A numeric param with two printed values — the unkicked one and the kicked one
+ * ("deals 2 damage… if this spell was kicked, it deals 4 damage instead").
+ * Which one applies is decided by the cast-time kicked flag on the resolution,
+ * so ONE primitive ref reproduces the whole "instead" sentence and the target
+ * restriction stays on that single ref.
+ */
+export interface KickedSwitchValue {
+  readonly base: number;
+  readonly kicked: number;
+}
+
+/** Whether a param value is a base/kicked pair. */
+function isKickedSwitch(value: unknown): value is KickedSwitchValue {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { base?: unknown }).base === 'number' &&
+    typeof (value as { kicked?: unknown }).kicked === 'number'
+  );
+}
+
+/**
  * Evaluate a derived count against the CURRENT state.
  *
  * "Current" matters: the value is computed when the effect resolves, not when
@@ -110,6 +150,11 @@ export function intParam(ctx: EffectContext, key: string, fallback: number): num
   const v = ctx.params[key];
   if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v);
   if (isDerivedValue(v)) return evaluateDerived(ctx, v);
+  // "X" — the value chosen (and paid for) at cast time. An unchosen X reads 0,
+  // the direction that can never play better than printed.
+  if (isChosenX(v)) return ctx.xValue ?? 0;
+  // "N… or M instead, if this spell was kicked" — one ref, both printed values.
+  if (isKickedSwitch(v)) return ctx.kicked === true ? v.kicked : v.base;
   return fallback;
 }
 

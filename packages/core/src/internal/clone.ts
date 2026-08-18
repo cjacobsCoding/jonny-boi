@@ -118,6 +118,14 @@ function cloneStackObject(o: StackObject): StackObject {
     controller: o.controller,
     resolvesTo: o.resolvesTo,
     targets: [...o.targets],
+    // Conditional for the same reason as `awaitingTargets` above: dropping any
+    // of these would lose a chosen X / kicked flag (the spell would resolve as
+    // if unpaid) or lose the "cast still being finished" marker, on the clone
+    // made at every action boundary. Conditional so the ordinary spell object
+    // stays byte-for-byte what it always was.
+    ...(o.xValue !== undefined ? { xValue: o.xValue } : {}),
+    ...(o.kicked !== undefined ? { kicked: o.kicked } : {}),
+    ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
   };
 }
 
