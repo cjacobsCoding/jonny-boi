@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import { getCard, cardImage } from '../../lib/cards.js';
 import { CardHover } from '../CardHover.js';
 import type { BoardPermanent } from '../../lib/play/view-model.js';
+import './planeswalker.css';
 
 /** Short keyword abbreviations shown as chips on a creature. */
 const KEYWORD_ABBR: Readonly<Record<string, string>> = {
@@ -53,6 +54,7 @@ export function BoardPermanentTile({
   const title =
     `${perm.name}` +
     (perm.isCreature ? ` · ${perm.power}/${perm.toughness}` : '') +
+    (perm.isPlaneswalker ? ` · ${perm.loyalty} loyalty` : '') +
     (perm.tapped ? ' · tapped' : '') +
     (perm.summoningSick && perm.isCreature ? ' · summoning sick' : '');
 
@@ -79,6 +81,11 @@ export function BoardPermanentTile({
           <span className={`perm__pt${wounded ? ' perm__pt--wounded' : ''}`}>
             {perm.power}/{perm.toughness}
             {wounded && <span className="perm__dmg"> (−{perm.damageMarked})</span>}
+          </span>
+        )}
+        {perm.isPlaneswalker && (
+          <span className="perm__loyalty" aria-label={`${perm.loyalty} loyalty`} title="Loyalty">
+            ◆ {perm.loyalty}
           </span>
         )}
       </div>

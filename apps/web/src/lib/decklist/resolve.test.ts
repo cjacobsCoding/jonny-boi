@@ -164,7 +164,10 @@ describe('resolveDecklist', () => {
 
     const grouped = blockedByEngineSystem(plan);
     expect(grouped.length).toBeGreaterThan(0);
-    const loyalty = grouped.find((group) => group.system.includes('planeswalker'));
+    // Both fixture walkers lack a printed-loyalty number in their record, so
+    // they group under that shared gap (their ability BODIES differ, so the
+    // loyalty-template gap would not group them together).
+    const loyalty = grouped.find((group) => group.system.includes('starting-loyalty'));
     expect(loyalty?.cards).toEqual(['Gideon Jura', 'Jace, the Mind Sculptor']);
   });
 

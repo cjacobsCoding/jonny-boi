@@ -19,6 +19,8 @@ import {
   indexContinuous,
   isCreature,
   isLand,
+  isPlaneswalker,
+  loyaltyOf,
   manaColorsOffered,
   NO_MOD,
   type CardInstance,
@@ -45,6 +47,9 @@ export interface BoardPermanent {
   readonly controller: PlayerId;
   readonly isCreature: boolean;
   readonly isLand: boolean;
+  readonly isPlaneswalker: boolean;
+  /** Current loyalty (from the loyalty counter); 0 for non-walkers. */
+  readonly loyalty: number;
   readonly tapped: boolean;
   readonly summoningSick: boolean;
   readonly power: number;
@@ -122,6 +127,10 @@ function boardPermanent(state: GameState, inst: CardInstance): BoardPermanent {
     controller: inst.controller,
     isCreature: creature,
     isLand: isLand(inst.def),
+    isPlaneswalker: isPlaneswalker(inst.def),
+    // A walker's loyalty LIVES in its counters (engine invariant), so this is the
+    // authoritative current value, not the printed one.
+    loyalty: isPlaneswalker(inst.def) ? loyaltyOf(inst) : 0,
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
     power: creature ? effectivePower(inst, mod) : 0,
