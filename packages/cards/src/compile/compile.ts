@@ -810,7 +810,6 @@ function isTransformDfc(card: CompilableCard): boolean {
  * face (see {@link compileTransformDfc} for how attribution works).
  */
 function compileFace(
-  card: CompilableCard,
   face: NonNullable<CompilableCard['faces']>[number],
   id: string,
   keywords: readonly string[],
@@ -870,8 +869,8 @@ function compileTransformDfc(card: CompilableCard): CompileResult {
     }
   }
 
-  const front = compileFace(card, frontFace, card.id, keywordsFor(frontFace));
-  const back = compileFace(card, backFace, `${card.id}${BACK_FACE_ID_SUFFIX}`, keywordsFor(backFace));
+  const front = compileFace(frontFace, card.id, keywordsFor(frontFace));
+  const back = compileFace(backFace, `${card.id}${BACK_FACE_ID_SUFFIX}`, keywordsFor(backFace));
   missing.push(...front.missing, ...back.missing);
 
   const definition: CardDefinition = {
