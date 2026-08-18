@@ -87,7 +87,8 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
-| feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
+| feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
+| feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
 
 ## Messages between agents
@@ -111,6 +112,23 @@ _Append dated notes here; keep them short. Newest at top._
   curated pool (importer path only), no reanimation/token entry paths (none exist yet — they inherit
   the tapped default by construction). `npm run verify` exit 0, full suite green, `npm run build`
   exit 0. (Worker)
+- 2026-08-17 worker (feat/about-mechanics): **About view shipped — a LIVE supported-vs-TODO
+  mechanics page**, pushed, not merged. New nav tab "About" renders entirely from the compiler's
+  own registries (`EFFECT_RULES`/`TRIGGER_RULES`/`STATIC_RULES`/`MANA_RULES`, `KEYWORD_FLAGS`,
+  `UNSUPPORTED_HINTS`, `TYPES_WITHOUT_SYSTEM`, `STUBBED_MECHANICS`, `CARD_POOL`, primitive maps) —
+  no prose copy to go stale. The one hand-written piece (readable "supported" group blurbs) is
+  pinned by WITNESSES (rule id / primitive / keyword / pool card / oracle text that must compile
+  `'complete'`), and `apps/web/src/lib/about/mechanics.test.ts` resolves every witness on every
+  test run, so a removed mechanic fails the suite instead of lying on the page. Also surfaces the
+  per-browser "gaps you've hit" queue from `unsupportedRegistry` (live subscription + Markdown
+  export). `packages/cards` edits are re-exports only — no behavior change. Verified: full suite
+  **2349 passed, 0 failed** (re-run after merging origin/main incl. fix/online-playability:
+  **2424 passed, 0 failed**); `npm run verify` exit 0; `npm run build` exit 0; live dev-server check
+  of the About tab on :5199 — renders real derived data (62 templates, 14 keywords, 9 missing
+  systems, 22 template gaps, 7 stubbed cards), 0 console errors. NOT done: no DESIGN §3 flip (the
+  About page is not a §3 roadmap row); no debug-inspector entry (the page is itself the inspector
+  for compiler coverage — say if you want one anyway).
+
 - 2026-08-15 DESKTOP-90PJPM4: ✅ **RESOLVED — the "unplayable online" report, diagnosed and fixed.**
   Branch `fix/online-playability` (worktree `D:\Cool Stuff\Claude\jb-online`). Suite **2273 passed,
   0 failed** (was 2250); `npm run build -w @jonny-boi/web` exit 0; lint clean. The handoff brief

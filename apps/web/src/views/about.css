@@ -1,0 +1,167 @@
+/* About view — the live supported/TODO mechanics reading. */
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 62rem;
+  margin: 0 auto;
+}
+
+.about__intro h2 {
+  margin: 0 0 var(--space-3);
+  color: var(--color-accent-soft);
+}
+
+.about__intro p {
+  margin: 0;
+  color: var(--color-fg-muted);
+  line-height: 1.6;
+}
+
+.about__heading {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-lg);
+  color: var(--color-accent-soft);
+}
+
+/* The at-a-glance stat strip. */
+.about__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.about__stat {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-3) var(--space-4);
+}
+
+.about__stat dt {
+  font-size: var(--text-xs);
+  color: var(--color-fg-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.about__stat dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xl);
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.about__stat--todo dd {
+  color: var(--color-warning);
+}
+
+/* Cards laid out two-up on wide screens, stacking on phones. */
+.about__groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.about__card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--space-4);
+}
+
+.about__card h4 {
+  margin: 0 0 var(--space-2);
+  color: var(--color-fg);
+}
+
+.about__card h5 {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--color-fg-muted);
+}
+
+.about__mechanics {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--color-fg-muted);
+  line-height: 1.5;
+}
+
+.about__mechanics strong {
+  color: var(--color-fg);
+}
+
+.about__mechanics--todo li::marker {
+  color: var(--color-warning);
+}
+
+.about__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.about__chip {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 0.15rem var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-fg);
+}
+
+.about__details summary {
+  cursor: pointer;
+  color: var(--color-fg);
+  font-weight: 600;
+}
+
+.about__details summary:hover {
+  color: var(--color-accent-soft);
+}
+
+.about__templates {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.1rem;
+  columns: 2;
+  column-gap: var(--space-5);
+  color: var(--color-fg-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.about__templates li {
+  break-inside: avoid;
+  margin-bottom: var(--space-1);
+}
+
+@media (max-width: 40rem) {
+  .about__templates {
+    columns: 1;
+  }
+}
+
+.about__fine-print {
+  margin: var(--space-2) 0 var(--space-2);
+  color: var(--color-fg-faint);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.about__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  color: var(--color-success);
+  font-size: var(--text-sm);
+}

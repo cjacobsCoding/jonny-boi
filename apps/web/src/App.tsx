@@ -5,6 +5,7 @@ import { useDecks } from './lib/useDecks.js';
 import { useSimWorker } from './lib/useSimWorker.js';
 import { useLabSelection } from './lib/useLabSelection.js';
 import { SAMPLE_DECKS } from '@jonny-boi/sim';
+import { AboutView } from './views/AboutView.js';
 import { CardsView } from './views/CardsView.js';
 import { DeckBuilderView } from './views/DeckBuilderView.js';
 import { LabView } from './views/LabView.js';
@@ -20,6 +21,7 @@ const VIEWS = [
   { id: 'lab', label: 'Lab' },
   { id: 'match', label: 'Watch a Game' },
   { id: 'proxies', label: 'Proxies' },
+  { id: 'about', label: 'About' },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]['id'];
@@ -84,6 +86,7 @@ export function App(): ReactElement {
         {view === 'lab' && <LabView decks={decks} sim={labSim} selection={labSelection} />}
         {view === 'match' && <MatchView decks={decks} sim={matchSim} />}
         {view === 'proxies' && <ProxiesView decks={decks} />}
+        {view === 'about' && <AboutView />}
       </main>
 
       <footer className="app__footer">
