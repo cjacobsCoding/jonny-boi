@@ -71,6 +71,7 @@ import {
   restrictionOfEffects,
   targetRestrictionOf,
 } from './targeting.js';
+import { WARD_COST_PARAM, WARD_COUNTER_PRIMITIVE, effectiveWardOf } from './protection.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
@@ -637,7 +638,7 @@ function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: Ga
 function finishSpellResolution(
   state: GameState,
   card: CardInstance,
-  resolvesTo: 'battlefield' | 'graveyard',
+  resolvesTo: 'battlefield' | 'graveyard' | 'exile',
   emit: (e: GameEvent) => void,
 ): void {
   if (resolvesTo === 'battlefield') {
@@ -666,11 +667,13 @@ function finishSpellResolution(
     if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
     return;
   }
-  // Spell → graveyard.
-  card.zone = 'graveyard';
-  state.players[card.owner].graveyard.push(card);
+  // Spell → graveyard, or → exile for a flashback cast (CR 702.34a: a spell
+  // cast from the graveyard is exiled instead of being put anywhere else as it
+  // leaves the stack). Same move either way; only the destination differs.
+  card.zone = resolvesTo;
+  state.players[card.owner][resolvesTo].push(card);
   resetInstanceForNewZone(card);
-  emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
+  emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: resolvesTo });
 }
 
 /**
@@ -1097,6 +1100,10 @@ function applyPlayLand(
   const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
   if (!isLand(card.def)) return rejectWith(prevState, 'that card is not a land');
+  // Same CR 712.8b guard as casting: a back face is never playable from hand.
+  if (card.def.isBackFace === true) {
+    return rejectWith(prevState, 'the back face of a double-faced card cannot be played');
+  }
 
   moveToZone(state, card, 'battlefield', emit, action.player);
   card.controller = action.player;
@@ -1207,7 +1214,14 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
     if (index < 0) return;
     const trigger = state.stack[index] as TriggeredStackObject;
     const restriction = trigger.awaitingTargets as TargetRestriction;
-    const candidates = legalTargetsFor(state, restriction, trigger.controller);
+    // The SOURCE card's definition rides along so a protected permanent is never
+    // offered to an ability whose source has a protected quality (a red
+    // creature's ETB damage cannot be aimed at protection-from-red). The source
+    // may already have left the battlefield; the ability still resolves, so the
+    // definition is recovered from wherever the card now is.
+    const triggerSourceDef = (findOnBattlefield(state, trigger.sourceInstanceId) ??
+      findInstanceAnywhere(state, trigger.sourceInstanceId))?.def;
+    const candidates = legalTargetsFor(state, restriction, trigger.controller, triggerSourceDef);
 
     if (candidates.length === 0) {
       state.stack.splice(index, 1);
@@ -1299,6 +1313,59 @@ function recordTriggerTargets(
     label: trigger.label,
     targets: [...targets],
   });
+  // A triggered ability aimed at an opponent's warded permanent triggers ward
+  // exactly as a spell does — "the target of a spell OR ABILITY".
+  pushWardTriggers(state, trigger.controller, targets, trigger.instanceId, emit);
+}
+
+/**
+ * WARD (CR 702.21) — for every warded permanent an OPPONENT's spell or ability
+ * has just targeted, put the "counter it unless its controller pays {N}" trigger
+ * on the stack, above the targeting object.
+ *
+ * The trigger is an ordinary trigger stack object whose one effect is core's
+ * reserved {@link WARD_COUNTER_PRIMITIVE} (implemented by `cards`, which asks
+ * the payment through the same `payMana` machinery Mana Leak uses and counters
+ * on a decline). Its TARGET is the stack object that trespassed, so the
+ * resolution knows exactly what to counter even if the stack has moved on — and
+ * a registry without the primitive degrades to `effectUnsupported`, never a
+ * crash.
+ *
+ * Own-controller targeting never triggers (ward names an opponent), and the
+ * ward cost is read through the continuous layer so a granted ward charges too.
+ */
+function pushWardTriggers(
+  state: GameState,
+  actingPlayer: PlayerId,
+  targets: ReadonlyArray<InstanceId | PlayerId>,
+  targetedStackInstanceId: InstanceId,
+  emit: (e: GameEvent) => void,
+): void {
+  for (const target of targets) {
+    if (isPlayerTarget(target)) continue;
+    const permanent = findOnBattlefield(state, target);
+    if (!permanent || permanent.controller === actingPlayer) continue;
+    const wardCost = effectiveWardOf(state, permanent);
+    if (wardCost <= 0) continue;
+    const label = `Ward {${wardCost}}`;
+    state.stack.push({
+      kind: 'trigger',
+      instanceId: state.nextInstanceId++,
+      sourceInstanceId: permanent.instanceId,
+      controller: permanent.controller,
+      effects: [
+        { primitive: WARD_COUNTER_PRIMITIVE, params: { [WARD_COST_PARAM]: { generic: wardCost } } },
+      ],
+      targets: [targetedStackInstanceId],
+      label,
+    });
+    emit({
+      type: 'triggerPutOnStack',
+      sourceInstanceId: permanent.instanceId,
+      controller: permanent.controller,
+      label,
+    });
+  }
 }
 
 /** Describe a target reference (a permanent or a seat) for a choice's option list. */
@@ -1495,9 +1562,32 @@ function applyCastSpell(
 ): EngineResult {
   if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
   const player = state.players[action.player];
-  const card = instanceIn(player.hand, action.instanceId);
-  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  const fromZone = action.fromZone ?? 'hand';
+  // The source zone is explicit and validated FIRST: a flashback cast finds its
+  // card in the caster's own graveyard (the card is cast "from your graveyard",
+  // so it is the owner's copy), and a card that has left that zone mid-response
+  // — exiled, or already flashed back — is cleanly rejected here, exactly as a
+  // hand card that was discarded in response would be.
+  const card =
+    fromZone === 'graveyard'
+      ? instanceIn(player.graveyard, action.instanceId)
+      : instanceIn(player.hand, action.instanceId);
+  if (!card) {
+    return rejectWith(
+      prevState,
+      fromZone === 'graveyard' ? 'that card is not in your graveyard' : 'that card is not in your hand',
+    );
+  }
   if (isLand(card.def)) return rejectWith(prevState, 'lands are played, not cast');
+  if (fromZone === 'graveyard' && card.def.flashback === undefined) {
+    return rejectWith(prevState, 'that card has no flashback');
+  }
+  // CR 712.8b: the back face of a transforming DFC can never be cast. A card in
+  // hand is front-face-up by construction, so this is defensive — but a state
+  // built by hand (a test, a hostile online client) must be refused, not played.
+  if (card.def.isBackFace === true) {
+    return rejectWith(prevState, 'the back face of a double-faced card cannot be cast');
+  }
 
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
   const timing = castTiming(card.def);
@@ -1515,8 +1605,10 @@ function applyCastSpell(
   const targetProblem = illegalTargetReason(state, card.def, action.targets ?? [], action.player);
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
-  // Pay the mana cost from the floating pool.
-  const cost = card.def.cost;
+  // Pay the mana cost from the floating pool. A flashback cast pays the
+  // FLASHBACK cost, not the printed one — that substitution is the whole of
+  // what "cast it for its flashback cost" means at this seam.
+  const cost = fromZone === 'graveyard' ? card.def.flashback : card.def.cost;
   if (cost) {
     if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
     const result = payCost(player.manaPool, cost);
@@ -1524,10 +1616,18 @@ function applyCastSpell(
     player.manaPool = result.pool;
   }
 
-  // Move the card to the stack.
-  removeFromHand(player, card.instanceId);
+  // Move the card to the stack, out of whichever zone it was cast from.
+  removeFromZoneArray(fromZone === 'graveyard' ? player.graveyard : player.hand, card.instanceId);
   card.zone = 'stack';
-  const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(card.def) ? 'battlefield' : 'graveyard';
+  // The source zone decides the exit: a permanent still resolves to the
+  // battlefield, but a flashback spell resolves to EXILE, and the stack object
+  // carries `castFrom` so countering reaches the same answer (see
+  // `spellLeaveDestination`).
+  const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(card.def)
+    ? 'battlefield'
+    : fromZone === 'graveyard'
+      ? 'exile'
+      : 'graveyard';
   const stackObject: SpellStackObject = {
     kind: 'spell',
     instanceId: card.instanceId,
@@ -1535,6 +1635,7 @@ function applyCastSpell(
     controller: action.player,
     resolvesTo,
     targets: action.targets ?? [],
+    ...(fromZone === 'graveyard' ? { castFrom: 'graveyard' as const } : {}),
   };
   state.stack.push(stackObject);
   emit({
@@ -1543,7 +1644,14 @@ function applyCastSpell(
     instanceId: card.instanceId,
     name: card.def.name,
     castTypes: [...card.def.types],
+    ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
   });
+  // Ward (CR 702.21): targeting an opponent's warded permanent triggers the
+  // "counter unless you pay" ability, stacked ABOVE the spell so it resolves
+  // first. Raised here because "becomes the target" is a moment only the
+  // engine sees — no effect resolves and no event exists a data trigger could
+  // watch.
+  pushWardTriggers(state, action.player, stackObject.targets, card.instanceId, emit);
   // Caster retains priority after putting something on the stack.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
@@ -1604,6 +1712,7 @@ function applyActivateAbility(
     ability.effects,
     action.targets ?? [],
     action.player,
+    source.def,
   );
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
@@ -1648,9 +1757,10 @@ function applyActivateAbility(
     source.loyaltyActivatedTurn = state.turnNumber;
   }
 
+  const abilityStackId = state.nextInstanceId++;
   state.stack.push({
     kind: 'trigger',
-    instanceId: state.nextInstanceId++,
+    instanceId: abilityStackId,
     sourceInstanceId: source.instanceId,
     controller: action.player,
     effects: ability.effects,
@@ -1663,6 +1773,8 @@ function applyActivateAbility(
     instanceId: source.instanceId,
     label: ability.label,
   });
+  // Ward fires on "becomes the target of an ability an opponent controls" too.
+  pushWardTriggers(state, action.player, action.targets ?? [], abilityStackId, emit);
 
   // Paying loyalty down to exactly zero is legal and immediately fatal to the
   // walker (CR 704.5i) — settled before anybody acts again, because the next
@@ -1725,11 +1837,11 @@ function unpayableActivationReason(
   return undefined;
 }
 
-function removeFromHand(player: GameState['players'][PlayerId], id: InstanceId): void {
-  const hand = player.hand;
-  for (let i = 0; i < hand.length; i++) {
-    if ((hand[i] as CardInstance).instanceId === id) {
-      hand.splice(i, 1);
+/** Remove an instance from a zone array in place (hand or graveyard, at cast). */
+function removeFromZoneArray(zone: CardInstance[], id: InstanceId): void {
+  for (let i = 0; i < zone.length; i++) {
+    if ((zone[i] as CardInstance).instanceId === id) {
+      zone.splice(i, 1);
       return;
     }
   }
@@ -1916,7 +2028,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
-      if (isLand(card.def)) {
+      if (isLand(card.def) && card.def.isBackFace !== true) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId });
       }
     }
@@ -1934,6 +2046,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   for (let h = 0; h < player.hand.length; h++) {
     const card = player.hand[h] as CardInstance;
     if (isLand(card.def)) continue;
+    // A back face is never castable (CR 712.8b) — mirror `applyCastSpell`'s
+    // guard so the offered menu can only contain playable actions.
+    if (card.def.isBackFace === true) continue;
     const timing = castTiming(card.def);
     const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
     if (!timingOk) continue;
@@ -1943,8 +2058,37 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
       continue;
     }
-    for (const target of legalTargetsFor(state, restriction, me)) {
+    for (const target of legalTargetsFor(state, restriction, me, card.def)) {
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
+    }
+  }
+
+  // Flashback: cast a card with a flashback cost out of YOUR OWN graveyard.
+  // Mirrors the hand loop exactly — same timing gate (a sorcery flashes back
+  // only at sorcery speed), same pool-funds-it gate, same one-offer-per-legal-
+  // target rule for restricted spells — with the flashback cost in place of the
+  // printed one and the action carrying its explicit source zone.
+  const graveyard = player.graveyard;
+  for (let g = 0; g < graveyard.length; g++) {
+    const card = graveyard[g] as CardInstance;
+    const flashbackCost = card.def.flashback;
+    if (flashbackCost === undefined || isLand(card.def)) continue;
+    const timing = castTiming(card.def);
+    if (timing !== 'instant' && !sorcerySpeedWindow) continue;
+    if (!canPay(player.manaPool, flashbackCost)) continue;
+    const restriction = targetRestrictionOf(card.def);
+    if (restriction === undefined) {
+      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'graveyard' });
+      continue;
+    }
+    for (const target of legalTargetsFor(state, restriction, me)) {
+      actions.push({
+        kind: 'castSpell',
+        player: me,
+        instanceId: card.instanceId,
+        targets: [target],
+        fromZone: 'graveyard',
+      });
     }
   }
 
@@ -1967,7 +2111,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         actions.push({ kind: 'activateAbility', player: me, instanceId: perm.instanceId, abilityIndex: index });
         continue;
       }
-      for (const target of legalTargetsFor(state, restriction, me)) {
+      for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
         actions.push({
           kind: 'activateAbility',
           player: me,

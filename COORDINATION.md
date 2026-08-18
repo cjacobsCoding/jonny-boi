@@ -89,10 +89,177 @@ throughput (games/sec) from regressing.
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
+| feat/source-aware-targeting | worker | packages/core (protection.ts NEW + card/targeting/attachments/events/engine/index + internal stats/continuous/combat + protection.test.ts NEW), packages/cards (primitives + choice-primitives `wardCounterUnlessPaid` + compile rules/compile + ward-protection.test.ts NEW + 2 reworded tests), packages/sim (2 classification lines), packages/ai (heuristic source threading), apps/web (2 formatter cases + about/mechanics.ts entries), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
+| feat/double-faced-cards | worker | packages/core (card/state/events/engine guards + NEW transform.ts, internal/zones+clone+triggers-runtime, NEW transform.test.ts), packages/cards (choice-primitives transformRevealTop, effect-helpers face-revert, compile types/compile/rules/index, data/pool.ts Delver, src/index.ts STUBBED_MECHANICS, NEW transform-play.test.ts), packages/sim (paired-arms-config +1 classification; fidelity copy in config/cli/swap), apps/web (lib/cards.ts back-face records + NEW cards.test.ts, lib/about/mechanics.ts + test), DESIGN §3.13 | 🚧 PUSHED, not merged |
+
+| feat/nonhand-casting | worker | packages/core (card/actions/state/events/choices/engine/index + internal/clone + test-fixtures + new flashback.test.ts), packages/cards (effect-helpers, compile types/rules/compile, index.ts STUBBED reword, data/pool.ts comments only, new flashback.test.ts), packages/ai (heuristic.ts + new flashback-pilot.test.ts), packages/sim (config/cli/swap + data/decks/uw-control — FIDELITY wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
+
+| feat/planeswalkers | worker | packages/core (card/state/actions/events/targeting/engine/effects/serialize/index + internal stats/combat/sba/clone/zones + NEW planeswalker.test.ts), packages/cards (compile types/compile/rules loyalty + NEW rules, choice-primitives sacrificeChosen+pileSplitSacrifice, primitives dealDamage-to-walker, data/pool.ts Liliana + 2 refreshed expanded entries, index.ts STUBBED, NEW planeswalker-play.test.ts), packages/ai (heuristic walker attack/burn/loyalty + effect-value + weights + NEW planeswalker-pilot.test.ts), packages/data-tools (loyalty capture + Liliana index record), packages/sim (observation +2, paired-arms +2, fidelity copy), apps/web (play board walker UI + about/mechanics + card-index regen), DESIGN §3.9/§3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `feat/planeswalkers` 🚧 PUSHED — **planeswalkers are real: loyalty
+  counters, walkers as attackable objects, Liliana of the Veil un-stubbed.** Loyalty lives in the
+  EXISTING counters record (`counters['loyalty']`); every entry path shares `applyEnteringLoyalty`.
+  Loyalty abilities are activated abilities with a SIGNED `cost.loyalty` — sorcery-speed, engine-
+  enforced once per walker per turn (compared against `turnNumber` via a conditionally-cloned
+  `CardInstance.loyaltyActivatedTurn`; anyone adding instance/combat fields: `internal/clone.ts`,
+  as ever), never payable below zero; paying to exactly 0 kills the walker immediately and the
+  ability still resolves. ⚠️ THE COMBAT SEAM IS GENERIC ON PURPOSE (the brief's battle
+  constraint): `DeclareAttackersAction.attackTargets` maps attacker → attacked PERMANENT, gated on
+  core's `isAttackable(def)` — battles plug in there without touching combat again. Damage to a
+  walker removes loyalty (CR 120.3c); trample past its loyalty carries to the player (CR 702.19i);
+  an attacked walker that leaves absorbs nothing and redirects NOTHING (the 2017 rules removed
+  redirection — do not "add it back"). Targeting: `'playerOrPlaneswalker'` + `'creatureOrPlaneswalker'`
+  restrictions; "any target" includes walkers (Lava Spike / Sorin's Vengeance refreshed in the
+  GENERATED expanded pool by targeted patch — full `build-expansion` re-run is blocked on the
+  gitignored scratch cache, which no machine currently has; the fidelity suite recompiles both from
+  real text so the data provably matches the compiler). Compiler: `planeswalker` left
+  TYPES_WITHOUT_SYSTEM; `+N:`/`−N:` lines compile via `compileLoyaltyAbility` (U+2212 minus
+  handled); a walker record without printed loyalty stays reported (the committed data-tools index
+  predates loyalty capture — `normalize.ts` captures it now; Liliana's cached record got the one
+  factual field). New primitives `sacrificeChosen` (edict — the VICTIM picks) and
+  `pileSplitSacrifice` (two questions, both collected before anything moves); `discardCard` grew
+  `who:'eachPlayer'` (APNAP). Emblems: NOT built — new `/emblem/` hint, checked before the
+  loyalty hint so ultimates report the real blocker. Legend rule: NOT built for walkers because the
+  engine has none for legendary creatures either — building it walker-only would be a partial rule;
+  it needs one shared owner. AI is not inert: the heuristic activates loyalty abilities (priced by
+  `valueOfEffects` + new `loyaltyAbilityBaseScore`/`loyaltyPerCounter` weights), diverts the
+  smallest sufficient attacker set to KILL a finishable walker (never chips, never over a lethal
+  race), burns killable walkers; the hybrid's policy candidates carry the same walker attack plan
+  plus the all-face alternative. Coverage audit re-run post-merge: **191/2100 playable (9.1%)**,
+  the "planeswalker loyalty abilities" system block (30 cards) dissolved into per-template gaps.
+  Merged origin/main (protection/ward + template-gaps + flashback + DFC) — rules.ts hint table and
+  sim fidelity caveats were 3-way rewordings, all kept. NOT done: online board UI for walker
+  attacks (hotseat only; the server passes `attackTargets` through untouched — deep action validity
+  is the engine's), no walker added to gauntlet meta decks (verdicts unchanged by construction),
+  emblems/battles. (Worker)
+
+- 2026-08-18 worker: `feat/source-aware-targeting` 🚧 PUSHED — **protection from [quality] and
+  Ward {N} play as printed, on a source-aware targeting seam.** `isLegalTarget`/`legalTargetsFor`/
+  `illegalTargetReason(ForEffects)` gained an optional trailing `source?: CardDefinition` (additive
+  — old call sites compile unchanged); the engine passes it at offer, accept, trigger-aim and the
+  three resolution re-checks. All FOUR protection halves enforced (targeting, damage — combat +
+  noncombat with a new `damagePrevented` event, enchant/equip via `isLegalHost` + SBA knock-off,
+  blocking). Ward is engine-raised at the three targeting moments and resolves through the existing
+  `payMana` optional-payment machinery via core's reserved primitive id `wardCounterUnlessPaid`
+  (registered in cards; classified LIBRARY_SAFE in paired-arms-config). Compiler reads `Ward {N}`,
+  `Protection from X[ and from Y]`, and the gains-protection-until-EOT grant; UNSUPPORTED_HINTS
+  reworded to a template-gap. **TRAPS found:** (1) `internal/continuous.ts` `grantInto` only folded
+  the 10 combat keywords — granted hexproof/shroud/menace/unblockable/flash were silently dropped
+  for as long as the layer has existed (targeting.ts documented them as working); fixed + pinned.
+  (2) The keyword merge `{...printed, ...granted}` would have REPLACED a printed protection list —
+  payload keywords need union/add semantics, now in one place (`mergeKeywordGrant`, exported).
+  (3) `heuristic.ts`'s `defaultLegalTarget` picked the biggest threat with NO legality check — a
+  hexproof (now also protected) fallback target meant a rejected cast and a re-chosen identical
+  goal; it now filters through `isLegalTarget`. NOT done, deliberately: attachments/statics may not
+  grant ward/protection (compiler refuses — the continuous-empty fast path cannot see them);
+  "any target" spells stay unpoliced at cast (hexproof precedent — they fizzle at resolution);
+  non-generic ward costs and off-table qualities report; UNSUPPORTED-BACKLOG.md not regenerated
+  (network tool). Suite green, `npm run verify` exit 0, build exit 0; gauntlet seed-99 reproduces
+  79/280 = 28.2% exactly; throughput at PARITY against a same-box origin/main baseline worktree,
+  alternating runs (quiet-box rounds: 97.0 vs 95.9, 90.8 vs 91.9, 100 vs 96.5 games/sec — median
+  ratio ~1.01; absolute numbers below the recorded 109–118 band because several agents shared the
+  box, which is why the comparison is paired). (Worker)
+- 2026-08-17 worker: `feat/template-gaps` 🚧 PUSHED — **six importer template gaps closed as
+  rule-table data**, each proven by a real card compiling `'complete'` with pinned params AND playing
+  correctly in an engine game (`packages/cards/src/compile/template-gaps.test.ts`). Closed:
+  **anthem statics** ("[Other] creatures you control get +X/+Y / have KEYWORD" — Glorious Anthem,
+  Fervor; new `ClauseContribution.statics` reaches the `statics.ts` layer that existed with no rule
+  able to emit it), **basic-land search** ("…for a basic land card, put it/that card onto the
+  battlefield [tapped]" — Rampant Growth, and it **UN-STUBS Sakura-Tribe Elder**, now removed from
+  `STUBBED_MECHANICS` with its full activated ability authored in the pool), **typed regrowth**
+  (Raise Dead), **targeted discard** (Mind Rot — victim chooses), **targeted draw/lose** (Sign in
+  Blood; `drawCards` gained `whichPlayer:'targetPlayer'` — param extension, NO new primitive, so
+  paired-arms-config is untouched), and **Act of Treason's exact templating** ("Untap that
+  creature."). The Treason play test caught a REAL engine bug: a control change from a resolving
+  SPELL silently no-oped (`applyControlChange` derives the stealer from the source's battlefield
+  presence; a sorcery is never there) — fixed with a fallback `stealer` param passed from the
+  resolution's controller, core regression test added. Every existing "gain control" import was
+  affected. Deliberately NOT built (need real systems; sibling branches own several): Tarmogoyf
+  (characteristic-defining P/T; `StaticAbility` deltas are fixed numbers), Fatal Push (no turn-scoped
+  event memory for revolt), scry/surveil (no bottom-of-library primitive), colored statics
+  (`CardFilter` has no color field), modal "choose three / one or both", {X}/kicker/cycling,
+  transform, planeswalkers. Coverage audit re-run: **178 → 190 playable (8.5% → 9.0%)**. About page
+  gains witness-pinned entries (anthems, ramp/sac-fetch). `npm run verify` exit 0, full suite green,
+  `npm run build` exit 0. (Worker)
+- 2026-08-17 worker: `feat/nonhand-casting` 🚧 PUSHED — **casting from a non-hand zone + flashback,
+  played as printed.** `CastSpellAction.fromZone` ('hand' default | 'graveyard') makes the source zone
+  explicit cast → stack → resolution: `applyCastSpell` validates against the LIVE zone (a card that
+  left the graveyard mid-response cleanly rejects) and pays `CardDefinition.flashback` instead of the
+  printed cost; the stack object records `castFrom`; and BOTH exits from the stack derive their
+  destination from that one field via core's new `spellLeaveDestination` — resolution → EXILE, and a
+  **countered flashback spell → EXILE too** (CR 702.34a; `counterSpellOnStack` uses the same helper, so
+  the two exits cannot disagree). Timing is the card's own (sorcery flashback only at sorcery speed —
+  tested both as not-offered and as rejected). ⚠️ `cloneStackObject` copies field-by-field: `castFrom`
+  is added there conditionally (ordinary spells keep their object shape) and PINNED by a test — drop it
+  and a cloned flashback cast silently resolves to the graveyard. `generateLegalActions` offers
+  flashback casts exactly as hand casts (timing + pool-funds-it + one offer per legal target).
+  **Pilots actually consider it**: the heuristic's `scoredSpellGoals` scores graveyard flashback
+  candidates through the same scorer/targeter as hand spells (goal carries `fromZone`; both
+  `pursueSpell` and the search-policy macro emit it), and `flashback-pilot.test.ts` proves the pilot
+  taps toward and submits a flashback cast the engine accepts. Compiler: new STATIC rule
+  `flashback-cost` ("Flashback {2}{U}", instants/sorceries only, PLAIN mana only) + the Scryfall
+  keyword sweep skips a compiled Flashback; hint reworded to a template gap. **Deliberately NOT done**:
+  {X}/additional-cost flashback ("Flashback—{1}{U}, Pay 3 life") stays `incomplete` — blocked on the
+  cast-cost-modification system a sibling is building; Snapcaster Mage stays STUBBED (reworded: the
+  GRANT needs targeting a graveyard card + a continuous effect on a non-battlefield card — neither
+  exists); no flashback card added to the curated pool (none is in the committed Scryfall index, and
+  the expansion pipeline is a full network re-fetch — importer path only for now); no graveyard-cast
+  affordance in the play UIs (hand-click only; the actions ARE in `legalActions`, follow-up for
+  whoever owns the boards); UNSUPPORTED-BACKLOG.md not regenerated (network corpus). Also fixed stale
+  claims: `FIDELITY_CAVEAT` + cli/swap/uw-control/pool.ts/UNSUPPORTED-MECHANICS no longer say
+  "flash/flashback unimplemented" (flash + printed flashback are real; only the GRANT isn't). 👉 NOTE
+  for the integrator: Snapcaster's pool entry could carry `flash` now, but that speeds up UW Control
+  and moves every recorded gauntlet baseline — left as a deliberate integrator call. Verified:
+  full suite **2456 passed, 0 failed** (baseline 2424 + 15 new + suite drift), `npm run verify` exit
+  0, `npm run build` exit 0; gauntlet seed 99 **79/280 = 28.2%, byte-identical to main's recorded
+  baseline** (no flashback card exists in the gauntlet, so identical is the right answer; the new
+  legal-action loop is one property read per graveyard card with an early-out). (Worker)
+- 2026-08-18 worker: `feat/double-faced-cards` 🚧 PUSHED — **the second card face + transform,
+  and Delver of Secrets is UN-STUBBED (both faces play as printed).** The seam is one swap, not a
+  parallel read path: a front `CardDefinition` nests its full back face (`backFace`, `isBackFace`,
+  id `<frontId>#back`), and **`CardInstance.def` IS the active face** (`printedDef` holds the front
+  to revert to, keeping definitions acyclic/serializable). Every characteristic read — combat,
+  targeting, triggers, statics, mana, AI evaluation, board/CardHover art — already goes through
+  `inst.def`, so the swap routes them all with no second code path. `transformPermanent`
+  (core `transform.ts`) is the ONLY writer; new `transformed` event; CR 712 pinned by tests
+  (counters/damage/auras/tapped/continuous persist; NO zoneChange; leave-the-battlefield reverts to
+  front in `resetInstanceForNewZone` — a bounced Aberration is a Delver in hand); back faces refused
+  by cast/play (CR 712.8b) and offered nowhere.
+  ⚠️ **Two traps found and fixed — read these before touching faces.** (1) `cloneInstance` copies
+  field by field: `printedDef` is copied conditionally (like `attachedTo`) or a transformed permanent
+  silently untransforms at the NEXT action boundary — pinned by a two-boundary test. (2) The trigger
+  collector cached sources per instance keyed on controller only ("abilities are immutable") — false
+  once `def` can swap mid-action. It now compares the trigger-list IDENTITY and *deletes* the entry
+  when the active face is triggerless (a transformed-away face must not keep firing as
+  last-known-info — that rule is for permanents that LEFT). Both directions tested in one action:
+  transform-then-die fires the back face's dies-trigger, never the front's.
+  ⚠️ **`movePermanentTo` in `packages/cards/src/effect-helpers.ts` is a SECOND copy of core's
+  leave-the-battlefield reset** (bounce/exile primitives use it, core paths use
+  `resetInstanceForNewZone`). It now does the face revert too, but it is a duplication that will bite
+  the next per-object field — worth unifying when someone owns both packages.
+  👉 Compiler: a `layout:'transform'` / `Transform`-keyword record compiles BOTH faces through the
+  full rule table and links them; complete ONLY if both faces are. Detection works without `layout`
+  because the committed index predates it (keyword fallback). Scryfall's card-level keyword list is
+  the UNION of both faces (Delver says Flying; only the back has it) — attributed by face text, never
+  guessed. Delver's upkeep body is ONE primitive `transformRevealTop` (look + may-reveal + transform):
+  a min-0/max-1 top-of-library selection whose valence follows the top card ('gain' if it matches, so
+  the pilot reveals exactly when it should) with a CONSTANT public prompt — `choiceAsked` carries only
+  a count, so a declined reveal leaks nothing (pinned by a test comparing both worlds' logs).
+  Classified library-reading in `paired-arms-config` (it looks and branches, same as `revealTopCard`).
+  ❌ **Deliberately NOT done, and why:** modal DFCs / split / adventure (second face is CASTABLE —
+  needs the cast-time face/cost choice a sibling branch owns; they report the named
+  `SECOND_CASTABLE_FACE_GAP`); werewolves/daybound (needs a day-night tracker — their lines still
+  report); generic "transform ~" from activated/other templates (no rule yet — hint reworded to a
+  TEMPLATE gap since the system now exists); copy/clone of a transformed permanent (engine has no copy
+  effects); no `cardsRevealed` event (same pre-existing gap as `revealTopCard` — mechanics exact, the
+  reveal itself absent from the log); UNSUPPORTED-BACKLOG.md not regenerated (coverage-audit needs a
+  live Scryfall fetch). Expanded pool untouched — Delver lives in the curated pool.
+  Verified: full suite **2469 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0
+  (origin/main had not moved at push time — no merge was needed). (Worker)
 
 - 2026-08-17 worker: `feat/shocklands` 🚧 PUSHED — **shocklands play as printed, on BOTH entry
   paths.** New `payLife` choice kind (engine charges the life once in `applyAnswerChoice`, CR 118.4

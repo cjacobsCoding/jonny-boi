@@ -25,6 +25,7 @@
 
 import type { CardInstance } from '../state.js';
 import type { KeywordFlags } from '../card.js';
+import { unionProtection } from '../card.js';
 import type { AggregatedMod } from './continuous.js';
 import { NO_MOD } from './continuous.js';
 
@@ -137,7 +138,33 @@ export function effectiveKeywords(inst: CardInstance, mod: AggregatedMod = NO_MO
   const granted = mod.keywords;
   // Fast path: nothing granted → return the printed set (or empty) directly.
   if (!granted || isEmptyKeywords(granted)) return printed ?? {};
-  return { ...(printed ?? {}), ...onlyTrue(granted) };
+  return mergeKeywordGrant(printed ?? {}, granted);
+}
+
+/**
+ * Fold a keyword GRANT onto a base keyword set. Boolean flags OR together (a
+ * grant can set a flag, never clear one). The two non-boolean keywords carry
+ * payloads and merge by their own rules, defined once here and reused by the
+ * continuous layer's aggregation:
+ *   - `protectionFrom` lists UNION (protection from red plus a granted
+ *     protection from white is protection from both);
+ *   - `ward` costs ADD (two ward abilities charge the sum — paying both).
+ */
+export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): KeywordFlags {
+  const out: Record<string, unknown> = { ...base };
+  for (const key in granted) {
+    const value = (granted as Record<string, unknown>)[key];
+    if (key === 'protectionFrom') {
+      const merged = unionProtection(base.protectionFrom, value as KeywordFlags['protectionFrom']);
+      if (merged !== undefined) out[key] = merged;
+    } else if (key === 'ward') {
+      const grantedWard = typeof value === 'number' && value > 0 ? value : 0;
+      if (grantedWard > 0) out[key] = (base.ward ?? 0) + grantedWard;
+    } else if (value === true) {
+      out[key] = true;
+    }
+  }
+  return out as KeywordFlags;
 }
 
 /** Whether a creature effectively has a given keyword (base or granted). */
@@ -150,13 +177,4 @@ function isEmptyKeywords(k: KeywordFlags): boolean {
     if ((k as Record<string, unknown>)[key]) return false;
   }
   return true;
-}
-
-/** A copy of `k` keeping only the flags set to true (so OR-merge never un-sets one). */
-function onlyTrue(k: KeywordFlags): KeywordFlags {
-  const out: Record<string, boolean> = {};
-  for (const key in k) {
-    if ((k as Record<string, unknown>)[key]) out[key] = true;
-  }
-  return out as KeywordFlags;
 }

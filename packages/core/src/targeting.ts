@@ -37,6 +37,7 @@ import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
+import { protectionBlocksSource } from './protection.js';
 
 /**
  * What a targeted effect may point at.
@@ -180,6 +181,7 @@ export function isLegalTarget(
   restriction: TargetRestriction,
   target: InstanceId | PlayerId,
   controller?: PlayerId,
+  source?: CardDefinition,
 ): boolean {
   if (isPlayerTarget(target)) {
     if (restriction === 'opponent') {
@@ -196,7 +198,7 @@ export function isLegalTarget(
   }
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
-  if (!isTargetableBy(state, permanent, controller)) return false;
+  if (!isTargetableBy(state, permanent, controller, source)) return false;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
   // "Target player or planeswalker": a permanent target must be a walker.
   if (restriction === 'playerOrPlaneswalker') return isPlaneswalker(permanent.def);
@@ -223,21 +225,34 @@ export function isLegalTarget(
  *
  * Granted keywords are read through the continuous layer, so a creature given
  * hexproof by an aura or a pump is protected too.
+ *
+ * PROTECTION's "can't be targeted" half is checked here too, keyed on the
+ * SOURCE definition (`protection.ts`): a spell whose source has a protected
+ * quality may not aim here, whoever casts it — its own controller included,
+ * which is why protection does not share hexproof's own-controller escape.
+ * With an UNKNOWN source a protected permanent is treated as untargetable, the
+ * same conservative direction as an unknown caster under hexproof.
  */
 function isTargetableBy(
   state: GameState,
   permanent: CardInstance,
   caster: PlayerId | undefined,
+  source?: CardDefinition,
 ): boolean {
   // PERFORMANCE: this runs for every candidate target of every castable spell on
   // the engine's hottest loop, and `indexContinuous` walks the whole effect list.
   // The overwhelmingly common board has no continuous effects and no printed
-  // hexproof, so both are checked cheaply first and the index is built only when
-  // a grant could actually exist.
+  // hexproof/protection, so those are checked cheaply first and the index is
+  // built only when a grant could actually exist.
   const printed = permanent.def.keywords;
   if (state.continuous.length === 0) {
     if (printed?.shroud === true) return false;
-    if (printed?.hexproof === true) return caster !== undefined && caster === permanent.controller;
+    if (printed?.hexproof === true && (caster === undefined || caster !== permanent.controller)) {
+      return false;
+    }
+    if (printed?.protectionFrom !== undefined && protectionBlocksSource(printed.protectionFrom, source)) {
+      return false;
+    }
     return true;
   }
   const keywords = effectiveKeywords(
@@ -245,7 +260,12 @@ function isTargetableBy(
     indexContinuous(state).get(permanent.instanceId) ?? NO_MOD,
   );
   if (keywords.shroud === true) return false;
-  if (keywords.hexproof === true) return caster !== undefined && caster === permanent.controller;
+  if (keywords.hexproof === true && (caster === undefined || caster !== permanent.controller)) {
+    return false;
+  }
+  if (keywords.protectionFrom !== undefined && protectionBlocksSource(keywords.protectionFrom, source)) {
+    return false;
+  }
   return true;
 }
 
@@ -260,6 +280,7 @@ export function legalTargetsFor(
   state: GameState,
   restriction: TargetRestriction,
   controller?: PlayerId,
+  source?: CardDefinition,
 ): readonly (InstanceId | PlayerId)[] {
   if (restriction === 'spell') {
     return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
@@ -283,14 +304,14 @@ export function legalTargetsFor(
     const walkersToo = restriction !== 'creature';
     for (const permanent of state.battlefield) {
       const kindOk = isCreature(permanent.def) || (walkersToo && isPlaneswalker(permanent.def));
-      if (kindOk && isTargetableBy(state, permanent, controller)) {
+      if (kindOk && isTargetableBy(state, permanent, controller, source)) {
         targets.push(permanent.instanceId);
       }
     }
   }
   if (restriction === 'playerOrPlaneswalker') {
     for (const permanent of state.battlefield) {
-      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller)) {
+      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source)) {
         targets.push(permanent.instanceId);
       }
     }
@@ -300,7 +321,7 @@ export function legalTargetsFor(
       if (
         permanent.controller === controller &&
         isCreature(permanent.def) &&
-        isTargetableBy(state, permanent, controller)
+        isTargetableBy(state, permanent, controller, source)
       ) {
         targets.push(permanent.instanceId);
       }
@@ -308,7 +329,7 @@ export function legalTargetsFor(
   }
   if (restriction === 'artifact') {
     for (const permanent of state.battlefield) {
-      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller)) {
+      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source)) {
         targets.push(permanent.instanceId);
       }
     }
@@ -337,7 +358,9 @@ export function illegalTargetReason(
     return `${def.name} targets exactly one ${describeRestriction(restriction)}`;
   }
   const target = targets[0]!;
-  if (!isLegalTarget(state, restriction, target, controller)) {
+  // The card being cast IS the source of its own targeting, so its protection
+  // qualities (color, types) are checked without any caller having to say so.
+  if (!isLegalTarget(state, restriction, target, controller, def)) {
     return `${def.name} can only target ${describeRestriction(restriction)}`;
   }
   return undefined;
@@ -357,13 +380,14 @@ export function illegalTargetReasonForEffects(
   effects: readonly EffectRef[],
   targets: ReadonlyArray<InstanceId | PlayerId>,
   controller?: PlayerId,
+  source?: CardDefinition,
 ): string | undefined {
   const restriction = restrictionOfEffects(effects);
   if (restriction === undefined) return undefined; // unrestricted — not policed
   if (targets.length !== 1) {
     return `${label} targets exactly one ${describeRestriction(restriction)}`;
   }
-  if (!isLegalTarget(state, restriction, targets[0]!, controller)) {
+  if (!isLegalTarget(state, restriction, targets[0]!, controller, source)) {
     return `${label} can only target ${describeRestriction(restriction)}`;
   }
   return undefined;

@@ -127,6 +127,32 @@ export {
   describeRestriction,
 } from './targeting.js';
 
+// Protection from [quality] + ward (protection.ts): the source-aware half of
+// targeting/damage/attachment/blocking legality, and the reserved ward seam.
+export type { ProtectionQuality } from './card.js';
+export { unionProtection } from './card.js';
+export {
+  PROTECTION_QUALITIES,
+  WARD_COST_PARAM,
+  WARD_COUNTER_PRIMITIVE,
+  colorsOfDefinition,
+  effectiveProtectionOf,
+  effectiveWardOf,
+  isProtectionQuality,
+  protectionBlocksSource,
+  protectionPreventsDamage,
+  sourceHasQuality,
+} from './protection.js';
+/**
+ * Transforming double-faced cards (CR 701.28 / 712): a front-face definition
+ * nests its back face (`CardDefinition.backFace`), which face is up is
+ * per-permanent state (`CardInstance.def` = the active face), and
+ * `transformPermanent` is the ONE writer that swaps it. Effect primitives owned
+ * by `cards` call it; nothing else mutates a face.
+ */
+export type { FaceUp } from './transform.js';
+export { transformPermanent, faceUpOf, transformTargetOf } from './transform.js';
+
 // Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.
 export type {
   TriggeredAbility,
@@ -168,7 +194,16 @@ export type {
   TriggeredStackObject,
   CombatState,
 } from './state.js';
-export { PLAYER_IDS, STEP_ORDER, MAIN_STEPS, NO_COUNTERS, createPlayer, playerZone, opponentOf } from './state.js';
+export {
+  PLAYER_IDS,
+  STEP_ORDER,
+  MAIN_STEPS,
+  NO_COUNTERS,
+  createPlayer,
+  playerZone,
+  opponentOf,
+  spellLeaveDestination,
+} from './state.js';
 
 // Events
 export type { GameEvent, EventLog } from './events.js';
@@ -195,6 +230,7 @@ export type {
   TapForManaAction,
   ActivateAbilityAction,
   CastSpellAction,
+  CastZone,
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,
@@ -291,6 +327,7 @@ export {
   effectiveToughness,
   remainingToughness,
   effectiveKeywords,
+  mergeKeywordGrant,
   hasKeyword,
   PLUS_ONE_COUNTER,
   MINUS_ONE_COUNTER,

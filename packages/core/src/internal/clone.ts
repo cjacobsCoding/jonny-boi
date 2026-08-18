@@ -67,6 +67,13 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // loyalty ability has been activated ever carries this, and an unconditional
   // extra property on every clone measurably costs sim throughput.
   if (inst.loyaltyActivatedTurn !== undefined) copy.loyaltyActivatedTurn = inst.loyaltyActivatedTurn;
+  // Same conditional-copy rule as `attachedTo`, and the same stakes as a
+  // dropped stack-object field: `def` is the ACTIVE face (a transformed DFC
+  // points at its nested back face), and `printedDef` is the only way back to
+  // the front. Dropping it here would silently freeze a transformed permanent
+  // on its back face for the rest of the game — and losing the pair together
+  // would untransform it — on the very next action's clone.
+  if (inst.printedDef != null) copy.printedDef = inst.printedDef;
   return copy;
 }
 
@@ -122,6 +129,11 @@ function cloneStackObject(o: StackObject): StackObject {
     controller: o.controller,
     resolvesTo: o.resolvesTo,
     targets: [...o.targets],
+    // Field-by-field on purpose (see the header): dropping this one would turn a
+    // cloned flashback cast back into an ordinary one, and the spell would slip
+    // into the graveyard on resolution instead of exile — silently, one action
+    // later. Conditional so the ordinary spell keeps its exact object shape.
+    ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
   };
 }
 

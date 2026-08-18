@@ -66,6 +66,7 @@ export {
   counterUnlessPaid,
   sacrificeChosen,
   pileSplitSacrifice,
+  transformRevealTop,
 } from './choice-primitives.js';
 
 // Pool loader + registry builder.
@@ -90,11 +91,18 @@ export { EXPANDED_CARD_POOL } from '../data/expanded-pool.js';
 // get an honest list of the engine systems it would still need (`./compile`).
 export type {
   CompilableCard,
+  CompilableCardFace,
   CompileResult,
   CompileStatus,
   UnsupportedClause,
 } from './compile/index.js';
-export { compileCard, compileCards, explainUnsupported } from './compile/index.js';
+export {
+  compileCard,
+  compileCards,
+  explainUnsupported,
+  BACK_FACE_ID_SUFFIX,
+  SECOND_CASTABLE_FACE_GAP,
+} from './compile/index.js';
 
 // The compiler's own live registries, re-exported for the About view: the rule
 // tables and keyword map say what imports as fully playable TODAY, and the
@@ -130,6 +138,12 @@ export {
  * optional basic-land search) and **Goblin Guide** (reveal the top card, take it
  * only if it is a land). Earlier waves un-stubbed Young Pyromancer, Monastery
  * Swiftspear, Kitchen Finks and Giant Growth on the trigger + continuous layers.
+ * **Sakura-Tribe Elder** was un-stubbed by the template-gap pass: its sacrifice-
+ * self activation cost and its basic-land search both existed already, and only
+ * the "search … for a basic land card" compiler rule was missing.
+ * The second-face system (CardDefinition.backFace + core's transformPermanent)
+ * un-stubbed **Delver of Secrets** — both faces play as printed, upkeep reveal
+ * included.
  * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
  * abilities play as printed (each-player discard, the edict, the pile split).
  */
@@ -137,14 +151,18 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
-  { card: 'Delver of Secrets', missingEngineSystem: 'transform (upkeep reveal + flip to a 3/2 flyer)' },
   {
+    // Flash timing AND flashback-the-mechanic both exist now (`castTiming` reads
+    // flash; `CardDefinition.flashback` casts from the graveyard and exiles on
+    // leaving the stack). What Snapcaster still needs is the GRANT: targeting an
+    // instant/sorcery card in a graveyard (targeting reaches only permanents,
+    // players and spells today) and a continuous effect that gives a
+    // NON-battlefield card a flashback cost derived from its mana cost, until end
+    // of turn. Un-stub it only when a trigger can aim at a graveyard card and the
+    // continuous layer can carry a grant on one.
     card: 'Snapcaster Mage',
-    missingEngineSystem: 'flash timing + casting a card from the graveyard (flashback)',
-  },
-  {
-    card: 'Sakura-Tribe Elder',
-    missingEngineSystem: 'activated abilities with a sacrifice cost (the basic-land search itself is now expressible)',
+    missingEngineSystem:
+      'granting flashback to a card in a graveyard (targeting a graveyard card + a continuous effect on a non-battlefield card)',
   },
   { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
   {

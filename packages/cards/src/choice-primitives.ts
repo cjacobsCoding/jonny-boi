@@ -38,7 +38,15 @@ import type {
   PlayerId,
   CardType,
 } from '@jonny-boi/core';
-import { collectCardOptions, formatManaCost, isCreature, matchesCardFilter } from '@jonny-boi/core';
+import {
+  collectCardOptions,
+  formatManaCost,
+  isCreature,
+  isPlayerTarget,
+  matchesCardFilter,
+  transformPermanent,
+} from '@jonny-boi/core';
+import type { StackObject } from '@jonny-boi/core';
 import {
   boolParam,
   counterSpellOnStack,
@@ -572,6 +580,115 @@ export const counterUnlessPaid: EffectPrimitive = (ctx) => {
 /** Where the optional payment's cost lives in a card's params. */
 const UNLESS_PAID_PARAM = 'unlessPaid';
 
+/**
+ * `wardCounterUnlessPaid` — the resolution of a WARD trigger (CR 702.21):
+ * "counter the spell or ability that targeted this permanent unless its
+ * controller pays the ward cost".
+ *
+ * The id is core's reserved {@link WARD_COUNTER_PRIMITIVE} seam: core raises
+ * the trigger itself when an opponent's spell/ability targets a warded
+ * permanent ("becomes the target" is a moment only the engine sees), and this
+ * primitive supplies the behaviour through the SAME optional-payment machinery
+ * Mana Leak uses — the engine enriches affordability, charges the mana as the
+ * answer is accepted, and never asks a player who cannot pay.
+ *
+ * Unlike `counterUnlessPaid` this must counter ABILITIES too — ward reads
+ * "spell or ability", and a Flametongue-style trigger aimed at a warded
+ * creature is the ability case. Countering a trigger object is simply removing
+ * it from the stack (no card changes zones), reported with the same event a
+ * fizzled trigger emits so the log always says why the stack shrank.
+ */
+export const wardCounterUnlessPaid: EffectPrimitive = (ctx) => {
+  const target = ctx.targets[0];
+  if (target === undefined || isPlayerTarget(target)) return;
+  const object = ctx.state.stack.find((o) => o.instanceId === target);
+  if (!object) return; // already resolved or countered — safe no-op
+  const cost = manaCostParam(ctx, UNLESS_PAID_PARAM);
+  if (cost) {
+    // ASK FIRST, THEN MUTATE — nothing above this line has touched the state.
+    const paid = ctx.payOrDecline({
+      chooser: object.controller,
+      cost,
+      prompt: `Pay ${formatManaCost(cost)} (ward) or ${ctx.source.def.name}'s ward counters ${describeStackObject(object)}`,
+      // Paying keeps your spell/ability, so agreeing is the favourable branch
+      // for the chooser — exactly as with a soft counterspell.
+      valence: 'gain',
+    });
+    if (paid === undefined) return; // parked — resume later, nothing mutated
+    if (paid) return; // paid in full: the targeting object resolves as normal
+  }
+  if (object.kind === 'spell') {
+    counterSpellOnStack(ctx, object);
+    return;
+  }
+  const idx = ctx.state.stack.indexOf(object);
+  if (idx < 0) return;
+  ctx.state.stack.splice(idx, 1);
+  ctx.emit({
+    type: 'triggerRemovedFromStack',
+    sourceInstanceId: object.sourceInstanceId,
+    controller: object.controller,
+    label: object.label,
+    reason: `countered by ${ctx.source.def.name}'s ward`,
+  });
+};
+
+/** How a countered stack object reads in the ward prompt. */
+function describeStackObject(object: StackObject): string {
+  return object.kind === 'spell' ? object.card.def.name : object.label;
+}
+
+// --- transforming double-faced cards -------------------------------------------------
+
+/**
+ * `transformRevealTop` — Delver of Secrets' upkeep body: "look at the top card of
+ * your library. You may reveal that card. If a card matching `params.filter` is
+ * revealed this way, transform ~."
+ *
+ * The look and the "you may reveal" are ONE question: a `min: 0, max: 1`
+ * selection whose single candidate is the top card. Offering the candidate IS
+ * the look (the choice travels only to its chooser, so nobody else sees it — the
+ * `choiceAsked` event carries just a count), selecting it is the reveal, and the
+ * PROMPT is deliberately constant so the public log cannot leak whether the top
+ * card matched when the reveal is declined.
+ *
+ * Valence is computed from the top card: revealing a matching card transforms
+ * the source (`'gain'`), revealing a non-matching one does nothing but hand the
+ * opponent information (`'loss'`) — so a pilot reveals exactly when it should,
+ * with no card knowledge. Both answers stay legal either way; a human may still
+ * reveal a blank to bluff.
+ *
+ * Same documented gap as {@link revealTopCard}: the engine has no
+ * `cardsRevealed` event yet, so the reveal itself is not in the log — every
+ * MECHANICAL consequence (the transform, or nothing) is exact.
+ *
+ * The transform itself is core's `transformPermanent` (CR 701.28/712): a source
+ * that is not on the battlefield, or is not a transforming DFC, transforms
+ * nothing — never a crash.
+ */
+export const transformRevealTop: EffectPrimitive = (ctx) => {
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const candidates = collectCardOptions(ctx.state, 'library', { controller: who, limit: 1, fromTop: true });
+  if (candidates.length === 0) return; // empty library — nothing to look at
+  const filter = filterParam(ctx);
+  const top = ctx.state.players[who].library[0];
+  const matches = top !== undefined && matchesCardFilter(top, filter);
+  const chosen = ctx.chooseCards({
+    chooser: who,
+    prompt: 'You may reveal the top card of your library',
+    candidates,
+    min: 0,
+    max: 1,
+    valence: matches ? 'gain' : 'loss',
+    fromZone: 'library',
+  });
+  if (chosen === undefined) return; // parked — nothing mutated
+  if (chosen.length === 0) return; // declined — the card stays hidden on top
+  if (!matches) return; // revealed a non-matching card — nothing happens
+  transformPermanent(ctx.state, ctx.source.instanceId, ctx.emit);
+};
+
 // --- registry ------------------------------------------------------------------------
 
 /**
@@ -712,4 +829,6 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   counterUnlessPaid,
   sacrificeChosen,
   pileSplitSacrifice,
+  wardCounterUnlessPaid,
+  transformRevealTop,
 });

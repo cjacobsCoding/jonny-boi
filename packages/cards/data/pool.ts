@@ -31,9 +31,11 @@
  * when the cast is offered, when it is applied, and again when it resolves — so
  * "target creature", "target player" and "target spell" mean what they say, and a
  * spell with no legal target cannot be cast. Activated abilities (including
- * planeswalker LOYALTY abilities) are real, and walkers enter with printed
- * loyalty, are attackable, and die at 0. What it still has no system for is
- * transform, dynamic P/T, and flash/flashback.
+ * planeswalker LOYALTY abilities) are real: walkers enter with printed loyalty,
+ * are attackable, and die at 0. Flash is a real timing flag and a printed
+ * "Flashback {cost}" casts from the graveyard for real (then exiles). What it
+ * still has no system for is dynamic P/T and flashback GRANTED by another card
+ * (Snapcaster).
  * Cards whose identity needs one of those are authored as the closest faithful
  * subset (documented per-card); their
  * vanilla body (P/T, keywords, mana production) is always correct so they play on
@@ -445,8 +447,12 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 1,
     keywords: {},
-    // Flash + flashback-granting ETB needs flash timing + graveyard recast; the
-    // vanilla 2/1 plays correctly.
+    // The flashback-granting ETB still needs targeting a card in a graveyard +
+    // a continuous effect on a non-battlefield card (see STUBBED_MECHANICS); the
+    // vanilla 2/1 plays correctly. Flash timing DOES exist engine-wide now, but
+    // adding the keyword here would speed up UW Control and move every recorded
+    // gauntlet baseline — an integrator decision to make deliberately with a
+    // re-measure, not a drive-by data edit.
   },
   {
     id: 'e3afc704-220f-498f-9eaa-0821b17dc24c',
@@ -455,19 +461,64 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, G: 1 },
     power: 1,
     toughness: 1,
-    // Sacrifice for a land needs an activated sac-ability + land search; vanilla
-    // 1/1 plays correctly.
+    // "Sacrifice this creature: Search your library for a basic land card, put
+    // that card onto the battlefield tapped, then shuffle." — the full printed
+    // card: a sacrifice-self activation cost funding the basic-land search
+    // (same search shape as Path to Exile's compensation, on our own library).
+    activated: [
+      {
+        cost: { sacrificeSelf: true },
+        effects: [
+          {
+            primitive: 'searchLibrary',
+            params: {
+              who: 'controller',
+              count: 1,
+              filter: LAND,
+              nameAnyOf: BASIC_LAND_NAMES,
+              destination: 'battlefield',
+              tapped: true,
+            },
+          },
+        ],
+        label: 'Sacrifice ~: search for a basic land, tapped',
+      },
+    ],
   },
   {
     id: 'edd531b9-f615-4399-8c8c-1c5e18c4acbf',
     name: 'Delver of Secrets',
     types: ['creature'],
+    subtypes: ['human', 'wizard'],
     cost: { U: 1 },
     power: 1,
     toughness: 1,
-    keywords: { flying: false },
-    // Transform (upkeep trigger flipping to a 3/2 flyer) needs a transform system;
-    // the front-face vanilla 1/1 plays correctly.
+    // "At the beginning of your upkeep, look at the top card of your library.
+    // You may reveal that card. If an instant or sorcery card is revealed this
+    // way, transform this creature." — played for real: the look/reveal is one
+    // top-of-library selection, and a matching reveal transforms the permanent
+    // to the nested back face below (core swaps `CardInstance.def`; CR 712:
+    // counters/damage/auras persist, and it turns back front-face-up on leaving
+    // the battlefield).
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'transformRevealTop', params: { filter: { anyOfTypes: ['instant', 'sorcery'] } } },
+        ],
+        label: 'Upkeep: you may reveal the top card of your library — an instant or sorcery transforms this',
+      },
+    ],
+    backFace: {
+      id: 'edd531b9-f615-4399-8c8c-1c5e18c4acbf#back',
+      name: 'Insectile Aberration',
+      isBackFace: true,
+      types: ['creature'],
+      subtypes: ['human', 'insect'],
+      power: 3,
+      toughness: 2,
+      keywords: { flying: true },
+    },
   },
   {
     id: '45900b2f-f6a9-4c42-9642-008f3c1cf6dd',

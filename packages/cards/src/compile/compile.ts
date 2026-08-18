@@ -49,7 +49,10 @@ import {
   TRIGGER_RULES,
   explainUnsupported,
   isVacuousClause,
+  parseProtectionOrWard,
 } from './rules.js';
+import { mergeKeywordGrant } from '@jonny-boi/core';
+import type { KeywordFlags } from '@jonny-boi/core';
 import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
 
 /**
@@ -190,10 +193,13 @@ interface Assembly {
   readonly produces: ManaColor[];
   readonly producesOptions: ManaProduction[];
   readonly activated: ActivatedAbility[];
-  keywords: Record<string, boolean>;
+  readonly statics: import('@jonny-boi/core').StaticAbility[];
+  keywords: KeywordFlags;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
+  /** The printed flashback cost, once a "Flashback {…}" line compiles. */
+  flashback?: ManaCost;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
   attachesAs?: ClauseContribution['attachesAs'];
   /** The "Enchanted/Equipped creature gets …" half, accumulated across lines. */
@@ -209,14 +215,18 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.produces) assembly.produces.push(...contribution.produces);
   if (contribution.producesOptions) assembly.producesOptions.push(...contribution.producesOptions);
   if (contribution.keywords) {
-    assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
+    // Folded by the same merge rule the engine layers with: boolean flags OR,
+    // protection lists UNION, ward costs ADD (`mergeKeywordGrant`).
+    assembly.keywords = mergeKeywordGrant(assembly.keywords, contribution.keywords);
   }
   if (contribution.activated) assembly.activated.push(...contribution.activated);
+  if (contribution.statics) assembly.statics.push(...contribution.statics);
   if (contribution.entersTapped) assembly.entersTapped = true;
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
+  if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
     // Merged rather than replaced: a card may print the P/T line and the keyword
@@ -412,11 +422,19 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
     .filter((word) => word.length > 0);
   if (words.length === 0) return false;
 
-  const flags: Record<string, boolean> = {};
+  let flags: KeywordFlags = {};
   for (const word of words) {
     const field = KEYWORD_FLAGS[word];
     if (field) {
-      flags[field] = true;
+      flags = mergeKeywordGrant(flags, { [field]: true });
+      continue;
+    }
+    // The two payload keywords - `Ward {N}` and `Protection from ...` - are not
+    // boolean flags, so they parse through their own closed tables. A form
+    // outside them ("Ward-Pay 3 life") falls through and reports the line.
+    const special = parseProtectionOrWard(word);
+    if (special) {
+      flags = mergeKeywordGrant(flags, special);
       continue;
     }
     // A keyword with a real primitive-built implementation, either as a direct
@@ -437,7 +455,7 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
     return false; // not a keyword we model — report the line
   }
   if (Object.keys(flags).length > 0) {
-    assembly.keywords = { ...assembly.keywords, ...flags };
+    assembly.keywords = mergeKeywordGrant(assembly.keywords, flags);
     assembly.matchedRules.push('keyword-flags');
   }
   return true;
@@ -529,12 +547,22 @@ function compileAbilityLine(
  *   `'incomplete'` result explaining what was wrong.
  */
 export function compileCard(card: CompilableCard): CompileResult {
+  // A TRANSFORMING double-faced card is compiled as two linked faces — see
+  // `compileTransformDfc`. Detected by Scryfall's `layout` when the record
+  // carries it, else by the `Transform` keyword Scryfall stamps on every
+  // transforming DFC (the committed index predates the layout field). Other
+  // multi-faced layouts (modal DFC, split, adventure) fall through: their
+  // second face is CASTABLE, which needs the cast-time face choice the engine
+  // does not have, and they are reported as exactly that below.
+  if (isTransformDfc(card)) return compileTransformDfc(card);
+
   const assembly: Assembly = {
     effects: [],
     triggers: [],
     produces: [],
     producesOptions: [],
     activated: [],
+    statics: [],
     keywords: {},
     entersTapped: false,
     matchedRules: [],
@@ -567,12 +595,17 @@ export function compileCard(card: CompilableCard): CompileResult {
     });
   }
 
-  // A double-faced card can be played as its front face, but the engine cannot
-  // transform it — so the back face's existence is itself a gap.
+  // A multi-faced card that is NOT a transforming DFC (modal DFC, split,
+  // adventure) has a second CASTABLE face: playing it means choosing which face
+  // to cast, at cast time, with that face's own cost — the cast-time choice
+  // system this engine does not have. Transforming DFCs no longer land here
+  // (they take the `compileTransformDfc` path above); everything else stays
+  // reported rather than being played as its front face only, which would be a
+  // strictly weaker card than printed.
   if (card.name.includes(' // ')) {
     assembly.missing.push({
       text: card.name,
-      missingEngineSystem: 'transform / double-faced cards',
+      missingEngineSystem: SECOND_CASTABLE_FACE_GAP,
     });
   }
 
@@ -724,11 +757,23 @@ export function compileCard(card: CompilableCard): CompileResult {
     // (prowess via its template, persist via a direct builder) — Scryfall
     // listing them again is not a second, unmodelled ability.
     if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
+    // Scryfall lists ward and protection by their bare names; the printed line
+    // carries the payload ("Ward {2}", "Protection from red") and has already
+    // compiled it into the keyword fields - or already reported the line, in
+    // which case the missing-scan below still refuses a duplicate entry.
+    if (word === 'ward' && assembly.keywords.ward !== undefined) continue;
+    if (word === 'protection' && assembly.keywords.protectionFrom !== undefined) continue;
     // "Enchant" and "Equip" are Scryfall's names for the attachment ability the
     // card's own printed line already compiled (see `assembleAttachment`). Without
     // this, every Aura and Equipment would report its central ability as missing
     // one line after implementing it.
     if (ATTACHMENT_KEYWORDS.has(word) && assembly.attachesAs !== undefined) continue;
+    // Same shape for "Flashback": the printed "Flashback {…}" line compiled into
+    // `assembly.flashback`, and Scryfall listing the keyword again is not a
+    // second, unmodelled ability. A flashback line that did NOT compile (an {X}
+    // or additional-cost form) leaves `flashback` unset, so the keyword still
+    // reports through the line's own `missing` entry.
+    if (word === 'flashback' && assembly.flashback !== undefined) continue;
     if (!assembly.missing.some((m) => m.text.toLowerCase().includes(word))) {
       assembly.missing.push({
         text: keyword,
@@ -781,6 +826,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.entersTappedUnlessLifePaid !== undefined
       ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
       : {}),
+    ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0
       ? { producesOptions: manaModes }
@@ -789,6 +835,7 @@ export function compileCard(card: CompilableCard): CompileResult {
         : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
     ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
+    ...(assembly.statics.length > 0 ? { statics: assembly.statics } : {}),
     ...(attachment ? { attachment } : {}),
   };
 
@@ -797,6 +844,123 @@ export function compileCard(card: CompilableCard): CompileResult {
     definition,
     matchedRules: assembly.matchedRules,
     missing: assembly.missing,
+  };
+}
+
+// --- transforming double-faced cards ---------------------------------------------
+
+/**
+ * The gap a modal DFC / split / adventure card reports: its second face is
+ * CASTABLE, and choosing which face to cast is a cast-time decision the engine
+ * cannot ask yet (it belongs to the cast-cost/choice system, in progress on its
+ * own branch). Named once so the report and the tests cannot drift.
+ */
+export const SECOND_CASTABLE_FACE_GAP =
+  'casting either face of a modal double-faced / split card (a cast-time face choice the engine cannot ask yet)';
+
+/** The id suffix a compiled back-face definition carries (`<frontId>#back`). */
+export const BACK_FACE_ID_SUFFIX = '#back';
+
+/** Scryfall's layout value / keyword for Innistrad-style transforming DFCs. */
+const TRANSFORM_LAYOUT = 'transform';
+const TRANSFORM_KEYWORD = 'transform';
+
+/** The number of faces a transforming DFC prints — a front and a back. */
+const DFC_FACE_COUNT = 2;
+
+/**
+ * Whether this record is a TRANSFORMING double-faced card (front castable, back
+ * never castable, a transform instruction flips between them) — as opposed to a
+ * modal DFC / split / adventure, whose second half is castable.
+ */
+function isTransformDfc(card: CompilableCard): boolean {
+  if (!card.faces || card.faces.length !== DFC_FACE_COUNT) return false;
+  if (card.layout !== undefined) return card.layout === TRANSFORM_LAYOUT;
+  return card.keywords.some((keyword) => keyword.toLowerCase() === TRANSFORM_KEYWORD);
+}
+
+/**
+ * Compile one face of a transforming DFC by wrapping it as an ordinary
+ * single-faced record and running it through {@link compileCard} — the whole
+ * rule table, the keyword sweep, the P/T checks, everything, applies to each
+ * face with no second compiler.
+ *
+ * `keywords` is the subset of the card's Scryfall keywords attributable to this
+ * face (see {@link compileTransformDfc} for how attribution works).
+ */
+function compileFace(
+  face: NonNullable<CompilableCard['faces']>[number],
+  id: string,
+  keywords: readonly string[],
+): CompileResult {
+  return compileCard({
+    id,
+    name: face.name,
+    manaCost: face.manaCost,
+    typeLine: face.typeLine,
+    oracleText: face.oracleText,
+    power: face.power,
+    toughness: face.toughness,
+    keywords,
+    // No `faces` on the wrapped record — each face is single-faced, which is
+    // also what terminates the recursion.
+  });
+}
+
+/**
+ * Compile a transforming DFC: BOTH faces in full, linked as one definition.
+ *
+ * THE CONTRACT DOES NOT BEND HERE: the card is `'complete'` only when every
+ * printed ability of BOTH faces compiled — a DFC whose back face is
+ * half-modelled would sit on the battlefield playing wrong after the first
+ * transform, which is worse than reporting it. The front face's definition
+ * carries the back nested as `CardDefinition.backFace` (back marked
+ * `isBackFace`, id `<frontId>#back` so the UI can look up per-face art); which
+ * face is UP is per-permanent state owned by core (`transformPermanent`).
+ *
+ * Scryfall's card-level `keywords` list is the UNION of both faces' keywords
+ * (Delver's says `Flying`, printed only on the back). Each keyword (minus
+ * `Transform` itself, which is the machinery, not an ability) is attributed to
+ * every face whose own oracle text prints it; one attributable to NEITHER face
+ * is reported, never guessed onto a face.
+ */
+function compileTransformDfc(card: CompilableCard): CompileResult {
+  const faces = card.faces as NonNullable<CompilableCard['faces']>;
+  const [frontFace, backFace] = faces as [typeof faces[number], typeof faces[number]];
+
+  const missing: UnsupportedClause[] = [];
+  const keywordsFor = (face: typeof frontFace): string[] => {
+    const text = face.oracleText.toLowerCase();
+    return card.keywords.filter((keyword) => {
+      const word = keyword.toLowerCase();
+      return word !== TRANSFORM_KEYWORD && text.includes(word);
+    });
+  };
+  for (const keyword of card.keywords) {
+    const word = keyword.toLowerCase();
+    if (word === TRANSFORM_KEYWORD) continue;
+    const printedSomewhere = faces.some((face) => face.oracleText.toLowerCase().includes(word));
+    if (!printedSomewhere) {
+      missing.push({
+        text: keyword,
+        missingEngineSystem: `the "${keyword}" keyword ability (not attributable to either face's text)`,
+      });
+    }
+  }
+
+  const front = compileFace(frontFace, card.id, keywordsFor(frontFace));
+  const back = compileFace(backFace, `${card.id}${BACK_FACE_ID_SUFFIX}`, keywordsFor(backFace));
+  missing.push(...front.missing, ...back.missing);
+
+  const definition: CardDefinition = {
+    ...front.definition,
+    backFace: { ...back.definition, isBackFace: true },
+  };
+  return {
+    status: missing.length === 0 ? 'complete' : 'incomplete',
+    definition,
+    matchedRules: [...front.matchedRules, ...back.matchedRules, 'transforming-dfc'],
+    missing,
   };
 }
 

@@ -17,8 +17,11 @@
 import type {
   CardType,
   EffectRef,
+  KeywordFlags,
   ManaColor,
   ManaProduction,
+  ProtectionQuality,
+  StaticAbility,
   TargetRestriction,
   TriggerCondition,
   TriggeredAbility,
@@ -243,6 +246,78 @@ function discardFilterFor(word: string): (typeof DISCARD_RESTRICTIONS)[string] |
 function keywordFlag(word: string): Record<string, boolean> | null {
   const field = KEYWORD_FLAGS[word.trim().toLowerCase()];
   return field ? { [field]: true } : null;
+}
+
+/**
+ * The quality words a printed "protection from ..." may name, mapped to the core
+ * {@link ProtectionQuality} each means. A CLOSED table: a quality outside it
+ * ("protection from Demons", "from instants and from sorceries") has no faithful
+ * engine check, so those cards keep reporting rather than compiling a protection
+ * that quietly protects from the wrong things.
+ */
+const PROTECTION_QUALITY_WORDS: Readonly<Record<string, ProtectionQuality>> = Object.freeze({
+  white: 'white',
+  blue: 'blue',
+  black: 'black',
+  red: 'red',
+  green: 'green',
+  colorless: 'colorless',
+  multicolored: 'multicolored',
+  artifacts: 'artifacts',
+  creatures: 'creatures',
+  everything: 'everything',
+});
+
+/** How a printed protection line separates its qualities ("... and from ..."). */
+const PROTECTION_SEPARATOR = /,? and (?:from )?|, /;
+
+/** `Ward {N}` - only the plain generic-cost form; anything else must report. */
+const WARD_PATTERN = /^ward \{(\d+)\}$/;
+
+/** `Protection from X[ and from Y...]` - the capturing form of the printed line. */
+const PROTECTION_PATTERN = /^protection from (.+)$/;
+
+/**
+ * Parse a printed protection quality list ("red", "black and from green") into
+ * core qualities, or `null` when ANY word is outside the closed table - a
+ * half-understood protection line must report, never protect from less than it
+ * says.
+ */
+function parseProtectionQualities(text: string): readonly ProtectionQuality[] | null {
+  const words = text
+    .split(PROTECTION_SEPARATOR)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  const qualities: ProtectionQuality[] = [];
+  for (const word of words) {
+    const quality = PROTECTION_QUALITY_WORDS[word];
+    if (!quality) return null;
+    if (!qualities.includes(quality)) qualities.push(quality);
+  }
+  return qualities;
+}
+
+/**
+ * Compile the two payload-carrying keyword abilities - `Ward {N}` and
+ * `Protection from [quality]` - into the keyword fields core enforces, or
+ * `null` when the word is neither (or a form outside the closed tables).
+ * Shared by the keyword-line compiler and the keyword sweep so the two cannot
+ * disagree about which printed forms are real.
+ */
+export function parseProtectionOrWard(word: string): KeywordFlags | null {
+  const text = word.trim().toLowerCase();
+  const ward = WARD_PATTERN.exec(text);
+  if (ward) {
+    const cost = Number.parseInt(ward[1] ?? '', 10);
+    return Number.isFinite(cost) && cost > 0 ? { ward: cost } : null;
+  }
+  const protection = PROTECTION_PATTERN.exec(text);
+  if (protection) {
+    const qualities = parseProtectionQualities(protection[1] ?? '');
+    return qualities === null ? null : { protectionFrom: qualities };
+  }
+  return null;
 }
 
 /**
@@ -588,6 +663,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'target-player-draws-and-loses-life',
+    description: '"Target player draws N cards and loses M life" (Sign in Blood)',
+    // The TARGETED sibling of `draw-and-lose-life`: both halves land on the
+    // chosen player (who may be the caster — 'player', not 'opponent').
+    pattern: new RegExp(
+      `^target player draws ${COUNT_TOKEN} cards? and loses ${COUNT_TOKEN} life$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const count = parseCount(match[1]);
+      const life = parseCount(match[2]);
+      if (count === null || life === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count, whichPlayer: 'targetPlayer', targets: PLAYER_TARGET } },
+        { primitive: 'loseLife', params: { amount: life, targetPlayer: true } },
+      );
+    },
+  },
+  {
     id: 'return-target-permanent-to-hand',
     description: '"Return target creature to its owner\'s hand" (bounce)',
     pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
@@ -669,8 +763,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // The riders are optional in the pattern but captured, because they change
     // what the card DOES: without haste a stolen creature cannot attack, so a
     // card that prints them and a card that does not are different cards.
+    // "Untap it" and "Untap that creature" are the same instruction — Act of
+    // Treason prints the latter — so both fold onto the one `untap` flag.
     pattern:
-      /^gain control of target creature until end of turn(?:\. untap it)?(?:\. it gains haste until end of turn|\. it gains haste)?$/,
+      /^gain control of target creature until end of turn(?:\. untap (?:it|that creature))?(?:\. it gains haste until end of turn|\. it gains haste)?$/,
     needsChosenTarget: true,
     build(match) {
       const text = match[0];
@@ -678,7 +774,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         primitive: 'gainControl',
         params: {
           targets: CREATURE_TARGET,
-          ...(text.includes('untap it') ? { untap: true } : {}),
+          ...(text.includes('untap') ? { untap: true } : {}),
           ...(text.includes('gains haste') ? { haste: true } : {}),
         },
       });
@@ -702,6 +798,26 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({
         primitive: 'exileTarget',
         params: { gainLifeEqualPower: true, targets: CREATURE_TARGET },
+      });
+    },
+  },
+  {
+    // Delver of Secrets' upkeep body, whole-line: the look, the optional
+    // reveal, and the conditional transform are ONE primitive
+    // (`transformRevealTop`), because splitting them into sentences would leave
+    // "You may reveal that card" meaning nothing on its own. Both Oracle
+    // wordings of the condition are accepted (the template was retemplated in
+    // 2021). Only the instant-or-sorcery filter is reproduced — a different
+    // type list is a different card and stays reported rather than guessed.
+    id: 'reveal-top-transform',
+    description:
+      '"Look at the top card of your library. You may reveal that card. If an instant or sorcery card is revealed this way, transform ~" (Delver of Secrets)',
+    pattern:
+      /^look at the top card of your library\. you may reveal that card\. if (?:an instant or sorcery card is revealed this way|it's an instant or sorcery card), transform ~$/,
+    build() {
+      return effects({
+        primitive: 'transformRevealTop',
+        params: { filter: { anyOfTypes: ['instant', 'sorcery'] } },
       });
     },
   },
@@ -796,6 +912,24 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
             primitive: 'grantKeywordUntilEndOfTurn',
             params: { keywords, targets: CREATURE_TARGET },
           });
+    },
+  },
+  {
+    // Protection granted as a combat trick ("Gods Willing" without the scry).
+    // Compiles to the SAME grant primitive as a keyword grant; the payload is
+    // the quality list, which the continuous layer unions onto the printed set
+    // - so an until-end-of-turn protection genuinely wears off at cleanup.
+    id: 'grant-protection-until-eot',
+    description: '"Target creature gains protection from [quality] until end of turn"',
+    pattern: /^target creature gains protection from ([a-z, ]+?) until end of turn$/,
+    needsChosenTarget: true,
+    build(match) {
+      const qualities = parseProtectionQualities(match[1] ?? '');
+      if (qualities === null) return null;
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { protectionFrom: qualities }, targets: CREATURE_TARGET },
+      });
     },
   },
   {
@@ -1009,6 +1143,70 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'search-basic-land-to-battlefield',
+    description:
+      '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle." (Rampant Growth; Sakura-Tribe Elder\'s sacrifice body)',
+    // "a basic land card" is expressible the same way Path to Exile expresses it:
+    // the land filter narrowed to the five basics BY NAME (`CardFilter` has no
+    // supertype field; see `restrictToNames` in ../choice-primitives.ts). Both
+    // printed pronouns ("put it" / "put that card") mean the same move.
+    pattern:
+      /^search your library for a basic land card, put (?:it|that card) onto the battlefield( tapped)?(?:, then shuffle)?$/,
+    build(match) {
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: LAND_FILTER,
+          nameAnyOf: BASIC_LAND_NAMES,
+          destination: 'battlefield',
+          ...(match[1] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'return-graveyard-card-by-type',
+    description:
+      '"[You may] return target TYPE card from your graveyard to your hand" (Raise Dead)',
+    // The typed sibling of `return-target-card-from-graveyard`: the same
+    // resolution-time choice, narrowed by the printed card type. Like that rule
+    // it carries no `needsChosenTarget` — the card is picked by a CHOICE when the
+    // effect resolves — so it may also be the body of a triggered ability.
+    pattern: new RegExp(
+      `^(you may )?return target (${Object.keys(SPELL_TYPE_WORDS).join('|')}) card from your graveyard to your hand$`,
+    ),
+    build(match) {
+      const type = SPELL_TYPE_WORDS[match[2] ?? ''];
+      if (!type) return null;
+      const params: Record<string, unknown> = { count: 1, filter: { anyOfTypes: [type] } };
+      if (match[1]) params.optional = true;
+      return effects({ primitive: 'returnFromGraveyard', params });
+    },
+  },
+  {
+    id: 'target-player-discards',
+    description: '"Target player/opponent discards N cards" (Mind Rot)',
+    // The victim chooses their own discards — that is what the plain printed
+    // form means (`chosenBy` defaults to the victim; contrast the Thoughtseize
+    // rule above, where "you choose" hands the pick to the caster).
+    pattern: new RegExp(`^target (player|opponent) discards ${COUNT_TOKEN} cards?$`),
+    needsChosenTarget: true,
+    build(match) {
+      const count = parseCount(match[2]);
+      if (count === null) return null;
+      return effects({
+        primitive: 'discardCard',
+        params: {
+          count,
+          who: 'targetPlayer',
+          targets: match[1] === 'opponent' ? OPPONENT_TARGET : PLAYER_TARGET,
+        },
+      });
+    },
+  },
+  {
     id: 'exile-creature-controller-may-fetch-basic',
     description:
       '"Exile target creature. Its controller may search their library for a basic land card, put that card onto the battlefield tapped, then shuffle." (Path to Exile)',
@@ -1174,6 +1372,26 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'flashback-cost',
+    description: '"Flashback {2}{U}" — the plain mana-cost form only',
+    // A whole ability line: the keyword followed by nothing but mana symbols.
+    // "Flashback—{1}{U}, Discard a card" and "Flashback {X}…" deliberately do
+    // NOT match — a flashback cost beyond plain mana needs the cast-cost-
+    // modification system, and half-paying it would be strictly better than
+    // printed. Those lines fall through to the hint instead.
+    pattern: /^flashback ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      // Flashback is printed only on instants and sorceries; anything else
+      // reaching here is a card the engine could not cast from a graveyard
+      // faithfully, so it stays reported rather than compiling a dead field.
+      const types = ctx.card.typeLine.types.map((t) => t.toLowerCase());
+      if (!types.includes('instant') && !types.includes('sorcery')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null; // {X}/Phyrexian/hybrid — report, don't approximate
+      return { flashback: cost };
+    },
+  },
+  {
     id: 'enters-tapped',
     description: '"~ enters tapped" (the unconditional form only)',
     pattern: /^~ enters(?: the battlefield)? tapped$/,
@@ -1220,6 +1438,42 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // reads the same but means something this rule does not implement.
       if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
       return { entersTappedUnless: { controlsSubtype: subtypes } };
+    },
+  },
+  {
+    id: 'static-buff-your-creatures',
+    description:
+      '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
+    pattern: /^(other )?creatures you control (?:get ([+-]\d+)\/([+-]\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$/,
+    build(match, ctx) {
+      // Only a PERMANENT can carry a static ability. An instant/sorcery printing
+      // this shape would be a one-shot team effect this rule does not implement
+      // (the printed until-end-of-turn forms never match this pattern anyway,
+      // but the guard keeps a hypothetical durationless spell honest).
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
+      if (!isPermanent) return null;
+      const power = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
+      const toughness = match[3] === undefined ? 0 : Number.parseInt(match[3], 10);
+      if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      const keywordText = match[4] ?? match[5];
+      const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
+      // A keyword the engine does not model reports the whole line, never a
+      // half-granted anthem.
+      if (keywordText !== undefined && keywords === null) return null;
+      const ability: StaticAbility = {
+        affects: {
+          anyOfTypes: ['creature'],
+          controller: 'you',
+          // The printed word "other": the lord pumps the team, not itself.
+          ...(match[1] ? { excludeSource: true } : {}),
+        },
+        ...(power !== 0 || toughness !== 0 ? { power, toughness } : {}),
+        ...(keywords ? { keywords } : {}),
+        label: match[0],
+      };
+      return { statics: [ability] };
     },
   },
   // --- attachments: Auras and Equipment (one system, two printed forms) --------
@@ -1506,11 +1760,30 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bloyalty\b|^[+−-]\d+:/,
     missingEngineSystem: 'a loyalty-ability template the compiler does not recognize yet',
   },
-  { pattern: /\btransform\b|\bflip\b|double-faced/, missingEngineSystem: 'transform / double-faced cards' },
-  // Flash is now a real timing flag (`castTiming` reads it), so only FLASHBACK —
-  // recasting from the graveyard — is still missing. Matching bare "flash" here
-  // would send a flash creature to the queue for a mechanic it already has.
-  { pattern: /\bflashback\b/, missingEngineSystem: 'recasting a spell from the graveyard (flashback)' },
+  {
+    // Transforming DFCs ARE implemented now (core's second face +
+    // `transformPermanent`, the `transformRevealTop` primitive, the
+    // `reveal-top-transform` rule), so this hint no longer claims the system is
+    // missing — that would send the next agent to rebuild it. What still lands
+    // here is a TEMPLATE: a transform instruction with no rule yet ("transform
+    // ~" from an activated ability, daybound/nightbound's day-night tracker,
+    // Kamigawa flip cards). Modal DFCs report separately: their gap is the
+    // cast-time face choice, not the second face itself.
+    pattern: /\btransform\b|\bflip\b|double-faced/,
+    missingEngineSystem: 'a transform/double-faced template the compiler does not recognize yet',
+  },
+  // Flash is a real timing flag and PLAIN flashback ("Flashback {2}{U}") is a
+  // real mechanic now (`CardDefinition.flashback` — cast from the graveyard,
+  // exiled on leaving the stack). What still lands here is a flashback the
+  // engine cannot pay or grant: an {X} or additional-cost form
+  // ("Flashback—{1}{U}, Discard a card"), which needs the cast-cost-modification
+  // system, and flashback-GRANTING text (Snapcaster Mage), which needs an effect
+  // that modifies a card in a graveyard.
+  {
+    pattern: /\bflashback\b/,
+    missingEngineSystem:
+      'a flashback template the compiler does not recognize yet (plain "Flashback {cost}" is supported; {X}/additional costs and granted flashback are not)',
+  },
   {
     // Attachment IS implemented now (core's `attachments.ts` + the
     // `enchant-permanent` / `attachment-modification` / `equip-cost` rules), so
@@ -1540,11 +1813,14 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
   {
-    // Hexproof and shroud are implemented keyword flags now. Ward (pay a cost to
-    // target) and protection (a bundle of can't-be-blocked/damaged/enchanted
-    // rules) are genuinely still missing, so the hint names only those.
+    // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
+    // COMPILE now (source-aware targeting: all four protection halves plus the
+    // ward pay-or-counter trigger are engine-enforced). What still lands here
+    // is a TEMPLATE outside the closed tables: a ward cost that is not plain
+    // generic mana ("Ward-Pay 3 life", "Ward {X}"), or a protection quality
+    // with no engine meaning ("protection from Demons", "from instants").
     pattern: /\bward\b|\bprotection from\b/,
-    missingEngineSystem: 'ward and protection-from (cost-to-target and the protection bundle)',
+    missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
   { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },

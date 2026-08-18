@@ -164,7 +164,8 @@ export const DEFAULT_STATS_CONFIG: StatsConfig = Object.freeze({
  * THIS constant so there is exactly one wording. The statistics are always exact.
  */
 export const FIDELITY_CAVEAT =
-  'Note: the engine models triggered abilities, until-end-of-turn effects, and ' +
-  'planeswalkers with loyalty. A few advanced mechanics remain unimplemented — ' +
-  'transform/double-faced cards, dynamic power/toughness, and flash/flashback — so ' +
-  'cards using them play as a simplified subset. The statistics are exact.';
+  'Note: the engine models triggered abilities, until-end-of-turn effects, '
+  + 'planeswalkers with loyalty, transforming double-faced cards, and printed '
+  + '"Flashback {cost}". A few advanced mechanics remain unimplemented — dynamic '
+  + 'power/toughness and flashback GRANTED by another card — so cards using them '
+  + 'play as a simplified subset. The statistics are exact.';

@@ -30,6 +30,7 @@ import type { GameEvent } from '../events.js';
 import type { KeywordFlags } from '../card.js';
 import { effectivePower, effectiveKeywords, loyaltyOf, remainingToughness, removeLoyalty } from './stats.js';
 import { isPlaneswalker } from '../card.js';
+import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
 import type { ContinuousIndex } from './continuous.js';
 import { indexContinuous, NO_MOD } from './continuous.js';
@@ -61,6 +62,12 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
   // "Can't be blocked" is absolute — checked before evasion, which it subsumes.
   if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
+  // Protection's fourth half: an attacker with protection from [quality] can't
+  // be blocked by creatures having that quality (protection from creatures
+  // therefore makes it unblockable, since every blocker is a creature).
+  if (ak.protectionFrom !== undefined && protectionBlocksSource(ak.protectionFrom, blocker.def)) {
+    return false;
+  }
   return true;
 }
 
@@ -146,6 +153,20 @@ function applyDamage(
       emit({ type: 'loyaltyChanged', instanceId: target.instanceId, delta: -removed, to: loyaltyOf(target) });
     }
   } else {
+    // Protection's second half: damage from a source with a protected quality
+    // is PREVENTED (CR 702.16e). Lifelink below is skipped with it — no damage
+    // was dealt, so there is nothing to link.
+    const protection = kw(target, index).protectionFrom;
+    if (protection !== undefined && protectionBlocksSource(protection, source.def)) {
+      emit({
+        type: 'damagePrevented',
+        source: source.instanceId,
+        target: target.instanceId,
+        amount,
+        combat: true,
+      });
+      return;
+    }
     target.damageMarked += amount;
     if (kw(source, index).deathtouch) target.markedByDeathtouch = true;
     emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });

@@ -227,6 +227,12 @@ interface SpellGoal {
   readonly cost: ManaCost;
   readonly targets: readonly (InstanceId | PlayerId)[];
   readonly reason: string;
+  /**
+   * Set when this goal casts the card out of the GRAVEYARD (flashback) — the
+   * cast action must then carry `fromZone: 'graveyard'` and `cost` is the
+   * card's flashback cost, not its printed one.
+   */
+  readonly fromZone?: 'graveyard';
 }
 
 function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
@@ -432,7 +438,7 @@ function bestEquipPlay(
       // leaving it alone is safer than guessing at what paying it costs us.
       if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
 
-      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me);
+      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
       if (!host) continue;
 
@@ -586,6 +592,35 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
     if (legal) scored.push(legal);
   }
 
+  // Flashback casts out of OUR graveyard — the same scoring, targeting and
+  // timing rules as a hand cast, with the FLASHBACK cost in place of the
+  // printed one and the goal marked so the cast action carries its source
+  // zone. Without this loop a flashback card is inert to the pilot: legal,
+  // never considered, and silently corrupting every A/B verdict that swaps one
+  // in. (A card in the graveyard costs no card from hand, so the same score
+  // reads as at least as attractive — free spells win ties naturally.)
+  for (const card of view.players[me].graveyard) {
+    const def = card.def;
+    const flashbackCost = def.flashback;
+    if (flashbackCost === undefined || isLand(def)) continue;
+    const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
+    if (!timingOk) continue;
+    if (convertedManaCost(flashbackCost) > availableMana) continue;
+
+    const intent = classifySpell(def);
+    oppCreatures ??= creaturesControlledBy(view, opp);
+    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain);
+    const legal = goal ? withLegalTargets(view, opp, goal) : undefined;
+    if (legal) {
+      scored.push({
+        ...legal,
+        cost: flashbackCost,
+        fromZone: 'graveyard',
+        reason: explain ? `flashback — ${legal.reason}` : NO_REASON,
+      });
+    }
+  }
+
   scored.sort((a, b) => b.score - a.score);
   return scored;
 }
@@ -607,11 +642,14 @@ function withLegalTargets(view: PilotView, opp: PlayerId, goal: SpellGoal): Spel
   const restriction = targetRestrictionOf(goal.card.def);
   if (restriction === undefined) return goal; // unrestricted — the scorer's choice stands
   const state = view as GameState;
+  // The spell's own definition rides along as the SOURCE so protection is
+  // judged exactly as the engine will judge it — without it a red pilot would
+  // aim burn at protection-from-red, have the cast rejected, and live-lock.
   for (const target of goal.targets) {
-    if (!isLegalTarget(state, restriction, target)) continue;
+    if (!isLegalTarget(state, restriction, target, goal.card.controller, goal.card.def)) continue;
     return goal.targets.length === 1 ? goal : { ...goal, targets: [target] };
   }
-  const fallback = defaultLegalTarget(view, opp, restriction);
+  const fallback = defaultLegalTarget(view, opp, restriction, goal.card.def);
   return fallback === undefined ? undefined : { ...goal, targets: [fallback] };
 }
 
@@ -625,9 +663,21 @@ function defaultLegalTarget(
   view: PilotView,
   opp: PlayerId,
   restriction: TargetRestriction,
+  source?: CardDefinition,
 ): InstanceId | PlayerId | undefined {
   if (restriction === 'player' || restriction === 'playerOrPlaneswalker') return opp;
-  const biggest = biggestThreat(creaturesControlledBy(view, opp));
+  // Only creatures the spell may actually be aimed at are candidates —
+  // a fallback the engine would reject (hexproof, shroud, protection) is a
+  // guaranteed rejected cast and a re-chosen goal, i.e. a live-lock. A
+  // creature-or-planeswalker restriction falls back to 'creature' for this
+  // legality probe — a creature candidate is legal for it exactly when it is
+  // legal as a creature target.
+  const state = view as GameState;
+  const probe = restriction === 'any' || restriction === 'creatureOrPlaneswalker' ? 'creature' : restriction;
+  const legal = creaturesControlledBy(view, opp).filter((creature) =>
+    isLegalTarget(state, probe, creature.instanceId, undefined, source),
+  );
+  const biggest = biggestThreat(legal);
   if (biggest) return biggest.instanceId;
   if (restriction === 'creatureOrPlaneswalker') {
     return walkersControlledBy(view, opp)[0]?.instanceId;
@@ -1025,6 +1075,8 @@ function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
       player: me,
       instanceId: goal.card.instanceId,
       targets: goal.targets.length > 0 ? goal.targets : undefined,
+      // A flashback goal must say so, or the engine looks for the card in hand.
+      fromZone: goal.fromZone,
     };
     return emit(ctx, cast, goal.reason, goal.score);
   }
@@ -1788,6 +1840,7 @@ function collectPriorityCandidates(
       player: me,
       instanceId: goal.card.instanceId,
       targets: goal.targets.length > 0 ? goal.targets : undefined,
+      fromZone: goal.fromZone,
     });
     out.push({ plies, score: goal.score, label: goal.reason });
   }
@@ -1831,7 +1884,7 @@ function bestEquipMacro(
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
       const mana = ability.cost.mana;
       if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
-      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me);
+      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
       if (!host) continue;
       const score = scoreEquip(modifies, host, weights);

@@ -892,6 +892,67 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   ⚠️ Green has **no mono-green Aura in the pool and that is not an oversight**: essentially every green
   Aura is an umbra (totem armor), a regenerate-granter, or dynamic (`+1/+1 for each Forest`), none of
   which the engine models. Green is served by Unflinching Courage ({1}{G}{W}) and by the Equipment.
+- ✅ *source-aware targeting + protection from [quality] + ward {N}* — `isLegalTarget` /
+  `legalTargetsFor` and the primitives' resolution re-checks now carry the SOURCE card's definition,
+  which is what protection is keyed on. **Protection** enforces all four printed halves against
+  sources with the named quality (color from cost pips incl. hybrid, colorless, multicolored,
+  artifacts, creatures, everything): can't be targeted (offer + accept + resolution re-check, no
+  hexproof-style own-controller escape), can't be dealt damage (combat and noncombat — prevented,
+  with a `damagePrevented` event so the log says why a swing did nothing), can't be
+  enchanted/equipped (`isLegalHost` + the SBA, so an Aura falls off the moment its host gains
+  protection from it), and can't be blocked (`canBlock`). An UNKNOWN source is treated as blocked —
+  the same conservative direction as hexproof's unknown caster. **Ward {N}** is raised by the engine
+  itself ("becomes the target" is a moment no data trigger can watch): targeting an opponent's
+  warded permanent stacks a trigger whose one effect is core's reserved `wardCounterUnlessPaid`
+  primitive (a seam convention like `TARGET_RESTRICTION_PARAM`; `cards` registers the
+  implementation), which asks the payment through the SAME `payMana` optional-payment machinery as
+  Mana Leak — a player who cannot pay is never asked — and counters the spell (or removes the
+  targeting ability from the stack) on a decline. Fires on spells, activated abilities and aimed
+  triggers alike; never on the controller's own targeting. Granted protection/ward layer through
+  the continuous fold (protection lists UNION, ward costs ADD — `mergeKeywordGrant`), and the
+  compiler reads `Ward {N}`, `Protection from [quality][ and from …]` and "Target creature gains
+  protection from [quality] until end of turn"; non-generic ward costs ("Ward—Pay 3 life") and
+  qualities outside the closed table ("protection from Demons") keep reporting. ⚠️ Two deliberate
+  limits: an attachment/static may NOT grant ward/protection (the compiler refuses — the targeting
+  fast path reads printed keywords when `state.continuous` is empty, and a grant it cannot see
+  would be a silently ignored ability), and — matching the long-standing hexproof shape — an
+  unrestricted "any target" spell is not policed at cast, so aiming it at a protected creature is
+  accepted and fizzles at resolution instead of being refused.
+- ✅ *the template-gap pass* — wordings the engine could already play that only lacked a rule-table
+  entry, closed as table data plus one 3-line core fix. **Statics/anthems**: "[Other] creatures you
+  control get +X/+Y / have KEYWORD" (Glorious Anthem, Fervor) now compiles onto the existing
+  `statics.ts` layer via a new `ClauseContribution.statics` field — the layer existed with no
+  compiler rule able to reach it, the exact go-wide bias the previous revision of this list called
+  out. **Basic-land search**: "Search your library for a basic land card, put it/that card onto the
+  battlefield [tapped]" (Rampant Growth) — which also **un-stubbed Sakura-Tribe Elder** (its
+  sacrifice-self cost already parsed; only the search body was missing). **Typed regrowth**: "Return
+  target TYPE card from your graveyard to your hand" (Raise Dead). **Targeted discard**: "Target
+  player/opponent discards N cards" (Mind Rot — the victim chooses, unlike the Thoughtseize form).
+  **Targeted draw/lose**: "Target player draws N cards and loses M life" (Sign in Blood; `drawCards`
+  gained a `whichPlayer: 'targetPlayer'` mode). **Act of Treason's exact templating** ("Untap that
+  creature.") — and its play test exposed that a control change from a resolving SPELL silently
+  no-oped (`applyControlChange` read the stealer from the source's battlefield presence; a sorcery is
+  never there), fixed by passing the resolving controller as the fallback stealer, with a core
+  regression test. Every closure is proven by a real card compiling `'complete'` with pinned params
+  AND playing correctly in an engine game (`compile/template-gaps.test.ts`).
+- ✅ *casting from a non-hand zone — flashback* — "Flashback {2}{U}" (Think Twice, Firebolt: cast the
+  card from your graveyard for that cost; **then exile it**). The design decision that carries the whole
+  mechanic: the SOURCE ZONE is explicit end to end. `CastSpellAction.fromZone` names it (omitted =
+  `'hand'`), `applyCastSpell` validates against the live zone and pays `CardDefinition.flashback`
+  instead of the printed cost, the stack object records `castFrom` (cloned field-by-field — the
+  `cloneStackObject` trap is pinned by a test), and every exit from the stack derives its destination
+  from that one field via `spellLeaveDestination`: resolution puts the card in EXILE, and a flashback
+  spell that is **countered** is exiled too (CR 702.34a — being countered is leaving the stack), which
+  `counterSpellOnStack` reaches through the same helper so the two exits cannot disagree. Timing is the
+  card's own (a sorcery flashes back only at sorcery speed); a card that left the graveyard in response
+  cleanly rejects; the same card cast from HAND still resolves to the graveyard. `generateLegalActions`
+  offers the cast (per legal target, pool-funded) exactly as it offers hand casts, and the heuristic's
+  `scoredSpellGoals` scores graveyard flashback candidates through the same scorer as hand spells — so
+  the hybrid search's policy candidates inherit the consideration and the mechanic is never
+  pilot-inert. Only the PLAIN mana-cost form compiles (`flashback-cost` rule); {X}/additional-cost
+  flashback stays reported against the cast-cost-modification system, and flashback GRANTED by another
+  card (Snapcaster Mage) stays stubbed on targeting-a-graveyard-card + a continuous effect on a
+  non-battlefield card.
 - ✅ *planeswalkers + loyalty* — walkers are real attackable permanents. A walker enters with its
   printed loyalty as COUNTERS (`counters['loyalty']`, `CardDefinition.loyalty`); its `[+N]/[−N]` lines
   compile to activated abilities with a SIGNED `cost.loyalty`, sorcery-speed, engine-enforced once per
@@ -910,16 +971,15 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   walker. NOT built, on purpose: emblems (ultimates that need them stay reported), the legend rule
   (the engine has none for legendary creatures either — walkers get the same treatment), battles.
 Still open, roughly by how often they block a real decklist:
-- *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
-  pool (fetchlands, mana rocks, sac outlets).
-- *static / "anthem" continuous effects* — the engine layer EXISTS (`statics.ts`, aggregated with
-  everything else), but no compiler rule reaches it yet, so an anthem still cannot be imported. Without
-  it a go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta
-  the lab measures — a bias in the verdicts themselves, not just missing cards.
-- *alternative and additional costs* (suspend, spectacle, kicker), *{X} and Phyrexian costs*,
-  *dynamic P/T*, *transform/DFC*, *flash + casting from the graveyard*, *emblems*,
-  *revolt-style "a permanent left the battlefield this turn" trackers*.
-
+- *alternative and additional costs* (suspend, spectacle, kicker, cycling), *{X} and Phyrexian costs*,
+  *dynamic P/T* (Tarmogoyf needs characteristic-defining P/T — `StaticAbility` deltas are fixed
+  numbers and `DerivedCount` has no "card types in all graveyards" entry), *emblems* (walker ultimates that create one stay reported),
+  *modal DFCs / split / adventure (the cast-time face choice)*, *granting flashback to a graveyard card (Snapcaster Mage: needs targeting a
+  graveyard card + a continuous effect on a non-battlefield card)*,
+  *revolt-style "a permanent left the battlefield this turn" trackers* (no turn-scoped event memory
+  exists to answer Fatal Push's question),
+  *colored/filtered statics* ("White creatures you control…" — `CardFilter` has no color field),
+  *scry/surveil* (bottom-of-library placement has no primitive yet).
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
 
@@ -959,6 +1019,37 @@ into cheap spelling correction. A **review grid** shows each pile's own crop wit
 count, flags anything unconfident, and lets the name *and the quantity* be corrected; only then does the
 list flow into §3.11's importer, so scanned cards get the same Oracle-compiler treatment as typed ones.
 Tesseract is dynamically imported so its WASM core stays off the initial bundle.
+
+### 3.13 Transforming double-faced cards — ✅ done
+A second card face, and the mechanic it gates: **transform** (Innistrad-style DFCs — front face
+castable, back face never castable, transform instructions flip which face's characteristics apply).
+
+The seam is deliberately ONE swap, not a parallel read path: a front-face `CardDefinition` nests its
+complete back face (`backFace`, marked `isBackFace`, id `<frontId>#back`), and **which face is up is
+per-permanent state** — `CardInstance.def` IS the active face, with `printedDef` holding the front to
+revert to (definitions stay acyclic, so the generated pool module still writes them as literals).
+Because every consumer already reads characteristics through `inst.def`, the swap routes name, types,
+P/T, keywords, triggers, statics, mana production, targeting, the AI's evaluation and the renderer's
+art lookup through the active face with **no second code path anywhere**. `transformPermanent`
+(core `transform.ts`) is the only writer; it emits a dedicated `transformed` event.
+
+CR 712 is the contract: transforming is **not** a zone change — counters, marked damage, attachments,
+tapped state and continuous effects persist, no `zoneChange` is emitted (so no ETB/leaves trigger can
+fire off a flip) — and a permanent that leaves the battlefield turns front-face-up again in the same
+`resetInstanceForNewZone` chokepoint every leave path runs (a bounced Aberration is a Delver in hand).
+The trigger collector re-checks the active face's trigger list identity per event, so a permanent that
+transforms mid-action stops/starts triggering with the face it actually shows. Back faces are refused
+by cast/play (CR 712.8b) and never appear in the deck-builder pool; the web resolves `<id>#back`
+through per-face Scryfall data, so the board and CardHover show the active face's own art.
+
+Compiler: a `layout: 'transform'` (or `Transform`-keyword) record compiles BOTH faces through the full
+rule table and links them; it is `'complete'` only when every printed ability of both faces compiled —
+a half-modelled back face is worse than reporting it. Scryfall's card-level keyword union is attributed
+to faces by their own text, never guessed. **Delver of Secrets is un-stubbed**: the upkeep
+look/may-reveal/transform body is one primitive (`transformRevealTop`, classified library-reading for
+paired arms), asked as a single top-of-library selection whose valence follows the top card, with a
+constant public prompt so the log cannot leak a declined reveal. Modal DFCs / split / adventure cards
+keep reporting `SECOND_CASTABLE_FACE_GAP` — their gap is the cast-time face choice, a different system.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

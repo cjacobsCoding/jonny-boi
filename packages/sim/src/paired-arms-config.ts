@@ -57,6 +57,11 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // A shuffle permutes both arms identically, but the *question* ("may I shuffle?")
   // is answered by a pilot valuing a library it can see. Classified conservatively.
   'mayShuffleLibrary',
+  // Delver's upkeep: reads the top card and BRANCHES on what it is (the reveal
+  // choice's valence, and whether the source transforms). Same shape as
+  // `revealTopCard`, with the same dangerous miss: it looked, learned, and
+  // moved nothing — so a swapped top card can diverge the games invisibly.
+  'transformRevealTop',
 ]);
 
 /**
@@ -137,6 +142,9 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Countering with an optional payment reads the stack and a mana pool, and the
   // question it asks ("pay {3}?") is answered from the board, never from a library.
   'counterUnlessPaid',
+  // Ward's resolution is the same shape: a stack read, a pay-or-decline answered
+  // from the board, and a counter that moves only known cards.
+  'wardCounterUnlessPaid',
   'createToken',
   'tapTarget',
   'discardCard',

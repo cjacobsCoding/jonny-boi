@@ -143,6 +143,9 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   tapped: 'public',
   landPlayed: 'public',
   spellCast: 'public',
+  // Transforming happens on the battlefield in front of everyone (CR 712.8);
+  // both face names are public the moment the permanent flips.
+  transformed: 'public',
   stackResolved: 'public',
   // Mana in a pool is open information in paper Magic, and it is the raw material
   // for the brief's §35–37 "represented mana" reasoning.
@@ -162,6 +165,9 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   attackersDeclared: 'public',
   blockersDeclared: 'public',
   damageDealt: 'public',
+  // Prevented damage is as face-up as dealt damage: the swing, the shield and
+  // the amount all happen on the table.
+  damagePrevented: 'public',
   lifeChanged: 'public',
   gainLife: 'public',
   creatureDied: 'public',

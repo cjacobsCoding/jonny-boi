@@ -6,6 +6,7 @@
 
 export type {
   CompilableCard,
+  CompilableCardFace,
   CompileResult,
   CompileRule,
   CompileStatus,
@@ -13,7 +14,13 @@ export type {
   RuleContext,
   UnsupportedClause,
 } from './types.js';
-export { compileCard, compileCards, TYPES_WITHOUT_SYSTEM } from './compile.js';
+export {
+  compileCard,
+  compileCards,
+  TYPES_WITHOUT_SYSTEM,
+  BACK_FACE_ID_SUFFIX,
+  SECOND_CASTABLE_FACE_GAP,
+} from './compile.js';
 export {
   EFFECT_RULES,
   TRIGGER_RULES,

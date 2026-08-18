@@ -140,4 +140,13 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // bounced and replayed in one turn may activate again — the once-per-turn
   // marker does not survive the move. Same shape-guard as `attachedTo`.
   if (inst.loyaltyActivatedTurn !== undefined) delete inst.loyaltyActivatedTurn;
+  // CR 712.8a: a double-faced card is front-face-up everywhere except the
+  // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
+  // reverts to its printed front face here — the same single chokepoint that
+  // clears the rest of its battlefield-only state. A bounced Delver is a 1/1
+  // Delver of Secrets in hand, never a 3/2 Aberration.
+  if (inst.printedDef != null) {
+    inst.def = inst.printedDef;
+    inst.printedDef = null;
+  }
 }

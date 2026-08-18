@@ -61,6 +61,66 @@ export interface KeywordFlags {
   readonly menace?: boolean;
   /** Can't be blocked at all. Checked per pair in `canBlock`. */
   readonly unblockable?: boolean;
+  /**
+   * Protection from [quality] — the printed bundle of four rules, all enforced
+   * against SOURCES having any listed quality (see `protection.ts`):
+   * can't be targeted, can't be dealt damage, can't be enchanted/equipped, and
+   * can't be blocked, by sources with that quality. A list because a card may
+   * print several ("protection from black and from green").
+   *
+   * NOT a boolean flag: the payload is what the protection is FROM, so the
+   * keyword-merge paths (`effectiveKeywords`, the continuous layer's grant fold)
+   * UNION lists instead of OR-ing booleans.
+   */
+  readonly protectionFrom?: readonly ProtectionQuality[];
+  /**
+   * Ward {N} — whenever this permanent becomes the target of a spell or ability
+   * an OPPONENT controls, counter it unless that player pays {N}. The value is
+   * the printed generic cost; only the plain `Ward {N}` form is modelled (a
+   * ward whose cost is life, colored mana or {X} stays unimplemented rather
+   * than being flattened to a generic charge). Merged additively — a creature
+   * with two ward abilities charges the sum, which is what paying both costs.
+   */
+  readonly ward?: number;
+}
+
+/**
+ * The qualities a printed "protection from …" can name, each with an exact
+ * engine meaning (see `sourceHasQuality` in `protection.ts`). A closed list on
+ * purpose: a quality outside it ("protection from Demons", "from instants") has
+ * no faithful check, so the compiler reports those cards instead of guessing.
+ */
+export type ProtectionQuality =
+  | 'white'
+  | 'blue'
+  | 'black'
+  | 'red'
+  | 'green'
+  /** A source with NO colors (true colorless — lands, most artifacts). */
+  | 'colorless'
+  /** A source with two or more colors. */
+  | 'multicolored'
+  /** Any source whose card is an artifact. */
+  | 'artifacts'
+  /** Any source whose card is a creature. */
+  | 'creatures'
+  /** Every source, whatever its qualities. */
+  | 'everything';
+
+/**
+ * Union two protection lists without duplicates — the one merge rule everywhere
+ * a protection grant meets a printed list (`effectiveKeywords`, the continuous
+ * layer's grant fold, the compiler's keyword assembly). Returns the first list
+ * unchanged when the second adds nothing, so the no-grant path allocates nothing.
+ */
+export function unionProtection(
+  base: readonly ProtectionQuality[] | undefined,
+  granted: readonly ProtectionQuality[] | undefined,
+): readonly ProtectionQuality[] | undefined {
+  if (granted === undefined || granted.length === 0) return base;
+  if (base === undefined || base.length === 0) return granted;
+  const extra = granted.filter((quality) => !base.includes(quality));
+  return extra.length === 0 ? base : [...base, ...extra];
 }
 
 /**
@@ -178,6 +238,23 @@ export interface CardDefinition {
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
+   * Flashback — "You may cast this card from your graveyard for its flashback
+   * cost. Then exile it." (CR 702.34). The value is that cost.
+   *
+   * Two halves, both engine-enforced from this one field:
+   *  - **The cast**: a `castSpell` action with `fromZone: 'graveyard'` pays THIS
+   *    cost instead of `cost`, honoring the card's normal timing (a sorcery
+   *    flashes back only at sorcery speed).
+   *  - **The exile**: a spell cast from the graveyard is exiled whenever it
+   *    would leave the stack — resolved OR countered (CR 702.34a) — never put
+   *    back into the graveyard. See `spellLeaveDestination` in state.ts.
+   *
+   * Only the PLAIN mana-cost form is modelled. A flashback cost with {X} or
+   * additional non-mana costs ("Flashback—{1}{U}, Discard a card") needs the
+   * cast-cost-modification system and stays reported by the compiler.
+   */
+  readonly flashback?: ManaCost;
+  /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
    * — the trigger machinery (triggers.ts) matches conditions against the event log
@@ -203,6 +280,33 @@ export interface CardDefinition {
    * bookkeeping. Omit for cards with none (the overwhelming majority).
    */
   readonly statics?: readonly import('./statics.js').StaticAbility[];
+  /**
+   * The SECOND FACE of a transforming double-faced card (Innistrad-style), as a
+   * complete nested definition — everything a face can print: name, types, P/T,
+   * keywords, triggers, statics, the lot.
+   *
+   * Present only on the FRONT face. The back face never carries a `backFace` of
+   * its own; it is marked {@link isBackFace} instead, and the way back to the
+   * front is the instance's `printedDef` (state.ts) — deliberately NOT a back-
+   * reference here, so definitions stay acyclic and serializable as plain data
+   * (the generated pool module writes them as literals).
+   *
+   * Which face is UP is per-permanent state, not definition data: a transformed
+   * permanent's `CardInstance.def` points at this nested definition, so every
+   * characteristic read in the engine (combat, targeting, triggers, statics,
+   * the AI, the renderer) routes through the active face with no second code
+   * path. See `transform.ts` for the swap and CR 712 for why it is not a zone
+   * change.
+   */
+  readonly backFace?: CardDefinition;
+  /**
+   * Marks this definition as the BACK face of a transforming double-faced card.
+   * A back face is never castable and never starts in any zone face-up (CR
+   * 712.8a: a DFC is always front-face-up everywhere except the battlefield) —
+   * the cast/play paths refuse it defensively, though in practice a back-face
+   * definition only ever appears as a battlefield permanent's active face.
+   */
+  readonly isBackFace?: boolean;
   /**
    * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
    * data: what it may be attached to, what it does to its host while attached, and
