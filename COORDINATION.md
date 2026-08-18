@@ -89,6 +89,7 @@ throughput (games/sec) from regressing.
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
+| feat/source-aware-targeting | worker | packages/core (protection.ts NEW + card/targeting/attachments/events/engine/index + internal stats/continuous/combat + protection.test.ts NEW), packages/cards (primitives + choice-primitives `wardCounterUnlessPaid` + compile rules/compile + ward-protection.test.ts NEW + 2 reworded tests), packages/sim (2 classification lines), packages/ai (heuristic source threading), apps/web (2 formatter cases + about/mechanics.ts entries), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
 | feat/double-faced-cards | worker | packages/core (card/state/events/engine guards + NEW transform.ts, internal/zones+clone+triggers-runtime, NEW transform.test.ts), packages/cards (choice-primitives transformRevealTop, effect-helpers face-revert, compile types/compile/rules/index, data/pool.ts Delver, src/index.ts STUBBED_MECHANICS, NEW transform-play.test.ts), packages/sim (paired-arms-config +1 classification; fidelity copy in config/cli/swap), apps/web (lib/cards.ts back-face records + NEW cards.test.ts, lib/about/mechanics.ts + test), DESIGN §3.13 | 🚧 PUSHED, not merged |
 
@@ -139,6 +140,32 @@ _Append dated notes here; keep them short. Newest at top._
   whoever owns flashback: its {X}/additional-cost flashback forms were reported pending THIS
   system — they can now be wired to the cast-time question step. (Worker)
 
+- 2026-08-18 worker: `feat/source-aware-targeting` 🚧 PUSHED — **protection from [quality] and
+  Ward {N} play as printed, on a source-aware targeting seam.** `isLegalTarget`/`legalTargetsFor`/
+  `illegalTargetReason(ForEffects)` gained an optional trailing `source?: CardDefinition` (additive
+  — old call sites compile unchanged); the engine passes it at offer, accept, trigger-aim and the
+  three resolution re-checks. All FOUR protection halves enforced (targeting, damage — combat +
+  noncombat with a new `damagePrevented` event, enchant/equip via `isLegalHost` + SBA knock-off,
+  blocking). Ward is engine-raised at the three targeting moments and resolves through the existing
+  `payMana` optional-payment machinery via core's reserved primitive id `wardCounterUnlessPaid`
+  (registered in cards; classified LIBRARY_SAFE in paired-arms-config). Compiler reads `Ward {N}`,
+  `Protection from X[ and from Y]`, and the gains-protection-until-EOT grant; UNSUPPORTED_HINTS
+  reworded to a template-gap. **TRAPS found:** (1) `internal/continuous.ts` `grantInto` only folded
+  the 10 combat keywords — granted hexproof/shroud/menace/unblockable/flash were silently dropped
+  for as long as the layer has existed (targeting.ts documented them as working); fixed + pinned.
+  (2) The keyword merge `{...printed, ...granted}` would have REPLACED a printed protection list —
+  payload keywords need union/add semantics, now in one place (`mergeKeywordGrant`, exported).
+  (3) `heuristic.ts`'s `defaultLegalTarget` picked the biggest threat with NO legality check — a
+  hexproof (now also protected) fallback target meant a rejected cast and a re-chosen identical
+  goal; it now filters through `isLegalTarget`. NOT done, deliberately: attachments/statics may not
+  grant ward/protection (compiler refuses — the continuous-empty fast path cannot see them);
+  "any target" spells stay unpoliced at cast (hexproof precedent — they fizzle at resolution);
+  non-generic ward costs and off-table qualities report; UNSUPPORTED-BACKLOG.md not regenerated
+  (network tool). Suite green, `npm run verify` exit 0, build exit 0; gauntlet seed-99 reproduces
+  79/280 = 28.2% exactly; throughput at PARITY against a same-box origin/main baseline worktree,
+  alternating runs (quiet-box rounds: 97.0 vs 95.9, 90.8 vs 91.9, 100 vs 96.5 games/sec — median
+  ratio ~1.01; absolute numbers below the recorded 109–118 band because several agents shared the
+  box, which is why the comparison is paired). (Worker)
 - 2026-08-17 worker: `feat/template-gaps` 🚧 PUSHED — **six importer template gaps closed as
   rule-table data**, each proven by a real card compiling `'complete'` with pinned params AND playing
   correctly in an engine game (`packages/cards/src/compile/template-gaps.test.ts`). Closed:

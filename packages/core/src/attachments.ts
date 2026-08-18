@@ -39,6 +39,7 @@ import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
 import type { CardDefinition } from './card.js';
+import { effectiveProtectionOf, protectionBlocksSource } from './protection.js';
 import type { PermanentModification, StaticControllerScope } from './statics.js';
 
 /**
@@ -147,12 +148,32 @@ export function attachmentProblem(def: CardDefinition): string | undefined {
  * to a permanent in play, which is what makes the SBA below able to answer "is this
  * still legal" by looking at nothing but the current board.
  */
-export function isLegalHost(spec: AttachmentSpec, attachmentController: PlayerId, host: CardInstance): boolean {
+export function isLegalHost(
+  spec: AttachmentSpec,
+  attachmentController: PlayerId,
+  host: CardInstance,
+  /**
+   * The attachment's own card + the game state, for protection's third half:
+   * a host with protection from a quality the ATTACHMENT has can't be
+   * enchanted/equipped by it (CR 702.16d). Optional so a caller with no state
+   * in hand keeps the pre-protection behaviour; every rules path (the SBA and
+   * `attachTo`) passes both, which is what knocks an Aura off the moment its
+   * host gains protection from it.
+   */
+  attachmentDef?: CardDefinition,
+  state?: GameState,
+): boolean {
   const scope = spec.attachesTo.controller ?? DEFAULT_HOST_SCOPE;
   if (scope === 'you') {
     if (host.controller !== attachmentController) return false;
   } else if (scope === 'opponent') {
     if (host.controller === attachmentController) return false;
+  }
+  if (attachmentDef !== undefined) {
+    const protection = state !== undefined
+      ? effectiveProtectionOf(state, host)
+      : host.def.keywords?.protectionFrom;
+    if (protectionBlocksSource(protection, attachmentDef)) return false;
   }
   return matchesCardFilter(host, spec.attachesTo);
 }
@@ -175,7 +196,7 @@ export function isLegallyAttached(state: GameState, permanent: CardInstance): bo
   if (permanent.attachedTo == null) return false;
   const host = findAttachmentHost(state, permanent.attachedTo);
   if (host === undefined) return false;
-  return isLegalHost(spec, permanent.controller, host);
+  return isLegalHost(spec, permanent.controller, host, permanent.def, state);
 }
 
 /**
@@ -205,7 +226,7 @@ export function illegalAttachmentReason(
   if (hostId === attachment.instanceId) return `${attachment.def.name} cannot be attached to itself`;
   const host = findAttachmentHost(state, hostId);
   if (host === undefined) return `${attachment.def.name} has no permanent to attach to`;
-  if (!isLegalHost(spec, attachment.controller, host)) {
+  if (!isLegalHost(spec, attachment.controller, host, attachment.def, state)) {
     return `${attachment.def.name} cannot be attached to ${host.def.name}`;
   }
   return undefined;

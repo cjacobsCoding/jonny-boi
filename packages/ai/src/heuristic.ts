@@ -396,7 +396,7 @@ function bestEquipPlay(
       // leaving it alone is safer than guessing at what paying it costs us.
       if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
 
-      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me);
+      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
       if (!host) continue;
 
@@ -610,11 +610,14 @@ function withLegalTargets(view: PilotView, opp: PlayerId, goal: SpellGoal): Spel
   const restriction = targetRestrictionOf(goal.card.def);
   if (restriction === undefined) return goal; // unrestricted — the scorer's choice stands
   const state = view as GameState;
+  // The spell's own definition rides along as the SOURCE so protection is
+  // judged exactly as the engine will judge it — without it a red pilot would
+  // aim burn at protection-from-red, have the cast rejected, and live-lock.
   for (const target of goal.targets) {
-    if (!isLegalTarget(state, restriction, target)) continue;
+    if (!isLegalTarget(state, restriction, target, goal.card.controller, goal.card.def)) continue;
     return goal.targets.length === 1 ? goal : { ...goal, targets: [target] };
   }
-  const fallback = defaultLegalTarget(view, opp, restriction);
+  const fallback = defaultLegalTarget(view, opp, restriction, goal.card.def);
   return fallback === undefined ? undefined : { ...goal, targets: [fallback] };
 }
 
@@ -628,9 +631,17 @@ function defaultLegalTarget(
   view: PilotView,
   opp: PlayerId,
   restriction: TargetRestriction,
+  source?: CardDefinition,
 ): InstanceId | PlayerId | undefined {
   if (restriction === 'player') return opp;
-  const biggest = biggestThreat(creaturesControlledBy(view, opp));
+  // Only creatures the spell may actually be aimed at are candidates —
+  // a fallback the engine would reject (hexproof, shroud, protection) is a
+  // guaranteed rejected cast and a re-chosen goal, i.e. a live-lock.
+  const state = view as GameState;
+  const legal = creaturesControlledBy(view, opp).filter((creature) =>
+    isLegalTarget(state, restriction === 'any' ? 'creature' : restriction, creature.instanceId, undefined, source),
+  );
+  const biggest = biggestThreat(legal);
   if (biggest) return biggest.instanceId;
   return restriction === 'any' ? opp : undefined;
 }
@@ -1716,7 +1727,7 @@ function bestEquipMacro(
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
       const mana = ability.cost.mana;
       if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
-      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me);
+      hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
       if (!host) continue;
       const score = scoreEquip(modifies, host, weights);

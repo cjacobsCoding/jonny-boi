@@ -581,11 +581,11 @@ describe('compileCard — templated cards outside the curated pool', () => {
   });
 
   it('reports an unmodelled keyword rather than dropping the ability', () => {
-    // Menace used to be the example here; it is implemented now (it constrains
-    // the block DECLARATION, which no per-pair check can express). Ward is the
-    // right stand-in: it needs a cost paid to target, which the engine has no
-    // way to demand. The point of the test is unchanged — an ability we cannot
-    // model must be REPORTED, never silently dropped.
+    // Menace was the example here, then ward — both are implemented now (ward
+    // compiles to the engine-enforced pay-or-counter trigger). Indestructible
+    // is the current stand-in: the engine's destruction and lethal-damage SBAs
+    // have no such exemption. The point of the test is unchanged — an ability
+    // we cannot model must be REPORTED, never silently dropped.
     const result = compileCard(
       makeCard({
         name: 'Sneaky Beast',
@@ -593,13 +593,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
-        oracleText: 'Ward {2}',
-        keywords: ['Ward'],
+        oracleText: 'Indestructible',
+        keywords: ['Indestructible'],
       }),
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /ward/i.test(gap.text))).toBe(true);
+    expect(result.missing.some((gap) => /indestructible/i.test(gap.text))).toBe(true);
   });
 
   it('compiles menace, which IS modelled now', () => {

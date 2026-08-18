@@ -34,7 +34,14 @@ import type {
   PlayerId,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { MINUS_ONE_COUNTER, PLUS_ONE_COUNTER, effectivePower, isCreature, isLegalTarget } from '@jonny-boi/core';
+import {
+  MINUS_ONE_COUNTER,
+  PLUS_ONE_COUNTER,
+  effectivePower,
+  isCreature,
+  isLegalTarget,
+  protectionPreventsDamage,
+} from '@jonny-boi/core';
 import {
   boolParam,
   changeLife,
@@ -85,7 +92,9 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   if (target === undefined) return;
   // `ctx.controller` is passed so an "opponent-only" restriction can be judged —
   // without it the check cannot tell the caster apart from their opponent.
-  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller)) return; // illegal → fizzle
+  // The source definition rides along so protection's "can't be targeted" half
+  // re-fizzles a target that gained protection between cast and resolution.
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller, ctx.source.def)) return; // illegal → fizzle
 
   if (isPlayerTarget(target)) {
     changeLife(ctx, target, -amount);
@@ -284,7 +293,7 @@ export const destroyTarget: EffectPrimitive = (ctx) => {
   // Which permanents this may destroy comes from the DECLARED restriction, not a
   // hard-coded creature check — otherwise "destroy target artifact" would find a
   // legal artifact target and then silently do nothing to it.
-  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target.instanceId, ctx.controller)) return;
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target.instanceId, ctx.controller, ctx.source.def)) return;
   if (!passesDestroyFilter(ctx, target)) return;
   destroyPermanent(ctx, target);
 };
@@ -482,25 +491,47 @@ export const fight: EffectPrimitive = (ctx) => {
   const selfPower = effectivePower(self);
   const otherPower = effectivePower(other);
 
+  // Protection prevents the damage a protected fighter would take, in either
+  // direction, without stopping the other half of the fight (CR 702.16e).
   if (otherPower > 0) {
-    self.damageMarked += otherPower;
-    ctx.emit({
-      type: 'damageDealt',
-      source: other.instanceId,
-      target: self.instanceId,
-      amount: otherPower,
-      combat: false,
-    });
+    if (protectionPreventsDamage(ctx.state, self, other.def)) {
+      ctx.emit({
+        type: 'damagePrevented',
+        source: other.instanceId,
+        target: self.instanceId,
+        amount: otherPower,
+        combat: false,
+      });
+    } else {
+      self.damageMarked += otherPower;
+      ctx.emit({
+        type: 'damageDealt',
+        source: other.instanceId,
+        target: self.instanceId,
+        amount: otherPower,
+        combat: false,
+      });
+    }
   }
   if (selfPower > 0) {
-    other.damageMarked += selfPower;
-    ctx.emit({
-      type: 'damageDealt',
-      source: self.instanceId,
-      target: other.instanceId,
-      amount: selfPower,
-      combat: false,
-    });
+    if (protectionPreventsDamage(ctx.state, other, self.def)) {
+      ctx.emit({
+        type: 'damagePrevented',
+        source: self.instanceId,
+        target: other.instanceId,
+        amount: selfPower,
+        combat: false,
+      });
+    } else {
+      other.damageMarked += selfPower;
+      ctx.emit({
+        type: 'damageDealt',
+        source: self.instanceId,
+        target: other.instanceId,
+        amount: selfPower,
+        combat: false,
+      });
+    }
   }
   // Death is the engine's state-based check, exactly as with combat damage.
 };
@@ -520,6 +551,18 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
     // Snapshot first: damage is dealt simultaneously, so a creature dying to it
     // must not change who else gets hit.
     for (const creature of [...ctx.state.battlefield].filter((c) => isCreature(c.def))) {
+      // An untargeted sweep is still DAMAGE FROM THIS SOURCE, so protection's
+      // "can't be dealt damage" half prevents it per creature (CR 702.16e).
+      if (protectionPreventsDamage(ctx.state, creature, ctx.source.def)) {
+        ctx.emit({
+          type: 'damagePrevented',
+          source: ctx.source.instanceId,
+          target: creature.instanceId,
+          amount,
+          combat: false,
+        });
+        continue;
+      }
       creature.damageMarked += amount;
       ctx.emit({
         type: 'damageDealt',
@@ -626,7 +669,7 @@ function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
 export const attachToTarget: EffectPrimitive = (ctx) => {
   const target = firstPermanentTarget(ctx);
   if (!target) return;
-  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target.instanceId, ctx.controller)) return;
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target.instanceId, ctx.controller, ctx.source.def)) return;
   ctx.attach(target.instanceId);
 };
 

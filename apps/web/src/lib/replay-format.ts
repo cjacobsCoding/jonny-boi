@@ -67,6 +67,10 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
         text: `${name(event.source)} deals ${event.amount} to ${targetName(event.target, name)}.`,
         tone: 'damage',
       };
+    case 'damagePrevented':
+      return {
+        text: `Protection prevents ${event.amount} damage from ${name(event.source)} to ${targetName(event.target, name)}.`,
+      };
     case 'lifeChanged':
       return {
         text: `Player ${event.player} ${event.delta >= 0 ? 'gains' : 'loses'} ${Math.abs(

@@ -891,6 +891,32 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   ⚠️ Green has **no mono-green Aura in the pool and that is not an oversight**: essentially every green
   Aura is an umbra (totem armor), a regenerate-granter, or dynamic (`+1/+1 for each Forest`), none of
   which the engine models. Green is served by Unflinching Courage ({1}{G}{W}) and by the Equipment.
+- ✅ *source-aware targeting + protection from [quality] + ward {N}* — `isLegalTarget` /
+  `legalTargetsFor` and the primitives' resolution re-checks now carry the SOURCE card's definition,
+  which is what protection is keyed on. **Protection** enforces all four printed halves against
+  sources with the named quality (color from cost pips incl. hybrid, colorless, multicolored,
+  artifacts, creatures, everything): can't be targeted (offer + accept + resolution re-check, no
+  hexproof-style own-controller escape), can't be dealt damage (combat and noncombat — prevented,
+  with a `damagePrevented` event so the log says why a swing did nothing), can't be
+  enchanted/equipped (`isLegalHost` + the SBA, so an Aura falls off the moment its host gains
+  protection from it), and can't be blocked (`canBlock`). An UNKNOWN source is treated as blocked —
+  the same conservative direction as hexproof's unknown caster. **Ward {N}** is raised by the engine
+  itself ("becomes the target" is a moment no data trigger can watch): targeting an opponent's
+  warded permanent stacks a trigger whose one effect is core's reserved `wardCounterUnlessPaid`
+  primitive (a seam convention like `TARGET_RESTRICTION_PARAM`; `cards` registers the
+  implementation), which asks the payment through the SAME `payMana` optional-payment machinery as
+  Mana Leak — a player who cannot pay is never asked — and counters the spell (or removes the
+  targeting ability from the stack) on a decline. Fires on spells, activated abilities and aimed
+  triggers alike; never on the controller's own targeting. Granted protection/ward layer through
+  the continuous fold (protection lists UNION, ward costs ADD — `mergeKeywordGrant`), and the
+  compiler reads `Ward {N}`, `Protection from [quality][ and from …]` and "Target creature gains
+  protection from [quality] until end of turn"; non-generic ward costs ("Ward—Pay 3 life") and
+  qualities outside the closed table ("protection from Demons") keep reporting. ⚠️ Two deliberate
+  limits: an attachment/static may NOT grant ward/protection (the compiler refuses — the targeting
+  fast path reads printed keywords when `state.continuous` is empty, and a grant it cannot see
+  would be a silently ignored ability), and — matching the long-standing hexproof shape — an
+  unrestricted "any target" spell is not policed at cast, so aiming it at a protected creature is
+  accepted and fizzles at resolution instead of being refused.
 - ✅ *the template-gap pass* — wordings the engine could already play that only lacked a rule-table
   entry, closed as table data plus one 3-line core fix. **Statics/anthems**: "[Other] creatures you
   control get +X/+Y / have KEYWORD" (Glorious Anthem, Fervor) now compiles onto the existing

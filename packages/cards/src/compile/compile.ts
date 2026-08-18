@@ -49,7 +49,10 @@ import {
   TRIGGER_RULES,
   explainUnsupported,
   isVacuousClause,
+  parseProtectionOrWard,
 } from './rules.js';
+import { mergeKeywordGrant } from '@jonny-boi/core';
+import type { KeywordFlags } from '@jonny-boi/core';
 import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
 
 /**
@@ -200,7 +203,7 @@ interface Assembly {
   readonly producesOptions: ManaProduction[];
   readonly activated: ActivatedAbility[];
   readonly statics: import('@jonny-boi/core').StaticAbility[];
-  keywords: Record<string, boolean>;
+  keywords: KeywordFlags;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
@@ -223,7 +226,9 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.produces) assembly.produces.push(...contribution.produces);
   if (contribution.producesOptions) assembly.producesOptions.push(...contribution.producesOptions);
   if (contribution.keywords) {
-    assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
+    // Folded by the same merge rule the engine layers with: boolean flags OR,
+    // protection lists UNION, ward costs ADD (`mergeKeywordGrant`).
+    assembly.keywords = mergeKeywordGrant(assembly.keywords, contribution.keywords);
   }
   if (contribution.activated) assembly.activated.push(...contribution.activated);
   if (contribution.statics) assembly.statics.push(...contribution.statics);
@@ -393,11 +398,19 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
     .filter((word) => word.length > 0);
   if (words.length === 0) return false;
 
-  const flags: Record<string, boolean> = {};
+  let flags: KeywordFlags = {};
   for (const word of words) {
     const field = KEYWORD_FLAGS[word];
     if (field) {
-      flags[field] = true;
+      flags = mergeKeywordGrant(flags, { [field]: true });
+      continue;
+    }
+    // The two payload keywords - `Ward {N}` and `Protection from ...` - are not
+    // boolean flags, so they parse through their own closed tables. A form
+    // outside them ("Ward-Pay 3 life") falls through and reports the line.
+    const special = parseProtectionOrWard(word);
+    if (special) {
+      flags = mergeKeywordGrant(flags, special);
       continue;
     }
     // A keyword with a real primitive-built implementation, either as a direct
@@ -418,7 +431,7 @@ function compileKeywordLine(line: string, assembly: Assembly, ctx: RuleContext):
     return false; // not a keyword we model — report the line
   }
   if (Object.keys(flags).length > 0) {
-    assembly.keywords = { ...assembly.keywords, ...flags };
+    assembly.keywords = mergeKeywordGrant(assembly.keywords, flags);
     assembly.matchedRules.push('keyword-flags');
   }
   return true;
@@ -699,6 +712,12 @@ export function compileCard(card: CompilableCard): CompileResult {
     // (prowess via its template, persist via a direct builder) — Scryfall
     // listing them again is not a second, unmodelled ability.
     if (KEYWORD_ABILITY_TEXT[word] || KEYWORD_ABILITY_BUILDERS[word]) continue;
+    // Scryfall lists ward and protection by their bare names; the printed line
+    // carries the payload ("Ward {2}", "Protection from red") and has already
+    // compiled it into the keyword fields - or already reported the line, in
+    // which case the missing-scan below still refuses a duplicate entry.
+    if (word === 'ward' && assembly.keywords.ward !== undefined) continue;
+    if (word === 'protection' && assembly.keywords.protectionFrom !== undefined) continue;
     // "Enchant" and "Equip" are Scryfall's names for the attachment ability the
     // card's own printed line already compiled (see `assembleAttachment`). Without
     // this, every Aura and Equipment would report its central ability as missing
