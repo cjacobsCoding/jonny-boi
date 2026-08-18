@@ -891,6 +891,24 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   ⚠️ Green has **no mono-green Aura in the pool and that is not an oversight**: essentially every green
   Aura is an umbra (totem armor), a regenerate-granter, or dynamic (`+1/+1 for each Forest`), none of
   which the engine models. Green is served by Unflinching Courage ({1}{G}{W}) and by the Equipment.
+- ✅ *casting from a non-hand zone — flashback* — "Flashback {2}{U}" (Think Twice, Firebolt: cast the
+  card from your graveyard for that cost; **then exile it**). The design decision that carries the whole
+  mechanic: the SOURCE ZONE is explicit end to end. `CastSpellAction.fromZone` names it (omitted =
+  `'hand'`), `applyCastSpell` validates against the live zone and pays `CardDefinition.flashback`
+  instead of the printed cost, the stack object records `castFrom` (cloned field-by-field — the
+  `cloneStackObject` trap is pinned by a test), and every exit from the stack derives its destination
+  from that one field via `spellLeaveDestination`: resolution puts the card in EXILE, and a flashback
+  spell that is **countered** is exiled too (CR 702.34a — being countered is leaving the stack), which
+  `counterSpellOnStack` reaches through the same helper so the two exits cannot disagree. Timing is the
+  card's own (a sorcery flashes back only at sorcery speed); a card that left the graveyard in response
+  cleanly rejects; the same card cast from HAND still resolves to the graveyard. `generateLegalActions`
+  offers the cast (per legal target, pool-funded) exactly as it offers hand casts, and the heuristic's
+  `scoredSpellGoals` scores graveyard flashback candidates through the same scorer as hand spells — so
+  the hybrid search's policy candidates inherit the consideration and the mechanic is never
+  pilot-inert. Only the PLAIN mana-cost form compiles (`flashback-cost` rule); {X}/additional-cost
+  flashback stays reported against the cast-cost-modification system, and flashback GRANTED by another
+  card (Snapcaster Mage) stays stubbed on targeting-a-graveyard-card + a continuous effect on a
+  non-battlefield card.
 Still open, roughly by how often they block a real decklist:
 - *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
   pool (fetchlands, mana rocks, sac outlets).
@@ -899,8 +917,8 @@ Still open, roughly by how often they block a real decklist:
   it a go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta
   the lab measures — a bias in the verdicts themselves, not just missing cards.
 - *alternative and additional costs* (suspend, spectacle, kicker), *{X} and Phyrexian costs*,
-  *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*, *flash + casting from the graveyard*,
-  *revolt-style "a permanent left the battlefield this turn" trackers*.
+  *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*, *granting flashback to a graveyard card
+  (Snapcaster Mage)*, *revolt-style "a permanent left the battlefield this turn" trackers*.
 
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.

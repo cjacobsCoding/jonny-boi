@@ -165,6 +165,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'keyword', word: 'flash' },
       },
       {
+        title: 'Flashback',
+        detail:
+          'A "Flashback {cost}" instant or sorcery casts from your graveyard for that cost — honoring its normal timing — and is exiled as it leaves the stack, even when countered (CR 702.34a). Plain mana costs only; {X}/additional-cost flashback still reports.',
+        witness: { kind: 'rule', id: 'flashback-cost' },
+      },
+      {
         title: 'Prowess',
         detail: 'Modelled exactly: a cast trigger per noncreature spell that pumps until end of turn.',
         witness: { kind: 'card', name: 'Monastery Swiftspear' },

@@ -1122,6 +1122,26 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'flashback-cost',
+    description: '"Flashback {2}{U}" — the plain mana-cost form only',
+    // A whole ability line: the keyword followed by nothing but mana symbols.
+    // "Flashback—{1}{U}, Discard a card" and "Flashback {X}…" deliberately do
+    // NOT match — a flashback cost beyond plain mana needs the cast-cost-
+    // modification system, and half-paying it would be strictly better than
+    // printed. Those lines fall through to the hint instead.
+    pattern: /^flashback ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      // Flashback is printed only on instants and sorceries; anything else
+      // reaching here is a card the engine could not cast from a graveyard
+      // faithfully, so it stays reported rather than compiling a dead field.
+      const types = ctx.card.typeLine.types.map((t) => t.toLowerCase());
+      if (!types.includes('instant') && !types.includes('sorcery')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null; // {X}/Phyrexian/hybrid — report, don't approximate
+      return { flashback: cost };
+    },
+  },
+  {
     id: 'enters-tapped',
     description: '"~ enters tapped" (the unconditional form only)',
     pattern: /^~ enters(?: the battlefield)? tapped$/,
@@ -1441,10 +1461,18 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet' },
   { pattern: /\bloyalty\b|^[+-]\d+:/, missingEngineSystem: 'planeswalker loyalty abilities' },
   { pattern: /\btransform\b|\bflip\b|double-faced/, missingEngineSystem: 'transform / double-faced cards' },
-  // Flash is now a real timing flag (`castTiming` reads it), so only FLASHBACK —
-  // recasting from the graveyard — is still missing. Matching bare "flash" here
-  // would send a flash creature to the queue for a mechanic it already has.
-  { pattern: /\bflashback\b/, missingEngineSystem: 'recasting a spell from the graveyard (flashback)' },
+  // Flash is a real timing flag and PLAIN flashback ("Flashback {2}{U}") is a
+  // real mechanic now (`CardDefinition.flashback` — cast from the graveyard,
+  // exiled on leaving the stack). What still lands here is a flashback the
+  // engine cannot pay or grant: an {X} or additional-cost form
+  // ("Flashback—{1}{U}, Discard a card"), which needs the cast-cost-modification
+  // system, and flashback-GRANTING text (Snapcaster Mage), which needs an effect
+  // that modifies a card in a graveyard.
+  {
+    pattern: /\bflashback\b/,
+    missingEngineSystem:
+      'a flashback template the compiler does not recognize yet (plain "Flashback {cost}" is supported; {X}/additional costs and granted flashback are not)',
+  },
   {
     // Attachment IS implemented now (core's `attachments.ts` + the
     // `enchant-permanent` / `attachment-modification` / `equip-cost` rules), so

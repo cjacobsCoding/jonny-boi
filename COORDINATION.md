@@ -90,9 +90,44 @@ throughput (games/sec) from regressing.
 | feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | ✅ MERGED |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
+| feat/nonhand-casting | worker | packages/core (card/actions/state/events/choices/engine/index + internal/clone + test-fixtures + new flashback.test.ts), packages/cards (effect-helpers, compile types/rules/compile, index.ts STUBBED reword, data/pool.ts comments only, new flashback.test.ts), packages/ai (heuristic.ts + new flashback-pilot.test.ts), packages/sim (config/cli/swap + data/decks/uw-control — FIDELITY wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-17 worker: `feat/nonhand-casting` 🚧 PUSHED — **casting from a non-hand zone + flashback,
+  played as printed.** `CastSpellAction.fromZone` ('hand' default | 'graveyard') makes the source zone
+  explicit cast → stack → resolution: `applyCastSpell` validates against the LIVE zone (a card that
+  left the graveyard mid-response cleanly rejects) and pays `CardDefinition.flashback` instead of the
+  printed cost; the stack object records `castFrom`; and BOTH exits from the stack derive their
+  destination from that one field via core's new `spellLeaveDestination` — resolution → EXILE, and a
+  **countered flashback spell → EXILE too** (CR 702.34a; `counterSpellOnStack` uses the same helper, so
+  the two exits cannot disagree). Timing is the card's own (sorcery flashback only at sorcery speed —
+  tested both as not-offered and as rejected). ⚠️ `cloneStackObject` copies field-by-field: `castFrom`
+  is added there conditionally (ordinary spells keep their object shape) and PINNED by a test — drop it
+  and a cloned flashback cast silently resolves to the graveyard. `generateLegalActions` offers
+  flashback casts exactly as hand casts (timing + pool-funds-it + one offer per legal target).
+  **Pilots actually consider it**: the heuristic's `scoredSpellGoals` scores graveyard flashback
+  candidates through the same scorer/targeter as hand spells (goal carries `fromZone`; both
+  `pursueSpell` and the search-policy macro emit it), and `flashback-pilot.test.ts` proves the pilot
+  taps toward and submits a flashback cast the engine accepts. Compiler: new STATIC rule
+  `flashback-cost` ("Flashback {2}{U}", instants/sorceries only, PLAIN mana only) + the Scryfall
+  keyword sweep skips a compiled Flashback; hint reworded to a template gap. **Deliberately NOT done**:
+  {X}/additional-cost flashback ("Flashback—{1}{U}, Pay 3 life") stays `incomplete` — blocked on the
+  cast-cost-modification system a sibling is building; Snapcaster Mage stays STUBBED (reworded: the
+  GRANT needs targeting a graveyard card + a continuous effect on a non-battlefield card — neither
+  exists); no flashback card added to the curated pool (none is in the committed Scryfall index, and
+  the expansion pipeline is a full network re-fetch — importer path only for now); no graveyard-cast
+  affordance in the play UIs (hand-click only; the actions ARE in `legalActions`, follow-up for
+  whoever owns the boards); UNSUPPORTED-BACKLOG.md not regenerated (network corpus). Also fixed stale
+  claims: `FIDELITY_CAVEAT` + cli/swap/uw-control/pool.ts/UNSUPPORTED-MECHANICS no longer say
+  "flash/flashback unimplemented" (flash + printed flashback are real; only the GRANT isn't). 👉 NOTE
+  for the integrator: Snapcaster's pool entry could carry `flash` now, but that speeds up UW Control
+  and moves every recorded gauntlet baseline — left as a deliberate integrator call. Verified:
+  full suite **2456 passed, 0 failed** (baseline 2424 + 15 new + suite drift), `npm run verify` exit
+  0, `npm run build` exit 0; gauntlet seed 99 **79/280 = 28.2%, byte-identical to main's recorded
+  baseline** (no flashback card exists in the gauntlet, so identical is the right answer; the new
+  legal-action loop is one property read per graveyard card with an early-out). (Worker)
 
 - 2026-08-17 worker: `feat/shocklands` 🚧 PUSHED — **shocklands play as printed, on BOTH entry
   paths.** New `payLife` choice kind (engine charges the life once in `applyAnswerChoice`, CR 118.4

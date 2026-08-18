@@ -193,6 +193,8 @@ interface Assembly {
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
+  /** The printed flashback cost, once a "Flashback {…}" line compiles. */
+  flashback?: ManaCost;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
   attachesAs?: ClauseContribution['attachesAs'];
   /** The "Enchanted/Equipped creature gets …" half, accumulated across lines. */
@@ -216,6 +218,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
+  if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
     // Merged rather than replaced: a card may print the P/T line and the keyword
@@ -670,6 +673,12 @@ export function compileCard(card: CompilableCard): CompileResult {
     // this, every Aura and Equipment would report its central ability as missing
     // one line after implementing it.
     if (ATTACHMENT_KEYWORDS.has(word) && assembly.attachesAs !== undefined) continue;
+    // Same shape for "Flashback": the printed "Flashback {…}" line compiled into
+    // `assembly.flashback`, and Scryfall listing the keyword again is not a
+    // second, unmodelled ability. A flashback line that did NOT compile (an {X}
+    // or additional-cost form) leaves `flashback` unset, so the keyword still
+    // reports through the line's own `missing` entry.
+    if (word === 'flashback' && assembly.flashback !== undefined) continue;
     if (!assembly.missing.some((m) => m.text.toLowerCase().includes(word))) {
       assembly.missing.push({
         text: keyword,
@@ -721,6 +730,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.entersTappedUnlessLifePaid !== undefined
       ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
       : {}),
+    ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0
       ? { producesOptions: manaModes }

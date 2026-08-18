@@ -166,7 +166,16 @@ export type {
   TriggeredStackObject,
   CombatState,
 } from './state.js';
-export { PLAYER_IDS, STEP_ORDER, MAIN_STEPS, NO_COUNTERS, createPlayer, playerZone, opponentOf } from './state.js';
+export {
+  PLAYER_IDS,
+  STEP_ORDER,
+  MAIN_STEPS,
+  NO_COUNTERS,
+  createPlayer,
+  playerZone,
+  opponentOf,
+  spellLeaveDestination,
+} from './state.js';
 
 // Events
 export type { GameEvent, EventLog } from './events.js';
@@ -193,6 +202,7 @@ export type {
   TapForManaAction,
   ActivateAbilityAction,
   CastSpellAction,
+  CastZone,
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,

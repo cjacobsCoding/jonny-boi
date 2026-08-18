@@ -135,8 +135,17 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
 }> = Object.freeze([
   { card: 'Delver of Secrets', missingEngineSystem: 'transform (upkeep reveal + flip to a 3/2 flyer)' },
   {
+    // Flash timing AND flashback-the-mechanic both exist now (`castTiming` reads
+    // flash; `CardDefinition.flashback` casts from the graveyard and exiles on
+    // leaving the stack). What Snapcaster still needs is the GRANT: targeting an
+    // instant/sorcery card in a graveyard (targeting reaches only permanents,
+    // players and spells today) and a continuous effect that gives a
+    // NON-battlefield card a flashback cost derived from its mana cost, until end
+    // of turn. Un-stub it only when a trigger can aim at a graveyard card and the
+    // continuous layer can carry a grant on one.
     card: 'Snapcaster Mage',
-    missingEngineSystem: 'flash timing + casting a card from the graveyard (flashback)',
+    missingEngineSystem:
+      'granting flashback to a card in a graveyard (targeting a graveyard card + a continuous effect on a non-battlefield card)',
   },
   {
     card: 'Sakura-Tribe Elder',
