@@ -92,6 +92,15 @@ export function giveHand(state: GameState, player: PlayerId, defs: readonly Card
 }
 
 /**
+ * Deterministically place fresh instances of `defs` into a player's graveyard on
+ * an existing game state — the fixture flashback tests build their positions
+ * with. Mutates the given state directly, like {@link giveHand}.
+ */
+export function giveGraveyard(state: GameState, player: PlayerId, defs: readonly CardDefinition[]): CardInstance[] {
+  return placeInZone(state, player, 'graveyard', defs, (inst) => state.players[player].graveyard.push(inst));
+}
+
+/**
  * Deterministically REPLACE a player's library with fresh instances of `defs`, in
  * order — `defs[0]` ends up on top. Mutates the given state directly, like
  * {@link giveHand}: a test that asserts "the card I put back is now on top" needs

@@ -32,6 +32,7 @@ import {
   isPlayerTarget,
   isTargetRestriction,
   MANA_COLORS,
+  spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
 
@@ -399,8 +400,12 @@ export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | und
 }
 
 /**
- * Counter `spell`: take it off the stack and put its card into its owner's
- * graveyard without resolving.
+ * Counter `spell`: take it off the stack and put its card where a countered copy
+ * of it goes — the owner's graveyard normally, EXILE when it was cast via
+ * flashback (CR 702.34a exiles the card any time it would leave the stack, and
+ * being countered is leaving the stack). The destination is core's
+ * `spellLeaveDestination`, the same answer resolution uses, so countering and
+ * resolving cannot disagree about where a flashback card ends up.
  *
  * One implementation, shared by the plain counterspell and the "unless its
  * controller pays" one. They differ ONLY in whether the payment happens first, and
@@ -412,9 +417,10 @@ export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject)
   if (idx < 0) return;
   ctx.state.stack.splice(idx, 1);
   const card = spell.card;
-  card.zone = 'graveyard';
-  ctx.state.players[card.owner].graveyard.push(card);
-  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'graveyard' });
+  const to = spellLeaveDestination(spell);
+  card.zone = to;
+  ctx.state.players[card.owner][to].push(card);
+  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to });
 }
 
 // --- misc -----------------------------------------------------------------------

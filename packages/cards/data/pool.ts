@@ -30,9 +30,11 @@
  * restriction declares it as data (`params.targets`) and the engine enforces it
  * when the cast is offered, when it is applied, and again when it resolves — so
  * "target creature", "target player" and "target spell" mean what they say, and a
- * spell with no legal target cannot be cast. What it still has no system for is
- * transform, planeswalker loyalty, dynamic P/T, flash/flashback, activated
- * abilities, and target restrictions finer than those three (an opponent-only
+ * spell with no legal target cannot be cast. Flash is a real timing flag and a
+ * printed "Flashback {cost}" casts from the graveyard for real (then exiles);
+ * what it still has no system for is transform, planeswalker loyalty, dynamic
+ * P/T, flashback GRANTED by another card (Snapcaster), and target restrictions
+ * finer than those three (an opponent-only
  * target, "nonblack creature" as a legality rather than a resolution-time fizzle).
  * Cards whose identity needs one of those are authored as the closest faithful
  * subset (documented per-card); their
@@ -445,8 +447,12 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 1,
     keywords: {},
-    // Flash + flashback-granting ETB needs flash timing + graveyard recast; the
-    // vanilla 2/1 plays correctly.
+    // The flashback-granting ETB still needs targeting a card in a graveyard +
+    // a continuous effect on a non-battlefield card (see STUBBED_MECHANICS); the
+    // vanilla 2/1 plays correctly. Flash timing DOES exist engine-wide now, but
+    // adding the keyword here would speed up UW Control and move every recorded
+    // gauntlet baseline — an integrator decision to make deliberately with a
+    // re-measure, not a drive-by data edit.
   },
   {
     id: 'e3afc704-220f-498f-9eaa-0821b17dc24c',

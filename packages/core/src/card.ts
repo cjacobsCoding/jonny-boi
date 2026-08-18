@@ -169,6 +169,23 @@ export interface CardDefinition {
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
+   * Flashback — "You may cast this card from your graveyard for its flashback
+   * cost. Then exile it." (CR 702.34). The value is that cost.
+   *
+   * Two halves, both engine-enforced from this one field:
+   *  - **The cast**: a `castSpell` action with `fromZone: 'graveyard'` pays THIS
+   *    cost instead of `cost`, honoring the card's normal timing (a sorcery
+   *    flashes back only at sorcery speed).
+   *  - **The exile**: a spell cast from the graveyard is exiled whenever it
+   *    would leave the stack — resolved OR countered (CR 702.34a) — never put
+   *    back into the graveyard. See `spellLeaveDestination` in state.ts.
+   *
+   * Only the PLAIN mana-cost form is modelled. A flashback cost with {X} or
+   * additional non-mana costs ("Flashback—{1}{U}, Discard a card") needs the
+   * cast-cost-modification system and stays reported by the compiler.
+   */
+  readonly flashback?: ManaCost;
+  /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
    * — the trigger machinery (triggers.ts) matches conditions against the event log

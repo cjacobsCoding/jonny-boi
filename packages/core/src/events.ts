@@ -33,6 +33,12 @@ export type GameEvent =
       readonly name: string;
       /** The card types of the spell cast (so cast-triggers can filter by type). */
       readonly castTypes: readonly CardType[];
+      /**
+       * Present (as `'graveyard'`) when this was a flashback cast, so the log,
+       * the replay and the inspector can say WHICH way the spell was cast —
+       * absent for the ordinary from-hand cast every existing consumer knows.
+       */
+      readonly fromZone?: 'graveyard';
     }
   | {
       readonly type: 'stackResolved';
