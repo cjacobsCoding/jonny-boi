@@ -142,6 +142,9 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Countering with an optional payment reads the stack and a mana pool, and the
   // question it asks ("pay {3}?") is answered from the board, never from a library.
   'counterUnlessPaid',
+  // Ward's resolution is the same shape: a stack read, a pay-or-decline answered
+  // from the board, and a counter that moves only known cards.
+  'wardCounterUnlessPaid',
   'createToken',
   'tapTarget',
   'discardCard',

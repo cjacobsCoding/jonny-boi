@@ -61,6 +61,66 @@ export interface KeywordFlags {
   readonly menace?: boolean;
   /** Can't be blocked at all. Checked per pair in `canBlock`. */
   readonly unblockable?: boolean;
+  /**
+   * Protection from [quality] — the printed bundle of four rules, all enforced
+   * against SOURCES having any listed quality (see `protection.ts`):
+   * can't be targeted, can't be dealt damage, can't be enchanted/equipped, and
+   * can't be blocked, by sources with that quality. A list because a card may
+   * print several ("protection from black and from green").
+   *
+   * NOT a boolean flag: the payload is what the protection is FROM, so the
+   * keyword-merge paths (`effectiveKeywords`, the continuous layer's grant fold)
+   * UNION lists instead of OR-ing booleans.
+   */
+  readonly protectionFrom?: readonly ProtectionQuality[];
+  /**
+   * Ward {N} — whenever this permanent becomes the target of a spell or ability
+   * an OPPONENT controls, counter it unless that player pays {N}. The value is
+   * the printed generic cost; only the plain `Ward {N}` form is modelled (a
+   * ward whose cost is life, colored mana or {X} stays unimplemented rather
+   * than being flattened to a generic charge). Merged additively — a creature
+   * with two ward abilities charges the sum, which is what paying both costs.
+   */
+  readonly ward?: number;
+}
+
+/**
+ * The qualities a printed "protection from …" can name, each with an exact
+ * engine meaning (see `sourceHasQuality` in `protection.ts`). A closed list on
+ * purpose: a quality outside it ("protection from Demons", "from instants") has
+ * no faithful check, so the compiler reports those cards instead of guessing.
+ */
+export type ProtectionQuality =
+  | 'white'
+  | 'blue'
+  | 'black'
+  | 'red'
+  | 'green'
+  /** A source with NO colors (true colorless — lands, most artifacts). */
+  | 'colorless'
+  /** A source with two or more colors. */
+  | 'multicolored'
+  /** Any source whose card is an artifact. */
+  | 'artifacts'
+  /** Any source whose card is a creature. */
+  | 'creatures'
+  /** Every source, whatever its qualities. */
+  | 'everything';
+
+/**
+ * Union two protection lists without duplicates — the one merge rule everywhere
+ * a protection grant meets a printed list (`effectiveKeywords`, the continuous
+ * layer's grant fold, the compiler's keyword assembly). Returns the first list
+ * unchanged when the second adds nothing, so the no-grant path allocates nothing.
+ */
+export function unionProtection(
+  base: readonly ProtectionQuality[] | undefined,
+  granted: readonly ProtectionQuality[] | undefined,
+): readonly ProtectionQuality[] | undefined {
+  if (granted === undefined || granted.length === 0) return base;
+  if (base === undefined || base.length === 0) return granted;
+  const extra = granted.filter((quality) => !base.includes(quality));
+  return extra.length === 0 ? base : [...base, ...extra];
 }
 
 /**

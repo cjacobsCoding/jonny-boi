@@ -62,6 +62,7 @@
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import type { KeywordFlags } from '../card.js';
+import { unionProtection } from '../card.js';
 import type { GameEvent } from '../events.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 
@@ -117,7 +118,15 @@ export interface AggregatedMod {
 /** A precomputed lookup from instance id to its aggregated continuous mod. */
 export type ContinuousIndex = ReadonlyMap<InstanceId, AggregatedMod>;
 
-/** The keyword flags, in canonical order, that a grant can set. */
+/**
+ * The BOOLEAN keyword flags, in canonical order, that a grant can set.
+ *
+ * This list used to stop at the ten combat keywords, which silently dropped a
+ * granted hexproof/shroud/menace/unblockable/flash — the exact grants
+ * `targeting.ts` documents as working. The full boolean set is here now; the
+ * two non-boolean keywords (`protectionFrom`, `ward`) carry payloads and are
+ * folded by their own merge rules in {@link grantInto}.
+ */
 const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'flying',
   'vigilance',
@@ -129,6 +138,11 @@ const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'reach',
   'defender',
   'lifelink',
+  'flash',
+  'hexproof',
+  'shroud',
+  'menace',
+  'unblockable',
 ];
 
 /**
@@ -156,9 +170,20 @@ const NO_KEYWORDS: KeywordFlags = Object.freeze({});
 function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
   if (!grant) return;
   for (const key of KEYWORD_KEYS) {
-    if (!grant[key]) continue;
+    if (grant[key] !== true) continue;
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as Record<string, boolean>)[key] = true;
+  }
+  // The two payload keywords, merged by the same rules `effectiveKeywords`
+  // applies when the aggregate meets the printed set: protections UNION, wards ADD.
+  if (grant.protectionFrom !== undefined && grant.protectionFrom.length > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { protectionFrom?: KeywordFlags['protectionFrom'] }).protectionFrom =
+      unionProtection(agg.keywords.protectionFrom, grant.protectionFrom);
+  }
+  if (typeof grant.ward === 'number' && grant.ward > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { ward?: number }).ward = (agg.keywords.ward ?? 0) + grant.ward;
   }
 }
 

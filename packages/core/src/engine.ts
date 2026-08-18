@@ -71,6 +71,7 @@ import {
   restrictionOfEffects,
   targetRestrictionOf,
 } from './targeting.js';
+import { WARD_COST_PARAM, WARD_COUNTER_PRIMITIVE, effectiveWardOf } from './protection.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
@@ -1209,7 +1210,14 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
     if (index < 0) return;
     const trigger = state.stack[index] as TriggeredStackObject;
     const restriction = trigger.awaitingTargets as TargetRestriction;
-    const candidates = legalTargetsFor(state, restriction, trigger.controller);
+    // The SOURCE card's definition rides along so a protected permanent is never
+    // offered to an ability whose source has a protected quality (a red
+    // creature's ETB damage cannot be aimed at protection-from-red). The source
+    // may already have left the battlefield; the ability still resolves, so the
+    // definition is recovered from wherever the card now is.
+    const triggerSourceDef = (findOnBattlefield(state, trigger.sourceInstanceId) ??
+      findInstanceAnywhere(state, trigger.sourceInstanceId))?.def;
+    const candidates = legalTargetsFor(state, restriction, trigger.controller, triggerSourceDef);
 
     if (candidates.length === 0) {
       state.stack.splice(index, 1);
@@ -1301,6 +1309,59 @@ function recordTriggerTargets(
     label: trigger.label,
     targets: [...targets],
   });
+  // A triggered ability aimed at an opponent's warded permanent triggers ward
+  // exactly as a spell does — "the target of a spell OR ABILITY".
+  pushWardTriggers(state, trigger.controller, targets, trigger.instanceId, emit);
+}
+
+/**
+ * WARD (CR 702.21) — for every warded permanent an OPPONENT's spell or ability
+ * has just targeted, put the "counter it unless its controller pays {N}" trigger
+ * on the stack, above the targeting object.
+ *
+ * The trigger is an ordinary trigger stack object whose one effect is core's
+ * reserved {@link WARD_COUNTER_PRIMITIVE} (implemented by `cards`, which asks
+ * the payment through the same `payMana` machinery Mana Leak uses and counters
+ * on a decline). Its TARGET is the stack object that trespassed, so the
+ * resolution knows exactly what to counter even if the stack has moved on — and
+ * a registry without the primitive degrades to `effectUnsupported`, never a
+ * crash.
+ *
+ * Own-controller targeting never triggers (ward names an opponent), and the
+ * ward cost is read through the continuous layer so a granted ward charges too.
+ */
+function pushWardTriggers(
+  state: GameState,
+  actingPlayer: PlayerId,
+  targets: ReadonlyArray<InstanceId | PlayerId>,
+  targetedStackInstanceId: InstanceId,
+  emit: (e: GameEvent) => void,
+): void {
+  for (const target of targets) {
+    if (isPlayerTarget(target)) continue;
+    const permanent = findOnBattlefield(state, target);
+    if (!permanent || permanent.controller === actingPlayer) continue;
+    const wardCost = effectiveWardOf(state, permanent);
+    if (wardCost <= 0) continue;
+    const label = `Ward {${wardCost}}`;
+    state.stack.push({
+      kind: 'trigger',
+      instanceId: state.nextInstanceId++,
+      sourceInstanceId: permanent.instanceId,
+      controller: permanent.controller,
+      effects: [
+        { primitive: WARD_COUNTER_PRIMITIVE, params: { [WARD_COST_PARAM]: { generic: wardCost } } },
+      ],
+      targets: [targetedStackInstanceId],
+      label,
+    });
+    emit({
+      type: 'triggerPutOnStack',
+      sourceInstanceId: permanent.instanceId,
+      controller: permanent.controller,
+      label,
+    });
+  }
 }
 
 /** Describe a target reference (a permanent or a seat) for a choice's option list. */
@@ -1581,6 +1642,12 @@ function applyCastSpell(
     castTypes: [...card.def.types],
     ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
   });
+  // Ward (CR 702.21): targeting an opponent's warded permanent triggers the
+  // "counter unless you pay" ability, stacked ABOVE the spell so it resolves
+  // first. Raised here because "becomes the target" is a moment only the
+  // engine sees — no effect resolves and no event exists a data trigger could
+  // watch.
+  pushWardTriggers(state, action.player, stackObject.targets, card.instanceId, emit);
   // Caster retains priority after putting something on the stack.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
@@ -1641,6 +1708,7 @@ function applyActivateAbility(
     ability.effects,
     action.targets ?? [],
     action.player,
+    source.def,
   );
   if (targetProblem) return rejectWith(prevState, targetProblem);
 
@@ -1667,9 +1735,10 @@ function applyActivateAbility(
     resetInstanceForNewZone(source);
   }
 
+  const abilityStackId = state.nextInstanceId++;
   state.stack.push({
     kind: 'trigger',
-    instanceId: state.nextInstanceId++,
+    instanceId: abilityStackId,
     sourceInstanceId: source.instanceId,
     controller: action.player,
     effects: ability.effects,
@@ -1682,6 +1751,8 @@ function applyActivateAbility(
     instanceId: source.instanceId,
     label: ability.label,
   });
+  // Ward fires on "becomes the target of an ability an opponent controls" too.
+  pushWardTriggers(state, action.player, action.targets ?? [], abilityStackId, emit);
 
   // The activating player retains priority, as with casting a spell.
   state.priorityPlayer = action.player;
@@ -1907,7 +1978,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
       continue;
     }
-    for (const target of legalTargetsFor(state, restriction, me)) {
+    for (const target of legalTargetsFor(state, restriction, me, card.def)) {
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
     }
   }
@@ -1960,7 +2031,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         actions.push({ kind: 'activateAbility', player: me, instanceId: perm.instanceId, abilityIndex: index });
         continue;
       }
-      for (const target of legalTargetsFor(state, restriction, me)) {
+      for (const target of legalTargetsFor(state, restriction, me, perm.def)) {
         actions.push({
           kind: 'activateAbility',
           player: me,

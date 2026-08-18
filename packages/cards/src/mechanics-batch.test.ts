@@ -339,7 +339,7 @@ describe('flash / hexproof / shroud compile from the printed keyword list', () =
     expect(result.definition.keywords).toMatchObject({ hexproof: true });
   });
 
-  it('still reports WARD, which is a cost-to-target rule we do not have', () => {
+  it('compiles Ward {N}, which the engine now enforces as a pay-or-counter trigger', () => {
     const result = compileCard(
       card({
         name: 'Warded Thing',
@@ -348,6 +348,63 @@ describe('flash / hexproof / shroud compile from the printed keyword list', () =
         power: 2,
         toughness: 2,
         keywords: ['Ward'],
+      }),
+    );
+    expect(result.status).toBe('complete');
+    expect(result.definition.keywords).toMatchObject({ ward: 2 });
+  });
+
+  it('still reports a ward whose cost is not plain generic mana', () => {
+    const result = compileCard(
+      card({
+        name: 'Life Warded Thing',
+        oracleText: 'Ward—Pay 3 life.',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Ward'],
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('compiles protection from a color, and from a two-color list', () => {
+    const single = compileCard(
+      card({
+        name: 'Guarded Knight',
+        oracleText: 'Protection from red',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Protection'],
+      }),
+    );
+    expect(single.status).toBe('complete');
+    expect(single.definition.keywords).toMatchObject({ protectionFrom: ['red'] });
+
+    const pair = compileCard(
+      card({
+        name: 'Sworded Knight',
+        oracleText: 'Protection from black and from green',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Protection'],
+      }),
+    );
+    expect(pair.status).toBe('complete');
+    expect(pair.definition.keywords).toMatchObject({ protectionFrom: ['black', 'green'] });
+  });
+
+  it('still reports a protection quality outside the closed table', () => {
+    const result = compileCard(
+      card({
+        name: 'Tribal Warded Thing',
+        oracleText: 'Protection from Demons',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Protection'],
       }),
     );
     expect(result.status).toBe('incomplete');

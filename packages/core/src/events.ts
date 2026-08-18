@@ -108,6 +108,20 @@ export type GameEvent =
       readonly amount: number;
       readonly combat: boolean;
     }
+  | {
+      /**
+       * Damage a source WOULD have dealt was prevented — today only by
+       * protection's "can't be dealt damage by sources with that quality" half.
+       * Its own event rather than silence: a replay or the inspector must be
+       * able to show WHY a swing did nothing, and a prevented hit that leaves
+       * no trace is indistinguishable from a bug.
+       */
+      readonly type: 'damagePrevented';
+      readonly source: InstanceId;
+      readonly target: InstanceId | PlayerId;
+      readonly amount: number;
+      readonly combat: boolean;
+    }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
   | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }
