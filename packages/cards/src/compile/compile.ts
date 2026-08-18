@@ -191,6 +191,7 @@ interface Assembly {
   keywords: Record<string, boolean>;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
+  entersTappedUnlessLifePaid?: number;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
   attachesAs?: ClauseContribution['attachesAs'];
   /** The "Enchanted/Equipped creature gets …" half, accumulated across lines. */
@@ -211,6 +212,9 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.activated) assembly.activated.push(...contribution.activated);
   if (contribution.entersTapped) assembly.entersTapped = true;
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
+  if (contribution.entersTappedUnlessLifePaid !== undefined) {
+    assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
+  }
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
     // Merged rather than replaced: a card may print the P/T line and the keyword
@@ -553,11 +557,25 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
 
   // --- lands: basic land types produce their mana without any printed text ----
-  for (const subtype of card.typeLine.subtypes) {
-    const color = LAND_SUBTYPE_MANA[subtype.toLowerCase()];
-    if (color && types.includes('land')) {
-      assembly.produces.push(color);
-      assembly.matchedRules.push('basic-land-type');
+  //
+  // Rule 305.6: EACH basic land type is its own "{T}: Add {X}" ability, so a
+  // land with two of them (a shockland's Swamp Mountain, a true dual) offers a
+  // CHOICE of one mana per tap — `producesOptions` — not a bundle. Pushing both
+  // into `produces` would make one tap add both colours, the exact "Birds taps
+  // for five" bug the compiler was built to refuse. A single basic type stays
+  // the plain fixed bundle it always was.
+  {
+    const landColors: ManaColor[] = [];
+    for (const subtype of card.typeLine.subtypes) {
+      const color = LAND_SUBTYPE_MANA[subtype.toLowerCase()];
+      if (color && types.includes('land')) {
+        landColors.push(color);
+        assembly.matchedRules.push('basic-land-type');
+      }
+    }
+    if (landColors.length === 1) assembly.produces.push(landColors[0]!);
+    else if (landColors.length > 1) {
+      assembly.producesOptions.push(...landColors.map((color) => ({ [color]: 1 }) as ManaProduction));
     }
   }
 
@@ -699,6 +717,9 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.entersTappedUnless ? { entersTappedUnless: assembly.entersTappedUnless } : {}),
+    ...(assembly.entersTappedUnlessLifePaid !== undefined
+      ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
+      : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0
       ? { producesOptions: manaModes }

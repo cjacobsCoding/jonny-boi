@@ -22,6 +22,7 @@ import type {
   ChoiceAnswer,
   ChoiceRequest,
   ConfirmRequest,
+  PayLifeRequest,
   PayManaRequest,
   SelectCardsRequest,
   SelectPlayersRequest,
@@ -128,6 +129,14 @@ export interface EffectContext {
    * to pay".
    */
   payOrDecline(request: ChoiceRequestArgs<PayManaRequest>): boolean | undefined;
+  /**
+   * Ask a player to pay LIFE, or decline — a shockland's "you may pay 2 life"
+   * asked mid-resolution (a fetch effect putting it onto the battlefield).
+   * `undefined` ⇒ parked; `true` ⇒ **the life is already gone** (deducted by the
+   * engine as it accepted the answer, for the same re-run reason as
+   * {@link EffectContext.payOrDecline}); `false` ⇒ nothing was taken.
+   */
+  payLifeOrDecline(request: ChoiceRequestArgs<PayLifeRequest>): boolean | undefined;
   /**
    * Schedule further effect refs to run inside THIS resolution, immediately after
    * the current one. The composition seam for modal spells and for any effect
@@ -283,6 +292,10 @@ export function applyEffectRef(
     payOrDecline(request) {
       const answer = ask({ ...request, kind: 'payMana', chooser: request.chooser ?? base.controller });
       return answer && answer.kind === 'payMana' ? answer.pay : undefined;
+    },
+    payLifeOrDecline(request) {
+      const answer = ask({ ...request, kind: 'payLife', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'payLife' ? answer.pay : undefined;
     },
     enqueueEffects(refs) {
       channel?.enqueueEffects(refs);

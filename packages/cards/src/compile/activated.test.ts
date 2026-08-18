@@ -133,10 +133,11 @@ describe('conditional enters-tapped — the real dual-land cycles', () => {
     });
   });
 
-  it('still reports a SHOCKLAND, whose condition is a price rather than a board state', () => {
-    // "You may pay 2 life" asks the controller a question at land-play time,
-    // which nothing in the engine can do yet. Guessing either way misprices the
-    // card, so it stays honestly unsupported.
+  it('compiles a SHOCKLAND to its life price, distinct from any board condition', () => {
+    // "You may pay 2 life" is a question for the controller, not a board fact,
+    // so it lands in `entersTappedUnlessLifePaid` (the engine's payLife choice
+    // asks it at entry) \u2014 never flattened into `entersTapped`/`entersTappedUnless`.
+    // The full behaviour is pinned in ../shockland.test.ts.
     const result = compileCard(
       land(
         'Sacred Foundry',
@@ -144,7 +145,8 @@ describe('conditional enters-tapped — the real dual-land cycles', () => {
         ['Mountain', 'Plains'],
       ),
     );
-    expect(result.status).toBe('incomplete');
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.entersTappedUnlessLifePaid).toBe(2);
     expect(result.definition.entersTappedUnless).toBeUndefined();
     expect(result.definition.entersTapped).toBeUndefined();
   });

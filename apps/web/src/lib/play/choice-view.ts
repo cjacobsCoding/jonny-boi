@@ -56,6 +56,7 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
   chooseModes: { one: 'mode', many: 'modes' },
   confirm: { one: 'answer', many: 'answers' },
   payMana: { one: 'answer', many: 'answers' },
+  payLife: { one: 'answer', many: 'answers' },
   selectTargets: { one: 'target', many: 'targets' },
 });
 
@@ -66,7 +67,7 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
  * they are named once here instead of as a two-kind test repeated six times.
  */
 function isBinaryKind(kind: ChoiceKind): boolean {
-  return kind === 'confirm' || kind === 'payMana';
+  return kind === 'confirm' || kind === 'payMana' || kind === 'payLife';
 }
 
 /** A readable zone name, degrading to the raw id for a zone we have no copy for. */
@@ -93,7 +94,8 @@ export type ChoiceDraft =
   | { readonly kind: 'selectPlayers'; readonly players: readonly PlayerId[] }
   | { readonly kind: 'chooseModes'; readonly modeIds: readonly string[] }
   | { readonly kind: 'confirm'; readonly yes: boolean | null }
-  | { readonly kind: 'payMana'; readonly pay: boolean | null };
+  | { readonly kind: 'payMana'; readonly pay: boolean | null }
+  | { readonly kind: 'payLife'; readonly pay: boolean | null };
 
 /** The value one selectable option contributes to the draft. */
 export type ChoiceOptionValue = InstanceId | PlayerId | string;
@@ -111,6 +113,8 @@ export function emptyDraft(choice: PendingChoice): ChoiceDraft {
       return { kind: 'selectTargets', targets: [] };
     case 'payMana':
       return { kind: 'payMana', pay: null };
+    case 'payLife':
+      return { kind: 'payLife', pay: null };
     default:
       return { kind: 'confirm', yes: null };
   }
@@ -184,6 +188,11 @@ export function setPayMana(draft: ChoiceDraft, pay: boolean): ChoiceDraft {
   return draft.kind === 'payMana' ? { kind: 'payMana', pay } : draft;
 }
 
+/** Set a pay-life draft's answer (a no-op on any other kind). */
+export function setPayLife(draft: ChoiceDraft, pay: boolean): ChoiceDraft {
+  return draft.kind === 'payLife' ? { kind: 'payLife', pay } : draft;
+}
+
 /** Clear every pick — the "choose none" path of a `may` selection. */
 export function clearDraft(choice: PendingChoice, draft: ChoiceDraft): ChoiceDraft {
   return isBinaryKind(draft.kind) ? draft : emptyDraft(choice);
@@ -215,6 +224,8 @@ export function draftToAnswer(draft: ChoiceDraft): ChoiceAnswer | null {
       return { kind: 'selectTargets', targets: [...draft.targets] };
     case 'payMana':
       return draft.pay === null ? null : { kind: 'payMana', pay: draft.pay };
+    case 'payLife':
+      return draft.pay === null ? null : { kind: 'payLife', pay: draft.pay };
     default:
       return draft.yes === null ? null : { kind: 'confirm', yes: draft.yes };
   }
@@ -238,7 +249,8 @@ export interface DraftStatus {
 export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftStatus {
   const answer = draftToAnswer(draft);
   if (!answer) {
-    return { answer: null, canSubmit: false, hint: choice.kind === 'payMana' ? PAY_UNDECIDED_HINT : CONFIRM_UNDECIDED_HINT };
+    const paying = choice.kind === 'payMana' || choice.kind === 'payLife';
+    return { answer: null, canSubmit: false, hint: paying ? PAY_UNDECIDED_HINT : CONFIRM_UNDECIDED_HINT };
   }
   const verdict: AnswerValidation = validateChoiceAnswer(choice, answer);
   if (!verdict.ok) return { answer, canSubmit: false, hint: capitalize(verdict.reason) };
@@ -293,6 +305,11 @@ function requirementText(choice: PendingChoice): string {
   if (choice.kind === 'confirm') return 'Answer yes or no.';
   if (choice.kind === 'selectTargets') {
     return `Choose what ${choice.sourceName} points at: ${describeRestriction(choice.restriction)}.`;
+  }
+  if (choice.kind === 'payLife') {
+    return choice.affordable
+      ? `Pay ${choice.amount} life to have it enter untapped, or decline and it enters tapped.`
+      : `You do not have ${choice.amount} life to pay, so it enters tapped.`;
   }
   if (choice.kind === 'payMana') {
     const cost = formatManaCost(choice.cost);

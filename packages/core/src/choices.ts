@@ -35,6 +35,9 @@
  *     controller pays {3}"). It is NOT a `confirm` with a cost in the prompt: the
  *     engine has to know the cost to decide whether paying is even possible, and
  *     to actually spend the mana when the answer says yes.
+ *   - {@link PayLifeChoice}      — pay life, or decline (a shockland's "you may
+ *     pay 2 life"). Separate from `payMana` for the same reason `payMana` is
+ *     separate from `confirm`: the engine charges the price, so it must know it.
  * Library search is `selectCards` over library candidates plus the shuffle that
  * follows (`EffectContext.shuffleLibrary`), not a kind of its own.
  *
@@ -335,6 +338,19 @@ export interface PayManaRequest extends ChoiceRequestBase {
   readonly affordable?: boolean;
 }
 
+export interface PayLifeRequest extends ChoiceRequestBase {
+  readonly kind: 'payLife';
+  /** How much life paying costs. All-or-nothing, exactly like a mana payment. */
+  readonly amount: number;
+  /**
+   * Whether the chooser HAS that much life (CR 118.4 — life may only be paid
+   * down to zero, never past it). Filled in by the ENGINE, like
+   * {@link PayManaRequest.affordable}; a request that arrives without it is
+   * treated as unaffordable, the branch that takes nothing.
+   */
+  readonly affordable?: boolean;
+}
+
 /** Everything a resolving effect may ask. */
 export type ChoiceRequest =
   | SelectCardsRequest
@@ -342,6 +358,7 @@ export type ChoiceRequest =
   | ChooseModesRequest
   | ConfirmRequest
   | PayManaRequest
+  | PayLifeRequest
   | SelectTargetsRequest;
 
 /** The kinds, as a discriminator. */
@@ -410,6 +427,13 @@ export interface PayManaChoice extends PendingChoiceBase {
   readonly affordable: boolean;
 }
 
+export interface PayLifeChoice extends PendingChoiceBase {
+  readonly kind: 'payLife';
+  readonly amount: number;
+  /** Whether the chooser can pay — false makes declining the only legal answer. */
+  readonly affordable: boolean;
+}
+
 /** A question parked in `GameState.pendingChoice`, awaiting an `answerChoice`. */
 export type PendingChoice =
   | SelectCardsChoice
@@ -417,6 +441,7 @@ export type PendingChoice =
   | ChooseModesChoice
   | ConfirmChoice
   | PayManaChoice
+  | PayLifeChoice
   | SelectTargetsChoice;
 
 // --- answers ----------------------------------------------------------------------
@@ -454,6 +479,16 @@ export interface PayManaAnswer {
   readonly pay: boolean;
 }
 
+export interface PayLifeAnswer {
+  readonly kind: 'payLife';
+  /**
+   * True = "I pay". Like {@link PayManaAnswer.pay}, the life is deducted by the
+   * ENGINE as it accepts this answer — an effect re-run to collect a later
+   * question must never charge twice.
+   */
+  readonly pay: boolean;
+}
+
 /** What an `answerChoice` action carries. Plain data — clones and serializes. */
 export type ChoiceAnswer =
   | SelectCardsAnswer
@@ -461,6 +496,7 @@ export type ChoiceAnswer =
   | ChooseModesAnswer
   | ConfirmAnswer
   | PayManaAnswer
+  | PayLifeAnswer
   | SelectTargetsAnswer;
 
 // --- normalisation ----------------------------------------------------------------
@@ -484,6 +520,8 @@ export function choiceOptionCount(choice: PendingChoice): number {
       return CONFIRM_OPTION_COUNT;
     case 'payMana':
       // Declining is always on offer; paying only when the mana is actually there.
+      return choice.affordable ? CONFIRM_OPTION_COUNT : DECLINE_ONLY_OPTION_COUNT;
+    case 'payLife':
       return choice.affordable ? CONFIRM_OPTION_COUNT : DECLINE_ONLY_OPTION_COUNT;
     default:
       return 0;
@@ -572,6 +610,15 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
         // Copied, not aliased: the request's cost usually IS a card definition's
         // frozen cost object, and a parked choice outlives the call that raised it.
         cost: { ...request.cost },
+        affordable: request.affordable ?? false,
+        min: 1,
+        max: 1,
+      };
+    case 'payLife':
+      return {
+        ...base,
+        kind: 'payLife',
+        amount: request.amount,
         affordable: request.affordable ?? false,
         min: 1,
         max: 1,
@@ -665,6 +712,13 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
       if (pay && !choice.affordable) return invalid(`you cannot produce ${formatManaCost(choice.cost)}`);
       return VALID;
     }
+    case 'payLife': {
+      const pay = (answer as PayLifeAnswer).pay;
+      if (typeof pay !== 'boolean') return invalid('a pay/decline answer must be a boolean');
+      // Life may only be paid down to zero (CR 118.4) — same refusal as payMana.
+      if (pay && !choice.affordable) return invalid(`you do not have ${choice.amount} life to pay`);
+      return VALID;
+    }
     default:
       return invalid('unknown choice kind');
   }
@@ -699,6 +753,9 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
       // it is the only branch that cannot take something the chooser did not agree
       // to give — the reason this is safe as the degraded answer.
       return { kind: 'payMana', pay: false };
+    case 'payLife':
+      // Same rule, higher stakes: life is never taken without a yes.
+      return { kind: 'payLife', pay: false };
     default:
       return { kind: 'confirm', yes: false };
   }
@@ -734,6 +791,8 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       // engine takes it instead of stopping the game to collect the inevitable.
       // This is also what stops a "pays {3}" clause from interrupting a game in
       // which nobody could ever have paid.
+      return !choice.affordable;
+    case 'payLife':
       return !choice.affordable;
     default:
       return true;
@@ -836,6 +895,13 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
             { kind: 'payMana', pay: false },
           ]
         : [{ kind: 'payMana', pay: false }];
+    case 'payLife':
+      return choice.affordable
+        ? [
+            { kind: 'payLife', pay: true },
+            { kind: 'payLife', pay: false },
+          ]
+        : [{ kind: 'payLife', pay: false }];
     default:
       return [defaultAnswerFor(choice)];
   }
@@ -877,6 +943,8 @@ export function describeChoiceAnswer(answer: ChoiceAnswer): string {
       return answer.yes ? 'yes' : 'no';
     case 'payMana':
       return answer.pay ? 'paid' : 'declined to pay';
+    case 'payLife':
+      return answer.pay ? 'paid life' : 'declined to pay life';
     default:
       return 'answer';
   }

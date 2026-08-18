@@ -248,9 +248,37 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
 
   const destination = strParam(ctx, 'destination') === 'battlefield' ? 'battlefield' : 'hand';
   const tapped = boolParam(ctx, 'tapped', false);
+
+  // A fetched SHOCKLAND asks its "you may pay 2 life" here, mid-resolution,
+  // BEFORE anything moves (the ask-first contract): the engine has already
+  // charged the life by the time `paid` comes back true. Only a battlefield
+  // destination raises it — a card searched to hand pays nothing.
+  const shockPaid = new Map<InstanceId, boolean>();
+  if (destination === 'battlefield') {
+    for (const id of chosen) {
+      const found = ctx.state.players[who].library.find((c) => c.instanceId === id);
+      const shockCost = found?.def.entersTappedUnlessLifePaid;
+      if (shockCost === undefined) continue;
+      const paid = ctx.payLifeOrDecline({
+        chooser: who,
+        amount: shockCost,
+        prompt: `Pay ${shockCost} life, or ${found!.def.name} enters tapped`,
+        valence: 'neutral',
+      });
+      if (paid === undefined) return; // parked — nothing has moved yet
+      shockPaid.set(id, paid);
+    }
+  }
+
   for (const id of chosen) {
-    if (destination === 'battlefield') putOntoBattlefield(ctx, who, id, 'library', { tapped });
-    else moveOwnedCard(ctx, who, id, 'library', 'hand');
+    if (destination === 'battlefield') {
+      // `putOntoBattlefield` consults `entersTapped`, whose answer for a
+      // shockland is the unpaid default (tapped); a paid entry overrides it.
+      const enters = shockPaid.get(id) === true ? { tapped: false, ignoreEntersTapped: true } : { tapped };
+      putOntoBattlefield(ctx, who, id, 'library', enters);
+    } else {
+      moveOwnedCard(ctx, who, id, 'library', 'hand');
+    }
   }
   // Searching a library shuffles it, found or not.
   ctx.shuffleLibrary(who);

@@ -150,12 +150,22 @@ export interface CardDefinition {
    *
    * Present ⇒ the permanent enters tapped whenever the condition is NOT met.
    * Only conditions that read the board are expressible here; a land that
-   * charges a PRICE to enter untapped (a shockland's "you may pay 2 life") asks
-   * its controller a question at land-play time, which nothing in the engine
-   * can do yet, so those stay unimplemented rather than being flattened into
-   * always-tapped or always-untapped — either would misprice the card.
+   * charges a PRICE instead declares it in {@link entersTappedUnlessLifePaid},
+   * because a price is a question for the controller, not a fact of the board.
    */
   readonly entersTappedUnless?: EntersUntappedCondition;
+  /**
+   * A shockland: "As ~ enters, you may **pay N life**. If you don't, it enters
+   * tapped." The value is the printed life cost.
+   *
+   * This is a DECISION, not a condition, so `entersTapped` cannot answer it —
+   * the entry paths that can ask (playing the land; a fetch effect putting it
+   * onto the battlefield mid-resolution) raise a `payLife` choice and override
+   * the tapped state with the answer. **Every path that does not ask enters the
+   * permanent TAPPED**: an unasked entry is an unpaid one, which is the printed
+   * default and the direction that can never play better than the real card.
+   */
+  readonly entersTappedUnlessLifePaid?: number;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -413,6 +423,11 @@ export interface EntersTappedContext {
  */
 export function entersTapped(def: CardDefinition, context?: EntersTappedContext): boolean {
   if (def.entersTapped === true) return true;
+  // A pay-life entry is a QUESTION, and this accessor cannot ask one. Tapped is
+  // the printed "if you don't" default, so any entry path that does not raise
+  // the choice gets the unpaid outcome — never a free untapped shockland. The
+  // two paths that do ask override the answer explicitly.
+  if (def.entersTappedUnlessLifePaid !== undefined) return true;
   const condition = def.entersTappedUnless;
   if (!condition) return false;
   // With no board to read we cannot evaluate the condition. Entering tapped is

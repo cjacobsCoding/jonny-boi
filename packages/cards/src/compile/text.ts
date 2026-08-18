@@ -148,11 +148,17 @@ export function frontFaceName(cardName: string): string {
 
 /** Collapse whitespace, lowercase, and drop a trailing period. */
 export function normalizeClause(text: string): string {
-  return text
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\.$/, '')
-    .toLowerCase();
+  return (
+    text
+      .replace(/\s+/g, ' ')
+      // Scryfall's oracle text uses the straight apostrophe, but text arriving
+      // from other sources (a pasted card, a test) may carry the typographic
+      // one; the rule table is written with straight quotes, so fold them.
+      .replace(/’/g, "'")
+      .trim()
+      .replace(/\.$/, '')
+      .toLowerCase()
+  );
 }
 
 /**

@@ -103,6 +103,8 @@ export interface ClauseContribution {
   readonly entersTapped?: boolean;
   /** Set when the text gives a BOARD condition for entering untapped. */
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
+  /** Set when the text charges a LIFE price to enter untapped (a shockland). */
+  readonly entersTappedUnlessLifePaid?: number;
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
   /**

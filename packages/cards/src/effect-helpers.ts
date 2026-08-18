@@ -330,7 +330,16 @@ export function putOntoBattlefield(
   player: PlayerId,
   id: InstanceId,
   from: OwnedZone,
-  options: { readonly tapped?: boolean } = {},
+  options: {
+    readonly tapped?: boolean;
+    /**
+     * Skip the definition's own `entersTapped` and use `tapped` verbatim. The
+     * one caller is a fetched shockland whose controller PAID: the definition's
+     * answer is the unpaid default (tapped), and the payment has already been
+     * charged by the engine, so the entry must honour it.
+     */
+    readonly ignoreEntersTapped?: boolean;
+  } = {},
 ): CardInstance | undefined {
   const owner = ctx.state.players[player];
   const source = owner[from];
@@ -340,7 +349,7 @@ export function putOntoBattlefield(
   if (!card) return undefined;
   card.zone = 'battlefield';
   card.controller = player;
-  card.tapped = options.tapped === true || entersTapped(card.def);
+  card.tapped = options.ignoreEntersTapped === true ? options.tapped === true : options.tapped === true || entersTapped(card.def);
   card.summoningSick = isCreature(card.def) && card.def.keywords?.haste !== true;
   card.damageMarked = 0;
   card.markedByDeathtouch = false;
