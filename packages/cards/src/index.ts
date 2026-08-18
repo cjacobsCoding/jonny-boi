@@ -128,6 +128,9 @@ export {
  * optional basic-land search) and **Goblin Guide** (reveal the top card, take it
  * only if it is a land). Earlier waves un-stubbed Young Pyromancer, Monastery
  * Swiftspear, Kitchen Finks and Giant Growth on the trigger + continuous layers.
+ * **Sakura-Tribe Elder** was un-stubbed by the template-gap pass: its sacrifice-
+ * self activation cost and its basic-land search both existed already, and only
+ * the "search … for a basic land card" compiler rule was missing.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
@@ -137,10 +140,6 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
   {
     card: 'Snapcaster Mage',
     missingEngineSystem: 'flash timing + casting a card from the graveyard (flashback)',
-  },
-  {
-    card: 'Sakura-Tribe Elder',
-    missingEngineSystem: 'activated abilities with a sacrifice cost (the basic-land search itself is now expressible)',
   },
   { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
   { card: 'Liliana of the Veil', missingEngineSystem: 'planeswalker loyalty abilities' },

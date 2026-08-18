@@ -189,6 +189,7 @@ interface Assembly {
   readonly produces: ManaColor[];
   readonly producesOptions: ManaProduction[];
   readonly activated: ActivatedAbility[];
+  readonly statics: import('@jonny-boi/core').StaticAbility[];
   keywords: Record<string, boolean>;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
@@ -211,6 +212,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.keywords = { ...assembly.keywords, ...(contribution.keywords as Record<string, boolean>) };
   }
   if (contribution.activated) assembly.activated.push(...contribution.activated);
+  if (contribution.statics) assembly.statics.push(...contribution.statics);
   if (contribution.entersTapped) assembly.entersTapped = true;
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
@@ -493,6 +495,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     produces: [],
     producesOptions: [],
     activated: [],
+    statics: [],
     keywords: {},
     entersTapped: false,
     matchedRules: [],
@@ -729,6 +732,7 @@ export function compileCard(card: CompilableCard): CompileResult {
         : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
     ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
+    ...(assembly.statics.length > 0 ? { statics: assembly.statics } : {}),
     ...(attachment ? { attachment } : {}),
   };
 
