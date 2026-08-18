@@ -952,8 +952,35 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   flashback stays reported against the cast-cost-modification system, and flashback GRANTED by another
   card (Snapcaster Mage) stays stubbed on targeting-a-graveyard-card + a continuous effect on a
   non-battlefield card.
+- ✅ *cost modification / choice at cast time — {X} costs and kicker* — the cast-time question
+  step. Casting a spell with an `{X}` cost or a kicker parks a question with NOTHING resolving
+  (the same moment a shockland's pay-life and a trigger's aiming use): a new choice kind,
+  `chooseNumber`, for "choose a value for X", and the existing `payMana` for "pay the kicker?".
+  Three design rules carry the whole thing. **(1) The engine charges the extra cost, once, as it
+  accepts the answer** — `X × xCost` generic mana (or the kicker cost) is paid through the same
+  `payManaCostFromBoard` as an optional payment, so the base cost stays in `CardDefinition.cost`
+  (X is 0 everywhere but the stack, CR 107.3) and no mana function learned a new symbol.
+  **(2) A question with one fundable answer is never asked**: the X range is bounded by what the
+  SAME payment planner says the board can produce (`maxAffordableX`), so an unpayable X is never
+  on offer, X capped at 0 is recorded silently, and an unaffordable kicker casts the spell
+  unkicked without stopping the game. **(3) The chosen values ride the stack object into the
+  resolution** (`SpellStackObject.xValue`/`kicked` → `ResolutionFrame` → `EffectContext`), so
+  "deals X damage" and "if this spell was kicked" read what was actually paid for — including
+  after the spell has left the stack. The waiting lives ON the stack object
+  (`awaitingCastChoice`, cleared as each answer is recorded — same argument as a trigger's
+  `awaitingTargets`), and `internal/clone.ts` copies all three new fields. The compiler reads
+  `{X}` cost symbols into `xCost`, "Kicker {COST}" into `kicker`, and these templates: "deals X
+  damage / draw X cards / gain X life" (gated on the cost actually printing {X}), the
+  Burst-Lightning "deals M instead" switch (`{ base, kicked }` amounts), and "If this spell was
+  kicked, RIDER" (an `ifKicked` branch primitive enqueuing the rider into the same resolution).
+  The heuristic pilot scores an X burn at the X this board could fund and answers with the
+  maximum affordable; the hotseat/online prompt renders one button per fundable value.
+  Deliberately NOT done: multikicker (needs a pay-count, reported), kicked ETB clauses on
+  permanents (the flag dies with the resolution; needs instance memory), X divided among
+  targets, and "where X is …" definitions (those X's are not the cast-time X and are refused).
 Still open, roughly by how often they block a real decklist:
-- *alternative and additional costs* (suspend, spectacle, kicker, cycling), *{X} and Phyrexian costs*,
+- *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
+  cast-time question step now that {X}/kicker built it), *multikicker*, *Phyrexian costs*,
   *dynamic P/T* (Tarmogoyf needs characteristic-defining P/T — `StaticAbility` deltas are fixed
   numbers and `DerivedCount` has no "card types in all graveyards" entry), *planeswalker loyalty*,
   *modal DFCs / split / adventure (the cast-time face choice)*, *granting flashback to a graveyard card (Snapcaster Mage: needs targeting a

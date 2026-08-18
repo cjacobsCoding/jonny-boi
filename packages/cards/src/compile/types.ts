@@ -140,6 +140,11 @@ export interface ClauseContribution {
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
   /**
+   * The printed "Kicker {COST}" line — an optional additional cost the engine
+   * asks about at cast time (`CardDefinition.kicker`).
+   */
+  readonly kicker?: import('@jonny-boi/core').ManaCost;
+  /**
    * Static ("anthem") abilities this clause prints ("Creatures you control get
    * +1/+1") — continuous modifications applied by core's statics layer for as
    * long as this permanent is on the battlefield.

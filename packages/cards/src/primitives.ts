@@ -712,8 +712,30 @@ export const gainControl: EffectPrimitive = (ctx) => {
   }
 };
 
+/**
+ * "If this spell was kicked, [effects]" — the branch half of kicker. Reads the
+ * cast-time kicked flag off the resolution (`EffectContext.kicked`, charged and
+ * recorded by the ENGINE when the spell was cast) and, when true, enqueues the
+ * nested effects into THIS resolution — so they run in printed order, may ask
+ * their own questions, and read the same targets and X the spell was cast with.
+ *
+ * Params: `effects` — the effect refs of the kicked clause. Malformed or absent
+ * refs are a safe no-op (the unkicked outcome, never a stronger card).
+ */
+export const ifKicked: EffectPrimitive = (ctx) => {
+  if (ctx.kicked !== true) return;
+  const raw = ctx.params.effects;
+  if (!Array.isArray(raw)) return;
+  const refs = raw.filter(
+    (entry): entry is { primitive: string; params?: Record<string, unknown> } =>
+      typeof entry === 'object' && entry !== null && typeof (entry as { primitive?: unknown }).primitive === 'string',
+  );
+  if (refs.length > 0) ctx.enqueueEffects(refs);
+};
+
 export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   gainControl,
+  ifKicked,
   dealDamage,
   drawCards,
   gainLife,

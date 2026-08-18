@@ -94,9 +94,51 @@ throughput (games/sec) from regressing.
 | feat/double-faced-cards | worker | packages/core (card/state/events/engine guards + NEW transform.ts, internal/zones+clone+triggers-runtime, NEW transform.test.ts), packages/cards (choice-primitives transformRevealTop, effect-helpers face-revert, compile types/compile/rules/index, data/pool.ts Delver, src/index.ts STUBBED_MECHANICS, NEW transform-play.test.ts), packages/sim (paired-arms-config +1 classification; fidelity copy in config/cli/swap), apps/web (lib/cards.ts back-face records + NEW cards.test.ts, lib/about/mechanics.ts + test), DESIGN §3.13 | 🚧 PUSHED, not merged |
 
 | feat/nonhand-casting | worker | packages/core (card/actions/state/events/choices/engine/index + internal/clone + test-fixtures + new flashback.test.ts), packages/cards (effect-helpers, compile types/rules/compile, index.ts STUBBED reword, data/pool.ts comments only, new flashback.test.ts), packages/ai (heuristic.ts + new flashback-pilot.test.ts), packages/sim (config/cli/swap + data/decks/uw-control — FIDELITY wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
+| feat/cast-cost-modification | worker | packages/core (card/choices/state/effects/engine/index + internal/clone + new cast-cost.test.ts), packages/cards (effect-helpers/primitives/index; compile types+compile+rules + compile.test; new cast-cost-cards.test.ts), packages/ai (choices + heuristic + choices.test), packages/sim (paired-arms-config classification only), apps/web (play/choice-view + ChoicePrompt + choice tests, about/mechanics.ts), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `feat/cast-cost-modification` 🚧 PUSHED — **cost modification at cast time:
+  {X} costs and kicker play as printed.** The subsystem the 2026-08-15 board note names as gate #3
+  exists now; suspend/spectacle are rule-table work on top of it. The seam: casting a spell whose
+  definition carries `xCost` (count of printed {X} symbols — NOT part of `ManaCost`, X is 0 off
+  the stack per CR 107.3) or `kicker` parks a cast-time question with nothing resolving, exactly
+  like a shockland's pay-life. New choice kind `chooseNumber` ("choose a value for X", range
+  0..max computed by the ENGINE from the same `planManaPayment` that will fund it — an unpayable
+  X is never offered, X capped at 0 / an unaffordable kicker never stop the game); the kicker
+  question is the existing `payMana`. ⚠️ THE ENGINE CHARGES, ONCE, in `applyAnswerChoice` —
+  same rule as optional payment. The chosen values ride `SpellStackObject.xValue`/`kicked`
+  (marker: `awaitingCastChoice`, cleared per answer; **all three fields added to
+  `internal/clone.ts` — field-by-field cloning drops what you forget**) into
+  `ResolutionFrame` and `EffectContext.xValue`/`kicked`, so "deals X damage" reads the paid-for
+  number AFTER the spell left the stack (tested). Compiler: {X} symbols compile into `xCost`
+  (Phyrexian/monocolour-hybrid still report, message reworded), `^kicker {COST}$` →
+  `CardDefinition.kicker`, new EFFECT_RULES `x-damage`/`x-draw`/`x-gain-life` (gated on the cost
+  actually printing {X} — a "where X is…" X is refused, not misread), `kicked-damage-instead`
+  (Burst Lightning / Shivan Fire, one dealDamage with `{base, kicked}` amount) and
+  `kicked-extra-effect` ("If this spell was kicked, RIDER" → new `ifKicked` branch primitive,
+  rider compiled target-free and enqueued into the same resolution). Real cards proven end to
+  end: Blaze, Mind Spring, Burst Lightning (kicked 4 / unkicked 2 / poverty-unkicked) —
+  `cast-cost-cards.test.ts`. AI: `chooseNumber` answered max-on-gain (the engine parks X as
+  'gain'), min otherwise; the heuristic scores an X burn at the X THIS board could fund
+  (projected from `totalAvailableMana` minus base cost; X=0 casts are held). `ifKicked` is
+  classified LIBRARY_READING in paired-arms-config ON PURPOSE: its nested refs hide inside a
+  param where the decklist scan cannot see them, so the identical-game skip is withdrawn for
+  kicked resolutions — sound whatever the rider contains. Hints reworded: kicker → template-gap
+  wording, multikicker split out as its own system, {X} hint → template-gap wording, cycling/
+  buyback/madness keep a real-system hint. About page gained "{X} costs" + "Kicker" (witnesses:
+  `x-damage`, `kicker-cost` rule ids). UNSUPPORTED-BACKLOG regenerated: still 178/2100 — honest:
+  the corpus's X staples (Walking Ballista, Exsanguinate, Finale…) are blocked by OTHER systems
+  (counters/activated, group drain, tutors), so the system unblocks importer-path cards, not the
+  EDHREC top slice. NOT done, deliberately: multikicker (needs a pay count — reported), kicked
+  ETB clauses on permanents (kicked flag dies with the resolution; needs instance memory), X
+  divided among targets (real Fireball still reports), Phyrexian, no pool additions (importer
+  path only, like shocklands), and none of the 7 stubbed famous cards un-stub via this seam
+  (checked: their blockers are transform/flashback-timing/sacrifice-activated/dynamic-P/T/
+  loyalty/revolt/modal-at-cast — all named, none is cast-time cost choice). FOLLOW-UP for
+  whoever owns flashback: its {X}/additional-cost flashback forms were reported pending THIS
+  system — they can now be wired to the cast-time question step. (Worker)
 
 - 2026-08-18 worker: `feat/source-aware-targeting` 🚧 PUSHED — **protection from [quality] and
   Ward {N} play as printed, on a source-aware targeting seam.** `isLegalTarget`/`legalTargetsFor`/

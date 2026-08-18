@@ -121,19 +121,29 @@ function bundleAsMode(bundle: readonly ManaColor[]): ManaProduction {
   return mode;
 }
 
-/** Split `other` cost symbols into payable hybrids and genuinely unpayable ones. */
+/** Split `other` cost symbols into payable hybrids, `{X}` symbols, and genuinely unpayable ones. */
 function partitionOtherSymbols(symbols: readonly string[]): {
   hybrid: ManaColor[][];
+  /** How many `{X}` symbols the cost prints — payable now (chosen at cast time). */
+  xCount: number;
   unpayable: string[];
 } {
   const hybrid: ManaColor[][] = [];
   const unpayable: string[] = [];
+  let xCount = 0;
   for (const symbol of symbols) {
-    const match = HYBRID_SYMBOL.exec(symbol.toUpperCase());
+    // Canonical `other` entries are brace-free ('X', 'G/W'), but a hand-built
+    // record may carry the printed form ('{X}') — fold both to one shape.
+    const upper = symbol.replace(/[{}]/g, '').toUpperCase();
+    if (upper === 'X') {
+      xCount += 1;
+      continue;
+    }
+    const match = HYBRID_SYMBOL.exec(upper);
     if (match) hybrid.push([match[1] as ManaColor, match[2] as ManaColor]);
     else unpayable.push(symbol);
   }
-  return { hybrid, unpayable };
+  return { hybrid, xCount, unpayable };
 }
 
 /** Convert a data-tools mana cost to the core cost shape (omitting zeroes). */
@@ -197,6 +207,8 @@ interface Assembly {
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
+  /** The printed "Kicker {COST}", once some line prints it. */
+  kicker?: ManaCost;
   /** The printed flashback cost, once a "Flashback {…}" line compiles. */
   flashback?: ManaCost;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
@@ -225,6 +237,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
+  if (contribution.kicker) assembly.kicker = contribution.kicker;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
@@ -568,15 +581,16 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
 
   // --- mana cost -------------------------------------------------------------
-  // Colour/colour hybrid symbols are payable now (the mana system tries each
-  // assignment). What remains in `other` — {X}, Phyrexian, monocolour hybrid,
-  // snow — genuinely cannot be paid, and a card we would mis-cost is never
-  // complete.
-  const { hybrid, unpayable } = partitionOtherSymbols(card.manaCost.other);
+  // Colour/colour hybrid symbols are payable (the mana system tries each
+  // assignment) and `{X}` is payable now too — its value is a cast-time choice
+  // the engine charges (`CardDefinition.xCost`). What remains in `other` —
+  // Phyrexian, monocolour hybrid, snow — genuinely cannot be paid, and a card
+  // we would mis-cost is never complete.
+  const { hybrid, xCount, unpayable } = partitionOtherSymbols(card.manaCost.other);
   if (unpayable.length > 0) {
     assembly.missing.push({
       text: unpayable.map((symbol) => `{${symbol}}`).join(''),
-      missingEngineSystem: 'variable ({X}), Phyrexian, and monocolour hybrid mana costs',
+      missingEngineSystem: 'Phyrexian and monocolour hybrid mana costs',
     });
   }
   const cost = toCoreCost(card, hybrid);
@@ -709,6 +723,9 @@ export function compileCard(card: CompilableCard): CompileResult {
     // this, every Aura and Equipment would report its central ability as missing
     // one line after implementing it.
     if (ATTACHMENT_KEYWORDS.has(word) && assembly.attachesAs !== undefined) continue;
+    // Same story for "Kicker": Scryfall lists it as a keyword, and the printed
+    // "Kicker {COST}" line has already compiled into `CardDefinition.kicker`.
+    if (word === 'kicker' && assembly.kicker !== undefined) continue;
     // Same shape for "Flashback": the printed "Flashback {…}" line compiled into
     // `assembly.flashback`, and Scryfall listing the keyword again is not a
     // second, unmodelled ability. A flashback line that did NOT compile (an {X}
@@ -766,6 +783,8 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.entersTappedUnlessLifePaid !== undefined
       ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
       : {}),
+    ...(xCount > 0 ? { xCost: xCount } : {}),
+    ...(assembly.kicker ? { kicker: assembly.kicker } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0

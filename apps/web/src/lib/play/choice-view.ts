@@ -57,6 +57,7 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
   confirm: { one: 'answer', many: 'answers' },
   payMana: { one: 'answer', many: 'answers' },
   payLife: { one: 'answer', many: 'answers' },
+  chooseNumber: { one: 'value', many: 'values' },
   selectTargets: { one: 'target', many: 'targets' },
 });
 
@@ -68,6 +69,16 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
  */
 function isBinaryKind(kind: ChoiceKind): boolean {
   return kind === 'confirm' || kind === 'payMana' || kind === 'payLife';
+}
+
+/**
+ * The kinds whose answer is one scalar rather than a selection — the binary
+ * kinds plus the number pick. They share the selection-machinery no-ops
+ * (nothing to toggle, nothing to clear) without sharing the binary two-button
+ * copy, which is why this is a second predicate rather than a wider first one.
+ */
+function isScalarKind(kind: ChoiceKind): boolean {
+  return isBinaryKind(kind) || kind === 'chooseNumber';
 }
 
 /** A readable zone name, degrading to the raw id for a zone we have no copy for. */
@@ -95,7 +106,8 @@ export type ChoiceDraft =
   | { readonly kind: 'chooseModes'; readonly modeIds: readonly string[] }
   | { readonly kind: 'confirm'; readonly yes: boolean | null }
   | { readonly kind: 'payMana'; readonly pay: boolean | null }
-  | { readonly kind: 'payLife'; readonly pay: boolean | null };
+  | { readonly kind: 'payLife'; readonly pay: boolean | null }
+  | { readonly kind: 'chooseNumber'; readonly value: number | null };
 
 /** The value one selectable option contributes to the draft. */
 export type ChoiceOptionValue = InstanceId | PlayerId | string;
@@ -115,6 +127,8 @@ export function emptyDraft(choice: PendingChoice): ChoiceDraft {
       return { kind: 'payMana', pay: null };
     case 'payLife':
       return { kind: 'payLife', pay: null };
+    case 'chooseNumber':
+      return { kind: 'chooseNumber', value: null };
     default:
       return { kind: 'confirm', yes: null };
   }
@@ -164,7 +178,7 @@ function withValues(draft: ChoiceDraft, values: readonly ChoiceOptionValue[]): C
  * over-picking.
  */
 export function toggleOption(choice: PendingChoice, draft: ChoiceDraft, value: ChoiceOptionValue): ChoiceDraft {
-  if (isBinaryKind(draft.kind)) return draft;
+  if (isScalarKind(draft.kind)) return draft;
   const values = draftValues(draft);
   const at = values.indexOf(value);
   if (at >= 0) return withValues(draft, values.filter((v) => v !== value));
@@ -193,9 +207,14 @@ export function setPayLife(draft: ChoiceDraft, pay: boolean): ChoiceDraft {
   return draft.kind === 'payLife' ? { kind: 'payLife', pay } : draft;
 }
 
+/** Set a choose-a-number draft's value (a no-op on any other kind). */
+export function setChooseNumber(draft: ChoiceDraft, value: number): ChoiceDraft {
+  return draft.kind === 'chooseNumber' ? { kind: 'chooseNumber', value } : draft;
+}
+
 /** Clear every pick — the "choose none" path of a `may` selection. */
 export function clearDraft(choice: PendingChoice, draft: ChoiceDraft): ChoiceDraft {
-  return isBinaryKind(draft.kind) ? draft : emptyDraft(choice);
+  return isScalarKind(draft.kind) ? draft : emptyDraft(choice);
 }
 
 /**
@@ -226,6 +245,8 @@ export function draftToAnswer(draft: ChoiceDraft): ChoiceAnswer | null {
       return draft.pay === null ? null : { kind: 'payMana', pay: draft.pay };
     case 'payLife':
       return draft.pay === null ? null : { kind: 'payLife', pay: draft.pay };
+    case 'chooseNumber':
+      return draft.value === null ? null : { kind: 'chooseNumber', value: draft.value };
     default:
       return draft.yes === null ? null : { kind: 'confirm', yes: draft.yes };
   }
@@ -250,7 +271,9 @@ export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftSta
   const answer = draftToAnswer(draft);
   if (!answer) {
     const paying = choice.kind === 'payMana' || choice.kind === 'payLife';
-    return { answer: null, canSubmit: false, hint: paying ? PAY_UNDECIDED_HINT : CONFIRM_UNDECIDED_HINT };
+    const hint =
+      choice.kind === 'chooseNumber' ? NUMBER_UNDECIDED_HINT : paying ? PAY_UNDECIDED_HINT : CONFIRM_UNDECIDED_HINT;
+    return { answer: null, canSubmit: false, hint };
   }
   const verdict: AnswerValidation = validateChoiceAnswer(choice, answer);
   if (!verdict.ok) return { answer, canSubmit: false, hint: capitalize(verdict.reason) };
@@ -259,7 +282,7 @@ export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftSta
 
 /** The hint shown once the draft is already legal (it may still take more picks). */
 function readyHint(choice: PendingChoice, draft: ChoiceDraft): string {
-  if (isBinaryKind(choice.kind)) return 'Confirm your answer.';
+  if (isScalarKind(choice.kind)) return 'Confirm your answer.';
   const picked = draftValues(draft).length;
   if (picked < choice.max) {
     const room = choice.max - picked;
@@ -271,6 +294,7 @@ function readyHint(choice: PendingChoice, draft: ChoiceDraft): string {
 /** The two undecided-draft hints, named so the copy is not buried in a branch. */
 const CONFIRM_UNDECIDED_HINT = 'Choose Yes or No.';
 const PAY_UNDECIDED_HINT = 'Choose whether to pay.';
+const NUMBER_UNDECIDED_HINT = 'Choose a value.';
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
@@ -305,6 +329,13 @@ function requirementText(choice: PendingChoice): string {
   if (choice.kind === 'confirm') return 'Answer yes or no.';
   if (choice.kind === 'selectTargets') {
     return `Choose what ${choice.sourceName} points at: ${describeRestriction(choice.restriction)}.`;
+  }
+  if (choice.kind === 'chooseNumber') {
+    // The range was computed by the engine from what the board can pay, so the
+    // copy can promise every offered value is fundable.
+    return choice.min === choice.max
+      ? `Only ${choice.min} can be chosen here.`
+      : `Choose a value from ${choice.min} to ${choice.max} — every value shown is one you can pay for.`;
   }
   if (choice.kind === 'payLife') {
     return choice.affordable
@@ -344,7 +375,7 @@ export function choicePromptView(
     prompt: choice.prompt,
     requirement: requirementText(choice),
     ordered: choice.kind === 'selectCards' && choice.ordered,
-    optional: !isBinaryKind(choice.kind) && choice.min === 0,
+    optional: !isScalarKind(choice.kind) && choice.min === 0,
     optionCount: choiceOptionCount(choice),
   };
 }

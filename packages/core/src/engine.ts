@@ -39,6 +39,7 @@ import {
   addProduction,
   canPay,
   emptyPool,
+  formatManaCost,
   MANA_COLORS,
   payCost,
   poolTotal,
@@ -51,6 +52,7 @@ import type {
   InstanceId,
   PlayerId,
   SpellStackObject,
+  StackObject,
   Step,
   TriggeredStackObject,
 } from './state.js';
@@ -507,6 +509,10 @@ function resolveTopOfStack(
       askCount: 0,
       card,
       resolvesTo: top.resolvesTo,
+      // Cast-time choices ride the frame from here on: the resolution outlives
+      // the stack object, and "deals X damage" is read during (and after) it.
+      ...(top.xValue !== undefined ? { xValue: top.xValue } : {}),
+      ...(top.kicked !== undefined ? { kicked: top.kicked } : {}),
     },
     registry,
     emit,
@@ -596,7 +602,7 @@ function runResolution(
     applyEffectRef(
       registry,
       ref,
-      { state, source, controller: frame.controller },
+      { state, source, controller: frame.controller, xValue: frame.xValue, kicked: frame.kicked },
       emit,
       frame.targets,
       createChoiceChannel(state, frame, source, emit),
@@ -1016,6 +1022,36 @@ function applyAnswerChoice(
     summary: describeChoiceAnswer(answer),
   });
   state.pendingChoice = null;
+
+  // A CAST-TIME answer belongs to a spell still being cast — the stack object
+  // carrying the `awaitingCastChoice` marker this question was asked for. The
+  // extra cost is charged HERE, once, exactly like the payment kinds above
+  // (indeed the kicker IS a payMana, already charged by that block); the answer
+  // is recorded on the stack object, and the next cast question (a kicker after
+  // an X) asks immediately. When the cast is fully announced, any triggers that
+  // fired off the cast are aimed and the caster keeps priority — exactly where
+  // they would be had the spell needed no question.
+  const casting = spellOnStack(state, choice.sourceInstanceId);
+  if (casting?.awaitingCastChoice !== undefined) {
+    if (casting.awaitingCastChoice === 'x' && choice.kind === 'chooseNumber' && answer.kind === 'chooseNumber') {
+      const perSymbol = casting.card.def.xCost ?? 0;
+      let value = answer.value;
+      if (value > 0 && perSymbol > 0 && !payManaCostFromBoard(state, choice.chooser, { generic: value * perSymbol }, emit)) {
+        // The board could not honour the agreed X (only reachable from a
+        // hand-built state — the offered range was computed from this board).
+        // Recorded as what actually happened: nothing was paid, X is 0.
+        value = 0;
+      }
+      patchSpellOnStack(state, casting.instanceId, { xValue: value, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (casting.awaitingCastChoice === 'kicker' && choice.kind === 'payMana' && answer.kind === 'payMana') {
+      // The mana (if paid) was already spent by the shared payMana block above,
+      // and a payment the board could not honour arrives here as a decline.
+      patchSpellOnStack(state, casting.instanceId, { kicked: answer.pay, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+  }
 
   // A TARGETING answer belongs to the stack, not to a resolution: it names what a
   // triggered ability points at, chosen as the ability went on the stack. Nothing
@@ -1651,7 +1687,184 @@ function applyCastSpell(
   // Caster retains priority after putting something on the stack.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
+  // COST MODIFICATION AT CAST TIME. A spell with an {X} cost or a kicker asks
+  // its question(s) HERE — after the base cost is paid and the spell is on the
+  // stack, with nothing resolving (so, like a shockland's pay-life and a
+  // trigger's aiming, the question is parked with no resolution frame behind
+  // it). While one stands, the only legal action is answering it, and the
+  // ENGINE charges the extra cost as it accepts the answer. A question with
+  // only one fundable answer (X capped at 0, an unaffordable kicker) is never
+  // asked — the unpaid default is recorded and the game does not stop.
+  askNextCastChoice(state, card.instanceId, emit);
   return { state, events };
+}
+
+/** The spell stack object with this instance id, or undefined. */
+function spellOnStack(state: GameState, instanceId: InstanceId): SpellStackObject | undefined {
+  for (let i = state.stack.length - 1; i >= 0; i--) {
+    const object = state.stack[i] as StackObject;
+    if (object.kind === 'spell' && object.instanceId === instanceId) return object;
+  }
+  return undefined;
+}
+
+/**
+ * Replace a spell stack object with a patched copy. Replaced rather than
+ * mutated for the same reason `recordTriggerTargets` replaces: a stack object
+ * is read-only data to everyone else (the masked view, the replay, a look-ahead
+ * clone), and a fresh object keeps that true without a mutable escape hatch.
+ */
+function patchSpellOnStack(
+  state: GameState,
+  instanceId: InstanceId,
+  patch: Partial<Pick<SpellStackObject, 'xValue' | 'kicked' | 'awaitingCastChoice'>>,
+): void {
+  const index = state.stack.findIndex((object) => object.kind === 'spell' && object.instanceId === instanceId);
+  if (index < 0) return;
+  const spell = state.stack[index] as SpellStackObject;
+  const next: SpellStackObject = { ...spell, ...patch };
+  // `awaitingCastChoice: undefined` must CLEAR the marker, not store undefined —
+  // a field-by-field consumer (clone.ts) keys on presence.
+  if (patch.awaitingCastChoice === undefined && 'awaitingCastChoice' in patch) {
+    delete (next as { awaitingCastChoice?: unknown }).awaitingCastChoice;
+  }
+  state.stack[index] = next;
+}
+
+/**
+ * The bound the engine offers for X: the largest value whose generic cost the
+ * caster could actually produce (floating pool + everything still untappable),
+ * answered by the SAME planner that will later make the payment — so the range
+ * on offer cannot disagree with what the board can fund.
+ *
+ * Linear from zero: the planner refuses quickly once the board runs dry, X
+ * spells are cast a handful of times per game (never on the per-decision hot
+ * path), and a closed-form sum would be a second opinion on payability that
+ * could drift from the planner's.
+ */
+function maxAffordableX(state: GameState, player: PlayerId, xCount: number): number {
+  let max = 0;
+  while (max < MAX_X_VALUE && planPaymentFor(state, player, { generic: (max + 1) * xCount }) !== undefined) {
+    max += 1;
+  }
+  return max;
+}
+
+/**
+ * A hard ceiling on the X range the engine will offer. Generous — funding it
+ * needs this much mana available AT ONCE — and present so a degenerate board
+ * cannot make the bound search (or the answer enumeration) unbounded.
+ */
+const MAX_X_VALUE = 64;
+
+/**
+ * Ask the next unanswered cast-time question for a spell being cast, or record
+ * the forced answer and move on when only one answer is fundable. Order is the
+ * printed announcement order (CR 601.2b): the value of X first, then the
+ * optional additional cost.
+ */
+function askNextCastChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): void {
+  const spell = spellOnStack(state, spellInstanceId);
+  if (!spell) return;
+  const def = spell.card.def;
+  const caster = spell.controller;
+
+  const xCount = def.xCost ?? 0;
+  if (xCount > 0 && spell.xValue === undefined) {
+    const max = maxAffordableX(state, caster, xCount);
+    if (max <= 0) {
+      // X = 0 is the only value this board can fund — not a decision, so the
+      // game is not stopped to collect the inevitable (same rule as an
+      // unaffordable payMana). Recorded, then on to the next question.
+      patchSpellOnStack(state, spellInstanceId, { xValue: 0 });
+    } else {
+      const choice = normalizeChoiceRequest(
+        {
+          kind: 'chooseNumber',
+          chooser: caster,
+          prompt: `Choose a value for X (${def.name})`,
+          min: 0,
+          max,
+          // More X is the upside the caster cast the spell for — the steer a
+          // pilot answers by. It never affects which answers are legal.
+          valence: 'gain',
+        },
+        { id: state.nextInstanceId++, sourceInstanceId: spell.instanceId, sourceName: def.name },
+      );
+      if (choice) {
+        patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'x' });
+        parkCastChoice(state, choice, emit);
+        return;
+      }
+      patchSpellOnStack(state, spellInstanceId, { xValue: 0 });
+    }
+  }
+
+  const refreshed = spellOnStack(state, spellInstanceId);
+  if (!refreshed) return;
+  if (def.kicker && refreshed.kicked === undefined) {
+    if (!canAffordManaCost(state, caster, def.kicker)) {
+      // A caster who cannot pay is never asked — the spell is simply unkicked,
+      // the printed default.
+      patchSpellOnStack(state, spellInstanceId, { kicked: false });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'payMana',
+        chooser: caster,
+        prompt: `Pay the kicker ${formatManaCost(def.kicker)}? (${def.name})`,
+        cost: def.kicker,
+        affordable: true,
+        valence: 'gain',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: refreshed.instanceId, sourceName: def.name },
+    );
+    if (choice) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'kicker' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    patchSpellOnStack(state, spellInstanceId, { kicked: false });
+  }
+}
+
+/**
+ * After one cast-time answer is recorded: ask the spell's next question if it
+ * has one, aim any triggers that fired while the cast was being finished, and —
+ * when nothing further is being asked — hand the floor back to the caster, who
+ * never surrendered priority by casting.
+ */
+function finishCastChoice(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  caster: PlayerId,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  askNextCastChoice(state, spellInstanceId, emit);
+  if (!state.pendingChoice) aimPendingTriggers(state, emit);
+  if (!state.pendingChoice && !state.gameOver) {
+    state.priorityPlayer = caster;
+    state.consecutivePasses = 0;
+  }
+  return { state, events };
+}
+
+/** Park a cast-time question: the caster (its chooser) gets the floor. */
+function parkCastChoice(state: GameState, choice: PendingChoice, emit: (e: GameEvent) => void): void {
+  state.pendingChoice = choice;
+  state.priorityPlayer = choice.chooser;
+  state.consecutivePasses = 0;
+  emit({
+    type: 'choiceAsked',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    prompt: choice.prompt,
+    sourceInstanceId: choice.sourceInstanceId,
+    optionCount: choiceOptionCount(choice),
+  });
 }
 
 /**

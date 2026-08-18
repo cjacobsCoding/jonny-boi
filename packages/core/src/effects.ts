@@ -46,6 +46,16 @@ export interface EffectContext {
   readonly targets: ReadonlyArray<InstanceId | PlayerId>;
   /** The effect's params blob (opaque to core, defined by the primitive). */
   readonly params: Readonly<Record<string, unknown>>;
+  /**
+   * The value chosen for the spell's `{X}` cost at cast time, or `undefined`
+   * when this resolution has no X (a trigger, an ordinary spell). This is how
+   * "deals X damage" reads the number that was actually paid for — including
+   * AFTER the spell has left the stack, because the value rides the resolution
+   * frame, not the stack object.
+   */
+  readonly xValue?: number;
+  /** Whether the spell's kicker was paid at cast time ("if this spell was kicked"). */
+  readonly kicked?: boolean;
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -262,6 +272,8 @@ export function applyEffectRef(
     controller: base.controller,
     targets,
     params: ref.params ?? {},
+    xValue: base.xValue,
+    kicked: base.kicked,
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
@@ -310,7 +322,7 @@ export function applyEffectRef(
 }
 
 /** The parts of an `EffectContext` the caller supplies; the rest are wired here. */
-export type EffectContextBase = Pick<EffectContext, 'state' | 'source' | 'controller'>;
+export type EffectContextBase = Pick<EffectContext, 'state' | 'source' | 'controller' | 'xValue' | 'kicked'>;
 
 /**
  * Answer a question raised with no resolution to park into: normalise it, take the
