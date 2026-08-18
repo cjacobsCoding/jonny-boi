@@ -37,7 +37,8 @@ import type {
   PlayerId,
   CardType,
 } from '@jonny-boi/core';
-import { collectCardOptions, formatManaCost, isCreature, matchesCardFilter } from '@jonny-boi/core';
+import { collectCardOptions, formatManaCost, isCreature, isPlayerTarget, matchesCardFilter } from '@jonny-boi/core';
+import type { StackObject } from '@jonny-boi/core';
 import {
   boolParam,
   counterSpellOnStack,
@@ -533,6 +534,64 @@ export const counterUnlessPaid: EffectPrimitive = (ctx) => {
 /** Where the optional payment's cost lives in a card's params. */
 const UNLESS_PAID_PARAM = 'unlessPaid';
 
+/**
+ * `wardCounterUnlessPaid` — the resolution of a WARD trigger (CR 702.21):
+ * "counter the spell or ability that targeted this permanent unless its
+ * controller pays the ward cost".
+ *
+ * The id is core's reserved {@link WARD_COUNTER_PRIMITIVE} seam: core raises
+ * the trigger itself when an opponent's spell/ability targets a warded
+ * permanent ("becomes the target" is a moment only the engine sees), and this
+ * primitive supplies the behaviour through the SAME optional-payment machinery
+ * Mana Leak uses — the engine enriches affordability, charges the mana as the
+ * answer is accepted, and never asks a player who cannot pay.
+ *
+ * Unlike `counterUnlessPaid` this must counter ABILITIES too — ward reads
+ * "spell or ability", and a Flametongue-style trigger aimed at a warded
+ * creature is the ability case. Countering a trigger object is simply removing
+ * it from the stack (no card changes zones), reported with the same event a
+ * fizzled trigger emits so the log always says why the stack shrank.
+ */
+export const wardCounterUnlessPaid: EffectPrimitive = (ctx) => {
+  const target = ctx.targets[0];
+  if (target === undefined || isPlayerTarget(target)) return;
+  const object = ctx.state.stack.find((o) => o.instanceId === target);
+  if (!object) return; // already resolved or countered — safe no-op
+  const cost = manaCostParam(ctx, UNLESS_PAID_PARAM);
+  if (cost) {
+    // ASK FIRST, THEN MUTATE — nothing above this line has touched the state.
+    const paid = ctx.payOrDecline({
+      chooser: object.controller,
+      cost,
+      prompt: `Pay ${formatManaCost(cost)} (ward) or ${ctx.source.def.name}'s ward counters ${describeStackObject(object)}`,
+      // Paying keeps your spell/ability, so agreeing is the favourable branch
+      // for the chooser — exactly as with a soft counterspell.
+      valence: 'gain',
+    });
+    if (paid === undefined) return; // parked — resume later, nothing mutated
+    if (paid) return; // paid in full: the targeting object resolves as normal
+  }
+  if (object.kind === 'spell') {
+    counterSpellOnStack(ctx, object);
+    return;
+  }
+  const idx = ctx.state.stack.indexOf(object);
+  if (idx < 0) return;
+  ctx.state.stack.splice(idx, 1);
+  ctx.emit({
+    type: 'triggerRemovedFromStack',
+    sourceInstanceId: object.sourceInstanceId,
+    controller: object.controller,
+    label: object.label,
+    reason: `countered by ${ctx.source.def.name}'s ward`,
+  });
+};
+
+/** How a countered stack object reads in the ward prompt. */
+function describeStackObject(object: StackObject): string {
+  return object.kind === 'spell' ? object.card.def.name : object.label;
+}
+
 // --- registry ------------------------------------------------------------------------
 
 /**
@@ -552,4 +611,5 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  wardCounterUnlessPaid,
 });

@@ -154,6 +154,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'keyword', word: 'hexproof' },
       },
       {
+        title: 'Protection from [quality]',
+        detail:
+          'All four halves, keyed on the source: can\'t be targeted, can\'t be dealt damage (combat and noncombat), can\'t be enchanted or equipped, and can\'t be blocked, by sources with the named color, colorless/multicolored, artifacts, creatures, or everything. Granted protection layers through continuous effects and wears off at cleanup.',
+        witness: { kind: 'rule', id: 'grant-protection-until-eot' },
+      },
+      {
+        title: 'Ward {N}',
+        detail:
+          'Targeting an opponent\'s warded permanent triggers "counter unless you pay {N}", asked through the same optional-payment machinery as Mana Leak — and a player who cannot pay is never asked. Fires on spells and on targeted abilities alike.',
+        witness: { kind: 'primitive', id: 'wardCounterUnlessPaid' },
+      },
+      {
         title: 'Blocking restrictions',
         detail:
           'Menace judges the whole block declaration (not any single pair), and "can\'t be blocked" is enforced per pair.',

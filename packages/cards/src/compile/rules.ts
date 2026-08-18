@@ -17,8 +17,10 @@
 import type {
   CardType,
   EffectRef,
+  KeywordFlags,
   ManaColor,
   ManaProduction,
+  ProtectionQuality,
   TargetRestriction,
   TriggerCondition,
   TriggeredAbility,
@@ -242,6 +244,78 @@ function discardFilterFor(word: string): (typeof DISCARD_RESTRICTIONS)[string] |
 function keywordFlag(word: string): Record<string, boolean> | null {
   const field = KEYWORD_FLAGS[word.trim().toLowerCase()];
   return field ? { [field]: true } : null;
+}
+
+/**
+ * The quality words a printed "protection from ..." may name, mapped to the core
+ * {@link ProtectionQuality} each means. A CLOSED table: a quality outside it
+ * ("protection from Demons", "from instants and from sorceries") has no faithful
+ * engine check, so those cards keep reporting rather than compiling a protection
+ * that quietly protects from the wrong things.
+ */
+const PROTECTION_QUALITY_WORDS: Readonly<Record<string, ProtectionQuality>> = Object.freeze({
+  white: 'white',
+  blue: 'blue',
+  black: 'black',
+  red: 'red',
+  green: 'green',
+  colorless: 'colorless',
+  multicolored: 'multicolored',
+  artifacts: 'artifacts',
+  creatures: 'creatures',
+  everything: 'everything',
+});
+
+/** How a printed protection line separates its qualities ("... and from ..."). */
+const PROTECTION_SEPARATOR = /,? and (?:from )?|, /;
+
+/** `Ward {N}` - only the plain generic-cost form; anything else must report. */
+const WARD_PATTERN = /^ward \{(\d+)\}$/;
+
+/** `Protection from X[ and from Y...]` - the capturing form of the printed line. */
+const PROTECTION_PATTERN = /^protection from (.+)$/;
+
+/**
+ * Parse a printed protection quality list ("red", "black and from green") into
+ * core qualities, or `null` when ANY word is outside the closed table - a
+ * half-understood protection line must report, never protect from less than it
+ * says.
+ */
+function parseProtectionQualities(text: string): readonly ProtectionQuality[] | null {
+  const words = text
+    .split(PROTECTION_SEPARATOR)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  const qualities: ProtectionQuality[] = [];
+  for (const word of words) {
+    const quality = PROTECTION_QUALITY_WORDS[word];
+    if (!quality) return null;
+    if (!qualities.includes(quality)) qualities.push(quality);
+  }
+  return qualities;
+}
+
+/**
+ * Compile the two payload-carrying keyword abilities - `Ward {N}` and
+ * `Protection from [quality]` - into the keyword fields core enforces, or
+ * `null` when the word is neither (or a form outside the closed tables).
+ * Shared by the keyword-line compiler and the keyword sweep so the two cannot
+ * disagree about which printed forms are real.
+ */
+export function parseProtectionOrWard(word: string): KeywordFlags | null {
+  const text = word.trim().toLowerCase();
+  const ward = WARD_PATTERN.exec(text);
+  if (ward) {
+    const cost = Number.parseInt(ward[1] ?? '', 10);
+    return Number.isFinite(cost) && cost > 0 ? { ward: cost } : null;
+  }
+  const protection = PROTECTION_PATTERN.exec(text);
+  if (protection) {
+    const qualities = parseProtectionQualities(protection[1] ?? '');
+    return qualities === null ? null : { protectionFrom: qualities };
+  }
+  return null;
 }
 
 /**
@@ -795,6 +869,24 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
             primitive: 'grantKeywordUntilEndOfTurn',
             params: { keywords, targets: CREATURE_TARGET },
           });
+    },
+  },
+  {
+    // Protection granted as a combat trick ("Gods Willing" without the scry).
+    // Compiles to the SAME grant primitive as a keyword grant; the payload is
+    // the quality list, which the continuous layer unions onto the printed set
+    // - so an until-end-of-turn protection genuinely wears off at cleanup.
+    id: 'grant-protection-until-eot',
+    description: '"Target creature gains protection from [quality] until end of turn"',
+    pattern: /^target creature gains protection from ([a-z, ]+?) until end of turn$/,
+    needsChosenTarget: true,
+    build(match) {
+      const qualities = parseProtectionQualities(match[1] ?? '');
+      if (qualities === null) return null;
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { protectionFrom: qualities }, targets: CREATURE_TARGET },
+      });
     },
   },
   {
@@ -1467,11 +1559,14 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
   {
-    // Hexproof and shroud are implemented keyword flags now. Ward (pay a cost to
-    // target) and protection (a bundle of can't-be-blocked/damaged/enchanted
-    // rules) are genuinely still missing, so the hint names only those.
+    // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
+    // COMPILE now (source-aware targeting: all four protection halves plus the
+    // ward pay-or-counter trigger are engine-enforced). What still lands here
+    // is a TEMPLATE outside the closed tables: a ward cost that is not plain
+    // generic mana ("Ward-Pay 3 life", "Ward {X}"), or a protection quality
+    // with no engine meaning ("protection from Demons", "from instants").
     pattern: /\bward\b|\bprotection from\b/,
-    missingEngineSystem: 'ward and protection-from (cost-to-target and the protection bundle)',
+    missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },
   { pattern: /\bcycling\b|\bkicker\b|\bbuyback\b|\bmadness\b/, missingEngineSystem: 'alternative and additional casting costs' },
   { pattern: /\{x\}|\bx damage\b|\bequal to\b/, missingEngineSystem: 'variable ({X}) and derived values' },

@@ -125,6 +125,23 @@ export {
   describeRestriction,
 } from './targeting.js';
 
+// Protection from [quality] + ward (protection.ts): the source-aware half of
+// targeting/damage/attachment/blocking legality, and the reserved ward seam.
+export type { ProtectionQuality } from './card.js';
+export { unionProtection } from './card.js';
+export {
+  PROTECTION_QUALITIES,
+  WARD_COST_PARAM,
+  WARD_COUNTER_PRIMITIVE,
+  colorsOfDefinition,
+  effectiveProtectionOf,
+  effectiveWardOf,
+  isProtectionQuality,
+  protectionBlocksSource,
+  protectionPreventsDamage,
+  sourceHasQuality,
+} from './protection.js';
+
 // Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.
 export type {
   TriggeredAbility,
@@ -289,6 +306,7 @@ export {
   effectiveToughness,
   remainingToughness,
   effectiveKeywords,
+  mergeKeywordGrant,
   hasKeyword,
   PLUS_ONE_COUNTER,
   MINUS_ONE_COUNTER,

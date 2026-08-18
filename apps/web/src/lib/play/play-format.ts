@@ -67,6 +67,11 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
         text: `${r.name(event.source)} deals ${event.amount} to ${targetText(event.target, r)}.`,
         tone: 'damage',
       };
+    case 'damagePrevented':
+      // A swing that did nothing must SAY why, or the log reads like a bug.
+      return {
+        text: `Protection prevents ${event.amount} damage from ${r.name(event.source)} to ${targetText(event.target, r)}.`,
+      };
     case 'lifeChanged':
       return {
         text: `${r.playerName(event.player)} ${event.delta >= 0 ? 'gains' : 'loses'} ${Math.abs(event.delta)} life (now ${event.to}).`,

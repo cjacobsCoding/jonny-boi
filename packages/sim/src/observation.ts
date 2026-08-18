@@ -162,6 +162,9 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   attackersDeclared: 'public',
   blockersDeclared: 'public',
   damageDealt: 'public',
+  // Prevented damage is as face-up as dealt damage: the swing, the shield and
+  // the amount all happen on the table.
+  damagePrevented: 'public',
   lifeChanged: 'public',
   gainLife: 'public',
   creatureDied: 'public',
