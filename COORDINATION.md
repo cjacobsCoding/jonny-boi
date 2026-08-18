@@ -84,7 +84,7 @@ throughput (games/sec) from regressing.
 | feat/attachment-cards | worker | packages/cards (data + compile/text.ts + build-expansion.ts + 2 tests), packages/data-tools/data, apps/web/src/data (generated), 1 stale comment in apps/web LabView.tsx, DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/pilot-observation | worker | packages/sim (new observation.ts + test + bench; match.ts, index.ts, package.json) + MINIMAL packages/ai (new observation.ts, reveal-tally.ts + test; additive edits to pilot.ts, index.ts, one comment in tree-reuse.ts), DESIGN §2 + §3.4c | 🚧 PUSHED, not merged |
 | feat/tactical-eval | worker | packages/ai (new: tactical.ts + tactical-suite.ts + 2 test files; evaluator/hybrid/hybrid-config/index/tsconfig/bench + 2 existing tests), DESIGN §3.4d | 🚧 PUSHED, not merged — branches off main |
-| fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass.ts, why-disabled.ts, online-config.ts + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, apps/server land-playability.test.ts, COORDINATION.md | 🚧 PUSHED, not merged — 2273 tests, build exit 0 |
+| fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | 🚧 PUSHED, not merged — 2284 tests, build exit 0 |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -131,11 +131,30 @@ _Append dated notes here; keep them short. Newest at top._
      declared). That key calls the second window a duplicate and hangs the game — observed. Dedupe on
      the identity of the frame the server pushed instead.
 
-  **STILL OPEN (not mine, not done):** drag-and-drop (LEAD 1); the lobby defaults the deck picker to
-  the user's *invalid* imported deck ("deck size 2 is below the minimum of 60") so a new player's
-  first sight is a wall of red errors and a disabled button; the web app has **no debug inspector
-  panel at all**, so rule 3 has no seam to register against; and online play has no DESIGN.md §3
-  entry to flip. (Integrator)
+  **UPDATE 2026-08-17 — LEAD 1 CLOSED: drag-to-play shipped** (same branch, suite now **2284/0**,
+  build exit 0). Built on **Pointer Events, not HTML5 drag-and-drop**, deliberately: `dragstart`/
+  `drop` never fire on touch browsers and this PWA ships to Android — half the audience would get a
+  silently dead drag, the exact "looks broken" class this branch exists to kill. Pure state machine
+  in `lib/online/drag-to-play.ts` (11 tests: threshold, drop-in/out, no un-commit, idle edges), DOM
+  glue in `useDragToPlay.ts`, wired so drag and click route through ONE `activateHandCard` — a drag
+  can never diverge from what clicking the same card does. The viewer's seat panel is the drop zone
+  (dashed outline while a card is in flight, solid+tint when over). Verified live both ways: Alice
+  dragged a Mountain onto her battlefield; Bob played a Guildgate by plain click through the same
+  path; a release outside the zone cancels and plays nothing.
+
+  Three integration notes: (1) the press-vs-drag threshold (`DRAG_START_THRESHOLD_PX`) is what keeps
+  tap-to-play alive on touch — every tap wobbles a few px and would otherwise die as a zero-distance
+  drop; (2) after a real drag the browser still synthesizes a `click` on the pressed card —
+  `onClickCapture` swallows exactly that one, or a drop would submit twice; (3) `setPointerCapture`
+  throws on pointers the browser no longer considers active — it is wrapped as the enhancement it
+  is, never a gesture-killer.
+
+  **STILL OPEN (not mine, not done):** the lobby defaults the deck picker to the user's *invalid*
+  imported deck ("deck size 2 is below the minimum of 60") so a new player's first sight is a wall
+  of red errors and a disabled button; the web app has **no debug inspector panel at all**, so rule 3
+  has no seam to register against; and online play has no DESIGN.md §3 entry to flip. Hotseat could
+  lift the same drag hook later — the machine has no online dependency; it lives in lib/online only
+  to respect this branch's file claim. (Integrator)
 
 - 2026-08-15 DESKTOP-90PJPM4: 🔴 **HANDOFF — ONLINE MULTIPLAYER IS UNPLAYABLE.** *(superseded by the
   entry above — kept for the elimination trail.)* User report,

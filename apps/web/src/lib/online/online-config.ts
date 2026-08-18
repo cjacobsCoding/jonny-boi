@@ -116,6 +116,14 @@ export const AUTO_PASS_EMPTY_PRIORITY = true;
 export const AUTO_PASS_DELAY_MS = 300;
 
 /**
+ * Drag-to-play: how far (px, straight-line) a pressed card must travel before the
+ * press commits to being a drag. Below this a release is a plain click/tap — the
+ * threshold is what keeps tap-to-play alive on touch screens, where every tap
+ * would otherwise register as a zero-distance drag and die on release.
+ */
+export const DRAG_START_THRESHOLD_PX = 8;
+
+/**
  * Room-code shape, re-exported from the shared PROTOCOL package.
  *
  * This used to be its own literal — `6` — while the server generated codes of
