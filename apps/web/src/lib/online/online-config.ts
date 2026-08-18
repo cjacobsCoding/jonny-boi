@@ -101,6 +101,29 @@ export const PING_INTERVAL_MS = 20_000;
 export const ERROR_TOAST_MS = 4_000;
 
 /**
+ * Auto-advance through priority windows where passing is the ONLY legal action
+ * (see `auto-pass.ts` for the rule and the bug it fixes). Tunable, not baked in:
+ * a player who wants to sit in every empty `upkeep` can have it off.
+ */
+export const AUTO_PASS_EMPTY_PRIORITY = true;
+
+/**
+ * Delay before an auto-pass fires (ms). Not cosmetic padding: passing instantly
+ * makes several steps collapse in one frame, so the step readout appears to jump
+ * and the game log gains lines with nothing on screen to explain them. A short
+ * beat lets each step register as it goes by.
+ */
+export const AUTO_PASS_DELAY_MS = 300;
+
+/**
+ * Drag-to-play: how far (px, straight-line) a pressed card must travel before the
+ * press commits to being a drag. Below this a release is a plain click/tap — the
+ * threshold is what keeps tap-to-play alive on touch screens, where every tap
+ * would otherwise register as a zero-distance drag and die on release.
+ */
+export const DRAG_START_THRESHOLD_PX = 8;
+
+/**
  * Room-code shape, re-exported from the shared PROTOCOL package.
  *
  * This used to be its own literal — `6` — while the server generated codes of

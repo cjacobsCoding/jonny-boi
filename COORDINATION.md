@@ -88,6 +88,7 @@ throughput (games/sec) from regressing.
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/about-mechanics | worker | apps/web (new views/AboutView.tsx + views/about.css + lib/about/mechanics.ts+test; App.tsx nav), packages/cards (export-only edits: compile/compile.ts, compile/index.ts, index.ts) | 🚧 PUSHED, not merged |
+| fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -102,11 +103,122 @@ _Append dated notes here; keep them short. Newest at top._
   test run, so a removed mechanic fails the suite instead of lying on the page. Also surfaces the
   per-browser "gaps you've hit" queue from `unsupportedRegistry` (live subscription + Markdown
   export). `packages/cards` edits are re-exports only — no behavior change. Verified: full suite
-  **2349 passed, 0 failed**; `npm run verify` exit 0; `npm run build` exit 0; live dev-server check
+  **2349 passed, 0 failed** (re-run after merging origin/main incl. fix/online-playability:
+  **2424 passed, 0 failed**); `npm run verify` exit 0; `npm run build` exit 0; live dev-server check
   of the About tab on :5199 — renders real derived data (62 templates, 14 keywords, 9 missing
   systems, 22 template gaps, 7 stubbed cards), 0 console errors. NOT done: no DESIGN §3 flip (the
   About page is not a §3 roadmap row); no debug-inspector entry (the page is itself the inspector
   for compiler coverage — say if you want one anyway).
+
+- 2026-08-15 DESKTOP-90PJPM4: ✅ **RESOLVED — the "unplayable online" report, diagnosed and fixed.**
+  Branch `fix/online-playability` (worktree `D:\Cool Stuff\Claude\jb-online`). Suite **2273 passed,
+  0 failed** (was 2250); `npm run build -w @jonny-boi/web` exit 0; lint clean. The handoff brief
+  below is now HISTORY — read this entry first.
+
+  **ROOT CAUSE (not a bug in the server, the masking, or the adapter — all were sound, as the brief
+  had already proven).** A game opens in the `upkeep` step, and BOTH seats are given priority in
+  `upkeep` and again in `draw`, where the server's only legal action is `passPriority`. So the board
+  said **"Your move"** over a hand in which every card — the Mountain included — was
+  `play-card--disabled`, and the first land could not be played until **four `Pass / advance` clicks**
+  (two per seat) had gone by. Reproduced exactly, on both seats, before changing anything: that is
+  the user's "I can't even drag lands out… clicking, dragging, nothing works."
+
+  - **LEAD 2 split: UX defect, not an adapter bug.** The waiting seat DID render "Waiting for Alice…"
+    correctly, so `board-adapter.ts` is exonerated. The dead-hand-on-your-own-turn half is the real
+    fault.
+  - **LEAD 1 confirmed and still open.** There is no drag-and-drop anywhere in the online board; hand
+    cards are click-only. Dragging never worked and still doesn't — a missing feature, not a regression.
+  - **LEAD 3 looks unreachable.** `screen: 'mulligan'` is only ever set by `mulliganPrompt`, which
+    always carries a hand, so the `OnlinePlay.tsx:137` "Waiting for your hand…" dead end appears to be
+    dead code. NOT proven; left alone.
+
+  **THE FIX** (all in `apps/web`, disjoint from other branches):
+  - `lib/online/auto-pass.ts` (new, pure) — advance automatically when passing is the ONLY thing the
+    seat may do. Narrow by construction: it stops on any non-pass legal action, a non-empty stack, a
+    parked choice, or a card fundable by tapping — so it cannot skip a decision. Verified live that
+    `declareBlockers` stops it, so blocks are never auto-skipped.
+  - `lib/online/why-disabled.ts` (new, pure) — every greyed card now says WHY on hover
+    ("Lands can only be played in your main phase", "You've already played a land this turn",
+    "Waiting for Alice — you don't have priority yet").
+  - `AUTO_PASS_EMPTY_PRIORITY` / `AUTO_PASS_DELAY_MS` in `online-config.ts`; `PlayCard` gained an
+    optional `reason` tooltip (additive — hotseat unchanged).
+
+  **TWO TRAPS worth knowing, both found only by running it:**
+  1. **StrictMode kills a naive auto-advance.** Marking the window as "passed" at *schedule* time
+     deadlocks: run 1 marks + schedules, the cleanup cancels the timer, run 2 sees the mark and
+     declines to reschedule → the board sits on "advancing…" forever. Mark it when the pass FIRES.
+  2. **Do not dedupe on a `turn:step:priority` key.** A seat legitimately needs to pass TWICE in one
+     `declareBlockers` step with the stack empty throughout (priority returns after blocks are
+     declared). That key calls the second window a duplicate and hangs the game — observed. Dedupe on
+     the identity of the frame the server pushed instead.
+
+  **UPDATE 2026-08-17 — LEAD 1 CLOSED: drag-to-play shipped** (same branch, suite now **2284/0**,
+  build exit 0). Built on **Pointer Events, not HTML5 drag-and-drop**, deliberately: `dragstart`/
+  `drop` never fire on touch browsers and this PWA ships to Android — half the audience would get a
+  silently dead drag, the exact "looks broken" class this branch exists to kill. Pure state machine
+  in `lib/online/drag-to-play.ts` (11 tests: threshold, drop-in/out, no un-commit, idle edges), DOM
+  glue in `useDragToPlay.ts`, wired so drag and click route through ONE `activateHandCard` — a drag
+  can never diverge from what clicking the same card does. The viewer's seat panel is the drop zone
+  (dashed outline while a card is in flight, solid+tint when over). Verified live both ways: Alice
+  dragged a Mountain onto her battlefield; Bob played a Guildgate by plain click through the same
+  path; a release outside the zone cancels and plays nothing.
+
+  Three integration notes: (1) the press-vs-drag threshold (`DRAG_START_THRESHOLD_PX`) is what keeps
+  tap-to-play alive on touch — every tap wobbles a few px and would otherwise die as a zero-distance
+  drop; (2) after a real drag the browser still synthesizes a `click` on the pressed card —
+  `onClickCapture` swallows exactly that one, or a drop would submit twice; (3) `setPointerCapture`
+  throws on pointers the browser no longer considers active — it is wrapped as the enhancement it
+  is, never a gesture-killer.
+
+  **STILL OPEN (not mine, not done):** the lobby defaults the deck picker to the user's *invalid*
+  imported deck ("deck size 2 is below the minimum of 60") so a new player's first sight is a wall
+  of red errors and a disabled button; the web app has **no debug inspector panel at all**, so rule 3
+  has no seam to register against; and online play has no DESIGN.md §3 entry to flip. Hotseat could
+  lift the same drag hook later — the machine has no online dependency; it lives in lib/online only
+  to respect this branch's file claim. (Integrator)
+
+- 2026-08-15 DESKTOP-90PJPM4: 🔴 **HANDOFF — ONLINE MULTIPLAYER IS UNPLAYABLE.** *(superseded by the
+  entry above — kept for the elimination trail.)* User report,
+  verbatim: "I joined with someone but I cant even drag lands out to play them. Tried clicking,
+  dragging, nothing works." NOT FIXED. Branch `fix/online-playability` carries only the
+  investigation. **Read this before touching online play so you do not redo the elimination.**
+
+  **ALREADY RULED OUT — do not re-investigate.** `apps/server/src/land-playability.test.ts` drives
+  a real two-player game through the transport-free `Room` with fake connections and asserts, FOR
+  BOTH SEATS: priority is held in its own precombat main, ≥1 `playLand` is offered, every offered
+  `instanceId` is in that seat's own MASKED hand, and submitting it puts the land on the
+  battlefield. All 6 pass (suite 2250, 0 failed). So the server, the masking, the legal-action
+  path and the id alignment are SOUND. The fault is above them: client rendering, input wiring, or
+  the user simply not holding priority.
+
+  **LEAD 1 — there is no drag-and-drop at all.** `apps/web/src/components/online/OnlineBoard.tsx`
+  wires only `onClick`: no `draggable`, no `onDragStart`/`onDrop`, no drop targets anywhere.
+  Dragging a land can never have worked. This is a MISSING FEATURE, not a regression — so half the
+  report is explained outright, and "clicking does nothing" is the part still unaccounted for.
+
+  **LEAD 2 (most likely for the click half) — a waiting seat is indistinguishable from a broken
+  app.** The seat without priority is sent `legalActions: []`, so every card greys out. Pinned
+  deliberately as the last test in that file, because it is correct behaviour that LOOKS like the
+  bug. The user JOINED someone else's game, i.e. was seat B on seat A's turn. Check what the action
+  bar actually rendered: if it said "Waiting for <name>…" the app was working and this is a UX
+  defect (make the waiting state loud, and say WHY the hand is dead). If it said "Your move" and
+  clicking still did nothing, the fault is in `apps/web/src/lib/online/board-adapter.ts`
+  (`maskedViewToBoardView`, line ~126: `self: seatView(view.players[viewer], …)`) or in
+  OnlineBoard's disabled predicate — everything beneath those is already proven good.
+
+  **LEAD 3 — a real dead end, unproven as this bug.** `apps/web/src/components/online/OnlinePlay.tsx`
+  ~line 137: when phase is `mulligan` but `mulliganHand` is missing, it renders a bare "Waiting for
+  your hand…" with NO Keep button and no recovery. A player who lands there is stuck forever.
+
+  **START HERE:** run the app, open two browsers, join a room, and screenshot BOTH seats' action
+  bars on turn 1. That single observation splits LEAD 2 into "UX defect" vs "adapter bug" and costs
+  minutes. Do not start by reading the server.
+
+  ⚠️ FIXTURE TRAP that cost a cycle, now commented in the test: `DeckList.cardId` is the card
+  **NAME** (`'Forest'`, not `'forest'`). A wrong id is SILENTLY an unknown card → deck rejected →
+  the room never starts a game → every assertion fails with "never sent a state", pointing nowhere
+  near the deck. Worth checking whether the real deck-selection screen fails as silently.
+  (Integrator — handing off with ~0 context left.)
 
 - 2026-08-15 integrator: **`feat/blocking-restrictions` + `feat/derived-values` MERGED + DEPLOYED**
   (both Deploy PWA green). main = **2244 tests, build exit 0**.
