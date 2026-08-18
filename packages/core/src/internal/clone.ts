@@ -63,6 +63,13 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // a field that is almost always null. Copying it conditionally keeps the ordinary
   // instance byte-for-byte the object it has always been.
   if (inst.attachedTo != null) copy.attachedTo = inst.attachedTo;
+  // Same conditional-copy rule as `attachedTo`, and the same stakes as a
+  // dropped stack-object field: `def` is the ACTIVE face (a transformed DFC
+  // points at its nested back face), and `printedDef` is the only way back to
+  // the front. Dropping it here would silently freeze a transformed permanent
+  // on its back face for the rest of the game — and losing the pair together
+  // would untransform it — on the very next action's clone.
+  if (inst.printedDef != null) copy.printedDef = inst.printedDef;
   return copy;
 }
 
@@ -120,12 +127,15 @@ function cloneStackObject(o: StackObject): StackObject {
     targets: [...o.targets],
     // Conditional for the same reason as `awaitingTargets` above: dropping any
     // of these would lose a chosen X / kicked flag (the spell would resolve as
-    // if unpaid) or lose the "cast still being finished" marker, on the clone
-    // made at every action boundary. Conditional so the ordinary spell object
-    // stays byte-for-byte what it always was.
+    // if unpaid), lose the "cast still being finished" marker, or turn a cloned
+    // flashback cast back into an ordinary one (slipping into the graveyard on
+    // resolution instead of exile) — on the clone made at every action
+    // boundary. Conditional so the ordinary spell object stays byte-for-byte
+    // what it always was.
     ...(o.xValue !== undefined ? { xValue: o.xValue } : {}),
     ...(o.kicked !== undefined ? { kicked: o.kicked } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
+    ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
   };
 }
 

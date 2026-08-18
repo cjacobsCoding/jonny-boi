@@ -276,7 +276,7 @@ export function applyEffectRef(
     kicked: base.kicked,
     emit,
     addContinuousEffect(mod) {
-      return addContinuousEffectToState(base.state, base.source.instanceId, mod, emit);
+      return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
     },
     createToken(def, controller) {
       return createTokenInState(base.state, def, controller ?? base.controller, emit);
@@ -366,6 +366,7 @@ export function shuffleLibraryInState(state: GameState, player: PlayerId): void 
 function addContinuousEffectToState(
   state: GameState,
   sourceInstanceId: InstanceId,
+  controller: PlayerId,
   mod: ContinuousModRequest,
   emit: (event: GameEvent) => void,
 ): number {
@@ -374,9 +375,12 @@ function addContinuousEffectToState(
   const target = mod.target ?? sourceInstanceId;
 
   // A control change is applied to the instance NOW (and recorded so expiry can
-  // revert it); every other field is a layered read left to the index.
+  // revert it); every other field is a layered read left to the index. The
+  // resolving effect's controller is the stealer when the source is a SPELL —
+  // a resolving Act of Treason is on the stack, not the battlefield, and
+  // without this fallback its control change silently did nothing.
   const controlChange = mod.takeControl
-    ? applyControlChange(state, target, sourceInstanceId, emit)
+    ? applyControlChange(state, target, sourceInstanceId, emit, controller)
     : undefined;
 
   state.continuous.push({

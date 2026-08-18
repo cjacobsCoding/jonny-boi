@@ -44,14 +44,27 @@ export interface TapForManaAction {
 export const DEFAULT_MANA_MODE = 0;
 
 /**
- * Cast a spell from hand onto the stack. `targets` carries any chosen targets
- * (instance ids and/or players); empty when the spell needs none.
+ * The zones a spell may be cast from. `'hand'` is the default everywhere it is
+ * omitted; `'graveyard'` is a flashback cast (the card must declare
+ * `CardDefinition.flashback`, whose cost is paid instead of the printed one).
+ */
+export type CastZone = 'hand' | 'graveyard';
+
+/**
+ * Cast a spell onto the stack. `targets` carries any chosen targets (instance
+ * ids and/or players); empty when the spell needs none.
+ *
+ * `fromZone` names the SOURCE ZONE explicitly (omitted means `'hand'`), and the
+ * engine threads it cast → stack → resolution — which is what makes flashback's
+ * "exile instead of graveyard" fall out of tracked state rather than being a
+ * special case at each exit from the stack.
  */
 export interface CastSpellAction {
   readonly kind: 'castSpell';
   readonly player: PlayerId;
   readonly instanceId: InstanceId;
   readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+  readonly fromZone?: CastZone;
 }
 
 /**

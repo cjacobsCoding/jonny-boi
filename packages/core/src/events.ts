@@ -33,6 +33,12 @@ export type GameEvent =
       readonly name: string;
       /** The card types of the spell cast (so cast-triggers can filter by type). */
       readonly castTypes: readonly CardType[];
+      /**
+       * Present (as `'graveyard'`) when this was a flashback cast, so the log,
+       * the replay and the inspector can say WHICH way the spell was cast —
+       * absent for the ordinary from-hand cast every existing consumer knows.
+       */
+      readonly fromZone?: 'graveyard';
     }
   | {
       readonly type: 'stackResolved';
@@ -194,6 +200,20 @@ export type GameEvent =
       readonly type: 'attachmentPutIntoGraveyard';
       readonly instanceId: InstanceId;
       readonly name: string;
+    }
+  | {
+      /**
+       * A double-faced permanent TRANSFORMED (CR 701.28): its active face
+       * swapped. Deliberately NOT a `zoneChange` — transforming is not a zone
+       * change (CR 712.8), so counters/damage/attachments persist and no
+       * ETB/leaves trigger may fire off it. `toName` is the face now showing,
+       * which is what a replay/board needs to re-render the permanent.
+       */
+      readonly type: 'transformed';
+      readonly instanceId: InstanceId;
+      readonly fromName: string;
+      readonly toName: string;
+      readonly faceUp: 'front' | 'back';
     }
   | {
       // A token permanent was created on the battlefield.

@@ -198,6 +198,23 @@ export interface CardDefinition {
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
+   * Flashback — "You may cast this card from your graveyard for its flashback
+   * cost. Then exile it." (CR 702.34). The value is that cost.
+   *
+   * Two halves, both engine-enforced from this one field:
+   *  - **The cast**: a `castSpell` action with `fromZone: 'graveyard'` pays THIS
+   *    cost instead of `cost`, honoring the card's normal timing (a sorcery
+   *    flashes back only at sorcery speed).
+   *  - **The exile**: a spell cast from the graveyard is exiled whenever it
+   *    would leave the stack — resolved OR countered (CR 702.34a) — never put
+   *    back into the graveyard. See `spellLeaveDestination` in state.ts.
+   *
+   * Only the PLAIN mana-cost form is modelled. A flashback cost with {X} or
+   * additional non-mana costs ("Flashback—{1}{U}, Discard a card") needs the
+   * cast-cost-modification system and stays reported by the compiler.
+   */
+  readonly flashback?: ManaCost;
+  /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
    * — the trigger machinery (triggers.ts) matches conditions against the event log
@@ -223,6 +240,33 @@ export interface CardDefinition {
    * bookkeeping. Omit for cards with none (the overwhelming majority).
    */
   readonly statics?: readonly import('./statics.js').StaticAbility[];
+  /**
+   * The SECOND FACE of a transforming double-faced card (Innistrad-style), as a
+   * complete nested definition — everything a face can print: name, types, P/T,
+   * keywords, triggers, statics, the lot.
+   *
+   * Present only on the FRONT face. The back face never carries a `backFace` of
+   * its own; it is marked {@link isBackFace} instead, and the way back to the
+   * front is the instance's `printedDef` (state.ts) — deliberately NOT a back-
+   * reference here, so definitions stay acyclic and serializable as plain data
+   * (the generated pool module writes them as literals).
+   *
+   * Which face is UP is per-permanent state, not definition data: a transformed
+   * permanent's `CardInstance.def` points at this nested definition, so every
+   * characteristic read in the engine (combat, targeting, triggers, statics,
+   * the AI, the renderer) routes through the active face with no second code
+   * path. See `transform.ts` for the swap and CR 712 for why it is not a zone
+   * change.
+   */
+  readonly backFace?: CardDefinition;
+  /**
+   * Marks this definition as the BACK face of a transforming double-faced card.
+   * A back face is never castable and never starts in any zone face-up (CR
+   * 712.8a: a DFC is always front-face-up everywhere except the battlefield) —
+   * the cast/play paths refuse it defensively, though in practice a back-face
+   * definition only ever appears as a battlefield permanent's active face.
+   */
+  readonly isBackFace?: boolean;
   /**
    * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
    * data: what it may be attached to, what it does to its host while attached, and

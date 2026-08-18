@@ -78,9 +78,22 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     for (let i = 0; i < battlefield.length; i++) {
       const inst = battlefield[i] as (typeof battlefield)[number];
       const triggers = inst.def.triggers;
-      if (triggers === undefined || triggers.length === 0) continue;
+      if (triggers === undefined || triggers.length === 0) {
+        // A permanent that TRANSFORMED to a triggerless face mid-action must be
+        // FORGOTTEN, not kept as last-known-information: it is still on the
+        // battlefield, so its current face — not the one it used to show —
+        // governs what can trigger. (Last-known-info is only for permanents
+        // that have LEFT, which the map otherwise exists to serve.) The `?.`
+        // keeps the triggerless-board fast path allocation-free.
+        if (seenSources?.delete(inst.instanceId)) snapshot = null;
+        continue;
+      }
       const known = seenSources?.get(inst.instanceId);
-      if (known !== undefined && known.controller === inst.controller) continue;
+      // `known.triggers === triggers` is the transform check: abilities come
+      // from the immutable DEFINITION, but `inst.def` is the ACTIVE face and a
+      // transform swaps it — so identity of the trigger list, not presence of
+      // the entry, is what proves the cached source is still current.
+      if (known !== undefined && known.controller === inst.controller && known.triggers === triggers) continue;
       (seenSources ??= new Map()).set(inst.instanceId, {
         instanceId: inst.instanceId,
         controller: inst.controller,

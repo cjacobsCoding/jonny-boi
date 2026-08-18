@@ -177,6 +177,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'keyword', word: 'flash' },
       },
       {
+        title: 'Flashback',
+        detail:
+          'A "Flashback {cost}" instant or sorcery casts from your graveyard for that cost — honoring its normal timing — and is exiled as it leaves the stack, even when countered (CR 702.34a). Plain mana costs only; {X}/additional-cost flashback still reports.',
+        witness: { kind: 'rule', id: 'flashback-cost' },
+      },
+      {
         title: 'Prowess',
         detail: 'Modelled exactly: a cast trigger per noncreature spell that pumps until end of turn.',
         witness: { kind: 'card', name: 'Monastery Swiftspear' },
@@ -194,9 +200,21 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'enters-tapped-unless-few-lands' },
       },
       {
+        title: 'Transforming double-faced cards',
+        detail:
+          'Innistrad-style DFCs play both faces: the front casts, a transform instruction flips the permanent to its back face (Delver of Secrets reveals for its 3/2 flyer), counters/damage/Auras persist across the flip (CR 712), and a bounced or killed DFC turns front-face-up again.',
+        witness: { kind: 'primitive', id: 'transformRevealTop' },
+      },
+      {
         title: 'Gaining control of a permanent',
         detail: '"Gain control of target creature until end of turn" — Act of Treason effects.',
         witness: { kind: 'rule', id: 'gain-control-until-eot' },
+      },
+      {
+        title: 'Anthems (static buffs)',
+        detail:
+          '"[Other] creatures you control get +1/+1" and keyword-granting statics ("…have haste") compile onto the continuous layer, so the buff exists exactly while its source is on the battlefield.',
+        witness: { kind: 'rule', id: 'static-buff-your-creatures' },
       },
     ],
   },
@@ -222,7 +240,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Card flow',
         detail:
-          'Draw, discard (including targeted discard where the caster chooses), bounce, and graveyard recursion.',
+          'Draw, discard (targeted discard of the victim\'s choosing, Mind Rot-style, or where the caster chooses, Thoughtseize-style), bounce, and graveyard recursion — whole-graveyard or restricted by card type.',
         witness: { kind: 'rule', id: 'return-target-card-from-graveyard' },
       },
       {
@@ -230,6 +248,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail:
           'Brainstorm-style ordered put-backs, Ponder-style look-and-reorder, optional shuffles, reveals, and fetch-style searches that respect land subtypes.',
         witness: { kind: 'rule', id: 'fetch-land-by-subtype' },
+      },
+      {
+        title: 'Ramp & sacrifice-fetch',
+        detail:
+          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder).',
+        witness: { kind: 'rule', id: 'search-basic-land-to-battlefield' },
       },
       {
         title: 'Mill',
