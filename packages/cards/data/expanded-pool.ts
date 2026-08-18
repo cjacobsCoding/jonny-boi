@@ -1037,7 +1037,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { R: 1 },
     subtypes: ['arcane'],
-    effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'player' } }],
+    effects: [{ primitive: 'dealDamage', params: { amount: 3, targets: 'playerOrPlaneswalker' } }],
   },
   // {T}: Add {B}.
   {
@@ -1617,7 +1617,7 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 4, B: 3 },
     effects: [
-      { primitive: 'dealDamage', params: { amount: 10, targets: 'player' } },
+      { primitive: 'dealDamage', params: { amount: 10, targets: 'playerOrPlaneswalker' } },
       { primitive: 'gainLife', params: { amount: 10 } },
     ],
   },

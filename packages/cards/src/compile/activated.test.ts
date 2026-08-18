@@ -84,16 +84,48 @@ describe('activated abilities — the fetchland', () => {
     expect(result.definition.activated ?? []).toHaveLength(0);
   });
 
-  it('does not mistake a planeswalker loyalty ability for an activated one', () => {
+  it('compiles a planeswalker loyalty line to a LOYALTY-cost ability, not a mana one', () => {
     const result = compileCard(
       card({
         name: 'Test Walker',
         typeLine: { supertypes: [], types: ['Planeswalker'], subtypes: [] },
         oracleText: '+1: Draw a card.',
+        loyalty: 3,
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.loyalty).toBe(3);
+    expect(result.definition.activated).toHaveLength(1);
+    const [ability] = result.definition.activated!;
+    expect(ability!.cost).toEqual({ loyalty: 1 });
+    // CR 606.3: loyalty abilities are sorcery-speed — dropping this would make
+    // every walker an instant-speed machine gun.
+    expect(ability!.timing).toBe('sorcery');
+  });
+
+  it('a NON-walker printing a bare "+2:" line is never read as a loyalty ability', () => {
+    const result = compileCard(
+      card({
+        name: 'Test Trinket',
+        typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+        oracleText: '+2: Draw a card.',
       }),
     );
     expect(result.status).toBe('incomplete');
     expect(result.definition.activated ?? []).toHaveLength(0);
+  });
+
+  it('a walker whose record carries no printed loyalty stays reported', () => {
+    const result = compileCard(
+      card({
+        name: 'Test Walker',
+        typeLine: { supertypes: [], types: ['Planeswalker'], subtypes: [] },
+        oracleText: '+1: Draw a card.',
+        // No `loyalty` — an old cached record, or a variable "X" box.
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.some((m) => m.text === 'loyalty')).toBe(true);
   });
 });
 

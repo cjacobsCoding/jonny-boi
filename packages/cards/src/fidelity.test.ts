@@ -313,6 +313,16 @@ function behaviour(definition: CardDefinition): string {
       .map((trigger) => [trigger.condition, trigger.effects.map((ref) => [ref.primitive, ref.params ?? {}])])
       .map((entry) => JSON.stringify(entry))
       .sort(),
+    // The display label is presentation, not behaviour; cost + timing + effects
+    // are what the ability DOES. Liliana of the Veil is the first card whose
+    // whole behaviour lives here, so leaving `activated` out would have let a
+    // walker with wrong loyalty costs pass the audit.
+    activated: (definition.activated ?? []).map((ability) => [
+      ability.cost,
+      ability.timing ?? 'instant',
+      ability.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
+    ]),
+    loyalty: definition.loyalty ?? null,
   });
 }
 
@@ -347,7 +357,7 @@ describe('pool audit — every card claimed faithful really is', () => {
   });
 
   it('every declared target restriction is a value the engine enforces', () => {
-    const RESTRICTED = ['creature', 'player', 'spell'] as const;
+    const RESTRICTED = ['creature', 'player', 'spell', 'playerOrPlaneswalker', 'creatureOrPlaneswalker'] as const;
     for (const card of CARD_POOL) {
       for (const ref of card.effects ?? []) {
         const declared = ref.params?.targets;

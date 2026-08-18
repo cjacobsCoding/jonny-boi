@@ -11,7 +11,8 @@ import { PLAYER_IDS } from './state.js';
 import { poolTotal } from './mana.js';
 import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
-import { isCreature } from './card.js';
+import { isCreature, isPlaneswalker } from './card.js';
+import { loyaltyOf } from './internal/stats.js';
 
 /** A plain, JSON-safe snapshot of the game (no methods, no class instances). */
 export interface SerializedState {
@@ -49,6 +50,11 @@ export interface SerializedState {
      * board with no attachments serializes byte-for-byte as it always did.
      */
     readonly attachedTo?: number;
+    /**
+     * A planeswalker's current loyalty. Present only for walkers, so every
+     * other board serializes byte-for-byte as it always did.
+     */
+    readonly loyalty?: number;
   }>;
   /**
    * The question the game is currently waiting on, if any — so the debug
@@ -104,6 +110,7 @@ export function serializeState(state: GameState): SerializedState {
         toughness: isCreature(c.def) ? effectiveToughness(c, mod) : undefined,
         damageMarked: c.damageMarked,
         ...(c.attachedTo != null ? { attachedTo: c.attachedTo } : {}),
+        ...(isPlaneswalker(c.def) ? { loyalty: loyaltyOf(c) } : {}),
       };
     }),
     ...(state.pendingChoice ? { pendingChoice: serializePendingChoice(state.pendingChoice) } : {}),
@@ -139,7 +146,8 @@ export function dumpState(state: GameState): string {
   if (s.battlefield.length > 0) {
     lines.push('  battlefield:');
     for (const b of s.battlefield) {
-      const pt = b.power !== undefined ? ` ${b.power}/${b.toughness}` : '';
+      const pt =
+        b.power !== undefined ? ` ${b.power}/${b.toughness}` : b.loyalty !== undefined ? ` [${b.loyalty} loyalty]` : '';
       const flags = [b.tapped ? 'T' : '', b.summoningSick ? 'SS' : '', b.damageMarked ? `dmg${b.damageMarked}` : '']
         .filter(Boolean)
         .join(',');

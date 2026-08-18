@@ -756,7 +756,8 @@ baseline the §3.6 suggestion engine tunes against.
 The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta decks it needs: a
 **triggered-ability system** (ETB/attack/cast/death triggers → the stack), a **continuous-effects / "until
 end of turn" layer** with proper cleanup-step expiry (so `pumpUntilEndOfTurn` and similar wear off — current
-behavior persists the buff and biases combat sims), and later **planeswalkers**, **transform/DFC**, and
+behavior persists the buff and biases combat sims), and later **planeswalkers** (✅ landed — see §3.11),
+**transform/DFC**, and
 **dynamic P/T** (e.g. Tarmogoyf). Tracked here because §3.2 cards stubbed these mechanics against the MVP.
 Prioritize triggers + EOT-expiry before leaning on §3.5/§3.6 verdicts; the rest can follow.
 
@@ -891,6 +892,23 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   ⚠️ Green has **no mono-green Aura in the pool and that is not an oversight**: essentially every green
   Aura is an umbra (totem armor), a regenerate-granter, or dynamic (`+1/+1 for each Forest`), none of
   which the engine models. Green is served by Unflinching Courage ({1}{G}{W}) and by the Equipment.
+- ✅ *planeswalkers + loyalty* — walkers are real attackable permanents. A walker enters with its
+  printed loyalty as COUNTERS (`counters['loyalty']`, `CardDefinition.loyalty`); its `[+N]/[−N]` lines
+  compile to activated abilities with a SIGNED `cost.loyalty`, sorcery-speed, engine-enforced once per
+  walker per turn (CR 606) and never payable below zero (CR 118.5). Combat gained the GENERIC
+  attackable-object seam battles will reuse: `DeclareAttackersAction.attackTargets` maps attacker →
+  attacked permanent (gated on `isAttackable`, today = planeswalker), combat damage to a walker removes
+  loyalty (CR 120.3c), trample past a walker's loyalty carries to its controller (CR 702.19i), and a
+  walker whose attacked object left the battlefield deals no combat damage — the 2017 rules REMOVED
+  damage redirection, so none is modelled. 0 loyalty is death by state-based action (CR 704.5i).
+  Targeting gained `'playerOrPlaneswalker'` and `'creatureOrPlaneswalker'`; "any target" includes
+  walkers. **Liliana of the Veil is un-stubbed** — the +1 each-player discard (APNAP, both answers
+  collected before either card moves), the −2 edict (`sacrificeChosen` — the VICTIM picks), and the −6
+  pile split (`pileSplitSacrifice`: controller splits, victim picks the pile) all play as printed. The
+  heuristic pilot activates loyalty abilities (priced by `valueOfEffects`), diverts attackers to kill a
+  finishable walker (never chips one it cannot kill, never over a lethal race), and burns a killable
+  walker. NOT built, on purpose: emblems (ultimates that need them stay reported), the legend rule
+  (the engine has none for legendary creatures either — walkers get the same treatment), battles.
 Still open, roughly by how often they block a real decklist:
 - *activated abilities with costs* — `{T}`/mana/sacrifice abilities; unlocks a large slice of the card
   pool (fetchlands, mana rocks, sac outlets).
@@ -899,7 +917,7 @@ Still open, roughly by how often they block a real decklist:
   it a go-wide deck's tokens can never scale, so "wide" strategies are structurally weaker in every meta
   the lab measures — a bias in the verdicts themselves, not just missing cards.
 - *alternative and additional costs* (suspend, spectacle, kicker), *{X} and Phyrexian costs*,
-  *dynamic P/T*, *planeswalker loyalty*, *transform/DFC*, *flash + casting from the graveyard*,
+  *dynamic P/T*, *transform/DFC*, *flash + casting from the graveyard*, *emblems*,
   *revolt-style "a permanent left the battlefield this turn" trackers*.
 
 ### 3.12 Scan a deck from a photo — ✅ done

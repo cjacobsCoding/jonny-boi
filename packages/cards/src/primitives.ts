@@ -34,7 +34,15 @@ import type {
   PlayerId,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { MINUS_ONE_COUNTER, PLUS_ONE_COUNTER, effectivePower, isCreature, isLegalTarget } from '@jonny-boi/core';
+import {
+  LOYALTY_COUNTER,
+  MINUS_ONE_COUNTER,
+  PLUS_ONE_COUNTER,
+  effectivePower,
+  isCreature,
+  isLegalTarget,
+  isPlaneswalker,
+} from '@jonny-boi/core';
 import {
   boolParam,
   changeLife,
@@ -94,9 +102,38 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   }
   const perm = permanentById(ctx.state, target);
   if (!perm) return; // target fizzled (already gone) — safe no-op
+  if (isPlaneswalker(perm.def)) {
+    // Damage to a planeswalker removes that many loyalty counters immediately
+    // (CR 120.3c) — the modern rules aim burn AT the walker ("any target"
+    // includes it); the old redirect-from-the-player rule no longer exists.
+    // The 0-loyalty death is the state-based check after this resolution.
+    const removed = removeLoyaltyCounters(perm, amount);
+    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
+    if (removed > 0) {
+      ctx.emit({
+        type: 'loyaltyChanged',
+        instanceId: perm.instanceId,
+        delta: -removed,
+        to: perm.counters[LOYALTY_COUNTER] ?? 0,
+      });
+    }
+    return;
+  }
   perm.damageMarked += amount;
   ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
 };
+
+/**
+ * Remove up to `amount` loyalty counters (never below zero — CR 118.5), honoring
+ * the counters replace-don't-mutate contract. Returns how many actually left.
+ */
+function removeLoyaltyCounters(perm: CardInstance, amount: number): number {
+  const current = perm.counters[LOYALTY_COUNTER] ?? 0;
+  const removed = Math.min(Math.max(amount, 0), current);
+  if (removed === 0) return 0;
+  perm.counters = { ...perm.counters, [LOYALTY_COUNTER]: current - removed };
+  return removed;
+}
 
 /**
  * `drawCards` — a player draws `params.count` cards. Defaults to the controller;

@@ -27,6 +27,8 @@ export interface RawScryfallCard {
   oracle_text?: string;
   power?: string;
   toughness?: string;
+  /** Planeswalkers: printed starting loyalty ("3", or "X" on a variable one). */
+  loyalty?: string;
   colors?: string[];
   color_identity?: string[];
   keywords?: string[];
@@ -109,6 +111,12 @@ export interface NormalizedCard {
   oracleText: string;
   power: number | null;
   toughness: number | null;
+  /**
+   * Printed starting loyalty (planeswalkers), `null` otherwise or when variable
+   * ("X"). Records written before this field existed simply lack it, which the
+   * card compiler reads as "loyalty unknown — not playable until re-fetched".
+   */
+  loyalty?: number | null;
   colors: string[];
   colorIdentity: string[];
   keywords: string[];

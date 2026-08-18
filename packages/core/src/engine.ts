@@ -85,7 +85,8 @@ import {
   hasAnyFirstStrike,
   tapAttackers,
 } from './internal/combat.js';
-import { entersTapped, isCreature } from './card.js';
+import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
+import { addLoyalty, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
 
 /**
  * The registry a caller that supplied none gets.
@@ -655,6 +656,9 @@ function finishSpellResolution(
     card.summoningSick = isCreature(card.def) ? !(card.def.keywords?.haste ?? false) : false;
     state.battlefield.push(card);
     emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'battlefield' });
+    // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
+    // zoneChange so a replay folds "entered, then at loyalty N" in order.
+    applyEnteringLoyalty(card, emit);
     // The event log is the replay/inspector source (DESIGN §2), and a consumer
     // folding it starts every entering permanent untapped — so arriving tapped has
     // to be SAID, not just stored. `playLand` already emits this; without the same
@@ -1625,6 +1629,24 @@ function applyActivateAbility(
     moveToZone(state, source, 'graveyard', emit, source.owner);
     resetInstanceForNewZone(source);
   }
+  if (cost.loyalty !== undefined) {
+    // The loyalty cost is PAID here, before the ability reaches the stack, and
+    // is not refunded if the ability is countered or fizzles (CR 602.2) — a
+    // minus ability whose target vanishes has still spent the loyalty. The
+    // 0-loyalty death from paying down to exactly zero is the SBA pass after
+    // this action settles, exactly like paying life to zero.
+    if (cost.loyalty > 0) addLoyalty(source, cost.loyalty);
+    else if (cost.loyalty < 0) removeLoyalty(source, -cost.loyalty);
+    if (cost.loyalty !== 0) {
+      emit({
+        type: 'loyaltyChanged',
+        instanceId: source.instanceId,
+        delta: cost.loyalty,
+        to: loyaltyOf(source),
+      });
+    }
+    source.loyaltyActivatedTurn = state.turnNumber;
+  }
 
   state.stack.push({
     kind: 'trigger',
@@ -1641,6 +1663,15 @@ function applyActivateAbility(
     instanceId: source.instanceId,
     label: ability.label,
   });
+
+  // Paying loyalty down to exactly zero is legal and immediately fatal to the
+  // walker (CR 704.5i) — settled before anybody acts again, because the next
+  // thing a player sees must not be a 0-loyalty walker still standing. The
+  // ability already on the stack still resolves; its source is simply gone,
+  // which `frameSource` handles with last-known information.
+  if (cost.loyalty !== undefined && cost.loyalty < 0 && loyaltyOf(source) === 0) {
+    checkStateBasedActions(state, emit);
+  }
 
   // The activating player retains priority, as with casting a spell.
   state.priorityPlayer = action.player;
@@ -1677,6 +1708,20 @@ function unpayableActivationReason(
     return 'you do not have enough life to pay that cost';
   }
   if (cost.mana && !canPay(player.manaPool, cost.mana)) return 'insufficient mana for that ability';
+  if (cost.loyalty !== undefined) {
+    // A loyalty cost only means anything on a planeswalker carrying loyalty
+    // counters; anything else declaring one is malformed data, refused loudly.
+    if (!isPlaneswalker(source.def)) return `${source.def.name} is not a planeswalker`;
+    // One loyalty ability per permanent per turn (CR 606.3, modern form).
+    if (source.loyaltyActivatedTurn === state.turnNumber) {
+      return `${source.def.name} has already activated a loyalty ability this turn`;
+    }
+    // A minus cost removes counters, and you can never remove more than are
+    // there (CR 118.5): a walker at 4 cannot pay −6.
+    if (cost.loyalty < 0 && loyaltyOf(source) < -cost.loyalty) {
+      return `${source.def.name} does not have ${-cost.loyalty} loyalty to pay`;
+    }
+  }
   return undefined;
 }
 
@@ -1729,10 +1774,45 @@ function applyDeclareAttackers(
     if (kw.defender) return rejectWith(prevState, `${a.def.name} has defender and cannot attack`);
   }
 
+  // Per-attacker attacked OBJECTS (a planeswalker rather than the player). Every
+  // entry must name a declared attacker, and its value must be the defending
+  // player or an attackable permanent THAT PLAYER controls — you cannot attack
+  // your own walker, the caster's seat, or a creature.
+  const attackTargets = action.attackTargets;
+  let storedTargets: Record<InstanceId, InstanceId | PlayerId> | undefined;
+  if (attackTargets !== undefined) {
+    const defender = defendingPlayerOf(state);
+    for (const key of Object.keys(attackTargets)) {
+      const attackerId = Number(key);
+      if (!declaredAttackers.has(attackerId)) {
+        return rejectWith(prevState, `attack target given for ${key}, which is not a declared attacker`);
+      }
+      const attacked = attackTargets[attackerId]!;
+      if (typeof attacked === 'string') {
+        if (attacked !== defender) return rejectWith(prevState, 'a creature can only attack the defending player');
+        continue; // the default; storing it would be redundant but is harmless
+      }
+      const object = findOnBattlefield(state, attacked);
+      if (!object) return rejectWith(prevState, `attacked permanent ${attacked} is not on the battlefield`);
+      if (object.controller !== defender) {
+        return rejectWith(prevState, `${object.def.name} is not controlled by the defending player`);
+      }
+      if (!isAttackable(object.def)) {
+        return rejectWith(prevState, `${object.def.name} is not a permanent that can be attacked`);
+      }
+      (storedTargets ??= {})[attackerId] = attacked;
+    }
+  }
+
   state.combat.attackers = [...action.attackers];
   state.combat.attackersDeclared = true;
+  if (storedTargets !== undefined) state.combat.attackTargets = storedTargets;
   tapAttackers(state, action.attackers, emit);
-  emit({ type: 'attackersDeclared', attackers: [...action.attackers] });
+  emit({
+    type: 'attackersDeclared',
+    attackers: [...action.attackers],
+    ...(storedTargets !== undefined ? { attackTargets: { ...storedTargets } } : {}),
+  });
   // Priority passes to active player (could cast a trick), then on to blockers.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;

@@ -67,6 +67,9 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
     oracleText: raw.oracle_text ?? frontFace?.oracle_text ?? '',
     power: parseStat(raw.power ?? frontFace?.power),
     toughness: parseStat(raw.toughness ?? frontFace?.toughness),
+    // Planeswalkers: printed starting loyalty. `parseStat` already returns null
+    // for a non-numeric box ("X"), which is exactly "variable - not compilable".
+    loyalty: parseStat(raw.loyalty),
     colors: raw.colors ?? frontFace?.colors ?? [],
     colorIdentity: raw.color_identity ?? [],
     keywords: raw.keywords ?? [],

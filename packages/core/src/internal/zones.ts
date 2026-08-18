@@ -136,4 +136,8 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // and adding the property would migrate most of the game's instances onto a
   // second object shape that `cloneInstance` then has to copy (see clone.ts).
   if (inst.attachedTo != null) inst.attachedTo = null;
+  // A permanent that changes zones becomes a NEW object (CR 400.7), so a walker
+  // bounced and replayed in one turn may activate again — the once-per-turn
+  // marker does not survive the move. Same shape-guard as `attachedTo`.
+  if (inst.loyaltyActivatedTurn !== undefined) delete inst.loyaltyActivatedTurn;
 }

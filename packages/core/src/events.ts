@@ -90,7 +90,16 @@ export type GameEvent =
       readonly primitive: string;
       readonly sourceInstanceId: InstanceId;
     }
-  | { readonly type: 'attackersDeclared'; readonly attackers: readonly InstanceId[] }
+  | {
+      readonly type: 'attackersDeclared';
+      readonly attackers: readonly InstanceId[];
+      /**
+       * Per-attacker attacked OBJECT, present only for attackers not attacking
+       * the defending player (a planeswalker). Optional so every fold of the
+       * log written before walkers existed still reads the event unchanged.
+       */
+      readonly attackTargets?: Readonly<Record<InstanceId, InstanceId | PlayerId>>;
+    }
   | {
       readonly type: 'blockersDeclared';
       readonly blocks: ReadonlyArray<{ readonly blocker: InstanceId; readonly attacker: InstanceId }>;
@@ -105,6 +114,26 @@ export type GameEvent =
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
   | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }
+  | {
+      /**
+       * A planeswalker's loyalty changed — damage removed counters, a loyalty
+       * ability's cost added or removed them. Its own event (not `counterAdded`)
+       * because loyalty is the walker's life total: a replay, the inspector and
+       * the UI all need "at what loyalty is it NOW", which `to` answers directly.
+       */
+      readonly type: 'loyaltyChanged';
+      readonly instanceId: InstanceId;
+      readonly delta: number;
+      readonly to: number;
+    }
+  | {
+      // CR 704.5i: a planeswalker with no loyalty is put into its owner's
+      // graveyard by a state-based action. Named apart from `creatureDied` so a
+      // log reader can tell a dead walker from a dead creature.
+      readonly type: 'planeswalkerDied';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
   | { readonly type: 'playerLost'; readonly player: PlayerId; readonly reason: string }
   | { readonly type: 'gameOver'; readonly winner: PlayerId | null }
   | { readonly type: 'actionRejected'; readonly reason: string }

@@ -71,13 +71,14 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
 });
 
 /**
- * Card types the engine has no system for, with the reason. `planeswalker` maps
- * to a real `CardType` (so it is representable) but has no loyalty system, so a
- * planeswalker can never be complete. Exported so the About view's TODO list can
- * name these gaps from the same record the compiler judges by.
+ * Card types the engine has no system for, with the reason. Exported so the
+ * About view's TODO list can name these gaps from the same record the compiler
+ * judges by. `planeswalker` left this list when the loyalty system landed:
+ * walkers enter with printed loyalty, their `[+N]/[−N]` lines compile to
+ * loyalty-cost activated abilities, they can be attacked and burned, and a
+ * 0-loyalty walker dies to a state-based action.
  */
 export const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({
-  planeswalker: 'planeswalker loyalty abilities',
   battle: 'battles (siege / defense counters)',
 });
 
@@ -308,6 +309,42 @@ function splitCostAndEffect(
   return { cost, effect, raw: clause };
 }
 
+/**
+ * A planeswalker loyalty-ability line: `+1: BODY`, `−2: BODY`, `0: BODY`. The
+ * printed minus is U+2212 (`−`); a plain hyphen is accepted for hand-typed text.
+ */
+const LOYALTY_LINE = /^([+−-]?\d+): (.+)$/;
+
+/**
+ * Compile a loyalty ability into an activated ability with a SIGNED loyalty
+ * cost, sorcery-speed — which, with the engine's once-per-turn rule keyed on the
+ * cost kind, is exactly what CR 606 makes a loyalty ability. The body goes
+ * through the ordinary effect rules (targets and questions included), so a
+ * walker can only print abilities the engine genuinely runs; any body without a
+ * faithful implementation leaves the line unmatched and reported.
+ *
+ * Only planeswalkers get this reading: on anything else a leading `+2:` is not
+ * a loyalty cost, and the line falls through to the normal tables. Returns true
+ * when the line was consumed.
+ */
+function compileLoyaltyAbility(clause: string, assembly: Assembly, ctx: RuleContext): boolean {
+  if (!ctx.card.typeLine.types.some((printed) => printed.toLowerCase() === 'planeswalker')) return false;
+  const match = LOYALTY_LINE.exec(clause);
+  if (!match) return false;
+  const value = Number.parseInt(match[1]!.replace('−', '-'), 10);
+  if (!Number.isFinite(value)) return false;
+  const effects = ctx.compileEffectClause(match[2]!);
+  if (!effects || effects.length === 0) return false;
+  assembly.activated.push({
+    cost: { loyalty: value },
+    effects,
+    timing: 'sorcery',
+    label: capitalizeFirst(clause),
+  });
+  assembly.matchedRules.push('loyalty-ability');
+  return true;
+}
+
 /** A cost component the parser understands, as printed. */
 const TAP_SYMBOL = '{t}';
 /** "Pay N life" / "pay 1 life". */
@@ -449,6 +486,11 @@ function compileAbilityLine(
     return;
   }
 
+  // A planeswalker's loyalty ability: "+1: EFFECT" / "−2: EFFECT". Tried before
+  // the generic activated-ability parser, whose cost vocabulary deliberately
+  // refuses a bare number.
+  if (compileLoyaltyAbility(clause, assembly, ctx)) return;
+
   // An activated ability: "COST: EFFECT". Handled before the effect rules so the
   // cost is never mistaken for part of the effect text.
   if (compileActivatedAbility(clause, assembly, ctx)) return;
@@ -554,6 +596,23 @@ export function compileCard(card: CompilableCard): CompileResult {
     assembly.missing.push({
       text: 'power/toughness',
       missingEngineSystem: 'dynamic power/toughness (characteristic-defining */*)',
+    });
+  }
+
+  // --- planeswalkers: printed starting loyalty --------------------------------
+  // A walker without a usable loyalty number cannot enter at the right value, so
+  // it is never complete — whether the printed box is variable (`X`, parsed to
+  // null) or the record simply predates loyalty capture in the data pipeline.
+  const isWalkerCard = types.includes('planeswalker');
+  const printedLoyalty =
+    typeof card.loyalty === 'number' && Number.isFinite(card.loyalty) && card.loyalty > 0
+      ? card.loyalty
+      : undefined;
+  if (isWalkerCard && printedLoyalty === undefined) {
+    assembly.missing.push({
+      text: 'loyalty',
+      missingEngineSystem:
+        'a printed starting-loyalty number in the card record (variable/X loyalty, or a cached record from before loyalty was captured)',
     });
   }
 
@@ -710,6 +769,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(cost ? { cost } : {}),
     ...(isCreatureCard && card.power !== null ? { power: card.power } : {}),
     ...(isCreatureCard && card.toughness !== null ? { toughness: card.toughness } : {}),
+    ...(isWalkerCard && printedLoyalty !== undefined ? { loyalty: printedLoyalty } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain
     // or Plains card") match a dual land the way the printed card does.

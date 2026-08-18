@@ -17,8 +17,8 @@
 import type { CardInstance, GameState, PlayerId } from '../state.js';
 import { PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
-import { isCreature } from '../card.js';
-import { effectiveToughness, remainingToughness } from './stats.js';
+import { isCreature, isPlaneswalker } from '../card.js';
+import { effectiveToughness, loyaltyOf, remainingToughness } from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
 import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
 import { detachFromHost, isLegallyAttached } from '../attachments.js';
@@ -65,6 +65,23 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
     // the game, and a permanent visited twice is far cheaper than that.)
     for (let cursor = 0; cursor < state.battlefield.length; ) {
       const inst = state.battlefield[cursor] as CardInstance;
+      // CR 704.5i: a planeswalker with no loyalty is put into its owner's
+      // graveyard. Checked in the same pass as creature death because both are
+      // "this permanent stops existing on the battlefield" rules and the cursor
+      // walk already handles the splice-under-the-loop mechanics.
+      if (isPlaneswalker(inst.def) && !isCreature(inst.def)) {
+        if (loyaltyOf(inst) > 0) {
+          cursor += 1;
+          continue;
+        }
+        const walkerSizeBefore = state.battlefield.length;
+        emit({ type: 'planeswalkerDied', instanceId: inst.instanceId, name: inst.def.name });
+        moveToZone(state, inst, 'graveyard', emit, inst.owner);
+        resetInstanceForNewZone(inst);
+        changed = true;
+        if (state.battlefield.length >= walkerSizeBefore) cursor += 1;
+        continue;
+      }
       if (!isCreature(inst.def)) {
         cursor += 1;
         continue;

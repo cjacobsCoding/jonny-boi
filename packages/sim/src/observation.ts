@@ -165,6 +165,10 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   lifeChanged: 'public',
   gainLife: 'public',
   creatureDied: 'public',
+  // A walker's loyalty and its death are face-up battlefield facts, exactly
+  // like a creature dying or a counter landing.
+  loyaltyChanged: 'public',
+  planeswalkerDied: 'public',
   playerLost: 'public',
   gameOver: 'public',
   // Reveals that a pilot proposed something illegal — a pilot-quality signal, not

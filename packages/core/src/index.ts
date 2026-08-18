@@ -63,6 +63,8 @@ export {
   hasSubtype,
   isLand,
   isCreature,
+  isPlaneswalker,
+  isAttackable,
   isPermanentType,
   isManaSource,
   manaModesOf,
@@ -292,7 +294,13 @@ export {
   hasKeyword,
   PLUS_ONE_COUNTER,
   MINUS_ONE_COUNTER,
+  LOYALTY_COUNTER,
+  loyaltyOf,
 } from './internal/stats.js';
+
+// Combat's "what was this attacker declared attacking" accessor — the walker /
+// attackable-permanent half of combat, shared with the AI and any UI.
+export { attackedObjectOf } from './internal/combat.js';
 
 // Debug / inspector seam
 export type { SerializedState } from './serialize.js';

@@ -64,6 +64,8 @@ export {
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
+  sacrificeChosen,
+  pileSplitSacrifice,
 } from './choice-primitives.js';
 
 // Pool loader + registry builder.
@@ -128,6 +130,8 @@ export {
  * optional basic-land search) and **Goblin Guide** (reveal the top card, take it
  * only if it is a land). Earlier waves un-stubbed Young Pyromancer, Monastery
  * Swiftspear, Kitchen Finks and Giant Growth on the trigger + continuous layers.
+ * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
+ * abilities play as printed (each-player discard, the edict, the pile split).
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
@@ -143,7 +147,6 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
     missingEngineSystem: 'activated abilities with a sacrifice cost (the basic-land search itself is now expressible)',
   },
   { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
-  { card: 'Liliana of the Veil', missingEngineSystem: 'planeswalker loyalty abilities' },
   {
     card: 'Fatal Push',
     missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',

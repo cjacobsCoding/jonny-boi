@@ -105,6 +105,15 @@ export interface CardDefinition {
   readonly cost?: ManaCost;
   readonly power?: number;
   readonly toughness?: number;
+  /**
+   * Printed starting loyalty — planeswalkers only. The permanent ENTERS with this
+   * many loyalty counters (CR 306.5b), stored in `CardInstance.counters` under
+   * {@link LOYALTY_COUNTER}, and a walker whose loyalty reaches 0 is put into its
+   * owner's graveyard by a state-based action (CR 704.5i). A planeswalker
+   * definition without this cannot be played faithfully, so the compiler refuses
+   * it rather than inventing a number.
+   */
+  readonly loyalty?: number;
   readonly keywords?: KeywordFlags;
   /**
    * Ordered effects run when this spell resolves (instants/sorceries) or as the
@@ -226,6 +235,20 @@ export interface ActivationCost {
   readonly sacrificeSelf?: boolean;
   /** "Pay N life". Payable only while the controller's life exceeds it. */
   readonly life?: number;
+  /**
+   * A LOYALTY cost — the `[+N]` / `[−N]` / `[0]` printed on a planeswalker's
+   * abilities, SIGNED: `+1` adds a loyalty counter as the cost is paid, `-2`
+   * removes two, `0` changes nothing (CR 606.5, 602.5b). Paying a negative cost
+   * is only possible while the walker has at least that many loyalty counters —
+   * you can never pay more loyalty than is there (CR 118.5).
+   *
+   * The engine also enforces the two rules that make these loyalty abilities
+   * rather than ordinary activations: at most ONE loyalty ability per permanent
+   * per turn (CR 606.3 as modified by the modern once-per-turn rule), and only at
+   * sorcery speed — the compiler stamps `timing: 'sorcery'` on every loyalty
+   * ability it builds, which is what CR 606.3 means.
+   */
+  readonly loyalty?: number;
 }
 
 /**
@@ -291,6 +314,21 @@ export function isPermanentType(def: CardDefinition): boolean {
 
 export function isCreature(def: CardDefinition): boolean {
   return hasType(def, 'creature');
+}
+
+export function isPlaneswalker(def: CardDefinition): boolean {
+  return hasType(def, 'planeswalker');
+}
+
+/**
+ * Whether this permanent is a non-player object that ATTACKERS may be declared
+ * against — today exactly the planeswalkers, tomorrow battles too. Combat asks
+ * this ONE question (declaration legality, damage routing, the AI's target menu)
+ * so a future attackable kind plugs in here without touching the combat code
+ * again.
+ */
+export function isAttackable(def: CardDefinition): boolean {
+  return isPlaneswalker(def);
 }
 
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */
