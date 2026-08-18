@@ -11,6 +11,7 @@
  * live in `detect.ts`, `crop.ts` and `match.ts`, which are pure and tested.
  */
 
+import { MAX_IMAGE_EDGE } from './config.js';
 import type { MutablePixelImage } from './crop.js';
 import type { PixelImage } from './detect.js';
 
@@ -86,13 +87,18 @@ export async function createOcrEngine(
 /**
  * Decode an image file into raw pixels, downscaling very large photos first.
  *
- * Phone cameras produce 12-megapixel images; the detector's variance passes and
- * the OCR crops gain nothing from that resolution but cost a lot of memory and
- * time, so we cap the long edge. The cap is high enough that a card's title bar
- * is still comfortably legible after the title crop is upscaled again.
+ * Phone cameras produce 12-megapixel images; the detector's variance passes gain
+ * nothing from that resolution but pay for it in memory, so we cap the long edge
+ * at a size chosen to keep a card's title bar legible ({@link MAX_IMAGE_EDGE}).
+ *
+ * EXIF ORIENTATION IS APPLIED EXPLICITLY. A phone held upright records a
+ * landscape sensor image plus a "rotate me" tag, and browsers disagree about
+ * whether an un-hinted `createImageBitmap` honours it. Decoding sideways is not a
+ * subtle degradation: the title bands would be cut from the left edge of each
+ * card and every single name would come back as noise.
  */
-export async function decodeImageFile(file: File, maxEdge = 2000): Promise<PixelImage> {
-  const bitmap = await createImageBitmap(file);
+export async function decodeImageFile(file: File, maxEdge = MAX_IMAGE_EDGE): Promise<PixelImage> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   try {
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     const width = Math.max(1, Math.round(bitmap.width * scale));

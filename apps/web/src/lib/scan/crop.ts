@@ -6,7 +6,8 @@
  */
 
 import {
-  OCR_UPSCALE,
+  OCR_MAX_UPSCALE,
+  OCR_TARGET_TITLE_HEIGHT,
   TITLE_BAND_BOTTOM,
   TITLE_BAND_LEFT_INSET,
   TITLE_BAND_RIGHT_INSET,
@@ -77,8 +78,21 @@ export function cropRegion(image: PixelImage, rect: Rect): MutablePixelImage {
  * a per-crop stretch adapts), and colour carries no signal for text (so greyscale
  * removes a distraction). Deliberately NOT binarised: Tesseract does its own
  * adaptive thresholding and does it better than a global cutoff.
+ *
+ * The upscale is chosen to REACH A TARGET HEIGHT rather than being a fixed
+ * factor, because a fixed factor is wrong at both ends: on a close-up photo it
+ * inflates an already-legible strip into a slow, no-better image, and on a
+ * wide one it still leaves the text too small to read.
  */
-export function prepareForOcr(crop: PixelImage, upscale = OCR_UPSCALE): MutablePixelImage {
+export function upscaleFactorFor(cropHeight: number): number {
+  if (cropHeight <= 0) return 1;
+  return Math.min(OCR_MAX_UPSCALE, Math.max(1, Math.round(OCR_TARGET_TITLE_HEIGHT / cropHeight)));
+}
+
+export function prepareForOcr(
+  crop: PixelImage,
+  upscale = upscaleFactorFor(crop.height),
+): MutablePixelImage {
   const grey = new Float32Array(crop.width * crop.height);
   let min = 255;
   let max = 0;

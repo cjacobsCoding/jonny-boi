@@ -8,14 +8,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   detectCards,
+  estimateCardWidth,
   findBands,
   gridCells,
   lineVariance,
   looksLikeCard,
+  splitByCardSize,
   toLuminance,
   type PixelImage,
 } from './detect.js';
-import { cropRegion, prepareForOcr, titleBandOf } from './crop.js';
+import { cropRegion, prepareForOcr, titleBandOf, upscaleFactorFor } from './crop.js';
 import {
   buildNameIndex,
   editDistance,
@@ -61,6 +63,36 @@ function paintCard(image: PixelImage, x: number, y: number, width: number, heigh
 /** Card dimensions with a real card's aspect ratio, for synthetic layouts. */
 const CARD_HEIGHT = 88;
 const CARD_WIDTH = Math.round(CARD_HEIGHT * CARD_ASPECT_RATIO);
+
+/**
+ * Paint a rows × columns layout of cards, the way a deck sits on a table.
+ * `gap` of 0 means the cards touch — which real people's photos routinely do.
+ */
+function layout(
+  rows: number,
+  columns: number,
+  gap: number,
+  cardWidth = CARD_WIDTH,
+): PixelImage {
+  const cardHeight = Math.round(cardWidth / CARD_ASPECT_RATIO);
+  const margin = Math.max(gap, 12);
+  const image = blankImage(
+    columns * cardWidth + (columns - 1) * gap + 2 * margin,
+    rows * cardHeight + (rows - 1) * gap + 2 * margin,
+  );
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      paintCard(
+        image,
+        margin + column * (cardWidth + gap),
+        margin + row * (cardHeight + gap),
+        cardWidth,
+        cardHeight,
+      );
+    }
+  }
+  return image;
+}
 
 describe('detectCards', () => {
   it('finds a single card on a flat surface', () => {
@@ -108,14 +140,64 @@ describe('detectCards', () => {
   });
 
   it('rejects a region whose shape is not a card', () => {
-    const image = blankImage(400, 200);
-    paintCard(image, 20, 20, 340, 60); // a long strip — a table edge, not a card
+    const image = blankImage(800, 400);
+    paintCard(image, 40, 40, 700, 40); // a long thin strip — a table edge, not cards
 
     expect(detectCards(image).cells).toHaveLength(0);
   });
 
   it('handles a zero-sized image without throwing', () => {
     expect(detectCards({ width: 0, height: 0, data: new Uint8ClampedArray(0) }).cells).toEqual([]);
+  });
+
+  /**
+   * THE REGRESSION THIS FILE EXISTS FOR. A full deck laid out for one photo puts
+   * ten cards across the frame with only a sliver between them. The gap
+   * threshold used to be a fraction of the IMAGE, which at that many columns
+   * exceeded the real spacing — so every card in a row bridged into one band,
+   * every band failed the card-shape test, and the scanner told the user it
+   * could not find a single card in a photo of sixty.
+   */
+  it('finds all sixty cards in a full deck laid out ten across', () => {
+    const { cells, rows, columns } = detectCards(layout(6, 10, 12, 180));
+
+    expect(columns).toBe(10);
+    expect(rows).toBe(6);
+    expect(cells).toHaveLength(60);
+  });
+
+  it('separates cards that touch, using the fixed card shape', () => {
+    // No gap at all between columns; the rows are still spaced.
+    const image = blankImage(4 * 100 + 40, 2 * 140 + 60);
+    for (let row = 0; row < 2; row += 1) {
+      for (let column = 0; column < 4; column += 1) {
+        paintCard(image, 20 + column * 100, 20 + row * (140 + 20), 100, 140);
+      }
+    }
+
+    const { cells, columns } = detectCards(image);
+
+    expect(columns).toBe(4);
+    expect(cells).toHaveLength(8);
+  });
+
+  it('ignores the empty slots of a ragged last row', () => {
+    // Fourteen cards laid out four across: the last row holds two.
+    const cardWidth = 120;
+    const cardHeight = Math.round(cardWidth / CARD_ASPECT_RATIO);
+    const gap = 16;
+    const image = blankImage(4 * (cardWidth + gap) + gap, 4 * (cardHeight + gap) + gap);
+    for (let index = 0; index < 14; index += 1) {
+      paintCard(
+        image,
+        gap + (index % 4) * (cardWidth + gap),
+        gap + Math.floor(index / 4) * (cardHeight + gap),
+        cardWidth,
+        cardHeight,
+      );
+    }
+
+    expect(detectCards(image).cells).toHaveLength(14);
   });
 });
 
@@ -142,10 +224,42 @@ describe('detection internals', () => {
     profile.fill(0, 100, 140); // a real gap
     profile.fill(1, 140, 200);
 
-    const bands = findBands(profile, 200);
+    const bands = findBands(profile);
 
     expect(bands).toHaveLength(2);
     expect(bands[0]).toEqual({ start: 0, end: 99 });
+  });
+
+  it('keeps a gap that is small next to the photo but large next to a card', () => {
+    // Ten bands of 18 separated by 4 — the shape of a deck laid out across a
+    // frame. A threshold measured against the profile's length would swallow
+    // every one of these gaps; measured against a card, none of them.
+    const profile = new Float32Array(220);
+    for (let card = 0; card < 10; card += 1) profile.fill(1, card * 22, card * 22 + 18);
+
+    expect(findBands(profile)).toHaveLength(10);
+  });
+
+  it('splits a merged band into whole cards', () => {
+    expect(splitByCardSize([{ start: 0, end: 299 }], 100)).toEqual([
+      { start: 0, end: 99 },
+      { start: 100, end: 199 },
+      { start: 200, end: 299 },
+    ]);
+  });
+
+  it('trusts the axis that still sees gaps when the other has merged', () => {
+    // One 800-wide band (eight touching cards) against rows of a card's height.
+    const rowBands = [{ start: 0, end: 139 }];
+    const estimate = estimateCardWidth([{ start: 0, end: 799 }], rowBands, 800, 140);
+
+    expect(estimate).not.toBeNull();
+    expect(estimate!).toBeCloseTo(140 * CARD_ASPECT_RATIO, 0);
+  });
+
+  it('refuses a layout that is not a whole number of cards on both axes', () => {
+    // Card-shaped on the columns, nothing like a card on the rows.
+    expect(estimateCardWidth([{ start: 0, end: 699 }], [{ start: 0, end: 39 }], 800, 400)).toBeNull();
   });
 
   it('accepts card-shaped rectangles and rejects extreme ones', () => {
@@ -221,6 +335,18 @@ describe('title band + crop', () => {
   it('leaves a flat crop alone rather than amplifying noise', () => {
     const prepared = prepareForOcr(blankImage(3, 3, 128), 1);
     expect(prepared.data[0]).toBe(128);
+  });
+
+  it('upscales a small crop hard and a big one barely, aiming at one target size', () => {
+    const small = upscaleFactorFor(16);
+    const large = upscaleFactorFor(90);
+
+    expect(small).toBeGreaterThan(large);
+    expect(large).toBe(1);
+    // A crop that is already huge is never blown up further, and a degenerate
+    // one never divides by zero.
+    expect(upscaleFactorFor(400)).toBe(1);
+    expect(upscaleFactorFor(0)).toBe(1);
   });
 });
 

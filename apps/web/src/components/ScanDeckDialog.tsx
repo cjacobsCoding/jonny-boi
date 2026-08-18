@@ -6,15 +6,16 @@ import type { ScannedCard } from '../lib/scan/pipeline.js';
 /**
  * Scan a photo of physical cards into a decklist.
  *
- * The flow is photo → detect → OCR the title of each card → correct against
+ * The flow is photo → find the piles → OCR each pile's title → correct against
  * every real card name → REVIEW → hand the resulting decklist to the importer,
  * which turns it into real, playable cards.
  *
- * The review grid is not a formality. Every card shows its own crop next to the
- * name we think it is, cards we are unsure about are flagged, and any guess can
- * be re-picked from the runners-up or typed in. A scanner that quietly swapped
- * one card for a look-alike would poison a deck in a way that is very hard to
- * notice later, so nothing is accepted on the scanner's word alone.
+ * The review grid is not a formality. Every pile shows its own crop next to the
+ * name we think it is and the number of copies we counted, anything we are
+ * unsure about is flagged, and both the name and the count can be corrected. A
+ * scanner that quietly swapped one card for a look-alike, or imported three
+ * copies as four, would poison a deck in a way that is very hard to notice
+ * later, so nothing is accepted on the scanner's word alone.
  */
 export function ScanDeckDialog({
   onClose,
@@ -50,17 +51,24 @@ export function ScanDeckDialog({
         </div>
 
         <p className="import-intro">
-          Lay the cards out in a grid on a plain surface, with each card’s name visible, and take one
-          photo. Everything runs on your device — the photo is never uploaded.
+          Put the copies of each card in a pile, fanned so every name shows, and lay the piles out in
+          rows on a plain surface. One photo then gives both the cards and how many of each. Single
+          cards laid out in a grid work too. Everything runs on your device — the photo is never
+          uploaded.
         </p>
 
         <div className="import-row">
           <label className="btn btn--primary scan-file-label">
             Choose a photo…
+            {/*
+              No `capture` attribute on purpose. It forces the camera and hides
+              the gallery on mobile, which blocks the most common case by far —
+              someone who already laid the deck out and took the photo. Without
+              it the browser offers both.
+            */}
             <input
               type="file"
               accept="image/*"
-              capture="environment"
               className="import-file-input"
               onChange={(event) => {
                 const chosen = event.target.files?.[0] ?? null;
@@ -124,18 +132,19 @@ export function ScanDeckDialog({
           <div className="import-review">
             <div className="section-label">Review</div>
             <div className="import-counts">
-              <span className="import-count import-count--ok">{recognized} recognized</span>
+              <span className="import-count import-count--ok">{scanner.copies} cards</span>
               {scanner.unrecognized > 0 && (
                 <span className="import-count import-count--warn">
                   {scanner.unrecognized} need a name
                 </span>
               )}
-              <span className="import-count">{scanner.scanned.length} cards found</span>
+              <span className="import-count">{scanner.scanned.length} piles found</span>
             </div>
 
             <p className="import-note">
-              Check anything highlighted, then create the deck. Every name here is corrected against
-              the full list of real Magic cards.
+              Check anything highlighted, and check the counts — the number on each pile is how many
+              copies we think it holds. Every name is corrected against the full list of real Magic
+              cards.
             </p>
 
             <div className="scan-grid">
@@ -144,6 +153,7 @@ export function ScanDeckDialog({
                   key={card.index}
                   card={card}
                   onChoose={(name) => scanner.chooseName(card.index, name)}
+                  onQuantity={(qty) => scanner.chooseQuantity(card.index, qty)}
                   searchNames={(text) =>
                     scanner.nameIndex ? matchCardName(text, scanner.nameIndex, 6) : []
                   }
@@ -158,7 +168,7 @@ export function ScanDeckDialog({
                 onClick={() => onUseDecklist(scanner.decklistText())}
                 disabled={recognized === 0}
               >
-                Use these {recognized} cards
+                Use these {scanner.copies} cards
               </button>
             </div>
           </div>
@@ -168,14 +178,16 @@ export function ScanDeckDialog({
   );
 }
 
-/** One detected card in the review grid: its crop, its name, and a way to fix it. */
+/** One detected pile in the review grid: its crop, its name, its count, and ways to fix both. */
 function ScannedCardTile({
   card,
   onChoose,
+  onQuantity,
   searchNames,
 }: {
   card: ScannedCard;
   onChoose: (name: string | null) => void;
+  onQuantity: (qty: number) => void;
   searchNames: (text: string) => ReadonlyArray<{ name: string }>;
 }): ReactElement {
   const [typed, setTyped] = useState('');
@@ -189,6 +201,27 @@ function ScannedCardTile({
       ) : (
         <div className="scan-tile__image scan-tile__image--empty" />
       )}
+
+      <div className="scan-tile__qty">
+        <button
+          type="button"
+          className="scan-tile__qty-step"
+          onClick={() => onQuantity(card.qty - 1)}
+          disabled={card.qty <= 1}
+          aria-label={`One fewer copy of card ${card.index + 1}`}
+        >
+          −
+        </button>
+        <span className="scan-tile__qty-value">{card.qty}×</span>
+        <button
+          type="button"
+          className="scan-tile__qty-step"
+          onClick={() => onQuantity(card.qty + 1)}
+          aria-label={`One more copy of card ${card.index + 1}`}
+        >
+          +
+        </button>
+      </div>
 
       <div className="scan-tile__name">{card.chosenName ?? 'Not recognized'}</div>
       {card.ocrText && card.ocrText !== card.chosenName && (
