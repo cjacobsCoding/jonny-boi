@@ -57,6 +57,11 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // A shuffle permutes both arms identically, but the *question* ("may I shuffle?")
   // is answered by a pilot valuing a library it can see. Classified conservatively.
   'mayShuffleLibrary',
+  // Delver's upkeep: reads the top card and BRANCHES on what it is (the reveal
+  // choice's valence, and whether the source transforms). Same shape as
+  // `revealTopCard`, with the same dangerous miss: it looked, learned, and
+  // moved nothing — so a swapped top card can diverge the games invisibly.
+  'transformRevealTop',
 ]);
 
 /**

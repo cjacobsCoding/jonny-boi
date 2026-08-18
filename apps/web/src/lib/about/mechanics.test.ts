@@ -67,10 +67,11 @@ describe('the TODO side', () => {
     const todo = todoMechanics();
     const all = [...todo.systems, ...todo.templateGaps];
     expect(new Set(all).size).toBe(all.length);
-    // Two systems everyone knows are missing — if either lands, delete the
-    // assertion for it and enjoy the moment.
+    // A system everyone knows is missing — if it lands, delete the assertion
+    // and enjoy the moment. (Transform/DFC used to sit beside it; the second
+    // face landed, so its hint is a TEMPLATE gap now — asserted below.)
     expect(todo.systems).toContain('planeswalker loyalty abilities');
-    expect(todo.systems).toContain('transform / double-faced cards');
+    expect(todo.templateGaps).toContain('a transform/double-faced template the compiler does not recognize yet');
     // Template wording must not leak into the systems list, or the page would
     // overstate how much engine work is left.
     for (const system of todo.systems) {

@@ -11,9 +11,10 @@
  * lopsided enough to be real. We answer with **McNemar's paired test**.
  *
  * Honesty about fidelity (DESIGN §3.9, done): the engine NOW models triggered
- * abilities and until-end-of-turn continuous effects. Only a few advanced mechanics
- * remain unimplemented (transform/DFC, dynamic P/T, planeswalker loyalty, flashback
- * granted by another card — see `FIDELITY_CAVEAT`), so cards using them play as a
+ * abilities, until-end-of-turn continuous effects, transforming DFCs, and printed
+ * flashback. Only a few advanced mechanics remain unimplemented (dynamic P/T,
+ * planeswalker loyalty, flashback granted by another card — see `FIDELITY_CAVEAT`),
+ * so cards using them play as a
  * simplified subset. The swap machinery and statistics are exact; the CLI prints
  * this caveat.
  */

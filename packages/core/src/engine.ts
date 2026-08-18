@@ -1095,6 +1095,10 @@ function applyPlayLand(
   const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
   if (!isLand(card.def)) return rejectWith(prevState, 'that card is not a land');
+  // Same CR 712.8b guard as casting: a back face is never playable from hand.
+  if (card.def.isBackFace === true) {
+    return rejectWith(prevState, 'the back face of a double-faced card cannot be played');
+  }
 
   moveToZone(state, card, 'battlefield', emit, action.player);
   card.controller = action.player;
@@ -1513,6 +1517,12 @@ function applyCastSpell(
   if (fromZone === 'graveyard' && card.def.flashback === undefined) {
     return rejectWith(prevState, 'that card has no flashback');
   }
+  // CR 712.8b: the back face of a transforming DFC can never be cast. A card in
+  // hand is front-face-up by construction, so this is defensive — but a state
+  // built by hand (a test, a hostile online client) must be refused, not played.
+  if (card.def.isBackFace === true) {
+    return rejectWith(prevState, 'the back face of a double-faced card cannot be cast');
+  }
 
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
   const timing = castTiming(card.def);
@@ -1867,7 +1877,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
-      if (isLand(card.def)) {
+      if (isLand(card.def) && card.def.isBackFace !== true) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId });
       }
     }
@@ -1885,6 +1895,9 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   for (let h = 0; h < player.hand.length; h++) {
     const card = player.hand[h] as CardInstance;
     if (isLand(card.def)) continue;
+    // A back face is never castable (CR 712.8b) — mirror `applyCastSpell`'s
+    // guard so the offered menu can only contain playable actions.
+    if (card.def.isBackFace === true) continue;
     const timing = castTiming(card.def);
     const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
     if (!timingOk) continue;

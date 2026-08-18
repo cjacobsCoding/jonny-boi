@@ -212,6 +212,33 @@ export interface CardDefinition {
    */
   readonly statics?: readonly import('./statics.js').StaticAbility[];
   /**
+   * The SECOND FACE of a transforming double-faced card (Innistrad-style), as a
+   * complete nested definition — everything a face can print: name, types, P/T,
+   * keywords, triggers, statics, the lot.
+   *
+   * Present only on the FRONT face. The back face never carries a `backFace` of
+   * its own; it is marked {@link isBackFace} instead, and the way back to the
+   * front is the instance's `printedDef` (state.ts) — deliberately NOT a back-
+   * reference here, so definitions stay acyclic and serializable as plain data
+   * (the generated pool module writes them as literals).
+   *
+   * Which face is UP is per-permanent state, not definition data: a transformed
+   * permanent's `CardInstance.def` points at this nested definition, so every
+   * characteristic read in the engine (combat, targeting, triggers, statics,
+   * the AI, the renderer) routes through the active face with no second code
+   * path. See `transform.ts` for the swap and CR 712 for why it is not a zone
+   * change.
+   */
+  readonly backFace?: CardDefinition;
+  /**
+   * Marks this definition as the BACK face of a transforming double-faced card.
+   * A back face is never castable and never starts in any zone face-up (CR
+   * 712.8a: a DFC is always front-face-up everywhere except the battlefield) —
+   * the cast/play paths refuse it defensively, though in practice a back-face
+   * definition only ever appears as a battlefield permanent's active face.
+   */
+  readonly isBackFace?: boolean;
+  /**
    * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
    * data: what it may be attached to, what it does to its host while attached, and
    * what the state-based actions do when it is not legally attached. See

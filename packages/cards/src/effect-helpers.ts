@@ -375,6 +375,14 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   perm.markedByDeathtouch = false;
   perm.summoningSick = false;
   perm.counters = {};
+  // CR 712.8a: a transformed DFC turns front-face-up the moment it leaves the
+  // battlefield — a bounced Aberration is a Delver in hand. Core's
+  // `resetInstanceForNewZone` does the same for the engine's own leave paths;
+  // this helper is the cards-side funnel and must agree with it.
+  if (perm.printedDef != null) {
+    perm.def = perm.printedDef;
+    perm.printedDef = null;
+  }
   // A permanent always goes to its OWNER's zone, not its controller's. Its
   // `controller` field is left as it was: it is the last-known information an
   // after-the-fact effect reads (Path to Exile compensates the creature's

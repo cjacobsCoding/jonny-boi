@@ -727,6 +727,26 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // Delver of Secrets' upkeep body, whole-line: the look, the optional
+    // reveal, and the conditional transform are ONE primitive
+    // (`transformRevealTop`), because splitting them into sentences would leave
+    // "You may reveal that card" meaning nothing on its own. Both Oracle
+    // wordings of the condition are accepted (the template was retemplated in
+    // 2021). Only the instant-or-sorcery filter is reproduced — a different
+    // type list is a different card and stays reported rather than guessed.
+    id: 'reveal-top-transform',
+    description:
+      '"Look at the top card of your library. You may reveal that card. If an instant or sorcery card is revealed this way, transform ~" (Delver of Secrets)',
+    pattern:
+      /^look at the top card of your library\. you may reveal that card\. if (?:an instant or sorcery card is revealed this way|it's an instant or sorcery card), transform ~$/,
+    build() {
+      return effects({
+        primitive: 'transformRevealTop',
+        params: { filter: { anyOfTypes: ['instant', 'sorcery'] } },
+      });
+    },
+  },
+  {
     id: 'counter-target-spell',
     description: '"Counter target spell"',
     pattern: /^counter target spell$/,
@@ -1582,7 +1602,18 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   },
   { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet' },
   { pattern: /\bloyalty\b|^[+-]\d+:/, missingEngineSystem: 'planeswalker loyalty abilities' },
-  { pattern: /\btransform\b|\bflip\b|double-faced/, missingEngineSystem: 'transform / double-faced cards' },
+  {
+    // Transforming DFCs ARE implemented now (core's second face +
+    // `transformPermanent`, the `transformRevealTop` primitive, the
+    // `reveal-top-transform` rule), so this hint no longer claims the system is
+    // missing — that would send the next agent to rebuild it. What still lands
+    // here is a TEMPLATE: a transform instruction with no rule yet ("transform
+    // ~" from an activated ability, daybound/nightbound's day-night tracker,
+    // Kamigawa flip cards). Modal DFCs report separately: their gap is the
+    // cast-time face choice, not the second face itself.
+    pattern: /\btransform\b|\bflip\b|double-faced/,
+    missingEngineSystem: 'a transform/double-faced template the compiler does not recognize yet',
+  },
   // Flash is a real timing flag and PLAIN flashback ("Flashback {2}{U}") is a
   // real mechanic now (`CardDefinition.flashback` — cast from the graveyard,
   // exiled on leaving the stack). What still lands here is a flashback the

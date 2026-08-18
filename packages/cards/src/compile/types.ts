@@ -47,6 +47,33 @@ export interface CompilableCard {
   readonly toughness: number | null;
   /** Scryfall's keyword list (e.g. `['Flying', 'Prowess']`). */
   readonly keywords: readonly string[];
+  /**
+   * Per-face data for a double-faced card, when the record carries it
+   * (`NormalizedCard.faces`). The compiler uses it to compile a TRANSFORMING
+   * DFC as two linked faces; a single-faced card omits it or leaves it empty.
+   */
+  readonly faces?: readonly CompilableCardFace[];
+  /**
+   * Scryfall's `layout` when the record carries it (`'transform'`,
+   * `'modal_dfc'`, `'split'`, …). Optional because the committed index predates
+   * the field — the transform detection therefore also accepts the `Transform`
+   * keyword, which Scryfall stamps on every transforming DFC.
+   */
+  readonly layout?: string;
+}
+
+/**
+ * One face of a double-faced card, structurally matching
+ * `NormalizedCardFace` from `@jonny-boi/data-tools` (minus display-only
+ * fields) for the same no-import reason as {@link CompilableCard}.
+ */
+export interface CompilableCardFace {
+  readonly name: string;
+  readonly manaCost: CompilableCard['manaCost'];
+  readonly typeLine: CompilableCard['typeLine'];
+  readonly oracleText: string;
+  readonly power: number | null;
+  readonly toughness: number | null;
 }
 
 /** Whether every printed ability compiled to a real implementation. */
