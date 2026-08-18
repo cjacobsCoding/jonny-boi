@@ -1130,6 +1130,21 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'enters-tapped-unless-pay-life',
+    description:
+      '"As ~ enters, you may pay 2 life. If you don\'t, it enters tapped." (the shockland cycle)',
+    // Both templatings: the 2018+ "~ enters the battlefield" wording and the
+    // 2024+ short "~ enters" one; the second sentence names the card either as
+    // "it" or by name (which normalization folds to ~).
+    pattern:
+      /^as ~ enters(?: the battlefield)?, you may pay (\d+) life\. if you don't, (?:it|~) enters(?: the battlefield)? tapped$/,
+    build(match) {
+      const life = Number.parseInt(match[1] ?? '', 10);
+      if (!Number.isFinite(life) || life <= 0) return null;
+      return { entersTappedUnlessLifePaid: life };
+    },
+  },
+  {
     id: 'enters-tapped-unless-few-lands',
     description:
       '"~ enters tapped unless you control two or fewer other lands" (the fastland cycle)',
@@ -1398,7 +1413,14 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /add one mana of any color|add \{[wubrgc]\} or \{[wubrgc]\}|add one mana of any/,
     missingEngineSystem: 'a mana-ability template the compiler does not recognize yet',
   },
-  { pattern: /\benters tapped\b/, missingEngineSystem: 'an enters-tapped template the compiler does not recognize yet' },
+  {
+    // Plain taplands, fastlands/checklands (`entersTappedUnless`) AND shocklands
+    // ("you may pay 2 life" → `entersTappedUnlessLifePaid`) all COMPILE now, so
+    // what lands here is only an enters-tapped wording with no rule yet — e.g. a
+    // price other than life, or a condition the board cannot express.
+    pattern: /\benters tapped\b/,
+    missingEngineSystem: 'an enters-tapped template the compiler does not recognize yet',
+  },
   {
     // Modal cards are the one choice shape still genuinely missing a system: the
     // engine picks a spell's targets at cast with no modes declared, so a mode

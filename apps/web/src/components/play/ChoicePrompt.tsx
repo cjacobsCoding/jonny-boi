@@ -7,6 +7,7 @@ import {
   emptyDraft,
   orderBadge,
   setConfirm,
+  setPayLife,
   setPayMana,
   toggleOption,
   type ChoiceDraft,
@@ -112,6 +113,14 @@ export function ChoicePrompt({
               // a lie, so it is disabled rather than left to fail on submit.
               yesDisabled={!choice.affordable}
               onSet={(pay) => setDraft((d) => setPayMana(d, pay))}
+            />
+          )}
+          {choice.kind === 'payLife' && (
+            <BinaryOptions
+              chosen={draft.kind === 'payLife' ? draft.pay : null}
+              labels={{ yes: `Pay ${choice.amount} life`, no: 'Enter tapped' }}
+              yesDisabled={!choice.affordable}
+              onSet={(pay) => setDraft((d) => setPayLife(d, pay))}
             />
           )}
         </div>

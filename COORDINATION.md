@@ -87,11 +87,30 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/shocklands | worker | packages/core (card/choices/effects/engine/index + new shockland.test.ts), packages/cards (choice-primitives/effect-helpers/compile rules+text+types+compile + activated.test + new shockland.test.ts), packages/ai (choices.ts), apps/web (choice-view + ChoicePrompt + choice-session.test), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-17 worker: `feat/shocklands` 🚧 PUSHED — **shocklands play as printed, on BOTH entry
+  paths.** New `payLife` choice kind (engine charges the life once in `applyAnswerChoice`, CR 118.4
+  re-checked against the live total; pay-to-exactly-zero legal and lethal). The price is a decision,
+  not a board fact: `CardDefinition.entersTappedUnlessLifePaid`, with `entersTapped` answering TRUE
+  so any path that cannot ask yields the unpaid default (tapped) — never a free untapped shockland.
+  Asked at `applyPlayLand` (tapped event deferred until a decline confirms it; player keeps
+  priority) and mid-resolution via `ctx.payLifeOrDecline` in `searchLibrary → battlefield` (the
+  fetch path; ask-first, `putOntoBattlefield` gains `ignoreEntersTapped` for the paid entry). A
+  player who cannot pay is never asked. Pilot pays while remaining life stays above
+  `desperateLifeThreshold`. Also fixed rule 305.6: two basic land types now compile to
+  `producesOptions` (a choice of one mana per tap), not a two-mana bundle. Curly apostrophes fold to
+  straight in `normalizeClause`. Reworded the stale `enters tapped` UNSUPPORTED_HINT and the stale
+  `activated.test.ts` shockland-is-unsupported test. Coverage audit re-run: **155 → 178 playable
+  (7.4% → 8.5%)** — the whole shock cycle (Watery Grave, Blood Crypt, Steam Vents…) off the backlog.
+  NOT done: no new effect primitive (nothing for paired-arms-config), no shockland added to the
+  curated pool (importer path only), no reanimation/token entry paths (none exist yet — they inherit
+  the tapped default by construction). `npm run verify` exit 0, full suite green, `npm run build`
+  exit 0. (Worker)
 - 2026-08-15 DESKTOP-90PJPM4: ✅ **RESOLVED — the "unplayable online" report, diagnosed and fixed.**
   Branch `fix/online-playability` (worktree `D:\Cool Stuff\Claude\jb-online`). Suite **2273 passed,
   0 failed** (was 2250); `npm run build -w @jonny-boi/web` exit 0; lint clean. The handoff brief

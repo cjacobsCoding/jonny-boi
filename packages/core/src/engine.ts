@@ -724,7 +724,9 @@ function createChoiceChannel(
       const asked: ChoiceRequest =
         request.kind === 'payMana'
           ? { ...request, affordable: canAffordManaCost(state, request.chooser, request.cost) }
-          : request;
+          : request.kind === 'payLife'
+            ? { ...request, affordable: canAffordLifeCost(state, request.chooser, request.amount) }
+            : request;
       const choice = normalizeChoiceRequest(asked, {
         id: state.nextInstanceId++,
         sourceInstanceId: source.instanceId,
@@ -994,6 +996,14 @@ function applyAnswerChoice(
       answer = { kind: 'payMana', pay: false };
     }
   }
+  // Life is charged the same way, for the same reason — and re-checked against
+  // the live total, so an answer racing a stale affordability can never drive a
+  // life total below zero through a "payment" (CR 118.4).
+  if (choice.kind === 'payLife' && answer.kind === 'payLife' && answer.pay) {
+    if (!payLifeCost(state, choice.chooser, choice.amount, emit)) {
+      answer = { kind: 'payLife', pay: false };
+    }
+  }
   emit({
     type: 'choiceAnswered',
     choiceId: choice.id,
@@ -1013,6 +1023,31 @@ function applyAnswerChoice(
     aimPendingTriggers(state, emit);
     if (!state.pendingChoice && !state.gameOver) {
       state.priorityPlayer = state.activePlayer;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
+  // A LIFE payment with no resolution behind it is a shockland entering off a
+  // land play (`applyPlayLand` parked it; the land is the choice's source). The
+  // life was already charged above; what is left is the printed "if you don't":
+  // a decline turns the just-entered land tapped. Also the moment to settle any
+  // state-based consequence of the payment (paying to exactly zero is legal and
+  // lethal) and to aim any landfall trigger that fired while the question stood.
+  if (choice.kind === 'payLife' && answer.kind === 'payLife' && !state.resolution) {
+    if (!answer.pay) {
+      const land = findOnBattlefield(state, choice.sourceInstanceId);
+      if (land && !land.tapped) {
+        land.tapped = true;
+        emit({ type: 'tapped', instanceId: land.instanceId });
+      }
+    }
+    checkStateBasedActions(state, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      // The land play never surrendered priority, so its player keeps the floor —
+      // exactly where they would be had the land needed no question.
+      state.priorityPlayer = choice.chooser;
       state.consecutivePasses = 0;
     }
     return { state, events };
@@ -1069,7 +1104,50 @@ function applyPlayLand(
     self: card,
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
-  if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
+
+  // A shockland asks its question HERE — at land-play time, with nothing
+  // resolving. The land has entered with the unpaid default (tapped, from
+  // `entersTapped`); a payable question is parked, and the answer either charges
+  // the life and untaps the fresh entry (nothing has been able to observe it
+  // tapped: only answering is legal while the question stands) or confirms the
+  // default. A player who cannot pay is not asked — the default already IS the
+  // only outcome, so the game does not stop.
+  const shockCost = card.def.entersTappedUnlessLifePaid;
+  if (shockCost !== undefined && canAffordLifeCost(state, action.player, shockCost)) {
+    // Entered tapped above, but the tapped event is deferred until the answer —
+    // emitted only if the decline confirms it, so a replay never shows a land
+    // flickering tapped→untapped.
+    card.tapped = false;
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'payLife',
+        chooser: action.player,
+        prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
+        amount: shockCost,
+        affordable: true,
+        valence: 'neutral',
+      },
+      {
+        id: state.nextInstanceId++,
+        sourceInstanceId: card.instanceId,
+        sourceName: card.def.name,
+      },
+    );
+    if (choice) {
+      state.pendingChoice = choice;
+      emit({
+        type: 'choiceAsked',
+        choiceId: choice.id,
+        chooser: choice.chooser,
+        choiceKind: choice.kind,
+        prompt: choice.prompt,
+        sourceInstanceId: choice.sourceInstanceId,
+        optionCount: choiceOptionCount(choice),
+      });
+    }
+  } else if (card.tapped) {
+    emit({ type: 'tapped', instanceId: card.instanceId });
+  }
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
@@ -1290,6 +1368,29 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
  */
 export function canAffordManaCost(state: GameState, player: PlayerId, cost: ManaCost): boolean {
   return planPaymentFor(state, player, cost) !== undefined;
+}
+
+/**
+ * Whether `player` may pay `amount` life: CR 118.4 — life is a resource down to
+ * exactly zero. Paying to zero is legal (and promptly lethal via the SBAs),
+ * which is the player's call to make, not the engine's to forbid.
+ */
+function canAffordLifeCost(state: GameState, player: PlayerId, amount: number): boolean {
+  return amount > 0 && state.players[player].life >= amount;
+}
+
+/**
+ * Deduct a life payment, saying so in the log. Returns false — having changed
+ * nothing — when the chooser no longer has the life, which mirrors
+ * `payManaCostFromBoard`: the caller records what actually happened, and an
+ * agreement the total cannot honour is recorded as a decline.
+ */
+function payLifeCost(state: GameState, player: PlayerId, amount: number, emit: (e: GameEvent) => void): boolean {
+  if (!canAffordLifeCost(state, player, amount)) return false;
+  const owner = state.players[player];
+  owner.life -= amount;
+  emit({ type: 'lifeChanged', player, delta: -amount, to: owner.life });
+  return true;
 }
 
 /** The taps that would fund `cost` for `player`, or undefined if it cannot be paid. */

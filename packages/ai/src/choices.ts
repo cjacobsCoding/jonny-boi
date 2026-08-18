@@ -34,6 +34,7 @@ import type {
   ConfirmChoice,
   GameAction,
   GameState,
+  PayLifeChoice,
   PayManaChoice,
   PendingChoice,
   SelectTargetsChoice,
@@ -96,6 +97,8 @@ export function answerChoiceHeuristically(
       return answerAction(choice, answerConfirm(choice, weights));
     case 'payMana':
       return answerAction(choice, answerPayMana(choice, weights));
+    case 'payLife':
+      return answerAction(choice, answerPayLife(state, choice, weights));
     case 'selectTargets':
       return answerAction(choice, answerSelectTargets(state, choice, weights));
     default:
@@ -269,6 +272,27 @@ function answerConfirm(choice: ConfirmChoice, weights: HeuristicWeights): Choice
  * knows no rules). A pilot that reasons about the stake belongs with the pilots
  * that search, not in the valence rule that answers every card ever printed.
  */
+/**
+ * Answer "pay N life, or it enters tapped" (a shockland; any pay-life rider).
+ *
+ * Life is a resource with a cliff in it, so unlike a mana payment this is not a
+ * plain valence call: paying 2 at 20 life buys a full turn of tempo, paying 2 at
+ * 4 life halves the burn spells needed to kill you. The rule is the pilot's
+ * existing danger line — pay while the REMAINING total stays above
+ * `desperateLifeThreshold`, decline once it would not. That is also exactly when
+ * a human stops shocking themselves.
+ *
+ * An unaffordable payment is declined unconditionally (paying is not even
+ * legal), and a `'loss'` valence — somebody else making us consider it — is
+ * declined like every other loss.
+ */
+function answerPayLife(state: GameState, choice: PayLifeChoice, weights: HeuristicWeights): ChoiceAnswer {
+  if (!choice.affordable) return { kind: 'payLife', pay: false };
+  if (choice.valence === 'loss') return { kind: 'payLife', pay: false };
+  const remaining = state.players[choice.chooser].life - choice.amount;
+  return { kind: 'payLife', pay: remaining > weights.desperateLifeThreshold };
+}
+
 function answerPayMana(choice: PayManaChoice, weights: HeuristicWeights): ChoiceAnswer {
   if (!choice.affordable) return { kind: 'payMana', pay: false };
   if (choice.valence === 'gain') return { kind: 'payMana', pay: true };

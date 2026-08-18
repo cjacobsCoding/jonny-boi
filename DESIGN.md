@@ -848,6 +848,22 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   full; the sub-decision of which Island is the planner's, in one place, for every seat.
   The pilot holds a soft counter like a hard one and prices it by asking whether the victim can pay
   (`softCounterPayableFactor`); the hotseat prompt renders "Pay {3}" / "Don't pay".
+- ✅ *shocklands — a pay-life price on entry* — "As ~ enters, you may **pay 2 life**. If you don't, it
+  enters tapped" (Blood Crypt and the cycle; both templatings). A sixth choice kind, `payLife`, kept
+  separate from `payMana` for the same reason `payMana` is separate from `confirm`: the engine charges
+  the price, so it must know it — the life is deducted once, in `applyAnswerChoice`, re-checked against
+  the live total (CR 118.4: down to exactly zero, which is legal, the player's call, and promptly
+  lethal via the SBAs). The price is a DECISION, not a board fact, so it lives in its own
+  `CardDefinition.entersTappedUnlessLifePaid` rather than `entersTappedUnless` — and `entersTapped`
+  answers TRUE for it, so **every entry path that does not ask produces the unpaid default (tapped),
+  never a free untapped shockland**. Two paths ask and override with the answer: `applyPlayLand`
+  (a question asked with nothing resolving; the land is on the battlefield while the question stands,
+  its tapped event deferred until a decline confirms it) and a fetch effect's
+  `searchLibrary → battlefield` (asked mid-resolution through `ctx.payLifeOrDecline`, before anything
+  moves). A player who cannot pay is never asked. The pilot pays while the remaining total stays above
+  its existing `desperateLifeThreshold`; the hotseat prompt renders "Pay 2 life" / "Enter tapped".
+  Compiling the cycle also fixed rule 305.6 fidelity: a land with TWO basic land types now offers a
+  choice of one mana per tap (`producesOptions`), not both at once.
 - ✅ *target restrictions* — a card narrows its own aim with the reserved `targets` param
   (`'any'|'creature'|'player'|'spell'`), enforced at offer, at cast, and again at resolution. A
   fidelity audit of all 156 definitions found **19 cards that did not play as printed** and fixed them:
