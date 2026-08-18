@@ -136,7 +136,7 @@ _Append dated notes here; keep them short. Newest at top._
   reveal itself absent from the log); UNSUPPORTED-BACKLOG.md not regenerated (coverage-audit needs a
   live Scryfall fetch). Expanded pool untouched — Delver lives in the curated pool.
   Verified: full suite **2469 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0
-  (numbers re-confirmed post-merge of origin/main). (Worker)
+  (origin/main had not moved at push time — no merge was needed). (Worker)
 
 - 2026-08-17 worker: `feat/shocklands` 🚧 PUSHED — **shocklands play as printed, on BOTH entry
   paths.** New `payLife` choice kind (engine charges the life once in `applyAnswerChoice`, CR 118.4
