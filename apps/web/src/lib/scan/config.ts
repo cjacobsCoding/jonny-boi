@@ -95,42 +95,154 @@ export const MIN_CELL_OCCUPANCY = 0.15;
 
 /**
  * The smallest fan offset we will believe, as a fraction of a card's height.
- * People fan a pile just far enough to read the name, so the real offset is
- * usually close to the title bar's own height; anything much tighter than this
- * is two edges of one card, not two cards.
+ * People fan a pile far enough to read the name, so the real offset is at least
+ * about the title bar's printed height (11.5% of the card). This floor also
+ * rejects the HALF-RHYTHM that defeats a looser bound: each fanned sliver shows
+ * two dark lines (the copy boundary and the title bar's own bottom frame line),
+ * and reading that interleaved sequence as the fan doubles the count.
  */
-export const MIN_FAN_PITCH_OF_CARD = 0.05;
+export const MIN_FAN_PITCH_OF_CARD = 0.08;
 
 /**
- * How much two stripes' heights may differ and still both be title bars, as a
- * fraction of the taller. Every copy in a fan shows the same sliver of card, so
- * their stripes match closely; a card's art or a line of its rules text does not.
+ * The largest fan offset we will believe, as a fraction of a card's height.
+ * People fan a pile just far enough to read the names, so a step much past the
+ * title bar's height is not another copy — it is the next pile, or the bottom
+ * card's own insides.
  */
-export const STRIPE_HEIGHT_TOLERANCE = 0.4;
+export const MAX_FAN_PITCH_OF_CARD = 0.3;
 
 /**
- * How tall a stripe must be, as a fraction of a card, to be a WHOLE CARD FACE
- * rather than a title bar.
+ * Stripes in one column separated by less than this fraction of a card belong
+ * to the SAME pile. The competing gaps differ by an order of magnitude: within
+ * a pile the flat separators (a border line, a sleeve lip, the quiet lines of a
+ * rules text box) are a few pixels, while the cloth between two rows of piles
+ * is a good fraction of a card.
+ */
+export const PILE_GAP_OF_CARD = 0.15;
+
+/**
+ * The shortest run of content that can be a pile, as a fraction of a card's
+ * height. A pile is AT LEAST one card tall; anything shorter is clutter that
+ * happened to sit in a card-wide column — a deck box edge, a stray token.
+ * Deliberately below 1.0 because a dark bottom border on dark cloth shaves the
+ * observed height of a real card.
+ */
+export const MIN_PILE_HEIGHT_OF_CARD = 0.6;
+
+/**
+ * How deep a dip in a pile's brightness profile must be to count as the
+ * boundary between two copies: the dip's floor must sit below this fraction of
+ * the brighter of its neighbouring peaks. The boundary is a dark line (card
+ * border plus sleeve edge) between two bright title bars, but glare on a
+ * sleeved white-frame card can wash it out badly — measured on a real photo,
+ * the faintest true boundary reached 0.77 of its neighbours.
+ */
+export const VALLEY_PROMINENCE = 0.8;
+
+/**
+ * The widest a copy boundary may be, as a fraction of a card's height. A
+ * boundary is a LINE — border plus sleeve lip, a few pixels. A dark run wider
+ * than this is card art or cloth, not a boundary.
+ */
+export const VALLEY_MAX_WIDTH_OF_CARD = 0.09;
+
+/**
+ * A row belongs to a TITLE PLATE when its mean brightness reaches this fraction
+ * of the brightest row in the pile's fanned zone. The plate — the pale strip
+ * the card's name is printed on — is the brightest thing in every fanned
+ * sliver, whatever the card: measured on the real photo, plates held 80–100% of
+ * their pile's peak while art, rules text and cloth fell well below, EXCEPT for
+ * pale art (a golden temple, a green-lit beast), which is why plates are not
+ * counted on brightness alone — see the pitch and valley rules that accompany
+ * this in `stacks.ts`.
+ */
+export const PLATE_BRIGHTNESS_FRACTION = 0.8;
+
+/**
+ * Rows below the plate threshold interrupt a plate without ending it when the
+ * run is at most this fraction of a card tall — the name's own dark glyphs and
+ * a streak of shadow both carve notches into the plate's brightness.
+ */
+export const PLATE_GAP_BRIDGE_OF_CARD = 0.014;
+
+/**
+ * The shortest run of bright rows that counts as a plate, as a fraction of a
+ * card. A nearly-flush copy can show a sliver of plate only a couple of pixels
+ * tall, so this stays tiny; below it is a single noisy row, not a plate.
+ */
+export const MIN_PLATE_ROWS_OF_CARD = 0.008;
+
+/**
+ * A valley at least this deep (see `Valley.depth`) is a REAL dark line — a card
+ * edge — and not a shading dip. Two rules key off it: a bright band is SPLIT in
+ * two where such a valley crosses it (two nearly-flush copies), and a band too
+ * close to its predecessor still counts as a copy when such a valley separates
+ * them. Measured on the real photo: true edges reached 0.5–0.95, while shading
+ * inside one card stayed at 0.2–0.48.
+ */
+export const SPLIT_VALLEY_DEPTH = 0.5;
+
+/**
+ * Plates closer together than this fraction of the photo's fan pitch cannot be
+ * two copies — a fan's whole point is offsetting each copy by about a title
+ * bar. The plate that fails this is the same copy's pale art showing under its
+ * title, and is dropped. Exception: see {@link FLUSH_PLATE_FRACTION}.
  *
- * Whether the bottom card of a pile shows up as one stripe or two depends on its
- * frame: if the line between its title bar and its art is crisp the two split,
- * and if it is not they merge into a single stripe as tall as the card. Both
- * happen on real photos, and the pile has to be counted correctly either way, so
- * the counter checks which it is looking at rather than assuming.
+ * Spacing is measured between the plates' BRIGHTEST rows, not their first
+ * bright rows — glare ramps a plate's leading edge upward and would fake a
+ * too-close spacing for a genuine copy (it did, on the real photo's Banisher
+ * Priest pile).
  */
-export const FACE_CARD_MIN_OF_CARD = 0.5;
+export const CLOSE_PLATE_FRACTION = 0.7;
 
 /**
- * How much consecutive fan offsets may differ and still be the same fan, as a
- * fraction of the larger. A pile is fanned in one motion, so its offsets are
- * regular — this is slack for a photo taken at an angle, not for a different
- * kind of spacing.
- *
- * Kept tight on purpose. The nearest competing rhythm is the step from a card's
- * last title bar down to the top of its art, which lands within about 30% of a
- * typical fan offset — so a looser bound swallows the art as another copy.
+ * Two copies slid almost flush show their plates nearly touching — far closer
+ * than any fan offset — with the upper card's edge as a deep valley between
+ * them. Below this fraction of the fan pitch, that deep valley outvotes
+ * {@link CLOSE_PLATE_FRACTION} and both plates count. The escape stays this
+ * tight because at ordinary close-but-not-flush spacings a deep valley proves
+ * nothing: a dark-framed card's own title-bottom line can be just as deep as a
+ * card edge (the real photo's Elvish Visionary pile), and looser escapes
+ * counted its art as a copy.
  */
-export const FAN_PITCH_TOLERANCE = 0.2;
+export const FLUSH_PLATE_FRACTION = 0.35;
+
+/**
+ * Sleeve glare above the first copy: an oversized sleeve catches light along
+ * its rim, painting a bright line ABOVE the top card that reads as a plate.
+ * That rim sits within this fraction of a card of the pile's top, so a band
+ * that ends before a deep valley this close to the top is glare, not a copy.
+ */
+export const GLARE_CAP_OF_CARD = 0.06;
+
+/**
+ * Fallback fan pitch, as a fraction of a card, for a photo with too few piles
+ * to measure its own pitch: about the printed title bar's height, which is what
+ * people fan a pile to reveal.
+ */
+export const FALLBACK_PITCH_OF_CARD = 0.13;
+
+/**
+ * How far past its measured content a pile may claim copy plates, as a
+ * fraction of a card. The pile's observed bottom underestimates the true one —
+ * a black-bordered card's bottom border sinks into dark cloth entirely, which
+ * on the real photo shaved 39px (0.16 of a card) off a Plains pile — so plates
+ * may begin a little beyond `observedHeight - cardHeight`; past that they
+ * cannot be a copy's title, because the copy would hang off the end of the
+ * pile. Kept just above the observed worst case (0.183 of a card, the real
+ * photo's Elvish Visionary pile): much looser and the bottom card's own pale
+ * ART clears the bar too — it starts about 0.2 of a card below the bottom
+ * card's top, and did on the real photo's Temple Garden pile.
+ */
+export const PILE_BOTTOM_SLACK_OF_CARD = 0.19;
+
+/**
+ * Horizontal inset, per side, of the strip used to measure a pile's brightness
+ * profile, as a fraction of the column's width. The middle of the card carries
+ * the title text and dodges both the rounded frame corners and the neighbour
+ * pile's edge bleeding into a slightly-rotated column.
+ */
+export const PILE_PROFILE_INSET = 0.2;
 
 /**
  * Margin added around a detected title stripe before OCR, as a fraction of the
@@ -157,9 +269,19 @@ export const MAX_COPIES_PER_STACK = 30;
  * How many extra copies in a pile we will OCR to break a weak read of the
  * bottom card. Every copy in a pile is the SAME card, so a second and third
  * opinion is free accuracy — but only worth paying for when the first read was
- * not convincing.
+ * not convincing. Counted over CROPS (each band contributes two, see
+ * {@link TITLE_CROP_SHIFT_FRACTION}), so this covers the bottom card's second
+ * crop plus the two crops of the next two copies.
  */
-export const STACK_CONSENSUS_READS = 2;
+export const STACK_CONSENSUS_READS = 5;
+
+/**
+ * The down-shifted retry crop: the same title band moved down by this fraction
+ * of its own height. The band hugs the plate's BRIGHT rows, but the name's dark
+ * glyphs sit at (or just past) the plate's lower edge on a tilted photo, and
+ * the shifted crop is the one that catches them whole.
+ */
+export const TITLE_CROP_SHIFT_FRACTION = 0.3;
 
 /**
  * Target height, in pixels, for a title crop handed to OCR. Upscaling is chosen
@@ -188,6 +310,13 @@ export const CONFIDENT_MATCH_SCORE = 0.82;
 
 /** How many alternative names the review UI offers per detected card. */
 export const MATCH_CANDIDATES = 4;
+
+/**
+ * Word-run queries shorter than this (in characters, normalized) are not
+ * offered to the matcher: a stray two-letter word of OCR junk matches short
+ * names at full score and would outvote the real, longer read.
+ */
+export const MIN_QUERY_LENGTH = 4;
 
 /**
  * Longest edge, in pixels, that a photo is decoded to.

@@ -35,3 +35,6 @@ data-cache/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Tesseract language data cached by the real-photo scan test (downloaded on first run)
+apps/web/src/lib/scan/fixtures/eng.traineddata
