@@ -69,10 +69,15 @@ function fillPool(state: GameState, player: PlayerId): void {
 }
 
 /**
- * Cast Cryptic Command at `target` and pass until it resolves far enough to park
- * its "choose two" question. Returns the state with the choice pending.
+ * Cast Cryptic Command and stop at its first cast-time question.
+ *
+ * Modes are announced AS THE SPELL IS CAST (CR 601.2b), so the question is
+ * standing the moment `castSpell` is applied — nothing has to resolve first, and
+ * nobody has had priority to respond. `setup` builds the board the pilot will
+ * price its modes against; the cast itself names no target, because a modal
+ * spell aims per mode rather than as a whole card.
  */
-function parkCrypticOn(target: (state: GameState) => InstanceId | undefined, seed = 7): GameState {
+function parkCrypticOn(setup: (state: GameState) => void, seed = 7): GameState {
   const created = createGame({
     seed,
     registry,
@@ -86,22 +91,32 @@ function parkCrypticOn(target: (state: GameState) => InstanceId | undefined, see
   while (state.step !== 'precombatMain' && guard++ < 50) {
     state = applyAction(state, { kind: 'passPriority', player: state.priorityPlayer }, DEFAULT_RULES, registry).state;
   }
-  const targetId = target(state);
+  setup(state);
   const spell = place(state, CRYPTIC, 'A', 'hand');
   fillPool(state, 'A');
-  state = applyAction(
+  return applyAction(
     state,
-    {
-      kind: 'castSpell',
-      player: 'A',
-      instanceId: spell.instanceId,
-      ...(targetId === undefined ? {} : { targets: [targetId] }),
-    },
+    { kind: 'castSpell', player: 'A', instanceId: spell.instanceId },
     DEFAULT_RULES,
     registry,
   ).state;
-  state = applyAction(state, { kind: 'passPriority', player: 'A' }, DEFAULT_RULES, registry).state;
-  return applyAction(state, { kind: 'passPriority', player: 'B' }, DEFAULT_RULES, registry).state;
+}
+
+/**
+ * Answer every cast-time question with the pilot, then let the spell resolve.
+ * A modal cast asks two kinds of question in a row (which modes, then where each
+ * one points), so a test that answered only the first would be measuring half a
+ * decision.
+ */
+function settleWithPilot(state: GameState, max = 20): GameState {
+  let s = state;
+  let guard = 0;
+  while ((s.pendingChoice || s.stack.length > 0) && !s.gameOver && guard++ < max) {
+    s = s.pendingChoice
+      ? answerWithPilot(s)
+      : applyAction(s, { kind: 'passPriority', player: s.priorityPlayer }, DEFAULT_RULES, registry).state;
+  }
+  return s;
 }
 
 /** Let the heuristic pilot answer the parked choice and apply its answer. */
@@ -121,43 +136,62 @@ function answerWithPilot(state: GameState): GameState {
 }
 
 describe('the heuristic pilot casting the pool’s real Cryptic Command', () => {
-  it('draws a card and taps the board rather than bouncing a land', () => {
-    // "Choose two" with only a land targeted: drawing and tapping their creatures
-    // both beat spending half the spell to return a Forest. (The old pilot took the
-    // two printed-first modes — counter and bounce — and never drew.)
+  it('asks for its modes AT CAST — the whole point of the cast-time system', () => {
     const state = parkCrypticOn((s) => {
       place(s, card('Grizzly Bears'), 'B', 'battlefield');
-      return place(s, card('Forest'), 'B', 'battlefield').instanceId;
     });
     expect(state.pendingChoice?.kind).toBe('chooseModes');
+    // Still on the stack, unresolved, with the caster holding priority: the
+    // modes are committed to before the opponent may respond.
+    expect(state.stack).toHaveLength(1);
+  });
+
+  it('draws a card and taps the board rather than bouncing a land', () => {
+    // Drawing and tapping their creature both beat spending half the spell to
+    // return a Forest. (The old pilot took the two printed-first modes — counter
+    // and bounce — and never drew.)
+    const state = parkCrypticOn((s) => {
+      place(s, card('Grizzly Bears'), 'B', 'battlefield');
+      place(s, card('Forest'), 'B', 'battlefield');
+    });
     const handBefore = state.players.A.hand.length;
-    const done = answerWithPilot(state);
+    const done = settleWithPilot(state);
     expect(done.players.A.hand.length).toBe(handBefore + 1);
+    // The LAND is what must survive: spending half a four-mana spell to return a
+    // Forest is the blunder under test. Whether the Bear is bounced or tapped is
+    // a real judgement call the pilot is entitled to make either way.
     expect(done.battlefield.some((c) => c.def.name === 'Forest')).toBe(true);
-    expect(done.battlefield.find((c) => c.def.name === 'Grizzly Bears')?.tapped).toBe(true);
+    const bear = done.battlefield.find((c) => c.def.name === 'Grizzly Bears');
+    expect(bear === undefined || bear.tapped).toBe(true);
   });
 
   it('bounces a real threat rather than leaving it alone', () => {
-    const state = parkCrypticOn((s) => place(s, card('Serra Angel'), 'B', 'battlefield').instanceId);
-    const done = answerWithPilot(state);
+    const state = parkCrypticOn((s) => {
+      place(s, card('Serra Angel'), 'B', 'battlefield');
+    });
+    const done = settleWithPilot(state);
     expect(done.battlefield.some((c) => c.def.name === 'Serra Angel')).toBe(false);
     expect(done.players.B.hand.some((c) => c.def.name === 'Serra Angel')).toBe(true);
   });
 
-  it('never bounces its OWN permanent', () => {
-    const state = parkCrypticOn((s) => place(s, card('Serra Angel'), 'A', 'battlefield').instanceId);
-    const done = answerWithPilot(state);
+  it('never bounces its OWN permanent when the opponent has one to bounce', () => {
+    const state = parkCrypticOn((s) => {
+      place(s, card('Serra Angel'), 'A', 'battlefield');
+      place(s, card('Grizzly Bears'), 'B', 'battlefield');
+    });
+    const done = settleWithPilot(state);
     expect(done.battlefield.some((c) => c.controller === 'A' && c.def.name === 'Serra Angel')).toBe(true);
   });
 
   it('taps the opponent’s board when that is the mode that matters', () => {
     const state = parkCrypticOn((s) => {
       for (let i = 0; i < 3; i++) place(s, card('Serra Angel'), 'B', 'battlefield');
-      return undefined; // no target chosen: counter/bounce are off the menu
     });
-    const done = answerWithPilot(state);
+    const done = settleWithPilot(state);
     const theirs = done.battlefield.filter((c) => c.controller === 'B' && c.def.name === 'Serra Angel');
-    expect(theirs.length).toBe(3);
+    // One may have been bounced (that is a real choice here); the ones that
+    // stayed are all tapped, which is the mode under test.
+    expect(theirs.length).toBeGreaterThanOrEqual(2);
     expect(theirs.every((c) => c.tapped)).toBe(true);
   });
 });
