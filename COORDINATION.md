@@ -119,9 +119,9 @@ _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-19 worker: `feat/mana-ability-model` 🚧 PUSHED — **core's mana model grew: four of the
   five shapes the census named are now real, and the fifth is reported by name.**
-  **Measured offline, PAIRED against the same cached corpus on the same-day `main`: 307 → 363 /
-  2100 playable (14.6% → 17.3%), +56 cards.** Gauntlet seed 99 is byte-identical to that `main`
-  (212/700, every matchup row equal), and min-of-14 paired wall time is 2.99s vs 3.05s — noise on a
+  **Measured offline, PAIRED against the same cached corpus on the same-day `main`: 328 → 384 /
+  2100 playable (15.6% → 18.3%), +56 cards.** Gauntlet seed 99 is byte-identical to that `main`
+  (215/700, every matchup row equal), and min-of-14 paired wall time is 2.99s vs 3.05s — noise on a
   box running several agents, with the branch faster than `main` in several individual pairs.
 
   ✅ **`CardDefinition.manaAbilities`** — a list of separately-printed mana abilities, each with its
