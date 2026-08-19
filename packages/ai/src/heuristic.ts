@@ -138,7 +138,7 @@ type SpellIntent =
        */
       readonly amountIsX?: boolean;
     }
-  | { readonly kind: 'destroyCreature' }
+  | { readonly kind: 'destroyCreature'; readonly exiles: boolean }
   | { readonly kind: 'shrink'; readonly toughness: number }
   | { readonly kind: 'pump'; readonly power: number; readonly toughness: number }
   | { readonly kind: 'counter' }
@@ -847,7 +847,15 @@ function scoreSpell(
       return undefined;
     }
     case 'destroyCreature': {
-      const target = biggestThreat(oppCreatures, index);
+      // An effect that says DESTROY does nothing at all to an indestructible
+      // creature (CR 702.12b), so pointing removal at one is a wasted card. The
+      // pilot looks past it for the biggest thing it CAN kill, and holds the
+      // spell if the board is nothing but indestructible creatures. Exile-based
+      // removal has no such exemption and keeps the whole list.
+      const reachable = intent.exiles
+        ? oppCreatures
+        : oppCreatures.filter((c) => !isIndestructible(c, index));
+      const target = biggestThreat(reachable, index);
       if (!target) return undefined; // no target → don't waste removal
       return {
         score: weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index),
@@ -1046,6 +1054,10 @@ function sweeperValue(
   let net = 0;
   for (const perm of view.battlefield) {
     if (!isCreature(perm.def)) continue;
+    // A wipe neither kills their indestructible creatures nor costs us ours, so
+    // neither belongs in the trade. Counting them makes the pilot cast a Wrath
+    // into a board it cannot actually clear.
+    if (isIndestructible(perm as CardInstance, index)) continue;
     const stats = statTotal(perm as CardInstance, index);
     net += perm.controller === me ? -stats * weights.ownCreatureLossPerStat : stats * weights.killEnemyPerStat;
   }
@@ -1380,10 +1392,10 @@ function attackIsProfitable(
   // The opponent will block if a blocker kills us and the trade favours them.
   // Find the blocker that would profitably kill us; if one exists, weigh the trade.
   let bestEnemyValue = -Infinity; // value to the OPPONENT of their best block
-  let blockerExists = false;
+  let eligibleBlockers = 0;
   for (const b of enemyBlockers) {
     if (!canBlockByEvasion(attacker, b, index)) continue;
-    blockerExists = true;
+    eligibleBlockers += 1;
     const bPower = power(b, index);
     const bTough = toughness(b, index);
     const attackerDies = bPower >= myTough;
@@ -1394,6 +1406,13 @@ function attackIsProfitable(
       (blockerDies ? weights.ownCreatureLossPerStat * (bPower + bTough) : 0);
     if (enemyValue > bestEnemyValue) bestEnemyValue = enemyValue;
   }
+
+  // Our attacker's own blocking requirement decides how many of those eligible
+  // blockers the defender actually needs: menace (or "except by N or more") means
+  // a single blocker is not a legal block at all, so a lone potential blocker is
+  // no deterrent and this attack is really unopposed.
+  const blockersNeeded = needsMultipleBlockers(attacker) ? MENACE_BLOCKERS_NEEDED : 1;
+  const blockerExists = eligibleBlockers >= blockersNeeded;
 
   // If the opponent has a block that's good for them (positive value) AND it kills
   // our attacker, attacking loses value — hold back unless we'd trade up.
@@ -1484,6 +1503,11 @@ function pickBlocker(
   weights: HeuristicWeights,
   index: ContinuousIndex,
 ): CardInstance | undefined {
+  // A creature that can only be blocked by two or more is one this pilot cannot
+  // block at all: it assigns a single blocker per attacker, and a lone blocker on
+  // a menacing attacker makes the WHOLE declaration illegal - so every other
+  // block in the same action is lost with it.
+  if (needsMultipleBlockers(attacker)) return undefined;
   const aPower = power(attacker, index);
   const aTough = toughness(attacker, index);
 
@@ -1584,7 +1608,11 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
       };
     }
     if (ref.primitive === PRIMITIVE.destroyTarget || ref.primitive === PRIMITIVE.exileTarget) {
-      return { kind: 'destroyCreature' };
+      // DESTROY and EXILE are the same play against almost every creature and
+      // opposite plays against an indestructible one, so the two cannot share an
+      // intent without the pilot "killing" a creature that shrugs it off. The
+      // flag is what the targeting below reads.
+      return { kind: 'destroyCreature', exiles: ref.primitive === PRIMITIVE.exileTarget };
     }
     if (ref.primitive === PRIMITIVE.counterSpell || ref.primitive === PRIMITIVE.counterUnlessPaid) {
       return { kind: 'counter' };
@@ -1738,14 +1766,35 @@ function totalIncomingDamage(
 }
 
 /**
- * Whether `blocker` could legally block `attacker` by evasion (flying needs
- * flying/reach). Mirrors core's combat rule so the pilot only proposes legal
- * blocks. (Tapped-ness is filtered by callers.)
+ * Whether this permanent shrugs off an effect that says "destroy".
  *
- * Reads the EFFECTIVE keyword set, not `def.keywords`: flying granted by an Aura
- * or an until-end-of-turn effect is flying, and a pilot that read only the printed
- * box proposed blocks the engine then rejected — the rules path and the AI path
- * answering the same question differently.
+ * Read through the continuous layer, not off `def.keywords`: an opponent who has
+ * just cast Heroic Intervention has an indestructible board with nothing printed
+ * on it, and a pilot that reads the printed set walks its removal straight into
+ * that. The DECISION's index is passed in rather than rebuilt per permanent —
+ * `aggregateFor` is a whole battlefield pass, and this runs once per candidate
+ * creature per removal spell.
+ */
+function isIndestructible(perm: CardInstance, index: ContinuousIndex): boolean {
+  return Boolean(keywordsOf(perm, index).indestructible);
+}
+
+/**
+ * Whether `blocker` could legally block `attacker` PER PAIR. Mirrors core's
+ * `canBlock` so the pilot only proposes declarations the engine will accept.
+ *
+ * ⚠️ It is deliberately the per-pair half only. Menace and "can't be blocked
+ * except by N or more creatures" constrain the whole DECLARATION, and this pilot
+ * assigns at most one blocker per attacker — so those are handled by
+ * {@link needsMultipleBlockers} refusing to block such an attacker at all,
+ * rather than by a pair test that cannot see the count.
+ *
+ * Keywords are read EFFECTIVE, not printed: flying granted by an Aura or an
+ * until-end-of-turn effect is flying, and a pilot that read only the printed box
+ * proposed blocks the engine then rejected — the rules path and the AI path
+ * answering one question two ways. (This doc-comment previously said the opposite,
+ * and said it for the same reason the rest of the file did: nothing passed an
+ * index. See `board-stats.ts`.)
  */
 function canBlockByEvasion(
   attacker: CardInstance,
@@ -1754,8 +1803,30 @@ function canBlockByEvasion(
 ): boolean {
   const ak = keywordsOf(attacker, index);
   const bk = keywordsOf(blocker, index);
+  // The blocker's own restriction disqualifies it whatever it would block.
+  if (bk.cantBlock) return false;
+  if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
   return true;
+}
+
+/**
+ * The smallest blocking requirement any printing of the rule states - menace's
+ * "two or more". Used as the count a defender needs before such an attacker is
+ * genuinely opposed.
+ */
+const MENACE_BLOCKERS_NEEDED = 2;
+
+/**
+ * Whether this attacker prints a blocking requirement of two or more creatures
+ * (menace, or the general "except by N or more"). This pilot never assigns more
+ * than one blocker to an attacker, so proposing ANY block on such a creature is
+ * proposing an illegal declaration - the engine rejects the whole thing, and the
+ * pilot loses every other block in it as well.
+ */
+function needsMultipleBlockers(attacker: CardInstance): boolean {
+  const ak = attacker.def.keywords ?? {};
+  return Boolean(ak.menace) || (ak.minBlockers ?? 0) > 1;
 }
 
 function findInstance(view: PilotView, id: InstanceId): CardInstance | undefined {

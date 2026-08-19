@@ -213,8 +213,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Blocking restrictions',
         detail:
-          'Menace judges the whole block declaration (not any single pair), and "can\'t be blocked" is enforced per pair.',
+          'Each restriction is enforced where it is expressible: "can\'t be blocked" and "~ can\'t block" per pair, while menace — and its general form "can\'t be blocked except by three or more creatures" — judges the whole block declaration, because every blocker is individually legal and only the count is not. Block REQUIREMENTS ("must be blocked if able") are not implemented, and a card printing one says so rather than playing without it.',
         witness: { kind: 'keyword', word: 'menace' },
+      },
+      {
+        title: 'Granted evasion',
+        detail:
+          '"Target creature can\'t be blocked this turn" is the ordinary until-end-of-turn keyword grant, so it expires at cleanup through the same path a pump does (Rogue\'s Passage, Whirler Rogue, Enter the Enigma).',
+        witness: { kind: 'rule', id: 'grant-unblockable-until-eot' },
+      },
+      {
+        title: 'Indestructible',
+        detail:
+          'Effects that say "destroy" and lethal damage — deathtouch included — leave it alone. Nothing else does: 0 toughness still puts it into the graveyard (a different state-based action, which the keyword does not mention), a sacrifice still takes it, and exile still removes it.',
+        witness: { kind: 'keyword', word: 'indestructible' },
+      },
+      {
+        title: 'Granted indestructible, one creature or the whole team',
+        detail:
+          'Heroic Intervention\'s "permanents you control gain hexproof and indestructible until end of turn" and Darksteel Forge\'s "artifacts you control have indestructible" both reach the destroy rules — a granted keyword is not a second-class one.',
+        witness: { kind: 'primitive', id: 'grantKeywordToYoursUntilEndOfTurn' },
       },
       {
         title: 'Flash timing',
@@ -271,8 +289,38 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Lands that enter tapped',
         detail:
-          'Unconditional taplands, plus the conditional cycles: "unless you control two or fewer other lands" (fastlands) and "unless you control a <basic type>" (checklands).',
+          'Unconditional taplands, plus every conditional cycle: "unless you control two or fewer other lands" (fastlands), "unless you control a <basic type>" (checklands), "unless you control two or more other lands" (slowlands) and "unless you control two or more basic lands" (battlelands, which count the printed Basic supertype, so a nonbasic dual does not qualify).',
         witness: { kind: 'rule', id: 'enters-tapped-unless-few-lands' },
+      },
+      {
+        title: 'Lands that ask a question as they enter',
+        detail:
+          'A shockland asks "pay 2 life?" and a reveal-land asks "show a Plains or Island card from your hand?" — both at land-play time, both real questions with two legal answers, and both defaulting to the printed "if you don\'t" (tapped) on any path that cannot ask. A controller with nothing to reveal is not asked at all.',
+        witness: { kind: 'rule', id: 'enters-tapped-unless-revealed' },
+      },
+      {
+        title: 'Optional triggers ("you may")',
+        detail:
+          'The printed "you may" is a genuine yes/no asked as the ability resolves, and declining is a complete outcome — never auto-answered to make a card compile, because a forced yes is a different card. Reclamation-Sage-style entries, the Mage cycle\'s tutors and Farhaven Elf all play both ways.',
+        witness: { kind: 'primitive', id: 'mayEffects' },
+      },
+      {
+        title: 'Step-beginning triggers',
+        detail:
+          'Upkeep, draw step, first main phase and end step all carry triggers ("At the beginning of your end step, untap all lands you control"). "Each player\'s <step>" still reports: the engine cannot yet aim a body at the player whose step it is, and firing it for the source\'s controller would be a different card.',
+        witness: { kind: 'rule', id: 'trigger-step-begins' },
+      },
+      {
+        title: 'Board-watching triggers',
+        detail:
+          '"Whenever a creature you control [with power 3 or greater] enters/dies" watches the battlefield through the same card filter every other chooser reads, so the printed restriction is honoured rather than dropped. Ajani\'s Welcome, Elemental Bond, Grave Pact and Dictate of Erebos all play.',
+        witness: { kind: 'rule', id: 'trigger-permanent-enters-or-dies' },
+      },
+      {
+        title: 'Filtered library tutors',
+        detail:
+          'A search to hand may be narrowed by card type, printed subtype, mana value or printed power/toughness ("an artifact card with mana value 1 or less", "a creature card with toughness 2 or less"). A restriction the filter cannot express reports instead — a tutor that ignored its bound would fetch the best card in the deck.',
+        witness: { kind: 'rule', id: 'search-to-hand-by-filter' },
       },
       {
         title: 'Transforming double-faced cards',
