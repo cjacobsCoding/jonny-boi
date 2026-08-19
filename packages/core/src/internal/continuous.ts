@@ -234,6 +234,25 @@ function applyAttachment(map: Map<InstanceId, MutableMod>, attachment: CardInsta
   grantInto(agg, mod.keywords);
 }
 
+/**
+ * Append the objects in one zone that declare static abilities to `sources`,
+ * allocating the list only if there is something to put in it. Hoisted to module
+ * scope rather than written inline so the hot path does not re-create a closure
+ * per call.
+ */
+function collectStaticSources(
+  zone: readonly CardInstance[],
+  sources: CardInstance[] | null,
+): CardInstance[] | null {
+  let out = sources;
+  for (let i = 0; i < zone.length; i++) {
+    const object = zone[i] as CardInstance;
+    const declared = object.def.statics;
+    if (declared !== undefined && declared.length > 0) (out ??= []).push(object);
+  }
+  return out;
+}
+
 /** Get (creating if needed) the accumulator for one instance. */
 function accumulatorFor(map: Map<InstanceId, MutableMod>, id: InstanceId): MutableMod {
   let agg = map.get(id);
@@ -270,6 +289,22 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   // property read per permanent and allocates nothing.
   let characteristic: CardInstance[] | null = null;
   const permanents = state.battlefield;
+  // EMBLEMS radiate statics from the COMMAND zone (CR 114): "creatures you
+  // control get +1/+1 as long as this emblem exists" is the SAME continuous
+  // modification an anthem applies from the battlefield, differing only in where
+  // its source sits and in the fact that nothing can ever remove it. So it folds
+  // into this one pass instead of getting a layer of its own — which is also
+  // what makes an emblem's buff survive a board wipe with no special case.
+  //
+  // PERFORMANCE: read directly rather than through `for (const pid of
+  // PLAYER_IDS)`, which allocates an array iterator per call for a two-element
+  // list — and this function runs several times per action across combat, SBAs,
+  // legality and serialization. The `.length === 0` guard means a game that
+  // never made an emblem (all of them, today) pays two integer comparisons.
+  const commandA = state.players.A.command;
+  if (commandA.length > 0) sources = collectStaticSources(commandA, sources);
+  const commandB = state.players.B.command;
+  if (commandB.length > 0) sources = collectStaticSources(commandB, sources);
   for (let i = 0; i < permanents.length; i++) {
     const perm = permanents[i] as CardInstance;
     const declared = perm.def.statics;
@@ -381,6 +416,18 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
         grantInto(agg, ability.keywords);
       }
     }
+    // EMBLEMS radiate from the COMMAND zone, and this single-instance path has to
+    // agree with `indexContinuous` about that or the same board would report two
+    // different power values depending on which accessor a caller happened to
+    // reach for. (It did, once: wiring only the bulk path made an emblem's anthem
+    // real in combat and invisible to a one-off read — caught by a test before it
+    // shipped, which is the only reason this comment is not a bug report.)
+    //
+    // Same direct-read guard as the bulk path: no iterator for a two-element list.
+    const commandA = state.players.A.command;
+    if (commandA.length > 0) any = foldCommandStatics(commandA, target, agg) || any;
+    const commandB = state.players.B.command;
+    if (commandB.length > 0) any = foldCommandStatics(commandB, target, agg) || any;
   }
   // Layer 4 — until-end-of-turn effects aimed at this instance.
   for (const eff of state.continuous) {
@@ -392,6 +439,32 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   }
 
   return any ? agg : NO_MOD;
+}
+
+/**
+ * Fold every static a command zone's objects (emblems) radiate onto ONE target's
+ * accumulator. Returns whether anything applied. The single-instance twin of
+ * {@link collectStaticSources}.
+ */
+function foldCommandStatics(
+  zone: readonly CardInstance[],
+  target: CardInstance,
+  agg: MutableMod,
+): boolean {
+  let applied = false;
+  for (let i = 0; i < zone.length; i++) {
+    const source = zone[i] as CardInstance;
+    const declared = source.def.statics;
+    if (declared === undefined || declared.length === 0) continue;
+    for (const ability of declared) {
+      if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
+      applied = true;
+      agg.power += ability.power ?? 0;
+      agg.toughness += ability.toughness ?? 0;
+      grantInto(agg, ability.keywords);
+    }
+  }
+  return applied;
 }
 
 /**

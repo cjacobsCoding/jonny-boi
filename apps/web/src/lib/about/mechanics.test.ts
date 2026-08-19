@@ -20,6 +20,7 @@ import {
   supportedKeywords,
   todoMechanics,
 } from './mechanics.js';
+import { TYPES_WITHOUT_SYSTEM } from '@jonny-boi/cards';
 
 describe('supported-mechanic claims', () => {
   for (const group of SUPPORTED_MECHANIC_GROUPS) {
@@ -70,12 +71,18 @@ describe('the TODO side', () => {
     const todo = todoMechanics();
     const all = [...todo.systems, ...todo.templateGaps];
     expect(new Set(all).size).toBe(all.length);
-    // A system everyone knows is missing — if it lands, delete the assertion
-    // and enjoy the moment. (Transform/DFC and planeswalker loyalty both used
-    // to sit here; both landed, so their hints are TEMPLATE gaps now, and the
-    // walker system's one remaining named subsystem is emblems.)
-    expect(todo.systems).toContain('emblems (a command-zone object that persists after its planeswalker leaves)');
+    // Systems that have LANDED must read as template gaps, never as missing
+    // systems — a stale entry here is how the next agent gets sent to rebuild
+    // something that already exists. Transform/DFC, planeswalker loyalty,
+    // emblems and battles have all made that journey.
     expect(todo.templateGaps).toContain('a transform/double-faced template the compiler does not recognize yet');
+    expect(todo.templateGaps).toContain('an emblem template the compiler does not recognize yet');
+    expect(todo.templateGaps).toContain('a battle template the compiler does not recognize yet');
+    expect(todo.systems).not.toContain(
+      'emblems (a command-zone object that persists after its planeswalker leaves)',
+    );
+    // There is still real engine work left; the page must not claim otherwise.
+    expect(todo.systems.length).toBeGreaterThan(0);
     // Template wording must not leak into the systems list, or the page would
     // overstate how much engine work is left.
     for (const system of todo.systems) {
@@ -83,8 +90,17 @@ describe('the TODO side', () => {
     }
   });
 
-  it('carries the card types the engine cannot represent', () => {
-    expect(todoMechanics().systems).toContain('battles (siege / defense counters)');
+  it('claims no missing card-type system, because there is none left', () => {
+    // `TYPES_WITHOUT_SYSTEM` is empty: every printed card type the compiler can
+    // meet now has an engine system behind it (planeswalker left when loyalty
+    // landed, battle when battles did).
+    //
+    // ⚠️ That is NOT the claim that every such card is playable. A real Siege is
+    // still reported, because its reward is casting the BACK FACE — a card-level
+    // gap named per card, which is the honest place for it. The page derives
+    // this record, so it cannot drift from what the compiler actually judges by.
+    expect(Object.keys(TYPES_WITHOUT_SYSTEM)).toHaveLength(0);
+    expect(todoMechanics().systems).not.toContain('battles (siege / defense counters)');
   });
 
   it('lists the stubbed pool cards verbatim, and every entry names a real card', () => {

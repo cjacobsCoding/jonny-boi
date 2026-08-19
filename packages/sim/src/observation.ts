@@ -187,6 +187,18 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // like a creature dying or a counter landing.
   loyaltyChanged: 'public',
   planeswalkerDied: 'public',
+  // A battle's defense and its defeat are face-up battlefield facts, exactly as
+  // a walker's loyalty and death are — the counters sit on the card where the
+  // whole table can count them.
+  defenseChanged: 'public',
+  battleDefeated: 'public',
+  // The legend rule happens in the open: everyone sees which copy stayed and
+  // which went to a graveyard. The CHOICE that produced it is redacted by the
+  // choice events above, exactly as every other choice is.
+  legendRuleApplied: 'public',
+  // An emblem is created face-up in the command zone with its ability read out,
+  // and nothing can ever remove it — there is no part of it anyone could hide.
+  emblemCreated: 'public',
   playerLost: 'public',
   gameOver: 'public',
   // Reveals that a pilot proposed something illegal — a pilot-quality signal, not

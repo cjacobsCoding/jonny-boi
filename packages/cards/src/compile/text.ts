@@ -128,6 +128,12 @@ const SELF_PHRASES: readonly string[] = [
   'this enchantment',
   'this land',
   'this card',
+  // A BATTLE names itself by its subtype in exactly the same way an Aura does
+  // ("As this Siege enters, choose an opponent to protect it"). Without these the
+  // phrase survives normalization, the line reads as an ability about some other
+  // object, and every printed battle reports its own reminder text as unknown.
+  'this siege',
+  'this battle',
 ];
 
 /**

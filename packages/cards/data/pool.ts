@@ -577,11 +577,14 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     // loyalty cost (the engine enforces one loyalty ability per walker per turn,
     // and that a minus can only be paid from loyalty actually there); she can be
     // attacked and burned ("any target" includes her), and dies at 0 loyalty to
-    // a state-based action. No legend rule is applied — the engine has none for
-    // legendary creatures either, so walkers get the same (absent) treatment.
+    // a state-based action. She is **Legendary**, and that is now load-bearing:
+    // the legend rule (CR 704.5j) is a real state-based action shared by every
+    // legendary permanent kind, so controlling a second Liliana makes her
+    // controller choose one and bury the other.
     id: '0ba134d8-ee7d-48ec-8dc6-57942b8e9261',
     name: 'Liliana of the Veil',
     types: ['planeswalker'],
+    legendary: true,
     subtypes: ['liliana'],
     cost: { generic: 1, B: 2 },
     loyalty: 3,

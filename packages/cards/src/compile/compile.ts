@@ -72,19 +72,28 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
   artifact: 'artifact',
   enchantment: 'enchantment',
   planeswalker: 'planeswalker',
+  battle: 'battle',
 });
 
 /**
  * Card types the engine has no system for, with the reason. Exported so the
  * About view's TODO list can name these gaps from the same record the compiler
- * judges by. `planeswalker` left this list when the loyalty system landed:
- * walkers enter with printed loyalty, their `[+N]/[−N]` lines compile to
- * loyalty-cost activated abilities, they can be attacked and burned, and a
- * 0-loyalty walker dies to a state-based action.
+ * judges by.
+ *
+ * The record is EMPTY, and that is the honest state of the world: every printed
+ * card type the engine can meet now has a system behind it. `planeswalker` left
+ * when loyalty landed; `battle` left when battles did — a battle enters with its
+ * printed defense counters, is attacked through the same attackable-object seam
+ * as a walker, loses defense to combat and to burn, and is put into its owner's
+ * graveyard by a state-based action at zero.
+ *
+ * ⚠️ A battle CARD is still usually reported, and by design: every printed battle
+ * is a Siege, whose reward is casting its BACK FACE, and that needs the
+ * castable-second-face system (`SECOND_CASTABLE_FACE_GAP`). The subsystem being
+ * complete is not the same claim as the cards being playable, and the compiler
+ * says so per card rather than letting a type-level "supported" imply it.
  */
-export const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({
-  battle: 'battles (siege / defense counters)',
-});
+export const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({});
 
 /** Basic land subtypes → the mana they tap for. */
 const LAND_SUBTYPE_MANA: Readonly<Record<string, ManaColor>> = Object.freeze({
@@ -606,6 +615,12 @@ export function compileCard(card: CompilableCard): CompileResult {
   };
 
   // --- type line -------------------------------------------------------------
+  // SUPERTYPES were parsed but never read until the legend rule needed one.
+  // "Legendary" is the only supertype with engine meaning today; "Basic" and
+  // "Snow" have none here (a basic land's mana comes from its land TYPES, and
+  // no card in reach cares about snow), so they are correctly ignored rather
+  // than reported — ignoring them changes nothing a game could observe.
+  const isLegendary = card.typeLine.supertypes.some((printed) => printed.toLowerCase() === 'legendary');
   const types: CardType[] = [];
   for (const printed of card.typeLine.types) {
     const key = printed.toLowerCase();
@@ -631,13 +646,14 @@ export function compileCard(card: CompilableCard): CompileResult {
     });
   }
 
-  // A multi-faced card that is neither a transforming DFC nor a modal DFC —
-  // a SPLIT card or an ADVENTURE — still reports. Both of those put two
-  // castable halves on ONE physical card without a second face to swap to (a
-  // split card is one object with two costs; an adventure exiles itself and is
-  // cast again later from exile), so neither is expressible as the front/back
-  // pair the face system models. They stay reported rather than being played as
-  // their left half only, which would be a strictly weaker card than printed.
+  // A multi-faced card that is neither a transforming DFC nor a modal DFC still
+  // reports. Modal DFCs are cast outright as either face (`backFaceCastable`),
+  // and that is exactly what these are NOT: a SPLIT card is one object with two
+  // costs, an ADVENTURE exiles itself and is cast again later from exile, and a
+  // SIEGE's back face becomes castable only once the battle is defeated. Each
+  // needs a cast path of its own, so none is expressible as the front/back pair
+  // the face system models. They stay reported rather than being played as their
+  // first half only, which would be a strictly weaker card than printed.
   if (card.name.includes(' // ')) {
     assembly.missing.push({
       text: card.name,
@@ -676,6 +692,23 @@ export function compileCard(card: CompilableCard): CompileResult {
       text: 'loyalty',
       missingEngineSystem:
         'a printed starting-loyalty number in the card record (variable/X loyalty, or a cached record from before loyalty was captured)',
+    });
+  }
+
+  // --- battles: printed starting defense --------------------------------------
+  // The same contract, for the same reason: a battle that entered with the wrong
+  // number of defense counters would take the wrong number of attacks to defeat,
+  // which is a different card. No number in the record ⇒ reported, never guessed.
+  const isBattleCard = types.includes('battle');
+  const printedDefense =
+    typeof card.defense === 'number' && Number.isFinite(card.defense) && card.defense > 0
+      ? card.defense
+      : undefined;
+  if (isBattleCard && printedDefense === undefined) {
+    assembly.missing.push({
+      text: 'defense',
+      missingEngineSystem:
+        'a printed starting-defense number in the card record (variable defense, or a cached record from before defense was captured)',
     });
   }
 
@@ -891,6 +924,12 @@ export function compileCard(card: CompilableCard): CompileResult {
     // A `*` box: the FORMULA replaces the numbers (never both — refused above).
     ...(assembly.characteristicPT ? { characteristicPT: assembly.characteristicPT } : {}),
     ...(isWalkerCard && printedLoyalty !== undefined ? { loyalty: printedLoyalty } : {}),
+    ...(isBattleCard && printedDefense !== undefined ? { defense: printedDefense } : {}),
+    // The printed **Legendary** supertype, carried because the legend rule
+    // (CR 704.5j) is keyed on exactly this — it is not decoration. Read from the
+    // supertype list rather than from the raw type line so a card whose name
+    // happens to contain the word is not mistaken for one.
+    ...(isLegendary ? { legendary: true } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain
     // or Plains card") match a dual land the way the printed card does.
@@ -940,7 +979,7 @@ export function compileCard(card: CompilableCard): CompileResult {
  * own branch). Named once so the report and the tests cannot drift.
  */
 export const SECOND_CASTABLE_FACE_GAP =
-  'casting either half of a split or adventure card (two castable halves on one object, rather than the two faces a modal DFC has)';
+  'casting the second half of a split, adventure or Siege card (a castable half reached by a cast path the engine does not have — unlike a modal DFC, whose two faces are both cast outright)';
 
 /** The id suffix a compiled back-face definition carries (`<frontId>#back`). */
 export const BACK_FACE_ID_SUFFIX = '#back';
