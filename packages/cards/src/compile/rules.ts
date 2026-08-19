@@ -129,6 +129,68 @@ const ARTIFACT_TARGET: TargetRestriction = 'artifact';
  */
 const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveyard';
 
+
+/**
+ * The controller scope + {@link CardFilter} a printed "each …" group phrase names,
+ * or `null` when the phrase says something the filter vocabulary cannot express.
+ *
+ * This is the whole reason a group counter rule is safe: "put a +1/+1 counter on
+ * each **attacking** creature you control" and "on each creature you control"
+ * differ by one word and by a lot of power, so a phrase that is not exactly
+ * reproducible must reject the line rather than widen to "every creature".
+ *
+ * A SUBTYPE qualifier ("each Vampire you control") is accepted only when the card
+ * being compiled prints that subtype itself — the typal-lord shape. That keeps
+ * the compiler from inventing a creature type out of an arbitrary capitalized
+ * word it cannot verify: a card naming a type it does not share stays reported.
+ */
+function groupCreatureScope(
+  phrase: string,
+  ctx: RuleContext,
+): { scope: string; filter: Record<string, unknown> } | null {
+  let text = phrase.trim();
+  let scope = GROUP_SCOPE_ANY;
+  for (const [suffix, named] of Object.entries(GROUP_SCOPE_SUFFIXES)) {
+    if (!text.endsWith(suffix)) continue;
+    text = text.slice(0, -suffix.length).trim();
+    scope = named;
+    break;
+  }
+
+  const filter: Record<string, unknown> = {};
+  // An optional colour word, exactly as the anthem rule reads one.
+  const colorMatch = /^([a-z]+) (.+)$/.exec(text);
+  if (colorMatch && COLOR_WORDS[colorMatch[1] ?? '']) {
+    filter.anyOfColors = [COLOR_WORDS[colorMatch[1] ?? ''] as string];
+    text = colorMatch[2] ?? '';
+  }
+  // An optional card-type adjective ("artifact creature"). The group primitive
+  // already requires a creature, so this narrows rather than widens.
+  const typeMatch = /^([a-z]+) creature$/.exec(text);
+  if (typeMatch) {
+    const type = SPELL_TYPE_WORDS[typeMatch[1] ?? ''];
+    if (!type || type === 'creature') return null;
+    filter.anyOfTypes = [type];
+    text = 'creature';
+  }
+  if (text === 'creature') return { scope, filter };
+
+  // A typal qualifier — accepted only when the compiling card prints it.
+  const printed = ctx.card.typeLine.subtypes.find((sub) => sub.toLowerCase() === text);
+  if (printed === undefined) return null;
+  filter.anyOfSubtypes = [printed];
+  return { scope, filter };
+}
+
+/** The printed tails that name whose permanents a group phrase reaches. */
+const GROUP_SCOPE_SUFFIXES: Readonly<Record<string, string>> = Object.freeze({
+  ' you control': 'you',
+  ' your opponents control': 'opponent',
+  ' an opponent controls': 'opponent',
+});
+/** No controller tail printed ⇒ everybody's, as "each creature" means. */
+const GROUP_SCOPE_ANY = 'any';
+
 /** How many modes each printed header lets you choose. */
 const MODAL_COUNTS: Readonly<Record<string, number>> = Object.freeze({
   one: 1,
@@ -781,6 +843,55 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
       return effects({ primitive: 'addCounters', params: { amount, self: true } });
+    },
+  },
+  {
+    /**
+     * A CONJUNCTION whose second half is a plain "you …" effect — "put a +1/+1
+     * counter on ~ **and you gain 1 life**" (Sunscorch Regent).
+     *
+     * Deliberately narrow. Only a second half beginning "you " is joined,
+     * because such a half is self-contained: it speaks about the controller, not
+     * about whatever the first half touched, so running the two in order is
+     * exactly what the printed sentence says. A conjunction like "…and it gains
+     * flying" refers BACK to the first half's object, and joining those would be
+     * the kind of guess this table exists to refuse — so it stays reported.
+     *
+     * Both halves are compiled TARGET-FREE, which is what makes the composition
+     * safe in a triggered ability as well as in a spell: a half needing a chosen
+     * target is rejected rather than compiled into a silent no-op.
+     */
+    id: 'effect-and-you-effect',
+    description: '"EFFECT and you EFFECT" (two independent halves in one sentence)',
+    pattern: /^(.+?) and (you .+)$/,
+    build(match, ctx) {
+      const first = ctx.compileEffectClause(match[1] ?? '', { targetFree: true });
+      if (first === null || first.length === 0) return null;
+      const second = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
+      if (second === null || second.length === 0) return null;
+      return { effects: [...first, ...second] };
+    },
+  },
+  {
+    // The GROUP form — "put a +1/+1 counter on EACH creature you control".
+    // Gavony Township, Steel Overseer and Cathars' Crusade all print it, and it
+    // is the same `addCounters` primitive with a scope + filter instead of a
+    // target, so the counters are the same real counters the stat layer reads.
+    id: 'put-counters-on-each',
+    description: '"Put N +1/-1 counters on each CREATURE-GROUP"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) (\\+1/\\+1|-1/-1) counters? on each (.+)$`,
+    ),
+    build(match, ctx) {
+      const magnitude = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (magnitude === null) return null;
+      const group = groupCreatureScope(match[3] ?? '', ctx);
+      if (group === null) return null;
+      const amount = match[2] === '-1/-1' ? -magnitude : magnitude;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, each: true, scope: group.scope, filter: group.filter },
+      });
     },
   },
   {
@@ -1631,6 +1742,36 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
           condition,
           effects: body,
           label: `Cast ${describeSpellFilter(condition)}: ${match[2] ?? ''}`,
+        })),
+      };
+    },
+  },
+  {
+    // "Whenever a player casts a spell" / "Whenever an opponent casts a spell" —
+    // the same cast trigger with a different `who`, which core has always had.
+    // Only the printed shapes were missing, so Managorger Hydra and Sunscorch
+    // Regent reported despite the machinery being complete.
+    id: 'trigger-cast-spell-by',
+    description: '"Whenever a player/an opponent casts a(n) [TYPE] spell, BODY"',
+    pattern: /^whenever (a player|an opponent) casts an? (?:([a-z ]+?) )?spell, (.+)$/,
+    build(match, ctx) {
+      const who = match[1] === 'an opponent' ? 'opponent' : 'any';
+      const restriction = match[2];
+      // With no type word the trigger watches every spell; with one, it reuses
+      // the same filter table the "whenever you cast" rule does — and rejects a
+      // phrase that table does not know rather than dropping the restriction.
+      const conditions: readonly TriggerCondition[] =
+        restriction === undefined
+          ? [{ on: 'castSpell', who }]
+          : (spellFiltersFor(restriction)?.map((condition) => ({ ...condition, who })) ?? []);
+      if (conditions.length === 0) return null;
+      const body = ctx.compileEffectClause(match[3] ?? '', { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return {
+        triggers: conditions.map((condition) => ({
+          condition,
+          effects: body,
+          label: `${match[1] === 'an opponent' ? 'Opponent casts' : 'Any player casts'} ${describeSpellFilter(condition)}: ${match[3] ?? ''}`,
         })),
       };
     },

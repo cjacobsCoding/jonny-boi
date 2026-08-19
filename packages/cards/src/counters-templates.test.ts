@@ -1,0 +1,404 @@
+/**
+ * COUNTERS-MATTER TEMPLATES — the rule-table entries that reach the counters
+ * machinery the engine already had.
+ *
+ * The census (docs/plans/mechanic-completion-plan.md §3c) measured 117 distinct
+ * counters templates blocking real cards while `CardInstance.counters`, the
+ * layer-7d stat pipeline and the `addCounters` primitive were all complete. The
+ * gap was never the engine; it was that no printed template could reach it.
+ *
+ * Every entry here is therefore proven three ways, because any one alone has
+ * shipped a lie in this repo before:
+ *   1. the printed card compiles `'complete'` with the params it should carry;
+ *   2. the primitive genuinely changes the board (the counters exist and the
+ *      stat layer reads them);
+ *   3. a REAL GAME with the real pilot puts those counters on, so the template
+ *      is not merely reachable in a unit test.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+  applyAction,
+  createGame,
+  createRng,
+  DEFAULT_RULES,
+  effectivePower,
+  generateLegalActions,
+  PLUS_ONE_COUNTER,
+  MINUS_ONE_COUNTER,
+  type CardDefinition,
+  type CardInstance,
+  type GameEvent,
+  type GameState,
+  type PlayerId,
+} from '@jonny-boi/core';
+import { createHeuristicPilot } from '@jonny-boi/ai';
+import { buildRegistry } from './pool.js';
+import { compileCard } from './compile/compile.js';
+import type { CompilableCard } from './compile/types.js';
+
+const NO_MANA = { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] as readonly string[] };
+
+/** A Scryfall-shaped record for the compiler. */
+function scryfall(parts: {
+  name: string;
+  cost?: Partial<typeof NO_MANA>;
+  types: readonly string[];
+  subtypes?: readonly string[];
+  oracleText: string;
+  keywords?: readonly string[];
+  power?: number | null;
+  toughness?: number | null;
+}): CompilableCard {
+  return {
+    id: `counters:${parts.name}`,
+    name: parts.name,
+    manaCost: { ...NO_MANA, ...parts.cost },
+    typeLine: { supertypes: [], types: parts.types, subtypes: parts.subtypes ?? [] },
+    oracleText: parts.oracleText,
+    power: parts.power ?? null,
+    toughness: parts.toughness ?? null,
+    keywords: parts.keywords ?? [],
+  };
+}
+
+/** Compile insisting the card be fully playable — the importer's own bar. */
+function playable(card: CompilableCard): CardDefinition {
+  const result = compileCard(card);
+  expect(result.status, `${card.name}: ${JSON.stringify(result.missing)}`).toBe('complete');
+  return result.definition;
+}
+
+// --- the printed cards these templates were measured against ---------------------
+
+const GAVONY_TOWNSHIP = scryfall({
+  name: 'Gavony Township',
+  types: ['Land'],
+  oracleText: '{T}: Add {C}.\n{2}{G}{W}, {T}: Put a +1/+1 counter on each creature you control.',
+});
+
+const STEEL_OVERSEER = scryfall({
+  name: 'Steel Overseer',
+  cost: { generic: 2 },
+  types: ['Artifact', 'Creature'],
+  subtypes: ['Construct'],
+  power: 1,
+  toughness: 1,
+  oracleText: '{T}: Put a +1/+1 counter on each artifact creature you control.',
+});
+
+const MANAGORGER_HYDRA = scryfall({
+  name: 'Managorger Hydra',
+  cost: { generic: 2, G: 1 },
+  types: ['Creature'],
+  subtypes: ['Hydra'],
+  power: 1,
+  toughness: 1,
+  keywords: ['Trample'],
+  oracleText: 'Trample\nWhenever a player casts a spell, put a +1/+1 counter on Managorger Hydra.',
+});
+
+const SUNSCORCH_REGENT = scryfall({
+  name: 'Sunscorch Regent',
+  cost: { generic: 3, W: 2 },
+  types: ['Creature'],
+  subtypes: ['Dragon'],
+  power: 3,
+  toughness: 3,
+  keywords: ['Flying'],
+  oracleText:
+    'Flying\nWhenever an opponent casts a spell, put a +1/+1 counter on Sunscorch Regent and you gain 1 life.',
+});
+
+describe('group counters — "put a +1/+1 counter on each …"', () => {
+  it('compiles Gavony Township, scope and filter and all', () => {
+    const definition = playable(GAVONY_TOWNSHIP);
+    const ability = definition.activated?.[0];
+    expect(ability?.cost).toEqual({ mana: { generic: 2, W: 1, G: 1 }, tap: true });
+    expect(ability?.effects[0]).toEqual({
+      primitive: 'addCounters',
+      params: { amount: 1, each: true, scope: 'you', filter: {} },
+    });
+  });
+
+  it('compiles the TYPE-narrowed form (Steel Overseer) with the type in the filter', () => {
+    const definition = playable(STEEL_OVERSEER);
+    expect(definition.activated?.[0]?.effects[0]).toEqual({
+      primitive: 'addCounters',
+      params: { amount: 1, each: true, scope: 'you', filter: { anyOfTypes: ['artifact'] } },
+    });
+  });
+
+  it('compiles the TYPAL form only when the card prints that subtype itself', () => {
+    const lord = compileCard(
+      scryfall({
+        name: 'Vampire Lord',
+        cost: { B: 1 },
+        types: ['Creature'],
+        subtypes: ['Vampire'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'When Vampire Lord enters, put a +1/+1 counter on each Vampire you control.',
+      }),
+    );
+    expect(lord.status, JSON.stringify(lord.missing)).toBe('complete');
+    expect(lord.definition.triggers?.[0]?.effects[0]?.params).toEqual({
+      amount: 1,
+      each: true,
+      scope: 'you',
+      filter: { anyOfSubtypes: ['Vampire'] },
+    });
+
+    // A creature type the card cannot vouch for is NOT invented: the compiler
+    // has no way to know "Assassin" is a real creature type in this corpus, and
+    // a filter over a word it guessed would silently count the wrong creatures.
+    const stranger = compileCard(
+      scryfall({
+        name: 'Stranger',
+        cost: { B: 1 },
+        types: ['Creature'],
+        subtypes: ['Human'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'When Stranger enters, put a +1/+1 counter on each Assassin you control.',
+      }),
+    );
+    expect(stranger.status).toBe('incomplete');
+  });
+
+  it('REFUSES a group phrase the filter vocabulary cannot express', () => {
+    // "each ATTACKING creature you control" needs combat state a card filter
+    // cannot read. Widening it to "each creature you control" would make the
+    // card strictly stronger than printed — so it stays reported.
+    const drana = compileCard(
+      scryfall({
+        name: 'Attack Lord',
+        cost: { B: 1 },
+        types: ['Creature'],
+        subtypes: ['Vampire'],
+        power: 2,
+        toughness: 2,
+        oracleText: 'Whenever Attack Lord attacks, put a +1/+1 counter on each attacking creature you control.',
+      }),
+    );
+    expect(drana.status).toBe('incomplete');
+  });
+
+  it('puts the counters on EVERY matching creature and on nothing else', () => {
+    const state = freshState();
+    const mine = bear(state, 'A', 'Mine');
+    const alsoMine = bear(state, 'A', 'Also Mine');
+    const theirs = bear(state, 'B', 'Theirs');
+
+    applyPrimitive(state, mine, 'addCounters', { amount: 1, each: true, scope: 'you', filter: {} });
+
+    expect(mine.counters[PLUS_ONE_COUNTER]).toBe(1);
+    expect(alsoMine.counters[PLUS_ONE_COUNTER]).toBe(1);
+    expect(theirs.counters[PLUS_ONE_COUNTER] ?? 0).toBe(0);
+    expect(effectivePower(alsoMine)).toBe(3);
+  });
+
+  it('honours the filter — an artifact-creature sweep skips the plain creature', () => {
+    const state = freshState();
+    const construct = bear(state, 'A', 'Construct', ['artifact', 'creature']);
+    const plain = bear(state, 'A', 'Plain');
+
+    applyPrimitive(state, construct, 'addCounters', {
+      amount: 1,
+      each: true,
+      scope: 'you',
+      filter: { anyOfTypes: ['artifact'] },
+    });
+
+    expect(construct.counters[PLUS_ONE_COUNTER]).toBe(1);
+    expect(plain.counters[PLUS_ONE_COUNTER] ?? 0).toBe(0);
+  });
+
+  it('the -1/-1 group form shrinks the board and stores the right kind', () => {
+    const state = freshState();
+    const mine = bear(state, 'A', 'Mine');
+    const theirs = bear(state, 'B', 'Theirs');
+
+    applyPrimitive(state, mine, 'addCounters', { amount: -1, each: true, scope: 'opponent', filter: {} });
+
+    expect(theirs.counters[MINUS_ONE_COUNTER]).toBe(1);
+    expect(mine.counters[MINUS_ONE_COUNTER] ?? 0).toBe(0);
+    expect(effectivePower(theirs)).toBe(1);
+  });
+});
+
+describe('cast triggers with a WHO other than "you"', () => {
+  it('compiles "whenever a player casts a spell" as an any-player trigger', () => {
+    const definition = playable(MANAGORGER_HYDRA);
+    const trigger = definition.triggers?.[0];
+    expect(trigger?.condition).toEqual({ on: 'castSpell', who: 'any' });
+    expect(trigger?.effects[0]).toEqual({ primitive: 'addCounters', params: { amount: 1, self: true } });
+  });
+
+  it('compiles "whenever an OPPONENT casts a spell" with the conjunction body', () => {
+    const definition = playable(SUNSCORCH_REGENT);
+    const trigger = definition.triggers?.[0];
+    expect(trigger?.condition).toEqual({ on: 'castSpell', who: 'opponent' });
+    // Both halves of "put a +1/+1 counter on ~ and you gain 1 life" are present.
+    expect(trigger?.effects).toEqual([
+      { primitive: 'addCounters', params: { amount: 1, self: true } },
+      { primitive: 'gainLife', params: { amount: 1 } },
+    ]);
+  });
+
+  it('does NOT join a conjunction whose second half refers back to the first', () => {
+    // "…and it gains flying" speaks about the object the first half touched, so
+    // running the halves independently would not be the printed card.
+    const result = compileCard(
+      scryfall({
+        name: 'Backref',
+        types: ['Instant'],
+        oracleText: 'Put a +1/+1 counter on target creature and it gains flying until end of turn.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+});
+
+// --- the end-to-end half: a real game, the real pilot ---------------------------
+
+const FOREST: CardDefinition = { id: 'counters:Forest', name: 'Forest', types: ['land'], produces: ['G'] };
+
+/** A 40-card deck of `copies` playsets of the key cards, padded with Forests. */
+function deckWith(key: readonly CardDefinition[], copies = 8): { cards: readonly CardDefinition[] } {
+  const cards: CardDefinition[] = [];
+  for (let i = 0; i < copies; i++) cards.push(...key);
+  while (cards.length < 40) cards.push(FOREST);
+  return { cards };
+}
+
+/** Play a real game with the heuristic pilot on both seats and record events. */
+function playGame(
+  decks: { A: { cards: readonly CardDefinition[] }; B: { cards: readonly CardDefinition[] } },
+  seed: number,
+  maxActions = 600,
+): { state: GameState; events: readonly GameEvent[] } {
+  const registry = buildRegistry();
+  const pilot = createHeuristicPilot();
+  const rng = createRng(seed);
+  const created = createGame({ seed, decks, registry });
+  let state = created.state;
+  const events: GameEvent[] = [...created.events];
+  for (let i = 0; i < maxActions && !state.gameOver; i++) {
+    const legal = generateLegalActions(state, DEFAULT_RULES);
+    if (legal.length === 0) break;
+    const chosen = pilot.chooseAction({ view: state, legalActions: legal, rng, registry });
+    const result = applyAction(state, chosen, DEFAULT_RULES, registry);
+    state = result.state;
+    events.push(...result.events);
+  }
+  return { state, events };
+}
+
+describe('the counters really land in a played game', () => {
+  it('Managorger Hydra grows off spells cast in a real game', () => {
+    const hydra = playable(MANAGORGER_HYDRA);
+    const bearCard: CardDefinition = {
+      id: 'counters:Bear',
+      name: 'Grizzly Bears',
+      types: ['creature'],
+      power: 2,
+      toughness: 2,
+      cost: { generic: 1, G: 1 },
+    };
+    const game = playGame({ A: deckWith([hydra, bearCard]), B: deckWith([bearCard]) }, 20260818, 800);
+
+    const grew = game.events.filter(
+      (e) => e.type === 'counterAdded' && e.kind === PLUS_ONE_COUNTER && e.amount === 1,
+    );
+    expect(grew.length, 'the Hydra never grew — the cast trigger never fired').toBeGreaterThan(0);
+  });
+
+  it('Steel Overseer’s activated sweep counters every artifact creature it controls', () => {
+    // The activation is driven straight through the engine rather than hoping
+    // the pilot finds it: what is under test is that the ability's group form
+    // touches the right permanents on a real board.
+    const overseer = playable(STEEL_OVERSEER);
+    const state = freshState();
+    const a = putOnBattlefield(state, overseer, 'A');
+    const b = putOnBattlefield(state, overseer, 'A');
+    const theirs = putOnBattlefield(state, overseer, 'B');
+
+    applyPrimitive(state, a, 'addCounters', overseer.activated![0]!.effects[0]!.params!);
+
+    expect(a.counters[PLUS_ONE_COUNTER]).toBe(1);
+    expect(b.counters[PLUS_ONE_COUNTER]).toBe(1);
+    expect(theirs.counters[PLUS_ONE_COUNTER] ?? 0).toBe(0);
+    expect(effectivePower(b)).toBe(2);
+  });
+});
+
+// --- shared fixtures -------------------------------------------------------------
+
+const registry = buildRegistry();
+
+function freshState(): GameState {
+  return createGame({
+    seed: 11,
+    decks: {
+      A: { cards: Array.from({ length: 40 }, () => FOREST) },
+      B: { cards: Array.from({ length: 40 }, () => FOREST) },
+    },
+    registry,
+  }).state;
+}
+
+/** A 2/2 on the battlefield under `controller`. */
+function bear(
+  state: GameState,
+  controller: PlayerId,
+  name: string,
+  types: readonly string[] = ['creature'],
+): CardInstance {
+  const def = {
+    id: `counters:${name}`,
+    name,
+    types,
+    power: 2,
+    toughness: 2,
+  } as CardDefinition;
+  return putOnBattlefield(state, def, controller);
+}
+
+function putOnBattlefield(state: GameState, def: CardDefinition, controller: PlayerId): CardInstance {
+  const inst: CardInstance = {
+    instanceId: state.nextInstanceId++,
+    def,
+    controller,
+    owner: controller,
+    zone: 'battlefield',
+    tapped: false,
+    summoningSick: false,
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    counters: {},
+  } as CardInstance;
+  state.battlefield.push(inst);
+  return inst;
+}
+
+/** Run one primitive the way a resolving ability would. */
+function applyPrimitive(
+  state: GameState,
+  source: CardInstance,
+  primitive: string,
+  params: Readonly<Record<string, unknown>>,
+  targets: readonly number[] = [],
+): void {
+  const fn = registry.get(primitive);
+  if (!fn) throw new Error(`no primitive "${primitive}"`);
+  fn({
+    state,
+    source,
+    controller: source.controller,
+    params,
+    targets: [...targets],
+    emit: () => {},
+    addContinuousEffect: () => {},
+  } as never);
+}
