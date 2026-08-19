@@ -31,7 +31,7 @@
  */
 
 import type { CardDefinition, EffectRef } from './card.js';
-import { isCreature } from './card.js';
+import { hasType, isCreature } from './card.js';
 import { isPlaneswalker } from './card.js';
 import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
@@ -92,7 +92,23 @@ export type TargetRestriction =
    */
   | 'playerOrPlaneswalker'
   /** "target creature or planeswalker" — a permanent of either kind, never a face. */
-  | 'creatureOrPlaneswalker';
+  | 'creatureOrPlaneswalker'
+  /**
+   * "target instant or sorcery card in your graveyard" — Snapcaster Mage's ETB
+   * aim, and the first restriction reaching a card in a NON-battlefield zone.
+   *
+   * Like `'opponent'` and `'creatureYouControl'`, legality depends on WHO is
+   * acting: "your graveyard" is the acting player's own, so an absent
+   * `controller` makes every candidate ILLEGAL rather than guessed — being
+   * unable to aim is the safe failure, while reaching into the wrong graveyard
+   * would be a card playing wider than printed.
+   *
+   * Hexproof/shroud/protection do not apply here by RULE, not by omission:
+   * those abilities read "this permanent", and a card in a graveyard is not a
+   * permanent (CR 110.1), so the battlefield targetability gate is correctly
+   * skipped for this restriction.
+   */
+  | 'instantOrSorceryInYourGraveyard';
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -119,7 +135,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'opponent' ||
     value === 'creatureYouControl' ||
     value === 'playerOrPlaneswalker' ||
-    value === 'creatureOrPlaneswalker'
+    value === 'creatureOrPlaneswalker' ||
+    value === 'instantOrSorceryInYourGraveyard'
   );
 }
 
@@ -191,6 +208,20 @@ export function isLegalTarget(
     return restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker';
   }
   if (restriction === 'player' || restriction === 'opponent') return false;
+  if (restriction === 'instantOrSorceryInYourGraveyard') {
+    // "Your graveyard" needs an actor; unknown ⇒ illegal, never guessed (see
+    // the type's note). The candidate must be sitting in THAT player's
+    // graveyard right now — a card that left it mid-response is not a legal
+    // target any more, which is exactly how the resolution re-check fizzles.
+    if (controller === undefined) return false;
+    const yard = state.players[controller].graveyard;
+    for (let i = 0; i < yard.length; i++) {
+      const card = yard[i] as CardInstance;
+      if (card.instanceId !== target) continue;
+      return hasType(card.def, 'instant') || hasType(card.def, 'sorcery');
+    }
+    return false;
+  }
   if (restriction === 'spell') {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".

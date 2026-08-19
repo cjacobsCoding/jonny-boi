@@ -17,6 +17,7 @@ import type { CardDefinition } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
+import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetRestriction } from './targeting.js';
 
@@ -352,6 +353,17 @@ export interface GameState {
    * computed by layering these over each permanent's base (see internal/continuous).
    */
   continuous: ContinuousEffect[];
+  /**
+   * Active grants to cards in NON-battlefield zones (Snapcaster Mage's "gains
+   * flashback until end of turn" on a graveyard card) — see `card-grants.ts`.
+   *
+   * OPTIONAL, like `pendingChoice`, and for the same two reasons: every state
+   * serialized (or hand-built in a test) before grants existed stays valid,
+   * and a game that never grants anything never touches the field at all —
+   * every consumer starts with the same one-property empty check
+   * (`hasCardGrants`), so the hot paths stay exactly as fast as before.
+   */
+  cardGrants?: CardGrant[];
   combat: CombatState | null;
   /** Set once the game is decided. */
   winner: PlayerId | null;
