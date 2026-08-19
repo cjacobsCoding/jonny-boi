@@ -542,7 +542,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
     ]);
   });
 
-  it('reports multikicker rather than flattening it into a single kick', () => {
+  it('compiles multikicker as a COUNT, never flattened into a single kick', () => {
     const result = compileCard(
       makeCard({
         name: 'Multi Thing',
@@ -555,11 +555,11 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    // `multikicker`, NOT `kicker`: the two ask different questions (a count vs a
+    // yes/no), and compiling one as the other would cap the card at one kick.
+    expect(result.definition.multikicker).toEqual({ R: 1 });
     expect(result.definition.kicker).toBeUndefined();
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'multikicker (an additional cost paid any number of times)',
-    );
   });
 
   it('compiles a colour/colour hybrid cost the mana system can pay', () => {

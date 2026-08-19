@@ -189,8 +189,14 @@ export function splitAbilities(oracleText: string): string[] {
   return joinModalBlocks(lines);
 }
 
-/** A modal header: "Choose one —", "Choose two —", "Choose one or both —". */
-const MODAL_HEADER = /^choose\s+(?:one|two|three|one or both|up to \w+)\s*[—-]\s*$/i;
+/**
+ * A modal header: "Choose one —", "Choose one or both —", "Choose up to two —",
+ * and the Confluence form "Choose three. You may choose the same mode more than
+ * once." — which prints a full stop instead of the dash, and is why the dash is
+ * optional here rather than required.
+ */
+const MODAL_HEADER =
+  /^choose\s+(?:one or both|up to \w+|one|two|three|four|five)\s*\.?\s*(?:you may choose the same mode more than once\s*\.?\s*)?[—-]?\s*$/i;
 
 /** A printed mode line, which Oracle text bullets. */
 const MODE_BULLET = /^[•·]\s*/;
@@ -228,7 +234,12 @@ function joinModalBlocks(lines: readonly string[]): string[] {
       out.push(line);
       continue;
     }
-    out.push(`${line} ${modes.map((mode) => `• ${mode}`).join(' ')}`);
+    // The rule table's pattern wants the header, a dash, then the bullets. A
+    // header printed WITHOUT a dash (the Confluence form) gets one supplied
+    // here, so one rule reads both printings rather than two nearly-identical
+    // patterns drifting apart.
+    const header = /[—-]\s*$/.test(line.trim()) ? line.trim() : `${line.trim()} —`;
+    out.push(`${header} ${modes.map((mode) => `• ${mode}`).join(' ')}`);
     i = j - 1;
   }
   return out;
