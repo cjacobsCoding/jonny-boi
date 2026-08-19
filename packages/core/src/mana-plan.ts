@@ -29,7 +29,21 @@ import type { CardInstance, InstanceId, PlayerId } from './state.js';
  */
 export interface ManaPlanView {
   readonly battlefield: readonly CardInstance[];
-  readonly players: Readonly<Record<PlayerId, { readonly manaPool: ManaPool }>>;
+  readonly players: Readonly<
+    Record<
+      PlayerId,
+      {
+        readonly manaPool: ManaPool;
+        /**
+         * Current life, when the caller has it. OPTIONAL so a redacted online
+         * view that predates this field still satisfies the shape; the planner
+         * simply stops refusing lethal taps without it, which is the same
+         * behaviour it always had.
+         */
+        readonly life?: number;
+      }
+    >
+  >;
 }
 
 /** One activation in a funding plan: which permanent to tap, in which mode. */
@@ -143,6 +157,12 @@ const scratch = {
   cost: new Int32Array(COLOR_COUNT),
   pool: new Int32Array(COLOR_COUNT),
   trial: new Int32Array(COLOR_COUNT),
+  /**
+   * What each tap COSTS ITS CONTROLLER IN LIFE — a "Pay 1 life" cost plus a
+   * rider's damage, added together because both come off the same total and the
+   * planner is choosing between whole activations.
+   */
+  tapPain: [] as number[],
   /** Per offered tap, parallel to `production`'s rows. */
   tapSource: [] as InstanceId[],
   tapMode: [] as number[],
@@ -221,9 +241,10 @@ export function planManaPayment(
   let lastSource: InstanceId | undefined;
   let lastModes: readonly ManaProduction[] | undefined;
   let lastExtras: ReturnType<typeof manaExtrasOf>;
-  // Stays false on every board with no cost-carrying source — which is nearly all
-  // of them — and keeps the whole cost apparatus below out of the ranking loop.
+  // Both stay false on every board with no cost-carrying source — which is nearly
+  // all of them — and keep the whole apparatus below out of the ranking loop.
   let anyTapCost = false;
+  let anyTapPain = false;
   for (let i = 0; i < legalActions.length; i++) {
     const action = legalActions[i] as GameAction;
     if (action.kind !== 'tapForMana' || action.player !== player) continue;
@@ -249,9 +270,13 @@ export function planManaPayment(
     }
     densifyInto(production, s.production, tapCount * COLOR_COUNT);
     // A tap that itself costs mana (a filter land).
-    const tapMana = lastExtras?.[mode]?.ability.cost?.mana;
+    const ability = lastExtras?.[mode]?.ability;
+    const tapMana = ability?.cost?.mana;
     s.tapCost[tapCount] = tapMana;
     if (tapMana) anyTapCost = true;
+    const pain = (ability?.cost?.life ?? 0) + (ability?.rider?.damageToController ?? 0);
+    s.tapPain[tapCount] = pain;
+    if (pain > 0) anyTapPain = true;
     s.tapSource[tapCount] = action.instanceId;
     s.tapMode[tapCount] = mode;
     s.tapProduction[tapCount] = production;
@@ -290,6 +315,9 @@ export function planManaPayment(
   // object tracks the dense running total for it. It is this function's own copy.
   const pool: ManaPool = { ...current };
   const plan: ManaTapPlan[] = [];
+  // Life the plan has left to spend, tracked across taps so two pain lands cannot
+  // each be "affordable" on their own and lethal together.
+  let lifeLeft = view.players[player].life;
 
   while (!canPay(pool, cost)) {
     // At least one pip is still owed (canPay said so). Flooring at 1 matters when
@@ -300,6 +328,7 @@ export function planManaPayment(
     let bestTap = -1;
     let bestGroup = -1;
     let bestDistance = owed;
+    let bestPain = Infinity;
     let bestFlexibility = Infinity;
     let bestSize = Infinity;
 
@@ -334,14 +363,30 @@ export function planManaPayment(
         }
         const distance = denseDistanceToPayable(s.trial, s.cost, genericOwed);
         if (distance >= owed) continue; // buys us nothing — never make this tap
+        // WHAT THIS TAP COSTS IN LIFE — a "Pay 1 life" cost plus a rider's damage.
+        // Zero on every ordinary board, where `anyTapPain` keeps this out of the
+        // loop entirely and the ranking is byte-identical to what it always was.
+        const pain = anyTapPain ? (s.tapPain[tap] as number) : 0;
+        // A plan is a way to CAST something. One that kills the caster is not a
+        // plan, so a tap whose life price is at least the life available is never
+        // planned — the player can still make that call by hand.
+        if (pain > 0 && lifeLeft !== undefined && pain >= lifeLeft) continue;
+        // Pain ranks above flexibility: given two taps that close the same
+        // shortfall, spend the one that does not cost life (a Plains before a
+        // pain land's coloured mode), which is how the card is actually played.
         const better =
           distance < bestDistance ||
-          (distance === bestDistance && flexibility < bestFlexibility) ||
-          (distance === bestDistance && flexibility === bestFlexibility && size < bestSize);
+          (distance === bestDistance && pain < bestPain) ||
+          (distance === bestDistance && pain === bestPain && flexibility < bestFlexibility) ||
+          (distance === bestDistance &&
+            pain === bestPain &&
+            flexibility === bestFlexibility &&
+            size < bestSize);
         if (better) {
           bestTap = tap;
           bestGroup = g;
           bestDistance = distance;
+          bestPain = pain;
           bestFlexibility = flexibility;
           bestSize = size;
         }
@@ -373,6 +418,7 @@ export function planManaPayment(
       s.pool[i] = total;
       pool[MANA_COLORS[i] as ManaColor] = total;
     }
+    if (anyTapPain && lifeLeft !== undefined) lifeLeft -= s.tapPain[bestTap] as number;
     plan.push({
       instanceId: s.tapSource[bestTap] as InstanceId,
       mode: s.tapMode[bestTap] as number,
