@@ -254,6 +254,21 @@ const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
 const LAND_FILTER = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
 
 /**
+ * Every card type that can be a permanent, in the engine's own vocabulary. It is
+ * what "all permanents" means; "all NONLAND permanents" is this list with lands
+ * excluded, which is how the printed phrase is written rather than as a
+ * hand-maintained five-type list that could drift from `isPermanentType`.
+ */
+const PERMANENT_TYPES: readonly CardType[] = Object.freeze([
+  'land',
+  'creature',
+  'artifact',
+  'enchantment',
+  'planeswalker',
+  'battle',
+]);
+
+/**
  * The five basic land types. A fetchland selects by these, and restricting the
  * fetch template to them keeps it from matching a search for some other card
  * type whose retrieval this template does not actually implement.
@@ -823,6 +838,27 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     build(match) {
       const who = match[1]!.startsWith('you control') ? 'controller' : 'opponent';
       return effects({ primitive: 'tapPermanents', params: { who, types: ['creature'] } });
+    },
+  },
+  {
+    id: 'untap-all-permanents',
+    description:
+      '"Untap all lands you control" / "Untap all nonland permanents you control" (Wilderness Reclamation, Unstoppable Plan)',
+    // The mirror of `tap-all-creatures`, on the same primitive: untapping is the
+    // same traversal with the flag flipped, so it is data rather than a second
+    // mechanism. "Nonland permanents" is the full permanent-type list minus
+    // lands — written as an exclusion so it cannot drift from what a permanent is.
+    pattern: /^untap all (lands|nonland permanents|creatures) you control$/,
+    build(match) {
+      const what = match[1] ?? '';
+      const params: Record<string, unknown> = { who: 'controller', untap: true };
+      if (what === 'lands') params.types = ['land'];
+      else if (what === 'creatures') params.types = ['creature'];
+      else {
+        params.types = [...PERMANENT_TYPES];
+        params.excludeTypes = ['land'];
+      }
+      return effects({ primitive: 'tapPermanents', params });
     },
   },
   {
@@ -1819,6 +1855,30 @@ function mayEffectsFrom(body: string, compiled: readonly EffectRef[]): readonly 
   ];
 }
 
+/**
+ * The printed step names that begin a triggered ability, mapped to the
+ * {@link TriggerCondition} event each one means. Closed: a step the engine's
+ * turn structure does not have must REPORT, never compile to a trigger that can
+ * never fire.
+ */
+const STEP_TRIGGER_EVENTS: Readonly<Record<string, TriggerCondition['on']>> = Object.freeze({
+  upkeep: 'upkeep',
+  'draw step': 'drawStep',
+  'first main phase': 'precombatMain',
+  'end step': 'endStep',
+});
+
+/** "your …" / "each player's …" — whose step the trigger watches. */
+const STEP_TRIGGER_SCOPES: Readonly<Record<string, 'you' | 'any'>> = Object.freeze({
+  your: 'you',
+  "each player's": 'any',
+});
+
+/** The alternation of both tables, built FROM them so they cannot drift. */
+const STEP_TRIGGER_PHRASE = `(${Object.keys(STEP_TRIGGER_SCOPES).join('|')}) (${Object.keys(
+  STEP_TRIGGER_EVENTS,
+).join('|')})`;
+
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'trigger-etb',
@@ -1899,6 +1959,49 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         match[1] ?? '',
         `Upkeep: ${match[1] ?? ''}`,
       );
+    },
+  },
+  {
+    id: 'trigger-step-begins',
+    description:
+      '"At the beginning of your upkeep / draw step / first main phase / end step, BODY" — and the "each player\'s" form',
+    // One rule for the whole family, because the printed lines differ only in
+    // which step they name and whose it is. The step words are a closed table
+    // (`STEP_TRIGGER_EVENTS`): a step the engine does not have would otherwise
+    // compile to a trigger that silently never fires.
+    pattern: new RegExp(`^at the beginning of ${STEP_TRIGGER_PHRASE}, (.+)$`),
+    build(match, ctx) {
+      const scope = match[1] ?? '';
+      const step = match[2] ?? '';
+      const event = STEP_TRIGGER_EVENTS[step];
+      if (!event) return null;
+      const who = STEP_TRIGGER_SCOPES[scope];
+      if (!who) return null;
+      // Only the SOURCE CONTROLLER's own step is expressible today. "Each
+      // player's end step" fires on both, but its body almost always says "that
+      // player", and the engine cannot yet aim an effect at the player whose
+      // step it is — so a `who: 'any'` trigger would run the body for the
+      // controller every time, which is a different card. It reports instead.
+      if (who !== 'you') return null;
+      const body = match[3] ?? '';
+      const compiled = ctx.compileTriggerBody(body);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      const optional = body.startsWith('you may ');
+      const inner = optional ? body.slice('you may '.length) : body;
+      const effectRefs = optional
+        ? mayEffectsFrom(inner, ctx.compileTriggerBody(inner)?.effects ?? [])
+        : compiled.effects;
+      if (effectRefs === null || effectRefs.length === 0) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: event, who },
+            effects: effectRefs,
+            label: `${step}: ${body}`,
+            ...(compiled.targets ? { targets: compiled.targets } : {}),
+          },
+        ],
+      };
     },
   },
   {

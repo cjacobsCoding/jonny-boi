@@ -808,3 +808,118 @@ describe('"As ~ enters, you may reveal ..." - the reveal-land cycle', () => {
     expect(played.state.pendingChoice?.kind).toBe('confirm');
   });
 });
+
+// --- "At the beginning of your <step>" -------------------------------------------
+
+/** Wilderness Reclamation - an end-step trigger that untaps a whole type. */
+const WILDERNESS_RECLAMATION = makeCard({
+  name: 'Wilderness Reclamation',
+  typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+  manaCost: { generic: 3, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
+  oracleText: 'At the beginning of your end step, untap all lands you control.',
+});
+
+/** Unstoppable Plan - the same trigger, the NONLAND permanents. */
+const UNSTOPPABLE_PLAN = makeCard({
+  name: 'Unstoppable Plan',
+  typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+  manaCost: { generic: 3, W: 0, U: 1, B: 0, R: 0, G: 0, other: [], C: 0 },
+  oracleText: 'At the beginning of your end step, untap all nonland permanents you control.',
+});
+
+/** Hulking Raptor - a first-main-phase trigger that adds mana. */
+const HULKING_RAPTOR = makeCard({
+  name: 'Hulking Raptor',
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Dinosaur'] },
+  manaCost: { generic: 3, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
+  power: 4,
+  toughness: 5,
+  oracleText: 'Ward {2}\nAt the beginning of your first main phase, add {G}{G}.',
+});
+
+describe('"At the beginning of your <step>" - the step-trigger family', () => {
+  it('compiles Wilderness Reclamation completely, on an END STEP trigger', () => {
+    const result = compileCard(WILDERNESS_RECLAMATION);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers).toHaveLength(1);
+    expect(result.definition.triggers![0]!.condition).toEqual({ on: 'endStep', who: 'you' });
+    expect(result.definition.triggers![0]!.effects).toEqual([
+      { primitive: 'tapPermanents', params: { who: 'controller', untap: true, types: ['land'] } },
+    ]);
+  });
+
+  it('compiles Unstoppable Plan with "nonland" written as an EXCLUSION', () => {
+    const result = compileCard(UNSTOPPABLE_PLAN);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.effects[0]!.params).toEqual({
+      who: 'controller',
+      untap: true,
+      types: ['land', 'creature', 'artifact', 'enchantment', 'planeswalker', 'battle'],
+      excludeTypes: ['land'],
+    });
+  });
+
+  it('compiles Hulking Raptor on a FIRST MAIN PHASE trigger', () => {
+    const result = compileCard(HULKING_RAPTOR);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.condition).toEqual({
+      on: 'precombatMain',
+      who: 'you',
+    });
+  });
+
+  it('REFUSES "each player\'s" - the engine cannot aim a body at "that player" yet', () => {
+    // The refusal that matters most in this family. A `who: 'any'` trigger would
+    // fire on both turns and run the body for the SOURCE's controller every
+    // time, so "that player draws an additional card" would draw for the wrong
+    // seat half the time. That is a different card, so it reports.
+    const result = compileCard(
+      makeCard({
+        name: 'Kami of the Crescent Moon',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Spirit'] },
+        power: 1,
+        toughness: 3,
+        oracleText: "At the beginning of each player's draw step, that player draws an additional card.",
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.triggers).toBeUndefined();
+  });
+
+  it('REFUSES a step the engine has no trigger for', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Untapper',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText: 'At the beginning of your untap step, untap all lands you control.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('untaps at the END STEP in a real game, and only the controller\'s lands', () => {
+    const reg = buildRegistry();
+    const reclamation = compileCard(WILDERNESS_RECLAMATION).definition;
+    const state = gameAtMain(reg, SEEDS.endStep);
+
+    putOnBattlefield(state, reclamation, 'A');
+    const mine = putOnBattlefield(state, ISLAND, 'A');
+    const theirs = putOnBattlefield(state, ISLAND, 'B');
+    const myCreature = putOnBattlefield(state, FOREST, 'A');
+    mine.tapped = true;
+    theirs.tapped = true;
+    myCreature.tapped = true;
+
+    const atEnd = settle(advanceToStep(state, 'end', reg), reg, () => ({
+      kind: 'confirm',
+      yes: true,
+    }));
+
+    const after = (id: number): boolean =>
+      atEnd.battlefield.find((c) => c.instanceId === id)!.tapped;
+    expect(after(mine.instanceId)).toBe(false);
+    expect(after(myCreature.instanceId)).toBe(false);
+    // The printed line says "you control" - the opponent's land is untouched.
+    expect(after(theirs.instanceId)).toBe(true);
+  });
+});

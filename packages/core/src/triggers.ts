@@ -18,7 +18,7 @@
 
 import type { CardType, EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
-import type { InstanceId, PlayerId } from './state.js';
+import type { InstanceId, PlayerId, Step } from './state.js';
 import type { TargetRestriction } from './targeting.js';
 
 /**
@@ -32,8 +32,27 @@ import type { TargetRestriction } from './targeting.js';
  *                        whether the source's controller cast it.
  *   - `upkeep`         : the beginning of a player's upkeep (by default, the source
  *                        controller's upkeep).
+ *   - `drawStep`       : the beginning of a player's draw step.
+ *   - `precombatMain`  : the beginning of a player's first main phase.
+ *   - `endStep`        : the beginning of a player's end step.
+ *
+ * The last three are the same shape as `upkeep` — "at the beginning of your X" —
+ * and are scoped by `who` the same way, so "at the beginning of EACH player's
+ * draw step" is `{ on: 'drawStep', who: 'any' }`. They exist as separate events
+ * rather than one event with a step field because the compiler names the printed
+ * step, and a mis-typed step name should be a type error, not a trigger that
+ * silently never fires.
  */
-export type TriggerEvent = 'etb' | 'attacks' | 'dies' | 'leaves' | 'castSpell' | 'upkeep';
+export type TriggerEvent =
+  | 'etb'
+  | 'attacks'
+  | 'dies'
+  | 'leaves'
+  | 'castSpell'
+  | 'upkeep'
+  | 'drawStep'
+  | 'precombatMain'
+  | 'endStep';
 
 /** Whose action a relational trigger (cast/upkeep) cares about. */
 export type TriggerWho = 'you' | 'opponent' | 'any';
@@ -145,8 +164,12 @@ export function conditionMatches(
       if (condition.spellTypeNoneOf?.some((type) => event.castTypes.includes(type))) return false;
       return true;
     }
-    case 'upkeep': {
-      if (event.type !== 'stepBegin' || event.step !== 'upkeep') return false;
+    case 'upkeep':
+    case 'drawStep':
+    case 'precombatMain':
+    case 'endStep': {
+      if (event.type !== 'stepBegin') return false;
+      if (event.step !== STEP_FOR_TRIGGER[condition.on]) return false;
       return whoMatches(condition.who, event.activePlayer, sourceController);
     }
     default:
@@ -154,6 +177,18 @@ export function conditionMatches(
       return false;
   }
 }
+
+/**
+ * The turn step each step-beginning trigger watches. One table so the trigger
+ * name and the step it means cannot drift apart, and so adding a step trigger is
+ * a table entry rather than another `case` in the matcher.
+ */
+const STEP_FOR_TRIGGER: Readonly<Record<string, Step>> = Object.freeze({
+  upkeep: 'upkeep',
+  drawStep: 'draw',
+  precombatMain: 'precombatMain',
+  endStep: 'end',
+});
 
 /** Resolve a `who` filter against the acting player and the source's controller. */
 function whoMatches(who: TriggerWho | undefined, actingPlayer: PlayerId, sourceController: PlayerId): boolean {
