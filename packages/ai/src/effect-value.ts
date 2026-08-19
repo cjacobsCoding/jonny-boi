@@ -36,16 +36,15 @@ import type { CardInstance, EffectRef, GameState, InstanceId, ManaCost, PlayerId
 import {
   canAffordManaCost,
   convertedManaCost,
-  effectivePower,
-  effectiveToughness,
   isCreature,
   MANA_COLORS,
   matchesCardFilter,
   opponentOf,
-  remainingToughness,
 } from '@jonny-boi/core';
 import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
+import type { ContinuousIndex } from './board-stats.js';
+import { power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -63,6 +62,13 @@ export interface EffectValueContext {
   readonly weights: HeuristicWeights;
   /** Board context for `cardValue`, precomputed once per decision. */
   readonly cards: CardValueContext;
+  /**
+   * The board's continuous aggregate, precomputed once per decision alongside
+   * `cards`. Every P/T this module prices is read through it, so an anthem, an
+   * Equipment or a `*` P/T box is worth what it actually is — a removal spell
+   * pointed at an anthem-boosted creature is priced at the creature's real size.
+   */
+  readonly index: ContinuousIndex;
 }
 
 /** The total value of running a list of effect refs, in order. */
@@ -184,8 +190,8 @@ function firstTargetSpell(ctx: EffectValueContext) {
  * the main-phase pilot uses to pick a removal target, so "kill the biggest threat"
  * means one thing across the whole pilot.
  */
-function removalValue(perm: CardInstance, weights: HeuristicWeights): number {
-  return weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(perm);
+function removalValue(perm: CardInstance, weights: HeuristicWeights, index: ContinuousIndex): number {
+  return weights.removalBaseScore + weights.removalPerPowerOfTarget * effPower(perm, index);
 }
 
 /** The mana value of a permanent's printed card (a token has none). */
@@ -263,18 +269,18 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     againstTarget(ctx, (perm) => {
       const weights = ctx.weights;
       const redeploy = weights.modeBouncePerManaValue * permanentManaValue(perm);
-      const pressure = isCreature(perm.def) ? weights.removalPerPowerOfTarget * effectivePower(perm) : 0;
+      const pressure = isCreature(perm.def) ? weights.removalPerPowerOfTarget * effPower(perm, ctx.index) : 0;
       return weights.modeBounceBaseScore + redeploy + pressure;
     }),
 
   /** Same shape as a bounce, but the card is gone for good. */
-  destroyTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
-  exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
+  destroyTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights, ctx.index)),
+  exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights, ctx.index)),
 
   /** Tapping one permanent is a fraction of tapping a board; price it per power. */
   tapTarget: (_params, ctx) =>
     againstTarget(ctx, (perm) =>
-      perm.tapped ? 0 : ctx.weights.modeTapPerPowerValue * Math.max(effectivePower(perm), 1),
+      perm.tapped ? 0 : ctx.weights.modeTapPerPowerValue * Math.max(effPower(perm, ctx.index), 1),
     ),
 
   /**
@@ -287,7 +293,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     let net = 0;
     for (const perm of ctx.state.battlefield) {
       if (!isCreature(perm.def)) continue;
-      const stats = effectivePower(perm) + effectiveToughness(perm);
+      const stats = statTotal(perm, ctx.index);
       net += perm.controller === ctx.player ? -stats * weights.ownCreatureLossPerStat : stats * weights.killEnemyPerStat;
     }
     return net * weights.removalPerPowerOfTarget;
@@ -311,7 +317,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       if (perm.tapped) continue;
       const types: readonly string[] = perm.def.types;
       if (!wanted.some((t) => types.includes(t))) continue;
-      const weight = weights.modeTapPerPowerValue * Math.max(effectivePower(perm), 1);
+      const weight = weights.modeTapPerPowerValue * Math.max(effPower(perm, ctx.index), 1);
       value += perm.controller === ctx.player ? -weight : weight;
     }
     return value;
@@ -349,8 +355,8 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       return amount >= ctx.state.players[playerTarget].life ? weights.lethalBurnScore : weights.burnFaceBaseScore;
     }
     return againstTarget(ctx, (perm) =>
-      remainingToughness(perm) <= amount
-        ? removalValue(perm, weights)
+      toughnessLeft(perm, ctx.index) <= amount
+        ? removalValue(perm, weights, ctx.index)
         : weights.removalPerPowerOfTarget * amount,
     );
   },
@@ -396,7 +402,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     for (const perm of ctx.state.battlefield) {
       if (perm.controller !== victim) continue;
       if (!matchesCardFilter(perm, filterParamOf(params))) continue;
-      const value = removalValue(perm, ctx.weights);
+      const value = removalValue(perm, ctx.weights, ctx.index);
       if (worst === undefined || value < worst) worst = value;
     }
     if (worst === undefined) return 0;
@@ -416,7 +422,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     for (const perm of ctx.state.battlefield) {
       if (perm.controller !== victim) continue;
       any = true;
-      total += removalValue(perm, ctx.weights);
+      total += removalValue(perm, ctx.weights, ctx.index);
     }
     if (!any) return 0;
     const half = total / 2;
@@ -505,8 +511,8 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       // Shrink-removal: worth a kill when it is lethal, a fraction when it only
       // trims, and a mistake pointed at our own board.
       if (perm.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
-      return -toughness >= remainingToughness(perm)
-        ? removalValue(perm, ctx.weights)
+      return -toughness >= toughnessLeft(perm, ctx.index)
+        ? removalValue(perm, ctx.weights, ctx.index)
         : ctx.weights.modePumpPerStatValue * -toughness;
     }
     if (perm.controller !== ctx.player) return -ctx.weights.modeSelfHarmPenalty;
@@ -613,5 +619,5 @@ export function resolutionValueContext(
   weights: HeuristicWeights,
   cards: CardValueContext,
 ): EffectValueContext {
-  return { state, player, targets: state.resolution?.targets ?? [], weights, cards };
+  return { state, player, targets: state.resolution?.targets ?? [], weights, cards, index: cards.index };
 }

@@ -55,6 +55,18 @@ export function boardIndex(state: GameState | PilotView): ContinuousIndex {
   return indexContinuous(state as GameState);
 }
 
+/**
+ * The index for "no board is in scope" — a card in hand, a library, a ranking with
+ * no state to hand. Shared and empty, so it allocates nothing and every read
+ * through it answers printed-plus-counters, which is the whole truth about an
+ * object that is not on the battlefield.
+ *
+ * It is NOT a substitute for `boardIndex` on a permanent: a caller that has a
+ * state must build the real index. This exists so the few genuinely board-free
+ * rankings can say so in the type system instead of silently omitting an argument.
+ */
+export const OFF_BOARD_INDEX: ContinuousIndex = new Map();
+
 /** Effective power, seeing counters, anthems, attachments and pumps. */
 export function power(inst: CardInstance, index: ContinuousIndex): number {
   return effectivePower(inst, index.get(inst.instanceId) ?? NO_MOD);
