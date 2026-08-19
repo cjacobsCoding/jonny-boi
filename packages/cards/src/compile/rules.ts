@@ -162,6 +162,9 @@ function derivedValue(phrase: string): { countOf: string } | null {
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
 
+/** The scry/surveil primitives' default look depth — omitted from emitted params. */
+const SCRY_DEFAULT_COUNT = 1;
+
 /**
  * Scryfall keyword → the core `KeywordFlags` field implementing it. ONLY the
  * keywords core's combat/turn systems genuinely model appear here; anything else
@@ -1092,6 +1095,48 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     build(match) {
       const count = parseCount(match[1]);
       return count === null ? null : effects({ primitive: 'reorderTopOfLibrary', params: { count } });
+    },
+  },
+  {
+    id: 'scry-n',
+    description: '"Scry N" — look at the top N, any split between top (any order) and bottom (any order)',
+    pattern: new RegExp(`^scry ${COUNT_TOKEN}$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null) return null;
+      // `count` is omitted at the primitive's default of one, matching the
+      // emitted-data style of every other rule.
+      return effects({ primitive: 'scry', ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) });
+    },
+  },
+  {
+    id: 'surveil-n',
+    description: '"Surveil N" — look at the top N, any split between top (any order) and the graveyard',
+    pattern: new RegExp(`^surveil ${COUNT_TOKEN}$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null) return null;
+      return effects({ primitive: 'surveil', ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) });
+    },
+  },
+  {
+    id: 'scry-then-effect',
+    description:
+      '"Scry N, then EFFECT" / "Surveil N, then EFFECT" — the one-sentence rider form (Preordain, Read the Bones). The tail must itself be a target-free clause the table compiles',
+    pattern: new RegExp(`^(scry|surveil) ${COUNT_TOKEN}, then (.+)$`),
+    build(match, ctx) {
+      const count = parseCount(match[2]);
+      if (count === null) return null;
+      // Target-free by construction, for the same reason as `kicked-extra-effect`:
+      // this rule's own id declares no chosen target, so a targeted tail inside a
+      // trigger would be aimed at nothing and silently no-op. Refusing keeps a
+      // targeted combination reported rather than half-played.
+      const tail = ctx.compileEffectClause(match[3]!, { targetFree: true });
+      if (!tail || tail.length === 0) return null;
+      return effects(
+        { primitive: match[1]!, ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) },
+        ...tail,
+      );
     },
   },
   {

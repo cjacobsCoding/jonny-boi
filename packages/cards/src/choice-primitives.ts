@@ -35,6 +35,7 @@ import type {
   EffectPrimitive,
   EffectRef,
   InstanceId,
+  ManaCost,
   PlayerId,
   CardType,
 } from '@jonny-boi/core';
@@ -560,6 +561,25 @@ const DEFAULT_TAP_TYPES: readonly CardType[] = Object.freeze(['creature'] as con
 export const counterUnlessPaid: EffectPrimitive = (ctx) => {
   const spell = targetedSpellOnStack(ctx);
   if (!spell) return; // already gone, or not a spell — safe no-op
+  // "…unless its controller pays {X}" (Condescend): the cost is the X the
+  // CASTER chose (and paid for) at cast time, read off the resolution. X = 0
+  // prints a cost of {0}, which any player trivially pays (CR 118.5) — so the
+  // spell simply survives, exactly like the printed card cast for zero.
+  if (boolParam(ctx, UNLESS_PAID_X_PARAM, false)) {
+    const x = ctx.xValue ?? 0;
+    if (x <= 0) return; // "pays {0}" — always paid, never a counter
+    const cost: ManaCost = { generic: x };
+    const paid = ctx.payOrDecline({
+      chooser: spell.controller,
+      cost,
+      prompt: `Pay ${formatManaCost(cost)} or ${ctx.source.def.name} counters ${spell.card.def.name}`,
+      valence: 'gain',
+    });
+    if (paid === undefined) return; // parked — resume later, nothing mutated
+    if (paid) return; // paid in full: the spell resolves as normal
+    counterSpellOnStack(ctx, spell);
+    return;
+  }
   const cost = manaCostParam(ctx, UNLESS_PAID_PARAM);
   if (cost) {
     // ASK FIRST, THEN MUTATE: nothing above this line has touched the state.
@@ -579,6 +599,9 @@ export const counterUnlessPaid: EffectPrimitive = (ctx) => {
 
 /** Where the optional payment's cost lives in a card's params. */
 const UNLESS_PAID_PARAM = 'unlessPaid';
+
+/** Boolean param: the payment is the {X} chosen at cast time (Condescend). */
+const UNLESS_PAID_X_PARAM = 'unlessPaidX';
 
 /**
  * `wardCounterUnlessPaid` — the resolution of a WARD trigger (CR 702.21):
@@ -687,6 +710,148 @@ export const transformRevealTop: EffectPrimitive = (ctx) => {
   if (chosen.length === 0) return; // declined — the card stays hidden on top
   if (!matches) return; // revealed a non-matching card — nothing happens
   transformPermanent(ctx.state, ctx.source.instanceId, ctx.emit);
+};
+
+// --- scry & surveil ------------------------------------------------------------------
+
+/**
+ * The shared first half of scry and surveil: look at the top `count` cards of
+ * `who`'s library and ask which of them STAY on top, in the order they will be
+ * drawn. Returns the answer plus the candidates it was asked over, or
+ * `undefined` while the question is parked.
+ *
+ * One deliberately constant-shaped question (a `keepOnTop`-marked ordered
+ * `selectCards`, min 0): offering the candidates IS the look — the choice
+ * travels only to its chooser, and the public `choiceAsked` event carries only
+ * a count, so a spectator learns exactly what paper Magic shows the table: that
+ * N cards were looked at (the `transformRevealTop` precedent). The prompt names
+ * only the count and where the rest go, never a card.
+ */
+function askKeepOnTop(
+  ctx: EffectContext,
+  who: PlayerId,
+  count: number,
+  restFate: string,
+): { kept: readonly InstanceId[]; candidates: readonly CardOption[] } | undefined {
+  const candidates = collectCardOptions(ctx.state, 'library', { controller: who, limit: count, fromTop: true });
+  if (candidates.length === 0) return { kept: [], candidates };
+  const kept = ctx.chooseCards({
+    chooser: who,
+    prompt: `Look at the top ${candidates.length} card(s) of your library. Choose the cards to keep on top, in order — the rest ${restFate}`,
+    candidates,
+    min: 0,
+    max: candidates.length,
+    ordered: true,
+    keepOnTop: true,
+    valence: 'neutral',
+    fromZone: 'library',
+  });
+  if (kept === undefined) return undefined; // parked — nothing mutated
+  return { kept, candidates };
+}
+
+/**
+ * Re-seat the kept cards so the FIRST chosen ends up on top — the same
+ * back-to-front `moveOwnedCard 'top'` walk `reorderTopOfLibrary` uses, so the
+ * two library-arranging primitives cannot disagree about what "in order" means.
+ */
+function placeKeptOnTop(ctx: EffectContext, who: PlayerId, kept: readonly InstanceId[]): void {
+  for (let i = kept.length - 1; i >= 0; i--) {
+    moveOwnedCard(ctx, who, kept[i] as InstanceId, 'library', 'library', 'top');
+  }
+}
+
+/**
+ * `scry` — "Scry N" (CR 701.18): look at the top `params.count` cards of your
+ * library, put any number of them on the bottom and the rest back on top, both
+ * groups in any order.
+ *
+ * TWO questions, both collected before anything moves (the ask-first contract):
+ *   1. which cards stay on TOP, in draw order ({@link askKeepOnTop});
+ *   2. the ORDER of the bottomed cards — asked only when there are two or more
+ *      to order (one or zero is not a decision; core would auto-answer anyway).
+ * In both ordered answers the FIRST chosen card is the one that comes up
+ * soonest: topmost of the kept, and the highest-placed (drawn first if the
+ * library empties) of the bottomed — the one meaning `ordered` always has.
+ *
+ * A library shorter than N scries what is there (core clamps the look). The
+ * bottom placement is `moveOwnedCard`'s `'bottom'` position — the same funnel
+ * every zone move uses, so each move emits the standard `zoneChange`, which the
+ * observation layer already anonymises (its destination is a hidden zone).
+ */
+export const scry: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+
+  const look = askKeepOnTop(ctx, who, count, 'go to the bottom of your library');
+  if (look === undefined) return; // parked
+  const { kept, candidates } = look;
+  if (candidates.length === 0) return; // empty library — nothing to scry
+
+  const keptSet = new Set(kept);
+  const restOptions = candidates.filter((option) => !keptSet.has(option.instanceId));
+  let bottomOrder: readonly InstanceId[] = restOptions.map((option) => option.instanceId);
+  if (restOptions.length > 1) {
+    const chosen = ctx.chooseCards({
+      chooser: who,
+      prompt: `Put ${restOptions.length} card(s) on the bottom of your library, in any order`,
+      candidates: restOptions,
+      min: restOptions.length,
+      max: restOptions.length,
+      ordered: true,
+      valence: 'neutral',
+      fromZone: 'library',
+    });
+    if (chosen === undefined) return; // parked — still nothing mutated
+    bottomOrder = chosen;
+  }
+
+  // MUTATE, only now. Bottoms first (the kept cards are still on top and out of
+  // the way), each appended to the library's end: the first-chosen bottom card
+  // is pushed first and every later one lands BELOW it, so first = surfaces
+  // soonest. Then the kept cards are re-seated in chosen order.
+  for (const id of bottomOrder) {
+    moveOwnedCard(ctx, who, id, 'library', 'library', 'bottom');
+  }
+  placeKeptOnTop(ctx, who, kept);
+};
+
+/**
+ * `surveil` — "Surveil N" (CR 701.42): look at the top `params.count` cards of
+ * your library, put any number into your graveyard and the rest back on top in
+ * any order.
+ *
+ * ONE question suffices: the kept-on-top pick ({@link askKeepOnTop}) decides
+ * everything, because a graveyard has no order worth asking about. The
+ * graveyarded cards move through the same `moveOwnedCard` funnel, whose
+ * `zoneChange` into a PUBLIC zone carries the instance id — exactly paper
+ * Magic, where surveilled-away cards are placed face up for the table to see,
+ * while the kept cards stay hidden.
+ *
+ * Filling a graveyard this way triggers nothing extra by construction: the
+ * moves emit only the standard `zoneChange`s, and no trigger condition in core
+ * watches cards ARRIVING in a graveyard from a library (dying is its own
+ * event).
+ */
+export const surveil: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+
+  const look = askKeepOnTop(ctx, who, count, 'go to your graveyard');
+  if (look === undefined) return; // parked
+  const { kept, candidates } = look;
+  if (candidates.length === 0) return; // empty library — nothing to surveil
+
+  const keptSet = new Set(kept);
+  for (const option of candidates) {
+    if (keptSet.has(option.instanceId)) continue;
+    moveOwnedCard(ctx, who, option.instanceId, 'library', 'graveyard');
+  }
+  placeKeptOnTop(ctx, who, kept);
 };
 
 // --- registry ------------------------------------------------------------------------
@@ -831,4 +996,6 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   pileSplitSacrifice,
   wardCounterUnlessPaid,
   transformRevealTop,
+  scry,
+  surveil,
 });
