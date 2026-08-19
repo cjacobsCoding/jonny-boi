@@ -1086,7 +1086,6 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
 Still open, roughly by how often they block a real decklist:
 - *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
   cast-time question step now that {X}/kicker built it), *multikicker*, *Phyrexian costs*,
-  *emblems* (walker ultimates that create one stay reported),
   *modal DFCs / split / adventure (the cast-time face choice)*,
   *P/T formulas outside the closed count vocabulary* (a star box counting something the
   `DerivedCountName` table does not name, or whose two halves count different things, still
