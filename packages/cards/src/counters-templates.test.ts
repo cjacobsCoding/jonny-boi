@@ -28,6 +28,7 @@ import {
   MINUS_ONE_COUNTER,
   type CardDefinition,
   type CardInstance,
+  type GameAction,
   type GameEvent,
   type GameState,
   type PlayerId,
@@ -394,6 +395,56 @@ function playGame(
   return { state, events };
 }
 
+/**
+ * Play a real game, but take any legal action that casts or activates `cardName`
+ * the moment one is offered; otherwise defer to the heuristic pilot.
+ *
+ * A pilot-only game proves the pilot's taste as much as the card's wiring, and a
+ * one-of instant it happens not to value never gets cast at all. This keeps the
+ * whole engine in the loop — real casting, real cost payment, real resolution —
+ * while making the card under test actually happen.
+ */
+function playGameCasting(
+  cardName: string,
+  decks: { A: { cards: readonly CardDefinition[] }; B: { cards: readonly CardDefinition[] } },
+  seed: number,
+  maxActions = 900,
+): { state: GameState; events: readonly GameEvent[] } {
+  const registry = buildRegistry();
+  const pilot = createHeuristicPilot();
+  const rng = createRng(seed);
+  const created = createGame({ seed, decks, registry });
+  let state = created.state;
+  const events: GameEvent[] = [...created.events];
+  for (let i = 0; i < maxActions && !state.gameOver; i++) {
+    const legal = generateLegalActions(state, DEFAULT_RULES);
+    if (legal.length === 0) break;
+    const named = legal.find((action) => {
+      if (action.kind !== 'castSpell' && action.kind !== 'activateAbility') return false;
+      const source = [...state.battlefield, ...state.players.A.hand, ...state.players.B.hand].find(
+        (c) => c.instanceId === action.instanceId,
+      );
+      return source?.def.name === cardName;
+    });
+    // An {X} spell asks for X as it is cast; take the biggest offer, since an X
+    // of zero would prove nothing about counters that are supposed to be there.
+    const biggestNumber = legal.reduce<GameAction | null>((best, action) => {
+      if (action.kind !== 'answerChoice' || action.answer.kind !== 'chooseNumber') return best;
+      const bestValue =
+        best !== null && best.kind === 'answerChoice' && best.answer.kind === 'chooseNumber'
+          ? best.answer.value
+          : -1;
+      return action.answer.value > bestValue ? action : best;
+    }, null);
+    const chosen =
+      biggestNumber ?? named ?? pilot.chooseAction({ view: state, legalActions: legal, rng, registry });
+    const result = applyAction(state, chosen, DEFAULT_RULES, registry);
+    state = result.state;
+    events.push(...result.events);
+  }
+  return { state, events };
+}
+
 describe('the counters really land in a played game', () => {
   it('Managorger Hydra grows off spells cast in a real game', () => {
     const hydra = playable(MANAGORGER_HYDRA);
@@ -461,6 +512,181 @@ describe('the counters really land in a played game', () => {
     expect(theirs.counters[PLUS_ONE_COUNTER] ?? 0).toBe(0);
     expect(effectivePower(b)).toBe(2);
   });
+});
+
+describe('targeted counters that must not touch the opponent’s board', () => {
+  it('compiles Snakeskin Veil — "you control" targeting plus the "it gains …" sentence', () => {
+    const definition = playable(SNAKESKIN_VEIL);
+    expect(definition.effects).toEqual([
+      { primitive: 'addCounters', params: { amount: 1, targets: 'creatureYouControl' } },
+      // The grant carries NO target of its own: "it" is the creature the first
+      // half already chose, which is what the primitive falls back to.
+      { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { hexproof: true } } },
+    ]);
+  });
+
+  it('does NOT reach "it gains …" as a sentence of its own', () => {
+    // "It" means the creature the sentence BEFORE targeted, so the two sentences
+    // are only trustworthy matched together. On its own the line has no prior
+    // target at all — in a trigger core would aim it at any creature on the
+    // table — so it must keep reporting.
+    const result = compileCard(
+      scryfall({
+        name: 'Trigger Trick',
+        cost: { G: 1 },
+        types: ['Creature'],
+        subtypes: ['Elf'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'When Trigger Trick enters, it gains hexproof until end of turn.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('Snakeskin Veil grows one of the caster’s OWN creatures in a real game', () => {
+    const veil = playable(SNAKESKIN_VEIL);
+    const bearCard: CardDefinition = {
+      id: 'counters:Bear',
+      name: 'Grizzly Bears',
+      types: ['creature'],
+      power: 2,
+      toughness: 2,
+      cost: { generic: 1, G: 1 },
+    };
+    const game = playGameCasting('Snakeskin Veil', {
+      A: deckWith([veil, bearCard]),
+      B: deckWith([bearCard]),
+    }, 5150);
+
+    const counters = game.events.filter((e) => e.type === 'counterAdded' && e.kind === PLUS_ONE_COUNTER);
+    expect(counters.length, 'the Veil never resolved on a creature').toBeGreaterThan(0);
+    // Every counter it put on belongs to the caster: an opponent-aimed buff
+    // would be the card playing differently from its printed text.
+    for (const event of counters) {
+      const permanent = game.state.battlefield.find(
+        (c) => c.instanceId === (event as { instanceId: number }).instanceId,
+      );
+      if (permanent) expect(permanent.controller).toBe('A');
+    }
+  });
+});
+
+describe('X counters', () => {
+  it('compiles "~ enters with X +1/+1 counters on it" onto the cast-time X', () => {
+    const definition = playable(STONECOIL_SERPENT);
+    expect(definition.effects?.[0]).toEqual({
+      primitive: 'addCounters',
+      params: { amount: { chosenX: true }, self: true },
+    });
+  });
+
+  it('refuses the same line on a card with no {X} in its cost', () => {
+    // An X defined by a "where X is …" clause is a different number entirely.
+    const result = compileCard(
+      scryfall({
+        name: 'No X Here',
+        cost: { generic: 2 },
+        types: ['Artifact', 'Creature'],
+        subtypes: ['Construct'],
+        power: 0,
+        toughness: 0,
+        oracleText: 'No X Here enters with X +1/+1 counters on it.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('an X creature really enters with that many counters — the bug this found', () => {
+    // "~ enters with N +1/+1 counters on it" compiled `'complete'` and then did
+    // NOTHING: the counters are put on as the permanent enters (CR 614.1c),
+    // which here is while its own spell resolves — before the instance is on the
+    // battlefield — and the primitive only ever looked at the battlefield. Every
+    // 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) therefore
+    // died to a state-based action the moment it arrived.
+    const serpent = playable(STONECOIL_SERPENT);
+    const state = freshState();
+    state.step = 'precombatMain';
+    for (let i = 0; i < 4; i++) putOnBattlefield(state, FOREST, 'A');
+    const inHand: CardInstance = {
+      instanceId: state.nextInstanceId++,
+      def: serpent,
+      controller: 'A',
+      owner: 'A',
+      zone: 'hand',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+    } as CardInstance;
+    state.players.A.hand.push(inHand);
+
+    const events = castThroughEngine(state, 'Stonecoil Serpent');
+
+    expect(
+      events.some((e) => e.type === 'counterAdded' && e.amount > 0),
+      'the X creature entered with no counters at all',
+    ).toBe(true);
+    const onBoard = state.battlefield.find((c) => c.def.name === 'Stonecoil Serpent');
+    expect(onBoard, 'the 0/0 died on arrival — its counters never landed').toBeDefined();
+    expect(effectivePower(onBoard!)).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Drive the real engine until `cardName` has been cast and resolved: take the
+ * cast when it is offered, answer every cast-time question with the largest
+ * value on offer (an X of zero would prove nothing), and pass priority
+ * otherwise. Mutates `state` in place and returns everything that happened.
+ */
+function castThroughEngine(state: GameState, cardName: string, maxActions = 40): GameEvent[] {
+  const registry = buildRegistry();
+  const events: GameEvent[] = [];
+  let current = state;
+  for (let i = 0; i < maxActions && !current.gameOver; i++) {
+    const legal = generateLegalActions(current, DEFAULT_RULES);
+    if (legal.length === 0) break;
+    const answer = legal.reduce<GameAction | null>((best, action) => {
+      if (action.kind !== 'answerChoice' || action.answer.kind !== 'chooseNumber') return best;
+      const bestValue =
+        best !== null && best.kind === 'answerChoice' && best.answer.kind === 'chooseNumber'
+          ? best.answer.value
+          : -1;
+      return action.answer.value > bestValue ? action : best;
+    }, null);
+    const cast = legal.find(
+      (action) =>
+        action.kind === 'castSpell' &&
+        current.players.A.hand.some(
+          (c) => c.instanceId === action.instanceId && c.def.name === cardName,
+        ),
+    );
+    const result = applyAction(current, answer ?? cast ?? legal[0]!, DEFAULT_RULES, registry);
+    current = result.state;
+    events.push(...result.events);
+  }
+  // The engine works on a draft copy, so hand the caller the state it produced.
+  Object.assign(state, current);
+  return events;
+}
+
+const SNAKESKIN_VEIL = scryfall({
+  name: 'Snakeskin Veil',
+  cost: { G: 1 },
+  types: ['Instant'],
+  oracleText: 'Put a +1/+1 counter on target creature you control. It gains hexproof until end of turn.',
+});
+
+const STONECOIL_SERPENT = scryfall({
+  name: 'Stonecoil Serpent',
+  cost: { other: ['X'] },
+  types: ['Artifact', 'Creature'],
+  subtypes: ['Snake'],
+  power: 0,
+  toughness: 0,
+  keywords: ['Reach', 'Trample'],
+  oracleText: ['Reach, trample', 'Stonecoil Serpent enters with X +1/+1 counters on it.'].join('\n'),
 });
 
 // --- shared fixtures -------------------------------------------------------------

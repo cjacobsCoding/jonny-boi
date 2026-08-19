@@ -119,6 +119,8 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  * better than the printed card.
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
+/** "target creature you control" — never widened to any creature on the table. */
+const YOUR_CREATURE_TARGET: TargetRestriction = 'creatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
@@ -811,6 +813,58 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         primitive: 'addCounters',
         params: { amount, targets: CREATURE_TARGET },
       });
+    },
+  },
+  {
+    // "…on target creature YOU CONTROL" (Snakeskin Veil). Its own rule rather
+    // than a widened one: `'creature'` would let a pilot grow the opponent's
+    // board, which is a card playing differently from its printed text.
+    id: 'put-counters-on-target-you-control',
+    description: '"Put N +1/+1 counters on target creature you control"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature you control$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, targets: YOUR_CREATURE_TARGET },
+      });
+    },
+  },
+  {
+    /**
+     * The whole two-sentence combat trick as ONE rule — "Put a +1/+1 counter on
+     * target creature you control. **It** gains hexproof until end of turn."
+     * (Snakeskin Veil).
+     *
+     * One rule rather than a rule per sentence, because "it" means *the creature
+     * the sentence before targeted*. A standalone "it gains …" rule would be
+     * aimed independently wherever the compiler met it — in a triggered ability
+     * core would aim it at any creature on the table — so the two sentences are
+     * only trustworthy while they are matched together, with a single target
+     * shared by both effects.
+     */
+    id: 'put-counters-then-grant-keyword',
+    description: '"Put N +1/+1 counters on target creature [you control]. It gains KEYWORD until end of turn"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature( you control)?\\. ` +
+        `it gains ${KEYWORD_TOKEN} until end of turn$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      const keywords = keywordFlag(match[3] ?? '');
+      if (amount === null || keywords === null) return null;
+      const restriction = match[2] ? YOUR_CREATURE_TARGET : CREATURE_TARGET;
+      return effects(
+        { primitive: 'addCounters', params: { amount, targets: restriction } },
+        // The grant deliberately carries NO target of its own: it reads the
+        // target already chosen for the spell, which is what "it" means.
+        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords } },
+      );
     },
   },
   {
@@ -1880,6 +1934,19 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       if (amount === null) return null;
       // The permanent's own ETB script counters itself.
       return { effects: [{ primitive: 'addCounters', params: { amount, self: true } }] };
+    },
+  },
+  {
+    // "~ enters with X +1/+1 counters on it" (Stonecoil Serpent). Gated on the
+    // card actually printing {X} in its cost, exactly like every other X rule:
+    // an X defined by a "where X is …" clause is a different number, and
+    // reading it as the cast-time X would size the creature wrongly.
+    id: 'enters-with-x-counters',
+    description: '"~ enters with X +1/+1 counters on it"',
+    pattern: /^~ enters(?: the battlefield)? with x \+1\/\+1 counters on it\.?$/,
+    build(_match, ctx) {
+      if (!cardHasXCost(ctx)) return null;
+      return { effects: [{ primitive: 'addCounters', params: { amount: CHOSEN_X_PARAM, self: true } }] };
     },
   },
   {

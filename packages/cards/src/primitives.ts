@@ -792,11 +792,30 @@ export const addCounters: EffectPrimitive = (ctx) => {
   }
 
   const target = boolParam(ctx, 'self', false)
-    ? selfIfCreature(ctx)
-    : (firstPermanentTarget(ctx) ?? selfIfCreature(ctx));
+    ? enteringOrResidentSelf(ctx)
+    : (firstPermanentTarget(ctx) ?? enteringOrResidentSelf(ctx));
   if (!target || !isCreature(target.def)) return;
   putCountersOn(ctx, target, amount);
 };
+
+/**
+ * The source as a counter target — the permanent on the battlefield if it is
+ * already there, otherwise the card CURRENTLY RESOLVING into play.
+ *
+ * The second half is what makes "~ enters with N +1/+1 counters on it" real. It
+ * is a replacement effect (CR 614.1c): the counters are put on as the permanent
+ * enters, which in this engine means while its own spell is resolving and before
+ * `finishSpellResolution` pushes that very instance onto the battlefield. Reading
+ * only the battlefield found nothing at that moment, so every "enters with
+ * counters" card compiled `'complete'` and then entered with none — a 0/0 body
+ * (Stonecoil Serpent, Walking Ballista) died to a state-based action on arrival.
+ */
+function enteringOrResidentSelf(ctx: EffectContext): CardInstance | undefined {
+  const resident = selfIfCreature(ctx);
+  if (resident) return resident;
+  const source = ctx.source;
+  return isCreature(source.def) ? source : undefined;
+}
 
 /**
  * The creatures a group counter effect ("each creature you control", "each
