@@ -301,7 +301,7 @@ _Append dated notes here; keep them short. Newest at top._
   • Core gained a `'permanent'` TARGET RESTRICTION. Cryptic's bounce mode needs it: flattening
   "target permanent" to "target creature" is a card that cannot bounce a land, i.e. weaker than
   printed. The bounce compile rule now emits it too.
-  ✅ **Verified**: full suite **2751 passed / 0 failed** post-merge, `npm run verify` exit 0,
+  ✅ **Verified**: full suite **2806 passed / 0 failed** post-merge, `npm run verify` exit 0,
   `npm run build` exit 0. **Gauntlet seed 99 reproduces 79/280 = 28.2% BYTE-IDENTICALLY** (UW Control
   12/40 unchanged too) — and that is checked, not assumed: an event scan over those same 40 UW games
   shows Cryptic Command cast 40/40 times, announcing its modes at cast every time and aiming 39, so
