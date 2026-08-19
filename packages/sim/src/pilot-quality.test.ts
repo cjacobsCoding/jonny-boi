@@ -13,6 +13,17 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import {
+  addMana,
+  createGame,
+  generateLegalActions,
+  type CardDefinition,
+  type CardInstance,
+  type DeckList,
+  type GameState,
+  type InstanceId,
+  type PlayerId,
+} from '@jonny-boi/core';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import { buildRegistry, compileCard, loadCardPool } from '@jonny-boi/cards';
 import { SAMPLE_DECKS } from '../data/decks/index.js';
@@ -135,5 +146,239 @@ describe(`default pilot ("${DEFAULT_PILOT_ID}") play quality`, () => {
       activated.length,
       'the pilot never cracked a fetchland — the ability is offered but unused',
     ).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * BOARD-AWARENESS GUARDS — the pilot must evaluate the board, not the printed card.
+ *
+ * Every one of these failed on `main` before `fix/ai-sees-continuous-effects`,
+ * and each fails for the same single reason: `packages/ai` called core's
+ * `effectivePower` / `effectiveToughness` with no continuous aggregate, which
+ * answers the PRINTED numbers. An anthem, an Aura, an Equipment and a
+ * characteristic-defining `*` P/T box were all invisible to every pilot, so the
+ * pilots attacked, blocked, traded and aimed removal at numbers the board had
+ * already changed.
+ *
+ * They are DECISION-level rather than whole-match: a match average can absorb a
+ * systematically wrong target choice and still finish, which is exactly how this
+ * survived a green suite for so long. Each asks the pilot one question whose right
+ * answer differs between the two readings.
+ */
+
+/** A vanilla creature definition. */
+function creature(
+  id: string,
+  power: number,
+  toughness: number,
+  subtypes: readonly string[] = [],
+): CardDefinition {
+  return { id, name: id, types: ['creature'], subtypes, power, toughness, cost: { generic: 2 } };
+}
+
+/** "Goblins you control get +N/+N" — a tribal anthem, as data. The tribal form
+ * keeps the test honest: an untyped anthem would pump BOTH of B's creatures and
+ * leave the printed order intact, proving nothing. */
+function anthem(id: string, amount: number): CardDefinition {
+  return {
+    id,
+    name: id,
+    types: ['enchantment'],
+    cost: { generic: 2, W: 1 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], anyOfSubtypes: ['goblin'] },
+        power: amount,
+        toughness: amount,
+        label: id,
+      },
+    ],
+  };
+}
+
+/**
+ * A `*`/`*+1` P/T box — Tarmogoyf's shape. Its real size arrives ONLY through the
+ * continuous layer, so a pilot reading printed numbers prices it at 0/0.
+ */
+function starCreature(id: string): CardDefinition {
+  return {
+    id,
+    name: id,
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    characteristicPT: {
+      power: { countOf: 'cardTypesInAllGraveyards' },
+      toughness: { countOf: 'cardTypesInAllGraveyards', plus: 1 },
+    },
+  };
+}
+
+/** Sorcery-speed "destroy target creature". */
+const DESTROY_TARGET: CardDefinition = {
+  id: 'test:destroy',
+  name: 'Test Removal',
+  types: ['sorcery'],
+  timing: 'sorcery',
+  cost: { generic: 1, B: 1 },
+  effects: [{ primitive: 'destroyTarget', params: { what: 'creature' } }],
+};
+
+function stubLand(i: number): CardDefinition {
+  return { id: `test:land${i}`, name: `Test Land ${i}`, types: ['land'], produces: ['B'] };
+}
+
+function stubDeck(): DeckList {
+  return { cards: Array.from({ length: 40 }, (_, i) => stubLand(i)) };
+}
+
+/** An empty-handed game in A's precombat main, with the stack clear. */
+function bareGame(): GameState {
+  const { state } = createGame({ seed: 3, decks: { A: stubDeck(), B: stubDeck() } });
+  state.players.A.hand = [];
+  state.players.B.hand = [];
+  state.step = 'precombatMain';
+  state.activePlayer = 'A';
+  state.priorityPlayer = 'A';
+  return state;
+}
+
+function put(state: GameState, player: PlayerId, defs: readonly CardDefinition[]): CardInstance[] {
+  const made: CardInstance[] = [];
+  for (const def of defs) {
+    const inst: CardInstance = {
+      instanceId: state.nextInstanceId++ as InstanceId,
+      def,
+      controller: player,
+      owner: player,
+      zone: 'battlefield',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+    };
+    state.battlefield.push(inst);
+    made.push(inst);
+  }
+  return made;
+}
+
+/** Put a card in hand and float enough mana that casting it is the next action. */
+function armWithRemoval(state: GameState, player: PlayerId): void {
+  const inst: CardInstance = {
+    instanceId: state.nextInstanceId++ as InstanceId,
+    def: DESTROY_TARGET,
+    controller: player,
+    owner: player,
+    zone: 'hand',
+    tapped: false,
+    summoningSick: false,
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    counters: {},
+  };
+  state.players[player].hand.push(inst);
+  state.players[player].manaPool = addMana(state.players[player].manaPool, 'B', 2);
+}
+
+describe('the pilot evaluates the BOARD, not the printed card', () => {
+  const pilot = createDefaultAiRegistry().getPilot(DEFAULT_PILOT_ID)!;
+  const rng = { next: () => 0.5, int: () => 0 } as unknown as Parameters<
+    typeof pilot.chooseAction
+  >[0]['rng'];
+
+  function chosenRemovalTarget(state: GameState): InstanceId | undefined {
+    const action = pilot.chooseAction({
+      view: state,
+      legalActions: generateLegalActions(state),
+      rng,
+    });
+    if (action.kind !== 'castSpell') return undefined;
+    const target = action.targets?.[0];
+    return typeof target === 'number' ? (target as InstanceId) : undefined;
+  }
+
+  it('aims removal at the creature an ANTHEM made biggest, not the biggest printed one', () => {
+    // B's board: a printed 4/4, and a printed 2/2 standing under a +3/+3 anthem —
+    // a 5/5 in play. Printed-blind, the pilot kills the 4/4 and leaves the bigger
+    // creature alive; that is the anthem being invisible to evaluation.
+    const state = bareGame();
+    const [printedBig] = put(state, 'B', [creature('printed-4-4', 4, 4)]);
+    const [buffed] = put(state, 'B', [creature('printed-2-2', 2, 2, ['goblin'])]);
+    put(state, 'B', [anthem('Test Anthem', 3)]);
+    armWithRemoval(state, 'A');
+
+    const target = chosenRemovalTarget(state);
+    expect(target, 'the pilot cast its removal at a creature').toBeDefined();
+    expect(
+      target,
+      `killed ${target === printedBig!.instanceId ? 'the printed 4/4' : 'something else'} ` +
+        'while a 2/2 under a +3/+3 anthem — a real 5/5 — stayed on the board',
+    ).toBe(buffed!.instanceId);
+  });
+
+  it('values a characteristic-defining `*` creature above zero', () => {
+    // A `*`/`*+1` box with four card types in the graveyards is a 4/5. Read
+    // printed, it is 0/0 — literally the least threatening thing on the board —
+    // so a printed-blind pilot points its removal anywhere else.
+    const state = bareGame();
+    const [goyf] = put(state, 'B', [starCreature('Test Goyf')]);
+    put(state, 'B', [creature('printed-3-3', 3, 3)]);
+    // Four distinct card types in the graveyard ⇒ the star box is a 4/5.
+    state.players.B.graveyard = [
+      { def: creature('gy-creature', 1, 1), types: ['creature'] },
+      { def: { id: 'gy:l', name: 'gy land', types: ['land'] } as CardDefinition, types: ['land'] },
+      {
+        def: { id: 'gy:i', name: 'gy instant', types: ['instant'] } as CardDefinition,
+        types: ['instant'],
+      },
+      {
+        def: { id: 'gy:s', name: 'gy sorcery', types: ['sorcery'] } as CardDefinition,
+        types: ['sorcery'],
+      },
+    ].map(({ def }, i) => ({
+      instanceId: (900 + i) as InstanceId,
+      def,
+      controller: 'B' as PlayerId,
+      owner: 'B' as PlayerId,
+      zone: 'graveyard' as const,
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+    }));
+    armWithRemoval(state, 'A');
+
+    const target = chosenRemovalTarget(state);
+    expect(target, 'the pilot cast its removal at a creature').toBeDefined();
+    expect(
+      target,
+      'the pilot left a 4/5 star-P/T creature alone and killed a 3/3 — it is reading ' +
+        'the printed (empty) P/T box, which is a 0/0',
+    ).toBe(goyf!.instanceId);
+  });
+
+  it('does not trade its 4/4 into an anthem-boosted 3/3 that is really a 4/4', () => {
+    // A's 4/4 attacks into B's 3/3 + a +1/+1 anthem. Printed, the attack is a
+    // clean kill that survives; in reality it is a mutual destruction the pilot
+    // did not choose to make.
+    const state = bareGame();
+    state.step = 'declareAttackers';
+    put(state, 'A', [creature('mine-4-4', 4, 4)]);
+    put(state, 'B', [creature('theirs-3-3', 3, 3, ['goblin'])]);
+    put(state, 'B', [anthem('Small Anthem', 1)]);
+
+    const action = pilot.chooseAction({
+      view: state,
+      legalActions: generateLegalActions(state),
+      rng,
+    });
+    const attackers = action.kind === 'declareAttackers' ? action.attackers.length : 0;
+    expect(
+      attackers,
+      'attacked a 3/3 that an anthem has already made a 4/4 — the trade the pilot ' +
+        'thought it was winning kills both creatures',
+    ).toBe(0);
   });
 });
