@@ -25,7 +25,13 @@ export interface CastChoice {
 /** The set of hand-card instance ids the viewer may play as a land. */
 export function playableLandIds(actions: readonly GameAction[]): ReadonlySet<InstanceId> {
   const ids = new Set<InstanceId>();
-  for (const a of actions) if (a.kind === 'playLand') ids.add(a.instanceId);
+  // FRONT FACE ONLY. A modal DFC offers a land play for its BACK face
+  // (`face: 'back'`), and this set carries only an instance id — so including it
+  // would render a land button whose click submits a face-less `playLand` that
+  // the engine rejects ("that card is not a land"). Until the board can offer
+  // two faces per card, the back-face offer is not shown rather than shown
+  // broken. See COORDINATION for the named gap.
+  for (const a of actions) if (a.kind === 'playLand' && a.face === undefined) ids.add(a.instanceId);
   return ids;
 }
 
@@ -38,6 +44,11 @@ function castChoicesFrom(
   for (const a of actions) {
     if (a.kind !== 'castSpell') continue;
     if ((a.fromZone ?? 'hand') !== zone) continue;
+    // FRONT FACE ONLY, for the same reason as `playableLandIds`: this map is
+    // keyed on the instance alone, so a modal DFC's two offers would MERGE —
+    // the back face's legal targets would appear on a menu that submits the
+    // front face, which is a wrong action, not merely a missing one.
+    if (a.face !== undefined) continue;
     const entry = byInstance.get(a.instanceId) ?? { sets: [], untargeted: false };
     const targets = a.targets ?? [];
     if (targets.length === 0) entry.untargeted = true;

@@ -171,7 +171,10 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'tapTarget',
   'discardCard',
   'returnFromGraveyard',
-  'modal',
+  // NOTE: there is no `modal` primitive to classify. Modal spells are announced
+  // at CAST time (core's `ModalSpec`) and their chosen modes resolve as the
+  // ordinary primitives listed here, each classified on its own terms — which is
+  // strictly better for this table than one opaque wrapper would have been.
   'returnToHand',
   'tapPermanents',
   // Sacrifices read and write the BATTLEFIELD only: the victim's (or the pile

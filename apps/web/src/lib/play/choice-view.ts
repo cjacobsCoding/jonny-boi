@@ -180,8 +180,16 @@ function withValues(draft: ChoiceDraft, values: readonly ChoiceOptionValue[]): C
 export function toggleOption(choice: PendingChoice, draft: ChoiceDraft, value: ChoiceOptionValue): ChoiceDraft {
   if (isScalarKind(draft.kind)) return draft;
   const values = draftValues(draft);
+  // "You may choose the same mode more than once": below the maximum, clicking a
+  // mode ADDS another copy rather than deselecting the one already there,
+  // because the number of copies IS the answer. At the maximum the click falls
+  // through to the ordinary remove-one path, so a human who over-picked steps
+  // back one copy instead of having to clear the whole draft.
+  if (allowsRepeats(choice) && values.length < choice.max) {
+    return withValues(draft, [...values, value]);
+  }
   const at = values.indexOf(value);
-  if (at >= 0) return withValues(draft, values.filter((v) => v !== value));
+  if (at >= 0) return withValues(draft, values.filter((v, i) => !(v === value && i === at)));
   if (values.length >= choice.max) {
     if (choice.max === SINGLE_PICK) return withValues(draft, [value]);
     return draft;
@@ -191,6 +199,22 @@ export function toggleOption(choice: PendingChoice, draft: ChoiceDraft, value: C
 
 /** A choice that takes exactly one option behaves like a radio group. */
 const SINGLE_PICK = 1;
+
+/** Whether one option may be picked several times (a repeated-modes choice). */
+function allowsRepeats(choice: PendingChoice): boolean {
+  return choice.kind === 'chooseModes' && choice.allowRepeats;
+}
+
+/**
+ * How many times `value` is in the draft — the badge a repeated-mode option
+ * shows ("×2"). Zero for anything unpicked, so a caller can render it as
+ * "picked or not" without a second predicate.
+ */
+export function pickCount(draft: ChoiceDraft, value: ChoiceOptionValue): number {
+  let count = 0;
+  for (const picked of draftValues(draft)) if (picked === value) count += 1;
+  return count;
+}
 
 /** Set a yes/no draft's answer (a no-op on any other kind). */
 export function setConfirm(draft: ChoiceDraft, yes: boolean): ChoiceDraft {
@@ -363,9 +387,10 @@ function requirementText(choice: PendingChoice): string {
   const suffix = zone ? ` from the ${zone}` : '';
   const orderNote = choice.kind === 'selectCards' && choice.ordered ? ' The order you pick is the order used.' : '';
   if (max === 0) return `Nothing can be chosen${suffix}.`;
-  if (min === max) return `Choose exactly ${countNoun(kind, max)}${suffix}.${orderNote}`;
-  if (min === 0) return `Choose up to ${countNoun(kind, max)}${suffix} — or none.${orderNote}`;
-  return `Choose ${min}–${countNoun(kind, max)}${suffix}.${orderNote}`;
+  const repeatNote = allowsRepeats(choice) ? ' You may choose the same mode more than once.' : '';
+  if (min === max) return `Choose exactly ${countNoun(kind, max)}${suffix}.${orderNote}${repeatNote}`;
+  if (min === 0) return `Choose up to ${countNoun(kind, max)}${suffix} — or none.${orderNote}${repeatNote}`;
+  return `Choose ${min}–${countNoun(kind, max)}${suffix}.${orderNote}${repeatNote}`;
 }
 
 /** Build the prompt header for a pending choice. */

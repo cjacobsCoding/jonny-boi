@@ -106,6 +106,7 @@ throughput (games/sec) from regressing.
 
 | fix/keyword-sweep-and-mana-templates | worker | packages/cards (compile/compile.ts keyword-sweep guard, compile/rules.ts 1 new MANA_RULES entry + 5 new UNSUPPORTED_HINTS above the mana hint, compile/scry-surveil.test.ts additions, NEW compile/mana-templates.test.ts), apps/web/src/lib/about/mechanics.ts (+1 witness), DESIGN §3.11, docs/plans/mechanic-completion-plan.md, COORDINATION.md. **No engine change.** | 🚧 PUSHED, not merged |
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
+| feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -289,6 +290,73 @@ _Append dated notes here; keep them short. Newest at top._
     COMPLETE tally, all 1686 gaps with full card lists) and `--save-corpus` (cache the fetch
     so every re-run is offline and reproducible). Every number above came from one run of
     that command; it is quoted in §7 of the plan.
+- 2026-08-18 worker: `feat/modal-casting` 🚧 PUSHED — **modal spells, modal DFCs, multikicker and
+  flashback's {X}/life forms — every decision a caster makes while ANNOUNCING a spell, asked before
+  anybody may respond.** All four extend the cast-time seam `feat/cast-cost-modification` opened;
+  none of them is a rival to it. **Cryptic Command is un-stubbed, and it was the LAST entry in
+  `STUBBED_MECHANICS` — the list is now EMPTY**, so every hand-authored pool card plays as printed
+  and `fidelity.test.ts` audits the whole pool with no exemptions.
+  ⚠️ **THE OLD RESOLUTION-TIME `modal` PRIMITIVE IS DELETED, deliberately — do not restore it.**
+  Modes are chosen at CAST (CR 601.2b) and each chosen mode is aimed at cast too (CR 601.2c). A
+  primitive only ever runs during a resolution, so a primitive-based modal card *cannot help* but let
+  its controller watch the opponent's response and only then decide whether to counter it — strictly
+  better than the printed card, and nothing looks broken. Two rival modal systems is precisely the
+  failure the seam exists to prevent, so the primitive went rather than being kept alongside
+  (its `paired-arms-config` entry is replaced by a note explaining there is nothing to classify:
+  chosen modes resolve as the ordinary primitives, each already classified on its own terms).
+  ⚠️ **`ResolutionFrame.effectTargets` IS A PARALLEL ARRAY — splice it in lockstep with
+  `effects` or you shift every later mode's target silently.** It exists because two chosen modes of
+  one spell point at two DIFFERENT objects, which one frame-wide `targets` list cannot express;
+  `enqueueEffects` splices both, and a test pins it. The alternative (an object per effect) would have
+  changed a shape every consumer, clone and serialized state already agrees on.
+  ⚠️ **A SPELL IS A LEGAL TARGET FOR ITS OWN COUNTER MODE, and that is correct.** Cryptic
+  Command is an object on the stack while its own modes are aimed, so "counter target spell" can name
+  it. Being faithful means the ENGINE offers it and the PILOT declines: `valueOfMode` prices each mode
+  by its best legal target, and `counterSpell`'s scorer already treats countering your own spell as
+  the blunder it is. Do not "fix" this by filtering the spell out of its own menu — that would be a
+  rule the game does not have.
+  ⚠️ **New stack-object fields go in `internal/clone.ts` (again).** `modePicks` (deep-copied
+  two levels — the aims are written INTO as they are collected, so an alias lets one cast's aiming
+  rewrite another's), `kickCount`, and `CardInstance.timesKicked`. Pinned by tests that drive a whole
+  two-mode cast through `applyAction`, which clones at every boundary.
+  • **Modal DFCs**: `backFaceCastable` beside `backFace`; `CastSpellAction.face` /
+  `PlayLandAction.face` name the half. The face swap is the transform swap (`def` IS the active face,
+  `printedDef` the way back), so leaving for a hidden zone reverts through the existing chokepoint
+  (CR 712.8a) and a transforming DFC's back face stays uncastable (CR 712.8b). Compiler reads
+  `layout: 'modal_dfc'` by LAYOUT ONLY — no keyword fallback, because guessing from a "//" name would
+  sweep in split and adventure cards, which must keep reporting.
+  • **Multikicker**: the answer is a COUNT, so a `chooseNumber` bounded by `maxAffordableKicks`,
+  planned against new `repeatCost` (three copies of a hybrid symbol are three symbols the payer may
+  satisfy in three colours — NOT a mana-value multiply). Charged once; any positive count also sets
+  `kicked` so an "if this spell was kicked" rider reads it. "For each time it was kicked" is a derived
+  count (`timesThisWasKicked`), so damage/draw/life/counters/tokens all learned it at once — note it
+  lives in core's shared `DerivedCountName` but is answered in `packages/cards`' `intParam`, because
+  it is a fact about the RESOLUTION and core's evaluator is board-only.
+  • **Flashback {X} / life**: `flashbackXCost`, `flashbackLifeCost`. The X reads the FLASHBACK
+  cost's count, not the printed cost's (a card may print both — tested).
+  • Core gained a `'permanent'` TARGET RESTRICTION. Cryptic's bounce mode needs it: flattening
+  "target permanent" to "target creature" is a card that cannot bounce a land, i.e. weaker than
+  printed. The bounce compile rule now emits it too.
+  ✅ **Verified**: full suite **2806 passed / 0 failed** post-merge, `npm run verify` exit 0,
+  `npm run build` exit 0. **Gauntlet seed 99 reproduces 79/280 = 28.2% BYTE-IDENTICALLY** (UW Control
+  12/40 unchanged too) — and that is checked, not assumed: an event scan over those same 40 UW games
+  shows Cryptic Command cast 40/40 times, announcing its modes at cast every time and aiming 39, so
+  the identical number is genuine rather than "the card stopped being cast". Throughput at parity,
+  paired and alternating on one box (BASE 104 / 162 / 132 vs MINE 125 / 129 / 136 games/sec — the
+  ordering crosses in both directions).
+  ❌ **Deliberately NOT done, each with its blocker**: (1) **the two BOARD UIs offer only a modal
+  DFC's FRONT face** — `castChoices`/`playableLandIds` (online) and `castOptions`/`playableLands`
+  (hotseat) key their affordances on instance id ALONE, and a modal DFC is two offers for one
+  instance. Rather than merge them (which would put the back face's legal targets on a menu that
+  submits the front face — a WRONG action, not a missing one) both are now explicitly front-face-only,
+  guarded and pinned by a test. Closing it properly means keying the affordance on `instanceId:face`
+  and rendering two buttons per card; no pool card is an MDFC yet, so it would ship untested.
+  (2) **split / adventure** still report `SECOND_CASTABLE_FACE_GAP`, reworded to say why: two castable
+  halves on ONE object is not two faces. (3) **Flashback riders that are not mana or life** (a
+  discard, a sacrifice) still report — the cast pipeline can charge mana and life and nothing else.
+  (4) No MDFC or multikicker card added to the curated pool (the importer path only, as with
+  shocklands), so no gauntlet baseline moves. (5) UNSUPPORTED-BACKLOG.md not regenerated (its
+  coverage audit needs a live Scryfall fetch). (Worker)
 
 - 2026-08-18 worker: `feat/derived-state` 🚧 PUSHED — **three kinds of state the engine could
   already see but could not express. Tarmogoyf and Fatal Push are both UN-STUBBED and play as

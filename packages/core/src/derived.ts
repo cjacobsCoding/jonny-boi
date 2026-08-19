@@ -136,6 +136,11 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
       return creaturesInGraveyard(state, you);
     case 'cardTypesInAllGraveyards':
       return cardTypesInAllGraveyards(state);
+    // `timesThisWasKicked` is deliberately absent: it is a fact about the
+    // RESOLUTION, not about the board, so this board-only evaluator genuinely
+    // cannot answer it and falls through to zero. The one caller that can —
+    // `intParam` in `packages/cards/effect-helpers.ts`, which holds the effect
+    // context — answers it before reaching here.
     default:
       return 0;
   }
