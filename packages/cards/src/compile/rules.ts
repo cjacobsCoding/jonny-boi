@@ -1732,6 +1732,37 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'enters-tapped-unless-min-other-lands',
+    description:
+      '"~ enters tapped unless you control two or more other lands" (the slowland cycle)',
+    // The mirror of the fastland rule above: a fastland wants FEW other lands,
+    // a slowland wants MANY. Same board read, opposite comparison, so they are
+    // two entries against one condition record rather than two mechanisms.
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more other lands$/,
+    build(match) {
+      const min = SMALL_NUMBER_WORDS[match[1]!];
+      if (min === undefined) return null; // an unexpected count — report it
+      return { entersTappedUnless: { minOtherLands: min } };
+    },
+  },
+  {
+    id: 'enters-tapped-unless-min-basic-lands',
+    description:
+      '"~ enters tapped unless you control two or more basic lands" (the battleland cycle)',
+    // "Basic" is a SUPERTYPE, not a subtype, and the difference is the whole
+    // point: counting land subtypes would count a nonbasic dual as a basic and
+    // let the land enter untapped when the printed card would not. The count
+    // reads `CardDefinition.basic`, which the compiler emits from the type line.
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more basic lands$/,
+    build(match) {
+      const min = SMALL_NUMBER_WORDS[match[1]!];
+      if (min === undefined) return null;
+      return { entersTappedUnless: { minBasicLands: min } };
+    },
+  },
+  {
     id: 'enters-tapped-unless-controls-subtype',
     description:
       '"~ enters tapped unless you control a Mountain or a Plains" (the checkland cycle)',

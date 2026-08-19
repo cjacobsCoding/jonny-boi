@@ -169,6 +169,15 @@ export interface CardDefinition {
    * (`'mountain'`) authoring works and a casing slip cannot silently break a lord.
    */
   readonly subtypes?: readonly string[];
+  /**
+   * The printed **Basic** supertype. Carried for the same reason
+   * {@link legendary} is: a rule keys on it — "unless you control two or more
+   * basic lands" (the battlelands) — and no other characteristic answers it.
+   * A basic land and a nonbasic dual print the same land SUBTYPES, so subtypes
+   * cannot stand in for this without counting duals as basics, which would let
+   * a battleland enter untapped when the printed card would not.
+   */
+  readonly basic?: boolean;
   /** Mana cost. Absent for lands and other free-to-play cards. */
   readonly cost?: ManaCost;
   /**
@@ -723,6 +732,21 @@ export interface EntersUntappedCondition {
    * the controller has another permanent with any of these subtypes.
    */
   readonly controlsSubtype?: readonly string[];
+  /**
+   * "unless you control two or more **other** lands" — the slowland cycle
+   * (Deserted Beach and friends). The mirror image of {@link maxOtherLands}:
+   * satisfied when the controller's OTHER lands number at least this, so the
+   * land is tapped early in the game and untapped late.
+   */
+  readonly minOtherLands?: number;
+  /**
+   * "unless you control two or more **basic** lands" — the Battle for Zendikar
+   * battlelands (Sunken Hollow and friends). Counts only lands whose printed
+   * type line carries the **Basic** supertype ({@link CardDefinition.basic}),
+   * which is why that flag exists: a nonbasic dual land prints the same land
+   * SUBTYPES as two basics and would otherwise be counted as one.
+   */
+  readonly minBasicLands?: number;
 }
 
 /**
@@ -777,6 +801,21 @@ function conditionMet(
   if (condition.maxOtherLands !== undefined) {
     const lands = others.filter((permanent) => permanent.def.types.includes('land')).length;
     if (lands > condition.maxOtherLands) return false;
+  }
+
+  if (condition.minOtherLands !== undefined) {
+    const lands = others.filter((permanent) => permanent.def.types.includes('land')).length;
+    if (lands < condition.minOtherLands) return false;
+  }
+
+  if (condition.minBasicLands !== undefined) {
+    // "Other" is not part of the printed condition here — a battleland counts
+    // every basic land you control — but the entering land is never basic
+    // itself, so filtering it out changes no answer and reuses one list.
+    const basics = others.filter(
+      (permanent) => permanent.def.basic === true && permanent.def.types.includes('land'),
+    ).length;
+    if (basics < condition.minBasicLands) return false;
   }
 
   if (condition.controlsSubtype !== undefined) {
