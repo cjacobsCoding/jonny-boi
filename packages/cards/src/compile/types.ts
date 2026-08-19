@@ -149,6 +149,8 @@ export interface ClauseContribution {
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   /** Set when the text charges a LIFE price to enter untapped (a shockland). */
   readonly entersTappedUnlessLifePaid?: number;
+  /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
+  readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
    * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
    * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N
