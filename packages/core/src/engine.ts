@@ -61,6 +61,7 @@ import {
   MAIN_STEPS,
   NO_COUNTERS,
   PLAYER_IDS,
+  protectorOf,
   STEP_ORDER,
 } from './state.js';
 import type { TargetRestriction } from './targeting.js';
@@ -79,7 +80,7 @@ import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
-import { checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.js';
+import { applyLegendRuleChoice, checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.js';
 import {
   assignAndDealCombatDamage,
   canBlock,
@@ -89,7 +90,7 @@ import {
   tapAttackers,
 } from './internal/combat.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
-import { addLoyalty, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
+import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
 
 /**
  * The registry a caller that supplied none gets.
@@ -402,6 +403,14 @@ function performStepTurnBasedActions(
 
 /** Grant the active player priority with a fresh pass counter. */
 function grantPriority(state: GameState): void {
+  // A parked question outranks priority: while one is outstanding the ONLY legal
+  // action is its chooser answering it (`generateLegalActions`), and that chooser
+  // may not be the active player. Handing the floor to the active player here
+  // would leave the board saying "your move" to a seat with nothing to do — the
+  // exact UX defect the online branch spent a session diagnosing. State-based
+  // actions can now raise such a question (the legend rule), so this is reachable
+  // from the turn machine and not only from an action handler.
+  if (state.pendingChoice) return;
   state.priorityPlayer = state.activePlayer;
   state.consecutivePasses = 0;
 }
@@ -666,6 +675,10 @@ function finishSpellResolution(
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
     // zoneChange so a replay folds "entered, then at loyalty N" in order.
     applyEnteringLoyalty(card, emit);
+    // A battle enters with its printed defense counters (CR 310.4) by the same
+    // rule and through the same kind of shared helper, so no entry path can
+    // disagree with another about the number a permanent arrives carrying.
+    applyEnteringDefense(card, emit);
     // The event log is the replay/inspector source (DESIGN §2), and a consumer
     // folding it starts every entering permanent untapped — so arriving tapped has
     // to be SAID, not just stored. `playLand` already emits this; without the same
@@ -1055,6 +1068,25 @@ function applyAnswerChoice(
       patchSpellOnStack(state, casting.instanceId, { kicked: answer.pay, awaitingCastChoice: undefined });
       return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
     }
+  }
+
+  // A LEGEND-RULE answer belongs to the state-based actions, not to a resolution
+  // (CR 704.5j — the game performs the rule; the player only picks the survivor).
+  // Routed by the choice's own `context` marker rather than by "there is no frame
+  // behind it", because that description also fits the shockland question below
+  // and the two must never be confused. The rule's own re-check runs the SBAs
+  // again, so a cascade — a second duplicated name, an Aura orphaned by the copy
+  // that left — settles before anyone gets priority back.
+  if (choice.context === 'legendRule' && answer.kind === 'selectCards') {
+    const kept = answer.instanceIds[0];
+    if (kept !== undefined) applyLegendRuleChoice(state, kept, emit);
+    else checkStateBasedActions(state, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      state.priorityPlayer = state.activePlayer;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
   }
 
   // A TARGETING answer belongs to the stack, not to a resolution: it names what a
@@ -2119,8 +2151,14 @@ function applyDeclareAttackers(
       }
       const object = findOnBattlefield(state, attacked);
       if (!object) return rejectWith(prevState, `attacked permanent ${attacked} is not on the battlefield`);
-      if (object.controller !== defender) {
-        return rejectWith(prevState, `${object.def.name} is not controlled by the defending player`);
+      // WHO defends the object, not who controls it. For a planeswalker those are
+      // the same player; for a BATTLE they are deliberately opposite — a Siege is
+      // protected by its controller's opponent (CR 310.11), which is exactly what
+      // makes attacking your OWN battle the printed play pattern. Deriving this
+      // through `protectorOf` rather than comparing controllers is the whole
+      // reason battles needed no second combat path.
+      if (protectorOf(object) !== defender) {
+        return rejectWith(prevState, `${object.def.name} is not defended by the defending player`);
       }
       if (!isAttackable(object.def)) {
         return rejectWith(prevState, `${object.def.name} is not a permanent that can be attacked`);
