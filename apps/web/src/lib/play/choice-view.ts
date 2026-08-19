@@ -180,10 +180,11 @@ function withValues(draft: ChoiceDraft, values: readonly ChoiceOptionValue[]): C
 export function toggleOption(choice: PendingChoice, draft: ChoiceDraft, value: ChoiceOptionValue): ChoiceDraft {
   if (isScalarKind(draft.kind)) return draft;
   const values = draftValues(draft);
-  // "You may choose the same mode more than once": clicking a mode ADDS another
-  // copy rather than deselecting the one already there, because the number of
-  // copies is the answer. Deselecting is the Clear control, which is why this
-  // branch does not need a second gesture.
+  // "You may choose the same mode more than once": below the maximum, clicking a
+  // mode ADDS another copy rather than deselecting the one already there,
+  // because the number of copies IS the answer. At the maximum the click falls
+  // through to the ordinary remove-one path, so a human who over-picked steps
+  // back one copy instead of having to clear the whole draft.
   if (allowsRepeats(choice) && values.length < choice.max) {
     return withValues(draft, [...values, value]);
   }

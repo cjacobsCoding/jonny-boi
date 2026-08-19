@@ -35,7 +35,7 @@ import {
   type PendingChoice,
 } from '@jonny-boi/core';
 import { createEffectRegistry } from '@jonny-boi/core';
-import type { EffectRef, ResolutionFrame } from '@jonny-boi/core';
+import type { EffectRef } from '@jonny-boi/core';
 import { answerChoiceHeuristically, cardValue, cardValueContext, safeFallbackAction } from './choices.js';
 import { resolutionValueContext, valueOfEffects } from './effect-value.js';
 import { createHeuristicPilot } from './heuristic.js';
@@ -646,14 +646,14 @@ describe('choosing modal-spell modes (scripted positions)', () => {
 
   it('BOUNCES instead of drawing when the target is a real threat', () => {
     const state = newGame().state;
-    const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
     const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'] });
     expect(chosenModes(state, choice)).toEqual(['bounce', 'draw']);
   });
 
   it('COUNTERS the opponent’s spell and still draws (never bounces nothing)', () => {
     const state = newGame().state;
-    const dragon = putOnStack(state, 'B', DRAGON);
+    putOnStack(state, 'B', DRAGON);
     const choice = parkModal(state, { offer: ['counter', 'tapAll', 'draw'] });
     expect(chosenModes(state, choice)).toEqual(['counter', 'draw']);
   });
@@ -707,14 +707,14 @@ describe('choosing modal-spell modes (scripted positions)', () => {
   it('still names the required number of modes when every mode is bad', () => {
     const state = newGame().state;
     state.players.A.library = [];
-    const [mine] = putOnBattlefield(state, 'A', [BEAR]);
+    putOnBattlefield(state, 'A', [BEAR]);
     const choice = parkModal(state, { offer: ['bounce', 'draw'], count: 2 });
     expect(chosenModes(state, choice)).toHaveLength(2);
   });
 
   it('on a LOSS valence it picks the WORST modes, and as few as allowed', () => {
     const state = newGame().state;
-    const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
     const choice = parkModal(state, {
       offer: ['bounce', 'tapAll', 'draw'],
       count: 1,
@@ -728,7 +728,7 @@ describe('choosing modal-spell modes (scripted positions)', () => {
   it('is deterministic: the same position always yields the same modes', () => {
     const build = () => {
       const state = newGame().state;
-      const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+      putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
       return { state, choice: parkModal(state, { offer: ['bounce', 'tapAll', 'draw'] }) };
     };
     const first = build();

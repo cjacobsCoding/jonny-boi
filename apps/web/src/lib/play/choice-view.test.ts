@@ -10,6 +10,7 @@ import {
   emptyDraft,
   isChoiceForViewer,
   orderBadge,
+  pickCount,
   setChooseNumber,
   setConfirm,
   setPayMana,
@@ -102,23 +103,59 @@ describe('choice-view — the submit gate agrees with the engine', () => {
     expect(draftStatus(choice, full).canSubmit).toBe(true);
   });
 
+  /** A "choose N modes" question, optionally the repeats form. */
+  function modes(opts: { min: number; max: number; allowRepeats?: boolean }): PendingChoice {
+    return {
+      ...BASE,
+      kind: 'chooseModes',
+      modes: [
+        { id: 'm1', label: 'Draw a card' },
+        { id: 'm2', label: 'Gain 3 life' },
+        { id: 'm3', label: 'Deal 2 damage' },
+      ],
+      allowRepeats: opts.allowRepeats ?? false,
+      min: opts.min,
+      max: opts.max,
+    };
+  }
+
+  it('lets a repeats choice pick the SAME mode twice, and counts it', () => {
+    // "You may choose the same mode more than once": clicking a picked mode adds
+    // another copy instead of deselecting it, because HOW MANY times is the
+    // answer. Without this the UI could never submit "Gain 3 life twice".
+    const choice = modes({ min: 2, max: 2, allowRepeats: true });
+    let draft = toggleOption(choice, emptyDraft(choice), 'm1');
+    draft = toggleOption(choice, draft, 'm1');
+    expect(pickCount(draft, 'm1')).toBe(2);
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseModes', modeIds: ['m1', 'm1'] });
+    // AT THE MAXIMUM a further click removes one copy instead of overflowing —
+    // so a human who over-picked can step back one without clearing the whole
+    // draft. The draft can never exceed `max`, which is what keeps it
+    // submittable at all times.
+    expect(pickCount(toggleOption(choice, draft, 'm1'), 'm1')).toBe(1);
+    // Clearing is how a repeats draft is undone.
+    expect(pickCount(clearDraft(choice, draft), 'm1')).toBe(0);
+  });
+
+  it('a NON-repeats modes choice still deselects on a second click', () => {
+    const choice = modes({ min: 0, max: 2 });
+    let draft = toggleOption(choice, emptyDraft(choice), 'm1');
+    draft = toggleOption(choice, draft, 'm1');
+    expect(pickCount(draft, 'm1')).toBe(0);
+  });
+
   it('never produces an answer the engine would reject', () => {
     const cases: PendingChoice[] = [
       selectCards({ min: 0, max: 2 }),
       selectCards({ min: 1, max: 1 }),
       selectCards({ min: 3, max: 3, ordered: true }),
       { ...BASE, kind: 'selectPlayers', candidates: ['A', 'B'], min: 1, max: 1 } as PendingChoice,
-      {
-        ...BASE,
-        kind: 'chooseModes',
-        modes: [
-          { id: 'm1', label: 'Draw a card' },
-          { id: 'm2', label: 'Gain 3 life' },
-          { id: 'm3', label: 'Deal 2 damage' },
-        ],
-        min: 2,
-        max: 2,
-      } as PendingChoice,
+      modes({ min: 2, max: 2 }),
+      // The repeats form is its own case: its draft may legally hold the SAME
+      // mode several times, which every other kind forbids.
+      modes({ min: 2, max: 2, allowRepeats: true }),
       { ...BASE, kind: 'confirm', min: 1, max: 1 } as PendingChoice,
     ];
     for (const choice of cases) {
