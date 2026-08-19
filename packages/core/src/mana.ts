@@ -257,6 +257,37 @@ function payFixedCost(pool: ManaPool, cost: ManaCost): PaymentResult {
  * mana left over afterwards — which is fungible, so the ORDER generic is spent in
  * cannot change feasibility — must cover the generic portion.
  */
+/**
+ * The cost of paying `cost` exactly `times` times — the shape multikicker
+ * needs ("you may pay {1}{G} any number of times as you cast this spell").
+ *
+ * Repeating a cost is NOT the same as scaling its mana value: each repetition
+ * is its own set of symbols, so three copies of `{G/W}` are three hybrid
+ * symbols the payer may satisfy with three DIFFERENT colours. Multiplying the
+ * hybrid list rather than counting it keeps that true, which is why this lives
+ * here beside `payCost` instead of being an ad-hoc `generic * n` at the call
+ * site.
+ *
+ * `times <= 0` yields an empty cost — the free, pay-nothing repetition count.
+ */
+export function repeatCost(cost: ManaCost, times: number): ManaCost {
+  const n = Math.max(0, Math.trunc(times));
+  if (n === 0) return {};
+  if (n === 1) return cost;
+  const out: Record<string, unknown> = {};
+  if (cost.generic) out.generic = cost.generic * n;
+  for (const color of MANA_COLORS) {
+    const count = cost[color];
+    if (count) out[color] = count * n;
+  }
+  if (cost.hybrid && cost.hybrid.length > 0) {
+    const hybrid: (readonly ManaColor[])[] = [];
+    for (let i = 0; i < n; i++) hybrid.push(...cost.hybrid);
+    out.hybrid = hybrid;
+  }
+  return out as ManaCost;
+}
+
 export function canPay(pool: ManaPool, cost: ManaCost): boolean {
   const hybrids = cost.hybrid;
   if (hybrids !== undefined && hybrids.length > 0) return canPayWithHybrids(pool, cost, hybrids);

@@ -2,12 +2,15 @@
  * The About page is a CAPABILITIES CLAIM, and claims rot. These tests are what
  * let it exist at all: every hand-written "supported" entry must present a
  * witness that still resolves against the live registries, and the TODO side
- * must stay non-empty and well-formed while the compiler still reports gaps.
+ * must stay well-formed (and non-empty for as long as the compiler really does
+ * report gaps — the STUBBED list has since reached zero, which is a claim of
+ * its own and is checked as such).
  * If a mechanic is removed (or a witness renamed), the page fails the suite
  * instead of lying to the user.
  */
 
 import { describe, expect, it } from 'vitest';
+import { CARD_POOL } from '@jonny-boi/cards';
 import {
   SUPPORTED_MECHANIC_GROUPS,
   compilerRuleGroups,
@@ -100,12 +103,17 @@ describe('the TODO side', () => {
     expect(todoMechanics().systems).not.toContain('battles (siege / defense counters)');
   });
 
-  it('lists the stubbed pool cards verbatim', () => {
+  it('lists the stubbed pool cards verbatim, and every entry names a real card', () => {
+    // The list is EMPTY today (Cryptic Command, its last entry, was un-stubbed by
+    // cast-time modal casting), so this no longer demands a non-empty list — that
+    // would be a test demanding the engine stay incomplete. What it still demands
+    // is that anything which DOES appear is well-formed and names a card that is
+    // really in the pool, which is what makes the page's claim checkable.
     const stubs = stubbedPoolCards();
-    expect(stubs.length).toBeGreaterThan(0);
     for (const stub of stubs) {
       expect(stub.card.length).toBeGreaterThan(0);
       expect(stub.missingEngineSystem.length).toBeGreaterThan(0);
+      expect(CARD_POOL.some((card) => card.name === stub.card), stub.card).toBe(true);
     }
   });
 });

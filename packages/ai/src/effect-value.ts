@@ -32,13 +32,23 @@
  * keeps a seeded sim reproducible.
  */
 
-import type { CardInstance, EffectRef, GameState, InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
+import type {
+  CardInstance,
+  EffectRef,
+  GameState,
+  InstanceId,
+  ManaCost,
+  PlayerId,
+  TargetRestriction,
+} from '@jonny-boi/core';
 import {
   canAffordManaCost,
   convertedManaCost,
   isCreature,
   MANA_COLORS,
+  legalTargetsFor,
   matchesCardFilter,
+  modalSpecOf,
   opponentOf,
 } from '@jonny-boi/core';
 import type { CardFilter } from '@jonny-boi/core';
@@ -566,50 +576,65 @@ function bestCardIn(cards: readonly CardInstance[], ctx: EffectValueContext): nu
 
 // --- modal-spell mode lookup --------------------------------------------------------
 
-/** A mode as the card AUTHORED it: an id and the effects choosing it runs. */
+/** A mode as the card AUTHORED it: its id, its effects, and what it may aim at. */
 export interface ModeEffects {
   readonly id: string;
   readonly effects: readonly EffectRef[];
+  /** What choosing this mode will then be asked to target, when it targets. */
+  readonly targets?: TargetRestriction;
 }
 
 /**
  * Recover the effects behind each offered mode id.
  *
- * The pending choice carries only `{ id, label }`, so the meaning has to come from
- * the card's own data. The authoritative source is the SUSPENDED RESOLUTION: the
- * effect ref it stopped on is the `modal` ref itself, complete with its `modes`
- * param, and its `targets` are the ones this cast locked in. Falling back to the
- * source card's printed effects covers a state that arrived without a frame (a
- * hand-built test position, a replay), and returning an empty map — never a throw —
- * covers a card this build cannot read, which simply degrades mode choice to
- * printed order.
+ * The pending choice carries only `{ id, label }` — deliberately, since a choice
+ * must be renderable by a UI that knows no rules — so the meaning comes from the
+ * card's own data: `CardDefinition.modal`, read off the card that asked.
+ *
+ * The question is raised while the spell is being CAST, so the card is on the
+ * STACK, not the battlefield; `findInstance` searches every zone, and a card
+ * this build cannot read yields an empty list rather than a throw, which simply
+ * degrades mode choice to printed order.
  */
 export function modeEffectsFor(state: GameState, sourceInstanceId: InstanceId): readonly ModeEffects[] {
-  const frame = state.resolution;
-  const running = frame ? frame.effects[frame.next] : undefined;
-  const fromFrame = running ? readModes(running) : undefined;
-  if (fromFrame && fromFrame.length > 0) return fromFrame;
-
-  const source = findInstance(state, sourceInstanceId);
-  for (const ref of source?.def.effects ?? []) {
-    const modes = readModes(ref);
-    if (modes && modes.length > 0) return modes;
-  }
-  return [];
+  // The STACK first, and that is not an optimisation: a modal spell's modes are
+  // chosen while it is being cast, so the card is on the stack and NOWHERE else
+  // — and `findInstance` (built for board/hand/graveyard questions) does not
+  // look there. Searching only through it returned an empty mode list, which
+  // silently degraded every mode choice to printed order.
+  const onStack = state.stack.find((o) => o.kind === 'spell' && o.instanceId === sourceInstanceId);
+  const source = (onStack?.kind === 'spell' ? onStack.card : undefined) ?? findInstance(state, sourceInstanceId);
+  const spec = source ? modalSpecOf(source.def) : undefined;
+  if (!spec) return [];
+  return spec.modes.map((mode) => ({
+    id: mode.id,
+    effects: mode.effects,
+    ...(mode.targets !== undefined ? { targets: mode.targets } : {}),
+  }));
 }
 
-/** Read a `modal` ref's `modes` param, keeping only well-formed entries. */
-function readModes(ref: EffectRef): readonly ModeEffects[] | undefined {
-  const raw = ref.params?.modes;
-  if (!Array.isArray(raw)) return undefined;
-  const out: ModeEffects[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const mode = entry as { id?: unknown; effects?: unknown };
-    if (typeof mode.id !== 'string') continue;
-    out.push({ id: mode.id, effects: Array.isArray(mode.effects) ? (mode.effects as EffectRef[]) : [] });
+/**
+ * What one mode is worth on this board, aimed as well as it could be.
+ *
+ * A targeting mode is priced by its BEST legal target rather than by an
+ * unaimed guess, because the aim is the mode: "counter target spell" is a
+ * blank with nothing worth countering and premium removal with something. This
+ * is also what stops the pilot countering ITS OWN spell — a Cryptic Command is
+ * on the stack while its modes are chosen, so it is a legal counter target, and
+ * `counterSpell`'s scorer prices aiming there as the mistake it is.
+ */
+export function valueOfMode(mode: ModeEffects, ctx: EffectValueContext): number {
+  if (mode.targets === undefined) return valueOfEffects(mode.effects, ctx);
+  const candidates = legalTargetsFor(ctx.state, mode.targets, ctx.player);
+  let best: number | undefined;
+  for (const ref of candidates) {
+    const value = valueOfEffects(mode.effects, { ...ctx, targets: [ref] });
+    if (best === undefined || value > best) best = value;
   }
-  return out;
+  // No legal target at all: the mode would not have been offered, but a caller
+  // scoring a card in hand can ask about one, and a mode that cannot happen is
+  // worth nothing.
+  return best ?? 0;
 }
 
 /** Build the value context for a resolution that is currently asking a question. */

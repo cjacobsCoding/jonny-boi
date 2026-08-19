@@ -94,6 +94,18 @@ export type TargetRestriction =
   /** "target creature or planeswalker" — a permanent of either kind, never a face. */
   | 'creatureOrPlaneswalker'
   /**
+   * "target permanent" — ANY permanent on the battlefield: a creature, a land,
+   * an artifact, an enchantment, a planeswalker. Never a player and never a
+   * spell on the stack.
+   *
+   * Its own restriction rather than a flavour of `'any'` because the two are
+   * genuinely different sets: "any target" reaches a player's face but not a
+   * land, and this reaches a land but never a face. Cryptic Command's bounce
+   * mode is the canonical printing, and flattening it either way would play the
+   * card differently from its text.
+   */
+  | 'permanent'
+  /**
    * "target instant or sorcery card in your graveyard" — Snapcaster Mage's ETB
    * aim, and the first restriction reaching a card in a NON-battlefield zone.
    *
@@ -136,6 +148,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'creatureYouControl' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
+    value === 'permanent' ||
     value === 'instantOrSorceryInYourGraveyard'
   );
 }
@@ -237,6 +250,9 @@ export function isLegalTarget(
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
   if (!isTargetableBy(state, permanent, controller, source)) return false;
+  // "Target permanent": being on the battlefield IS the whole requirement, so
+  // the targetability check above is the only gate.
+  if (restriction === 'permanent') return true;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
   // "Target player or planeswalker": a permanent target must be a walker.
   if (restriction === 'playerOrPlaneswalker') return isPlaneswalker(permanent.def);
@@ -396,6 +412,11 @@ export function legalTargetsFor(
       }
     }
   }
+  if (restriction === 'permanent') {
+    for (const permanent of state.battlefield) {
+      if (isTargetableBy(state, permanent, controller, source)) targets.push(permanent.instanceId);
+    }
+  }
   return targets;
 }
 
@@ -486,6 +507,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a player or a planeswalker';
     case 'creatureOrPlaneswalker':
       return 'a creature or a planeswalker';
+    case 'permanent':
+      return 'a permanent';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
     case 'any':

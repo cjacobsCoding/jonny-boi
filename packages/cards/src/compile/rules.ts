@@ -21,6 +21,7 @@ import type {
   ManaColor,
   ManaProduction,
   ProtectionQuality,
+  SpellMode,
   StaticAbility,
   TargetRestriction,
   TriggerCondition,
@@ -28,7 +29,7 @@ import type {
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
-import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols } from './text.js';
+import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols, splitCostSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
 
@@ -122,6 +123,7 @@ const CREATURE_TARGET: TargetRestriction = 'creature';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
+const PERMANENT_TARGET: TargetRestriction = 'permanent';
 /**
  * "Target instant or sorcery card in your graveyard" — the first restriction
  * that aims at a card OUTSIDE the battlefield (Snapcaster Mage). Core resolves
@@ -129,13 +131,36 @@ const ARTIFACT_TARGET: TargetRestriction = 'artifact';
  */
 const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveyard';
 
-/** How many modes each printed header lets you choose. */
-const MODAL_COUNTS: Readonly<Record<string, number>> = Object.freeze({
-  one: 1,
-  two: 2,
-  // "one or both" is a range the mode chooser cannot express as a fixed count,
-  // so it is deliberately absent and those cards keep reporting.
+/**
+ * Every printed modal header, as the COUNT RANGE it means.
+ *
+ * A range, not a number, because three of the four printed forms are ranges:
+ * "one or both" is 1-2, "up to two" is 0-2, and only the bare counts are exact.
+ * Reading them as fixed counts is what kept "one or both" reporting for as long
+ * as the mode chooser could not express a range.
+ */
+const MODAL_HEADER_COUNTS: Readonly<Record<string, { min: number; max: number }>> = Object.freeze({
+  one: { min: 1, max: 1 },
+  two: { min: 2, max: 2 },
+  three: { min: 3, max: 3 },
+  'one or both': { min: 1, max: 2 },
+  'up to one': { min: 0, max: 1 },
+  'up to two': { min: 0, max: 2 },
+  'up to three': { min: 0, max: 3 },
+  'up to four': { min: 0, max: 4 },
 });
+
+/** The alternation of every header phrase, longest first so none is truncated. */
+const MODAL_HEADER_PHRASE = Object.keys(MODAL_HEADER_COUNTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|');
+
+/**
+ * The printed sentence that lets one mode be taken several times. It follows
+ * the count and precedes the bullets ("Choose two. You may choose the same mode
+ * more than once.") — Fiery Confluence and every other Confluence.
+ */
+const REPEATED_MODES_PHRASE = 'you may choose the same mode more than once';
 const OPPONENT_TARGET: TargetRestriction = 'opponent';
 
 
@@ -153,6 +178,11 @@ const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
   'lands you control': 'landsYouControl',
   'cards in your hand': 'cardsInYourHand',
   'cards in your graveyard': 'cardsInYourGraveyard',
+  // Multikicker's counter. Oracle prints it several ways depending on era and
+  // on whether the card is the spell or the permanent it became.
+  'times it was kicked': 'timesThisWasKicked',
+  'times this spell was kicked': 'timesThisWasKicked',
+  'times ~ was kicked': 'timesThisWasKicked',
   // Added with characteristic-defining P/T: Tarmogoyf counts the first, the
   // Boneyard Wurm family the second. They are in the SHARED table on purpose —
   // a spell that deals damage "equal to the number of creature cards in your
@@ -427,6 +457,20 @@ function cardHasXCost(ctx: RuleContext): boolean {
   return ctx.card.manaCost.other.some((symbol) => symbol.toUpperCase() === 'X');
 }
 
+/**
+ * A printed mode's body, tidied into the label a human reads when choosing it:
+ * the card's own name restored from `~`, the first letter capitalised, and the
+ * compiler's leftover sentence period dropped.
+ *
+ * Presentation only — nothing downstream matches on it — but it is the text the
+ * mode question shows, so "counter target spell." reading as "Counter target
+ * spell" is the difference between a UI and a debug dump.
+ */
+function modeLabel(body: string, cardName: string): string {
+  const text = body.replace(/~/g, cardName).replace(/\.$/, '').trim();
+  return text.length === 0 ? text : text[0]!.toUpperCase() + text.slice(1);
+}
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-any-target',
@@ -682,33 +726,71 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'tap-all-creatures',
+    description:
+      '"Tap all creatures your opponents control" / "…you control" — a Falter-style mass tap, and Cryptic Command\'s third mode',
+    pattern: /^tap all creatures (your opponents control|your opponent controls|you control)$/,
+    build(match) {
+      const who = match[1]!.startsWith('you control') ? 'controller' : 'opponent';
+      return effects({ primitive: 'tapPermanents', params: { who, types: ['creature'] } });
+    },
+  },
+  {
     id: 'modal-choose',
-    description: '"Choose one — • MODE • MODE" (charms and commands)',
+    description:
+      '"Choose one/two/one or both/up to N — • MODE • MODE" (charms, commands, confluences), optionally with "You may choose the same mode more than once" — modes and their targets are chosen AT CAST (CR 601.2b/c)',
     // `text.ts` folds the header and its bullets into one line, so this sees the
     // whole block. Each mode compiles through the ordinary effect rules, which
     // means a modal card can only ever offer modes the engine can really run.
-    pattern: /^choose\s+(one|two|one or both)\s*[—-]\s*(•.+)$/,
+    pattern: new RegExp(
+      `^choose\\s+(${MODAL_HEADER_PHRASE})\\s*\\.?\\s*(?:(${REPEATED_MODES_PHRASE})\\s*\\.?\\s*)?[—-]\\s*(•.+)$`,
+    ),
     build(match, ctx) {
-      const count = MODAL_COUNTS[match[1]!.toLowerCase()];
-      if (count === undefined) return null;
+      const counts = MODAL_HEADER_COUNTS[match[1]!.toLowerCase()];
+      if (counts === undefined) return null;
+      const allowRepeats = match[2] !== undefined;
 
-      const bodies = match[2]!
+      const bodies = match[3]!
         .split('•')
         .map((mode) => mode.trim())
         .filter((mode) => mode.length > 0);
       if (bodies.length < 2) return null; // not really a choice
 
-      const modes: Array<{ id: string; label: string; effects: readonly EffectRef[] }> = [];
+      const modes: SpellMode[] = [];
       for (const [index, body] of bodies.entries()) {
         // A mode the engine cannot run makes the WHOLE card unsupported. Half a
         // modal spell is not a modal spell — offering only the modes we happen
         // to implement would silently change what the card can do.
-        const effects = ctx.compileEffectClause(body);
-        if (!effects) return null;
-        modes.push({ id: `mode${index + 1}`, label: body, effects });
+        //
+        // `compileTriggerBody` is the right compiler here, and not by accident:
+        // a mode, like a trigger, has to DECLARE what it may be aimed at rather
+        // than inherit a target the caster already named — and it refuses a body
+        // wanting two targets, which no printed mode has.
+        const compiled = ctx.compileTriggerBody(body);
+        if (!compiled || compiled.effects.length === 0) return null;
+        modes.push({
+          id: `mode${index + 1}`,
+          // The bodies arrive from the NORMALIZED clause (lowercased, `~` for
+          // the card's own name), and this label is shown to a human choosing a
+          // mode — so it is tidied back into a sentence rather than printed as
+          // compiler intermediate text.
+          label: modeLabel(body, ctx.card.name),
+          effects: compiled.effects,
+          ...(compiled.targets !== undefined ? { targets: compiled.targets } : {}),
+        });
       }
-
-      return { effects: [{ primitive: 'modal', params: { count, modes } }] };
+      // A printed count larger than the menu is a malformed record, not a card:
+      // clamp so the announced minimum is always satisfiable. (Repeats make any
+      // count satisfiable, so they are left alone.)
+      const max = allowRepeats ? counts.max : Math.min(counts.max, modes.length);
+      return {
+        modal: {
+          min: Math.min(counts.min, max),
+          max,
+          ...(allowRepeats ? { allowRepeats: true } : {}),
+          modes,
+        },
+      };
     },
   },
   {
@@ -823,14 +905,20 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'return-target-permanent-to-hand',
-    description: '"Return target creature to its owner\'s hand" (bounce)',
+    description: '"Return target creature/permanent to its owner\'s hand" (bounce)',
     pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
     needsChosenTarget: true,
-    build() {
+    build(match) {
       // `returnToHand` has existed in the primitive library the whole time with
       // no rule able to reach it — bounce was reported unsupported purely for
       // want of this pattern.
-      return effects({ primitive: 'returnToHand', params: { targets: CREATURE_TARGET } });
+      //
+      // "Target PERMANENT" is its own restriction and is NOT flattened to
+      // "creature": Cryptic Command bounces a land, and a bounce that could not
+      // would be a strictly weaker card than printed. (It used to flatten,
+      // because core had no `'permanent'` restriction to compile into.)
+      const restriction = match[1] === 'permanent' ? PERMANENT_TARGET : CREATURE_TARGET;
+      return effects({ primitive: 'returnToHand', params: { targets: restriction } });
     },
   },
   {
@@ -1642,6 +1730,21 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 /** Card-level static properties printed as their own ability line. */
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
+    id: 'multikicker-cost',
+    description:
+      '"Multikicker {COST}" — an additional cost payable ANY NUMBER of times; the engine asks for a count at cast time, bounded by what the board can fund',
+    // Tried before `kicker-cost`, whose pattern would otherwise never see this
+    // line at all (it anchors on "kicker" at the start) — spelled out because
+    // the two rules are one word apart and their order is load-bearing.
+    pattern: /^multikicker ((?:\{[^}]+\})+)$/,
+    build(match) {
+      // Only symbols the engine can charge; a multikicker of {X} or Phyrexian
+      // mana would be a cost we cannot ask for, so the line stays reported.
+      const cost = parseManaSymbols(match[1]!);
+      return cost === null ? null : { multikicker: cost };
+    },
+  },
+  {
     id: 'kicker-cost',
     description:
       '"Kicker {COST}" — an optional additional cost the engine asks about at cast time (single kicker only; multikicker keeps reporting)',
@@ -1678,22 +1781,39 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'flashback-cost',
-    description: '"Flashback {2}{U}" — the plain mana-cost form only',
-    // A whole ability line: the keyword followed by nothing but mana symbols.
-    // "Flashback—{1}{U}, Discard a card" and "Flashback {X}…" deliberately do
-    // NOT match — a flashback cost beyond plain mana needs the cast-cost-
-    // modification system, and half-paying it would be strictly better than
-    // printed. Those lines fall through to the hint instead.
-    pattern: /^flashback ((?:\{[^}]+\})+)$/,
+    description:
+      '"Flashback {2}{U}", "Flashback {X}{R}{R}" and "Flashback—{1}{U}, Pay 3 life" — the mana half, its {X} count, and a life rider, all charged at cast time',
+    // A whole ability line: the keyword, its mana symbols, and optionally a
+    // comma-separated "Pay N life". A NON-life additional cost ("Flashback—
+    // {1}{U}, Discard a card", "Flashback—Sacrifice a creature") still does
+    // NOT match: the engine has no cast-time discard or sacrifice cost, and
+    // half-paying one would be strictly better than printed. Those lines fall
+    // through to the hint instead.
+    pattern: /^flashback[—-]? ?((?:\{[^}]+\})+)(?:, pay (\d+) life)?$/,
     build(match, ctx) {
       // Flashback is printed only on instants and sorceries; anything else
       // reaching here is a card the engine could not cast from a graveyard
       // faithfully, so it stays reported rather than compiling a dead field.
       const types = ctx.card.typeLine.types.map((t) => t.toLowerCase());
       if (!types.includes('instant') && !types.includes('sorcery')) return null;
-      const cost = parseManaSymbols(match[1] ?? '');
-      if (!cost) return null; // {X}/Phyrexian/hybrid — report, don't approximate
-      return { flashback: cost };
+      const symbols = splitCostSymbols(match[1] ?? '');
+      // {X} in a flashback cost is now payable — the value is asked at cast
+      // time off THIS count, exactly as a printed {X} cost is. Everything else
+      // `parseManaSymbols` refuses (Phyrexian, monocolour hybrid) still reports.
+      const xCount = symbols.filter((symbol) => symbol === 'X').length;
+      const manaText = symbols.filter((symbol) => symbol !== 'X').map((symbol) => `{${symbol}}`).join('');
+      // A flashback cost of nothing but {X} is legal ("Flashback {X}") and pays
+      // an empty base cost — `parseManaSymbols` refuses empty input, so that
+      // case is handled here rather than by asking it.
+      const cost = manaText.length > 0 ? parseManaSymbols(manaText) : {};
+      if (!cost) return null;
+      const life = match[2] === undefined ? undefined : Number.parseInt(match[2], 10);
+      if (life !== undefined && !Number.isFinite(life)) return null;
+      return {
+        flashback: cost,
+        ...(xCount > 0 ? { flashbackXCost: xCount } : {}),
+        ...(life !== undefined && life > 0 ? { flashbackLifeCost: life } : {}),
+      };
     },
   },
   {
@@ -2156,12 +2276,15 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a battle template the compiler does not recognize yet',
   },
   {
-    // Modal cards are the one choice shape still genuinely missing a system: the
-    // engine picks a spell's targets at cast with no modes declared, so a mode
-    // that needs its own target can only be offered when the cast happens to have
-    // one. (Everything else a "choose / you may" clause needs — the question, the
-    // ordering, the search — the engine has; see `../choice-primitives.ts`.)
-    pattern: /^choose (?:one|two|three|up to)\b|^choose one or both\b/,
+    // Modal spells ARE implemented now, as a cast-time system: modes are
+    // announced and aimed while the spell is being cast (CR 601.2b/c),
+    // `CardDefinition.modal` carries them, and each announced mode resolves
+    // against its OWN target. So this hint no longer claims the system is
+    // missing — that would send the next agent to rebuild it. What still lands
+    // here is a TEMPLATE: a modal header the table does not read (an unusual
+    // count phrase), or a modal card one of whose MODES has no implementation,
+    // since half a modal spell is not a modal spell.
+    pattern: /^choose (?:one|two|three|four|five|up to)\b|^choose one or both\b/,
     missingEngineSystem: 'a modal template the compiler does not recognize yet',
   },
   {
@@ -2275,10 +2398,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an ability-word template the compiler does not recognize yet',
   },
   {
-    // Multikicker is the half of kicker still genuinely missing: it needs a
-    // COUNT ("paid N times"), not the single yes/no the engine asks.
+    // Multikicker IS implemented now (`CardDefinition.multikicker` + the
+    // cast-time COUNT question, charged once, with "for each time it was
+    // kicked" reading it through the derived-value channel). What still lands
+    // here is a TEMPLATE: a multikicker cost the symbol parser refuses ({X},
+    // Phyrexian), or a kicked-count clause with no rule yet.
     pattern: /\bmultikicker\b/,
-    missingEngineSystem: 'multikicker (an additional cost paid any number of times)',
+    missingEngineSystem: 'a multikicker template the compiler does not recognize yet',
   },
   {
     // Kicker ITSELF is implemented now (`CardDefinition.kicker` + the cast-time

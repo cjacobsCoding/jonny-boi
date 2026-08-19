@@ -123,6 +123,19 @@ function isKickedSwitch(value: unknown): value is KickedSwitchValue {
  * uses for a characteristic-defining P/T, so a count cannot mean two things.
  */
 export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number {
+  // Every count core can answer from the BOARD is answered by core, from the one
+  // shared evaluator (so a spell's "equal to the number of X" and a `*` P/T box
+  // count the identical set). The kick count is the single exception, and it has
+  // to be: it is a fact about THIS RESOLUTION, which core's board-only evaluator
+  // has no way to see.
+  if (value.countOf === 'timesThisWasKicked') {
+    // Two readings, and both are needed. DURING the spell's own resolution the
+    // count rides the frame (`ctx.kickCount`, with a plain kicker counting as
+    // one). AFTERWARDS — an enters-the-battlefield trigger on the permanent that
+    // spell became — the frame is gone and the count lives on the instance
+    // (`timesKicked`, written as it entered).
+    return ctx.kickCount ?? (ctx.kicked === true ? 1 : (ctx.source.timesKicked ?? 0));
+  }
   return evaluateDerivedCount(ctx.state, value.countOf, ctx.controller);
 }
 

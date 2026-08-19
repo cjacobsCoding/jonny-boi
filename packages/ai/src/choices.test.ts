@@ -35,7 +35,7 @@ import {
   type PendingChoice,
 } from '@jonny-boi/core';
 import { createEffectRegistry } from '@jonny-boi/core';
-import type { EffectRef, ResolutionFrame } from '@jonny-boi/core';
+import type { EffectRef } from '@jonny-boi/core';
 import { answerChoiceHeuristically, cardValue, cardValueContext, safeFallbackAction } from './choices.js';
 import { resolutionValueContext, valueOfEffects } from './effect-value.js';
 import { createHeuristicPilot } from './heuristic.js';
@@ -448,10 +448,11 @@ describe('the heuristic answers every choice kind sensibly', () => {
  * this data alone — it has no idea what "Cryptic Command" is.
  */
 const CRYPTIC_MODES = [
-  { id: 'counter', label: 'Counter target spell', effects: [{ primitive: 'counterSpell' }] },
+  { id: 'counter', label: 'Counter target spell', targets: 'spell', effects: [{ primitive: 'counterSpell' }] },
   {
     id: 'bounce',
     label: "Return target permanent to its owner's hand",
+    targets: 'permanent',
     effects: [{ primitive: 'returnToHand' }],
   },
   {
@@ -460,22 +461,26 @@ const CRYPTIC_MODES = [
     effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
   },
   { id: 'draw', label: 'Draw a card', effects: [{ primitive: 'drawCards', params: { count: 1 } }] },
-] as const;
+] as const satisfies readonly SpellMode[];
 
-const CRYPTIC_DEF: CardDefinition = freeInstant('Cryptic Command', [
-  { primitive: 'modal', params: { count: 2, modes: CRYPTIC_MODES } },
-]);
+const CRYPTIC_DEF: CardDefinition = {
+  ...freeInstant('Cryptic Command', []),
+  modal: { min: 2, max: 2, modes: CRYPTIC_MODES },
+};
 
 /**
- * Park a modal spell mid-resolution: the suspended frame carries the `modal` ref
- * (with its authored modes) and the targets the cast locked in, exactly as the
- * engine leaves it while the chooser is on the clock.
+ * Park a modal spell's MODE question the way the engine really does: the card is
+ * on the STACK being cast (`awaitingCastChoice: 'modes'`), nothing is resolving,
+ * and no target has been chosen — because each announced mode is aimed
+ * afterwards, as its own question.
+ *
+ * `offer` is the menu the engine computed from the board; the pilot's job is to
+ * pick from it, and its picks are graded here against what the board is worth.
  */
 function parkModal(
   state: GameState,
   opts: {
     readonly offer: readonly string[];
-    readonly targets?: readonly (InstanceId | 'A' | 'B')[];
     /** A real modal spell says "choose exactly N", so `count` sets both bounds. */
     readonly count?: number;
     readonly min?: number;
@@ -484,31 +489,84 @@ function parkModal(
   },
 ): PendingChoice {
   const [card] = giveHand(state, 'A', [CRYPTIC_DEF]);
-  const modalRef = (CRYPTIC_DEF.effects as readonly EffectRef[])[0] as EffectRef;
-  const frame: ResolutionFrame = {
-    origin: 'spell',
-    controller: 'A',
-    targets: [...(opts.targets ?? [])],
-    effects: [modalRef],
-    next: 0,
-    answers: [],
-    askCount: 0,
+  state.players.A.hand = state.players.A.hand.filter((c) => c.instanceId !== card!.instanceId);
+  card!.zone = 'stack';
+  state.stack.push({
+    kind: 'spell',
+    instanceId: card!.instanceId,
     card: card!,
+    controller: 'A',
     resolvesTo: 'graveyard',
-  };
-  state.resolution = frame;
-  const count = opts.count ?? 2;
-  const choice = park({
-    kind: 'chooseModes',
-    chooser: 'A',
-    prompt: 'Choose two —',
-    modes: CRYPTIC_MODES.filter((m) => opts.offer.includes(m.id)).map((m) => ({ id: m.id, label: m.label })),
-    min: opts.min ?? count,
-    max: opts.max ?? count,
-    valence: opts.valence ?? 'gain',
+    targets: [],
+    awaitingCastChoice: 'modes',
   });
+  const count = opts.count ?? 2;
+  // The choice names the SPELL as its source — that is how the pilot finds the
+  // card whose modes it is being asked about, so a stand-in id would silently
+  // degrade every mode decision below to printed order.
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'chooseModes',
+      chooser: 'A',
+      prompt: 'Choose two —',
+      modes: CRYPTIC_MODES.filter((m) => opts.offer.includes(m.id)).map((m) => ({ id: m.id, label: m.label })),
+      min: opts.min ?? count,
+      max: opts.max ?? count,
+      valence: opts.valence ?? 'gain',
+    },
+    { id: 7, sourceInstanceId: card!.instanceId, sourceName: 'Cryptic Command' },
+  );
+  if (!choice) throw new Error('expected a normalised choice');
   state.pendingChoice = choice;
   return choice;
+}
+
+/**
+ * Park the question that AIMS one announced mode: the spell is on the stack with
+ * its picks recorded and `awaitingCastChoice: 'modeTarget'`, exactly as the
+ * engine leaves it between announcing modes and aiming them.
+ */
+function parkModeTarget(
+  state: GameState,
+  modeId: string,
+  candidates: readonly InstanceId[],
+): PendingChoice {
+  const [card] = giveHand(state, 'A', [CRYPTIC_DEF]);
+  state.players.A.hand = state.players.A.hand.filter((c) => c.instanceId !== card!.instanceId);
+  card!.zone = 'stack';
+  state.stack.push({
+    kind: 'spell',
+    instanceId: card!.instanceId,
+    card: card!,
+    controller: 'A',
+    resolvesTo: 'graveyard',
+    targets: [],
+    modePicks: [{ modeId }],
+    awaitingCastChoice: 'modeTarget',
+  });
+  const mode = CRYPTIC_MODES.find((m) => m.id === modeId)!;
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'selectTargets',
+      chooser: 'A',
+      prompt: `Choose a target for ${mode.label}`,
+      candidates: candidates.map((ref) => ({ ref, name: String(ref), controller: 'A' as const })),
+      restriction: (mode as { targets?: TargetRestriction }).targets ?? 'any',
+      min: 1,
+      max: 1,
+    },
+    { id: 8, sourceInstanceId: card!.instanceId, sourceName: 'Cryptic Command' },
+  );
+  if (!choice) throw new Error('expected a normalised choice');
+  return choice;
+}
+
+/** The targets the pilot picks for a parked targeting choice. */
+function chosenTargets(state: GameState, choice: PendingChoice): readonly (InstanceId | 'A' | 'B')[] {
+  const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+  if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectTargets') throw new Error('wrong shape');
+  expect(validateChoiceAnswer(choice, action.answer).ok).toBe(true);
+  return action.answer.targets;
 }
 
 /** The mode ids the pilot picks for a parked modal choice. */
@@ -651,47 +709,56 @@ describe('aiming a triggered ability (the choice with no resolution behind it)',
 
 describe('choosing modal-spell modes (scripted positions)', () => {
   it('DRAWS instead of bouncing a permanent that is not worth bouncing', () => {
-    // The old pilot took the first two printed modes and bounced a Forest while
-    // never drawing a card. Here: a land is the only bounce target, and the
-    // opponent has a board worth tapping — so the two real modes are tap + draw.
+    // A lone Forest is the only thing on the board, so bouncing is nearly free
+    // value for the opponent and tapping does nothing at all. Drawing is the one
+    // mode that is worth a card, and a "choose one" must find it.
     const state = newGame().state;
-    const [forest] = putOnBattlefield(state, 'B', [landDef('Forest', 'G')]);
-    putOnBattlefield(state, 'B', [BEAR, BEAR]);
-    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [forest!.instanceId] });
-    const picked = chosenModes(state, choice);
-    expect(picked).toContain('draw');
-    expect(picked).not.toContain('bounce');
+    putOnBattlefield(state, 'B', [landDef('Forest', 'G')]);
+    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], count: 1 });
+    expect(chosenModes(state, choice)).toEqual(['draw']);
   });
 
   it('BOUNCES instead of drawing when the target is a real threat', () => {
     const state = newGame().state;
-    const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
-    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [angel!.instanceId] });
+    putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'] });
     expect(chosenModes(state, choice)).toEqual(['bounce', 'draw']);
   });
 
   it('COUNTERS the opponent’s spell and still draws (never bounces nothing)', () => {
     const state = newGame().state;
-    const dragon = putOnStack(state, 'B', DRAGON);
-    const choice = parkModal(state, { offer: ['counter', 'tapAll', 'draw'], targets: [dragon.instanceId] });
+    putOnStack(state, 'B', DRAGON);
+    const choice = parkModal(state, { offer: ['counter', 'tapAll', 'draw'] });
     expect(chosenModes(state, choice)).toEqual(['counter', 'draw']);
   });
 
-  it('never points a mode at its OWN board', () => {
+  it('never AIMS a mode at its own board when the opponent has a target', () => {
+    // Aiming is its own question now, asked once per announced mode — so "don't
+    // bounce your own Angel" is a property of the TARGET answer, not of which
+    // modes were chosen.
     const state = newGame().state;
     const [mine] = putOnBattlefield(state, 'A', [creatureDef('My Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
-    putOnBattlefield(state, 'B', [BEAR, BEAR]);
-    const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [mine!.instanceId] });
-    const picked = chosenModes(state, choice);
-    expect(picked).not.toContain('bounce');
-    expect(picked).toEqual(['tapAll', 'draw']);
+    const [theirs] = putOnBattlefield(state, 'B', [creatureDef('Their Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    const choice = parkModeTarget(state, 'bounce', [mine!.instanceId, theirs!.instanceId]);
+    expect(chosenTargets(state, choice)).toEqual([theirs!.instanceId]);
   });
 
-  it('never counters its OWN spell', () => {
+  it('never AIMS the counter mode at its own spell', () => {
     const state = newGame().state;
     const own = putOnStack(state, 'A', DRAGON);
+    const theirs = putOnStack(state, 'B', DRAGON);
+    const choice = parkModeTarget(state, 'counter', [own.instanceId, theirs.instanceId]);
+    expect(chosenTargets(state, choice)).toEqual([theirs.instanceId]);
+  });
+
+  it('never CHOOSES the counter mode when the only spell it could hit is its own', () => {
+    // A spell is an object on the stack while its own modes are being chosen, so
+    // "counter target spell" is legally announceable here — and pointless. The
+    // pilot prices the mode by its best aim, finds only self-harm, and passes.
+    const state = newGame().state;
+    putOnStack(state, 'A', DRAGON);
     putOnBattlefield(state, 'B', [BEAR]);
-    const choice = parkModal(state, { offer: ['counter', 'tapAll', 'draw'], targets: [own.instanceId] });
+    const choice = parkModal(state, { offer: ['counter', 'tapAll', 'draw'] });
     expect(chosenModes(state, choice)).toEqual(['tapAll', 'draw']);
   });
 
@@ -699,7 +766,7 @@ describe('choosing modal-spell modes (scripted positions)', () => {
     const state = newGame().state;
     state.players.A.library = [];
     putOnBattlefield(state, 'B', [BEAR]);
-    const choice = parkModal(state, { offer: ['tapAll', 'draw'], targets: [], count: 1 });
+    const choice = parkModal(state, { offer: ['tapAll', 'draw'], count: 1 });
     expect(chosenModes(state, choice)).toEqual(['tapAll']);
   });
 
@@ -714,17 +781,16 @@ describe('choosing modal-spell modes (scripted positions)', () => {
   it('still names the required number of modes when every mode is bad', () => {
     const state = newGame().state;
     state.players.A.library = [];
-    const [mine] = putOnBattlefield(state, 'A', [BEAR]);
-    const choice = parkModal(state, { offer: ['bounce', 'draw'], targets: [mine!.instanceId], count: 2 });
+    putOnBattlefield(state, 'A', [BEAR]);
+    const choice = parkModal(state, { offer: ['bounce', 'draw'], count: 2 });
     expect(chosenModes(state, choice)).toHaveLength(2);
   });
 
   it('on a LOSS valence it picks the WORST modes, and as few as allowed', () => {
     const state = newGame().state;
-    const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+    putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
     const choice = parkModal(state, {
       offer: ['bounce', 'tapAll', 'draw'],
-      targets: [angel!.instanceId],
       count: 1,
       valence: 'loss',
     });
@@ -736,8 +802,8 @@ describe('choosing modal-spell modes (scripted positions)', () => {
   it('is deterministic: the same position always yields the same modes', () => {
     const build = () => {
       const state = newGame().state;
-      const [angel] = putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
-      return { state, choice: parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], targets: [angel!.instanceId] }) };
+      putOnBattlefield(state, 'B', [creatureDef('Serra Angel', 4, 4, { cost: { generic: 3, W: 2 } })]);
+      return { state, choice: parkModal(state, { offer: ['bounce', 'tapAll', 'draw'] }) };
     };
     const first = build();
     const second = build();
@@ -752,7 +818,7 @@ describe('choosing modal-spell modes (scripted positions)', () => {
         const choice = parkModal(state, { offer: ['bounce', 'tapAll', 'draw'], count, valence });
         expect(chosenModes(state, choice).length).toBeGreaterThanOrEqual(choice.min);
         // A choice whose card data cannot be read must still answer legally.
-        state.resolution = null;
+        state.stack = [];
         expect(chosenModes(state, choice).length).toBeGreaterThanOrEqual(choice.min);
       }
     }
