@@ -145,7 +145,9 @@ _Append dated notes here; keep them short. Newest at top._
   drag source would need its own affordance study); kicker/pay-life prompts online are covered by the
   same `ChoicePrompt` path as {X} but are NOT separately harnessed (no pool card asks them); no online
   spectator affordances (spectators still correctly get no action menu). Full suite **2628 passed /
-  0 failed** (baseline 2621 + 7 new), `npm run verify` exit 0, `npm run build` exit 0. (Worker)
+  0 failed** on the branch alone (baseline 2621 + 7 new); after merging origin/main
+  (scry-and-templates) **2651 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0.
+  (Worker)
 
 - 2026-08-18 worker: `feat/scry-and-templates` 🚧 PUSHED — **scry and surveil play as printed, and
   the Temple / surveil-land cycles compile.** The blocker DESIGN §3.11 named ("bottom-of-library
