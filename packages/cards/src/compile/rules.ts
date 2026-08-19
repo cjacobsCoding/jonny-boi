@@ -2383,7 +2383,27 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bmill\b|puts? the top .* into (?:their|his or her) graveyard/,
     missingEngineSystem: 'a mill template the compiler does not recognize yet',
   },
-  { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
+  {
+    // Block RESTRICTIONS are engine-enforced now, in the two places each is
+    // expressible: per pair in `canBlock` ("can't be blocked", "~ can't block")
+    // and per DECLARATION in `illegalBlockDeclaration` (menace and the general
+    // "except by N or more creatures"). Granting evasion for a turn compiles
+    // through the ordinary continuous grant.
+    //
+    // What still lands here is two different things, and the hint says which:
+    //   - a block REQUIREMENT ("must be blocked if able", "all creatures able to
+    //     block ~ do so"). CR 509.1c/d resolves requirements and restrictions
+    //     TOGETHER — maximise satisfied requirements without violating any
+    //     restriction — which is a solver, not a check, and is not built;
+    //   - a restriction whose SELECTOR the engine cannot express: a power or
+    //     toughness comparison between the two creatures ("can't be blocked by
+    //     creatures with power 3 or greater", skulk), or a filtered set the
+    //     static layer deliberately cannot read (Tetsuko's "with power or
+    //     toughness 1 or less" — see `statics.ts` on printed characteristics).
+    pattern: /\bmust be blocked\b|\bable to block\b|\bblocks? it\b|\bcan't be blocked\b|\bcan't block\b|\bmenace\b|\bskulk\b/,
+    missingEngineSystem:
+      'a block REQUIREMENT, or a block restriction whose selector compares creatures',
+  },
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
     // COMPILE now (source-aware targeting: all four protection halves plus the

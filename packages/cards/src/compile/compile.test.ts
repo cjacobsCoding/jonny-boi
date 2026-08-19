@@ -605,11 +605,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
   });
 
   it('reports an unmodelled keyword rather than dropping the ability', () => {
-    // Menace was the example here, then ward — both are implemented now (ward
-    // compiles to the engine-enforced pay-or-counter trigger). Indestructible
-    // is the current stand-in: the engine's destruction and lethal-damage SBAs
-    // have no such exemption. The point of the test is unchanged — an ability
-    // we cannot model must be REPORTED, never silently dropped.
+    // Menace was the example here, then ward, then indestructible — all three
+    // are implemented now (indestructible exempts destruction and lethal damage
+    // in the state-based actions, and nothing else). SKULK is the current
+    // stand-in: "can't be blocked by creatures with greater power" is a per-pair
+    // restriction whose comparison the engine does not make. The point of the
+    // test is unchanged — an ability we cannot model must be REPORTED, never
+    // silently dropped.
     const result = compileCard(
       makeCard({
         name: 'Sneaky Beast',
@@ -617,13 +619,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
-        oracleText: 'Indestructible',
-        keywords: ['Indestructible'],
+        oracleText: 'Skulk',
+        keywords: ['Skulk'],
       }),
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /indestructible/i.test(gap.text))).toBe(true);
+    expect(result.missing.some((gap) => /skulk/i.test(gap.text))).toBe(true);
   });
 
   it('compiles menace, which IS modelled now', () => {

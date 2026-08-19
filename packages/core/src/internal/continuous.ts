@@ -139,8 +139,14 @@ export type ContinuousIndex = ReadonlyMap<InstanceId, AggregatedMod>;
  * This list used to stop at the ten combat keywords, which silently dropped a
  * granted hexproof/shroud/menace/unblockable/flash — the exact grants
  * `targeting.ts` documents as working. The full boolean set is here now; the
- * two non-boolean keywords (`protectionFrom`, `ward`) carry payloads and are
- * folded by their own merge rules in {@link grantInto}.
+ * three non-boolean keywords (`protectionFrom`, `ward`, `minBlockers`) carry
+ * payloads and are folded by their own merge rules in {@link grantInto}.
+ *
+ * ⚠️ ADDING A BOOLEAN FLAG TO `KeywordFlags` AND NOT TO THIS LIST is a silent,
+ * one-directional bug: the printed keyword works and every GRANT of it does
+ * nothing. That is how a granted hexproof was lost, and it is why an
+ * indestructible granted by a static or by a combat trick is covered by tests
+ * rather than assumed.
  */
 const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'flying',
@@ -158,6 +164,8 @@ const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'shroud',
   'menace',
   'unblockable',
+  'cantBlock',
+  'indestructible',
 ];
 
 /**
@@ -201,6 +209,16 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
   if (typeof grant.ward === 'number' && grant.ward > 0) {
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as { ward?: number }).ward = (agg.keywords.ward ?? 0) + grant.ward;
+  }
+  // `minBlockers` takes the MAXIMUM, matching `mergeKeywordGrant`: two blocking
+  // requirements are both in force, so the stricter one decides. Summing them
+  // would invent a restriction neither source printed.
+  if (typeof grant.minBlockers === 'number' && grant.minBlockers > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { minBlockers?: number }).minBlockers = Math.max(
+      agg.keywords.minBlockers ?? 0,
+      grant.minBlockers,
+    );
   }
 }
 
