@@ -162,6 +162,22 @@ export interface ClauseContribution {
    */
   readonly kicker?: import('@jonny-boi/core').ManaCost;
   /**
+   * The printed "Cycling {2}" / "Plainscycling {2}" line — an activated ability
+   * of the card while it is in HAND (`CardDefinition.cycling`). A list because
+   * a card may print more than one, and the contributions accumulate.
+   */
+  readonly cycling?: readonly import('@jonny-boi/core').CyclingAbility[];
+  /**
+   * The printed "Buyback {3}" line — an optional additional cost that returns
+   * the spell to its caster's hand as it resolves (`CardDefinition.buyback`).
+   */
+  readonly buyback?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed "Madness {1}{U}" line — discarding the card exiles it instead,
+   * with a window to cast it for this cost (`CardDefinition.madness`).
+   */
+  readonly madness?: import('@jonny-boi/core').ManaCost;
+  /**
    * A CHARACTERISTIC-DEFINING P/T this clause prints — the formula behind a `*`
    * box (Tarmogoyf). Present ⇒ the card's printed P/T is variable and the
    * assembly emits `CardDefinition.characteristicPT` INSTEAD of numbers.

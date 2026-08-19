@@ -222,6 +222,12 @@ interface Assembly {
   kicker?: ManaCost;
   /** The printed flashback cost, once a "Flashback {…}" line compiles. */
   flashback?: ManaCost;
+  /** Cycling abilities, accumulated — a card may print cycling AND landcycling. */
+  readonly cycling: import('@jonny-boi/core').CyclingAbility[];
+  /** The printed buyback cost, once a "Buyback {…}" line compiles. */
+  buyback?: ManaCost;
+  /** The printed madness cost, once a "Madness {…}" line compiles. */
+  madness?: ManaCost;
   /** The formula behind a `*` P/T box, once a line compiles one. */
   characteristicPT?: import('@jonny-boi/core').CharacteristicPT;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
@@ -230,6 +236,19 @@ interface Assembly {
   attachmentModifies?: PermanentModification;
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
+}
+
+/**
+ * Whether a Scryfall keyword name is a CYCLING one. Matched by suffix rather
+ * than against a list, because Scryfall names the typed variants BOTH generically
+ * ("Typecycling") and by the printed word ("Plainscycling", "Islandcycling",
+ * "Landcycling") — and a list would have to enumerate every land, creature and
+ * artifact type that has ever been printed with the word attached. All of them
+ * compile to the same `CardDefinition.cycling` list, so all of them are answered
+ * by the same guard.
+ */
+function isCyclingKeyword(word: string): boolean {
+  return word === 'cycling' || word.endsWith('cycling');
 }
 
 /** Merge one clause contribution into the assembly. */
@@ -251,6 +270,9 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
   if (contribution.kicker) assembly.kicker = contribution.kicker;
+  if (contribution.cycling) assembly.cycling.push(...contribution.cycling);
+  if (contribution.buyback) assembly.buyback = contribution.buyback;
+  if (contribution.madness) assembly.madness = contribution.madness;
   if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
@@ -590,6 +612,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     activated: [],
     statics: [],
     keywords: {},
+    cycling: [],
     entersTapped: false,
     matchedRules: [],
     missing: [],
@@ -845,6 +868,16 @@ export function compileCard(card: CompilableCard): CompileResult {
     // or additional-cost form) leaves `flashback` unset, so the keyword still
     // reports through the line's own `missing` entry.
     if (word === 'flashback' && assembly.flashback !== undefined) continue;
+    // Cycling and its typed variants: Scryfall lists "Cycling", "Typecycling"
+    // and "Landcycling" as keywords, and the printed line has already compiled
+    // into `assembly.cycling`. A cycling line that did NOT compile (an {X}
+    // cycling cost, a cycling word this engine cannot search for) leaves the
+    // list empty for that line, so the keyword still reports through the line's
+    // own `missing` entry — which is why this is keyed on the list, not on the
+    // keyword's presence.
+    if (isCyclingKeyword(word) && assembly.cycling.length > 0) continue;
+    if (word === 'buyback' && assembly.buyback !== undefined) continue;
+    if (word === 'madness' && assembly.madness !== undefined) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
     // 207.2c. It is skipped only when the line it labels actually compiled;
     // a line that failed put its own text (word included) into `missing`, so
@@ -917,6 +950,9 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),
     ...(assembly.kicker ? { kicker: assembly.kicker } : {}),
+    ...(assembly.cycling.length > 0 ? { cycling: assembly.cycling } : {}),
+    ...(assembly.buyback ? { buyback: assembly.buyback } : {}),
+    ...(assembly.madness ? { madness: assembly.madness } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0
