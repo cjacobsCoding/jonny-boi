@@ -26,7 +26,7 @@ import type {
   TriggerCondition,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION, PLUS_ONE_COUNTER } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
@@ -2115,6 +2115,47 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         label: match[0],
       };
       return { statics: [ability] };
+    },
+  },
+  {
+    /**
+     * A static whose reach depends on COUNTERS — "Creatures you control with
+     * +1/+1 counters on them can't be blocked" (Herald of Secret Streams),
+     * "Each creature you control with a +1/+1 counter on it has trample"
+     * (Duskshell Crawler).
+     *
+     * Counters are instance state, not a characteristic any static can change,
+     * so the filter reads them without the layer-dependency loop that keeps
+     * every other non-printed characteristic out of `StaticAffects`.
+     */
+    id: 'static-counters-grant',
+    description: `"Creatures you control with +1/+1 counters on them have KEYWORD / can't be blocked"`,
+    pattern: new RegExp(
+      `^(?:each creature|creatures) you control with (?:a |one or more )?\\+1/\\+1 counters?` +
+        `(?: on (?:it|them))? (?:(?:has|have) ${KEYWORD_TOKEN}|can'?t be blocked)$`,
+    ),
+    build(match, ctx) {
+      // Only a permanent radiates a static; an instant printing this shape would
+      // be a one-shot effect this rule does not implement.
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
+      if (!isPermanent) return null;
+      const keywords = match[1] === undefined ? { unblockable: true } : keywordFlag(match[1]);
+      if (keywords === null) return null;
+      return {
+        statics: [
+          {
+            affects: {
+              anyOfTypes: ['creature'],
+              controller: 'you',
+              hasCounterKind: PLUS_ONE_COUNTER,
+            },
+            keywords,
+            label: match[0],
+          },
+        ],
+      };
     },
   },
   // --- attachments: Auras and Equipment (one system, two printed forms) --------
