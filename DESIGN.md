@@ -1097,6 +1097,30 @@ Still open, roughly by how often they block a real decklist:
   *damage divided among targets* ("deals X damage divided as you choose among any number of
   targets" — needs a division the targeting layer cannot express: one spell, several targets, each
   with its own share).
+- ✅ *counters-matter templates* — the census (docs/plans/mechanic-completion-plan.md §3c) measured
+  **117 counters templates blocking 153 cards while the counters machinery was already complete**:
+  `CardInstance.counters`, the layer-7d stat pipeline, and the `addCounters` primitive all worked;
+  no printed template could reach them. Closed as rule-table data plus five small seam extensions:
+  the **group form** of `addCounters` (`each` + a controller `scope` + the shared `CardFilter`, so
+  "put a +1/+1 counter on each creature you control" counts exactly the printed set and a phrase the
+  filter cannot express — "each **attacking** creature" — rejects the line instead of widening it);
+  five new **trigger conditions** (`beginCombat`, `endStep`, `gainLife`, `creatureDies` for ANY
+  creature's death, `combatDamageToPlayer`); the **`permanentEtb`** condition — "whenever a creature
+  you control enters", landfall and constellation — which reads the entering permanent off the
+  battlefield through a new optional `TriggerStateView` and never fires without one; cast triggers
+  with `who` = any/opponent; and `StaticAffects.hasCounterKind`, the one non-printed characteristic a
+  static filter may read (counters are instance state no static can change, so there is no
+  layer-dependency loop). It also uncovered a real defect: **"~ enters with N +1/+1 counters on it"
+  put on no counters at all** — they are applied as the permanent enters (CR 614.1c), while its own
+  spell is resolving and before the instance reaches the battlefield, and the primitive only looked
+  at the battlefield — so every 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) died
+  on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable (9.2% → 10.3%)**.
+  ⚠️ Still reported, by name: `indestructible` (no keyword flag), phasing, doubling counters,
+  proliferate (needs a chooser over every permanent and player with a counter), counter kinds the
+  stat layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature",
+  "a creature **you control** dies" (the death event carries no controller), "**nontoken**" filters
+  (instances carry no token flag), and counter-removal activation costs (`ActivationCost` has no
+  counter component).
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
 

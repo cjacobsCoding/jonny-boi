@@ -2603,7 +2603,24 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bsacrifice\b/,
     missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
   },
-  { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'a counters template the compiler does not recognize yet' },
+  {
+    // COUNTERS ARE NOT A MISSING SYSTEM. `CardInstance.counters` exists, the
+    // stat pipeline reads +1/+1 and -1/-1 at CR 613.3 layer 7d, `addCounters`
+    // puts them on one creature or on a whole filtered group, a static can read
+    // "with a +1/+1 counter on it", and the trigger vocabulary now covers ETB,
+    // attacks, dies, ANY creature dying, life gain, combat damage to a player,
+    // begin-combat, the end step and another permanent entering. What lands here
+    // is a counters TEMPLATE with no rule — and, named so nobody re-builds
+    // finished work: indestructible, phasing, DOUBLING counters, proliferate
+    // (needs a chooser over every permanent and player with a counter), counter
+    // kinds the stat layer does not read (charge/quest/time/growth/keyword
+    // counters), "each ATTACKING creature", "a creature YOU CONTROL dies" (the
+    // death event carries no controller), "NONTOKEN" filters (instances carry no
+    // token flag), and removing a counter as an activation cost
+    // (`ActivationCost` has no counter component).
+    pattern: /\bcounters? on\b|\b\+1\/\+1 counter/,
+    missingEngineSystem: 'a counters template the compiler does not recognize yet',
+  },
   {
     // TARGETING a card in a graveyard is a real system now
     // ('instantOrSorceryInYourGraveyard' in core's targeting.ts), as is a

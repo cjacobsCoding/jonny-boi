@@ -78,6 +78,7 @@ throughput (games/sec) from regressing.
 | feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
 | spike/engine-representation | worker | spikes/engine-representation (new) + 2 narrow eslint.config.js additions | 🚧 PUSHED, not merged — DECISION SPIKE, no product code |
 | feat/hybrid-search | worker | packages/ai (new: search-stats/evaluator/hybrid/hybrid-config + heuristic policy seam + bench), DESIGN §3.4a | 🚧 PUSHED, not merged |
+| feat/counters-templates | worker | packages/cards compile/rules.ts + primitives.ts, packages/core triggers.ts/statics.ts, apps/web about/mechanics.ts (1 entry), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/pilot-relative-verdicts | worker | apps/web ONLY (lib/sim/pilots+history-store+protocols+run/plan/execute, lab panels, LabView/MatchView), DESIGN §3.7a | 🚧 PUSHED, not merged |
 | perf/core-hotpath | worker | packages/core (mana-plan.ts + new mana-plan.test.ts + bench/engine-alloc-bench.ts) | 🚧 PUSHED, not merged |
 | feat/tree-reuse | worker | packages/ai (new: tree-reuse.ts + tests; hybrid/hybrid-config/search-stats/index/bench), DESIGN §3.4b | 🚧 PUSHED, not merged — stacks on feat/hybrid-search |
@@ -108,6 +109,43 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-19 worker: `feat/counters-templates` 🚧 PUSHED — **the counters-matter family**
+  (mechanic-completion-plan §3c: 117 templates, 153 card-blocks). It was never a missing system:
+  `CardInstance.counters`, the layer-7d stat pipeline and `addCounters` all worked and nothing
+  printed could reach them. Closed as rule-table DATA plus small seam extensions.
+
+  **Measured on the cached 2100-card corpus: 193 → 217 playable (9.2% → 10.3%).** Re-run with
+  `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json <out>`.
+
+  Owned files: `packages/cards/src/compile/rules.ts`, `packages/cards/src/primitives.ts`,
+  `packages/core/src/triggers.ts`, `packages/core/src/statics.ts`,
+  `packages/core/src/internal/triggers-runtime.ts` (one line), `apps/web/src/lib/about/mechanics.ts`
+  (one entry), DESIGN §3.11, plus two new test files. ⚠️ `compile/rules.ts` is the most contested
+  file in the repo right now — this branch only ADDS table entries and one hint reword.
+
+  ⚠️ **A real defect fell out of it: "~ enters with N +1/+1 counters on it" put on NO counters.**
+  They are applied as the permanent enters (CR 614.1c) — while its own spell resolves, before the
+  instance is on the battlefield — and `addCounters` only ever looked at the battlefield. The card
+  compiled `'complete'` and then entered with none, so every 0/0 body printed that way (Stonecoil
+  Serpent, Walking Ballista) died to a state-based action on arrival. Fixed.
+
+  New engine seams (all additive, all data-driven): trigger conditions `beginCombat`, `endStep`,
+  `gainLife`, `creatureDies` (ANY creature), `combatDamageToPlayer`, and `permanentEtb` — "whenever
+  a creature you control enters", landfall, constellation — which reads the entering permanent off
+  the battlefield through a new optional `TriggerStateView` and NEVER fires without one.
+  `StaticAffects.hasCounterKind` lets a static read "with a +1/+1 counter on it" (counters are
+  instance state no static can change, so no layer-dependency loop). `addCounters` gained the group
+  form (`each` + `scope` + the shared `CardFilter`).
+
+  **DEFERRED, with named blockers — do not treat these as unfinished counters work:**
+  `indestructible` (no `KeywordFlags` flag — it is its own item in the plan), phasing, DOUBLING
+  counters, **proliferate** (needs a chooser over every permanent AND player with a counter; the
+  choice kinds cannot express that today — reported, never approximated), counter kinds the stat
+  layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature"
+  (no combat state in a `CardFilter`), "a creature **you control** dies" (the `creatureDied` event
+  carries no controller), "**nontoken**" filters (instances carry no token flag), and removing a
+  counter as an activation cost (`ActivationCost` has no counter component — Devoted Druid).
 
 - 2026-08-18 worker: `feat/battles-legend-emblems` 🚧 PUSHED — **three walker-adjacent objects:
   battles, the legend rule, and emblems.** All three DONE as subsystems; one card-level gap is
