@@ -34,7 +34,11 @@
     },
     {
       "role": "colourless / utility lands",
-      "names": ["Radiant Fountain", "Wastes", "Rupture Spire"]
+      "names": [
+        "Radiant Fountain",
+        "Wastes",
+        "Rupture Spire"
+      ]
     },
     {
       "role": "ramp — mana creatures and rocks",
@@ -296,6 +300,187 @@
         "Grafted Wargear",
         "Skullclamp",
         "Whispersilk Cloak"
+      ]
+    },
+    {
+      "role": "card selection — scry and surveil, the two mechanics a curated pool cannot show without a card that prints them",
+      "names": [
+        "Preordain",
+        "Serum Visions",
+        "Consider",
+        "Anticipate",
+        "Impulse",
+        "Augury Owl",
+        "Sinister Sabotage",
+        "Notion Rain",
+        "Otherworldly Gaze",
+        "Omen of the Sea",
+        "Temple of Deceit",
+        "Temple of Silence",
+        "Temple of Triumph",
+        "Temple of Malice",
+        "Temple of Abandon",
+        "Temple of Mystery",
+        "Temple of Plenty",
+        "Temple of Malady",
+        "Temple of Epiphany",
+        "Castle Vantress",
+        "Zhalfirin Void",
+        "Elegant Parlor",
+        "Undercity Sewers",
+        "Raucous Theater",
+        "Underground Mortuary",
+        "Commercial District",
+        "Hedge Maze",
+        "Lush Portico",
+        "Meticulous Archive",
+        "Shadowy Backstreet",
+        "Thundering Falls"
+      ]
+    },
+    {
+      "role": "mill — the library as a resource",
+      "names": [
+        "Tome Scour",
+        "Mind Sculpt",
+        "Thought Scour",
+        "Glimpse the Unthinkable",
+        "Dreadwaters",
+        "Increasing Confusion",
+        "Maddening Cacophony"
+      ]
+    },
+    {
+      "role": "flashback — printed casting from the graveyard",
+      "names": [
+        "Think Twice",
+        "Firebolt",
+        "Deep Analysis",
+        "Chainer's Edict",
+        "Lingering Souls",
+        "Silent Departure",
+        "Faithless Looting",
+        "Ancient Grudge",
+        "Flame Jab",
+        "Dread Return",
+        "Feeling of Dread",
+        "Mystic Retrieval",
+        "Artful Dodge",
+        "Cackling Counterpart",
+        "Momentary Blink",
+        "Strike It Rich"
+      ]
+    },
+    {
+      "role": "{X} — the cost chosen and paid at cast time",
+      "names": [
+        "Blaze",
+        "Mind Spring",
+        "Condescend",
+        "Fireball",
+        "Sphinx's Revelation",
+        "Blue Sun's Zenith",
+        "Stroke of Genius",
+        "Kaervek's Torch",
+        "Endless One",
+        "Walking Ballista",
+        "Rolling Thunder",
+        "Crater's Claws",
+        "Banefire",
+        "Death Denied"
+      ]
+    },
+    {
+      "role": "kicker and multikicker — the optional additional cost",
+      "names": [
+        "Burst Lightning",
+        "Into the Roil",
+        "Firebending Lesson",
+        "Saproling Migration",
+        "Tear Asunder",
+        "Vines of Vastwood",
+        "Goblin Bushwhacker",
+        "Everflowing Chalice",
+        "Wolfbriar Elemental",
+        "Rite of Replication",
+        "Deathforge Shaman",
+        "Enclave Elite",
+        "Nirkana Cutthroat",
+        "Skitter Eel",
+        "Aether Figment"
+      ]
+    },
+    {
+      "role": "planeswalkers beyond Liliana — loyalty abilities and the emblem an ultimate makes",
+      "names": [
+        "Jace Beleren",
+        "Liliana Vess",
+        "Chandra, Pyromaster",
+        "Chandra, Torch of Defiance",
+        "Garruk Wildspeaker",
+        "Ajani Goldmane",
+        "Elspeth, Knight-Errant",
+        "Koth of the Hammer",
+        "Sorin, Solemn Visitor",
+        "Nissa, Voice of Zendikar",
+        "Vraska, Golgari Queen",
+        "Domri Rade",
+        "Gideon Jura",
+        "Jace, the Mind Sculptor",
+        "Ob Nixilis Reignited",
+        "Arlinn, Voice of the Pack",
+        "Tibalt, the Fiend-Blooded",
+        "Sarkhan the Mad",
+        "Nicol Bolas, Planeswalker",
+        "Ajani Steadfast"
+      ]
+    },
+    {
+      "role": "protection and ward — the two printed defences the targeting system now enforces",
+      "names": [
+        "White Knight",
+        "Black Knight",
+        "Silver Knight",
+        "Paladin en-Vec",
+        "Mirran Crusader",
+        "Auriok Champion",
+        "Tomakul Honor Guard",
+        "Waterfall Aerialist",
+        "Rimeshield Frost Giant",
+        "Punk Frogs",
+        "Progenitus",
+        "Spectrum Sentinel"
+      ]
+    },
+    {
+      "role": "modal double-faced cards and battles — the two newest card kinds the engine models",
+      "names": [
+        "Bala Ged Recovery",
+        "Jwari Disruption",
+        "Kazandu Mammoth",
+        "Sejiri Shelter",
+        "Kabira Takedown",
+        "Shatterskull Smashing",
+        "Agadeem's Awakening",
+        "Malakir Rebirth",
+        "Khalni Ambush",
+        "Song-Mad Treachery",
+        "Invasion of Gobakhan",
+        "Invasion of Zendikar",
+        "Invasion of Ikoria",
+        "Invasion of Kaldheim",
+        "Invasion of Tarkir"
+      ]
+    },
+    {
+      "role": "transforming double-faced cards beyond Delver of Secrets",
+      "names": [
+        "Thraben Sentry",
+        "Village Ironsmith",
+        "Civilized Scholar",
+        "Ludevic's Test Subject",
+        "Screeching Bat",
+        "Chalice of Life"
       ]
     }
   ]
