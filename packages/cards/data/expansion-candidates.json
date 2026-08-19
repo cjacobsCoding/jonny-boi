@@ -482,6 +482,88 @@
         "Screeching Bat",
         "Chalice of Life"
       ]
+    },
+    {
+      "role": "modal spells — “Choose one” announced at cast (the charm cycle is the cheapest honest test of it)",
+      "names": [
+        "Abrade",
+        "Crosis's Charm",
+        "Dromar's Charm",
+        "Darigaaz's Charm",
+        "Umezawa's Charm",
+        "Midnight Charm",
+        "Winterflame",
+        "Tyrant's Scorn",
+        "Applied Biomancy",
+        "Subtle Strike",
+        "Artful Takedown",
+        "Grim Discovery",
+        "Aid the Fallen",
+        "Invoke the Firemind"
+      ]
+    },
+    {
+      "role": "more {X} — spread across colours so an {X} deck is buildable",
+      "names": [
+        "Clash of Wills",
+        "Volcanic Geyser",
+        "Death Grasp",
+        "Heat Ray",
+        "Overrule",
+        "Devil's Play"
+      ]
+    },
+    {
+      "role": "+1/+1 counters on real cards — the counter system had exactly one card (Kitchen Finks' persist)",
+      "names": [
+        "Sprite Dragon",
+        "Electrostatic Infantry",
+        "Patchwork Automaton",
+        "Tempest Angler",
+        "Faithful Watchdog",
+        "Myr Scrapling",
+        "Ruins Recluse",
+        "Unspeakable Symbol"
+      ]
+    },
+    {
+      "role": "more flashback — enough for a graveyard-value deck, including the {X} flashback cost",
+      "names": [
+        "Reckless Charge",
+        "Call of the Herd",
+        "Roar of the Wurm",
+        "Deep Reconnaissance",
+        "Moan of the Unhallowed",
+        "Chatter of the Squirrel",
+        "Dream Twist",
+        "Bump in the Night",
+        "Crippling Fatigue",
+        "Scour All Possibilities",
+        "Sacred Fire",
+        "Thrill of the Hunt",
+        "Geistflame",
+        "Morgue Theft"
+      ]
+    },
+    {
+      "role": "the second planeswalker, and the kicker cards the compiler can actually build",
+      "names": [
+        "Samut, Tyrant Smasher",
+        "Scout the Wilderness",
+        "Hurloon Battle Hymn",
+        "Tolarian Geyser"
+      ]
+    },
+    {
+      "role": "more ward and protection bodies, for colour spread",
+      "names": [
+        "Archive Dragon",
+        "Toadstool Admirer",
+        "Harmonious Grovestrider",
+        "Blood Knight",
+        "Nightwind Glider",
+        "Voice of Law"
+      ]
     }
   ]
 }
