@@ -209,12 +209,15 @@ export function effectiveKeywords(inst: CardInstance, mod: AggregatedMod = NO_MO
 
 /**
  * Fold a keyword GRANT onto a base keyword set. Boolean flags OR together (a
- * grant can set a flag, never clear one). The two non-boolean keywords carry
+ * grant can set a flag, never clear one). The three non-boolean keywords carry
  * payloads and merge by their own rules, defined once here and reused by the
  * continuous layer's aggregation:
  *   - `protectionFrom` lists UNION (protection from red plus a granted
  *     protection from white is protection from both);
- *   - `ward` costs ADD (two ward abilities charge the sum — paying both).
+ *   - `ward` costs ADD (two ward abilities charge the sum — paying both);
+ *   - `minBlockers` takes the MAXIMUM. Two blocking requirements are both in
+ *     force at once, so the one that is harder to satisfy is the one that
+ *     decides — adding them would invent a restriction neither card printed.
  */
 export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): KeywordFlags {
   const out: Record<string, unknown> = { ...base };
@@ -226,6 +229,9 @@ export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): Ke
     } else if (key === 'ward') {
       const grantedWard = typeof value === 'number' && value > 0 ? value : 0;
       if (grantedWard > 0) out[key] = (base.ward ?? 0) + grantedWard;
+    } else if (key === 'minBlockers') {
+      const grantedMin = typeof value === 'number' && value > 0 ? value : 0;
+      if (grantedMin > 0) out[key] = Math.max(base.minBlockers ?? 0, grantedMin);
     } else if (value === true) {
       out[key] = true;
     }

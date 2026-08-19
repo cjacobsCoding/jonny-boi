@@ -2,7 +2,8 @@
  * State-based actions (SBAs). Checked at the right times (after each resolution,
  * after combat damage, on priority). They are not actions players take — the game
  * performs them automatically. MVP set:
- *   - A creature with lethal marked damage or ≤0 toughness is destroyed.
+ *   - A creature with lethal marked damage or ≤0 toughness leaves the battlefield —
+ *     two DIFFERENT rules, only one of which indestructible exempts (see below).
  *   - A player at ≤0 life loses.
  *   - A player who attempted to draw from an empty library loses (flagged at draw).
  *
@@ -19,7 +20,13 @@ import { PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
 import { isBattle, isCreature, isPlaneswalker } from '../card.js';
 import { cardOption, choiceOptionCount, normalizeChoiceRequest } from '../choices.js';
-import { defenseOf, effectiveToughness, loyaltyOf, remainingToughness } from './stats.js';
+import {
+  defenseOf,
+  effectiveKeywords,
+  effectiveToughness,
+  loyaltyOf,
+  remainingToughness,
+} from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
 import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
 import { detachFromHost, isLegallyAttached } from '../attachments.js';
@@ -53,7 +60,8 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
     // buff can be lethal. Rebuilt each fixpoint pass (effects can change between).
     const index = indexContinuous(state);
 
-    // Creature death: lethal damage or non-positive toughness.
+    // Creature death: lethal damage (destruction — indestructible exempts it) or
+    // non-positive toughness (not destruction — indestructible does not).
     //
     // Walked with an explicit cursor over the LIVE battlefield rather than over a
     // spread copy of it. The copy existed because `moveToZone` splices the dying
@@ -107,10 +115,28 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
         continue;
       }
       const mod = index.get(inst.instanceId) ?? NO_MOD;
+      // The creature-death state-based actions are TWO DIFFERENT RULES, and
+      // indestructible exempts exactly one of them. Keeping them as separate
+      // questions here is the entire point:
+      //   - CR 704.5f — toughness 0 or less puts the creature into its owner's
+      //     graveyard. Indestructible does not mention this rule and does not
+      //     stop it, so a -N/-N that takes toughness to 0 kills an indestructible
+      //     creature. Asked FIRST, and never gated on the flag.
+      //   - CR 704.5g — LETHAL MARKED DAMAGE destroys the creature, and CR 702.2b
+      //     deathtouch makes any nonzero damage lethal. Both are destruction, so
+      //     CR 702.12b exempts both.
+      // Collapsing the two into one expression guarded by the flag is the classic
+      // wrong implementation: it makes an indestructible creature survive having
+      // no toughness at all.
+      //
+      // Cost: the keyword read is placed AFTER the damage test on purpose, so a
+      // creature that is not dying at all — nearly every creature on nearly every
+      // pass of this loop — never pays for it.
+      const destroyedByDamage =
+        remainingToughness(inst, mod) <= 0 || (inst.markedByDeathtouch && inst.damageMarked > 0);
       const dead =
         effectiveToughness(inst, mod) <= 0 ||
-        remainingToughness(inst, mod) <= 0 ||
-        (inst.markedByDeathtouch && inst.damageMarked > 0);
+        (destroyedByDamage && !effectiveKeywords(inst, mod).indestructible);
       if (!dead) {
         cursor += 1;
         continue;
