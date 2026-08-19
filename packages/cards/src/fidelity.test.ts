@@ -323,6 +323,21 @@ function behaviour(definition: CardDefinition): string {
       ability.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
     ]),
     loyalty: definition.loyalty ?? null,
+    // A MODAL card's whole behaviour is its modes, not its `effects` — Cryptic
+    // Command has no top-level effects at all. Leaving them out would give such
+    // a card an EMPTY behaviour signature that matched anything, which is
+    // precisely the blind spot this audit exists to close.
+    modal: definition.modal
+      ? [
+          definition.modal.min,
+          definition.modal.max,
+          definition.modal.allowRepeats ?? false,
+          definition.modal.modes.map((mode) => [
+            mode.targets ?? null,
+            mode.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
+          ]),
+        ]
+      : null,
   });
 }
 

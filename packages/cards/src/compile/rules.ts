@@ -122,6 +122,7 @@ const CREATURE_TARGET: TargetRestriction = 'creature';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
+const PERMANENT_TARGET: TargetRestriction = 'permanent';
 
 /**
  * Every printed modal header, as the COUNT RANGE it means.
@@ -440,6 +441,20 @@ function cardHasXCost(ctx: RuleContext): boolean {
   return ctx.card.manaCost.other.some((symbol) => symbol.toUpperCase() === 'X');
 }
 
+/**
+ * A printed mode's body, tidied into the label a human reads when choosing it:
+ * the card's own name restored from `~`, the first letter capitalised, and the
+ * compiler's leftover sentence period dropped.
+ *
+ * Presentation only — nothing downstream matches on it — but it is the text the
+ * mode question shows, so "counter target spell." reading as "Counter target
+ * spell" is the difference between a UI and a debug dump.
+ */
+function modeLabel(body: string, cardName: string): string {
+  const text = body.replace(/~/g, cardName).replace(/\.$/, '').trim();
+  return text.length === 0 ? text : text[0]!.toUpperCase() + text.slice(1);
+}
+
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'damage-any-target',
@@ -656,6 +671,16 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'tap-all-creatures',
+    description:
+      '"Tap all creatures your opponents control" / "…you control" — a Falter-style mass tap, and Cryptic Command\'s third mode',
+    pattern: /^tap all creatures (your opponents control|your opponent controls|you control)$/,
+    build(match) {
+      const who = match[1]!.startsWith('you control') ? 'controller' : 'opponent';
+      return effects({ primitive: 'tapPermanents', params: { who, types: ['creature'] } });
+    },
+  },
+  {
     id: 'modal-choose',
     description:
       '"Choose one/two/one or both/up to N — • MODE • MODE" (charms, commands, confluences), optionally with "You may choose the same mode more than once" — modes and their targets are chosen AT CAST (CR 601.2b/c)',
@@ -690,7 +715,11 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         if (!compiled || compiled.effects.length === 0) return null;
         modes.push({
           id: `mode${index + 1}`,
-          label: body,
+          // The bodies arrive from the NORMALIZED clause (lowercased, `~` for
+          // the card's own name), and this label is shown to a human choosing a
+          // mode — so it is tidied back into a sentence rather than printed as
+          // compiler intermediate text.
+          label: modeLabel(body, ctx.card.name),
           effects: compiled.effects,
           ...(compiled.targets !== undefined ? { targets: compiled.targets } : {}),
         });
@@ -821,14 +850,20 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'return-target-permanent-to-hand',
-    description: '"Return target creature to its owner\'s hand" (bounce)',
+    description: '"Return target creature/permanent to its owner\'s hand" (bounce)',
     pattern: /^return target (creature|permanent) to (?:its|their) owner'?s hand$/,
     needsChosenTarget: true,
-    build() {
+    build(match) {
       // `returnToHand` has existed in the primitive library the whole time with
       // no rule able to reach it — bounce was reported unsupported purely for
       // want of this pattern.
-      return effects({ primitive: 'returnToHand', params: { targets: CREATURE_TARGET } });
+      //
+      // "Target PERMANENT" is its own restriction and is NOT flattened to
+      // "creature": Cryptic Command bounces a land, and a bounce that could not
+      // would be a strictly weaker card than printed. (It used to flatten,
+      // because core had no `'permanent'` restriction to compile into.)
+      const restriction = match[1] === 'permanent' ? PERMANENT_TARGET : CREATURE_TARGET;
+      return effects({ primitive: 'returnToHand', params: { targets: restriction } });
     },
   },
   {
