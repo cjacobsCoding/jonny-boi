@@ -74,6 +74,7 @@ import {
   targetRestrictionOf,
 } from './targeting.js';
 import { WARD_COST_PARAM, WARD_COUNTER_PRIMITIVE, effectiveWardOf } from './protection.js';
+import { expireCardGrants, flashbackCostOf, pruneCardGrantsFor } from './card-grants.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
@@ -382,6 +383,10 @@ function performStepTurnBasedActions(
       // only for observability; expiry before damage-clear mirrors MTG cleanup.
       expireContinuousEffects(state, 'endOfTurn', emit);
       pruneOrphanContinuousEffects(state);
+      // A grant made to a card in a graveyard wears off on the same clock
+      // (Snapcaster's "until end of turn"), through its own list — see
+      // `card-grants.ts` for why it is not part of the continuous layer.
+      expireCardGrants(state, 'endOfTurn', emit);
       for (const inst of state.battlefield) {
         inst.damageMarked = 0;
         inst.markedByDeathtouch = false;
@@ -1615,7 +1620,11 @@ function applyCastSpell(
     );
   }
   if (isLand(card.def)) return rejectWith(prevState, 'lands are played, not cast');
-  if (fromZone === 'graveyard' && card.def.flashback === undefined) {
+  // Flashback may be PRINTED or GRANTED (Snapcaster Mage). One accessor answers
+  // both, so the cast path cannot disagree with the offer loop about what a card
+  // in the graveyard costs — or about whether it may be cast at all.
+  const grantedFlashback = fromZone === 'graveyard' ? flashbackCostOf(state, card) : undefined;
+  if (fromZone === 'graveyard' && grantedFlashback === undefined) {
     return rejectWith(prevState, 'that card has no flashback');
   }
   // CR 712.8b: the back face of a transforming DFC can never be cast. A card in
@@ -1644,7 +1653,7 @@ function applyCastSpell(
   // Pay the mana cost from the floating pool. A flashback cast pays the
   // FLASHBACK cost, not the printed one — that substitution is the whole of
   // what "cast it for its flashback cost" means at this seam.
-  const cost = fromZone === 'graveyard' ? card.def.flashback : card.def.cost;
+  const cost = fromZone === 'graveyard' ? grantedFlashback : card.def.cost;
   if (cost) {
     if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
     const result = payCost(player.manaPool, cost);
@@ -1655,6 +1664,11 @@ function applyCastSpell(
   // Move the card to the stack, out of whichever zone it was cast from.
   removeFromZoneArray(fromZone === 'graveyard' ? player.graveyard : player.hand, card.instanceId);
   card.zone = 'stack';
+  // The card just changed zones, so any grant on it stops applying (CR 400.7).
+  // Nothing is lost by dropping it here: the granted cost has already been paid,
+  // and the EXILE replacement rides the stack object's own `castFrom`
+  // (`spellLeaveDestination`) rather than the grant — see card-grants.ts.
+  pruneCardGrantsFor(state, card.instanceId);
   // The source zone decides the exit: a permanent still resolves to the
   // battlefield, but a flashback spell resolves to EXILE, and the stack object
   // carries `castFrom` so countering reaches the same answer (see
@@ -2284,7 +2298,10 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   const graveyard = player.graveyard;
   for (let g = 0; g < graveyard.length; g++) {
     const card = graveyard[g] as CardInstance;
-    const flashbackCost = card.def.flashback;
+    // Printed OR granted — one accessor, so a granted flashback is offered
+    // exactly as a printed one is, and costs one property read per graveyard
+    // card on a board where no grant exists anywhere.
+    const flashbackCost = flashbackCostOf(state, card);
     if (flashbackCost === undefined || isLand(card.def)) continue;
     const timing = castTiming(card.def);
     if (timing !== 'instant' && !sorcerySpeedWindow) continue;
@@ -2294,7 +2311,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'graveyard' });
       continue;
     }
-    for (const target of legalTargetsFor(state, restriction, me)) {
+    for (const target of legalTargetsFor(state, restriction, me, card.def)) {
       actions.push({
         kind: 'castSpell',
         player: me,

@@ -149,6 +149,13 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
  * `null` is memoized too: "this definition declares no restriction" is the common
  * answer and must not be recomputed either.
  */
+/**
+ * The shared, frozen empty answer for a restriction that can offer nothing on
+ * this board. Shared so the no-candidate case allocates nothing on the
+ * legal-action loop, exactly like `internal/continuous.ts`’s EMPTY_INDEX.
+ */
+const NO_TARGETS: readonly (InstanceId | PlayerId)[] = Object.freeze([]);
+
 const RESTRICTION_MEMO = new WeakMap<CardDefinition, TargetRestriction | null>();
 
 /**
@@ -316,6 +323,19 @@ export function legalTargetsFor(
   if (restriction === 'spell') {
     return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
   }
+  if (restriction === 'instantOrSorceryInYourGraveyard') {
+    // With no actor there is no such thing as "your graveyard", so nothing is
+    // offered — the same safe direction as 'opponent', and the one that makes an
+    // unaimable trigger leave the stack rather than resolve pointing at nothing.
+    if (controller === undefined) return NO_TARGETS;
+    const out: (InstanceId | PlayerId)[] = [];
+    const graveyard = state.players[controller].graveyard;
+    for (let g = 0; g < graveyard.length; g++) {
+      const card = graveyard[g] as CardInstance;
+      if (hasType(card.def, 'instant') || hasType(card.def, 'sorcery')) out.push(card.instanceId);
+    }
+    return out;
+  }
   const targets: (InstanceId | PlayerId)[] = [];
   if (restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker') {
     targets.push(...PLAYER_IDS);
@@ -455,6 +475,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a player or a planeswalker';
     case 'creatureOrPlaneswalker':
       return 'a creature or a planeswalker';
+    case 'instantOrSorceryInYourGraveyard':
+      return 'an instant or sorcery card in your graveyard';
     case 'any':
       return 'any target (a creature, a player, or a planeswalker)';
   }
