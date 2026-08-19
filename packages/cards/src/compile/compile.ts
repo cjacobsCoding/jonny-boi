@@ -63,6 +63,57 @@ import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitS
  */
 const ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['enchant', 'equip']);
 
+/**
+ * Scryfall keywords that this compiler models as effect PRIMITIVES matched by the
+ * rule table rather than as keyword flags or dedicated assembly fields.
+ *
+ * Scry, Surveil and Mill each compile from their printed line (`scry-n`,
+ * `surveil-n`, `scry-then-effect`, `self-mill`, `target-player-mills`) into an
+ * `EffectRef` whose `primitive` is the name below. The keyword sweep therefore has
+ * to look at the compiled OUTPUT to decide whether the line was implemented — the
+ * same question `flashback`/`kicker` answer with a single assembly field.
+ *
+ * The guard is deliberately evidence-based, not a blanket skip: a wording the rule
+ * table does NOT match (a derived or conditional count, "look at the top N …")
+ * produces no such primitive, so that card still reports honestly.
+ */
+const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
+  scry: 'scry',
+  surveil: 'surveil',
+  mill: 'mill',
+});
+
+/**
+ * Every effect-primitive name reachable in a compiled assembly.
+ *
+ * Primitives nest: a scry can sit inside a triggered ability's effect list (the
+ * Theros temples), inside an activated ability (Castle Vantress), or inside another
+ * primitive's params (`scry-then-effect`, the "you may" wrappers). A shallow look at
+ * `assembly.effects` would miss all three and report the keyword anyway, so the walk
+ * is a deep one over the assembled data.
+ */
+function compiledPrimitives(assembly: Assembly): ReadonlySet<string> {
+  const found = new Set<string>();
+  const seen = new Set<unknown>();
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    if (typeof record.primitive === 'string') found.add(record.primitive);
+    for (const value of Object.values(record)) visit(value);
+  };
+  visit(assembly.effects);
+  visit(assembly.triggers);
+  visit(assembly.activated);
+  visit(assembly.statics);
+  return found;
+}
+
 /** Scryfall card types → the core `CardType`s the engine understands. */
 const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
   land: 'land',
@@ -834,6 +885,7 @@ export function compileCard(card: CompilableCard): CompileResult {
   // --- keyword flags printed on the type line but not in the text ------------
   // Scryfall lists a card's keywords separately; anything it lists that we did
   // not already pick up from the text must still be modelled or reported.
+  const primitivesCompiled = compiledPrimitives(assembly);
   for (const keyword of card.keywords) {
     const word = keyword.toLowerCase();
     const field = KEYWORD_FLAGS[word];
@@ -871,6 +923,14 @@ export function compileCard(card: CompilableCard): CompileResult {
     // or additional-cost form) leaves `flashback` unset, so the keyword still
     // reports through the line's own `missing` entry.
     if (word === 'flashback' && assembly.flashback !== undefined) continue;
+    // Scry / Surveil / Mill: modelled as effect primitives, so the evidence that
+    // the printed line compiled is the primitive's presence in the assembled card
+    // rather than a dedicated field. Same contract as the guards above — skip the
+    // sweep entry ONLY when the line really was implemented; a wording the rules do
+    // not match compiles no primitive and still reports through its own `missing`
+    // entry (the scry/mill template hints).
+    const backingPrimitive = PRIMITIVE_BACKED_KEYWORDS[word];
+    if (backingPrimitive !== undefined && primitivesCompiled.has(backingPrimitive)) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
     // 207.2c. It is skipped only when the line it labels actually compiled;
     // a line that failed put its own text (word included) into `missing`, so

@@ -100,8 +100,13 @@ line actually compiled, so a form the rules *don't* match still reports honestly
 Cards recovered include Opt, Preordain, Serum Visions, Consider, Read the Bones, all
 ten Theros scry-Temples, Castle Vantress, Zhalfirin Void, and the Ravnica surveil-lands.
 
-> This branch is docs + generated data only, so the fix is **not** made here. It is the
-> top item of the queue below, and it is a defect, not a feature.
+> **✅ FIXED on `fix/keyword-sweep-and-mana-templates` (2026-08-18).** The guard is
+> evidence-based, like the flashback one: the sweep entry is skipped only when the
+> compiled assembly actually contains the backing primitive, deep-walked (a scry can
+> sit inside an ETB trigger, an activated ability, or another primitive's params).
+> A wording the rule table does not match compiles no primitive and still reports.
+> **Re-measured offline against the cached corpus: 193 → 227 playable, exactly the
+> prediction below.**
 
 ---
 
@@ -241,8 +246,39 @@ dramatically underpriced:
 - **enters-tapped templates** — 26 cards for 8 entries (3.3 cards/entry), the best ratio
   on the board.
 
-Both are lands. Lands are the highest-yield template work in the corpus because they are
-short, formulaic, repeat across cycles, and every deck plays 24 of them.
+Both are lands. Lands are the highest-yield work in the corpus because they are short,
+formulaic, repeat across cycles, and every deck plays 24 of them.
+
+> **⚠️ CORRECTION (2026-08-18, `fix/keyword-sweep-and-mana-templates`): the
+> mana-ability row above is wrong, and it is wrong in the expensive direction.**
+> It is not 52 cards for 24 rule entries. The plain forms this document points at —
+> `{T}: Add {U} or {R}` (row 12) and `{T}: Add one mana of any color` (row 10) — had
+> **already landed on `main`** (`tap-for-mana-choice`, `tap-for-any-color`) before this
+> census was written; the audit still ranked them because the *remaining* wordings share
+> their hint bucket. Everything left in that family needs **core's mana model to grow**,
+> not a rule-table entry: core models a mana source as a fixed list of colour bundles —
+> one tap, off the stack, no cost beyond the tap, no rider, no condition
+> (`CardDefinition.produces`/`producesOptions`, `pushManaTapActions`, `applyTapForMana`).
+>
+> The compiler now names each shape as engine work, which moves **83 sole-blocked cards**
+> out of the template column into five named systems:
+>
+> | mana gap (now a SYSTEM) | sole | blocks | examples |
+> |---|---:|---:|---|
+> | an ADDITIONAL COST on a mana ability | 35 | 52 | `{T}, Pay 1 life:` (Mana Confluence, the Horizon lands), the filter lands' `{R/W}, {T}:`, `{T}, Tap an untapped creature` |
+> | a RIDER effect on a mana ability | 22 | 22 | every pain land + the whole Talisman cycle |
+> | an ACTIVATION RESTRICTION on a mana ability | 15 | 17 | the Verge cycle, Nimbus Maze, Mox Opal |
+> | mana COLOURS DERIVED FROM BOARD STATE | 7 | 11 | Reflecting Pool, Exotic Orchard, Fellwar Stone |
+> | a SPEND RESTRICTION on produced mana | 4 | 15 | Cavern of Souls, Delighted Halfling |
+>
+> One genuine template remained and is closed: `{T}: Add three mana of any one color`
+> (Gilded Lotus, +1). **Do not queue rule-table work against the other five** — there is
+> no machinery behind them. Extending the mana model is instead the single highest
+> card-per-hour ENGINE item on the board, ahead of alternative casting costs (20 sole).
+>
+> The same caution applies to §4's wave 1 ("Land templates: mana-ability (24) +
+> enters-tapped (8) families, ≈305 playable"). The enters-tapped half is real template
+> work; the mana-ability half is the engine work above.
 
 By contrast **loyalty-ability templates** cost 38 entries for 3 sole cards — planeswalkers
 each print three unique abilities and share almost nothing.
@@ -253,7 +289,7 @@ each print three unique abilities and share almost nothing.
 
 | wave | content | est. cost | corpus playable after |
 |---|---|---|---|
-| **0** | The keyword-sweep guards (§2) | hours | 193 → **227** (10.8%) |
+| **0** | The keyword-sweep guards (§2) — ✅ **DONE, measured 227** | hours | 193 → **227** (10.8%) |
 | **1** | Land templates: mana-ability (24) + enters-tapped (8) families | days | ≈ **305** (14.5%) |
 | **2** | Alternative casting costs (cycling/buyback/madness) + typecycling/landcycling as riders; `Indestructible` flag | days | ≈ **355** (16.9%) |
 | **3** | Counters-matter: 117 rule entries against existing machinery | 1–2 weeks | ≈ **410** (19.5%) |
