@@ -63,7 +63,6 @@ export {
   revealTopCard,
   discardCard,
   returnFromGraveyard,
-  modal,
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
@@ -133,11 +132,18 @@ export {
  * because a card that plays *nearly* right silently corrupts every A/B verdict that
  * includes it.
  *
+ * ## THE LIST IS NOW EMPTY, and that is the point of keeping it
+ * Every hand-authored pool card plays as printed. The list stays — with its
+ * whole history below — because it is the mechanism, not the content: the next
+ * card the pool cannot model faithfully belongs HERE, named, rather than being
+ * quietly shipped as an approximation. `fidelity.test.ts` audits every pool card
+ * against its real Oracle text and skips exactly the cards named here, so an
+ * empty list means the audit now covers the entire pool with no exemptions.
+ *
  * Un-stubbed by the player-choice system (DESIGN §3.11) — these now play for real,
  * asking their questions through `pendingChoice`: **Brainstorm** (ordered put-back),
  * **Ponder** (top-3 reorder + optional shuffle), **Thoughtseize** (caster picks the
- * victim's nonland card), **Eternal Witness** (chosen graveyard card), **Cryptic
- * Command** (all four modes, choose two), **Path to Exile** (the controller's
+ * victim's nonland card), **Eternal Witness** (chosen graveyard card), **Path to Exile** (the controller's
  * optional basic-land search) and **Goblin Guide** (reveal the top card, take it
  * only if it is a land). Earlier waves un-stubbed Young Pyromancer, Monastery
  * Swiftspear, Kitchen Finks and Giant Growth on the trigger + continuous layers.
@@ -149,6 +155,9 @@ export {
  * included.
  * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
  * abilities play as printed (each-player discard, the edict, the pile split).
+ * The CAST-TIME modal system un-stubbed **Cryptic Command** — all four modes,
+ * chosen (and aimed) as the spell is cast, per CR 601.2b/c, so the opponent
+ * decides whether to respond already knowing which two halves are coming.
  * The graveyard-grant system (targeting a card in a graveyard + core's
  * `card-grants.ts` layer) un-stubbed **Snapcaster Mage** — flash, the targeted
  * ETB, and the granted flashback all play as printed, and the granted cast goes
@@ -157,16 +166,12 @@ export {
  * star box is the real formula over card types in all graveyards, re-derived on
  * every read; and the turn-scoped fact memory un-stubbed **Fatal Push**, whose
  * revolt mode now reads "a permanent you controlled left the battlefield this
- * turn" at resolution.
+ * turn" at resolution. The CAST-TIME MODAL system took the last entry off this
+ * list, un-stubbing **Cryptic Command**: all four modes, announced AND aimed as
+ * the spell is cast (CR 601.2b/c), so the opponent decides whether to respond
+ * already knowing which two halves are coming.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
-}> = Object.freeze([
-  {
-    // Everything Cryptic DOES is faithful; what is early is WHEN it is decided.
-    card: 'Cryptic Command',
-    missingEngineSystem:
-      'modes are chosen on resolution, not at cast: core picks targets at cast with no mode declared, so a mode is offered only when this cast happens to have a legal target for it (needs mode+target selection at cast time)',
-  },
-]);
+}> = Object.freeze([]);

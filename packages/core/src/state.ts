@@ -167,6 +167,19 @@ export interface CardInstance {
    * present. Anyone adding a field here must also edit `internal/clone.ts`.
    */
   loyaltyActivatedTurn?: number;
+  /**
+   * How many times this permanent's spell was kicked as it was cast — written
+   * when a kicked (or multikicked) PERMANENT spell resolves to the battlefield,
+   * so an enters-the-battlefield trigger ("create a token for each time it was
+   * kicked") can still read the count after the resolution frame is gone. A
+   * single kicker records 1. Cleared when the permanent leaves the battlefield
+   * (a re-cast is a new announcement).
+   *
+   * OPTIONAL and written only on the kicked entry, for the same object-shape/
+   * throughput reason as {@link attachedTo}. Anyone adding a field here must
+   * also edit `internal/clone.ts`.
+   */
+  timesKicked?: number;
 }
 
 /**
@@ -228,6 +241,30 @@ export const STEP_ORDER: readonly Step[] = [
 export const MAIN_STEPS: readonly Step[] = ['precombatMain', 'postcombatMain'];
 
 /**
+ * ONE announced mode of a modal spell — which mode was chosen, and what that
+ * mode was aimed at.
+ *
+ * Modes and their targets are both chosen as the spell is CAST (CR 601.2b/c),
+ * so a pick is finished data by the time the spell can resolve. Its own
+ * `targets` list is what makes "Choose two — • Counter target spell • Return
+ * target permanent to its owner's hand" possible at all: the two chosen modes
+ * point at DIFFERENT objects, which one `SpellStackObject.targets` list cannot
+ * express.
+ *
+ * One entry per PICK, not per mode: a spell that lets you choose the same mode
+ * more than once records it once per time it was chosen, each with its own aim.
+ */
+export interface ModePick {
+  /** The chosen `SpellMode.id`. */
+  readonly modeId: string;
+  /**
+   * What this mode points at — one target, or empty for a target-free mode.
+   * Absent (rather than empty) while the engine is still asking for it.
+   */
+  readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+}
+
+/**
  * A spell (or permanent) on the stack: a card instance moving through the stack.
  * Carries the resolving instance and resolves to a zone. Resolution is LIFO.
  */
@@ -256,14 +293,30 @@ export interface SpellStackObject {
   /** Whether the kicker was paid. Absent for spells with no kicker / unanswered. */
   readonly kicked?: boolean;
   /**
-   * Set while this spell sits on the stack with a CAST-TIME question still
-   * unanswered — "choose X", "pay the kicker?". Like a trigger's
-   * `awaitingTargets`, the waiting lives ON the stack object so "is a cast still
-   * being finished?" is answered by the stack itself; it is cleared the instant
-   * the answer is recorded. Anyone adding a stack-object field must also copy it
-   * in `internal/clone.ts` (field-by-field cloning drops unknown fields).
+   * How many times the MULTIKICKER was paid, recorded once the caster has
+   * answered (and the mana has been charged). Absent while unanswered and for
+   * spells without multikicker; any positive count also sets {@link kicked}.
    */
-  readonly awaitingCastChoice?: 'x' | 'kicker';
+  readonly kickCount?: number;
+  /**
+   * The MODES chosen for a modal spell, in PRINTED order, one entry per pick
+   * (a repeated mode appears once per time it was chosen). Each pick's
+   * `targets` is recorded as its cast-time aim is answered; a pick whose
+   * `targets` is still absent is the one the engine is currently asking about.
+   * Absent entirely until the mode question is answered, and for non-modal
+   * spells. Public information, exactly as announced modes are in paper.
+   */
+  readonly modePicks?: readonly ModePick[];
+  /**
+   * Set while this spell sits on the stack with a CAST-TIME question still
+   * unanswered — "choose your modes", "choose X", "pay the kicker?", "aim this
+   * mode". Like a trigger's `awaitingTargets`, the waiting lives ON the stack
+   * object so "is a cast still being finished?" is answered by the stack
+   * itself; it is cleared the instant the answer is recorded. Anyone adding a
+   * stack-object field must also copy it in `internal/clone.ts` (field-by-field
+   * cloning drops unknown fields).
+   */
+  readonly awaitingCastChoice?: 'modes' | 'x' | 'kicker' | 'multikicker' | 'modeTarget';
   /**
    * The zone this spell was CAST FROM. Optional, and absent means `'hand'` —
    * which keeps every state serialized before non-hand casting existed (and

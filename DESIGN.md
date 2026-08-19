@@ -1006,9 +1006,10 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   kicked, RIDER" (an `ifKicked` branch primitive enqueuing the rider into the same resolution).
   The heuristic pilot scores an X burn at the X this board could fund and answers with the
   maximum affordable; the hotseat/online prompt renders one button per fundable value.
-  Deliberately NOT done: multikicker (needs a pay-count, reported), kicked ETB clauses on
-  permanents (the flag dies with the resolution; needs instance memory), X divided among
-  targets, and "where X is …" definitions (those X's are not the cast-time X and are refused).
+  §3.16 then closed two of this entry's deferrals: MULTIKICKER (the pay-count question) and
+  KICKED ETB CLAUSES on permanents (the count now survives onto the instance as `timesKicked`).
+  Still deliberately NOT done: X divided among targets, and "where X is …" definitions (those X's
+  are not the cast-time X and are refused).
 - ✅ *planeswalkers + loyalty* — walkers are real attackable permanents. A walker enters with its
   printed loyalty as COUNTERS (`counters['loyalty']`, `CardDefinition.loyalty`); its `[+N]/[−N]` lines
   compile to activated abilities with a SIGNED `cost.loyalty`, sorcery-speed, engine-enforced once per
@@ -1083,10 +1084,42 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
   cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
   (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
+- ✅ *the keyword sweep no longer double-reports Scry / Surveil / Mill* — a **defect**, not a feature,
+  and the highest-yield single fix in the census. The compiler runs a keyword sweep after the rule
+  table: anything in Scryfall's `card.keywords` it did not consume is reported. The sweep carried
+  "already handled" guards for ward, protection, enchant/equip, kicker, flashback and ability words —
+  but not for the three keywords this compiler models as effect **primitives** matched by rules
+  (`scry-n`, `surveil-n`, `scry-then-effect`, `self-mill`, `target-player-mills`). So Opt's entire text
+  compiled and the card was still `incomplete`, on the strength of the word "Scry" being reported
+  twice. The guard is shaped like the flashback one and is **evidence-based**: skip the sweep entry
+  only when the compiled assembly actually contains the backing primitive — deep-walked, because a
+  scry can sit inside an ETB trigger (the Theros temples), inside an activated ability (Castle
+  Vantress) or inside another primitive's params. A wording the rule table does *not* match compiles no
+  primitive and keeps reporting through its own clause, which is the honest half and is tested as
+  such. **Measured: 193 → 227 of the 2100-card most-played corpus (9.2% → 10.8%).**
+- ✅ *modal mana with a multiplier* — `{T}: Add three mana of any one color` is five modes of three
+  (Gilded Lotus), which `producesOptions` expresses exactly. "One color" is what makes it a choice of
+  mode; a free per-mana mix is refused rather than flattened.
+
 Still open, roughly by how often they block a real decklist:
+- ***the mana model itself* — the largest engine lever left in the corpus, and it was mis-filed as
+  cheap template data.** Core models a mana source as a fixed list of colour bundles: one tap, no
+  stack, no cost beyond the tap, no rider, no condition. Four printed shapes need it to grow, and the
+  compiler now names each one instead of calling it "a template we don't recognize yet"
+  (**83 sole-blocked corpus cards** between them): an **additional cost** on a mana ability (35 —
+  `{T}, Pay 1 life:`, the filter lands' `{R/W}, {T}:`, `{T}, Tap an untapped creature`), a **rider**
+  (22 — every pain land and the whole Talisman cycle: "{T}: Add {U} or {B}. ~ deals 1 damage to you"),
+  an **activation restriction** (15 — the Verge cycle, Nimbus Maze, Mox Opal), a **spend restriction**
+  (4 — Cavern of Souls; the pool records colour, not what each mana may pay for), and **colours derived
+  from board state** at activation time (7 — Reflecting Pool, Exotic Orchard; commander identity is
+  refused for good). Lands are 24 cards of every deck, so this is the highest card-per-hour engine
+  work on the board.
 - *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
-  cast-time question step now that {X}/kicker built it), *multikicker*, *Phyrexian costs*,
-  *modal DFCs / split / adventure (the cast-time face choice)*,
+  cast-time question step now that {X}/kicker/multikicker built it), *Phyrexian costs*,
+  *split / adventure* (two castable halves on ONE object — modal DFCs landed in §3.16, but those
+  are two FACES, which is a different shape),
+  *flashback riders that are not mana or life* ("Flashback—{1}{U}, Discard a card" — the cast
+  pipeline can charge mana and life, and nothing else, so a discard or sacrifice rider reports),
   *P/T formulas outside the closed count vocabulary* (a star box counting something the
   `DerivedCountName` table does not name, or whose two halves count different things, still
   reports — it is never guessed),
@@ -1202,8 +1235,10 @@ a half-modelled back face is worse than reporting it. Scryfall's card-level keyw
 to faces by their own text, never guessed. **Delver of Secrets is un-stubbed**: the upkeep
 look/may-reveal/transform body is one primitive (`transformRevealTop`, classified library-reading for
 paired arms), asked as a single top-of-library selection whose valence follows the top card, with a
-constant public prompt so the log cannot leak a declined reveal. Modal DFCs / split / adventure cards
-keep reporting `SECOND_CASTABLE_FACE_GAP` — their gap is the cast-time face choice, a different system.
+constant public prompt so the log cannot leak a declined reveal. **Modal DFCs landed in §3.16** (a
+back face marked `backFaceCastable`, cast or played as its own half); split and adventure cards still
+report `SECOND_CASTABLE_FACE_GAP` (as do Sieges), because a half reached by its own cast path is
+not a second face.
 
 ### 3.14 Online UI parity — every shipped mechanic reachable online — ✅ done
 The rule this section exists to enforce: **a mechanic the engine plays and the online board cannot
@@ -1296,6 +1331,67 @@ battles by `protectorOf` (a controller-based search would never consider your ow
 chip damage on neither - on a battle it buys literally nothing, since the reward pays only on the
 last counter. The hotseat and online boards render a defense badge beside the loyalty one, in a
 different colour token because both sit in the same slot and "3 loyalty" must not read as "3 defense".
+
+### 3.16 Cast-time choices, part two — modal spells, modal DFCs, multikicker, flashback {X} — ✅ done
+Four mechanics, one seam: **every decision a caster makes while ANNOUNCING a spell**, asked before
+anybody gets priority to respond. §3.11's {X}/kicker system opened that seam; this section fills it in.
+
+**Why the timing is the whole feature.** Modes are chosen as the spell is cast (CR 601.2b) and each
+chosen mode is aimed at cast too (CR 601.2c). A modal spell whose modes were picked on RESOLUTION
+would let its controller watch the opponent's response first and only then decide whether to counter
+it — strictly better than the printed card, and nothing would look broken. That is exactly what the
+old resolution-time `modal` primitive did, so it is **deleted**, not kept alongside: two rival modal
+systems is the failure this seam exists to prevent.
+
+The data is `CardDefinition.modal` (`ModalSpec`: `min`, `max`, `allowRepeats`, and `SpellMode[]`),
+where each mode carries its own `effects` AND its own `targets` restriction — because two chosen modes
+point at two DIFFERENT objects, which one stack-object target list cannot express. `packages/core/modal.ts`
+answers the two cast-time questions purely (which modes may be announced on this board; what each
+resolves into), and the SAME helpers are read by `generateLegalActions` (the offer) and
+`applyCastSpell` (the accept), so offer and accept cannot disagree. A mode with no legal target is not
+on the menu; a modal spell that can announce nothing cannot be cast at all.
+
+The announcement rides the stack object as `modePicks` (one entry per PICK — a repeated mode appears
+once per time it was chosen, each with its own aim), and resolution flattens it in PRINTED order via
+`picksToResolution` into the frame's `effects` plus a **parallel** `effectTargets` array. That parallel
+array is the one sharp edge: `enqueueEffects` splices both in lockstep, and a test pins it — splicing
+one without the other shifts every later mode's target silently.
+
+- **Modal DFCs** (`backFaceCastable` beside `backFace`): both halves are really cast or played, each
+  with its own cost, timing, targets and script. `CastSpellAction.face`/`PlayLandAction.face` name the
+  half; the face swap is the same one a transform makes (`def` IS the active face, `printedDef` the way
+  back), so leaving for a hidden zone reverts to the front (CR 712.8a) through the existing chokepoint.
+  A transforming DFC's back face stays uncastable (CR 712.8b) — the difference between the two layouts
+  is exactly that one flag. Split, adventure and Siege cards still report `SECOND_CASTABLE_FACE_GAP`:
+  each reaches its second half by a cast path of its own (one object with two costs; a card exiled and
+  re-cast later; a face unlocked by defeating a battle), and none of those is a second FACE.
+- **Multikicker** (`CardDefinition.multikicker`): the answer is a COUNT, so the question is a
+  `chooseNumber` bounded by `maxAffordableKicks` — the same planner that will charge it, planning
+  against `repeatCost` (three copies of a hybrid symbol are three symbols, not a mana-value multiply).
+  Charged once; any positive count also sets `kicked`, so an "if this spell was kicked" rider reads
+  multikicker correctly. The count rides into resolution and then onto the PERMANENT
+  (`CardInstance.timesKicked`), which is how an ETB trigger reads it after the frame is gone.
+  "For each time it was kicked" is a derived count (`timesThisWasKicked`), so damage, draw, life,
+  counters and token counts all learned it at once with no primitive changed.
+- **Flashback {X} and the life rider**: `flashbackXCost` and `flashbackLifeCost`. The X question reads
+  the FLASHBACK cost's count, not the printed cost's (a card may print both); the life is charged with
+  the mana as a mandatory cost, so a caster who cannot pay it is neither offered the cast nor accepted.
+  A non-life rider (a discard, a sacrifice) still reports — the engine has no cast-time cost of that kind.
+
+**Cryptic Command is un-stubbed**, and it was the LAST entry in `STUBBED_MECHANICS` — every
+hand-authored pool card now plays as printed, so `fidelity.test.ts` audits the whole pool with no
+exemptions. All four modes are real; the bounce mode needed core's new `'permanent'` target
+restriction, because flattening "target permanent" to "target creature" would be a card that cannot
+bounce a land. The compiler reads every printed header ("choose one / two / one or both / up to N",
+plus "You may choose the same mode more than once") and compiles each mode through
+`compileTriggerBody`, which is the right compiler precisely because a mode, like a trigger, must
+DECLARE what it may be aimed at rather than inherit a target the caster already named.
+
+Both seats: the AI prices each mode by its BEST legal target (`valueOfMode`), which is what stops it
+choosing "counter target spell" when the only spell on the stack is its own — a spell is a legal
+target for its own counter mode, and being faithful there means the pilot, not the engine, must be the
+one that declines. Humans answer through the existing `ChoicePrompt`, with repeated modes rendered as
+a count (`×2`) rather than a toggle.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

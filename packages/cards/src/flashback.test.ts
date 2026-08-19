@@ -49,16 +49,27 @@ describe('compiling "Flashback {cost}"', () => {
     expect(result.matchedRules).toContain('flashback-cost');
   });
 
-  it('refuses an {X} flashback cost — that is the cast-cost-modification system', () => {
+  it('compiles an {X} flashback cost — the X is asked (and charged) at cast time', () => {
     const result = compileCard(flashbackCard('Draw a card.\nFlashback {X}{U}'));
-    expect(result.status).toBe('incomplete');
-    expect(result.definition.flashback).toBeUndefined();
-    expect(result.missing.some((m) => /flashback/i.test(m.text))).toBe(true);
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.flashback).toEqual({ U: 1 });
+    // The {X} is NOT folded into the mana cost — X is 0 off the stack (CR
+    // 107.3), so it is a separate count the cast-time question reads.
+    expect(result.definition.flashbackXCost).toBe(1);
   });
 
-  it('refuses a flashback cost with additional non-mana costs', () => {
-    // Deep-Analysis-shaped: the em-dash form with a rider is NOT plain mana.
+  it('compiles the Deep-Analysis shape: a flashback cost with a life rider', () => {
     const result = compileCard(flashbackCard('Draw a card.\nFlashback—{1}{U}, Pay 3 life.'));
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    expect(result.definition.flashback).toEqual({ generic: 1, U: 1 });
+    expect(result.definition.flashbackLifeCost).toBe(3);
+  });
+
+  it('still refuses a flashback rider the engine has no cast-time cost for', () => {
+    // A DISCARD rider is not a cost kind the cast pipeline can charge, so the
+    // line stays reported rather than being cast for the mana alone — which
+    // would be strictly cheaper than printed.
+    const result = compileCard(flashbackCard('Draw a card.\nFlashback—{1}{U}, Discard a card.'));
     expect(result.status).toBe('incomplete');
     expect(result.definition.flashback).toBeUndefined();
   });

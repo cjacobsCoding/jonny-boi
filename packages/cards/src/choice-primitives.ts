@@ -33,7 +33,6 @@ import type {
   CardOption,
   EffectContext,
   EffectPrimitive,
-  EffectRef,
   InstanceId,
   ManaCost,
   PlayerId,
@@ -421,78 +420,19 @@ export const returnFromGraveyard: EffectPrimitive = (ctx) => {
   for (const id of chosen) moveOwnedCard(ctx, who, id, 'graveyard', 'hand');
 };
 
-// --- modal spells --------------------------------------------------------------------
-
-/** One mode of a modal card, as authored in the card's data. */
-interface ModeSpec {
-  readonly id: string;
-  readonly label: string;
-  /** What this mode does — ordinary effect refs, run if the mode is chosen. */
-  readonly effects?: readonly EffectRef[];
-  /**
-   * What the mode needs in order to be CHOOSABLE at all. MTG only lets you pick a
-   * mode whose targets are legal (CR 700.2), which is exactly why a Cryptic
-   * Command cast with no spell to counter is still a real card: the counter mode
-   * simply is not on the menu.
-   */
-  readonly requires?: ModeRequirement;
-}
-
-/** The target shapes a mode can require. Data, so the card states its own needs. */
-type ModeRequirement = 'targetSpell' | 'targetPermanent' | 'targetCreature';
-
-/** Whether this resolution's targets satisfy a mode's requirement. */
-function modeIsAvailable(ctx: EffectContext, requires: ModeRequirement | undefined): boolean {
-  if (!requires) return true;
-  switch (requires) {
-    case 'targetSpell':
-      return ctx.targets.some((t) => ctx.state.stack.some((o) => o.kind === 'spell' && o.instanceId === t));
-    case 'targetPermanent':
-      return ctx.targets.some((t) => ctx.state.battlefield.some((c) => c.instanceId === t));
-    case 'targetCreature':
-      return ctx.targets.some((t) => ctx.state.battlefield.some((c) => c.instanceId === t && isCreature(c.def)));
-    default:
-      return false;
-  }
-}
-
-/** Read the `modes` param, keeping only well-formed entries. */
-function modesParam(ctx: EffectContext): readonly ModeSpec[] {
-  const v = ctx.params.modes;
-  if (!Array.isArray(v)) return [];
-  return v.filter((m): m is ModeSpec => typeof m === 'object' && m !== null && typeof (m as ModeSpec).id === 'string');
-}
-
-/**
- * `modal` — "choose `params.count` —" then run the chosen modes' effects inside
- * this same resolution (Cryptic Command; every future modal card).
- *
- * The modes are DATA on the card; this primitive knows only how to ask and how to
- * enqueue. Chosen modes run in the order the card PRINTS them, not the order they
- * were picked, which is how MTG resolves a modal spell. Modes whose targets are
- * not legal for this cast are not offered (see {@link ModeSpec.requires}), and
- * core clamps the count to what is left, so a spell cast with nothing to counter
- * still resolves as the best legal version of itself instead of fizzling.
- */
-export const modal: EffectPrimitive = (ctx) => {
-  const count = intParam(ctx, 'count', 1);
-  const modes = modesParam(ctx);
-  if (modes.length === 0 || count <= 0) return;
-  const available = modes.filter((m) => modeIsAvailable(ctx, m.requires));
-  if (available.length === 0) return;
-  const chosen = ctx.chooseModes({
-    prompt: `Choose ${count} —`,
-    modes: available.map((m) => ({ id: m.id, label: m.label })),
-    min: count,
-    max: count,
-    valence: 'gain',
-  });
-  if (!chosen) return; // parked
-  const picked = new Set(chosen);
-  // Printed order, not answer order.
-  const refs = modes.filter((m) => picked.has(m.id)).flatMap((m) => m.effects ?? []);
-  ctx.enqueueEffects(refs);
-};
+// --- modal spells -------------------------------------------------------------------
+//
+// There is deliberately NO `modal` PRIMITIVE. A modal spell's modes are chosen
+// as it is CAST (CR 601.2b), not as it resolves, and a primitive only ever runs
+// during a resolution — so a primitive-based modal card could not help but let
+// its controller see the opponent's response before committing to a mode, which
+// is strictly better than the printed card.
+//
+// The system lives on the cast seam instead: `CardDefinition.modal` (core's
+// `ModalSpec`), announced and aimed by the engine's cast-time question pipeline,
+// and flattened into this resolution by `picksToResolution` (core's
+// `modal.ts`). The modes' own effects are ordinary primitives from this file
+// and `../primitives.ts`, which is exactly the composition the seam is for.
 
 // --- small battlefield primitives the modal card needs -------------------------------
 
@@ -1000,7 +940,6 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   revealTopCard,
   discardCard,
   returnFromGraveyard,
-  modal,
   returnToHand,
   tapPermanents,
   counterUnlessPaid,

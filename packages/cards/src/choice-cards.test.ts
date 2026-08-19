@@ -457,7 +457,7 @@ describe('Eternal Witness — its ETB returns the CHOSEN graveyard card', () => 
 
 // --- Cryptic Command -----------------------------------------------------------------
 
-describe('Cryptic Command — choose two, and both chosen modes happen', () => {
+describe('Cryptic Command — modes AND their targets are chosen at CAST', () => {
   function game(): { state: GameState; reg: Registry; spell: CardInstance } {
     const reg = buildRegistry();
     const state = gameAtMain(reg, SEEDS.cryptic, { A: ISLAND, B: ISLAND });
@@ -465,44 +465,73 @@ describe('Cryptic Command — choose two, and both chosen modes happen', () => {
     return { state, reg, spell: spell! };
   }
 
-  it('with no targets, only the two target-free modes exist — so both of them run', () => {
+  /** Cast Cryptic bare — a modal spell names no whole-card target. */
+  function cast(state: GameState, reg: Registry, spell: CardInstance): GameState {
+    floodMana(state, 'A');
+    return act(state, { kind: 'castSpell', player: 'A', instanceId: spell.instanceId }, reg);
+  }
+
+  it('announces its modes AT CAST — before the opponent may respond', () => {
     const { state, reg, spell } = game();
-    const theirs = place(state, SERRA, 'B');
-    const asked: PendingChoice[] = [];
+    place(state, SERRA, 'B');
 
-    const done = castAndSettle(state, reg, 'A', spell, (choice) => {
-      asked.push(choice);
-      return { kind: 'chooseModes', modeIds: ['tapAll', 'draw'] };
-    });
+    const afterCast = cast(state, reg, spell);
 
-    // "Choose two" of exactly two available modes has ONE legal answer, so the
-    // engine takes it rather than stopping the game to collect the only reply —
-    // and the card still does both halves.
-    expect(asked).toEqual([]);
-    expect(done.battlefield.find((c) => c.instanceId === theirs.instanceId)!.tapped).toBe(true);
+    // THE WHOLE POINT OF THE CAST-TIME SYSTEM: the question is standing while the
+    // spell is still being announced, so the caster commits to its modes before
+    // anybody has had priority to respond. A resolution-time modal spell could
+    // not do this — it would watch the response first and then decide.
+    expect(afterCast.pendingChoice?.kind).toBe('chooseModes');
+    expect(afterCast.stack).toHaveLength(1);
+    expect(afterCast.stack[0]!.kind === 'spell' && afterCast.stack[0]!.modePicks).toBeUndefined();
+  });
+
+  it('offers only the modes it could legally announce — no permanent, no bounce mode', () => {
+    const { state, reg, spell } = game();
+    // Nothing on the battlefield at all, so "return target permanent" has
+    // nothing to point at and is simply not on the menu (CR 601.2b).
+    const afterCast = cast(state, reg, spell);
+
+    const choice = afterCast.pendingChoice!;
+    // Counter IS on the menu, and the only spell it could name is Cryptic
+    // itself: a spell is an object on the stack while its own targets are being
+    // chosen, so targeting itself is legal (pointless, but legal — and the
+    // engine's job is to be faithful, not to protect a player from a bad
+    // choice). The AI prices it and never takes it; see `packages/ai`.
+    expect(choice.kind === 'chooseModes' && choice.modes.map((m) => m.id)).toEqual([
+      'counter',
+      'tapAll',
+      'draw',
+    ]);
+    const done = settle(afterCast, reg, (pending) =>
+      pending.kind === 'chooseModes'
+        ? { kind: 'chooseModes', modeIds: ['tapAll', 'draw'] }
+        : { kind: 'selectTargets', targets: [] },
+    );
     expect(done.players.A.hand).toHaveLength(1); // drew a card
   });
 
   it('a legal bounce target puts a third mode on the menu, and the pick is a real question', () => {
     const { state, reg, spell } = game();
     const theirs = place(state, SERRA, 'B');
-    const asked: PendingChoice[] = [];
 
-    const done = castAndSettle(
-      state,
-      reg,
-      'A',
-      spell,
-      (choice) => {
-        asked.push(choice);
-        return { kind: 'chooseModes', modeIds: ['tapAll', 'draw'] };
-      },
-      [theirs.instanceId],
-    );
-
-    const choice = asked[0]!;
-    expect(choice.kind === 'chooseModes' && choice.modes.map((m) => m.id)).toEqual(['bounce', 'tapAll', 'draw']);
+    const afterCast = cast(state, reg, spell);
+    const choice = afterCast.pendingChoice!;
+    // All four: counter can name Cryptic itself (see the previous test) and
+    // bounce can now name the Serra Angel.
+    expect(choice.kind === 'chooseModes' && choice.modes.map((m) => m.id)).toEqual([
+      'counter',
+      'bounce',
+      'tapAll',
+      'draw',
+    ]);
     expect([choice.min, choice.max]).toEqual([2, 2]);
+
+    const done = settle(afterCast, reg, (pending) =>
+      pending.kind === 'chooseModes'
+        ? { kind: 'chooseModes', modeIds: ['tapAll', 'draw'] }
+        : { kind: 'selectTargets', targets: [] },
+    );
     // The modes NOT chosen did not happen: the creature is still there, tapped.
     const stillThere = done.battlefield.find((c) => c.instanceId === theirs.instanceId);
     expect(stillThere).toBeDefined();
@@ -510,48 +539,99 @@ describe('Cryptic Command — choose two, and both chosen modes happen', () => {
     expect(done.players.A.hand).toHaveLength(1);
   });
 
-  it('bounce + draw: the targeted permanent goes back to its owner hand AND a card is drawn', () => {
+  it('bounce + draw: the chosen mode is aimed at cast, and both halves happen', () => {
     const { state, reg, spell } = game();
     const theirs = place(state, SERRA, 'B');
+    const mine = place(state, SERRA, 'A');
 
-    const done = castAndSettle(
-      state,
-      reg,
-      'A',
-      spell,
-      () => ({ kind: 'chooseModes', modeIds: ['bounce', 'draw'] }),
-      [theirs.instanceId],
-    );
+    let s = cast(state, reg, spell);
+    s = answer(s, reg, { kind: 'chooseModes', modeIds: ['bounce', 'draw'] });
+    // The bounce mode is aimed as its OWN question — two permanents are on the
+    // board, so this is a genuine choice and the engine asks it.
+    expect(s.pendingChoice?.kind).toBe('selectTargets');
+    s = answer(s, reg, { kind: 'selectTargets', targets: [theirs.instanceId] });
+    // Aimed, announced, and still on the stack: nothing has resolved yet.
+    expect(s.pendingChoice).toBeNull();
+    expect(s.stack).toHaveLength(1);
 
+    const done = settle(s, reg, () => ({ kind: 'confirm', yes: false }));
     expect(done.battlefield.some((c) => c.instanceId === theirs.instanceId)).toBe(false);
+    expect(done.battlefield.some((c) => c.instanceId === mine.instanceId)).toBe(true);
     expect(names(done.players.B.hand)).toEqual(['Serra Angel']);
     expect(done.players.A.hand).toHaveLength(1);
+  });
+
+  it('bounces a LAND — "target permanent" is not quietly narrowed to "creature"', () => {
+    const { state, reg, spell } = game();
+    const land = place(state, ISLAND, 'B');
+    place(state, SERRA, 'B');
+
+    let s = cast(state, reg, spell);
+    s = answer(s, reg, { kind: 'chooseModes', modeIds: ['bounce', 'draw'] });
+    s = answer(s, reg, { kind: 'selectTargets', targets: [land.instanceId] });
+    const done = settle(s, reg, () => ({ kind: 'confirm', yes: false }));
+
+    expect(done.battlefield.some((c) => c.instanceId === land.instanceId)).toBe(false);
+    expect(names(done.players.B.hand)).toEqual(['Island']);
   });
 
   it('counter + draw: the targeted spell is countered on the stack and a card is drawn', () => {
     const { state, reg, spell } = game();
     const [theirCreature] = setHand(state, 'B', [SERRA]);
-    // B casts at instant speed in A's main phase is not legal for a creature, so
-    // let B take the turn: A passes down to B's main phase.
+    // A creature is sorcery-speed, so let B take the turn: A passes down to B's
+    // main phase and answers the creature spell with an instant-speed Cryptic.
     let s = state;
     let guard = 0;
     while (!(s.activePlayer === 'B' && s.step === 'precombatMain') && guard++ < 200) s = pass(s, reg);
     floodMana(s, 'B');
     s = act(s, { kind: 'castSpell', player: 'B', instanceId: theirCreature!.instanceId }, reg);
-    // The caster keeps priority after casting; B passes it to A, who responds with
-    // Cryptic targeting the creature spell still on the stack.
     s = pass(s, reg);
     floodMana(s, 'A');
-    s = act(s, { kind: 'castSpell', player: 'A', instanceId: spell.instanceId, targets: [theirCreature!.instanceId] }, reg);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: spell.instanceId }, reg);
 
-    const done = settle(s, reg, (choice) => {
-      expect(choice.kind === 'chooseModes' && choice.modes.map((m) => m.id)).toEqual(['counter', 'tapAll', 'draw']);
-      return { kind: 'chooseModes', modeIds: ['counter', 'draw'] };
-    });
+    const choice = s.pendingChoice!;
+    expect(choice.kind === 'chooseModes' && choice.modes.map((m) => m.id)).toEqual([
+      'counter',
+      'tapAll',
+      'draw',
+    ]);
+    s = answer(s, reg, { kind: 'chooseModes', modeIds: ['counter', 'draw'] });
+    // TWO spells are on the stack — theirs and Cryptic itself — so aiming the
+    // counter mode is a genuine question, and it is asked at cast time.
+    expect(s.pendingChoice?.kind).toBe('selectTargets');
+    s = answer(s, reg, { kind: 'selectTargets', targets: [theirCreature!.instanceId] });
 
+    const done = settle(s, reg, () => ({ kind: 'confirm', yes: false }));
     expect(done.battlefield.some((c) => c.def.name === 'Serra Angel')).toBe(false);
     expect(names(done.players.B.graveyard)).toContain('Serra Angel');
     expect(done.players.A.hand).toHaveLength(1);
+  });
+
+  it('resolves the chosen modes in PRINTED order, not the order they were picked', () => {
+    const { state, reg, spell } = game();
+    place(state, SERRA, 'B');
+
+    let s = cast(state, reg, spell);
+    // Picked draw-then-bounce; Cryptic prints bounce (mode 2) before draw (mode 4).
+    s = answer(s, reg, { kind: 'chooseModes', modeIds: ['draw', 'bounce'] });
+    const picks = s.stack[0]!.kind === 'spell' ? s.stack[0]!.modePicks : undefined;
+    expect(picks?.map((p) => p.modeId)).toEqual(['bounce', 'draw']);
+  });
+
+  it('a mode whose target died in response does nothing — its sibling still resolves', () => {
+    const { state, reg, spell } = game();
+    const theirs = place(state, SERRA, 'B');
+
+    let s = cast(state, reg, spell);
+    s = answer(s, reg, { kind: 'chooseModes', modeIds: ['bounce', 'draw'] });
+    // Aiming is settled automatically (one legal permanent), so the pick is
+    // already on the stack object. Now the target leaves before resolution.
+    s.battlefield = s.battlefield.filter((c) => c.instanceId !== theirs.instanceId);
+
+    const done = settle(s, reg, () => ({ kind: 'confirm', yes: false }));
+    // CR 608.2b: the illegal mode simply does not happen; the rest still does.
+    expect(done.players.A.hand).toHaveLength(1);
+    expect(done.players.B.hand).toHaveLength(0);
   });
 });
 
