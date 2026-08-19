@@ -2005,6 +2005,48 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-permanent-enters-or-dies',
+    description:
+      '"Whenever a creature you control [with power N or greater] enters/dies, BODY" (Ajani\'s Welcome, Elemental Bond, Grave Pact)',
+    // Both halves of the same family: a board-watching trigger scoped by WHOSE
+    // permanent it is and narrowed by a printed `CardFilter`. The filter is the
+    // fidelity: a trigger that dropped "with power 3 or greater" would fire off
+    // every token, which is a strictly better card.
+    //
+    // "ANOTHER creature you control" deliberately does NOT match. The engine has
+    // no self-exclusion on these conditions, and a source that triggered off its
+    // own entry when the card says "another" is a different card, so those lines
+    // keep reporting.
+    pattern: new RegExp(
+      `^whenever an? (${Object.keys(SPELL_TYPE_WORDS).join('|')}) (you control|an opponent controls)(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))? (enters|dies), (.+)$`,
+    ),
+    build(match, ctx) {
+      const type = SPELL_TYPE_WORDS[match[1] ?? ''];
+      if (!type) return null;
+      const who = match[2] === 'you control' ? 'you' : 'opponent';
+      const filter = searchFilterFrom(match[1] ?? '', match[3], match[4], match[5]);
+      if (filter === null) return null;
+      const event = match[6] === 'enters' ? 'permanentEnters' : 'permanentDies';
+      const body = match[7] ?? '';
+      const optional = body.startsWith('you may ');
+      const inner = optional ? body.slice('you may '.length) : body;
+      const compiled = ctx.compileTriggerBody(inner);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
+      if (effectRefs === null) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: event, who, permanentFilter: filter },
+            effects: effectRefs,
+            label: `${match[1]} ${match[6]}: ${body}`,
+            ...(compiled.targets ? { targets: compiled.targets } : {}),
+          },
+        ],
+      };
+    },
+  },
+  {
     id: 'trigger-cast-spell',
     description: '"Whenever you cast a(n) TYPE spell, BODY" (incl. prowess-style text)',
     pattern: /^whenever you cast an? ([a-z ]+?) spell, (.+)$/,

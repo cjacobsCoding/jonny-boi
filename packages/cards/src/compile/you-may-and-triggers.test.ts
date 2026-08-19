@@ -923,3 +923,129 @@ describe('"At the beginning of your <step>" - the step-trigger family', () => {
     expect(after(theirs.instanceId)).toBe(true);
   });
 });
+
+// --- "Whenever a creature you control enters / dies" ------------------------------
+
+/** Ajani's Welcome - the plainest board-watching trigger there is. */
+const AJANIS_WELCOME = makeCard({
+  name: "Ajani's Welcome",
+  typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+  manaCost: { generic: 0, W: 1, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+  oracleText: 'Whenever a creature you control enters, you gain 1 life.',
+});
+
+/** Elemental Bond - the same trigger with a printed POWER restriction. */
+const ELEMENTAL_BOND = makeCard({
+  name: 'Elemental Bond',
+  typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+  manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
+  oracleText: 'Whenever a creature you control with power 3 or greater enters, draw a card.',
+});
+
+describe('"Whenever a creature you control enters/dies" - board-watching triggers', () => {
+  it("compiles Ajani's Welcome completely", () => {
+    const result = compileCard(AJANIS_WELCOME);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.condition).toEqual({
+      on: 'permanentEnters',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    });
+  });
+
+  it('compiles Elemental Bond with the printed POWER bound on the trigger', () => {
+    const result = compileCard(ELEMENTAL_BOND);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.condition).toEqual({
+      on: 'permanentEnters',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'], minPower: 3 },
+    });
+  });
+
+  it('REFUSES "another creature you control" - the engine has no self-exclusion here', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Another Watcher',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 2,
+        toughness: 2,
+        oracleText: 'Whenever another creature you control enters, you gain 1 life.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.triggers).toBeUndefined();
+  });
+
+  it("Ajani's Welcome gains life for YOUR creature and not the opponent's", () => {
+    const reg = buildRegistry();
+    const welcome = compileCard(AJANIS_WELCOME).definition;
+    const bear: CardDefinition = {
+      id: 'plainbear',
+      name: 'Test Bear',
+      types: ['creature'],
+      cost: { G: 1 },
+      power: 2,
+      toughness: 2,
+    };
+
+    const state = gameAtMain(reg, SEEDS.creatureEtb);
+    putOnBattlefield(state, welcome, 'A');
+    const before = state.players.A.life;
+
+    const mine = instance(bear, 'A', 'hand');
+    state.players.A.hand.push(mine);
+    floodMana(state, 'A');
+    const afterMine = settle(
+      act(state, { kind: 'castSpell', player: 'A', instanceId: mine.instanceId }, reg),
+      reg,
+      () => ({ kind: 'confirm', yes: true }),
+    );
+    expect(afterMine.players.A.life).toBe(before + 1);
+
+    // The opponent's creature entering is not "a creature you control".
+    const theirs = instance(bear, 'B', 'battlefield');
+    afterMine.battlefield.push(theirs);
+    const lifeAfterTheirs = settle(afterMine, reg, () => ({ kind: 'confirm', yes: true }));
+    expect(lifeAfterTheirs.players.A.life).toBe(before + 1);
+  });
+
+  it('Elemental Bond fires only for a creature big enough, exactly as printed', () => {
+    const reg = buildRegistry();
+    const bond = compileCard(ELEMENTAL_BOND).definition;
+    const small: CardDefinition = {
+      id: 'smallbear',
+      name: 'Test Small',
+      types: ['creature'],
+      cost: { G: 1 },
+      power: 2,
+      toughness: 2,
+    };
+    const big: CardDefinition = {
+      id: 'bigbear',
+      name: 'Test Big',
+      types: ['creature'],
+      cost: { G: 1 },
+      power: 3,
+      toughness: 3,
+    };
+
+    const play = (def: CardDefinition): number => {
+      const state = gameAtMain(reg, SEEDS.drawStep);
+      putOnBattlefield(state, bond, 'A');
+      const before = state.players.A.hand.length;
+      const card = instance(def, 'A', 'hand');
+      state.players.A.hand.push(card);
+      floodMana(state, 'A');
+      const settled = settle(
+        act(state, { kind: 'castSpell', player: 'A', instanceId: card.instanceId }, reg),
+        reg,
+        () => ({ kind: 'confirm', yes: true }),
+      );
+      return settled.players.A.hand.length - before;
+    };
+
+    expect(play(small)).toBe(0);
+    expect(play(big)).toBe(1);
+  });
+});
