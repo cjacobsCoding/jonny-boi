@@ -278,8 +278,8 @@ formulaic, repeat across cycles, and every deck plays 24 of them.
 >
 > **✅ SHIPPED on `feat/mana-ability-model` (2026-08-19): four of these five are now real.**
 > Core carries `CardDefinition.manaAbilities` — a per-ability additional cost, rider, activation
-> restriction and board-derived colours. **Re-measured offline against this same cached corpus:
-> 229 → 285 playable (10.9% → 13.6%), +56 cards** — the largest single-branch move the census has
+> restriction and board-derived colours. **Re-measured offline against this same cached corpus,
+> PAIRED against the same-day `main`: 307 → 363 playable (14.6% → 17.3%), +56 cards** — the largest single-branch move the census has
 > recorded, and comfortably ahead of alternative casting costs. The **spend restriction** (4 sole)
 > is NOT shipped and is the one that is genuinely a different system: it colours the MANA rather
 > than the source, so `ManaPool` would have to carry it and every payment path honour it. Two

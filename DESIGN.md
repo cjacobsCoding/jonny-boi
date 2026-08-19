@@ -1157,7 +1157,8 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
     `Int32Array` buffers — keeps its cost/rider apparatus behind two `anyTapCost`/`anyTapPain` flags
     that stay false on an ordinary board. The planner also now prefers the painless source when two
     taps close the same shortfall, and refuses to plan a payment that kills its own controller.
-  **Measured: 229 → 285 of the 2100-card most-played corpus (10.9% → 13.6%), +56 cards.**
+  **Measured PAIRED against the same cached corpus on the same day's `main`: 307 → 363 of 2100
+  (14.6% → 17.3%), +56 cards.** (Against the 229 baseline the brief was written from, the same +56.)
 
 Still open, roughly by how often they block a real decklist:
 - *aiming a trigger body at the player whose step or turn it is* ("At the beginning of each player's

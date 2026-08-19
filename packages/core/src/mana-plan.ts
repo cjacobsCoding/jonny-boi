@@ -254,7 +254,10 @@ export function planManaPayment(
     } else {
       const perm = findOnBattlefield(bf, action.instanceId);
       modes = perm ? manaModesOf(perm.def) : undefined;
-      lastExtras = perm ? manaExtrasOf(perm.def) : undefined;
+      // Inlined `manaAbilities` test for the same reason `pushManaTapActions`
+      // inlines it: one property read, no call, on the hottest path in the sim.
+      lastExtras =
+        perm && perm.def.manaAbilities !== undefined ? manaExtrasOf(perm.def) : undefined;
       lastSource = action.instanceId;
       lastModes = modes;
     }

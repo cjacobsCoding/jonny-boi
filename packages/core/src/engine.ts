@@ -1696,9 +1696,11 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
       if (!canActivateManaAbility(perm, manaCont)) continue;
     }
     // The rich mana model (costs / riders / restrictions / derived colours) is
-    // read ONCE per source and is `undefined` for every plain land and rock, so a
-    // board of ordinary sources pays a single property read for it.
-    const extras = manaExtrasOf(perm.def);
+    // read ONCE per source. The `manaAbilities` test is inlined rather than left
+    // to `manaExtrasOf` so the ordinary board — where no source has one — pays a
+    // single property read on an immutable definition and never a call, on the
+    // engine's hottest loop.
+    const extras = perm.def.manaAbilities === undefined ? undefined : manaExtrasOf(perm.def);
     for (let mode = 0; mode < modes.length; mode++) {
       if (extras !== undefined && manaModeBlockedReason(state, perm, extras[mode]) !== undefined) {
         continue;
