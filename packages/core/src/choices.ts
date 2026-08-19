@@ -314,6 +314,13 @@ export interface SelectPlayersRequest extends ChoiceRequestBase, ChoiceCountRequ
 export interface ChooseModesRequest extends ChoiceRequestBase, ChoiceCountRequest {
   readonly kind: 'chooseModes';
   readonly modes: readonly ChoiceMode[];
+  /**
+   * "You may choose the same mode more than once." (Fiery Confluence, every
+   * Confluence.) Two things change when it is set, and both matter: `max` stops
+   * being clamped down to the number of distinct modes, and the answer may
+   * repeat a mode id. Absent means the ordinary rule — each mode at most once.
+   */
+  readonly allowRepeats?: boolean;
 }
 
 export interface ConfirmRequest extends ChoiceRequestBase {
@@ -417,6 +424,8 @@ export interface SelectPlayersChoice extends PendingChoiceBase {
 export interface ChooseModesChoice extends PendingChoiceBase {
   readonly kind: 'chooseModes';
   readonly modes: readonly ChoiceMode[];
+  /** Whether one mode may be chosen several times. See the request's note. */
+  readonly allowRepeats: boolean;
 }
 
 export interface ConfirmChoice extends PendingChoiceBase {
@@ -485,6 +494,11 @@ export interface SelectPlayersAnswer {
 }
 export interface ChooseModesAnswer {
   readonly kind: 'chooseModes';
+  /**
+   * The chosen mode ids. On an `allowRepeats` choice a mode may appear several
+   * times, and HOW MANY times is part of the answer ("choose two, you may
+   * choose the same mode more than once" is two effects, possibly the same one).
+   */
   readonly modeIds: readonly string[];
 }
 export interface ConfirmAnswer {
@@ -640,8 +654,20 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
       };
     }
     case 'chooseModes': {
-      const { min, max } = normalizeCounts(request, request.modes.length);
-      return { ...base, kind: 'chooseModes', modes: request.modes.map((m) => ({ id: m.id, label: m.label })), min, max };
+      // With repeats allowed one mode can fill every slot, so the option COUNT
+      // no longer bounds the pick count — the printed number does. Clamping to
+      // `modes.length` there would silently shrink "choose three" on a two-mode
+      // Confluence, i.e. play the card as weaker than printed.
+      const allowRepeats = request.allowRepeats === true && request.modes.length > 0;
+      const { min, max } = normalizeCounts(request, allowRepeats ? MAX_REPEATED_MODE_PICKS : request.modes.length);
+      return {
+        ...base,
+        kind: 'chooseModes',
+        modes: request.modes.map((m) => ({ id: m.id, label: m.label })),
+        allowRepeats,
+        min,
+        max,
+      };
     }
     case 'confirm':
       return { ...base, kind: 'confirm', min: 1, max: 1 };
@@ -743,14 +769,30 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
         choice.max,
         'target',
       );
-    case 'chooseModes':
-      return validateSelection(
-        (answer as ChooseModesAnswer).modeIds,
-        choice.modes.map((m) => m.id),
-        choice.min,
-        choice.max,
-        'mode',
-      );
+    case 'chooseModes': {
+      const ids = (answer as ChooseModesAnswer).modeIds;
+      if (!choice.allowRepeats) {
+        return validateSelection(
+          ids,
+          choice.modes.map((m) => m.id),
+          choice.min,
+          choice.max,
+          'mode',
+        );
+      }
+      // The repeats form shares the count and membership rules and drops only
+      // the duplicate rule, so it is spelled out here rather than bent into
+      // `validateSelection` behind a flag no other caller would ever pass.
+      if (!Array.isArray(ids)) return invalid('the mode selection must be a list');
+      if (ids.length < choice.min) return invalid(`choose at least ${choice.min} mode(s)`);
+      if (ids.length > choice.max) return invalid(`choose at most ${choice.max} mode(s)`);
+      for (const id of ids) {
+        if (!choice.modes.some((mode) => mode.id === id)) {
+          return invalid(`${String(id)} is not one of the offered modes`);
+        }
+      }
+      return VALID;
+    }
     case 'confirm':
       return typeof (answer as ConfirmAnswer).yes === 'boolean' ? VALID : invalid('a yes/no answer must be a boolean');
     case 'payMana': {
@@ -805,8 +847,16 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
       return { kind: 'selectPlayers', players: choice.candidates.slice(0, choice.min) };
     case 'selectTargets':
       return { kind: 'selectTargets', targets: choice.candidates.slice(0, choice.min).map((c) => c.ref) };
-    case 'chooseModes':
+    case 'chooseModes': {
+      // With repeats allowed the first mode can legally fill every required
+      // slot, which is what makes a floor of three satisfiable on a two-mode
+      // card. Without them it is the first `min` distinct modes, as ever.
+      if (choice.allowRepeats && choice.modes.length > 0) {
+        const first = (choice.modes[0] as ChoiceMode).id;
+        return { kind: 'chooseModes', modeIds: new Array<string>(choice.min).fill(first) };
+      }
       return { kind: 'chooseModes', modeIds: choice.modes.slice(0, choice.min).map((m) => m.id) };
+    }
     case 'confirm':
       // Declining is the no-op branch of "you may", so it is the safe default.
       return { kind: 'confirm', yes: false };
@@ -849,7 +899,12 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       // as playable and then fizzle the moment the board grew a second option.)
       return choice.min === choice.max && (choice.min === 0 || choice.min === choice.candidates.length);
     case 'chooseModes':
-      return choice.min === choice.max && (choice.min === 0 || choice.min === choice.modes.length);
+      if (choice.min !== choice.max) return false;
+      if (choice.min === 0) return true;
+      // With repeats, a ONE-mode menu has exactly one legal answer whatever the
+      // count ("choose two" of one mode is that mode twice). Without them, the
+      // only forced answer is "take them all".
+      return choice.allowRepeats ? choice.modes.length === 1 : choice.min === choice.modes.length;
     case 'confirm':
       return false;
     case 'payMana':
@@ -915,6 +970,39 @@ function boundedSubsets<T>(items: readonly T[], min: number, max: number, limit:
 }
 
 /**
+ * Multisets of `items` sized `min..max` — subsets that MAY repeat an item, for
+ * "you may choose the same mode more than once". Non-decreasing by index, so
+ * each combination appears exactly once and the order is deterministic (the
+ * same seeded sim reproduces the same menu).
+ */
+function boundedMultisets<T>(items: readonly T[], min: number, max: number, limit: number): T[][] {
+  const out: T[][] = [];
+  const current: T[] = [];
+  const walk = (start: number): void => {
+    if (out.length >= limit) return;
+    if (current.length >= min) out.push([...current]);
+    if (current.length >= max) return;
+    for (let i = start; i < items.length; i++) {
+      if (out.length >= limit) return;
+      current.push(items[i] as T);
+      // `i`, not `i + 1` — that one character is the whole difference from
+      // `boundedSubsets`: an item may be taken again.
+      walk(i);
+      current.pop();
+    }
+  };
+  walk(0);
+  return out;
+}
+
+/**
+ * The ceiling on a repeated-mode pick count. Real cards choose two or three;
+ * this exists so a malformed record cannot normalise into an unbounded
+ * enumeration.
+ */
+const MAX_REPEATED_MODE_PICKS = 16;
+
+/**
  * The answers a pilot may pick from for a pending choice — always at least one.
  *
  * For an ORDERED selection we enumerate each subset in candidate order only; a
@@ -947,9 +1035,10 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
     }
     case 'chooseModes': {
       const ids = choice.modes.map((m) => m.id);
-      const answers = boundedSubsets(ids, choice.min, choice.max, limit).map(
-        (modeIds): ChoiceAnswer => ({ kind: 'chooseModes', modeIds }),
-      );
+      const combos = choice.allowRepeats
+        ? boundedMultisets(ids, choice.min, choice.max, limit)
+        : boundedSubsets(ids, choice.min, choice.max, limit);
+      const answers = combos.map((modeIds): ChoiceAnswer => ({ kind: 'chooseModes', modeIds }));
       return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
     }
     case 'confirm':
@@ -1077,6 +1166,29 @@ export interface ResolutionFrame {
   xValue?: number;
   /** Whether the kicker was paid at cast time. Absent when there is no kicker. */
   kicked?: boolean;
+  /**
+   * How many times the MULTIKICKER was paid at cast time, carried off the
+   * stack object for the same reason as {@link xValue}: "for each time it was
+   * kicked" is read during a resolution that outlives the stack object.
+   */
+  kickCount?: number;
+  /**
+   * PER-EFFECT targets, parallel to {@link effects} — entry `i` is what
+   * `effects[i]` points at, or `undefined` to fall back to the frame-wide
+   * {@link targets}.
+   *
+   * This exists for exactly one reason: a MODAL spell's chosen modes each
+   * aim at their own object ("Counter target spell" + "Return target permanent
+   * to its owner's hand" is two different targets in one resolution), which
+   * one frame-wide list cannot express. Everything else leaves it absent and
+   * reads `targets` exactly as before.
+   *
+   * ⚠️ It is a PARALLEL ARRAY, so anything that splices `effects` must splice
+   * this in lockstep — `enqueueEffects` does, and a test pins it. The
+   * alternative (an object per effect) would have changed a shape every
+   * consumer, every clone and every serialized state already agrees on.
+   */
+  effectTargets?: Array<ReadonlyArray<InstanceId | PlayerId> | undefined>;
   /** The ability's source permanent + label (trigger frames only). */
   sourceInstanceId?: InstanceId;
   label?: string;

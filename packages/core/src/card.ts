@@ -740,6 +740,33 @@ function conditionMet(
   return true;
 }
 
+/**
+ * The face of `def` a `'front'`/`'back'` choice names, or `undefined` when the
+ * card has no such playable face.
+ *
+ * `'back'` resolves only for a MODAL double-faced card
+ * ({@link CardDefinition.backFaceCastable}). A transforming DFC's back face is
+ * reached by a transform instruction and never by a cast or a land play (CR
+ * 712.8b), so asking for it here yields `undefined` and the caller rejects —
+ * which is what keeps a hostile online client (or a hand-built test) from
+ * casting the 3/2 Aberration half of a Delver directly.
+ */
+export function playableFaceOf(def: CardDefinition, face: 'front' | 'back' | undefined): CardDefinition | undefined {
+  if (face !== 'back') return def;
+  if (def.backFaceCastable !== true) return undefined;
+  return def.backFace;
+}
+
+/**
+ * Whether this definition offers a second, CASTABLE face — the one question
+ * every "offer both halves of this card" loop asks. Written as its own
+ * predicate so the offer (`generateLegalActions`) and the accept
+ * (`applyCastSpell`/`applyPlayLand`) cannot drift apart.
+ */
+export function hasCastableBackFace(def: CardDefinition): boolean {
+  return def.backFaceCastable === true && def.backFace !== undefined;
+}
+
 /** Resolve a definition's casting timing, defaulting to sorcery-speed. */
 export function castTiming(def: CardDefinition): CastTiming {
   if (def.timing) return def.timing;

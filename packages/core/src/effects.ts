@@ -57,6 +57,13 @@ export interface EffectContext {
   readonly xValue?: number;
   /** Whether the spell's kicker was paid at cast time ("if this spell was kicked"). */
   readonly kicked?: boolean;
+  /**
+   * How many times the spell's MULTIKICKER was paid at cast time — what "for
+   * each time it was kicked" counts. `undefined` for a resolution with no
+   * multikicker; a single (non-multi) kicker leaves this alone and is read
+   * through {@link kicked}.
+   */
+  readonly kickCount?: number;
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -275,6 +282,7 @@ export function applyEffectRef(
     params: ref.params ?? {},
     xValue: base.xValue,
     kicked: base.kicked,
+    kickCount: base.kickCount,
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
@@ -323,7 +331,10 @@ export function applyEffectRef(
 }
 
 /** The parts of an `EffectContext` the caller supplies; the rest are wired here. */
-export type EffectContextBase = Pick<EffectContext, 'state' | 'source' | 'controller' | 'xValue' | 'kicked'>;
+export type EffectContextBase = Pick<
+  EffectContext,
+  'state' | 'source' | 'controller' | 'xValue' | 'kicked' | 'kickCount'
+>;
 
 /**
  * Answer a question raised with no resolution to park into: normalise it, take the

@@ -217,6 +217,30 @@ export const STEP_ORDER: readonly Step[] = [
 export const MAIN_STEPS: readonly Step[] = ['precombatMain', 'postcombatMain'];
 
 /**
+ * ONE announced mode of a modal spell — which mode was chosen, and what that
+ * mode was aimed at.
+ *
+ * Modes and their targets are both chosen as the spell is CAST (CR 601.2b/c),
+ * so a pick is finished data by the time the spell can resolve. Its own
+ * `targets` list is what makes "Choose two — • Counter target spell • Return
+ * target permanent to its owner's hand" possible at all: the two chosen modes
+ * point at DIFFERENT objects, which one `SpellStackObject.targets` list cannot
+ * express.
+ *
+ * One entry per PICK, not per mode: a spell that lets you choose the same mode
+ * more than once records it once per time it was chosen, each with its own aim.
+ */
+export interface ModePick {
+  /** The chosen `SpellMode.id`. */
+  readonly modeId: string;
+  /**
+   * What this mode points at — one target, or empty for a target-free mode.
+   * Absent (rather than empty) while the engine is still asking for it.
+   */
+  readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+}
+
+/**
  * A spell (or permanent) on the stack: a card instance moving through the stack.
  * Carries the resolving instance and resolves to a zone. Resolution is LIFO.
  */

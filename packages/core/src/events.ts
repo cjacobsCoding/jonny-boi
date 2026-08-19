@@ -181,6 +181,39 @@ export type GameEvent =
     }
   | {
       /**
+       * A modal spell's modes were ANNOUNCED as it was cast (CR 601.2b). Public
+       * information — in paper the caster says the modes out loud before anyone
+       * may respond — so the labels are carried plainly and a replay can show
+       * what the opponent knew when they decided whether to counter.
+       *
+       * Separate from `spellCast` because they are separate moments: the spell
+       * is on the stack first, then its modes are announced, and a Cryptic
+       * Command whose modes are chosen while a response is already on the stack
+       * would be a different card.
+       */
+      readonly type: 'modesChosen';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      /** The chosen modes' printed labels, in printed order, one per pick. */
+      readonly modes: readonly string[];
+    }
+  | {
+      /**
+       * One announced mode was aimed (CR 601.2c). Its own event, rather than a
+       * list on `modesChosen`, because each mode is aimed as its own question --
+       * and because a two-mode Command aims at two different objects, which a
+       * single targets list on the cast could never express.
+       */
+      readonly type: 'modeTargetChosen';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      /** The aimed mode's printed label. */
+      readonly mode: string;
+      readonly targets: ReadonlyArray<InstanceId | PlayerId>;
+    }
+  | {
+      /**
        * A triggered ability left the stack WITHOUT resolving — today only because
        * it had no legal target when it needed one (CR 603.3d). Its own event
        * rather than a silent removal: a trigger that vanishes with no trace in the
