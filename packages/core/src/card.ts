@@ -19,7 +19,15 @@ import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
-export type CardType = 'land' | 'creature' | 'instant' | 'sorcery' | 'artifact' | 'enchantment' | 'planeswalker';
+export type CardType =
+  | 'land'
+  | 'creature'
+  | 'instant'
+  | 'sorcery'
+  | 'artifact'
+  | 'enchantment'
+  | 'planeswalker'
+  | 'battle';
 
 /**
  * Keyword ability flags the combat/turn systems read as data. Core implements the
@@ -203,6 +211,25 @@ export interface CardDefinition {
    * it rather than inventing a number.
    */
   readonly loyalty?: number;
+  /**
+   * Printed starting DEFENSE — battles only. The permanent ENTERS with this many
+   * defense counters (CR 310.4), stored in `CardInstance.counters` under
+   * {@link DEFENSE_COUNTER}'s key ('defense'); damage dealt to a battle removes
+   * that many defense counters (CR 120.3d), and a battle with none is put into
+   * its owner's graveyard by a state-based action. A battle definition without
+   * this cannot be played faithfully, so the compiler refuses it rather than
+   * inventing a number — the exact contract printed loyalty already has.
+   */
+  readonly defense?: number;
+  /**
+   * The printed **Legendary** supertype. Load-bearing, not decorative: the
+   * legend rule (CR 704.5j) is a state-based action keyed on exactly this flag —
+   * a player who controls two or more legendary permanents with the same name
+   * chooses one and the rest go to their owners' graveyards. One shared flag for
+   * every permanent type (creatures, planeswalkers, battles, artifacts…), so the
+   * rule has one implementation rather than a walker-only special case.
+   */
+  readonly legendary?: boolean;
   readonly keywords?: KeywordFlags;
   /**
    * Ordered effects run when this spell resolves (instants/sorceries) or as the
@@ -441,7 +468,8 @@ export function isPermanentType(def: CardDefinition): boolean {
     hasType(def, 'creature') ||
     hasType(def, 'artifact') ||
     hasType(def, 'enchantment') ||
-    hasType(def, 'planeswalker')
+    hasType(def, 'planeswalker') ||
+    hasType(def, 'battle')
   );
 }
 
@@ -453,15 +481,23 @@ export function isPlaneswalker(def: CardDefinition): boolean {
   return hasType(def, 'planeswalker');
 }
 
+export function isBattle(def: CardDefinition): boolean {
+  return hasType(def, 'battle');
+}
+
 /**
  * Whether this permanent is a non-player object that ATTACKERS may be declared
- * against — today exactly the planeswalkers, tomorrow battles too. Combat asks
- * this ONE question (declaration legality, damage routing, the AI's target menu)
- * so a future attackable kind plugs in here without touching the combat code
- * again.
+ * against — planeswalkers and battles (CR 508.1). Combat asks this ONE question
+ * (declaration legality, damage routing, the AI's target menu) so a future
+ * attackable kind plugs in here without touching the combat code again.
+ *
+ * WHO may attack it differs by kind and is a separate question — see
+ * `protectorOf` in state.ts: a walker is defended by its controller, a battle by
+ * its PROTECTOR (its controller's opponent), which is why "attack my own battle"
+ * is legal and "attack my own walker" is not.
  */
 export function isAttackable(def: CardDefinition): boolean {
-  return isPlaneswalker(def);
+  return isPlaneswalker(def) || isBattle(def);
 }
 
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */

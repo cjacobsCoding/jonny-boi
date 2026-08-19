@@ -28,8 +28,16 @@
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import type { GameEvent } from '../events.js';
 import type { KeywordFlags } from '../card.js';
-import { effectivePower, effectiveKeywords, loyaltyOf, remainingToughness, removeLoyalty } from './stats.js';
-import { isPlaneswalker } from '../card.js';
+import {
+  defenseOf,
+  effectivePower,
+  effectiveKeywords,
+  loyaltyOf,
+  remainingToughness,
+  removeDefense,
+  removeLoyalty,
+} from './stats.js';
+import { isBattle, isPlaneswalker } from '../card.js';
 import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
 import type { ContinuousIndex } from './continuous.js';
@@ -152,6 +160,15 @@ function applyDamage(
     if (removed > 0) {
       emit({ type: 'loyaltyChanged', instanceId: target.instanceId, delta: -removed, to: loyaltyOf(target) });
     }
+  } else if (isBattle(target.def)) {
+    // Damage to a battle removes that many DEFENSE counters immediately
+    // (CR 120.3d) — the exact shape of walker loyalty, and the 0-defense
+    // defeat is likewise the SBA pass that follows the damage step.
+    const removed = removeDefense(target, amount);
+    emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
+    if (removed > 0) {
+      emit({ type: 'defenseChanged', instanceId: target.instanceId, delta: -removed, to: defenseOf(target) });
+    }
   } else {
     // Protection's second half: damage from a source with a protected quality
     // is PREVENTED (CR 702.16e). Lifelink below is skipped with it — no damage
@@ -209,11 +226,14 @@ function dealToAttackedObject(
   }
   const object = findOnBattlefield(state, attacked);
   if (!object) return; // the attacked permanent is gone — no damage, no redirect
-  if (isPlaneswalker(object.def) && kw(attacker, index).trample) {
-    const lethal = loyaltyOf(object);
-    const toWalker = Math.min(amount, lethal);
-    applyDamage(state, attacker, object, toWalker, index, emit);
-    applyDamage(state, attacker, defendingPlayer, amount - toWalker, index, emit);
+  if (kw(attacker, index).trample && (isPlaneswalker(object.def) || isBattle(object.def))) {
+    // CR 702.19i/702.19j: trampling past an attacked walker (its loyalty is
+    // lethal) or an attacked battle (its remaining defense is lethal) carries
+    // the excess to the defending player — who, for a battle, IS its protector.
+    const lethal = isBattle(object.def) ? defenseOf(object) : loyaltyOf(object);
+    const toObject = Math.min(amount, lethal);
+    applyDamage(state, attacker, object, toObject, index, emit);
+    applyDamage(state, attacker, defendingPlayer, amount - toObject, index, emit);
     return;
   }
   applyDamage(state, attacker, object, amount, index, emit);

@@ -17,8 +17,9 @@
 import type { CardInstance, GameState, PlayerId } from '../state.js';
 import { PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
-import { isCreature, isPlaneswalker } from '../card.js';
-import { effectiveToughness, loyaltyOf, remainingToughness } from './stats.js';
+import { isBattle, isCreature, isPlaneswalker } from '../card.js';
+import { cardOption, choiceOptionCount, normalizeChoiceRequest } from '../choices.js';
+import { defenseOf, effectiveToughness, loyaltyOf, remainingToughness } from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
 import { indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './continuous.js';
 import { detachFromHost, isLegallyAttached } from '../attachments.js';
@@ -82,6 +83,25 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
         if (state.battlefield.length >= walkerSizeBefore) cursor += 1;
         continue;
       }
+      // CR 704.5x (generic outcome): a battle with no defense counters is put
+      // into its owner's graveyard. Sieges additionally print an exile-and-cast
+      // reward — that half needs the castable-second-face system, and cards
+      // printing it stay reported by the compiler, so a battle reaching 0 here
+      // gives up nothing the game claimed to play. Same cursor mechanics as the
+      // walker check above.
+      if (isBattle(inst.def) && !isCreature(inst.def)) {
+        if (defenseOf(inst) > 0) {
+          cursor += 1;
+          continue;
+        }
+        const battleSizeBefore = state.battlefield.length;
+        emit({ type: 'battleDefeated', instanceId: inst.instanceId, name: inst.def.name });
+        moveToZone(state, inst, 'graveyard', emit, inst.owner);
+        resetInstanceForNewZone(inst);
+        changed = true;
+        if (state.battlefield.length >= battleSizeBefore) cursor += 1;
+        continue;
+      }
       if (!isCreature(inst.def)) {
         cursor += 1;
         continue;
@@ -114,6 +134,15 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
 
     // If exactly one player remains, the other wins.
     if (resolveWinner(state, emit)) changed = true;
+
+    // The legend rule (CR 704.5j) — checked LAST in the pass, once nothing else
+    // is changing the board, because it may have to STOP the fixpoint: which
+    // copy survives is the controlling player's choice, and a state-based action
+    // cannot decide it for them. When a duplicate exists the choice is parked
+    // and this whole check returns; the answer handler removes the losers and
+    // re-runs the SBAs, so cascades (an Aura on the discarded copy, a second
+    // duplicated name, the OTHER player's duplicates) settle then.
+    if (!changed && !state.gameOver && checkLegendRule(state, emit)) return;
   }
 
   // A temporary modification only exists while its permanent is on the battlefield.

@@ -154,6 +154,58 @@ export type GameEvent =
       readonly instanceId: InstanceId;
       readonly name: string;
     }
+  | {
+      /**
+       * A battle's defense changed — it entered with its printed counters, or
+       * damage removed some (CR 120.3d). Its own event (not `counterAdded`) for
+       * the same reason loyalty has one: defense is the battle's life total, and
+       * a replay, the inspector and the UI all need "at what defense is it NOW",
+       * which `to` answers directly.
+       */
+      readonly type: 'defenseChanged';
+      readonly instanceId: InstanceId;
+      readonly delta: number;
+      readonly to: number;
+    }
+  | {
+      /**
+       * A battle with no defense counters was put into its owner's graveyard by
+       * a state-based action (CR 704.5x's generic outcome). Named apart from
+       * `creatureDied`/`planeswalkerDied` so a log reader can tell a defeated
+       * battle from either. The Siege reward — exile it and cast the back face —
+       * needs the castable-second-face system and is NOT modelled yet; cards
+       * printing it stay reported by the compiler, so this event never
+       * under-delivers a printed reward in a real game.
+       */
+      readonly type: 'battleDefeated';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * The legend rule was applied (CR 704.5j): `player` controlled two or more
+       * legendary permanents named `name`, chose to keep `keptInstanceId`, and
+       * the rest went to their owners' graveyards (each departure emitting its
+       * own died/zoneChange events). The choice itself arrives as the ordinary
+       * choiceAsked/choiceAnswered pair; this event is the rule's verdict.
+       */
+      readonly type: 'legendRuleApplied';
+      readonly player: PlayerId;
+      readonly name: string;
+      readonly keptInstanceId: InstanceId;
+    }
+  | {
+      /**
+       * An EMBLEM was created in `controller`'s command zone — a game object
+       * with no physical presence: not a permanent, not targetable, and nothing
+       * in the game can remove it (CR 114). Its statics and triggers work from
+       * the command zone exactly as a permanent's would from the battlefield.
+       */
+      readonly type: 'emblemCreated';
+      readonly instanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly name: string;
+    }
   | { readonly type: 'playerLost'; readonly player: PlayerId; readonly reason: string }
   | { readonly type: 'gameOver'; readonly winner: PlayerId | null }
   | { readonly type: 'actionRejected'; readonly reason: string }
