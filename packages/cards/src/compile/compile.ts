@@ -271,6 +271,7 @@ interface Assembly {
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
+  entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /** The printed "Kicker {COST}", once some line prints it. */
   kicker?: ManaCost;
   /** The printed "Multikicker {COST}" — an additional cost paid any number of times. */
@@ -311,6 +312,9 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
+  }
+  if (contribution.entersTappedUnlessRevealed !== undefined) {
+    assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
   }
   if (contribution.kicker) assembly.kicker = contribution.kicker;
   if (contribution.multikicker) assembly.multikicker = contribution.multikicker;
@@ -671,11 +675,15 @@ export function compileCard(card: CompilableCard): CompileResult {
 
   // --- type line -------------------------------------------------------------
   // SUPERTYPES were parsed but never read until the legend rule needed one.
-  // "Legendary" is the only supertype with engine meaning today; "Basic" and
-  // "Snow" have none here (a basic land's mana comes from its land TYPES, and
-  // no card in reach cares about snow), so they are correctly ignored rather
-  // than reported — ignoring them changes nothing a game could observe.
-  const isLegendary = card.typeLine.supertypes.some((printed) => printed.toLowerCase() === 'legendary');
+  // Two of them now carry engine meaning: **Legendary** (CR 704.5j) and
+  // **Basic**, which the battlelands' "unless you control two or more basic
+  // lands" counts and which no other characteristic can answer (a nonbasic dual
+  // prints the same land subtypes as two basics). "Snow" still has none — no
+  // card in reach cares — so it is ignored rather than reported, which changes
+  // nothing a game could observe.
+  const supertypes = card.typeLine.supertypes.map((printed) => printed.toLowerCase());
+  const isLegendary = supertypes.includes('legendary');
+  const isBasic = supertypes.includes('basic');
   const types: CardType[] = [];
   for (const printed of card.typeLine.types) {
     const key = printed.toLowerCase();
@@ -1012,6 +1020,9 @@ export function compileCard(card: CompilableCard): CompileResult {
     // supertype list rather than from the raw type line so a card whose name
     // happens to contain the word is not mistaken for one.
     ...(isLegendary ? { legendary: true } : {}),
+    // The printed **Basic** supertype — read by the battlelands' enters-untapped
+    // condition (see `EntersUntappedCondition.minBasicLands`).
+    ...(isBasic ? { basic: true } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain
     // or Plains card") match a dual land the way the printed card does.
@@ -1020,6 +1031,9 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.entersTappedUnless ? { entersTappedUnless: assembly.entersTappedUnless } : {}),
+    ...(assembly.entersTappedUnlessRevealed !== undefined
+      ? { entersTappedUnlessRevealed: assembly.entersTappedUnlessRevealed }
+      : {}),
     ...(assembly.entersTappedUnlessLifePaid !== undefined
       ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
       : {}),

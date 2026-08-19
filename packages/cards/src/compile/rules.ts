@@ -122,6 +122,7 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  * better than the printed card.
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
+const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
@@ -235,10 +236,31 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   // Blocking restrictions: menace constrains the whole declaration, and
   // "can't be blocked" is checked per pair. Both are engine-enforced.
   menace: 'menace',
+  // Indestructible is a flag like any other here, but what it EXEMPTS is narrow
+  // and specific - destruction effects and lethal damage, never 0 toughness or a
+  // sacrifice. See `KeywordFlags.indestructible` in core for the whole rule.
+  indestructible: 'indestructible',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
 const KEYWORD_TOKEN = `(${Object.keys(KEYWORD_FLAGS).join('|')})`;
+
+/**
+ * The printed nouns an anthem-shaped static may select, mapped to the card type
+ * its filter should carry. `null` means NO type entry: "permanents you control"
+ * reaches everything, and an absent filter is exactly that.
+ *
+ * A CLOSED table. A noun outside it ("Zombies you control", "creatures you
+ * control with flying") selects by a subtype or by a characteristic the static
+ * filter deliberately cannot read, so those lines keep reporting.
+ */
+const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.freeze({
+  creature: 'creature',
+  permanent: null,
+  artifact: 'artifact',
+  enchantment: 'enchantment',
+  land: 'land',
+});
 
 /**
  * Colour words Oracle uses, mapped to colour letters — in removal restrictions
@@ -261,6 +283,21 @@ const COLOR_WORDS: Readonly<Record<string, ManaColor>> = Object.freeze({
 const LAND_FILTER = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
 
 /**
+ * Every card type that can be a permanent, in the engine's own vocabulary. It is
+ * what "all permanents" means; "all NONLAND permanents" is this list with lands
+ * excluded, which is how the printed phrase is written rather than as a
+ * hand-maintained five-type list that could drift from `isPermanentType`.
+ */
+const PERMANENT_TYPES: readonly CardType[] = Object.freeze([
+  'land',
+  'creature',
+  'artifact',
+  'enchantment',
+  'planeswalker',
+  'battle',
+]);
+
+/**
  * The five basic land types. A fetchland selects by these, and restricting the
  * fetch template to them keeps it from matching a search for some other card
  * type whose retrieval this template does not actually implement.
@@ -272,6 +309,96 @@ const LAND_SUBTYPES: ReadonlySet<string> = new Set([
   'mountain',
   'forest',
 ]);
+
+/**
+ * The printed SUBTYPES a library search may name — a closed table, extended one
+ * printed card at a time.
+ *
+ * It is closed on purpose. The template reads "search your library for a ___
+ * card", and the blank is either a card TYPE ("artifact") or a subtype
+ * ("Goblin"). Accepting any unrecognised word as a subtype would compile a
+ * search for "a **legendary** creature card" or "a **colorless** card" into a
+ * filter that matches nothing at all — a tutor that can never find, which is
+ * strictly worse than the printed card and completely silent about it. A word
+ * that is not in here keeps reporting instead.
+ *
+ * Everything listed is checked case-insensitively against the printed subtypes
+ * the compiler emits (`matchesCardFilter` → `hasSubtype`).
+ */
+const SEARCHABLE_SUBTYPES: ReadonlySet<string> = new Set([
+  // Land types (the fetchlands and the basic-land searches).
+  'plains',
+  'island',
+  'swamp',
+  'mountain',
+  'forest',
+  // Artifact/enchantment types.
+  'equipment',
+  'aura',
+  // Creature types named by the tutors in the most-played corpus.
+  'goblin',
+  'dragon',
+  'demon',
+]);
+
+/**
+ * The numeric restriction a search may print — "with mana value 1 or less",
+ * "with toughness 2 or less", "with power 4 or greater", "with mana value 2".
+ *
+ * Each printed characteristic maps to the pair of {@link CardFilter} bound
+ * fields it sets, so the bound and the direction cannot drift apart. A
+ * characteristic outside this table is not expressible and rejects the rule
+ * rather than being dropped — a dropped restriction is a strictly better tutor.
+ */
+const SEARCH_BOUND_FIELDS: Readonly<Record<string, { readonly min: string; readonly max: string }>> =
+  Object.freeze({
+    'mana value': Object.freeze({ min: 'minManaValue', max: 'maxManaValue' }),
+    power: Object.freeze({ min: 'minPower', max: 'maxPower' }),
+    toughness: Object.freeze({ min: 'minToughness', max: 'maxToughness' }),
+  });
+
+/** The alternation of the characteristics above, for the search patterns. */
+const SEARCH_BOUND_PHRASE = `(${Object.keys(SEARCH_BOUND_FIELDS).join('|')})`;
+
+/**
+ * Turn "an artifact card with mana value 1 or less" into the `CardFilter` that
+ * finds exactly those cards, or `null` when any part of the phrase is outside
+ * what the filter can say.
+ *
+ * `noun` is the word before "card" — a card type or a {@link SEARCHABLE_SUBTYPES}
+ * subtype. The three bound arguments are the optional "with X N [or less |
+ * or greater]" tail; **no** direction word means an EXACT value (Tribute Mage's
+ * "with mana value 2"), which is both bounds set to the same number.
+ */
+function searchFilterFrom(
+  noun: string,
+  characteristic?: string,
+  amount?: string,
+  direction?: string,
+): Record<string, unknown> | null {
+  const filter: Record<string, unknown> = {};
+  const type = SPELL_TYPE_WORDS[noun];
+  if (type) {
+    filter.anyOfTypes = [type];
+  } else if (SEARCHABLE_SUBTYPES.has(noun)) {
+    filter.anyOfSubtypes = [noun];
+  } else {
+    return null; // not a restriction this filter can express — report the line
+  }
+
+  if (characteristic === undefined) return filter;
+  const fields = SEARCH_BOUND_FIELDS[characteristic];
+  if (!fields) return null;
+  const value = Number.parseInt(amount ?? '', 10);
+  if (!Number.isFinite(value)) return null;
+  if (direction === 'less') filter[fields.max] = value;
+  else if (direction === 'greater') filter[fields.min] = value;
+  else {
+    filter[fields.min] = value;
+    filter[fields.max] = value;
+  }
+  return filter;
+}
 
 /**
  * The printed restrictions a "you choose a ___ card from it" discard may carry,
@@ -743,6 +870,27 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'untap-all-permanents',
+    description:
+      '"Untap all lands you control" / "Untap all nonland permanents you control" (Wilderness Reclamation, Unstoppable Plan)',
+    // The mirror of `tap-all-creatures`, on the same primitive: untapping is the
+    // same traversal with the flag flipped, so it is data rather than a second
+    // mechanism. "Nonland permanents" is the full permanent-type list minus
+    // lands — written as an exclusion so it cannot drift from what a permanent is.
+    pattern: /^untap all (lands|nonland permanents|creatures) you control$/,
+    build(match) {
+      const what = match[1] ?? '';
+      const params: Record<string, unknown> = { who: 'controller', untap: true };
+      if (what === 'lands') params.types = ['land'];
+      else if (what === 'creatures') params.types = ['creature'];
+      else {
+        params.types = [...PERMANENT_TYPES];
+        params.excludeTypes = ['land'];
+      }
+      return effects({ primitive: 'tapPermanents', params });
+    },
+  },
+  {
     id: 'modal-choose',
     description:
       '"Choose one/two/one or both/up to N — • MODE • MODE" (charms, commands, confluences), optionally with "You may choose the same mode more than once" — modes and their targets are chosen AT CAST (CR 601.2b/c)',
@@ -1152,6 +1300,57 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The MASS grant: "Creatures you control gain indestructible until end of
+    // turn" (Selfless Spirit), "Permanents you control gain hexproof and
+    // indestructible until end of turn" (Heroic Intervention).
+    //
+    // It is its own primitive rather than a flag on the single-target grant
+    // because it TARGETS NOTHING: there is no chosen creature and no legality
+    // question, and the set it reaches is read off the board at resolution. Nor
+    // is it a static - the grant outlives the spell that made it (to cleanup)
+    // and reaches only what was on the battlefield when it resolved.
+    id: 'mass-grant-keyword-until-eot',
+    description: '"Creatures/permanents you control gain KEYWORDS until end of turn"',
+    pattern: new RegExp(
+      `^(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control gain (.+) until end of turn$`,
+    ),
+    build(match) {
+      const nounType = STATIC_NOUN_TYPES[match[1] ?? ''];
+      if (nounType === undefined) return null;
+      const keywords = parseKeywordList(match[2] ?? '');
+      // A keyword the engine does not model reports the whole line rather than
+      // granting only the half we understood.
+      if (keywords === null) return null;
+      return effects({
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords, ...(nounType === null ? {} : { anyOfTypes: [nounType] }) },
+      });
+    },
+  },
+  {
+    // Evasion granted as a one-shot ("Target creature can't be blocked this
+    // turn") - the printed body of Rogue's Passage, Manifold Key, Whirler Rogue,
+    // Thassa and the spell Enter the Enigma alike. It is the same continuous
+    // grant every other until-end-of-turn keyword uses, so it expires at cleanup
+    // through the one path rather than needing a combat-specific memory.
+    //
+    // "Target creature you control" narrows only WHO may be chosen, which the
+    // target restriction already carries; the granted keyword is identical.
+    id: 'grant-unblockable-until-eot',
+    description: `"Target creature [you control] can't be blocked this turn"`,
+    pattern: /^target creature( you control)? can'?t be blocked this turn$/,
+    needsChosenTarget: true,
+    build(match) {
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: {
+          keywords: { unblockable: true },
+          targets: match[1] ? CREATURE_YOU_CONTROL_TARGET : CREATURE_TARGET,
+        },
+      });
+    },
+  },
+  {
     id: 'grant-keyword-until-eot',
     description: '"Target creature gains KEYWORD until end of turn"',
     pattern: new RegExp(`^target creature gains ${KEYWORD_TOKEN} until end of turn$`),
@@ -1421,6 +1620,61 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'each-opponent-sacrifices',
+    description:
+      '"Each opponent sacrifices a creature of their choice" (Dictate of Erebos; Grave Pact prints "each other player")',
+    // UNTARGETED, unlike `target-player-sacrifices` above — which is why it is a
+    // separate entry: a trigger body has no chosen target to read.
+    //
+    // "Each other player" and "each opponent" are the same set here and only
+    // here: this engine seats exactly two players, so the printed plural has
+    // exactly one referent. Both wordings are accepted for that reason, and for
+    // no broader one.
+    pattern:
+      /^each (?:opponent|other player) sacrifices an? (creature|land|artifact|permanent)(?: of their choice)?$/,
+    build(match) {
+      const kind = match[1]!;
+      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: { who: 'opponent', ...(filter ? { filter } : {}) },
+      });
+    },
+  },
+  {
+    id: 'each-opponent-loses-life-you-gain',
+    description:
+      '"Each opponent loses N life and you gain M life" (Bastion of Remembrance\'s death trigger)',
+    pattern: new RegExp(
+      `^each opponent loses ${COUNT_TOKEN} life and you gain ${COUNT_TOKEN} life$`,
+    ),
+    build(match) {
+      const lost = parseCount(match[1]);
+      const gained = parseCount(match[2]);
+      if (lost === null || gained === null) return null;
+      return effects(
+        { primitive: 'loseLife', params: { amount: lost, whichPlayer: 'opponent' } },
+        { primitive: 'gainLife', params: { amount: gained } },
+      );
+    },
+  },
+  {
+    id: 'gain-life-and-draw',
+    description: '"You gain N life and draw a card" (Moldervine Reclamation\'s death trigger)',
+    // The compound the sentence splitter cannot split: one printed sentence
+    // joining two clauses the table already implements separately.
+    pattern: new RegExp(`^you gain ${COUNT_TOKEN} life and draw ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const life = parseCount(match[1]);
+      const cards = parseCount(match[2]);
+      if (life === null || cards === null) return null;
+      return effects(
+        { primitive: 'gainLife', params: { amount: life } },
+        { primitive: 'drawCards', params: { count: cards } },
+      );
+    },
+  },
+  {
     id: 'pile-split-sacrifice',
     description:
       '"Separate all permanents target player controls into two piles. That player sacrifices all permanents in the pile of their choice." (Liliana\'s −6)',
@@ -1457,6 +1711,31 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
           destination: 'battlefield',
           ...(match[1] ? { tapped: true } : {}),
         },
+      });
+    },
+  },
+  {
+    id: 'search-to-hand-by-filter',
+    description:
+      '"Search your library for a TYPE card [with CHARACTERISTIC N [or less|or greater]], reveal it, put it into your hand, then shuffle" (the Mage cycle, Goblin Matron, Recruiter of the Guard, Fierce Empath)',
+    // The "reveal" is INFORMATION, not a state change: the card goes to hand
+    // either way, and nothing in this engine's state can observe the difference
+    // (the same reason `revealTopCard` does not log one). Every MECHANICAL
+    // consequence of the printed line is exact, which is the bar for a rule.
+    //
+    // The restriction is not optional decoration — a tutor that ignored "with
+    // mana value 1 or less" would fetch the best card in the deck instead of the
+    // best cheap one, i.e. a strictly better card. `searchFilterFrom` refuses
+    // anything it cannot express, so the line reports rather than over-fetches.
+    pattern: new RegExp(
+      `^search your library for an? ([a-z]+) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, reveal (?:it|that card), put (?:it|that card) into your hand, then shuffle$`,
+    ),
+    build(match) {
+      const filter = searchFilterFrom(match[1] ?? '', match[2], match[3], match[4]);
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count: 1, filter, destination: 'hand' },
       });
     },
   },
@@ -1664,6 +1943,77 @@ function triggerFrom(
   };
 }
 
+/**
+ * Words that make an optional clause a PRICE rather than a gift — the AI steer
+ * for {@link mayEffectsFrom}. "You may destroy target artifact" is upside and a
+ * pilot should take it; "you may sacrifice a land" costs the controller
+ * something and the default answer should be no.
+ *
+ * This changes no legality whatsoever: both answers stay available on every
+ * "you may", and a searching pilot works out the real answer for itself. It is
+ * only what a valence-answering pilot does when it has nothing better.
+ */
+const OPTIONAL_CLAUSE_COSTS: readonly string[] = Object.freeze([
+  'sacrifice',
+  'discard',
+  'pay ',
+  'lose ',
+]);
+
+/** `'loss'` when the optional clause charges its controller, else `'gain'`. */
+function optionalValence(body: string): 'gain' | 'loss' {
+  return OPTIONAL_CLAUSE_COSTS.some((cost) => body.startsWith(cost)) ? 'loss' : 'gain';
+}
+
+/**
+ * Wrap an already-compiled clause in the printed word **"you may"**.
+ *
+ * The wrapper is the `mayEffects` primitive, which asks a real yes/no and runs
+ * the clause only on a yes. Compiling the yes-half alone would be a different
+ * card — a Reclamation Sage that MUST destroy something, a druid that MUST
+ * sacrifice a land — so the option is data, never an assumption.
+ *
+ * Returns `null` when the body compiles to nothing, so the line keeps reporting
+ * instead of becoming an empty question the player has to answer for no effect.
+ */
+function mayEffectsFrom(body: string, compiled: readonly EffectRef[]): readonly EffectRef[] | null {
+  if (compiled.length === 0) return null;
+  return [
+    {
+      primitive: 'mayEffects',
+      params: {
+        prompt: `You may ${body}`,
+        valence: optionalValence(body),
+        effects: compiled,
+      },
+    },
+  ];
+}
+
+/**
+ * The printed step names that begin a triggered ability, mapped to the
+ * {@link TriggerCondition} event each one means. Closed: a step the engine's
+ * turn structure does not have must REPORT, never compile to a trigger that can
+ * never fire.
+ */
+const STEP_TRIGGER_EVENTS: Readonly<Record<string, TriggerCondition['on']>> = Object.freeze({
+  upkeep: 'upkeep',
+  'draw step': 'drawStep',
+  'first main phase': 'precombatMain',
+  'end step': 'endStep',
+});
+
+/** "your …" / "each player's …" — whose step the trigger watches. */
+const STEP_TRIGGER_SCOPES: Readonly<Record<string, 'you' | 'any'>> = Object.freeze({
+  your: 'you',
+  "each player's": 'any',
+});
+
+/** The alternation of both tables, built FROM them so they cannot drift. */
+const STEP_TRIGGER_PHRASE = `(${Object.keys(STEP_TRIGGER_SCOPES).join('|')}) (${Object.keys(
+  STEP_TRIGGER_EVENTS,
+).join('|')})`;
+
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'trigger-etb',
@@ -1671,6 +2021,40 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^when ~ enters(?: the battlefield)?, (.+)$/,
     build(match, ctx) {
       return triggerFrom(ctx, { on: 'etb' }, match[1] ?? '', `Enters: ${match[1] ?? ''}`);
+    },
+  },
+  {
+    id: 'trigger-etb-you-may',
+    description: '"When ~ enters, you may BODY" — the optional enters-the-battlefield trigger',
+    // Ordered AFTER `trigger-etb`, deliberately. Some bodies print their own
+    // "you may" and implement it themselves — "you may return target card from
+    // your graveyard to your hand" compiles to `returnFromGraveyard` with
+    // `optional: true`, one question, exactly as Eternal Witness plays. Letting
+    // that path win first keeps those cards on the rule that knows the most
+    // about them; this wrapper is the general fallback for every other body,
+    // which without it would report rather than being asked about.
+    //
+    // The invariant that makes the order safe: a body rule may match a printed
+    // "you may" ONLY if it implements the option (both rules that do, do). A
+    // rule that swallowed the words and compiled the forced version would turn
+    // an optional card into a different one — see the Eternal Witness test.
+    pattern: /^when ~ enters(?: the battlefield)?, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      const compiled = ctx.compileTriggerBody(body);
+      if (compiled === null) return null;
+      const effectRefs = mayEffectsFrom(body, compiled.effects);
+      if (effectRefs === null) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: effectRefs,
+            label: `Enters: you may ${body}`,
+            ...(compiled.targets ? { targets: compiled.targets } : {}),
+          },
+        ],
+      };
     },
   },
   {
@@ -1710,6 +2094,91 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         match[1] ?? '',
         `Upkeep: ${match[1] ?? ''}`,
       );
+    },
+  },
+  {
+    id: 'trigger-step-begins',
+    description:
+      '"At the beginning of your upkeep / draw step / first main phase / end step, BODY" — and the "each player\'s" form',
+    // One rule for the whole family, because the printed lines differ only in
+    // which step they name and whose it is. The step words are a closed table
+    // (`STEP_TRIGGER_EVENTS`): a step the engine does not have would otherwise
+    // compile to a trigger that silently never fires.
+    pattern: new RegExp(`^at the beginning of ${STEP_TRIGGER_PHRASE}, (.+)$`),
+    build(match, ctx) {
+      const scope = match[1] ?? '';
+      const step = match[2] ?? '';
+      const event = STEP_TRIGGER_EVENTS[step];
+      if (!event) return null;
+      const who = STEP_TRIGGER_SCOPES[scope];
+      if (!who) return null;
+      // Only the SOURCE CONTROLLER's own step is expressible today. "Each
+      // player's end step" fires on both, but its body almost always says "that
+      // player", and the engine cannot yet aim an effect at the player whose
+      // step it is — so a `who: 'any'` trigger would run the body for the
+      // controller every time, which is a different card. It reports instead.
+      if (who !== 'you') return null;
+      const body = match[3] ?? '';
+      const compiled = ctx.compileTriggerBody(body);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      const optional = body.startsWith('you may ');
+      const inner = optional ? body.slice('you may '.length) : body;
+      const effectRefs = optional
+        ? mayEffectsFrom(inner, ctx.compileTriggerBody(inner)?.effects ?? [])
+        : compiled.effects;
+      if (effectRefs === null || effectRefs.length === 0) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: event, who },
+            effects: effectRefs,
+            label: `${step}: ${body}`,
+            ...(compiled.targets ? { targets: compiled.targets } : {}),
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'trigger-permanent-enters-or-dies',
+    description:
+      '"Whenever a creature you control [with power N or greater] enters/dies, BODY" (Ajani\'s Welcome, Elemental Bond, Grave Pact)',
+    // Both halves of the same family: a board-watching trigger scoped by WHOSE
+    // permanent it is and narrowed by a printed `CardFilter`. The filter is the
+    // fidelity: a trigger that dropped "with power 3 or greater" would fire off
+    // every token, which is a strictly better card.
+    //
+    // "ANOTHER creature you control" deliberately does NOT match. The engine has
+    // no self-exclusion on these conditions, and a source that triggered off its
+    // own entry when the card says "another" is a different card, so those lines
+    // keep reporting.
+    pattern: new RegExp(
+      `^whenever an? (${Object.keys(SPELL_TYPE_WORDS).join('|')}) (you control|an opponent controls)(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))? (enters|dies), (.+)$`,
+    ),
+    build(match, ctx) {
+      const type = SPELL_TYPE_WORDS[match[1] ?? ''];
+      if (!type) return null;
+      const who = match[2] === 'you control' ? 'you' : 'opponent';
+      const filter = searchFilterFrom(match[1] ?? '', match[3], match[4], match[5]);
+      if (filter === null) return null;
+      const event = match[6] === 'enters' ? 'permanentEnters' : 'permanentDies';
+      const body = match[7] ?? '';
+      const optional = body.startsWith('you may ');
+      const inner = optional ? body.slice('you may '.length) : body;
+      const compiled = ctx.compileTriggerBody(inner);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
+      if (effectRefs === null) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: event, who, permanentFilter: filter },
+            effects: effectRefs,
+            label: `${match[1]} ${match[6]}: ${body}`,
+            ...(compiled.targets ? { targets: compiled.targets } : {}),
+          },
+        ],
+      };
     },
   },
   {
@@ -1787,6 +2256,33 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The mirror of the rule above, and a genuinely different one: this creature
+    // may not be declared as a BLOCKER (Carrion Feeder, Gravecrawler, Bloodghast).
+    // Both halves are printed together often enough to deserve their own pattern,
+    // because compiling only the first would leave a recursive threat blocking.
+    id: 'cant-block',
+    description: `"~ can't block" / "~ can't block and can't be blocked"`,
+    pattern: /^~ can'?t block(?: and can'?t be blocked)?$/,
+    build(match) {
+      const alsoUnblockable = /can'?t be blocked/.test(match[0]);
+      return { keywords: { cantBlock: true, ...(alsoUnblockable ? { unblockable: true } : {}) } };
+    },
+  },
+  {
+    // Menace generalised: "except by three or more creatures" (Pathrazer of
+    // Ulamog). Core folds this with menace by taking the larger requirement, so
+    // one declaration-level check serves every printing of the rule.
+    id: 'cant-be-blocked-except-by-n',
+    description: `"~ can't be blocked except by N or more creatures"`,
+    pattern: new RegExp(`^~ can'?t be blocked except by ${COUNT_TOKEN} or more creatures$`),
+    build(match) {
+      const minimum = parseCount(match[1]);
+      // "except by X or more" has no fixed value to enforce - report it.
+      if (minimum === null || minimum < 1) return null;
+      return { keywords: { minBlockers: minimum } };
+    },
+  },
+  {
     id: 'flashback-cost',
     description:
       '"Flashback {2}{U}", "Flashback {X}{R}{R}" and "Flashback—{1}{U}, Pay 3 life" — the mana half, its {X} count, and a life rider, all charged at cast time',
@@ -1847,6 +2343,25 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'enters-tapped-unless-revealed',
+    description:
+      `"As ~ enters, you may reveal an Island or Swamp card from your hand. If you don't, this land enters tapped." (the reveal-land cycles)`,
+    // A DECISION, like the shockland above and unlike the board-reading
+    // conditions below: holding the card does not untap the land, showing it
+    // does. The engine raises a real confirm at land-play time and both answers
+    // are legal, so the card is not silently compiled as its better half.
+    //
+    // Only LAND subtypes are accepted. "Reveal a creature card" would read the
+    // same and mean something this rule does not implement, so it reports.
+    pattern:
+      /^as ~ enters(?: the battlefield)?, you may reveal an? (\w+) or (?:an? )?(\w+) card from your hand\. if you don't, (?:it|this land|~) enters(?: the battlefield)? tapped$/,
+    build(match) {
+      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      return { entersTappedUnlessRevealed: { anyOfSubtypes: subtypes } };
+    },
+  },
+  {
     id: 'enters-tapped-unless-few-lands',
     description:
       '"~ enters tapped unless you control two or fewer other lands" (the fastland cycle)',
@@ -1856,6 +2371,37 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const max = SMALL_NUMBER_WORDS[match[1]!];
       if (max === undefined) return null; // an unexpected count — report it
       return { entersTappedUnless: { maxOtherLands: max } };
+    },
+  },
+  {
+    id: 'enters-tapped-unless-min-other-lands',
+    description:
+      '"~ enters tapped unless you control two or more other lands" (the slowland cycle)',
+    // The mirror of the fastland rule above: a fastland wants FEW other lands,
+    // a slowland wants MANY. Same board read, opposite comparison, so they are
+    // two entries against one condition record rather than two mechanisms.
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more other lands$/,
+    build(match) {
+      const min = SMALL_NUMBER_WORDS[match[1]!];
+      if (min === undefined) return null; // an unexpected count — report it
+      return { entersTappedUnless: { minOtherLands: min } };
+    },
+  },
+  {
+    id: 'enters-tapped-unless-min-basic-lands',
+    description:
+      '"~ enters tapped unless you control two or more basic lands" (the battleland cycle)',
+    // "Basic" is a SUPERTYPE, not a subtype, and the difference is the whole
+    // point: counting land subtypes would count a nonbasic dual as a basic and
+    // let the land enter untapped when the printed card would not. The count
+    // reads `CardDefinition.basic`, which the compiler emits from the type line.
+    pattern:
+      /^~ enters(?: the battlefield)? tapped unless you control (\w+) or more basic lands$/,
+    build(match) {
+      const min = SMALL_NUMBER_WORDS[match[1]!];
+      if (min === undefined) return null;
+      return { entersTappedUnless: { minBasicLands: min } };
     },
   },
   {
@@ -1922,7 +2468,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
     pattern: new RegExp(
-      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?creatures you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
     build(match, ctx) {
       // Only a PERMANENT can carry a static ability. An instant/sorcery printing
@@ -1933,9 +2479,14 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[3] === undefined ? 0 : Number.parseInt(match[3], 10);
-      const toughness = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
+      const power = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
+      const toughness = match[5] === undefined ? 0 : Number.parseInt(match[5], 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      // The printed NOUN decides the filter's type. "Permanent" maps to no type
+      // entry at all, because an absent filter already matches every permanent -
+      // inventing a 'permanent' type word would match nothing.
+      const nounType = STATIC_NOUN_TYPES[match[3] ?? ''];
+      if (nounType === undefined) return null;
       // "WHITE creatures you control get +1/+1" — the printed colour narrows the
       // filter, which core's shared `CardFilter` can express now
       // (`anyOfColors`, derived from cost pips exactly as protection reads
@@ -1943,14 +2494,14 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const colorWord = match[2]?.trim();
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
-      const keywordText = match[5] ?? match[6];
+      const keywordText = match[6] ?? match[7];
       const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
       // A keyword the engine does not model reports the whole line, never a
       // half-granted anthem.
       if (keywordText !== undefined && keywords === null) return null;
       const ability: StaticAbility = {
         affects: {
-          anyOfTypes: ['creature'],
+          ...(nounType === null ? {} : { anyOfTypes: [nounType] }),
           controller: 'you',
           ...(color ? { anyOfColors: [color as never] } : {}),
           // The printed word "other": the lord pumps the team, not itself.
@@ -2001,13 +2552,19 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'attachment-modification',
-    description: '"Enchanted/Equipped creature gets +2/+0 and has trample"',
+    description:
+      '"Enchanted/Equipped creature gets +2/+0 and has trample" / "the verbless can-not-be-blocked form (Whispersilk Cloak)"',
+    // The third alternative is the VERBLESS form: a printed blocking restriction
+    // is a sentence, not a keyword word, so Whispersilk Cloak's "Equipped
+    // creature can't be blocked and has shroud" carries no leading "has". It is
+    // a catch-all only in shape - `parseKeywordList` still has to recognise every
+    // conjunct, so a line naming anything else returns null and keeps reporting.
     pattern:
-      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+))$/,
+      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+)|(.+))$/,
     build(match) {
       const power = match[1] === undefined ? 0 : Number.parseInt(match[1], 10);
       const toughness = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
-      const keywordText = match[3] ?? match[4];
+      const keywordText = match[3] ?? match[4] ?? match[5];
       const keywords = keywordText === undefined ? {} : parseKeywordList(keywordText);
       // An unmodelled keyword must report the whole line rather than silently
       // granting only the half we understood.
@@ -2068,17 +2625,36 @@ const EQUIP_TARGET: TargetRestriction = 'creatureYouControl';
 function parseKeywordList(text: string): Record<string, boolean> | null {
   const words = text
     .split(/,| and /)
-    .map((word) => word.trim())
+    .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
     .filter((word) => word.length > 0);
   if (words.length === 0) return null;
   const flags: Record<string, boolean> = {};
   for (const word of words) {
-    const field = KEYWORD_FLAGS[word];
+    const field = KEYWORD_FLAGS[word] ?? KEYWORD_PHRASES[word];
     if (!field) return null;
     flags[field] = true;
   }
   return flags;
 }
+
+/**
+ * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
+ * each conjunct may carry one of its own. Stripped before the lookup rather than
+ * being folded into every pattern, because the verb is grammar, not meaning.
+ */
+const LEADING_GRANT_VERB = /^(?:has|have|gains?) /;
+
+/**
+ * Printed PHRASES that name an engine keyword flag without being a keyword word.
+ * The two blocking restrictions are printed as sentences rather than as keywords
+ * ("Equipped creature can't be blocked"), so a keyword-word table alone reports
+ * a rule the engine fully implements. A CLOSED table, exactly like
+ * {@link KEYWORD_FLAGS}: a phrase outside it keeps reporting.
+ */
+const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
+  "can't be blocked": 'unblockable',
+  "can't block": 'cantBlock',
+});
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
@@ -2564,10 +3140,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a mana-ability template the compiler does not recognize yet',
   },
   {
-    // Plain taplands, fastlands/checklands (`entersTappedUnless`) AND shocklands
-    // ("you may pay 2 life" → `entersTappedUnlessLifePaid`) all COMPILE now, so
-    // what lands here is only an enters-tapped wording with no rule yet — e.g. a
-    // price other than life, or a condition the board cannot express.
+    // Plain taplands, fastlands/checklands/slowlands/battlelands
+    // (`entersTappedUnless`), shocklands ("you may pay 2 life" →
+    // `entersTappedUnlessLifePaid`) AND reveal-lands ("you may reveal an Island
+    // or Swamp card from your hand" → `entersTappedUnlessRevealed`) all COMPILE
+    // now, so what lands here is only an enters-tapped wording with no rule yet
+    // — e.g. a price that is neither life nor a reveal, a condition the board
+    // cannot express, or an entry that also does something else.
     pattern: /\benters tapped\b/,
     missingEngineSystem: 'an enters-tapped template the compiler does not recognize yet',
   },
@@ -2610,10 +3189,23 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a modal template the compiler does not recognize yet',
   },
   {
+    // The printed word "you may" IS implemented now, as the `mayEffects`
+    // wrapper: "When ~ enters, you may BODY" and "At the beginning of your
+    // <step>, you may BODY" compile to a real yes/no whose no is a complete
+    // outcome. So this hint no longer claims the system is missing — that would
+    // send the next agent to rebuild it. What still lands here is a TEMPLATE:
+    // an optional clause whose BODY has no rule (a blink, a copy, a
+    // sacrifice-then-if-you-do chain), or a "choose" that is not a yes/no.
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
   {
+    // Searches to the BATTLEFIELD (basic lands, fetchland subtypes) and to HAND
+    // filtered by type, subtype, mana value, power or toughness all compile.
+    // What still lands here is a search whose restriction the shared
+    // `CardFilter` cannot say ("a card with the same mana value as this", "an
+    // artifact card with a mana ability"), a subtype outside the closed
+    // `SEARCHABLE_SUBTYPES` table, or a destination other than hand/battlefield.
     pattern: /\bsearch your library\b|\bsearch their library\b/,
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },
@@ -2698,7 +3290,27 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bmill\b|puts? the top .* into (?:their|his or her) graveyard/,
     missingEngineSystem: 'a mill template the compiler does not recognize yet',
   },
-  { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
+  {
+    // Block RESTRICTIONS are engine-enforced now, in the two places each is
+    // expressible: per pair in `canBlock` ("can't be blocked", "~ can't block")
+    // and per DECLARATION in `illegalBlockDeclaration` (menace and the general
+    // "except by N or more creatures"). Granting evasion for a turn compiles
+    // through the ordinary continuous grant.
+    //
+    // What still lands here is two different things, and the hint says which:
+    //   - a block REQUIREMENT ("must be blocked if able", "all creatures able to
+    //     block ~ do so"). CR 509.1c/d resolves requirements and restrictions
+    //     TOGETHER — maximise satisfied requirements without violating any
+    //     restriction — which is a solver, not a check, and is not built;
+    //   - a restriction whose SELECTOR the engine cannot express: a power or
+    //     toughness comparison between the two creatures ("can't be blocked by
+    //     creatures with power 3 or greater", skulk), or a filtered set the
+    //     static layer deliberately cannot read (Tetsuko's "with power or
+    //     toughness 1 or less" — see `statics.ts` on printed characteristics).
+    pattern: /\bmust be blocked\b|\bable to block\b|\bblocks? it\b|\bcan't be blocked\b|\bcan't block\b|\bmenace\b|\bskulk\b/,
+    missingEngineSystem:
+      'a block REQUIREMENT, or a block restriction whose selector compares creatures',
+  },
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
     // COMPILE now (source-aware targeting: all four protection halves plus the

@@ -449,10 +449,21 @@ export const returnToHand: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `tapPermanents` — tap every permanent matching `params.types` (default:
- * creatures) controlled by `params.who` (default: the opponent). Cryptic Command's
- * "tap all creatures your opponents control"; a Falter-style effect is the same
- * primitive with different data.
+ * `tapPermanents` — tap (or UNTAP) every permanent matching `params.types`
+ * (default: creatures) controlled by `params.who` (default: the opponent).
+ * Cryptic Command's "tap all creatures your opponents control"; a Falter-style
+ * effect is the same primitive with different data.
+ *
+ * Params:
+ *   - `who` — whose permanents (`'all'` for every controller).
+ *   - `types` — the card types to match (default: creatures).
+ *   - `excludeTypes` — types to SKIP, which is how "all **nonland** permanents"
+ *     is written. Applied after `types`, so `types: [every permanent type]` plus
+ *     `excludeTypes: ['land']` is exactly the printed set.
+ *   - `untap` — run the loop in the other direction. Untapping is the same
+ *     traversal with the flag and the event flipped, so it is a parameter rather
+ *     than a second primitive; a card that untaps is not a different mechanic
+ *     from one that taps, and splitting them would duplicate the filter logic.
  */
 export const tapPermanents: EffectPrimitive = (ctx) => {
   // `'all'` means every controller, so it is the one scope that is NOT a single
@@ -462,12 +473,19 @@ export const tapPermanents: EffectPrimitive = (ctx) => {
   if (!everyone && who === undefined) return;
   const types = strArrayParam(ctx, 'types');
   const wanted: readonly CardType[] = types.length > 0 ? (types as readonly CardType[]) : DEFAULT_TAP_TYPES;
+  const excluded = strArrayParam(ctx, 'excludeTypes') as readonly CardType[];
+  const untapping = boolParam(ctx, 'untap', false);
   for (const perm of ctx.state.battlefield) {
     if (who !== undefined && perm.controller !== who) continue;
     if (!wanted.some((t) => perm.def.types.includes(t))) continue;
-    if (perm.tapped) continue;
-    perm.tapped = true;
-    ctx.emit({ type: 'tapped', instanceId: perm.instanceId });
+    if (excluded.length > 0 && excluded.some((t) => perm.def.types.includes(t))) continue;
+    if (perm.tapped === !untapping) continue; // already in the state we would set
+    perm.tapped = !untapping;
+    ctx.emit(
+      untapping
+        ? { type: 'untapped', instanceId: perm.instanceId, player: perm.controller }
+        : { type: 'tapped', instanceId: perm.instanceId },
+    );
   }
 };
 

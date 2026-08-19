@@ -15,6 +15,7 @@ import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
 import type { ActivatedAbility, CardDefinition, EffectRef, ManaAbility, ManaModeExtra } from './card.js';
 import {
+  canRevealForUntapped,
   castTiming,
   fixedManaColorsOf,
   hasCastableBackFace,
@@ -1251,6 +1252,27 @@ function applyAnswerChoice(
     return { state, events };
   }
 
+  // A CONFIRM with no resolution behind it is a reveal-land entering off a land
+  // play (`applyPlayLand` parked it; the land is the choice's source). The
+  // printed "if you don't" is all that is left: a decline taps the fresh entry.
+  if (choice.kind === 'confirm' && answer.kind === 'confirm' && !state.resolution) {
+    if (!answer.yes) {
+      const land = findOnBattlefield(state, choice.sourceInstanceId);
+      if (land && !land.tapped) {
+        land.tapped = true;
+        emit({ type: 'tapped', instanceId: land.instanceId });
+      }
+    }
+    checkStateBasedActions(state, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      // The land play never surrendered priority, so its player keeps the floor.
+      state.priorityPlayer = choice.chooser;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
   const frame = state.resolution;
   if (!frame) {
     // Defensive: a choice with nothing to resume (only reachable from a hand-built
@@ -1327,6 +1349,52 @@ function applyPlayLand(
   // tapped: only answering is legal while the question stands) or confirms the
   // default. A player who cannot pay is not asked — the default already IS the
   // only outcome, so the game does not stop.
+  // A REVEAL-LAND asks the same shape of question in the same place, with a
+  // `confirm` instead of a price: "you may reveal an Island or Swamp card from
+  // your hand. If you don't, this land enters tapped." A controller holding
+  // nothing to show is not asked — the printed default is then the only
+  // outcome, and stopping the game for it would wedge the turn.
+  const revealCondition = card.def.entersTappedUnlessRevealed;
+  if (
+    revealCondition !== undefined &&
+    canRevealForUntapped(revealCondition, state.players[action.player].hand)
+  ) {
+    // Entered tapped above; the tapped event is deferred until the answer, so a
+    // replay never shows the land flickering tapped -> untapped.
+    card.tapped = false;
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'confirm',
+        chooser: action.player,
+        prompt: `Reveal ${describeRevealTypes(revealCondition.anyOfSubtypes)} from your hand, or ${card.def.name} enters tapped`,
+        // Showing a card costs nothing and unlocks an untapped land, so a pilot
+        // with nothing better to go on should take it.
+        valence: 'gain',
+      },
+      {
+        id: state.nextInstanceId++,
+        sourceInstanceId: card.instanceId,
+        sourceName: card.def.name,
+      },
+    );
+    if (choice) {
+      state.pendingChoice = choice;
+      emit({
+        type: 'choiceAsked',
+        choiceId: choice.id,
+        chooser: choice.chooser,
+        choiceKind: choice.kind,
+        prompt: choice.prompt,
+        sourceInstanceId: choice.sourceInstanceId,
+        optionCount: choiceOptionCount(choice),
+      });
+    }
+    player.landsPlayedThisTurn += 1;
+    emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
+    state.consecutivePasses = 0;
+    return { state, events };
+  }
+
   const shockCost = card.def.entersTappedUnlessLifePaid;
   if (shockCost !== undefined && canAffordLifeCost(state, action.player, shockCost)) {
     // Entered tapped above, but the tapped event is deferred until the answer —
@@ -1757,6 +1825,16 @@ function canAffordLifeCost(state: GameState, player: PlayerId, amount: number): 
  * `payManaCostFromBoard`: the caller records what actually happened, and an
  * agreement the total cannot honour is recorded as a decline.
  */
+/**
+ * The printed land types of a reveal-land, as the prompt shows them ("an Island
+ * or Swamp card"). Built from the condition rather than stored as prose so the
+ * question a player is asked can never disagree with the condition being tested.
+ */
+function describeRevealTypes(subtypes: readonly string[]): string {
+  const named = subtypes.map((subtype) => subtype.charAt(0).toUpperCase() + subtype.slice(1));
+  return `${named.join(' or ')} card`;
+}
+
 function payLifeCost(state: GameState, player: PlayerId, amount: number, emit: (e: GameEvent) => void): boolean {
   if (!canAffordLifeCost(state, player, amount)) return false;
   const owner = state.players[player];

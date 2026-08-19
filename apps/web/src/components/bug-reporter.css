@@ -1,0 +1,234 @@
+/*
+ * The in-game bug reporter's chrome.
+ *
+ * Built on the app's own design tokens so it never looks like a bolted-on
+ * widget, with one deliberate exception: the overlay's backdrop is near-black
+ * rather than `--color-bg`, because the frozen frame sitting on it has to read as
+ * a PHOTOGRAPH of the app rather than as the app itself. A reporter who thinks
+ * they are still looking at the live UI tries to click things in it.
+ *
+ * Sized for a phone first. The live PWA is used on Android, where there is no `b`
+ * key and no mouse: the launcher is a real tap target, the panel is a bottom
+ * sheet rather than a side panel below 720px, and every button clears 44px.
+ */
+
+.bugreport-launcher {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 900;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-fg-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  /* Present but quiet: it must be reachable at any moment without competing with
+     the app's own controls for attention. */
+  opacity: 0.45;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.bugreport-launcher:hover,
+.bugreport-launcher:focus-visible {
+  opacity: 1;
+  color: var(--color-accent-soft);
+}
+
+/* The link back to the last bundle. It stays on screen after a submit because a
+   download the browser blocked, or one the user dismissed, must not lose a report
+   that has already been written. */
+.bugreport-lastlink {
+  position: fixed;
+  right: 64px;
+  bottom: 18px;
+  z-index: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-fg-muted);
+  font-size: var(--text-xs, 12px);
+  text-decoration: none;
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bugreport {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  background: #05070a;
+}
+
+.bugreport__stage {
+  flex: 1 1 auto;
+  position: relative;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+/* The frozen frame and the ink canvas are stacked and MUST occupy the SAME box —
+   the strokes are stored in image pixels, so any difference here is a drawing
+   that lands somewhere the reporter did not put it. The wrapper carries the
+   frame's aspect ratio (set inline from the capture) and shrinks to fit the
+   stage; both children then simply fill it, and a pointer maps to the bitmap
+   through one uniform scale. `object-fit: contain` on the children instead was
+   the bug: the canvas ELEMENT filled the stage while its BITMAP was letterboxed
+   inside it, so every stroke came out scaled and offset. */
+.bugreport__framebox {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  /* No intrinsic size until a capture arrives; the inline aspect-ratio plus these
+     caps is what sizes it. */
+  width: 100%;
+  margin: auto;
+}
+
+.bugreport__frame,
+.bugreport__ink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.bugreport__frame--missing {
+  display: grid;
+  place-items: center;
+  color: var(--color-fg-faint);
+  font-size: var(--text-sm, 14px);
+}
+
+.bugreport__ink {
+  cursor: crosshair;
+  touch-action: none; /* a drag must draw, not scroll the page behind it */
+}
+
+.bugreport__panel {
+  flex: 0 0 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border-strong);
+}
+
+.bugreport__title {
+  font-size: var(--text-xs, 12px);
+  letter-spacing: 0.12em;
+  color: var(--color-focus);
+}
+
+.bugreport__label {
+  font-size: var(--text-xs, 12px);
+  color: var(--color-fg-muted);
+}
+
+.bugreport__note {
+  width: 100%;
+  resize: vertical;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--text-sm, 14px);
+}
+
+.bugreport__note:focus-visible {
+  outline: none;
+  border-color: var(--color-focus);
+}
+
+.bugreport__palette {
+  display: flex;
+  gap: 6px;
+}
+
+.bugreport__swatch {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  cursor: pointer;
+}
+
+.bugreport__swatch--on {
+  border: 3px solid var(--color-focus);
+}
+
+.bugreport__row {
+  display: flex;
+  gap: 6px;
+}
+
+.bugreport__btn {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--text-sm, 14px);
+  cursor: pointer;
+}
+
+.bugreport__btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.bugreport__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.bugreport__btn--primary {
+  border-color: var(--color-accent);
+  color: var(--color-accent-soft);
+}
+
+.bugreport__btn--recording {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.bugreport__status {
+  font-size: var(--text-xs, 12px);
+  color: var(--color-fg-faint);
+  min-height: 1.2em;
+}
+
+.bugreport__status--warn {
+  color: var(--color-error);
+}
+
+@media (max-width: 720px) {
+  /* Bottom sheet: on a phone the frame needs the width, and a thumb reaches the
+     bottom of the screen far more easily than a side rail. */
+  .bugreport {
+    flex-direction: column;
+  }
+
+  .bugreport__panel {
+    flex: 0 0 auto;
+    max-height: 55vh;
+    border-left: none;
+    border-top: 1px solid var(--color-border-strong);
+  }
+}

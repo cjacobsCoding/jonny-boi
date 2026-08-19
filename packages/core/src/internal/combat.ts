@@ -67,6 +67,9 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
   const idx = index;
   const ak = kw(attacker, idx);
   const bk = kw(blocker, idx);
+  // "~ can't block" disqualifies the BLOCKER whatever it would be blocking, so it
+  // is asked first and independently of anything about the attacker.
+  if (bk.cantBlock) return false;
   // "Can't be blocked" is absolute — checked before evasion, which it subsumes.
   if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
@@ -80,12 +83,39 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
 }
 
 /**
+ * The minimum number of creatures that must block this attacker TOGETHER for the
+ * block to be legal, or 0 when it prints no such requirement.
+ *
+ * Menace and `minBlockers` are the same printed rule at two values — "can't be
+ * blocked except by two or more creatures" and Pathrazer of Ulamog's "except by
+ * three or more" — so they are folded here by taking the LARGER, which is the
+ * only reading under which both restrictions hold at once.
+ */
+function requiredBlockerCount(attacker: CardInstance, index: ContinuousIndex): number {
+  const k = kw(attacker, index);
+  const menaceMinimum = k.menace ? MENACE_MINIMUM_BLOCKERS : 0;
+  return Math.max(menaceMinimum, k.minBlockers ?? 0);
+}
+
+/** Menace is the N = 2 printing of the "except by N or more creatures" rule. */
+const MENACE_MINIMUM_BLOCKERS = 2;
+
+/**
  * Why this whole block DECLARATION is illegal, or `undefined` if it stands.
  *
  * Menace lives here rather than in {@link canBlock} because it constrains the
  * assignment as a whole: each blocker individually *can* block a menacing
  * creature, and what the rule forbids is exactly one of them doing it. A
  * per-pair check cannot see that, so it would let a single blocker through.
+ * Every "can't be blocked except by N or more creatures" printing has that same
+ * shape, which is why they share this check rather than getting a flag each.
+ *
+ * ⚠️ This function enforces block RESTRICTIONS only. Block REQUIREMENTS ("~ must
+ * be blocked if able", "all creatures able to block ~ do so") are the other half
+ * of CR 509.1c/d and are NOT implemented — satisfying the maximum number of
+ * requirements without violating any restriction is a solver, not a check. Cards
+ * printing a requirement are reported by the compiler rather than played with the
+ * requirement silently ignored.
  */
 export function illegalBlockDeclaration(
   attackers: readonly CardInstance[],
@@ -93,11 +123,14 @@ export function illegalBlockDeclaration(
   index: ContinuousIndex,
 ): string | undefined {
   for (const attacker of attackers) {
-    if (!kw(attacker, index).menace) continue;
+    const required = requiredBlockerCount(attacker, index);
+    if (required === 0) continue;
     const assigned = blocks.filter((b) => b.attacker === attacker.instanceId).length;
-    // Zero is fine — menace forbids being blocked by ONE, not being unblocked.
-    if (assigned === 1) {
-      return `${attacker.def.name} has menace and can't be blocked by exactly one creature`;
+    // Zero is fine — the rule forbids being blocked by TOO FEW, not being unblocked.
+    if (assigned > 0 && assigned < required) {
+      return required === MENACE_MINIMUM_BLOCKERS
+        ? `${attacker.def.name} has menace and can't be blocked by exactly one creature`
+        : `${attacker.def.name} can't be blocked except by ${required} or more creatures`;
     }
   }
   return undefined;
