@@ -99,9 +99,85 @@ throughput (games/sec) from regressing.
 | feat/planeswalkers | worker | packages/core (card/state/actions/events/targeting/engine/effects/serialize/index + internal stats/combat/sba/clone/zones + NEW planeswalker.test.ts), packages/cards (compile types/compile/rules loyalty + NEW rules, choice-primitives sacrificeChosen+pileSplitSacrifice, primitives dealDamage-to-walker, data/pool.ts Liliana + 2 refreshed expanded entries, index.ts STUBBED, NEW planeswalker-play.test.ts), packages/ai (heuristic walker attack/burn/loyalty + effect-value + weights + NEW planeswalker-pilot.test.ts), packages/data-tools (loyalty capture + Liliana index record), packages/sim (observation +2, paired-arms +2, fidelity copy), apps/web (play board walker UI + about/mechanics + card-index regen), DESIGN §3.9/§3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 | feat/scry-and-templates | worker | packages/core (choices.ts `keepOnTop`, events.ts `cardsLookedAt`), packages/cards (choice-primitives scry/surveil + `unlessPaidX`, compile/rules.ts 4 new rules + 1 hint reword, NEW compile/scry-surveil.test.ts), packages/ai (choices.ts keep-on-top branch + weights.ts `scryKeepValueThreshold` + choices.test additions), packages/sim (observation +1 classification, paired-arms +2), apps/web (play/choice-view copy, play-format log line, about/mechanics +2 witnesses), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | fix/scan-real-photo | worker | apps/web/src/lib/scan (config/detect/stacks/crop/ocr/match/pipeline + stacks.test rewrite + pipeline.test tweak + NEW real-photo.test.ts + NEW fixtures/user-deck-photo.jpg + fixtures/card-names-catalog.json), apps/web/package.json (+jpeg-js dev), package-lock.json, .gitignore (traineddata cache), DESIGN §3.12 | 🚧 PUSHED, not merged |
+| feat/graveyard-grants | worker | packages/core (NEW card-grants.ts + card-grants.test.ts + bench/scavenge-probe.ts; targeting/state/events/engine/index + internal clone/zones), packages/cards (primitives grantFlashback + compile/rules new rule & 2 reworded hints + effect-helpers prune + index un-stub + data/pool.ts Snapcaster + NEW graveyard-grants.test.ts), packages/ai (effect-value/heuristic/weights + NEW graveyard-grant-pilot.test.ts), packages/sim (paired-arms +1, observation +2, uw-control comment), apps/web (about/mechanics +2 witnesses), DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `feat/graveyard-grants` 🚧 PUSHED — **effects can now TARGET and MODIFY cards
+  in graveyards, and Snapcaster Mage is UN-STUBBED.** Two systems, built together because neither is
+  worth anything on its own.
+  **(1) Targeting a graveyard card**: `TargetRestriction` gained
+  `'instantOrSorceryInYourGraveyard'`, threaded through the SAME three enforcement points as every
+  other restriction — offer (`legalTargetsFor`), accept (`isLegalTarget`), and the primitive's
+  re-check at resolution — so a target that leaves the graveyard in response FIZZLES the ability
+  instead of granting into the void (pinned at core AND through a real game). It reads "your" off
+  the ACTING player exactly as `'opponent'` does, and an absent controller makes every candidate
+  illegal rather than guessed. Hexproof/shroud/protection are deliberately NOT consulted here:
+  they read "this permanent", and a card in a graveyard is not one (CR 110.1).
+  **(2) Continuous effects on non-battlefield cards**: a NEW `GameState.cardGrants` list
+  (`packages/core/src/card-grants.ts`) — NOT the continuous layer, whose index is keyed on
+  battlefield permanents, whose statics radiate from battlefield sources, and whose
+  `pruneOrphanContinuousEffects` would have deleted a graveyard grant on sight. A grant is
+  instance-scoped, expires in cleanup, and dies with a zone change (CR 400.7) at every zone-move
+  chokepoint — core's `moveToZone`, the cast's graveyard→stack move, and `cards`'s own
+  `moveOwnedCard`/`movePermanentTo` funnels, which had to agree or a regrown card would carry a
+  stale grant.
+  ⚠️ **THE TRAP WORTH KNOWING**: pruning the grant as the card leaves the graveyard sounds like it
+  must break flashback's EXILE, and it does not — that replacement rides the stack object's own
+  `castFrom` (`spellLeaveDestination`), never the grant. CR 400.7g's "the effect keeps applying to
+  the spell it becomes" therefore falls out of state that already exists instead of being stored.
+  Pinned by a test that casts on a grant and asserts the card lands in EXILE with no grant alive.
+  **One accessor, `flashbackCostOf`**, answers printed-or-granted for `generateLegalActions`,
+  `applyCastSpell` AND both pilots — a pilot reading only `CardDefinition.flashback` would cast
+  Snapcaster and never use it, which is exactly the "legal but inert" failure the flashback branch
+  warned about.
+  ⚠️ **PERF, measured the only way that works on this box.** `cardGrants` is OPTIONAL and absent in
+  every game that grants nothing, and every reader and pruning hook opens with the same
+  one-property empty check as `isLegalTarget`'s `state.continuous.length === 0` fast path. Wall
+  clock here is **worthless**: five agents share the machine and paired alternating gauntlet runs
+  swung 0.64x–2.25x in BOTH directions. Parity was established instead with the allocation
+  instrument `engine-alloc-bench.ts`'s own header prescribes but which had never been shipped — a
+  scavenge-count probe, now added as `packages/core/bench/scavenge-probe.ts`. Result: **534 vs 533
+  median scavenges** against a same-box origin/main worktree (that header documents ±2 as the noise
+  floor), with **byte-identical play** — 30,466 actions / 63,782 events on both — and
+  `cloneState`/`planManaPayment` micro-benches level or slightly favouring the branch. Gauntlet
+  `Mono-Red Aggro --games 40 --seed 99`: **79/280 = 28.2%, byte-identical**, before AND after the
+  origin/main merge.
+  **Snapcaster Mage un-stubbed**: its real Oracle text compiles `'complete'` via a new
+  `grant-flashback-to-graveyard-spell` rule. The "The flashback cost is equal to its mana cost"
+  sentence is part of the SAME idiom on purpose — without it the line never prices the recast, and
+  a free recast is strictly better than the printed card, so that shape still reports. The curated
+  pool carries the whole card.
+  👉 **Adding `flash` to the pool entry moves NO recorded baseline**: no meta deck runs Snapcaster
+  (UW Control cut it precisely because it was a blank 2/1), and seed 99 reproduces byte-identically.
+  Putting it BACK into a deck is still an integrator call with a re-measure attached — the deck's
+  own comment now says exactly that instead of claiming the card is unimplemented.
+  **The AI is not inert**: `valueOfEffects` gained a `grantFlashback` entry pricing the grant off
+  the card it names (new weight `grantedFlashbackValueShare` = 2/3 — below `returnFromGraveyard`'s
+  full value, because the grant expires at end of turn and the card still costs its mana), so the
+  trigger's target chooser aims at the BEST spell rather than the first offered.
+  `graveyard-grant-pilot.test.ts` drives the heuristic through the WHOLE loop — it casts the
+  creature, the engine resolves the ETB, and the pilot then takes the recast — plus a control
+  proving it constructs no graveyard cast when there is no grant.
+  Classified in both enforced tables: `grantFlashback` is LIBRARY_SAFE in paired-arms-config (it
+  reads a PUBLIC zone the runner already tracks exactly, and branches on nothing a library holds),
+  and `cardGrantAdded`/`cardGrantExpired` are public in observation.ts (a graveyard is public and
+  the granting ability resolved in front of the table). Two stale hints reworded (flashback and
+  graveyard both claimed "missing" for things that now exist), About gained two witness-pinned
+  entries, and the stale Snapcaster row is gone from UNSUPPORTED-MECHANICS.md.
+  **NOT done, deliberately, with the blocker named each time**: no OTHER stubbed card un-stubs
+  through this seam — all three remaining were checked and none is blocked on graveyard targeting
+  (Tarmogoyf: characteristic-defining P/T; Fatal Push: revolt's turn-scoped event memory; Cryptic
+  Command: modes chosen at cast). No graveyard-HATE template (a Surgical-style "exile target card
+  in a graveyard" needs targeting ANY card in EITHER graveyard — a second restriction — plus an
+  exile primitive that reaches a non-battlefield zone; the targeting half is now trivial, but
+  shipping half of it would report a card that then plays wrong, so it is left named rather than
+  half-built). No play-UI affordance for a granted recast (the actions ARE in `legalActions`; same
+  open follow-up printed flashback already carries). UNSUPPORTED-BACKLOG.md not regenerated (that
+  audit needs a live Scryfall fetch). Merged origin/main (scry/surveil + six templates) — clean
+  auto-merge, both sides kept. Full suite **2673 passed / 0 failed**, `npm run verify` exit 0,
+  `npm run build` exit 0 — all re-run AFTER the merge. (Worker)
 
 - 2026-08-18 worker: `feat/scry-and-templates` 🚧 PUSHED — **scry and surveil play as printed, and
   the Temple / surveil-land cycles compile.** The blocker DESIGN §3.11 named ("bottom-of-library
