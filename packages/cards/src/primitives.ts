@@ -35,6 +35,7 @@ import type {
   TriggeredAbility,
 } from '@jonny-boi/core';
 import {
+  addCardGrant,
   LOYALTY_COUNTER,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
@@ -42,6 +43,7 @@ import {
   isCreature,
   isLegalTarget,
   isPlaneswalker,
+  type ManaCost,
   protectionPreventsDamage,
 } from '@jonny-boi/core';
 import {
@@ -764,6 +766,65 @@ export const ifKicked: EffectPrimitive = (ctx) => {
   if (refs.length > 0) ctx.enqueueEffects(refs);
 };
 
+/**
+ * `grantFlashback` — "target instant or sorcery card in your graveyard gains
+ * flashback until end of turn" (Snapcaster Mage).
+ *
+ * The grant lives in core's `card-grants.ts`, not in the continuous layer: the
+ * card it modifies is not a permanent, so the layer that indexes the
+ * battlefield has nowhere to put it. It is INSTANCE-SCOPED (this copy in this
+ * graveyard, not "cards named X"), expires in cleanup like any until-end-of-turn
+ * effect, and stops applying the instant the card changes zones (CR 400.7) —
+ * all three enforced by the grant layer rather than restated here.
+ *
+ * Params:
+ *   - `targets` — the {@link TargetRestriction} the printed line names
+ *     (`'instantOrSorceryInYourGraveyard'`). Re-checked HERE at resolution, so
+ *     a card that left the graveyard between the trigger going on the stack and
+ *     its resolution makes the ability do nothing, exactly as it fizzles for
+ *     every other targeted effect.
+ *   - `cost` — the granted flashback cost: omitted (or `'itsManaCost'`) means
+ *     the target's own printed mana cost, which is what Snapcaster prints; an
+ *     explicit `ManaCost` object covers a card that names a fixed cost.
+ *
+ * A card with no printed mana cost is refused rather than granted a FREE
+ * flashback — an unpriced recast is strictly better than any printed card, and
+ * refusing is the direction that can never be.
+ */
+export const grantFlashback: EffectPrimitive = (ctx) => {
+  const target = ctx.targets[0];
+  if (target === undefined || isPlayerTarget(target)) return;
+  // The same legality question the offer and the accept asked, asked once more
+  // at resolution — the fizzle path (see the header).
+  if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller, ctx.source.def)) return;
+  const card = ctx.state.players[ctx.controller].graveyard.find((c) => c.instanceId === target);
+  if (!card) return;
+  const declared = ctx.params.cost;
+  const cost: ManaCost | undefined =
+    declared !== undefined && declared !== ITS_MANA_COST && typeof declared === 'object' && declared !== null
+      ? (declared as ManaCost)
+      : card.def.cost;
+  if (cost === undefined) return; // no printed price ⇒ no free recast (see above)
+  addCardGrant(
+    ctx.state,
+    {
+      targetInstanceId: card.instanceId,
+      sourceInstanceId: ctx.source.instanceId,
+      zone: card.zone,
+      duration: 'endOfTurn',
+      flashback: cost,
+    },
+    ctx.emit,
+  );
+};
+
+/**
+ * The `cost` param value meaning "equal to its mana cost" — the printed
+ * Snapcaster wording. Named rather than written as a bare string at both the
+ * primitive and the compiler rule that emits it.
+ */
+export const ITS_MANA_COST = 'itsManaCost';
+
 export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   gainControl,
   ifKicked,
@@ -787,6 +848,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   dealDamageToEach,
   addCounters,
   attachToTarget,
+  grantFlashback,
   ...CHOICE_PRIMITIVES,
 });
 

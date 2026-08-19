@@ -443,16 +443,39 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '2bb2eda7-3b38-4c56-870f-c3218a1056f5',
     name: 'Snapcaster Mage',
     types: ['creature'],
+    subtypes: ['Human', 'Wizard'],
     cost: { generic: 1, U: 1 },
     power: 2,
     toughness: 1,
-    keywords: {},
-    // The flashback-granting ETB still needs targeting a card in a graveyard +
-    // a continuous effect on a non-battlefield card (see STUBBED_MECHANICS); the
-    // vanilla 2/1 plays correctly. Flash timing DOES exist engine-wide now, but
-    // adding the keyword here would speed up UW Control and move every recorded
-    // gauntlet baseline — an integrator decision to make deliberately with a
-    // re-measure, not a drive-by data edit.
+    // The WHOLE printed card now. Flash is a real timing flag (`castTiming`
+    // reads it), and the ETB is a targeted trigger aimed as it goes on the
+    // stack: "target instant or sorcery card in your graveyard gains flashback
+    // until end of turn. The flashback cost is equal to its mana cost."
+    //
+    // The grant is instance-scoped, expires in cleanup, and dies with a zone
+    // change (CR 400.7) — core's `card-grants.ts`; the cast path reads it
+    // through the same `flashbackCostOf` accessor that reads a printed
+    // flashback cost, so a granted recast plays exactly like Think Twice's.
+    //
+    // ⚠️ Adding `flash` here does NOT move any recorded gauntlet baseline:
+    // no meta deck runs Snapcaster (UW Control cut it precisely because it was
+    // a blank 2/1 — see `packages/sim/data/decks/uw-control.ts`), so seed 99
+    // still reproduces byte-identically. Putting it back into a deck IS a
+    // baseline-moving decision and is deliberately left to the integrator.
+    keywords: { flash: true },
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        targets: 'instantOrSorceryInYourGraveyard',
+        effects: [
+          {
+            primitive: 'grantFlashback',
+            params: { targets: 'instantOrSorceryInYourGraveyard', cost: 'itsManaCost' },
+          },
+        ],
+        label: 'Enters: target instant or sorcery in your graveyard gains flashback',
+      },
+    ],
   },
   {
     id: 'e3afc704-220f-498f-9eaa-0821b17dc24c',

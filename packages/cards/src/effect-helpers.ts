@@ -32,6 +32,7 @@ import {
   isPlayerTarget,
   isTargetRestriction,
   MANA_COLORS,
+  pruneCardGrantsFor,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
@@ -357,6 +358,11 @@ export function moveOwnedCard(
   const [card] = source.splice(index, 1);
   if (!card) return undefined;
   card.zone = to;
+  // CR 400.7: the card is a NEW object in its new zone, so a grant made on the
+  // old one (a granted flashback on a graveyard card) does not follow it. Core's
+  // own `moveToZone` prunes for the same reason; this helper is the cards-side
+  // funnel and must agree with it — see `card-grants.ts`.
+  pruneCardGrantsFor(ctx.state, card.instanceId);
   if (position === 'top') owner[to].unshift(card);
   else owner[to].push(card);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to });
@@ -432,6 +438,9 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   // `controller` field is left as it was: it is the last-known information an
   // after-the-fact effect reads (Path to Exile compensates the creature's
   // *controller* only after the creature has already been exiled).
+  // Same CR 400.7 prune as `moveOwnedCard` — a permanent carries no grant
+  // today, but the two funnels must not disagree about what a zone change does.
+  pruneCardGrantsFor(ctx.state, perm.instanceId);
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
 }
