@@ -256,7 +256,9 @@ are the same observation, which is the recurring failure shape in this repo.
 
 ⚠️ **MEASURED: MORE CORRECT, NOT MEASURABLY STRONGER — and it ships anyway, because it is a bug fix.**
 Fixed heuristic vs the OLD heuristic head to head, one process, seat and play rotated, paired seeds, the
-old pilot loaded from a separate `origin/main` worktree built at the same commit:
+old pilot loaded from a separate `origin/main` worktree built at the same commit: measured at
+origin/main `8152d7f`, before this branch merged the indestructible/menace-blocking work that
+landed after it — that work touches both arms' successors equally and is not in either arm here.
 
 | matchup | n | fixed wins | 95% CI |
 |---|---|---|---|
