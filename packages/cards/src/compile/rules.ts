@@ -2041,6 +2041,16 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },
   {
+    // Turn-scoped fact memory EXISTS now (core's `turn-facts.ts`: revolt,
+    // morbid and the lifegain check, fed from the event stream and cleared as
+    // each turn begins), and Fatal Push's revolt mode plays as printed. What
+    // still lands here is an ability word whose LINE has no rule — a morbid or
+    // delirium body the effect table cannot build, or a fact outside the closed
+    // vocabulary ("if you've cast two spells this turn").
+    pattern: /revolt|morbid|delirium|threshold|metalcraft/,
+    missingEngineSystem: 'an ability-word template the compiler does not recognize yet',
+  },
+  {
     // Multikicker is the half of kicker still genuinely missing: it needs a
     // COUNT ("paid N times"), not the single yes/no the engine asks.
     pattern: /\bmultikicker\b/,
@@ -2062,6 +2072,15 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // cost question kicker and {X} now go through.
     pattern: /\bcycling\b|\bbuyback\b|\bmadness\b/,
     missingEngineSystem: 'alternative casting costs and cost-bearing discards (cycling, buyback, madness)',
+  },
+  {
+    // Characteristic-defining P/T IS a system now (CR 613.3 layer 7a: a `*` box
+    // compiles to a formula over the closed derived-count vocabulary, applied
+    // as the creature's BASE before counters and pumps, re-derived on every
+    // read — Tarmogoyf plays as printed). What still lands here is a FORMULA
+    // outside that vocabulary, or a P/T that changes by some other rule.
+    pattern: /power is equal to|toughness is equal to|power and toughness are each equal/,
+    missingEngineSystem: 'a characteristic-defining P/T formula the compiler does not recognize yet',
   },
   {
     // {X} costs ARE payable now (a cast-time chooseNumber the engine charges),
@@ -2117,6 +2136,12 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a leaves-the-battlefield template the compiler does not recognize yet',
   },
   {
+    // Anthems compile, and they can now be narrowed by COLOUR ("White creatures
+    // you control get +1/+1") because the shared `CardFilter` carries
+    // `anyOfColors`, read from cost pips by the same reader protection uses.
+    // What still lands here is a static whose SELECTOR is outside the filter
+    // (by power, by tapped-ness, "as long as you control…") or one that is not
+    // a plain P/T-and-keyword modification.
     pattern: /(?:other )?creatures you control (?:get|have)|as long as you control|creatures? you control gets?/,
     missingEngineSystem: 'a static-buff template the compiler does not recognize yet',
   },

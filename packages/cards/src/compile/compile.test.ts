@@ -58,8 +58,16 @@ const STUBBED_NAMES = new Set(STUBBED_MECHANICS.map((entry) => entry.card));
  * one mana. The compiler reports the hybrid cost instead of shipping that.
  */
 const HUMAN_APPROXIMATIONS: Readonly<Record<string, string>> = Object.freeze({
-  Tarmogoyf: 'dynamic power/toughness (characteristic-defining */*)',
-  // Birds of Paradise used to live here: "{T}: Add one mana of any color" had no
+  // EMPTY, and that is the news: every remaining pool card is either reproduced
+  // exactly from its printed text or named in STUBBED_MECHANICS.
+  //
+  // Tarmogoyf used to live here — the pool pinned a representative 2/3 for a
+  // card whose printed box is a formula, and the compiler refused to copy the
+  // guess. Characteristic-defining P/T (CR 613.3 layer 7a) closed that gap, so
+  // the compiler reproduces the authored Tarmogoyf exactly and the card is held
+  // to the full ground-truth check like everything else.
+  //
+  // Birds of Paradise used to live here too: "{T}: Add one mana of any color" had no
   // faithful form, because a fixed `produces` bundle adds one of EACH colour and
   // would have made Birds tap for five mana. Core's modal `producesOptions` (one
   // tap = one chosen mode) closed that gap, so the compiler now reproduces the
@@ -181,16 +189,24 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
-    // Liliana COMPILES now (the planeswalker system landed), so the blocked half
-    // needs a genuinely unimplementable card: Tarmogoyf's */* P/T still is.
+    // Liliana compiles (planeswalkers landed) and so does Tarmogoyf now (the
+    // star P/T box landed), so the blocked half needs a card that is still
+    // genuinely unimplementable: Snapcaster Mage, which has to GRANT flashback
+    // to a card in a graveyard — targeting a graveyard card plus a continuous
+    // effect on a non-battlefield card, neither of which exists.
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
     const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
+    const snapcaster = scryfallFor(CARD_POOL.find((c) => c.name === 'Snapcaster Mage')!);
 
-    const { playable, blocked } = compileCards([bolt, liliana, goyf]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster]);
 
-    expect(playable.map((card) => card.name)).toEqual(['Lightning Bolt', 'Liliana of the Veil']);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Tarmogoyf']);
+    expect(playable.map((card) => card.name)).toEqual([
+      'Lightning Bolt',
+      'Liliana of the Veil',
+      'Tarmogoyf',
+    ]);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Snapcaster Mage']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });
