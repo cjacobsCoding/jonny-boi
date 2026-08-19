@@ -214,7 +214,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Coloured anthems & card filters',
         detail:
-          '"White creatures you control get +1/+1" narrows by colour, read from the card's mana pips exactly as protection reads it — and the same filter serves every other chooser (searches, discards, sacrifices), not just statics.',
+          '"White creatures you control get +1/+1" narrows by colour, read from the card’s mana pips exactly as protection reads it — and the same filter serves every other chooser (searches, discards, sacrifices), not just statics.',
         witness: { kind: 'rule', id: 'static-buff-your-creatures' },
       },
       {

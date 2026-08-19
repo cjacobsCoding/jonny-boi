@@ -2047,7 +2047,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // still lands here is an ability word whose LINE has no rule — a morbid or
     // delirium body the effect table cannot build, or a fact outside the closed
     // vocabulary ("if you've cast two spells this turn").
-    pattern: /revolt|morbid|delirium|threshold|metalcraft/,
+    pattern: /\brevolt\b|\bmorbid\b|\bdelirium\b|\bthreshold\b|\bmetalcraft\b/,
     missingEngineSystem: 'an ability-word template the compiler does not recognize yet',
   },
   {
