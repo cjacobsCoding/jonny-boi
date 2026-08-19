@@ -168,6 +168,16 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // zoneChange. No library is ever consulted, so paired arms stay comparable.
   'sacrificeChosen',
   'pileSplitSacrifice',
+  /*
+   * `createEmblem` puts a new object in the COMMAND zone built from data carried
+   * in its own params — a name plus static/trigger ABILITY records. It never
+   * reads a library, and unlike `ifKicked` it cannot come to hide one: its params
+   * hold ability descriptions (a static's filter, a trigger's condition), not
+   * nested effect refs the decklist scan would be blind to. The abilities those
+   * records describe run through the ordinary primitive path when they fire, and
+   * are classified there on their own account.
+   */
+  'createEmblem',
 ]);
 
 /**

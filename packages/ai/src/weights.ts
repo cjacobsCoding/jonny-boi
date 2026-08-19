@@ -123,6 +123,15 @@ export interface HeuristicWeights {
   /** Flat value for finishing OFF an enemy planeswalker (on top of the per-loyalty
    *  term) — the ability stream it stops is worth more than its remaining counters. */
   readonly walkerKillBonus: number;
+  /** How much removing the last defense counter from an enemy BATTLE is worth, per
+   *  counter it has left. Priced BELOW `walkerThreatPerLoyalty` deliberately: a
+   *  walker generates value every turn it lives, whereas a battle just sits there
+   *  — the prize is the reward for defeating it, not the harm of leaving it up. */
+  readonly battleThreatPerDefense: number;
+  /** Flat value for DEFEATING an enemy battle (on top of the per-defense term) —
+   *  the reward it pays out is the whole reason to attack it, so this is what
+   *  outbids face damage once the last counter is actually reachable. */
+  readonly battleDefeatBonus: number;
 
   // --- activating loyalty abilities -----------------------------------------
   /** Base score for activating a loyalty ability whose effects come out at least
@@ -296,6 +305,13 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // can really be killed, and never when it cannot.
   walkerThreatPerLoyalty: 2,
   walkerKillBonus: 8,
+  // A battle is not a recurring threat the way a walker is — it does nothing while
+  // it sits there — so each remaining counter is worth less than a loyalty point.
+  // The value is concentrated in the DEFEAT bonus, which is what a Siege's reward
+  // actually is, and that shape is what stops a pilot chipping at a battle it
+  // cannot finish (chip damage on a battle buys precisely nothing).
+  battleThreatPerDefense: 1,
+  battleDefeatBonus: 8,
 
   // activating loyalty abilities: above genericSpellScore so a walker on the
   // table is USED (a plus activation is close to free value every turn), with
