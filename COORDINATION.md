@@ -111,6 +111,8 @@ throughput (games/sec) from regressing.
 | feat/you-may-and-trigger-templates | worker | packages/core (card.ts `basic`/`entersTappedUnlessRevealed`/`canRevealForUntapped`, choices.ts CardFilter P/T bounds, triggers.ts +5 TriggerEvents + `TriggerSubject`, internal/triggers-runtime.ts subject resolver, engine.ts reveal-land question + its answer branch, index.ts +2 exports, conditional-tapland.test.ts), packages/cards (primitives `mayEffects` + loseLife `whichPlayer`, choice-primitives tapPermanents untap/excludeTypes, compile/{rules,compile,types}.ts + NEW compile/you-may-and-triggers.test.ts, data/pool.ts basics only), packages/sim (paired-arms-config classification only), apps/web/src/lib/about/mechanics.ts (+6 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 | feat/indestructible-and-blocking | worker | packages/core (card.ts KeywordFlags +3, internal/{sba,combat,stats,continuous}.ts, NEW indestructible.test.ts, blocking-restrictions.test.ts extended), packages/cards (primitives.ts destroy exemption + NEW grantKeywordToYoursUntilEndOfTurn, index.ts, compile/rules.ts +4 rules & 1 hint reword & 2 generalised rules, compile.test.ts reword, NEW indestructible-and-blocking.test.ts), packages/ai (heuristic.ts, effect-value.ts, NEW indestructible-blocking-pilot.test.ts), packages/sim/src/paired-arms-config.ts (+1 classification), apps/web/src/lib/about/mechanics.ts (+4 witnesses), DESIGN §3.17 | 🚧 PUSHED, not merged |
 
+| feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
@@ -165,6 +167,85 @@ _Append dated notes here; keep them short. Newest at top._
   counter as an activation cost (`ActivationCost` has no counter component — Devoted Druid).
 
 
+
+- 2026-08-19 DESKTOP-90PJPM4 (integrator): `feat/bug-reporter` ✅ **INTEGRATED** — the in-game bug
+  reporter, ported from Treadlight/Lightwalker so all three projects file the SAME report. **B**, or
+  the ⛬ button (the one that matters — the live PWA is used on a phone), freezes the frame from any
+  view; scribble, type, speak; Submit downloads `bugreport_<stamp>.zip` with `report.md`,
+  `screenshot.png`, `annotated.png`, `state_dump.txt`, `console.txt`, `voice.webm`. DESIGN §3.18 has
+  the full write-up. Files owned: `apps/web/src/lib/bugreport/*`,
+  `apps/web/src/components/BugReporter.tsx` + `bug-reporter.css`, plus three lines in `App.tsx`, a
+  `define` block in `apps/web/vite.config.ts`, and one dependency (`html-to-image`, dynamically
+  imported so it is a 13.7 kB lazy chunk, not first-paint weight).
+
+  **Two things for whoever touches this next.** (1) `state_dump.txt` is a REGISTRY — call
+  `registerStateSection('yourFeature', () => '…')` and your state is in every future report; do not
+  add fields to the reporter. (2) The console/error ring is installed at APP LOAD, not when the
+  reporter opens, because by then it has already missed the thing you opened it for.
+
+  **Not verified automatically, and said so rather than glossed:** whether the rasteriser draws a
+  faithful picture. It needs a VISIBLE browser — in a backgrounded tab `html-to-image` never resolves
+  at all, even for one header element, which is exactly why the capture now has a finite budget and
+  degrades to "no picture, and here is why" instead of freezing the app. Everything around it is
+  tested (49 new cases) and the submit path was driven end-to-end in the running app. Suite
+  **2980 passed / 0 failed** on `main` after this, which includes
+  `feat/you-may-and-trigger-templates` landing mid-flight — this feature contributes 49 of them.
+
+- 2026-08-19 worker: `feat/alternative-costs` 🚧 PUSHED — **cycling, typecycling/landcycling,
+  buyback and madness, measured at +21 cards on the cached 2100-card corpus** (229 → 250 against
+  the main this branch started from; re-measured 307 → 328 against the latest main), which
+  is the census's predicted yield for this system plus one. Three things are worth reading before
+  anyone touches a cost or a discard.
+
+  ⚠️ **`spellLeaveDestination` NOW TAKES THE REASON A SPELL LEAVES THE STACK, and that argument is
+  the design, not bookkeeping.** Flashback exiles a card **however** it leaves the stack; buyback
+  returns it to hand **only as it resolves** and lets it go to the graveyard when it is **countered**
+  (CR 702.27a). One helper answers both because two exits that can disagree is exactly the bug it was
+  written to prevent — and `reason` is REQUIRED, so a new exit cannot forget the distinction exists.
+  Every call site (resolution, `counterSpellOnStack`) now says which one it is.
+
+  ⚠️ **THERE ARE TWO DISCARD FUNNELS IN THIS REPO** — core's `moveToZone` and the cards package's
+  `moveOwnedCard` — and madness applies to both. They now share `discardDestination` (core's new
+  `madness.ts`), so a card discarded as a COST (cycling) and a card discarded by an EFFECT
+  (Thoughtseize, "each player discards") cannot disagree about being exiled. If you add a third way
+  for a card to leave a hand for a graveyard, route it there.
+
+  ✅ **Cycling is its own action kind, deliberately.** `cycleCard` indexes `CardDefinition.cycling`
+  exactly as `activateAbility` indexes `activated`, but it is NOT an entry in that list: those are
+  activated from the battlefield by a permanent, and folding the two teaches every battlefield-shaped
+  check (summoning sickness, tap costs, `findOnBattlefield`) about a zone it never had to consider.
+  **Typecycling and landcycling folded in completely** — same list, same action, effects that search
+  instead of drawing — over a CLOSED table of cycling words the card filter can genuinely select; a
+  word outside it reports rather than fetching approximately the right card.
+
+  ⚠️ **The madness window is STATE, and while it stands the engine refuses everything else.** Legal
+  actions are exactly: mana sources, the cast from exile, and **pass, which declines** and drops the
+  card in the graveyard. Mana abilities had to stay legal or the window is a trap — the cast is only
+  offered once the pool already covers the cost, so a seat with untapped lands could never fund the
+  thing it was being offered. Same trap, same fix, for cycling: the pilot funds it through
+  `planManaPayment` because `cycleCard` is likewise only offered once the pool covers it.
+
+  ⚠️ **paired-arms' effect scan was blind to a new authoring place.** `allEffectRefs` walked
+  `effects`/`triggers`/`activated`; a LANDCYCLING ability is a `searchLibrary` over the very library
+  the two arms differ in, and it lives on `def.cycling`. Fixed. Anyone adding a new home for effect
+  refs must add it there too, or the identical-game optimisation silently assumes it cannot read a
+  library.
+
+  🚫 **Reported, not faked, by name:** an **{X} cycling cost** (Shark Typhoon — an activation cost has
+  no answer-and-charge step the way a casting cost does), a **madness cost printed in words**
+  ("Madness—Pay six {C}" — Emrakul), a **cycling word with no expressible filter**, and **"when you
+  cycle this card" triggers** (the `cardCycled` event exists for them; the trigger CONDITION does
+  not). **Aftermath is not in this system at all** — it is a split card and needs the `//` type.
+
+  GATE: `npx vitest run` **2967 passed / 0 failed**, `npm run verify` exit 0, `npm run build`
+  exit 0, measured after merging origin/main THREE times mid-flight (modal-casting + keyword-sweep,
+  indestructible/blocking, you-may/trigger-templates). **Gauntlet seed 99 `--games 40` reproduces
+  79/280 = 28.2% BYTE-IDENTICALLY, per-deck line for line, on every run of both sides.** Throughput
+  measured paired/alternating against a same-box `origin/main` worktree; the box is heavily
+  contended (six agents), so the honest read is the quietest round each side — 107 vs 102 games/sec,
+  ratio 0.95, with individual rounds ranging 0.44-2.65 in BOTH directions. One real cost was found
+  and removed on the way: the pilot cycling policy walked the battlefield on every priority decision
+  for a mechanic almost no deck holds, and now asks "does any hand card even cycle?" first.
 - 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
   trigger-timing families, worked in `sole`-descending order off the cached corpus.**
   **Measured: 193 → 248 playable of 2100 (+55).** Re-runnable offline:

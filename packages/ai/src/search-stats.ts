@@ -82,6 +82,13 @@ export function actionEquivalenceKey(state: GameState, action: GameAction): stri
       const name = perm?.def.name ?? String(action.instanceId);
       return `act:${name}:${action.abilityIndex}:${targetsKey(action.targets)}`;
     }
+    case 'cycleCard': {
+      // Keyed by NAME, like the cast and land cases above and for the same
+      // reason: two copies of the same cycling land in hand are the same move,
+      // and keying by instance id would make the search widen twice for it.
+      const name = handCardName(state, action.player, action.instanceId);
+      return `cycle:${name}:${action.abilityIndex ?? 0}`;
+    }
     case 'declareAttackers':
       return `atk:${[...action.attackers].sort(numeric).join(',')}`;
     case 'declareBlockers':
