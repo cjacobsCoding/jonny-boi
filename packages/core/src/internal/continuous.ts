@@ -61,6 +61,7 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
+import { PLAYER_IDS } from '../state.js';
 import type { KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import type { GameEvent } from '../events.js';
@@ -249,6 +250,24 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   let sources: CardInstance[] | null = null;
   let attachments: CardInstance[] | null = null;
   const permanents = state.battlefield;
+  // EMBLEMS radiate statics from the COMMAND zone (CR 114): "creatures you
+  // control get +1/+1 as long as this emblem exists" is the SAME continuous
+  // modification an anthem applies from the battlefield, differing only in where
+  // its source sits and in the fact that nothing can ever remove it. So it folds
+  // into this one pass instead of getting a layer of its own — which is also
+  // what makes an emblem's buff survive a board wipe with no special case.
+  //
+  // The cost on the sim's hot path is two array-length reads per call: the
+  // command zone is empty in every game that never made an emblem, and the loop
+  // body never runs.
+  for (const pid of PLAYER_IDS) {
+    const command = state.players[pid].command;
+    for (let i = 0; i < command.length; i++) {
+      const object = command[i] as CardInstance;
+      const declared = object.def.statics;
+      if (declared !== undefined && declared.length > 0) (sources ??= []).push(object);
+    }
+  }
   for (let i = 0; i < permanents.length; i++) {
     const perm = permanents[i] as CardInstance;
     const declared = perm.def.statics;

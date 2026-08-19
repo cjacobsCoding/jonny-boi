@@ -18,6 +18,7 @@
 
 import type { GameEvent } from '../events.js';
 import type { GameState, InstanceId } from '../state.js';
+import { PLAYER_IDS } from '../state.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
 import { matchTriggers, orderPendingTriggers } from '../triggers.js';
 
@@ -74,6 +75,32 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
    * existing key would not move it and we no longer re-set at all.
    */
   const rememberSources = (): void => {
+    // EMBLEMS trigger from the COMMAND zone (CR 114) — "at the beginning of your
+    // upkeep…" printed on an emblem fires exactly as it would on a permanent,
+    // and keeps firing for the rest of the game because nothing can remove the
+    // emblem. They fold into the SAME known-source set rather than being scanned
+    // separately, so the APNAP ordering, the label, the stack push and the
+    // resolution are all one path with no emblem special case.
+    //
+    // Cost: the command zone is empty in every game that never made an emblem,
+    // so this is two array-length reads per emitted event and no allocation.
+    for (const pid of PLAYER_IDS) {
+      const command = state.players[pid].command;
+      for (let i = 0; i < command.length; i++) {
+        const object = command[i] as (typeof command)[number];
+        const triggers = object.def.triggers;
+        if (triggers === undefined || triggers.length === 0) continue;
+        const known = seenSources?.get(object.instanceId);
+        if (known !== undefined && known.controller === object.controller && known.triggers === triggers) continue;
+        (seenSources ??= new Map()).set(object.instanceId, {
+          instanceId: object.instanceId,
+          controller: object.controller,
+          name: object.def.name,
+          triggers,
+        });
+        snapshot = null;
+      }
+    }
     const battlefield = state.battlefield;
     for (let i = 0; i < battlefield.length; i++) {
       const inst = battlefield[i] as (typeof battlefield)[number];

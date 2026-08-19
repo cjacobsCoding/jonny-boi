@@ -230,6 +230,24 @@ export interface CardDefinition {
    * rule has one implementation rather than a walker-only special case.
    */
   readonly legendary?: boolean;
+  /**
+   * Marks this definition as an EMBLEM (CR 114) — the object a planeswalker
+   * ultimate leaves behind. An emblem is not a card and not a permanent: it has
+   * no card types, no characteristics beyond its abilities, it lives in the
+   * COMMAND zone, and **nothing in the game can remove it**.
+   *
+   * That last property needs no enforcement code, deliberately: every removal
+   * path in this engine (targeting, destroy, exile, board wipes, state-based
+   * actions) reaches only `state.battlefield`, so an object that never enters
+   * the battlefield is unremovable BY CONSTRUCTION rather than by a list of
+   * exceptions somebody has to remember to keep complete.
+   *
+   * What an emblem does have is abilities, and they work from the command zone
+   * exactly as a permanent's work from the battlefield: {@link statics} reach
+   * the continuous layer and {@link triggers} reach the trigger collector,
+   * because both of those systems discover emblems alongside permanents.
+   */
+  readonly isEmblem?: boolean;
   readonly keywords?: KeywordFlags;
   /**
    * Ordered effects run when this spell resolves (instants/sorceries) or as the
