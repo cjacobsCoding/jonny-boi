@@ -52,8 +52,8 @@
  */
 
 import type { CardType, EffectRef } from './card.js';
-import { hasSubtype } from './card.js';
-import type { ManaCost } from './mana.js';
+import { colorsOfDefinition, hasSubtype } from './card.js';
+import type { ManaColor, ManaCost } from './mana.js';
 import type { TargetRestriction } from './targeting.js';
 import { convertedManaCost, formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
@@ -86,6 +86,16 @@ export interface CardFilter {
   /** Inclusive mana-value bounds. */
   readonly minManaValue?: number;
   readonly maxManaValue?: number;
+  /**
+   * Keep only cards of at least one of these COLORS — how "White creatures you
+   * control get +1/+1" narrows an anthem, and available to every other filter
+   * consumer (searches, discards, sacrifices) through the same field. Color is
+   * derived from the card's mana-cost pips (hybrid included) by
+   * {@link colorsOfDefinition} — the one color reader protection also uses, so
+   * "white" cannot mean two different things. A card with no colored pips (a
+   * land, most artifacts) matches no color and is excluded by any color filter.
+   */
+  readonly anyOfColors?: readonly ManaColor[];
 }
 
 /**
@@ -112,7 +122,21 @@ export function matchesCardFilter(card: CardInstance, filter?: CardFilter): bool
     if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
     if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
   }
+  // Colors last: it is the only test that can touch the (memoized) pip walk, so
+  // a candidate rejected by type/subtype/name never pays for it at all.
+  if (filter.anyOfColors !== undefined && !hasAnyColor(def, filter.anyOfColors)) return false;
   return true;
+}
+
+/** Whether a definition is any of `wanted` colors. Allocation-free (see above). */
+function hasAnyColor(def: CardInstance['def'], wanted: readonly ManaColor[]): boolean {
+  const colors = colorsOfDefinition(def);
+  for (const want of wanted) {
+    for (const color of colors) {
+      if (color === want) return true;
+    }
+  }
+  return false;
 }
 
 /** Whether a type line carries any of `wanted`. Allocation-free (see above). */
