@@ -66,6 +66,15 @@ describe('any-creature-dies triggers', () => {
     expect(matches(condition, { type: 'creatureDied', instanceId: SOURCE, name: 'Me' })).toBe(true);
   });
 
+  it('a `who` scope narrows it to one player’s creatures, and needs the controller', () => {
+    const yours = { on: 'creatureDies', who: 'you' } as const;
+    expect(matches(yours, { type: 'creatureDied', instanceId: OTHER, name: 'Bear', controller: ME })).toBe(true);
+    expect(matches(yours, { type: 'creatureDied', instanceId: OTHER, name: 'Bear', controller: THEM })).toBe(false);
+    // An event that does not name the controller (an older log fold) cannot
+    // satisfy a scoped filter, so it does not fire.
+    expect(matches(yours, { type: 'creatureDied', instanceId: OTHER, name: 'Bear' })).toBe(false);
+  });
+
   it('the SELF-only "dies" condition still fires for its own death alone', () => {
     const condition = { on: 'dies' } as const;
     expect(matches(condition, { type: 'creatureDied', instanceId: SOURCE, name: 'Me' })).toBe(true);

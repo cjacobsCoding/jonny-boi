@@ -116,7 +116,7 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
         continue;
       }
       const sizeBefore = state.battlefield.length;
-      emit({ type: 'creatureDied', instanceId: inst.instanceId, name: inst.def.name });
+      emit({ type: 'creatureDied', instanceId: inst.instanceId, name: inst.def.name, controller: inst.controller });
       moveToZone(state, inst, 'graveyard', emit, inst.owner);
       resetInstanceForNewZone(inst);
       changed = true;
@@ -412,7 +412,7 @@ export function applyLegendRuleChoice(
     // event every other death emits, so dies-triggers and any log reader see it
     // through the one mechanism. Walkers and battles announce themselves in kind.
     if (isCreature(loser.def)) {
-      emit({ type: 'creatureDied', instanceId: loser.instanceId, name: loser.def.name });
+      emit({ type: 'creatureDied', instanceId: loser.instanceId, name: loser.def.name, controller: loser.controller });
     } else if (isPlaneswalker(loser.def)) {
       emit({ type: 'planeswalkerDied', instanceId: loser.instanceId, name: loser.def.name });
     } else if (isBattle(loser.def)) {

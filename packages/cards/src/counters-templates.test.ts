@@ -286,13 +286,14 @@ describe('the trigger templates the counters family needed', () => {
 
   it('compiles "whenever ~ or another creature dies" as the ANY-death trigger', () => {
     const definition = playable(CORDIAL_VAMPIRE);
-    expect(definition.triggers?.[0]?.condition).toEqual({ on: 'creatureDies' });
+    expect(definition.triggers?.[0]?.condition).toEqual({ on: 'creatureDies', who: 'any' });
   });
 
-  it('REFUSES "whenever a creature you control dies" — the death event has no controller', () => {
-    // Compiling this as the unfiltered any-death trigger would make the card
-    // fire on the opponent's creatures too: strictly more triggers than printed.
-    const result = compileCard(
+  it('scopes "whenever a creature YOU CONTROL dies" to your own creatures', () => {
+    // The death event carries the dead creature's controller, so the narrower
+    // printed form is a real filter rather than a silently-widened any-death
+    // trigger firing on the opponent's board too.
+    const definition = playable(
       scryfall({
         name: 'Yours Only',
         cost: { B: 1 },
@@ -303,7 +304,7 @@ describe('the trigger templates the counters family needed', () => {
         oracleText: 'Whenever a creature you control dies, put a +1/+1 counter on Yours Only.',
       }),
     );
-    expect(result.status).toBe('incomplete');
+    expect(definition.triggers?.[0]?.condition).toEqual({ on: 'creatureDies', who: 'you' });
   });
 
   it('compiles the begin-combat and end-step templates', () => {
@@ -707,6 +708,29 @@ describe('another-permanent-enters triggers', () => {
       on: 'permanentEtb',
       who: 'you',
       entering: { anyOfTypes: ['creature'], anyOfColors: ['G'] },
+      excludeSelf: true,
+    });
+  });
+
+  it('reads an ABSENT controller tail as everybody’s permanents', () => {
+    // "Whenever another creature enters" (Soul Warden) fires on the opponent's
+    // arrivals too. Reading the absent tail as "you control" would make the card
+    // trigger on half as many arrivals as printed.
+    const warden = playable(
+      scryfall({
+        name: 'Soul Warden',
+        cost: { W: 1 },
+        types: ['Creature'],
+        subtypes: ['Human'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'Whenever another creature enters, you gain 1 life.',
+      }),
+    );
+    expect(warden.triggers?.[0]?.condition).toEqual({
+      on: 'permanentEtb',
+      who: 'any',
+      entering: { anyOfTypes: ['creature'] },
       excludeSelf: true,
     });
   });

@@ -1900,10 +1900,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
      * reporting rather than firing on tokens too.
      */
     id: 'trigger-permanent-etb',
-    description: '"Whenever [another] [COLOR] TYPE you control enters, BODY" (incl. landfall / constellation)',
+    description:
+      '"Whenever [another] [COLOR] TYPE [you control / an opponent controls] enters, BODY" (incl. landfall / constellation)',
     pattern: new RegExp(
       `^(?:landfall — |constellation — )?whenever (another |an?other |an? )?` +
-        `((?:${Object.keys(COLOR_WORDS).join('|')}) )?([a-z]+) you control enters, (.+)$`,
+        `((?:${Object.keys(COLOR_WORDS).join('|')}) )?([a-z]+)` +
+        `( you control| an opponent controls| your opponents control)? enters, (.+)$`,
     ),
     build(match, ctx) {
       const type = SPELL_TYPE_WORDS[match[3] ?? ''];
@@ -1911,10 +1913,16 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       const colorWord = match[2]?.trim();
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
+      // No controller tail printed ⇒ EVERYBODY's permanents, which is what
+      // "whenever another creature enters" (Soul Warden) means. Reading the
+      // absent tail as "you control" would make the card fire on half as many
+      // arrivals as printed.
+      const tail = (match[4] ?? '').trim();
+      const who = tail === '' ? 'any' : tail === 'you control' ? 'you' : 'opponent';
       const another = (match[1] ?? '').trim().startsWith('another');
       const condition = {
         on: 'permanentEtb',
-        who: 'you',
+        who,
         entering: {
           anyOfTypes: [type],
           ...(color ? { anyOfColors: [color as never] } : {}),
@@ -1924,8 +1932,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       return triggerFrom(
         ctx,
         condition as never,
-        match[4] ?? '',
-        `${another ? 'Another ' : 'A '}${type} you control enters: ${match[4] ?? ''}`,
+        match[5] ?? '',
+        `${another ? 'Another ' : 'A '}${type} (${who}) enters: ${match[5] ?? ''}`,
       );
     },
   },
@@ -1973,19 +1981,24 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'trigger-any-creature-dies',
-    description: '"Whenever a creature dies" / "Whenever ~ or another creature dies, BODY"',
+    description:
+      '"Whenever [another] a creature [you control / an opponent controls] dies" / "Whenever ~ or another creature dies, BODY"',
     // Both printed forms mean the same thing — EVERY creature's death, this
     // permanent's own included — which is what core's `creatureDies` watches.
     // The narrower "whenever a creature YOU CONTROL dies" is deliberately NOT
     // matched: the death event carries no controller, so that filter cannot be
     // honoured and the line must keep reporting.
-    pattern: /^whenever (?:a creature|~ or another creature) dies, (.+)$/,
+    pattern:
+      /^whenever (?:(another )?a?\s?creature( you control| an opponent controls| your opponents control)?|~ or another creature) dies, (.+)$/,
     build(match, ctx) {
+      const tail = (match[2] ?? '').trim();
+      const who = tail === '' ? 'any' : tail === 'you control' ? 'you' : 'opponent';
+      const another = (match[1] ?? '').trim() === 'another';
       return triggerFrom(
         ctx,
-        { on: 'creatureDies' },
-        match[1] ?? '',
-        `A creature dies: ${match[1] ?? ''}`,
+        { on: 'creatureDies', who, ...(another ? { excludeSelf: true } : {}) } as never,
+        match[3] ?? '',
+        `A creature (${who}) dies: ${match[3] ?? ''}`,
       );
     },
   },

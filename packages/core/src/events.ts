@@ -151,7 +151,18 @@ export type GameEvent =
     }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
-  | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }
+  | {
+      readonly type: 'creatureDied';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      /**
+       * Who controlled it as it died — what "whenever a creature **you control**
+       * dies" is keyed on. Optional so every fold of a log written before it
+       * existed still reads; a trigger that needs it and does not find it does
+       * not fire, which is the safe direction.
+       */
+      readonly controller?: PlayerId;
+    }
   | {
       /**
        * A planeswalker's loyalty changed — damage removed counters, a loyalty

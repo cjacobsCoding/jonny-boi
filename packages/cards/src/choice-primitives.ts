@@ -825,7 +825,7 @@ function sacrificePermanent(ctx: EffectContext, perm: CardInstance): void {
   const wasCreature = isCreature(perm.def);
   const wasWalker = perm.def.types.includes('planeswalker');
   if (wasCreature) {
-    ctx.emit({ type: 'creatureDied', instanceId: perm.instanceId, name: perm.def.name });
+    ctx.emit({ type: 'creatureDied', instanceId: perm.instanceId, name: perm.def.name, controller: perm.controller });
   } else if (wasWalker) {
     ctx.emit({ type: 'planeswalkerDied', instanceId: perm.instanceId, name: perm.def.name });
   }

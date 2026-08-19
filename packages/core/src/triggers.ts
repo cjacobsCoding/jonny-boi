@@ -223,12 +223,21 @@ export function conditionMatches(
       if (event.type !== 'gainLife') return false;
       return whoMatches(condition.who, event.player, sourceController);
     }
-    case 'creatureDies':
+    case 'creatureDies': {
       // Any creature's death, this permanent's own included ("whenever ~ or
-      // another creature dies"). Deliberately unfiltered: the event carries no
-      // controller, so a condition that claimed to watch only YOUR creatures
-      // could not be honoured and is therefore not expressible here.
-      return event.type === 'creatureDied';
+      // another creature dies"). A `who` scope narrows it to the deaths one
+      // player's creatures ("whenever a creature YOU CONTROL dies") — honoured
+      // only when the event names the dead creature's controller. An event
+      // without it (an older log fold) does not fire a scoped trigger, which is
+      // the safe direction: a filter that cannot be verified must not be
+      // silently dropped.
+      if (event.type !== 'creatureDied') return false;
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
+      const scope = condition.who;
+      if (scope === undefined || scope === 'any') return true;
+      if (event.controller === undefined) return false;
+      return whoMatches(scope, event.controller, sourceController);
+    }
     case 'permanentEtb': {
       // Another permanent's arrival. The ENTERING permanent's controller and
       // characteristics are not on the event, so they are read from the

@@ -890,7 +890,7 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
 function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
   movePermanentTo(ctx, permanent, 'graveyard');
   if (isCreature(permanent.def)) {
-    ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
+    ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name, controller: permanent.controller });
   }
 }
 
