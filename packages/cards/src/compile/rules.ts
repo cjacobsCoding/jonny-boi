@@ -3462,10 +3462,11 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // stat pipeline reads +1/+1 and -1/-1 at CR 613.3 layer 7d, `addCounters`
     // puts them on one creature or on a whole filtered group, a static can read
     // "with a +1/+1 counter on it", and the trigger vocabulary now covers ETB,
-    // attacks, dies, ANY creature dying, life gain, combat damage to a player,
-    // begin-combat, the end step and another permanent entering. What lands here
+    // attacks, `permanentEnters`/`permanentDies` (with a controller scope, a
+    // `CardFilter` and the printed word "another"), life gain, combat damage to
+    // a player, begin-combat and the step-beginning triggers. What lands here
     // is a counters TEMPLATE with no rule — and, named so nobody re-builds
-    // finished work: indestructible, phasing, DOUBLING counters, proliferate
+    // finished work: phasing, DOUBLING counters, proliferate
     // (needs a chooser over every permanent and player with a counter), counter
     // kinds the stat layer does not read (charge/quest/time/growth/keyword
     // counters), "each ATTACKING creature", "NONTOKEN" filters (instances carry

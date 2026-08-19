@@ -159,8 +159,7 @@ _Append dated notes here; keep them short. Newest at top._
   which a card from each branch watches the same event and asserts both fire.
 
   **DEFERRED, with named blockers — do not treat these as unfinished counters work:**
-  `indestructible` (no `KeywordFlags` flag — it is its own item in the plan), phasing, DOUBLING
-  counters, **proliferate** (needs a chooser over every permanent AND player with a counter; the
+  phasing (Slip Out the Back), DOUBLING counters, **proliferate** (needs a chooser over every permanent AND player with a counter; the
   choice kinds cannot express that today — reported, never approximated), counter kinds the stat
   layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature"
   (no combat state in a `CardFilter`), "**nontoken**" filters (instances carry no token flag),
