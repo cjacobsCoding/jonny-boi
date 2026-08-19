@@ -548,10 +548,19 @@ describe('every compiled card resolves in a real game', () => {
       events.push(...result.events);
       s = result.state;
     };
-    const settle = (max = 50): void => {
+    // Resolve the stack, ANSWERING any question a resolution asks along the way.
+    // Modal spells ask which modes at cast, an {X} spell asks for X, a kicker
+    // asks whether to pay — all of them park a `pendingChoice` that blocks every
+    // later action until it is answered. The answer is taken from
+    // `generateLegalActions`, so this stays data-driven: no card is special-cased
+    // here, and a new question kind is answered the day it is added.
+    const settle = (max = 200): void => {
       let guard = 0;
-      while (s.stack.length > 0 && !s.gameOver && guard++ < max) {
-        drive({ kind: 'passPriority', player: s.priorityPlayer });
+      while ((s.stack.length > 0 || s.pendingChoice != null) && !s.gameOver && guard++ < max) {
+        const answer = s.pendingChoice
+          ? generateLegalActions(s).find((a) => a.kind === 'answerChoice')
+          : undefined;
+        drive(answer ?? { kind: 'passPriority', player: s.priorityPlayer });
       }
     };
 
@@ -603,18 +612,23 @@ describe('every compiled card resolves in a real game', () => {
           ref.primitive,
         ),
       );
+      const legal = restriction === undefined ? [] : legalTargetsFor(s, restriction);
+      // A restricted spell with no legal target cannot be cast at all (a
+      // counterspell with an empty stack) — skip it rather than assert a
+      // rejection the engine is right to make.
+      if (restriction !== undefined && legal.length === 0) continue;
+      // The punching bag when it is legal, and otherwise whatever the ENGINE
+      // says is legal — "destroy target artifact" has to be pointed at an
+      // artifact, and falling back to the creature dummy would assert a
+      // rejection the engine is right to make.
       const targets: Array<InstanceId | PlayerId> =
         restriction !== undefined
-          ? [legalTargetsFor(s, restriction).find((t) => t === dummyId || t === 'B') ?? dummyId]
+          ? [legal.find((t) => t === dummyId || t === 'B') ?? legal[0]!]
           : wantsPermanent
             ? [dummyId]
             : wantsPlayer
               ? ['B']
               : [];
-      // A restricted spell with no legal target cannot be cast at all (a
-      // counterspell with an empty stack) — skip it rather than assert a
-      // rejection the engine is right to make.
-      if (restriction !== undefined && legalTargetsFor(s, restriction).length === 0) continue;
       drive({ kind: 'castSpell', player: 'A', instanceId: id, targets });
       settle();
       cast += 1;
