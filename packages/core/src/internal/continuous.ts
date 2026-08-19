@@ -357,6 +357,24 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
         grantInto(agg, ability.keywords);
       }
     }
+    // EMBLEMS radiate from the COMMAND zone, and this single-instance path has to
+    // agree with `indexContinuous` about that or the same board would report two
+    // different power values depending on which accessor a caller happened to
+    // reach for. (It did, once: wiring only the bulk path made an emblem's anthem
+    // real in combat and invisible to a one-off read.)
+    for (const pid of PLAYER_IDS) {
+      for (const source of state.players[pid].command) {
+        const declared = source.def.statics;
+        if (declared === undefined || declared.length === 0) continue;
+        for (const ability of declared) {
+          if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
+          any = true;
+          agg.power += ability.power ?? 0;
+          agg.toughness += ability.toughness ?? 0;
+          grantInto(agg, ability.keywords);
+        }
+      }
+    }
   }
   // Layer 4 — until-end-of-turn effects aimed at this instance.
   for (const eff of state.continuous) {
