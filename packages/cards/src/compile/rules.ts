@@ -1861,7 +1861,11 @@ export const VACUOUS_CLAUSES: readonly RegExp[] = Object.freeze([
   //
   // If a third seat is ever added this stops being vacuous and must become a
   // real choice, because then the answer genuinely varies.
-  /^as ~ enters, choose an opponent to protect it(?:\. you and others can attack it)?$/,
+  // Split into one pattern per SENTENCE, because vacuity is judged per sentence
+  // (`compileAbilityLine` splits the line before filtering) — a single combined
+  // pattern silently matched neither half.
+  /^as ~ enters, choose an opponent to protect it$/,
+  /^you and others can attack it$/,
 ]);
 
 /** True when a clause is vacuously satisfied and can safely be skipped. */
@@ -1916,6 +1920,32 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an enters-tapped template the compiler does not recognize yet',
   },
   {
+    // EMBLEMS ARE IMPLEMENTED NOW (core's command-zone object + the
+    // `emblem-with-ability` rule + the `createEmblem` primitive), so this hint no
+    // longer claims the system is missing - that would send the next agent to
+    // rebuild something that exists. What lands here is a TEMPLATE: an emblem
+    // whose printed ability has no rule of its own.
+    //
+    // Checked EARLY, above the generic "you may / choose", library-search and
+    // scry hints. An emblem's body is arbitrary card text, so it will often
+    // contain a word one of those matches first - and being told an emblem line
+    // needs "a scry template" names the wrong blocker entirely. The line is an
+    // emblem line, and that is what has to be said.
+    pattern: /\bemblem\b/,
+    missingEngineSystem: 'an emblem template the compiler does not recognize yet',
+  },
+  {
+    // BATTLES ARE IMPLEMENTED NOW (defense counters, the attackable-object seam,
+    // damage from combat and from burn, defeat by state-based action). What lands
+    // here is a battle TEMPLATE with no rule yet. The reason a real Siege is
+    // still reported is different and more specific - its reward is casting the
+    // BACK FACE, which the second-castable-face gap names - so this hint must not
+    // claim battles are missing, and the Siege reminder line is skipped as
+    // vacuous rather than reported at all.
+    pattern: /\bdefense counter|\bsiege\b/,
+    missingEngineSystem: 'a battle template the compiler does not recognize yet',
+  },
+  {
     // Modal cards are the one choice shape still genuinely missing a system: the
     // engine picks a spell's targets at cast with no modes declared, so a mode
     // that needs its own target can only be offered when the cast happens to have
@@ -1933,29 +1963,6 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },
   { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet' },
-  {
-    // EMBLEMS ARE IMPLEMENTED NOW (core's command-zone object + the
-    // `emblem-with-ability` rule + the `createEmblem` primitive), so this hint no
-    // longer claims the system is missing — that would send the next agent to
-    // rebuild something that exists. What still lands here is a TEMPLATE: an
-    // emblem whose printed ability has no rule of its own, which is the same
-    // reason any other body reports. Still checked before the loyalty hint, so an
-    // ultimate naming an unimplementable emblem ability is explained by the
-    // emblem's body rather than by the loyalty cost around it.
-    pattern: /\bemblem\b/,
-    missingEngineSystem: 'an emblem template the compiler does not recognize yet',
-  },
-  {
-    // BATTLES ARE IMPLEMENTED NOW (defense counters, the attackable-object seam,
-    // damage from combat and from burn, defeat by state-based action). What lands
-    // here is a battle TEMPLATE with no rule yet. The reason a real Siege is
-    // still reported is different and more specific — its reward is casting the
-    // BACK FACE, which the second-castable-face gap names — so this hint must not
-    // claim battles are missing, and the Siege reminder line below is skipped as
-    // vacuous rather than reported twice.
-    pattern: /\bdefense counter|\bsiege\b/,
-    missingEngineSystem: 'a battle template the compiler does not recognize yet',
-  },
   {
     // Planeswalker loyalty IS a system now: walkers enter with printed loyalty,
     // `[+N]/[−N]` lines compile to loyalty-cost activated abilities, walkers are
