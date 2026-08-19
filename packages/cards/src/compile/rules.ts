@@ -162,6 +162,9 @@ function derivedValue(phrase: string): { countOf: string } | null {
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
 
+/** The scry/surveil primitives' default look depth — omitted from emitted params. */
+const SCRY_DEFAULT_COUNT = 1;
+
 /**
  * Scryfall keyword → the core `KeywordFlags` field implementing it. ONLY the
  * keywords core's combat/turn systems genuinely model appear here; anything else
@@ -937,6 +940,23 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'counter-target-spell-unless-pays-x',
+    description:
+      '"Counter target spell unless its controller pays {X}" (Condescend) — the payment is the X chosen and paid for at cast time',
+    pattern: /^counter target spell unless its controller pays \{x\}$/,
+    needsChosenTarget: true,
+    build(_match, ctx) {
+      // Gated on the card actually printing {X} in its COST, exactly like the
+      // other X rules: an X defined by a "where X is …" clause is not the
+      // cast-time X, and charging it as one would price the counter wrongly.
+      if (!cardHasXCost(ctx)) return null;
+      return effects({
+        primitive: 'counterUnlessPaid',
+        params: { targets: SPELL_TARGET, unlessPaidX: true },
+      });
+    },
+  },
+  {
     id: 'pump-until-eot',
     description: '"Target creature gets +X/+Y until end of turn"',
     pattern: /^target creature gets ([+-]\d+)\/([+-]\d+) until end of turn$/,
@@ -1092,6 +1112,48 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     build(match) {
       const count = parseCount(match[1]);
       return count === null ? null : effects({ primitive: 'reorderTopOfLibrary', params: { count } });
+    },
+  },
+  {
+    id: 'scry-n',
+    description: '"Scry N" — look at the top N, any split between top (any order) and bottom (any order)',
+    pattern: new RegExp(`^scry ${COUNT_TOKEN}$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null) return null;
+      // `count` is omitted at the primitive's default of one, matching the
+      // emitted-data style of every other rule.
+      return effects({ primitive: 'scry', ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) });
+    },
+  },
+  {
+    id: 'surveil-n',
+    description: '"Surveil N" — look at the top N, any split between top (any order) and the graveyard',
+    pattern: new RegExp(`^surveil ${COUNT_TOKEN}$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null) return null;
+      return effects({ primitive: 'surveil', ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) });
+    },
+  },
+  {
+    id: 'scry-then-effect',
+    description:
+      '"Scry N, then EFFECT" / "Surveil N, then EFFECT" — the one-sentence rider form (Preordain, Read the Bones). The tail must itself be a target-free clause the table compiles',
+    pattern: new RegExp(`^(scry|surveil) ${COUNT_TOKEN}, then (.+)$`),
+    build(match, ctx) {
+      const count = parseCount(match[2]);
+      if (count === null) return null;
+      // Target-free by construction, for the same reason as `kicked-extra-effect`:
+      // this rule's own id declares no chosen target, so a targeted tail inside a
+      // trigger would be aimed at nothing and silently no-op. Refusing keeps a
+      // targeted combination reported rather than half-played.
+      const tail = ctx.compileEffectClause(match[3]!, { targetFree: true });
+      if (!tail || tail.length === 0) return null;
+      return effects(
+        { primitive: match[1]!, ...(count === SCRY_DEFAULT_COUNT ? {} : { params: { count } }) },
+        ...tail,
+      );
     },
   },
   {
@@ -1962,7 +2024,16 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bsearch your library\b|\bsearch their library\b/,
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },
-  { pattern: /\bscry\b|\bsurveil\b|look at the top/, missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet' },
+  {
+    // Scry N and Surveil N ARE implemented now (the `scry`/`surveil` primitives
+    // over core's bottom-of-library placement + the keep-on-top question), and
+    // so is the "…, then EFFECT" rider form. What still lands here is a
+    // TEMPLATE: a conditional scry ("if you control an artifact, scry 1"), a
+    // scry whose count is derived, "look at the top N" wordings with no rule
+    // (search-and-reveal shapes), or a surveil rider that needs its own target.
+    pattern: /\bscry\b|\bsurveil\b|look at the top/,
+    missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet',
+  },
   {
     // Planeswalker loyalty IS a system now: walkers enter with printed loyalty,
     // `[+N]/[−N]` lines compile to loyalty-cost activated abilities, walkers are

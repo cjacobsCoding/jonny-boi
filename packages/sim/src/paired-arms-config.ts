@@ -73,6 +73,17 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // `revealTopCard`, with the same dangerous miss: it looked, learned, and
   // moved nothing — so a swapped top card can diverge the games invisibly.
   'transformRevealTop',
+  /*
+   * Scry READS the top N cards and then REORDERS them — both halves break the
+   * identical-game argument. The read is the dangerous one: a scry that bottoms
+   * everything it saw has moved cards the runner tracks (each bottoming emits a
+   * `zoneChange`), but the DECISION was made by looking at cards the swap may
+   * have changed, so the two arms can diverge from the same visible moves.
+   */
+  'scry',
+  // Surveil is the same look with a graveyard for a bottom: it reads the top N
+  // and branches on what it saw.
+  'surveil',
 ]);
 
 /**

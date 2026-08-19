@@ -87,6 +87,12 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':
       return { text: `${r.playerName(event.controller)} creates ${event.name}.`, tone: 'cast' };
+    case 'cardsLookedAt':
+      // The COUNT only — the cards themselves are not public, and this shared
+      // hotseat log is exactly the channel that must not leak them.
+      return {
+        text: `${r.playerName(event.player)} looks at the top ${event.amount} card${event.amount === 1 ? '' : 's'} of their library.`,
+      };
     case 'triggerPutOnStack':
       return { text: `Trigger: ${event.label}.`, tone: 'trigger' };
     case 'triggeredAbilityResolved':
