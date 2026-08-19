@@ -42,6 +42,7 @@ import {
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
+  effectiveKeywords,
   effectivePower,
   isBattle,
   turnFactHolds,
@@ -797,13 +798,40 @@ export const addCounters: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * Whether this permanent shrugs off an effect that says **destroy** (CR 702.12b).
+ *
+ * Asked through the continuous layer rather than off `def.keywords`, so a GRANTED
+ * indestructible — an until-end-of-turn "creatures you control gain
+ * indestructible", an anthem-style static — saves the permanent exactly as a
+ * printed one does. Reading the printed set here is the bug that makes a
+ * fog-the-wrath trick do nothing.
+ */
+function isIndestructible(ctx: EffectContext, permanent: CardInstance): boolean {
+  return Boolean(
+    effectiveKeywords(permanent, aggregateFor(ctx.state, permanent.instanceId)).indestructible,
+  );
+}
+
+/**
  * Destroy a permanent: move it to its owner's graveyard.
+ *
+ * An INDESTRUCTIBLE permanent is not destroyed and nothing else happens to it —
+ * no zone change, and no `creatureDied`, because it did not die. This is the one
+ * place every printed "destroy" in the pool passes through (single target, board
+ * wipe, and the destroy modes of modal spells alike), which is why the exemption
+ * lives here and not in each caller.
+ *
+ * Note what this does NOT cover, deliberately: SACRIFICE is a cost rather than
+ * destruction and goes through `sacrificePermanent` untouched, exile moves the
+ * permanent by a different path, and lethal damage is a state-based action
+ * (`internal/sba.ts`) rather than an effect.
  *
  * `creatureDied` is emitted only for an actual creature — it is what death
  * triggers key off, and firing it for a destroyed artifact would make a "when a
  * creature dies" ability trigger on something that never was one.
  */
 function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
+  if (isIndestructible(ctx, permanent)) return;
   movePermanentTo(ctx, permanent, 'graveyard');
   if (isCreature(permanent.def)) {
     ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });

@@ -119,6 +119,7 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  * better than the printed card.
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
+const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
@@ -203,6 +204,10 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   // Blocking restrictions: menace constrains the whole declaration, and
   // "can't be blocked" is checked per pair. Both are engine-enforced.
   menace: 'menace',
+  // Indestructible is a flag like any other here, but what it EXEMPTS is narrow
+  // and specific - destruction effects and lethal damage, never 0 toughness or a
+  // sacrifice. See `KeywordFlags.indestructible` in core for the whole rule.
+  indestructible: 'indestructible',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
@@ -1057,6 +1062,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // Evasion granted as a one-shot ("Target creature can't be blocked this
+    // turn") - the printed body of Rogue's Passage, Manifold Key, Whirler Rogue,
+    // Thassa and the spell Enter the Enigma alike. It is the same continuous
+    // grant every other until-end-of-turn keyword uses, so it expires at cleanup
+    // through the one path rather than needing a combat-specific memory.
+    //
+    // "Target creature you control" narrows only WHO may be chosen, which the
+    // target restriction already carries; the granted keyword is identical.
+    id: 'grant-unblockable-until-eot',
+    description: `"Target creature [you control] can't be blocked this turn"`,
+    pattern: /^target creature( you control)? can'?t be blocked this turn$/,
+    needsChosenTarget: true,
+    build(match) {
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: {
+          keywords: { unblockable: true },
+          targets: match[1] ? CREATURE_YOU_CONTROL_TARGET : CREATURE_TARGET,
+        },
+      });
+    },
+  },
+  {
     id: 'grant-keyword-until-eot',
     description: '"Target creature gains KEYWORD until end of turn"',
     pattern: new RegExp(`^target creature gains ${KEYWORD_TOKEN} until end of turn$`),
@@ -1674,6 +1702,33 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^~ can'?t be blocked$/,
     build() {
       return { keywords: { unblockable: true } };
+    },
+  },
+  {
+    // The mirror of the rule above, and a genuinely different one: this creature
+    // may not be declared as a BLOCKER (Carrion Feeder, Gravecrawler, Bloodghast).
+    // Both halves are printed together often enough to deserve their own pattern,
+    // because compiling only the first would leave a recursive threat blocking.
+    id: 'cant-block',
+    description: `"~ can't block" / "~ can't block and can't be blocked"`,
+    pattern: /^~ can'?t block(?: and can'?t be blocked)?$/,
+    build(match) {
+      const alsoUnblockable = /can'?t be blocked/.test(match[0]);
+      return { keywords: { cantBlock: true, ...(alsoUnblockable ? { unblockable: true } : {}) } };
+    },
+  },
+  {
+    // Menace generalised: "except by three or more creatures" (Pathrazer of
+    // Ulamog). Core folds this with menace by taking the larger requirement, so
+    // one declaration-level check serves every printing of the rule.
+    id: 'cant-be-blocked-except-by-n',
+    description: `"~ can't be blocked except by N or more creatures"`,
+    pattern: new RegExp(`^~ can'?t be blocked except by ${COUNT_TOKEN} or more creatures$`),
+    build(match) {
+      const minimum = parseCount(match[1]);
+      // "except by X or more" has no fixed value to enforce - report it.
+      if (minimum === null || minimum < 1) return null;
+      return { keywords: { minBlockers: minimum } };
     },
   },
   {

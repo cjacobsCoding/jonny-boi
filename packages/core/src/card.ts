@@ -70,6 +70,43 @@ export interface KeywordFlags {
   /** Can't be blocked at all. Checked per pair in `canBlock`. */
   readonly unblockable?: boolean;
   /**
+   * The blocking RESTRICTION that mirrors {@link unblockable}: this creature
+   * can't block at all ("~ can't block" — Carrion Feeder, Gravecrawler,
+   * Bloodghast). Checked per pair in `canBlock`, which is where it is
+   * expressible: it disqualifies the blocker whatever it would be blocking.
+   */
+  readonly cantBlock?: boolean;
+  /**
+   * "Can't be blocked except by N or more creatures" — the GENERAL form of which
+   * {@link menace} is the N = 2 printing (Pathrazer of Ulamog prints N = 3).
+   *
+   * Like menace it constrains the whole block DECLARATION rather than any single
+   * pair, so `illegalBlockDeclaration` reads it and `canBlock` deliberately does
+   * not. The two are folded there by taking the LARGER requirement, so a
+   * creature carrying both is judged by the stricter one.
+   */
+  readonly minBlockers?: number;
+  /**
+   * Indestructible — "damage and effects that say 'destroy' don't destroy this"
+   * (CR 702.12b).
+   *
+   * ⚠️ **It is not a general shield, and treating it as one is the classic wrong
+   * implementation.** Exactly two things stop happening:
+   *   - lethal MARKED DAMAGE no longer destroys it (CR 704.5g), deathtouch's
+   *     "any nonzero damage is lethal" (CR 702.2b) included;
+   *   - an effect that says **destroy** — targeted removal, a board wipe — does
+   *     nothing to it.
+   *
+   * Everything else still kills it, and each is a *different* rule that must keep
+   * working: **0 or less toughness** puts it into its owner's graveyard as a
+   * state-based action (CR 704.5f, which indestructible does not mention),
+   * sacrifice is a cost and not destruction, exile removes it, and −N/−N effects
+   * reach it through toughness. A permanent whose toughness is reduced to 0 dies
+   * with indestructible on the battlefield; an implementation that skips the
+   * whole death check when the flag is set gets that backwards.
+   */
+  readonly indestructible?: boolean;
+  /**
    * Protection from [quality] — the printed bundle of four rules, all enforced
    * against SOURCES having any listed quality (see `protection.ts`):
    * can't be targeted, can't be dealt damage, can't be enchanted/equipped, and
