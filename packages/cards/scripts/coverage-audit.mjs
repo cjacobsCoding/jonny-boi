@@ -18,6 +18,16 @@
  *   node packages/cards/scripts/coverage-audit.mjs [--pages N] [--query "..."]
  *   node packages/cards/scripts/coverage-audit.mjs --input <cards.json>
  *
+ * Flags:
+ *   --out <md>           write the ranked Markdown backlog here (default: stdout)
+ *   --top N              how many gaps the Markdown lists (default 25; 0 = all)
+ *   --json <path>        write the COMPLETE ranked tally as JSON — every gap, its
+ *                        full blocked-card list, and a template-vs-system flag.
+ *                        The Markdown is a summary; this is the measurement.
+ *   --save-corpus <path> save the fetched cards so later runs can use --input and
+ *                        stay offline. The fetch is the only network step, so
+ *                        caching it is what makes an audit re-runnable.
+ *
  * NETWORK. Never run from a test or from CI — it is a triage tool, run by hand,
  * whose OUTPUT is committed.
  */
@@ -42,16 +52,29 @@ const DEFAULT_QUERY = 'legal:modern -is:funny';
  * listing them all buries the systems that matter. The count that is cut is
  * always stated — a truncated report that looks complete is worse than none.
  */
-const TOP_N = 25;
+const DEFAULT_TOP_N = 25;
 
 function parseArgs(argv) {
-  const args = { pages: DEFAULT_PAGES, query: DEFAULT_QUERY, input: null, out: null };
+  const args = {
+    pages: DEFAULT_PAGES,
+    query: DEFAULT_QUERY,
+    input: null,
+    out: null,
+    top: DEFAULT_TOP_N,
+    json: null,
+    saveCorpus: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--pages') args.pages = Number(argv[++i]);
     else if (argv[i] === '--query') args.query = argv[++i];
     else if (argv[i] === '--input') args.input = argv[++i];
     else if (argv[i] === '--out') args.out = argv[++i];
+    else if (argv[i] === '--top') args.top = Number(argv[++i]);
+    else if (argv[i] === '--json') args.json = argv[++i];
+    else if (argv[i] === '--save-corpus') args.saveCorpus = argv[++i];
   }
+  // `--top 0` means "list every gap"; the report still states what it cut.
+  if (!Number.isFinite(args.top) || args.top <= 0) args.top = Number.POSITIVE_INFINITY;
   return args;
 }
 
@@ -152,6 +175,11 @@ function audit(rawCards) {
     for (const [system, exampleClause] of distinct) {
       const entry = systems.get(system) ?? {
         system,
+        // A TEMPLATE gap is text no compiler rule matched — usually one rule-table
+        // entry to close. A SYSTEM gap is named engine work. Ranking them in one
+        // list prices a day's work the same as a line of data, so the distinction
+        // is recorded here, at measure time, rather than re-derived by eye later.
+        kind: CATCH_ALL.test(system) ? 'template' : 'system',
         cards: [],
         occurrences: 0,
         exampleClause,
@@ -167,7 +195,7 @@ function audit(rawCards) {
 }
 
 /** Render the ranked backlog as the Markdown the work queue expects. */
-function toMarkdown({ ranked, complete, failed, total }, query, generatedAt) {
+function toMarkdown({ ranked, complete, failed, total }, query, generatedAt, topN) {
   const blocked = total - complete - failed;
   const pct = (n) => `${((n / total) * 100).toFixed(1)}%`;
 
@@ -187,12 +215,24 @@ function toMarkdown({ ranked, complete, failed, total }, query, generatedAt) {
   lines.push(`highest-value engine work available.`);
   lines.push('');
 
-  const shown = ranked.slice(0, TOP_N);
-  if (ranked.length > TOP_N) {
-    const tailCards = ranked.slice(TOP_N).reduce((n, e) => n + e.cards.length, 0);
+  const systemGaps = ranked.filter((e) => e.kind === 'system');
+  const templateGaps = ranked.filter((e) => e.kind === 'template');
+  const cardsIn = (list) => list.reduce((n, e) => n + e.cards.length, 0);
+  lines.push(
+    `Of the ${ranked.length} distinct gaps, **${systemGaps.length}** are named **engine systems** ` +
+      `(${cardsIn(systemGaps)} card-blocks — real work) and **${templateGaps.length}** are ` +
+      `**template gaps** (${cardsIn(templateGaps)} card-blocks — text no compiler rule matched, ` +
+      `typically one rule-table entry each). The two cost wildly different amounts, so every entry ` +
+      `below carries its kind, and the \`--json\` output carries it as \`kind\`.`,
+  );
+  lines.push('');
+
+  const shown = ranked.slice(0, topN);
+  if (ranked.length > shown.length) {
+    const tailCards = ranked.slice(shown.length).reduce((n, e) => n + e.cards.length, 0);
     lines.push(
-      `Showing the top ${TOP_N} of **${ranked.length}** distinct gaps. The remaining ` +
-        `${ranked.length - TOP_N} account for ${tailCards} card-blocks between them — a long tail of ` +
+      `Showing the top ${shown.length} of **${ranked.length}** distinct gaps. The remaining ` +
+        `${ranked.length - shown.length} account for ${tailCards} card-blocks between them — a long tail of ` +
         `one-off templates, not a second tier of systems. Re-run with a larger \`--top\` to see it.`,
     );
     lines.push('');
@@ -203,6 +243,7 @@ function toMarkdown({ ranked, complete, failed, total }, query, generatedAt) {
     const more = entry.cards.length > 8 ? `, +${entry.cards.length - 8} more` : '';
     lines.push(`## ${entry.system}`);
     lines.push('');
+    lines.push(`- **Kind:** ${entry.kind === 'system' ? 'engine system' : 'template gap (rule-table entry)'}`);
     lines.push(`- **Blocks ${entry.cards.length} card(s)** (${pct(entry.cards.length)} of corpus)`);
     lines.push(`- **Occurrences:** ${entry.occurrences}`);
     lines.push(`- **Cards:** ${examples}${more}`);
@@ -224,6 +265,10 @@ async function main() {
   } else {
     console.error(`Fetching up to ${args.pages * CARDS_PER_PAGE} cards: "${args.query}"`);
     raw = await fetchCorpus(args.query, args.pages);
+    if (args.saveCorpus) {
+      writeFileSync(args.saveCorpus, JSON.stringify(raw), 'utf8');
+      console.error(`Saved ${raw.length} cards to ${args.saveCorpus} — re-run offline with --input`);
+    }
   }
 
   if (raw.length === 0) {
@@ -232,7 +277,29 @@ async function main() {
   }
 
   const result = audit(raw);
-  const markdown = toMarkdown(result, args.input ?? args.query, new Date().toISOString().slice(0, 10));
+  const measuredAt = new Date().toISOString().slice(0, 10);
+  const markdown = toMarkdown(result, args.input ?? args.query, measuredAt, args.top);
+
+  if (args.json) {
+    writeFileSync(
+      args.json,
+      JSON.stringify(
+        {
+          query: args.input ?? args.query,
+          measured: measuredAt,
+          total: result.total,
+          complete: result.complete,
+          failed: result.failed,
+          blocked: result.total - result.complete - result.failed,
+          gaps: result.ranked,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+    console.error(`Wrote ${args.json} — ${result.ranked.length} gaps with full card lists`);
+  }
 
   if (args.out) {
     writeFileSync(args.out, markdown, 'utf8');
