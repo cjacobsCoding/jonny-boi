@@ -28,8 +28,12 @@ import { fileURLToPath } from 'node:url';
 
 const SRC = dirname(fileURLToPath(import.meta.url));
 
-/** The wrapper module — the one place the bare-defaulting accessors may be named. */
-const EXEMPT = new Set(['board-stats.ts']);
+/**
+ * The wrapper module — the one place the bare-defaulting accessors may be named —
+ * plus this file, whose own fixtures spell the forbidden shape on purpose to prove
+ * the detector detects it.
+ */
+const EXEMPT = new Set(['board-stats.ts', 'bare-stats.test.ts']);
 
 /**
  * A call to a stat accessor whose argument list contains no comma and no nested
