@@ -213,8 +213,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Blocking restrictions',
         detail:
-          'Menace judges the whole block declaration (not any single pair), and "can\'t be blocked" is enforced per pair.',
+          'Each restriction is enforced where it is expressible: "can\'t be blocked" and "~ can\'t block" per pair, while menace — and its general form "can\'t be blocked except by three or more creatures" — judges the whole block declaration, because every blocker is individually legal and only the count is not. Block REQUIREMENTS ("must be blocked if able") are not implemented, and a card printing one says so rather than playing without it.',
         witness: { kind: 'keyword', word: 'menace' },
+      },
+      {
+        title: 'Granted evasion',
+        detail:
+          '"Target creature can\'t be blocked this turn" is the ordinary until-end-of-turn keyword grant, so it expires at cleanup through the same path a pump does (Rogue\'s Passage, Whirler Rogue, Enter the Enigma).',
+        witness: { kind: 'rule', id: 'grant-unblockable-until-eot' },
+      },
+      {
+        title: 'Indestructible',
+        detail:
+          'Effects that say "destroy" and lethal damage — deathtouch included — leave it alone. Nothing else does: 0 toughness still puts it into the graveyard (a different state-based action, which the keyword does not mention), a sacrifice still takes it, and exile still removes it.',
+        witness: { kind: 'keyword', word: 'indestructible' },
+      },
+      {
+        title: 'Granted indestructible, one creature or the whole team',
+        detail:
+          'Heroic Intervention\'s "permanents you control gain hexproof and indestructible until end of turn" and Darksteel Forge\'s "artifacts you control have indestructible" both reach the destroy rules — a granted keyword is not a second-class one.',
+        witness: { kind: 'primitive', id: 'grantKeywordToYoursUntilEndOfTurn' },
       },
       {
         title: 'Flash timing',

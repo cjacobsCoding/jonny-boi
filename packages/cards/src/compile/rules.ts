@@ -142,6 +142,7 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  * better than the printed card.
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
+const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
@@ -255,10 +256,31 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
   // Blocking restrictions: menace constrains the whole declaration, and
   // "can't be blocked" is checked per pair. Both are engine-enforced.
   menace: 'menace',
+  // Indestructible is a flag like any other here, but what it EXEMPTS is narrow
+  // and specific - destruction effects and lethal damage, never 0 toughness or a
+  // sacrifice. See `KeywordFlags.indestructible` in core for the whole rule.
+  indestructible: 'indestructible',
 });
 
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
 const KEYWORD_TOKEN = `(${Object.keys(KEYWORD_FLAGS).join('|')})`;
+
+/**
+ * The printed nouns an anthem-shaped static may select, mapped to the card type
+ * its filter should carry. `null` means NO type entry: "permanents you control"
+ * reaches everything, and an absent filter is exactly that.
+ *
+ * A CLOSED table. A noun outside it ("Zombies you control", "creatures you
+ * control with flying") selects by a subtype or by a characteristic the static
+ * filter deliberately cannot read, so those lines keep reporting.
+ */
+const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.freeze({
+  creature: 'creature',
+  permanent: null,
+  artifact: 'artifact',
+  enchantment: 'enchantment',
+  land: 'land',
+});
 
 /** Colour words Oracle uses in removal restrictions, mapped to color letters. */
 const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
@@ -1167,6 +1189,57 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The MASS grant: "Creatures you control gain indestructible until end of
+    // turn" (Selfless Spirit), "Permanents you control gain hexproof and
+    // indestructible until end of turn" (Heroic Intervention).
+    //
+    // It is its own primitive rather than a flag on the single-target grant
+    // because it TARGETS NOTHING: there is no chosen creature and no legality
+    // question, and the set it reaches is read off the board at resolution. Nor
+    // is it a static - the grant outlives the spell that made it (to cleanup)
+    // and reaches only what was on the battlefield when it resolved.
+    id: 'mass-grant-keyword-until-eot',
+    description: '"Creatures/permanents you control gain KEYWORDS until end of turn"',
+    pattern: new RegExp(
+      `^(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control gain (.+) until end of turn$`,
+    ),
+    build(match) {
+      const nounType = STATIC_NOUN_TYPES[match[1] ?? ''];
+      if (nounType === undefined) return null;
+      const keywords = parseKeywordList(match[2] ?? '');
+      // A keyword the engine does not model reports the whole line rather than
+      // granting only the half we understood.
+      if (keywords === null) return null;
+      return effects({
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords, ...(nounType === null ? {} : { anyOfTypes: [nounType] }) },
+      });
+    },
+  },
+  {
+    // Evasion granted as a one-shot ("Target creature can't be blocked this
+    // turn") - the printed body of Rogue's Passage, Manifold Key, Whirler Rogue,
+    // Thassa and the spell Enter the Enigma alike. It is the same continuous
+    // grant every other until-end-of-turn keyword uses, so it expires at cleanup
+    // through the one path rather than needing a combat-specific memory.
+    //
+    // "Target creature you control" narrows only WHO may be chosen, which the
+    // target restriction already carries; the granted keyword is identical.
+    id: 'grant-unblockable-until-eot',
+    description: `"Target creature [you control] can't be blocked this turn"`,
+    pattern: /^target creature( you control)? can'?t be blocked this turn$/,
+    needsChosenTarget: true,
+    build(match) {
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: {
+          keywords: { unblockable: true },
+          targets: match[1] ? CREATURE_YOU_CONTROL_TARGET : CREATURE_TARGET,
+        },
+      });
+    },
+  },
+  {
     id: 'grant-keyword-until-eot',
     description: '"Target creature gains KEYWORD until end of turn"',
     pattern: new RegExp(`^target creature gains ${KEYWORD_TOKEN} until end of turn$`),
@@ -1802,6 +1875,33 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The mirror of the rule above, and a genuinely different one: this creature
+    // may not be declared as a BLOCKER (Carrion Feeder, Gravecrawler, Bloodghast).
+    // Both halves are printed together often enough to deserve their own pattern,
+    // because compiling only the first would leave a recursive threat blocking.
+    id: 'cant-block',
+    description: `"~ can't block" / "~ can't block and can't be blocked"`,
+    pattern: /^~ can'?t block(?: and can'?t be blocked)?$/,
+    build(match) {
+      const alsoUnblockable = /can'?t be blocked/.test(match[0]);
+      return { keywords: { cantBlock: true, ...(alsoUnblockable ? { unblockable: true } : {}) } };
+    },
+  },
+  {
+    // Menace generalised: "except by three or more creatures" (Pathrazer of
+    // Ulamog). Core folds this with menace by taking the larger requirement, so
+    // one declaration-level check serves every printing of the rule.
+    id: 'cant-be-blocked-except-by-n',
+    description: `"~ can't be blocked except by N or more creatures"`,
+    pattern: new RegExp(`^~ can'?t be blocked except by ${COUNT_TOKEN} or more creatures$`),
+    build(match) {
+      const minimum = parseCount(match[1]);
+      // "except by X or more" has no fixed value to enforce - report it.
+      if (minimum === null || minimum < 1) return null;
+      return { keywords: { minBlockers: minimum } };
+    },
+  },
+  {
     id: 'flashback-cost',
     description:
       '"Flashback {2}{U}", "Flashback {X}{R}{R}" and "Flashback—{1}{U}, Pay 3 life" — the mana half, its {X} count, and a life rider, all charged at cast time',
@@ -2026,7 +2126,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
     pattern: new RegExp(
-      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?creatures you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
     build(match, ctx) {
       // Only a PERMANENT can carry a static ability. An instant/sorcery printing
@@ -2037,9 +2137,14 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[3] === undefined ? 0 : Number.parseInt(match[3], 10);
-      const toughness = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
+      const power = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
+      const toughness = match[5] === undefined ? 0 : Number.parseInt(match[5], 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      // The printed NOUN decides the filter's type. "Permanent" maps to no type
+      // entry at all, because an absent filter already matches every permanent -
+      // inventing a 'permanent' type word would match nothing.
+      const nounType = STATIC_NOUN_TYPES[match[3] ?? ''];
+      if (nounType === undefined) return null;
       // "WHITE creatures you control get +1/+1" — the printed colour narrows the
       // filter, which core's shared `CardFilter` can express now
       // (`anyOfColors`, derived from cost pips exactly as protection reads
@@ -2047,14 +2152,14 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const colorWord = match[2]?.trim();
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
-      const keywordText = match[5] ?? match[6];
+      const keywordText = match[6] ?? match[7];
       const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
       // A keyword the engine does not model reports the whole line, never a
       // half-granted anthem.
       if (keywordText !== undefined && keywords === null) return null;
       const ability: StaticAbility = {
         affects: {
-          anyOfTypes: ['creature'],
+          ...(nounType === null ? {} : { anyOfTypes: [nounType] }),
           controller: 'you',
           ...(color ? { anyOfColors: [color as never] } : {}),
           // The printed word "other": the lord pumps the team, not itself.
@@ -2105,13 +2210,19 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'attachment-modification',
-    description: '"Enchanted/Equipped creature gets +2/+0 and has trample"',
+    description:
+      '"Enchanted/Equipped creature gets +2/+0 and has trample" / "the verbless can-not-be-blocked form (Whispersilk Cloak)"',
+    // The third alternative is the VERBLESS form: a printed blocking restriction
+    // is a sentence, not a keyword word, so Whispersilk Cloak's "Equipped
+    // creature can't be blocked and has shroud" carries no leading "has". It is
+    // a catch-all only in shape - `parseKeywordList` still has to recognise every
+    // conjunct, so a line naming anything else returns null and keeps reporting.
     pattern:
-      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+))$/,
+      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+)|(.+))$/,
     build(match) {
       const power = match[1] === undefined ? 0 : Number.parseInt(match[1], 10);
       const toughness = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
-      const keywordText = match[3] ?? match[4];
+      const keywordText = match[3] ?? match[4] ?? match[5];
       const keywords = keywordText === undefined ? {} : parseKeywordList(keywordText);
       // An unmodelled keyword must report the whole line rather than silently
       // granting only the half we understood.
@@ -2172,17 +2283,36 @@ const EQUIP_TARGET: TargetRestriction = 'creatureYouControl';
 function parseKeywordList(text: string): Record<string, boolean> | null {
   const words = text
     .split(/,| and /)
-    .map((word) => word.trim())
+    .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
     .filter((word) => word.length > 0);
   if (words.length === 0) return null;
   const flags: Record<string, boolean> = {};
   for (const word of words) {
-    const field = KEYWORD_FLAGS[word];
+    const field = KEYWORD_FLAGS[word] ?? KEYWORD_PHRASES[word];
     if (!field) return null;
     flags[field] = true;
   }
   return flags;
 }
+
+/**
+ * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
+ * each conjunct may carry one of its own. Stripped before the lookup rather than
+ * being folded into every pattern, because the verb is grammar, not meaning.
+ */
+const LEADING_GRANT_VERB = /^(?:has|have|gains?) /;
+
+/**
+ * Printed PHRASES that name an engine keyword flag without being a keyword word.
+ * The two blocking restrictions are printed as sentences rather than as keywords
+ * ("Equipped creature can't be blocked"), so a keyword-word table alone reports
+ * a rule the engine fully implements. A CLOSED table, exactly like
+ * {@link KEYWORD_FLAGS}: a phrase outside it keeps reporting.
+ */
+const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
+  "can't be blocked": 'unblockable',
+  "can't block": 'cantBlock',
+});
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
@@ -2560,7 +2690,27 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bmill\b|puts? the top .* into (?:their|his or her) graveyard/,
     missingEngineSystem: 'a mill template the compiler does not recognize yet',
   },
-  { pattern: /\bcan't be blocked\b|\bmenace\b|\bmust be blocked\b/, missingEngineSystem: 'blocking restrictions beyond evasion keywords' },
+  {
+    // Block RESTRICTIONS are engine-enforced now, in the two places each is
+    // expressible: per pair in `canBlock` ("can't be blocked", "~ can't block")
+    // and per DECLARATION in `illegalBlockDeclaration` (menace and the general
+    // "except by N or more creatures"). Granting evasion for a turn compiles
+    // through the ordinary continuous grant.
+    //
+    // What still lands here is two different things, and the hint says which:
+    //   - a block REQUIREMENT ("must be blocked if able", "all creatures able to
+    //     block ~ do so"). CR 509.1c/d resolves requirements and restrictions
+    //     TOGETHER — maximise satisfied requirements without violating any
+    //     restriction — which is a solver, not a check, and is not built;
+    //   - a restriction whose SELECTOR the engine cannot express: a power or
+    //     toughness comparison between the two creatures ("can't be blocked by
+    //     creatures with power 3 or greater", skulk), or a filtered set the
+    //     static layer deliberately cannot read (Tetsuko's "with power or
+    //     toughness 1 or less" — see `statics.ts` on printed characteristics).
+    pattern: /\bmust be blocked\b|\bable to block\b|\bblocks? it\b|\bcan't be blocked\b|\bcan't block\b|\bmenace\b|\bskulk\b/,
+    missingEngineSystem:
+      'a block REQUIREMENT, or a block restriction whose selector compares creatures',
+  },
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
     // COMPILE now (source-aware targeting: all four protection halves plus the

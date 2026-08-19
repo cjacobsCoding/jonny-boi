@@ -1371,7 +1371,61 @@ target for its own counter mode, and being faithful there means the pilot, not t
 one that declines. Humans answer through the existing `ChoicePrompt`, with repeated modes rendered as
 a count (`×2`) rather than a toggle.
 
-### 3.17 Alternative and additional casting costs — cycling, buyback, madness — ✅ done
+### 3.17 Indestructible + the blocking restrictions — ✅ done
+Two small engine systems the mechanic census named together (`docs/plans/mechanic-completion-plan.md`
+§3c), sharing one lesson: **a rule belongs where it is expressible, and nowhere else.**
+
+**Indestructible is not a shield, it is an exemption from exactly two rules.** CR 702.12b removes
+the permanent from destruction — an effect that says "destroy", and lethal marked damage (CR 704.5g),
+with deathtouch's "any nonzero damage is lethal" (CR 702.2b) riding along. Everything else still
+works, and each is a *different* rule: **0 or less toughness** puts it into the graveyard by
+CR 704.5f, which the keyword does not mention; **sacrifice** is a cost, not destruction; **exile**
+moves it by another path. So the state-based-action pass asks the two creature-death questions
+separately and gates only the damage one on the flag — collapsing them into one guarded expression is
+the classic wrong implementation and makes a creature with no toughness immortal. The destroy
+exemption itself lives in `destroyPermanent`, the single function every printed "destroy" in the pool
+already passed through (single target, board wipe, modal destroy mode), so there is no per-caller
+check to forget.
+
+**A latent bug this exposed, worth more than either feature.** The continuous layer's `KEYWORD_KEYS`
+is a hand-maintained list of the boolean flags a GRANT may set. A flag added to `KeywordFlags` and not
+to that list works when printed and does *nothing* when granted — silently, and in one direction only.
+It had already eaten a granted hexproof once. Both new booleans are in it, `minBlockers` folds by MAX
+(two blocking requirements are both in force; the stricter decides, and summing would invent a third),
+and granted-not-printed cases are now covered by tests in both systems.
+
+**Blocking restrictions are split by what a check can SEE**, following the menace precedent:
+- **per pair** (`canBlock`): "can't be blocked", "~ can't block", flying/reach, protection. Each
+  disqualifies one specific attacker/blocker pairing.
+- **per declaration** (`illegalBlockDeclaration`): menace, and its general form "can't be blocked
+  except by N or more creatures" (`minBlockers`, of which menace is the N = 2 printing). Every
+  blocker is individually legal and only the *count* is not, so a per-pair check cannot express it.
+
+⛔ **Block REQUIREMENTS are NOT implemented, deliberately.** "Must be blocked if able" and "all
+creatures able to block ~ do so" are the other half of CR 509.1c/d, which resolves requirements and
+restrictions *together* — maximise satisfied requirements without violating any restriction. That is
+a solver, not a check, and half of it would be a card playing differently from its text. The compiler
+reports those cards by name, and the unsupported hint says which of the two things is missing.
+
+Also reported rather than approximated: a restriction whose SELECTOR compares the two creatures
+(skulk; Delney's "power 2 or less can't be blocked by power 3 or greater"), and a filtered set the
+static layer cannot read — `statics.ts` matches PRINTED characteristics only, on purpose, so
+Tetsuko's "power or toughness 1 or less" has no faithful filter and keeps reporting.
+
+**Both seats.** The pilot no longer "kills" an indestructible creature: destroy and exile are split
+into one intent flag, a destroy looks past indestructible creatures and holds the card if the whole
+enemy board is one, and a sweeper's value counts neither side's indestructible creatures. It also
+never proposes a declaration the engine would refuse — it assigns one blocker per attacker, so it
+declines to block a menacing attacker at all rather than voiding every other block in the same action.
+
+**Measured yield:** the top-2100 corpus went **229 → 252 playable** (10.9% → 12.0%) on the same cached
+corpus, via the keyword itself plus four rule-table entries it unlocked: the mass until-end-of-turn
+grant ("permanents you control gain hexproof and indestructible"), the anthem static generalised past
+"creatures" to any permanent noun (Darksteel Forge, Avacyn), the printed PHRASES "can't be blocked" /
+"can't block" as keyword names, and "target creature can't be blocked this turn". Gauntlet seed 99 is
+byte-identical to `origin/main` (79/280) with throughput at parity.
+
+### 3.18 Alternative and additional casting costs — cycling, buyback, madness — ✅ done
 The third answer to "what does this card cost?", after §3.11's {X}/kicker and §3.16's modal/multikicker
 work. These three are one section because they are one question asked three ways: what a card costs,
 and **where it goes**, when it is played by some route other than "pay the printed cost from your hand".
