@@ -234,6 +234,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
           'Walkers enter at printed loyalty; +N/−N abilities are sorcery-speed, once per walker per turn; creatures attack them, "any target" burns them, and 0 loyalty is death by state-based action. Liliana of the Veil plays all three abilities as printed.',
         witness: { kind: 'card', name: 'Liliana of the Veil' },
       },
+      {
+        title: 'Battles (Sieges)',
+        detail:
+          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. ⚠️ Printed Sieges still import as unplayable: their reward is casting the back face, which needs the modal double-faced system.",
+        witness: { kind: 'primitive', id: 'createEmblem' },
+      },
+      {
+        title: 'The legend rule',
+        detail:
+          "Controlling two or more legendary permanents with the same name makes YOU choose which to keep — not the game, and not your opponent — with the rest going to their owners' graveyards as a state-based action. One shared rule covering legendary creatures, planeswalkers and battles alike, applied per player: you and your opponent may each hold your own copy quite legally.",
+        witness: { kind: 'card', name: 'Liliana of the Veil' },
+      },
+      {
+        title: 'Emblems',
+        detail:
+          "A planeswalker ultimate's emblem lives in the command zone with its statics and triggers fully live from there — and nothing in the game can remove it, because no removal path reaches outside the battlefield. It survives a board wipe and keeps buffing whatever arrives afterwards.",
+        witness: { kind: 'rule', id: 'emblem-with-ability' },
+      },
     ],
   },
   {
