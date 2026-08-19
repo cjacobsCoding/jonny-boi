@@ -103,6 +103,9 @@ function seatView(
     hand: player.hand ? visibleHand(player.hand) : null,
     libraryCount: player.libraryCount,
     graveyardCount: player.graveyard.length,
+    // The graveyard is a PUBLIC zone: the server sends its full contents for both
+    // seats, so listing the cards here reveals nothing the table can't see.
+    graveyard: visibleHand(player.graveyard),
     exileCount: player.exile.length,
     manaPool: { ...player.manaPool },
     hasLost: player.hasLost,
