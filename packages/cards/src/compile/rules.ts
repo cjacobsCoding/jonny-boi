@@ -850,10 +850,10 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      * A CONJUNCTION whose second half is a plain "you …" effect — "put a +1/+1
      * counter on ~ **and you gain 1 life**" (Sunscorch Regent).
      *
-     * Deliberately narrow. Only a second half beginning "you " is joined,
-     * because such a half is self-contained: it speaks about the controller, not
-     * about whatever the first half touched, so running the two in order is
-     * exactly what the printed sentence says. A conjunction like "…and it gains
+     * Deliberately narrow. Only a second half beginning "you " or "draw " is
+     * joined, because such a half is self-contained: it speaks about the
+     * controller, not about whatever the first half touched, so running the two
+     * in order is exactly what the printed sentence says. A conjunction like "…and it gains
      * flying" refers BACK to the first half's object, and joining those would be
      * the kind of guess this table exists to refuse — so it stays reported.
      *
@@ -863,7 +863,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      */
     id: 'effect-and-you-effect',
     description: '"EFFECT and you EFFECT" (two independent halves in one sentence)',
-    pattern: /^(.+?) and (you .+)$/,
+    pattern: /^(.+?) and ((?:you|draw) .+)$/,
     build(match, ctx) {
       const first = ctx.compileEffectClause(match[1] ?? '', { targetFree: true });
       if (first === null || first.length === 0) return null;
@@ -1744,6 +1744,79 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
           label: `Cast ${describeSpellFilter(condition)}: ${match[2] ?? ''}`,
         })),
       };
+    },
+  },
+  {
+    id: 'trigger-begin-combat',
+    description: '"At the beginning of combat on your turn, BODY"',
+    pattern: /^at the beginning of combat on your turn, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'beginCombat', who: 'you' },
+        match[1] ?? '',
+        `Begin combat: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-end-step',
+    description: '"At the beginning of your / each end step, BODY"',
+    // "each end step" fires on both players' end steps; "your" only on yours.
+    // One rule, because the two differ by exactly the `who` scope core takes.
+    pattern: /^at the beginning of (your|each) end step, (.+)$/,
+    build(match, ctx) {
+      const who = match[1] === 'each' ? 'any' : 'you';
+      return triggerFrom(
+        ctx,
+        { on: 'endStep', who },
+        match[2] ?? '',
+        `End step (${who}): ${match[2] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-gain-life',
+    description: '"Whenever you gain life, BODY"',
+    pattern: /^whenever you gain life, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'gainLife', who: 'you' },
+        match[1] ?? '',
+        `Gain life: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-any-creature-dies',
+    description: '"Whenever a creature dies" / "Whenever ~ or another creature dies, BODY"',
+    // Both printed forms mean the same thing — EVERY creature's death, this
+    // permanent's own included — which is what core's `creatureDies` watches.
+    // The narrower "whenever a creature YOU CONTROL dies" is deliberately NOT
+    // matched: the death event carries no controller, so that filter cannot be
+    // honoured and the line must keep reporting.
+    pattern: /^whenever (?:a creature|~ or another creature) dies, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'creatureDies' },
+        match[1] ?? '',
+        `A creature dies: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-combat-damage-to-player',
+    description: '"Whenever ~ deals combat damage to a player, BODY"',
+    pattern: /^whenever ~ deals combat damage to a player, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'combatDamageToPlayer' },
+        match[1] ?? '',
+        `Combat damage to a player: ${match[1] ?? ''}`,
+      );
     },
   },
   {

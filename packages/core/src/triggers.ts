@@ -32,10 +32,33 @@ import type { TargetRestriction } from './targeting.js';
  *                        whether the source's controller cast it.
  *   - `upkeep`         : the beginning of a player's upkeep (by default, the source
  *                        controller's upkeep).
+ *   - `beginCombat`    : the beginning of combat on a player's turn.
+ *   - `endStep`        : the beginning of a player's end step.
+ *   - `gainLife`       : a player gained life ("whenever you gain life").
+ *   - `creatureDies`   : ANY creature died, not just this one — the printed
+ *                        "whenever ~ or another creature dies". Distinct from
+ *                        `dies`, which is this permanent's own death, because a
+ *                        card that fired on every death when it should fire on
+ *                        one is a very different card.
+ *   - `combatDamageToPlayer` : this permanent dealt COMBAT damage to a player.
  */
-export type TriggerEvent = 'etb' | 'attacks' | 'dies' | 'leaves' | 'castSpell' | 'upkeep';
+export type TriggerEvent =
+  | 'etb'
+  | 'attacks'
+  | 'dies'
+  | 'leaves'
+  | 'castSpell'
+  | 'upkeep'
+  | 'beginCombat'
+  | 'endStep'
+  | 'gainLife'
+  | 'creatureDies'
+  | 'combatDamageToPlayer';
 
-/** Whose action a relational trigger (cast/upkeep) cares about. */
+/**
+ * Whose action a relational trigger (cast / a step / life gain) cares about.
+ * Read against the SOURCE's controller, never against the active player.
+ */
 export type TriggerWho = 'you' | 'opponent' | 'any';
 
 /**
@@ -149,6 +172,40 @@ export function conditionMatches(
       if (event.type !== 'stepBegin' || event.step !== 'upkeep') return false;
       return whoMatches(condition.who, event.activePlayer, sourceController);
     }
+    case 'beginCombat': {
+      // "At the beginning of combat on your turn" — the same shape as upkeep,
+      // keyed on the step the turn machine already announces.
+      if (event.type !== 'stepBegin' || event.step !== 'beginCombat') return false;
+      return whoMatches(condition.who, event.activePlayer, sourceController);
+    }
+    case 'endStep': {
+      if (event.type !== 'stepBegin' || event.step !== 'end') return false;
+      return whoMatches(condition.who, event.activePlayer, sourceController);
+    }
+    case 'gainLife': {
+      // "Whenever you gain life". Keyed on the `gainLife` event rather than on
+      // `lifeChanged`, because the latter also fires for life LOST and for the
+      // bookkeeping of a life-set effect — a lifegain trigger that fired on
+      // damage would be a different card.
+      if (event.type !== 'gainLife') return false;
+      return whoMatches(condition.who, event.player, sourceController);
+    }
+    case 'creatureDies':
+      // Any creature's death, this permanent's own included ("whenever ~ or
+      // another creature dies"). Deliberately unfiltered: the event carries no
+      // controller, so a condition that claimed to watch only YOUR creatures
+      // could not be honoured and is therefore not expressible here.
+      return event.type === 'creatureDied';
+    case 'combatDamageToPlayer':
+      // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
+      // the string test is what distinguishes "to a player" from "to a
+      // creature or planeswalker" without a second event field.
+      return (
+        event.type === 'damageDealt' &&
+        event.combat &&
+        event.source === sourceInstanceId &&
+        typeof event.target === 'string'
+      );
     default:
       // Unknown condition kind → never matches (safe no-op).
       return false;

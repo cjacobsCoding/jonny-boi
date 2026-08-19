@@ -260,6 +260,105 @@ describe('cast triggers with a WHO other than "you"', () => {
   });
 });
 
+describe('the trigger templates the counters family needed', () => {
+  it('compiles "whenever you gain life" onto the life-gain trigger (Archangel of Thune)', () => {
+    const definition = playable(
+      scryfall({
+        name: 'Archangel of Thune',
+        cost: { generic: 3, W: 2 },
+        types: ['Creature'],
+        subtypes: ['Angel'],
+        power: 3,
+        toughness: 4,
+        keywords: ['Flying', 'Lifelink'],
+        oracleText: [
+          'Flying',
+          'Lifelink',
+          'Whenever you gain life, put a +1/+1 counter on each creature you control.',
+        ].join('\n'),
+      }),
+    );
+    const trigger = definition.triggers?.[0];
+    expect(trigger?.condition).toEqual({ on: 'gainLife', who: 'you' });
+    expect(trigger?.effects[0]?.params).toEqual({ amount: 1, each: true, scope: 'you', filter: {} });
+  });
+
+  it('compiles "whenever ~ or another creature dies" as the ANY-death trigger', () => {
+    const definition = playable(CORDIAL_VAMPIRE);
+    expect(definition.triggers?.[0]?.condition).toEqual({ on: 'creatureDies' });
+  });
+
+  it('REFUSES "whenever a creature you control dies" — the death event has no controller', () => {
+    // Compiling this as the unfiltered any-death trigger would make the card
+    // fire on the opponent's creatures too: strictly more triggers than printed.
+    const result = compileCard(
+      scryfall({
+        name: 'Yours Only',
+        cost: { B: 1 },
+        types: ['Creature'],
+        subtypes: ['Vampire'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'Whenever a creature you control dies, put a +1/+1 counter on Yours Only.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('compiles the begin-combat and end-step templates', () => {
+    const combat = playable(
+      scryfall({
+        name: 'Combat Grower',
+        cost: { G: 1 },
+        types: ['Creature'],
+        subtypes: ['Elf'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'At the beginning of combat on your turn, put a +1/+1 counter on Combat Grower.',
+      }),
+    );
+    expect(combat.triggers?.[0]?.condition).toEqual({ on: 'beginCombat', who: 'you' });
+
+    const endStep = playable(
+      scryfall({
+        name: 'Nightly Grower',
+        cost: { G: 1 },
+        types: ['Creature'],
+        subtypes: ['Elf'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'At the beginning of each end step, put a +1/+1 counter on Nightly Grower.',
+      }),
+    );
+    expect(endStep.triggers?.[0]?.condition).toEqual({ on: 'endStep', who: 'any' });
+  });
+
+  it('compiles "whenever ~ deals combat damage to a player"', () => {
+    const definition = playable(
+      scryfall({
+        name: 'Bruiser',
+        cost: { R: 1 },
+        types: ['Creature'],
+        subtypes: ['Ogre'],
+        power: 2,
+        toughness: 2,
+        oracleText: 'Whenever Bruiser deals combat damage to a player, put a +1/+1 counter on Bruiser.',
+      }),
+    );
+    expect(definition.triggers?.[0]?.condition).toEqual({ on: 'combatDamageToPlayer' });
+  });
+});
+
+const CORDIAL_VAMPIRE = scryfall({
+  name: 'Cordial Vampire',
+  cost: { B: 1 },
+  types: ['Creature'],
+  subtypes: ['Vampire'],
+  power: 1,
+  toughness: 1,
+  oracleText: 'Whenever Cordial Vampire or another creature dies, put a +1/+1 counter on each Vampire you control.',
+});
+
 // --- the end-to-end half: a real game, the real pilot ---------------------------
 
 const FOREST: CardDefinition = { id: 'counters:Forest', name: 'Forest', types: ['land'], produces: ['G'] };
@@ -312,6 +411,37 @@ describe('the counters really land in a played game', () => {
       (e) => e.type === 'counterAdded' && e.kind === PLUS_ONE_COUNTER && e.amount === 1,
     );
     expect(grew.length, 'the Hydra never grew — the cast trigger never fired').toBeGreaterThan(0);
+  });
+
+  it('an any-death trigger counters the team when creatures die in a real game', () => {
+    // Cordial Vampire's own {B} cost is uncastable off this test's Forest mana,
+    // so the play test uses the same printed ability on a green body: what is
+    // under test is the trigger and the group counters, not the mana cost.
+    const vampire = playable(
+      scryfall({
+        name: 'Verdant Vampire',
+        cost: { G: 1 },
+        types: ['Creature'],
+        subtypes: ['Vampire'],
+        power: 1,
+        toughness: 1,
+        oracleText:
+          'Whenever Verdant Vampire or another creature dies, put a +1/+1 counter on each Vampire you control.',
+      }),
+    );
+    const bearCard: CardDefinition = {
+      id: 'counters:Bear',
+      name: 'Grizzly Bears',
+      types: ['creature'],
+      power: 2,
+      toughness: 2,
+      cost: { generic: 1, G: 1 },
+    };
+    const game = playGame({ A: deckWith([vampire, bearCard]), B: deckWith([bearCard]) }, 909090, 900);
+
+    expect(game.events.some((e) => e.type === 'creatureDied'), 'nothing ever died').toBe(true);
+    const counters = game.events.filter((e) => e.type === 'counterAdded' && e.kind === PLUS_ONE_COUNTER);
+    expect(counters.length, 'a creature died and no Vampire was counted').toBeGreaterThan(0);
   });
 
   it('Steel Overseer’s activated sweep counters every artifact creature it controls', () => {
