@@ -1,6 +1,12 @@
 import { useMemo, useState, type ReactElement } from 'react';
 import type { InstanceId, PlayerId } from '@jonny-boi/core';
-import type { AbilityOption, GameSession, CastOption, SubmitResult } from '../../lib/play/session.js';
+import type {
+  AbilityOption,
+  GameSession,
+  CastOption,
+  CycleOption,
+  SubmitResult,
+} from '../../lib/play/session.js';
 import { buildBoardView } from '../../lib/play/view-model.js';
 import { optionToTarget, type TargetOption } from '../../lib/play/targeting.js';
 import { stepLabel } from '../../lib/play/play-config.js';
@@ -63,6 +69,9 @@ export function PlayBoard({
   const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   // The viewer's graveyard panel (the flashback affordance's entry point).
   const [graveyardOpen, setGraveyardOpen] = useState(false);
+  // A hand card the player clicked that can be played in more than one way (a
+  // cycling land is both a land drop and a cycling ability), awaiting the pick.
+  const [handChoice, setHandChoice] = useState<InstanceId | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const resetTransient = (): void => {
@@ -74,6 +83,7 @@ export function PlayBoard({
     setPendingManaTap(null);
     setAbilitySource(null);
     setPendingAbility(null);
+    setHandChoice(null);
   };
 
   const run = (fn: () => SubmitResult): void => {
@@ -96,6 +106,14 @@ export function PlayBoard({
   // Flashback: cards castable OUT OF the viewer's graveyard, same option shape as
   // the hand so the whole cast flow below (target pick → castWithAutoTap) is shared.
   const graveyardCasts = isViewersPriority ? session.graveyardCastOptions() : [];
+  // Cycling: an ability of a card in HAND, so it is a second way to play a card
+  // that may already have one (a cycling land is also a land drop) — which is
+  // why the hand click below can open a menu rather than always acting.
+  const cycleOptions = isViewersPriority ? session.cycleOptions() : [];
+  // MADNESS: a card of the viewer's discarded to exile, still castable. The
+  // window is the only thing the engine will accept right now, so it is shown as
+  // a prompt rather than tucked into a panel the player might not open.
+  const madnessCasts = session.exileCastOptions().filter(() => session.priorityPlayer === viewer);
 
   // --- manual mana tapping --------------------------------------------------------
   // Auto-tap covers casting; this covers everything else a player does with mana by
@@ -165,6 +183,36 @@ export function PlayBoard({
     } else {
       run(() => session.castWithAutoTap(opt.instanceId, [], opt.fromZone ?? 'hand'));
     }
+  };
+
+  const onCycleClick = (opt: CycleOption): void => {
+    setHandChoice(null);
+    run(() => session.cycleWithAutoTap(opt.instanceId, opt.abilityIndex));
+  };
+
+  /**
+   * A hand card was clicked. A card with exactly one way to be played acts
+   * immediately; a card with several (a cycling land is a land drop AND a
+   * cycling ability, a cycling spell is a cast AND a cycling ability) opens a
+   * menu, because picking one for the player would silently throw away the
+   * choice the printed card exists to offer.
+   */
+  const onHandCardClick = (id: InstanceId, land: boolean, cast: CastOption | undefined): void => {
+    const cycles = cycleOptions.filter((o) => o.instanceId === id);
+    const ways = (land ? 1 : 0) + (cast ? 1 : 0) + cycles.length;
+    if (ways > 1) {
+      setHandChoice(id);
+      return;
+    }
+    if (cycles.length === 1) {
+      onCycleClick(cycles[0] as CycleOption);
+      return;
+    }
+    if (land) {
+      run(() => session.playLand(id));
+      return;
+    }
+    if (cast) onCastClick(cast);
   };
 
   /**
@@ -454,23 +502,27 @@ export function PlayBoard({
           {(view.self.hand ?? []).map((c) => {
             const land = playableLands.includes(c.instanceId);
             const cast = castOptions.find((o) => o.instanceId === c.instanceId);
-            const actionable = isViewersPriority && (land || !!cast);
+            const cycles = cycleOptions.filter((o) => o.instanceId === c.instanceId);
+            const actionable = isViewersPriority && (land || !!cast || cycles.length > 0);
+            const badge = c.isLand
+              ? cycles.length > 0
+                ? 'Land · cycling'
+                : 'Land'
+              : cast?.affordableNow
+                ? 'castable'
+                : cast
+                  ? 'tap mana'
+                  : cycles.length > 0
+                    ? 'cycling'
+                    : undefined;
             return (
               <PlayCard
                 key={c.instanceId}
                 cardId={c.cardId}
                 name={c.name}
-                badge={c.isLand ? 'Land' : cast?.affordableNow ? 'castable' : cast ? 'tap mana' : undefined}
+                badge={badge}
                 disabled={!actionable}
-                onClick={
-                  actionable
-                    ? land
-                      ? () => run(() => session.playLand(c.instanceId))
-                      : cast
-                        ? () => onCastClick(cast)
-                        : undefined
-                    : undefined
-                }
+                onClick={actionable ? () => onHandCardClick(c.instanceId, land, cast) : undefined}
               />
             );
           })}
@@ -543,6 +595,95 @@ export function PlayBoard({
           </div>
         </div>
       )}
+
+      {/* HOW to play this hand card, when there is more than one way. A cycling
+          land is a land drop and a cycling ability; picking for the player would
+          throw away exactly the decision the printed card exists to offer. */}
+      {handChoice !== null && (
+        <div className="target-prompt" role="dialog" aria-label="Choose how to play this card">
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">How do you want to play {session.nameOf(handChoice)}?</div>
+            <div className="target-prompt__options">
+              {playableLands.includes(handChoice) && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    const id = handChoice;
+                    setHandChoice(null);
+                    run(() => session.playLand(id));
+                  }}
+                >
+                  Play as a land
+                </button>
+              )}
+              {castOptions
+                .filter((o) => o.instanceId === handChoice)
+                .map((o) => (
+                  <button
+                    key={`cast:${o.instanceId}`}
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      setHandChoice(null);
+                      onCastClick(o);
+                    }}
+                  >
+                    Cast it
+                  </button>
+                ))}
+              {cycleOptions
+                .filter((o) => o.instanceId === handChoice)
+                .map((o) => (
+                  <button
+                    key={`cycle:${o.instanceId}:${o.abilityIndex}`}
+                    type="button"
+                    className="btn"
+                    onClick={() => onCycleClick(o)}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setHandChoice(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MADNESS: a discarded card of the viewer's is in exile and the game is
+          waiting to hear whether they cast it. Declining is the pass action the
+          engine already accepts — said out loud here, because a player who does
+          not know the window is open would stall the game staring at a board
+          that refuses every other move. */}
+      {madnessCasts.map((opt) => (
+        <div
+          key={`madness:${opt.instanceId}`}
+          className="target-prompt"
+          role="dialog"
+          aria-label="Cast the discarded card for its madness cost"
+        >
+          <div className="target-prompt__card">
+            <div className="target-prompt__title">
+              {opt.name} was discarded and exiled. Cast it for its madness cost?
+            </div>
+            <div className="target-prompt__options">
+              <button
+                type="button"
+                className="btn"
+                disabled={!opt.affordableNow && !opt.affordableWithTap}
+                onClick={() => onCastClick(opt)}
+              >
+                Cast for madness
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={() => run(() => session.passPriority())}>
+                Decline
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
 
       {/* Which ability of this permanent? (a planeswalker's loyalty lines). Only
           engine-offered abilities are listed, so a used-this-turn or unpayable

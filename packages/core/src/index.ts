@@ -50,6 +50,7 @@ export {
 // Card model seam
 export type {
   ActivatedAbility,
+  CyclingAbility,
   ActivationCost,
   EntersUntappedCondition,
   RevealFromHandCondition,
@@ -255,6 +256,8 @@ export type {
   TriggeredStackObject,
   ModePick,
   CombatState,
+  MadnessWindow,
+  SpellLeaveReason,
 } from './state.js';
 export {
   PLAYER_IDS,
@@ -267,6 +270,9 @@ export {
   protectorOf,
   spellLeaveDestination,
 } from './state.js';
+
+// Madness (CR 702.35): the discard replacement and the window it opens.
+export { discardDestination, declineMadness } from './madness.js';
 
 // Events
 export type { GameEvent, EventLog } from './events.js';
@@ -294,6 +300,7 @@ export type {
   ActivateAbilityAction,
   CastSpellAction,
   CastZone,
+  CycleCardAction,
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,

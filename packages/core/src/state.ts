@@ -316,7 +316,13 @@ export interface SpellStackObject {
    * stack-object field must also copy it in `internal/clone.ts` (field-by-field
    * cloning drops unknown fields).
    */
-  readonly awaitingCastChoice?: 'modes' | 'x' | 'kicker' | 'multikicker' | 'modeTarget';
+  /**
+   * Whether the BUYBACK cost was paid (CR 702.27a). Absent for spells with no
+   * buyback / unanswered. Read only through {@link spellLeaveDestination} —
+   * where the card goes is one answer, not a flag each exit interprets.
+   */
+  readonly boughtBack?: boolean;
+  readonly awaitingCastChoice?: 'modes' | 'x' | 'kicker' | 'multikicker' | 'modeTarget' | 'buyback';
   /**
    * The zone this spell was CAST FROM. Optional, and absent means `'hand'` —
    * which keeps every state serialized before non-hand casting existed (and
@@ -328,8 +334,15 @@ export interface SpellStackObject {
    * goes to the graveyard. Every exit from the stack (resolution, countering)
    * reads it through {@link spellLeaveDestination}.
    */
-  readonly castFrom?: 'hand' | 'graveyard';
+  readonly castFrom?: 'hand' | 'graveyard' | 'exile';
 }
+
+/**
+ * Why a spell is leaving the stack. The destination differs between the two —
+ * that difference IS buyback — so every exit says which one it is rather than
+ * letting the default decide for it.
+ */
+export type SpellLeaveReason = 'resolve' | 'counter';
 
 /**
  * Where a spell's CARD goes when it leaves the stack WITHOUT resolving to the
@@ -339,8 +352,38 @@ export interface SpellStackObject {
  * COUNTERED (CR 702.34a: "…if it would leave the stack, exile it instead") —
  * countering is precisely a way of leaving the stack.
  */
-export function spellLeaveDestination(spell: SpellStackObject): 'graveyard' | 'exile' {
-  return spell.castFrom === 'graveyard' ? 'exile' : 'graveyard';
+export function spellLeaveDestination(
+  spell: SpellStackObject,
+  reason: SpellLeaveReason,
+): 'graveyard' | 'exile' | 'hand' {
+  // Flashback first: exiling a card cast from the graveyard applies however it
+  // leaves the stack, so it outranks everything else here.
+  if (spell.castFrom === 'graveyard') return 'exile';
+  // Buyback returns the card to its owner's HAND — but only as it RESOLVES
+  // (CR 702.27a). A bought-back spell that is countered goes to the graveyard
+  // like any other countered spell; a caller that forgets the distinction
+  // cannot express it, because the reason is a required argument.
+  if (reason === 'resolve' && spell.boughtBack === true) return 'hand';
+  return 'graveyard';
+}
+
+/**
+ * A MADNESS WINDOW: a discarded card sitting in exile whose owner may still
+ * cast it for its madness cost (CR 702.35a), or decline.
+ *
+ * Modelled as state rather than as a triggered ability on the stack because the
+ * window is a *cast opportunity*, not an effect: what it needs is for one
+ * player to be handed priority with exactly two legal actions — cast that card
+ * from exile, or pass, which declines and drops it into the graveyard where the
+ * ordinary discard would have put it. Both of those are things the existing
+ * action seam already expresses, so every consumer (the pilots, the hotseat UI,
+ * the online server) needs no new transport to play a madness card.
+ */
+export interface MadnessWindow {
+  /** The exiled card that may still be cast. */
+  readonly instanceId: InstanceId;
+  /** Whose window it is — the discarding player, who alone may act on it. */
+  readonly controller: PlayerId;
 }
 
 /**
@@ -471,6 +514,17 @@ export interface GameState {
    * lets the spell finish resolving after the answer. Set only while suspended.
    */
   resolution?: ResolutionFrame | null;
+  /**
+   * An open MADNESS window (see {@link MadnessWindow}) — a card discarded to
+   * exile whose owner has not yet cast it or declined.
+   *
+   * Optional and normally absent, exactly like `pendingChoice`: a state
+   * serialized (or hand-built in a test) before madness existed stays valid, and
+   * a game containing no madness card never touches the field. While it is set,
+   * the ONLY legal actions are its controller casting that card from exile or
+   * passing priority to decline.
+   */
+  madnessWindow?: MadnessWindow | null;
   /**
    * What has happened SO FAR THIS TURN, for the printed cards that ask — revolt
    * ("a permanent you controlled left the battlefield this turn"), morbid, and

@@ -486,6 +486,59 @@ export interface CardDefinition {
    */
   readonly flashbackLifeCost?: number;
   /**
+   * CYCLING — "{cost}, Discard this card: Draw a card" (CR 702.29), plus the
+   * TYPECYCLING/LANDCYCLING variants whose effect is a library search instead of
+   * a draw. A list because a card may print more than one cycling ability, and
+   * because the `cycleCard` action indexes it exactly as `activateAbility`
+   * indexes {@link activated} — so *which* cycling ability is part of the
+   * action and a pilot can enumerate and score each one.
+   *
+   * It is NOT in {@link activated}, and that is the whole point: an activated
+   * ability there is activated from the BATTLEFIELD by a permanent, while
+   * cycling is activated from HAND by a card that is not a permanent at all
+   * (every cycling land in the corpus cycles while it is still a card in hand).
+   * Folding the two would mean teaching every battlefield-shaped check —
+   * summoning sickness, tap costs, `findOnBattlefield` — about a zone it has
+   * never had to consider.
+   *
+   * The DISCARD is a cost, not an effect, which is why madness (below) and any
+   * "whenever you cycle or discard" trigger see it: it goes through the same
+   * discard funnel every other discard does.
+   */
+  readonly cycling?: readonly CyclingAbility[];
+  /**
+   * BUYBACK — "You may pay an additional {cost} as you cast this spell. If you
+   * do, put this card into your hand as it resolves." (CR 702.27). The value is
+   * that additional cost.
+   *
+   * The decision is a cast-time question exactly like {@link kicker} (the same
+   * `payMana` the engine charges as it accepts the answer), and the answer rides
+   * the stack object as `boughtBack`. Where the card GOES is then one shared
+   * answer — `spellLeaveDestination` in state.ts — which is what makes buyback
+   * agree with flashback rather than being a second opinion about the exit from
+   * the stack. Note the asymmetry the rules require and that helper encodes: a
+   * bought-back spell returns to hand only when it RESOLVES; countered, it is
+   * put into the graveyard like any other countered spell.
+   */
+  readonly buyback?: ManaCost;
+  /**
+   * MADNESS — "If you discard this card, exile it instead of putting it into
+   * your graveyard. When you do, you may cast it for its madness cost" (CR
+   * 702.35). The value is that cost.
+   *
+   * Two halves, both engine-enforced from this one field:
+   *  - **The exile**: the discard funnel (`discardDestination` in state.ts)
+   *    diverts the card to exile and opens a MADNESS WINDOW on the game state.
+   *  - **The cast**: while that window stands, its owner may cast the card with
+   *    `fromZone: 'exile'`, paying THIS cost instead of `cost`; passing priority
+   *    declines, and the card falls into the graveyard where an ordinary discard
+   *    would have put it.
+   *
+   * Only the plain mana-cost form is modelled; a madness cost printed in words
+   * ("Madness—Pay six {C}") or with a non-mana component stays reported.
+   */
+  readonly madness?: ManaCost;
+  /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
    * — the trigger machinery (triggers.ts) matches conditions against the event log
@@ -746,6 +799,28 @@ export interface ActivatedAbility {
   readonly cost: ActivationCost;
   readonly effects: readonly EffectRef[];
   readonly timing?: CastTiming;
+  /** Human-readable text for the log, the inspector, and the replay viewer. */
+  readonly label: string;
+}
+
+/**
+ * One printed CYCLING ability: what it costs and what cycling it does.
+ *
+ * The cost is mana only — the other half of every printed cycling cost is
+ * "Discard this card", which is not data because it is the same for every
+ * cycling ability in the game and the engine performs it (see
+ * `CardDefinition.cycling`).
+ *
+ * `effects` is what the ability puts on the stack, as ordinary effect refs, so
+ * plain cycling ("Draw a card") and typecycling/landcycling ("Search your
+ * library for a Plains card…") are the SAME mechanism with different data —
+ * exactly one code path, and no primitive that exists only for cycling.
+ */
+export interface CyclingAbility {
+  /** The mana cost paid to cycle (the discard is performed by the engine). */
+  readonly cost: ManaCost;
+  /** What the cycling ability does on resolution — a draw, or a search. */
+  readonly effects: readonly EffectRef[];
   /** Human-readable text for the log, the inspector, and the replay viewer. */
   readonly label: string;
 }
