@@ -34,6 +34,7 @@ import {
   createGame,
   DEFAULT_RULES,
   generateLegalActions,
+  isTargetRestriction,
   targetRestrictionOf,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
@@ -375,19 +376,25 @@ describe('pool audit — every card claimed faithful really is', () => {
   });
 
   it('every declared target restriction is a value the engine enforces', () => {
-    const RESTRICTED = ['creature', 'player', 'spell', 'playerOrPlaneswalker', 'creatureOrPlaneswalker'] as const;
+    // Asked of the ENGINE (`isTargetRestriction`), never of a list copied here:
+    // a hand-kept copy goes stale the moment core learns a new restriction, and
+    // it did — "Destroy target artifact" compiled to `targets: 'artifact'`,
+    // which core has enforced since the attachment work, and this audit called
+    // it unenforced anyway. The engine's own predicate cannot drift from the
+    // engine.
     for (const card of CARD_POOL) {
       for (const ref of card.effects ?? []) {
         const declared = ref.params?.targets;
         if (declared === undefined) continue;
         expect(
-          (RESTRICTED as readonly unknown[]).includes(declared) || declared === 'any',
+          isTargetRestriction(declared),
           `${card.name} declares targets: ${String(declared)}`,
         ).toBe(true);
       }
-      // …and if it declares one, the engine reads it back.
-      const narrow = (card.effects ?? []).some((ref) =>
-        (RESTRICTED as readonly unknown[]).includes(ref.params?.targets),
+      // …and if it declares a NARROWING one, the engine reads it back. ('any' is
+      // the default and is deliberately not reported as a restriction.)
+      const narrow = (card.effects ?? []).some(
+        (ref) => isTargetRestriction(ref.params?.targets) && ref.params?.targets !== 'any',
       );
       expect(targetRestrictionOf(card) !== undefined, card.name).toBe(narrow);
     }
