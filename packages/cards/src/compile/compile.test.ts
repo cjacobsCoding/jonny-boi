@@ -189,24 +189,28 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
-    // Liliana compiles (planeswalkers landed) and so does Tarmogoyf now (the
-    // star P/T box landed), so the blocked half needs a card that is still
-    // genuinely unimplementable: Snapcaster Mage, which has to GRANT flashback
-    // to a card in a graveyard — targeting a graveyard card plus a continuous
-    // effect on a non-battlefield card, neither of which exists.
+    // The blocked half has to be a card that is STILL genuinely unimplementable,
+    // and that list keeps shrinking: Liliana compiles (planeswalkers), Tarmogoyf
+    // compiles (the star P/T box), and Snapcaster compiles (graveyard targeting
+    // plus grants on a non-battlefield card). What is left is Cryptic Command,
+    // whose MODES are chosen at cast — core picks targets with no mode declared.
+    // When modal casting lands, this test needs the next honestly-blocked card;
+    // if none remains, it should assert an empty blocked half instead.
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
     const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
     const snapcaster = scryfallFor(CARD_POOL.find((c) => c.name === 'Snapcaster Mage')!);
+    const cryptic = scryfallFor(CARD_POOL.find((c) => c.name === 'Cryptic Command')!);
 
-    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic]);
 
     expect(playable.map((card) => card.name)).toEqual([
       'Lightning Bolt',
       'Liliana of the Veil',
       'Tarmogoyf',
+      'Snapcaster Mage',
     ]);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Snapcaster Mage']);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Cryptic Command']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });
