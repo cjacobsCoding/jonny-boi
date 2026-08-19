@@ -359,26 +359,33 @@ describe('the pilot evaluates the BOARD, not the printed card', () => {
     ).toBe(goyf!.instanceId);
   });
 
-  it('does not trade its 4/4 into an anthem-boosted 3/3 that is really a 4/4', () => {
-    // A's 4/4 attacks into B's 3/3 + a +1/+1 anthem. Printed, the attack is a
-    // clean kill that survives; in reality it is a mutual destruction the pilot
-    // did not choose to make.
+  it('does not attack a 4/4 into an anthem-boosted 3/3 that is really a 6/6', () => {
+    // A's 4/4 into B's 3/3 under a +3/+3 anthem. Printed, the blocker is a 3/3 the
+    // attacker kills and survives — a free attack. In reality the blocker is a 6/6
+    // that eats the attacker for nothing, which is a creature given away.
     const state = bareGame();
     state.step = 'declareAttackers';
+    state.combat = { attackers: [], blocks: {}, attackersDeclared: false, blockersDeclared: false };
     put(state, 'A', [creature('mine-4-4', 4, 4)]);
     put(state, 'B', [creature('theirs-3-3', 3, 3, ['goblin'])]);
-    put(state, 'B', [anthem('Small Anthem', 1)]);
+    put(state, 'B', [anthem('Big Anthem', 3)]);
 
-    const action = pilot.chooseAction({
-      view: state,
-      legalActions: generateLegalActions(state),
-      rng,
-    });
+    const legal = generateLegalActions(state);
+    const offered = legal.find((a) => a.kind === 'declareAttackers');
+    // Without this the assertion below is hollow: "no attack was declared" is also
+    // what a position with no attack on offer produces, and a guard that cannot
+    // tell those apart reports something other than "I did not check".
+    expect(
+      offered && offered.kind === 'declareAttackers' ? offered.attackers.length : 0,
+      'the engine offered an attack with the 4/4 — otherwise this proves nothing',
+    ).toBe(1);
+
+    const action = pilot.chooseAction({ view: state, legalActions: legal, rng });
     const attackers = action.kind === 'declareAttackers' ? action.attackers.length : 0;
     expect(
       attackers,
-      'attacked a 3/3 that an anthem has already made a 4/4 — the trade the pilot ' +
-        'thought it was winning kills both creatures',
+      'attacked a 3/3 that an anthem has already made a 6/6 — the free kill the ' +
+        'pilot thought it was taking simply loses the attacker',
     ).toBe(0);
   });
 });
