@@ -985,7 +985,13 @@ function dispatchAction(
       action.instanceId === window.instanceId &&
       action.player === window.controller;
     const isDecline = action.kind === 'passPriority' && action.player === window.controller;
-    if (!isMadnessCast && !isDecline) {
+    // Mana abilities stay legal, because a cast needs paying for: the madness
+    // cast happens while the window's controller holds priority, and CR 605.3a
+    // lets a mana ability be activated whenever a player is casting a spell.
+    // Without this the window is a trap — a pilot with untapped lands and an
+    // empty pool could never fund the cast it is being offered.
+    const isFunding = action.kind === 'tapForMana' && action.player === window.controller;
+    if (!isMadnessCast && !isDecline && !isFunding) {
       return rejectWith(prevState, 'a madness window is awaiting its controller');
     }
   }
@@ -2468,6 +2474,10 @@ function madnessActionsFor(state: GameState): GameAction[] {
   const me = window.controller;
   const player = state.players[me];
   const actions: GameAction[] = [{ kind: 'passPriority', player: me }];
+  // Mana sources first: the cast below is only offered once the pool already
+  // covers the madness cost, so a board of untapped lands has to be able to
+  // produce before the offer can appear at all.
+  pushManaTapActions(state, me, actions);
   const card = instanceIn(player.exile, window.instanceId);
   const cost = card?.def.madness;
   if (!card || cost === undefined || !canPay(player.manaPool, cost)) return actions;

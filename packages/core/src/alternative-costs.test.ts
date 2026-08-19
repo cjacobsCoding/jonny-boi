@@ -420,7 +420,9 @@ describe('madness — a replacement on the discard, then a cast from exile', () 
     fund(state, 'A', { U: 1, C: 1 });
 
     const offers = generateLegalActions(state, DEFAULT_RULES);
-    expect(offers).toHaveLength(2);
+    // Pass, the cast, and any mana source — a window that could not be funded
+    // would be a trap rather than an offer.
+    expect(offers.filter((a) => a.kind !== 'tapForMana')).toHaveLength(2);
     expect(offers.some((a) => a.kind === 'passPriority')).toBe(true);
     const cast = offers.find(
       (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell',

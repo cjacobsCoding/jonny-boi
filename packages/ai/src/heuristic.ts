@@ -210,6 +210,17 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const onlyPass = everyActionIsPass(legalActions);
   if (onlyPass) return emit(ctx, legalActions[0] as GameAction, 'nothing useful — passing');
 
+  // A MADNESS window: a card of ours has been discarded to exile and the game is
+  // waiting to hear whether we cast it. It preempts the priority window the same
+  // way a pending choice does — those are the only actions the engine will
+  // accept — so it is answered here rather than left to the spell scorer, which
+  // reads the HAND and would never see the exiled card at all.
+  const madness = view.madnessWindow;
+  if (madness && madness.controller === me) {
+    const play = decideMadness(ctx, weights);
+    if (play) return play;
+  }
+
   // Combat declarations are their own decision shape.
   if (view.step === 'declareAttackers' && me === view.activePlayer) {
     const attack = chooseAttack(ctx, weights);
@@ -223,6 +234,44 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   // Otherwise: a priority window. Plan the best spell goal and act toward it,
   // or play a land, or pass.
   return choosePriorityAction(ctx, weights);
+}
+
+/**
+ * What to do about an open madness window: cast the exiled card, tap toward
+ * being able to, or decline.
+ *
+ * The judgement is one-sided and that is not laziness — it is the shape of the
+ * mechanic. The card has ALREADY been discarded: declining does not keep it, it
+ * puts it in the graveyard. So the only thing being weighed is the madness cost
+ * against a card that is otherwise simply lost, and casting is right whenever
+ * the mana can be produced at all. The engine offers the cast only when the pool
+ * already covers the cost, so the tap-toward step is what makes this reachable
+ * from a board of untapped lands.
+ */
+function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  const cast = legalActions.find(
+    (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell' && a.fromZone === 'exile',
+  );
+  if (cast) {
+    const name = findInstance(view, cast.instanceId)?.def.name ?? 'the discarded card';
+    return emit(ctx, cast, ctx.trace ? `cast ${name} for its madness cost` : NO_REASON, weights.genericSpellScore);
+  }
+  const window = view.madnessWindow;
+  const exiled = window ? view.players[me].exile.find((c) => c.instanceId === window.instanceId) : undefined;
+  const cost = exiled?.def.madness;
+  if (cost) {
+    const plan = planManaPayment(view as GameState, me, cost, legalActions);
+    const next = plan?.[0];
+    if (next) {
+      const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
+      return emit(ctx, tap, ctx.trace ? `tapping toward ${exiled!.def.name}'s madness cost` : NO_REASON);
+    }
+  }
+  // Cannot pay: passing is the decline, and it is the only way to unblock the
+  // game — leaving the window open would stall it forever.
+  return emit(ctx, passAction(view), ctx.trace ? 'cannot pay the madness cost — declining' : NO_REASON);
 }
 
 // --- priority-window play (lands, mana, spells) --------------------------------
@@ -258,6 +307,8 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
 
   const canPlayLand = anyActionOfKind(legalActions, 'playLand');
   const bestSpell = bestSpellGoal(ctx, weights);
+  // Cycling competes with the plays below on the same scale — see `bestCycle`.
+  const cycle = bestCycle(ctx, weights);
   // Equipping is a real play competing with the others, not a reflex — see
   // `bestEquipPlay`. It is offered only at sorcery speed by the engine, so it can
   // only turn up in a window where a land or a spell is also possible.
@@ -274,8 +325,9 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
   const landScore = canPlayLand ? weights.playLandScore : -Infinity;
   const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
   const equipScore = equip ? equip.score : -Infinity;
+  const cycleScore = cycle ? cycle.score : -Infinity;
 
-  if (landScore >= spellScore && landScore >= equipScore && canPlayLand) {
+  if (landScore >= spellScore && landScore >= equipScore && landScore >= cycleScore && canPlayLand) {
     const landAction = bestLandDrop(view, legalActions, weights);
     if (landAction) {
       const why = ctx.trace ? describeLandDrop(view, landAction, legalActions, weights) : NO_REASON;
@@ -287,8 +339,12 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
     return emit(ctx, equip.action, ctx.trace ? equip.label : NO_REASON, equipScore);
   }
 
-  if (bestSpell && bestSpell.goal.score > weights.passScore) {
+  if (bestSpell && bestSpell.goal.score > weights.passScore && spellScore >= cycleScore) {
     return pursueSpell(ctx, bestSpell);
+  }
+
+  if (cycle && cycleScore > weights.passScore) {
+    return pursueCycle(ctx, cycle);
   }
 
   // Nothing worth doing with our mana → pass.
@@ -1088,6 +1144,88 @@ function bestPumpPlay(
  * pilot stops tapping the moment the cost is covered — no more floating a fifth
  * mana for a four-mana turn.
  */
+/** A cycling play the pilot wants to make: which card, how it is funded, why. */
+interface CycleGoal {
+  readonly action: Extract<GameAction, { kind: 'cycleCard' }>;
+  readonly plan: readonly ManaTapPlan[];
+  readonly score: number;
+  readonly reason: string;
+}
+
+/**
+ * The best CYCLING play right now, or `undefined`.
+ *
+ * Cycling exists to fix the two hands that lose games — the flooded one and the
+ * one with nothing to do — so the policy is exactly those two cases and nothing
+ * card-specific:
+ *
+ *  1. **Flooded.** We already control `floodedLandCount` lands, so another land
+ *     in hand is worth less than an unknown card. Cycling it away is close to
+ *     free, and this is the case that makes cycling lands worth playing at all.
+ *  2. **The turn is ending with mana unspent.** Mana empties at end of step
+ *     whatever we do, so converting it into a card costs nothing — scored barely
+ *     above passing, so it never outbids a real play.
+ *
+ * Funding goes through the SAME `planManaPayment` every spell goal uses, which
+ * matters more than it looks: the engine only OFFERS `cycleCard` once the pool
+ * already covers the cost, so a pilot that did not plan its taps would never see
+ * the action and cycling would be inert on a board of untapped lands.
+ */
+function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal | undefined {
+  const { view } = ctx;
+  const me = view.priorityPlayer;
+  const hand = view.players[me].hand;
+  let landsInPlay = 0;
+  for (const perm of view.battlefield) {
+    if (perm.controller === me && isLand(perm.def)) landsInPlay += 1;
+  }
+  const flooded = landsInPlay >= weights.floodedLandCount;
+  // "The turn is ending" is read off the step rather than guessed from the
+  // absence of other plays: at the end step nothing else will use this mana.
+  const turnEnding = view.step === 'end';
+
+  let best: CycleGoal | undefined;
+  for (const card of hand) {
+    const abilities = card.def.cycling;
+    if (!abilities || abilities.length === 0) continue;
+    for (let index = 0; index < abilities.length; index++) {
+      const ability = abilities[index]!;
+      const surplusLand = flooded && isLand(card.def);
+      const score = surplusLand
+        ? weights.cycleFloodedScore
+        : turnEnding
+          ? weights.cycleIdleScore
+          : -Infinity;
+      if (score <= weights.passScore) continue;
+      if (best && score <= best.score) continue;
+      const plan = planManaPayment(view as GameState, me, ability.cost, ctx.legalActions);
+      if (!plan) continue;
+      best = {
+        action: { kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index },
+        plan,
+        score,
+        reason: ctx.trace
+          ? `${ability.label} ${card.def.name}${surplusLand ? ` (flooded at ${landsInPlay} lands)` : ' (mana would go unused)'}`
+          : NO_REASON,
+      };
+    }
+  }
+  return best;
+}
+
+/** Take the next step toward a cycling play: tap for it, or cycle. */
+function pursueCycle(ctx: DecisionContext, goal: CycleGoal): GameAction {
+  const next = goal.plan[0];
+  if (!next) return emit(ctx, goal.action, goal.reason, goal.score);
+  const tap: GameAction = {
+    kind: 'tapForMana',
+    player: ctx.view.priorityPlayer,
+    instanceId: next.instanceId,
+    mode: next.mode,
+  };
+  return emit(ctx, tap, goal.reason, goal.score);
+}
+
 function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
   const { view } = ctx;
   const me = view.priorityPlayer;
