@@ -87,6 +87,24 @@ export interface CardFilter {
   readonly minManaValue?: number;
   readonly maxManaValue?: number;
   /**
+   * Inclusive PRINTED power/toughness bounds — "a creature card with toughness 2
+   * or less" (Recruiter of the Guard), "with power 4 or greater".
+   *
+   * PRINTED, not effective: these filters select cards in a LIBRARY, a HAND or a
+   * GRAVEYARD, where a card is not a permanent and the continuous layer has
+   * nothing to apply. The printed box is the only characteristic that exists.
+   *
+   * A card with no printed number in the box — a non-creature, or a `*` P/T
+   * whose value is a formula ({@link CardDefinition.characteristicPT}) — matches
+   * NO power/toughness bound. Treating an absent box as zero would quietly make
+   * every Ornithopter and every Tarmogoyf a legal find for "toughness 2 or less",
+   * which is not what the printed card says.
+   */
+  readonly minPower?: number;
+  readonly maxPower?: number;
+  readonly minToughness?: number;
+  readonly maxToughness?: number;
+  /**
    * Keep only cards of at least one of these COLORS — how "White creatures you
    * control get +1/+1" narrows an anthem, and available to every other filter
    * consumer (searches, discards, sacrifices) through the same field. Color is
@@ -122,9 +140,29 @@ export function matchesCardFilter(card: CardInstance, filter?: CardFilter): bool
     if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
     if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
   }
+  if (filter.minPower !== undefined || filter.maxPower !== undefined) {
+    if (!withinPrintedBox(def.power, filter.minPower, filter.maxPower)) return false;
+  }
+  if (filter.minToughness !== undefined || filter.maxToughness !== undefined) {
+    if (!withinPrintedBox(def.toughness, filter.minToughness, filter.maxToughness)) return false;
+  }
   // Colors last: it is the only test that can touch the (memoized) pip walk, so
   // a candidate rejected by type/subtype/name never pays for it at all.
   if (filter.anyOfColors !== undefined && !hasAnyColor(def, filter.anyOfColors)) return false;
+  return true;
+}
+
+/**
+ * Whether a printed power/toughness box falls inside an inclusive bound.
+ *
+ * An ABSENT box (a non-creature, or a `*` P/T that is a formula rather than a
+ * number) is outside every bound — see {@link CardFilter.minPower} for why that
+ * is the printed reading and not a conservative guess.
+ */
+function withinPrintedBox(box: number | undefined, min?: number, max?: number): boolean {
+  if (box === undefined) return false;
+  if (min !== undefined && box < min) return false;
+  if (max !== undefined && box > max) return false;
   return true;
 }
 

@@ -30,7 +30,7 @@ import { applyAction, createGame, DEFAULT_RULES, dumpState } from '@jonny-boi/co
 import { compileCard } from './compile.js';
 import type { CompilableCard } from './types.js';
 import { buildRegistry } from '../pool.js';
-import { CARD_POOL } from '../../data/pool.js';
+import { BASIC_LAND_NAMES, CARD_POOL } from '../../data/pool.js';
 
 type Registry = ReturnType<typeof buildRegistry>;
 
@@ -330,5 +330,367 @@ describe('enters-tapped templates — played in a real game', () => {
     );
     expect(after.players.A.manaPool.W).toBe(1);
     expect(after.players.A.manaPool.U).toBe(0);
+  });
+});
+
+// --- "When ~ enters, you may ..." -------------------------------------------------
+
+/** Farhaven Elf - an optional ETB whose body is a basic-land search. */
+const FARHAVEN_ELF = makeCard({
+  name: 'Farhaven Elf',
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Elf', 'Druid'] },
+  manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
+  power: 1,
+  toughness: 1,
+  oracleText:
+    'When this creature enters, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.',
+});
+
+/** Trinket Mage - the optional ETB plus a mana-value-bounded tutor to hand. */
+const TRINKET_MAGE = makeCard({
+  name: 'Trinket Mage',
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Human', 'Wizard'] },
+  manaCost: { generic: 2, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
+  power: 2,
+  toughness: 2,
+  oracleText:
+    'When this creature enters, you may search your library for an artifact card with mana value 1 or less, reveal that card, put it into your hand, then shuffle.',
+});
+
+/** Recruiter of the Guard - the same shape, bounded by printed TOUGHNESS. */
+const RECRUITER_OF_THE_GUARD = makeCard({
+  name: 'Recruiter of the Guard',
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Human', 'Soldier'] },
+  manaCost: { generic: 2, W: 1, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+  power: 1,
+  toughness: 1,
+  oracleText:
+    'When this creature enters, you may search your library for a creature card with toughness 2 or less, reveal it, put it into your hand, then shuffle.',
+});
+
+/** Goblin Matron - the same shape, narrowed by a printed SUBTYPE. */
+const GOBLIN_MATRON = makeCard({
+  name: 'Goblin Matron',
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Goblin'] },
+  manaCost: { generic: 2, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+  power: 1,
+  toughness: 1,
+  oracleText:
+    'When this creature enters, you may search your library for a Goblin card, reveal that card, put it into your hand, then shuffle.',
+});
+
+describe('"When ~ enters, you may ..." - the optional ETB trigger', () => {
+  it('compiles Farhaven Elf completely, with the search wrapped in a real question', () => {
+    const result = compileCard(FARHAVEN_ELF);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers).toHaveLength(1);
+    const [trigger] = result.definition.triggers!;
+    expect(trigger!.condition).toEqual({ on: 'etb' });
+    expect(trigger!.effects).toEqual([
+      {
+        primitive: 'mayEffects',
+        params: {
+          prompt:
+            'You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+          valence: 'gain',
+          effects: [
+            {
+              primitive: 'searchLibrary',
+              params: {
+                who: 'controller',
+                count: 1,
+                filter: { anyOfTypes: ['land'] },
+                nameAnyOf: BASIC_LAND_NAMES,
+                destination: 'battlefield',
+                tapped: true,
+              },
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('compiles Trinket Mage completely, keeping the printed mana-value bound', () => {
+    const result = compileCard(TRINKET_MAGE);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const inner = (result.definition.triggers![0]!.effects[0]!.params as { effects: unknown[] })
+      .effects;
+    expect(inner).toEqual([
+      {
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfTypes: ['artifact'], maxManaValue: 1 },
+          destination: 'hand',
+        },
+      },
+    ]);
+  });
+
+  it('compiles Recruiter of the Guard with a printed-TOUGHNESS bound', () => {
+    const result = compileCard(RECRUITER_OF_THE_GUARD);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const inner = (result.definition.triggers![0]!.effects[0]!.params as { effects: unknown[] })
+      .effects as Array<{ params: { filter: unknown } }>;
+    expect(inner[0]!.params.filter).toEqual({ anyOfTypes: ['creature'], maxToughness: 2 });
+  });
+
+  it('compiles Goblin Matron with the printed SUBTYPE, not a card type', () => {
+    const result = compileCard(GOBLIN_MATRON);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    const inner = (result.definition.triggers![0]!.effects[0]!.params as { effects: unknown[] })
+      .effects as Array<{ params: { filter: unknown } }>;
+    expect(inner[0]!.params.filter).toEqual({ anyOfSubtypes: ['goblin'] });
+  });
+
+  it('leaves a body that implements its OWN "you may" on that rule (Eternal Witness)', () => {
+    // The ordering invariant, pinned. "You may return target card from your
+    // graveyard to your hand" is one question either way; compiling it as the
+    // wrapper around a FORCED return would be two questions or a different card,
+    // so the body rule that knows about `optional` must keep winning.
+    const result = compileCard(
+      makeCard({
+        name: 'Eternal Witness',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Human', 'Shaman'] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 2, C: 0, other: [] },
+        power: 2,
+        toughness: 1,
+        oracleText: 'When this creature enters, you may return target card from your graveyard to your hand.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.effects).toEqual([
+      { primitive: 'returnFromGraveyard', params: { count: 1, optional: true } },
+    ]);
+  });
+
+  it('REFUSES an optional ETB whose body it cannot implement', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Mystery',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 1,
+        toughness: 1,
+        oracleText: 'When this creature enters, you may proliferate twice.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.definition.triggers).toBeUndefined();
+  });
+
+  it('REFUSES a tutor whose subtype is outside the closed table (never a tutor that finds nothing)', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Zombie Matron',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 1,
+        toughness: 1,
+        oracleText:
+          'When this creature enters, you may search your library for a Zombie card, reveal that card, put it into your hand, then shuffle.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('REFUSES a tutor whose numeric restriction it cannot express', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Loyal Tutor',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
+        power: 1,
+        toughness: 1,
+        oracleText:
+          'When this creature enters, you may search your library for a creature card with loyalty 3 or less, reveal it, put it into your hand, then shuffle.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+});
+
+// --- play: the optional ETB, answered BOTH ways ----------------------------------
+
+/** Cast `def` from A's hand with mana already flooded, and hand back the state. */
+function castFromHand(
+  state: GameState,
+  def: CardDefinition,
+  reg: Registry,
+): { state: GameState; instanceId: number } {
+  const card = instance(def, 'A', 'hand');
+  state.players.A.hand.push(card);
+  floodMana(state, 'A');
+  const next = act(state, { kind: 'castSpell', player: 'A', instanceId: card.instanceId }, reg);
+  return { state: next, instanceId: card.instanceId };
+}
+
+describe('"When ~ enters, you may ..." - played in a real game, both answers', () => {
+  it('Farhaven Elf: saying YES puts a basic land onto the battlefield TAPPED', () => {
+    const reg = buildRegistry();
+    const elf = compileCard(FARHAVEN_ELF).definition;
+    const state = gameAtMain(reg, SEEDS.farhaven);
+    const cast = castFromHand(state, elf, reg);
+
+    const settled = settle(cast.state, reg, (choice) =>
+      choice.kind === 'confirm'
+        ? { kind: 'confirm', yes: true }
+        : { kind: 'selectCards', instanceIds: [(choice as { candidates: Array<{ instanceId: number; name: string }> }).candidates[0]!.instanceId] },
+    );
+
+    const lands = settled.battlefield.filter(
+      (c) => c.controller === 'A' && c.def.types.includes('land'),
+    );
+    expect(lands).toHaveLength(1);
+    expect(lands[0]!.tapped).toBe(true);
+  });
+
+  it('Farhaven Elf: saying NO puts NOTHING onto the battlefield - the elf still resolves', () => {
+    // The half that silently breaks. A declined "you may" must leave the board
+    // exactly as it was, and must not leave the trigger half-resolved.
+    const reg = buildRegistry();
+    const elf = compileCard(FARHAVEN_ELF).definition;
+    const state = gameAtMain(reg, SEEDS.farhaven);
+    const before = state.players.A.library.length;
+    const cast = castFromHand(state, elf, reg);
+
+    const settled = settle(cast.state, reg, () => ({ kind: 'confirm', yes: false }));
+
+    expect(
+      settled.battlefield.filter((c) => c.controller === 'A' && c.def.types.includes('land')),
+    ).toHaveLength(0);
+    // The creature itself is unaffected by the answer.
+    expect(
+      settled.battlefield.some((c) => c.controller === 'A' && c.def.name === 'Farhaven Elf'),
+    ).toBe(true);
+    // Declining searches nothing, so the library is untouched.
+    expect(settled.players.A.library).toHaveLength(before);
+    expect(settled.pendingChoice ?? undefined).toBeUndefined();
+    expect(settled.stack).toHaveLength(0);
+  });
+
+  it('Trinket Mage: the search is offered only the cards the printed bound allows', () => {
+    const reg = buildRegistry();
+    const mage = compileCard(TRINKET_MAGE).definition;
+    const state = gameAtMain(reg, SEEDS.creatureEtb);
+
+    // A library holding one legal find and two illegal ones: a 3-mana artifact
+    // (too expensive) and a 1-mana creature (not an artifact).
+    const trinket: CardDefinition = {
+      id: 'trinket',
+      name: 'Test Trinket',
+      types: ['artifact'],
+      cost: { generic: 1 },
+    };
+    const bigArtifact: CardDefinition = {
+      id: 'big',
+      name: 'Test Big Artifact',
+      types: ['artifact'],
+      cost: { generic: 3 },
+    };
+    const cheapCreature: CardDefinition = {
+      id: 'bear',
+      name: 'Test Bear',
+      types: ['creature'],
+      cost: { G: 1 },
+      power: 2,
+      toughness: 2,
+    };
+    state.players.A.library = [
+      instance(trinket, 'A', 'library'),
+      instance(bigArtifact, 'A', 'library'),
+      instance(cheapCreature, 'A', 'library'),
+    ];
+
+    const cast = castFromHand(state, mage, reg);
+    let offered: readonly string[] = [];
+    const settled = settle(cast.state, reg, (choice) => {
+      if (choice.kind === 'confirm') return { kind: 'confirm', yes: true };
+      offered = (choice as { candidates: Array<{ instanceId: number; name: string }> }).candidates.map((o) => o.name);
+      return { kind: 'selectCards', instanceIds: [(choice as { candidates: Array<{ instanceId: number; name: string }> }).candidates[0]!.instanceId] };
+    });
+
+    expect(offered).toEqual(['Test Trinket']);
+    expect(settled.players.A.hand.map((c) => c.def.name)).toContain('Test Trinket');
+  });
+
+  it('Recruiter of the Guard: the printed TOUGHNESS bound is what the search offers', () => {
+    const reg = buildRegistry();
+    const recruiter = compileCard(RECRUITER_OF_THE_GUARD).definition;
+    const state = gameAtMain(reg, SEEDS.goblinMatron);
+
+    const small: CardDefinition = {
+      id: 'small',
+      name: 'Test Small',
+      types: ['creature'],
+      cost: { W: 1 },
+      power: 3,
+      toughness: 2,
+    };
+    const big: CardDefinition = {
+      id: 'bigcreature',
+      name: 'Test Big',
+      types: ['creature'],
+      cost: { W: 1 },
+      power: 1,
+      toughness: 3,
+    };
+    // A card with no printed toughness box at all must not sneak in as a zero.
+    const artifact: CardDefinition = {
+      id: 'artifact',
+      name: 'Test Artifact',
+      types: ['artifact'],
+      cost: { generic: 1 },
+    };
+    state.players.A.library = [
+      instance(small, 'A', 'library'),
+      instance(big, 'A', 'library'),
+      instance(artifact, 'A', 'library'),
+    ];
+
+    const cast = castFromHand(state, recruiter, reg);
+    let offered: readonly string[] = [];
+    settle(cast.state, reg, (choice) => {
+      if (choice.kind === 'confirm') return { kind: 'confirm', yes: true };
+      offered = (choice as { candidates: Array<{ instanceId: number; name: string }> }).candidates.map((o) => o.name);
+      return { kind: 'selectCards', instanceIds: [] };
+    });
+
+    expect(offered).toEqual(['Test Small']);
+  });
+
+  it('Goblin Matron: the SUBTYPE filter finds a Goblin and nothing else', () => {
+    const reg = buildRegistry();
+    const matron = compileCard(GOBLIN_MATRON).definition;
+    const state = gameAtMain(reg, SEEDS.goblinMatron);
+
+    const goblin: CardDefinition = {
+      id: 'goblin',
+      name: 'Test Goblin',
+      types: ['creature'],
+      subtypes: ['goblin'],
+      cost: { R: 1 },
+      power: 1,
+      toughness: 1,
+    };
+    const elf: CardDefinition = {
+      id: 'elf',
+      name: 'Test Elf',
+      types: ['creature'],
+      subtypes: ['elf'],
+      cost: { G: 1 },
+      power: 1,
+      toughness: 1,
+    };
+    state.players.A.library = [instance(goblin, 'A', 'library'), instance(elf, 'A', 'library')];
+
+    const cast = castFromHand(state, matron, reg);
+    let offered: readonly string[] = [];
+    settle(cast.state, reg, (choice) => {
+      if (choice.kind === 'confirm') return { kind: 'confirm', yes: true };
+      offered = (choice as { candidates: Array<{ instanceId: number; name: string }> }).candidates.map((o) => o.name);
+      return { kind: 'selectCards', instanceIds: [] };
+    });
+
+    expect(offered).toEqual(['Test Goblin']);
   });
 });

@@ -237,6 +237,96 @@ const LAND_SUBTYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The printed SUBTYPES a library search may name — a closed table, extended one
+ * printed card at a time.
+ *
+ * It is closed on purpose. The template reads "search your library for a ___
+ * card", and the blank is either a card TYPE ("artifact") or a subtype
+ * ("Goblin"). Accepting any unrecognised word as a subtype would compile a
+ * search for "a **legendary** creature card" or "a **colorless** card" into a
+ * filter that matches nothing at all — a tutor that can never find, which is
+ * strictly worse than the printed card and completely silent about it. A word
+ * that is not in here keeps reporting instead.
+ *
+ * Everything listed is checked case-insensitively against the printed subtypes
+ * the compiler emits (`matchesCardFilter` → `hasSubtype`).
+ */
+const SEARCHABLE_SUBTYPES: ReadonlySet<string> = new Set([
+  // Land types (the fetchlands and the basic-land searches).
+  'plains',
+  'island',
+  'swamp',
+  'mountain',
+  'forest',
+  // Artifact/enchantment types.
+  'equipment',
+  'aura',
+  // Creature types named by the tutors in the most-played corpus.
+  'goblin',
+  'dragon',
+  'demon',
+]);
+
+/**
+ * The numeric restriction a search may print — "with mana value 1 or less",
+ * "with toughness 2 or less", "with power 4 or greater", "with mana value 2".
+ *
+ * Each printed characteristic maps to the pair of {@link CardFilter} bound
+ * fields it sets, so the bound and the direction cannot drift apart. A
+ * characteristic outside this table is not expressible and rejects the rule
+ * rather than being dropped — a dropped restriction is a strictly better tutor.
+ */
+const SEARCH_BOUND_FIELDS: Readonly<Record<string, { readonly min: string; readonly max: string }>> =
+  Object.freeze({
+    'mana value': Object.freeze({ min: 'minManaValue', max: 'maxManaValue' }),
+    power: Object.freeze({ min: 'minPower', max: 'maxPower' }),
+    toughness: Object.freeze({ min: 'minToughness', max: 'maxToughness' }),
+  });
+
+/** The alternation of the characteristics above, for the search patterns. */
+const SEARCH_BOUND_PHRASE = `(${Object.keys(SEARCH_BOUND_FIELDS).join('|')})`;
+
+/**
+ * Turn "an artifact card with mana value 1 or less" into the `CardFilter` that
+ * finds exactly those cards, or `null` when any part of the phrase is outside
+ * what the filter can say.
+ *
+ * `noun` is the word before "card" — a card type or a {@link SEARCHABLE_SUBTYPES}
+ * subtype. The three bound arguments are the optional "with X N [or less |
+ * or greater]" tail; **no** direction word means an EXACT value (Tribute Mage's
+ * "with mana value 2"), which is both bounds set to the same number.
+ */
+function searchFilterFrom(
+  noun: string,
+  characteristic?: string,
+  amount?: string,
+  direction?: string,
+): Record<string, unknown> | null {
+  const filter: Record<string, unknown> = {};
+  const type = SPELL_TYPE_WORDS[noun];
+  if (type) {
+    filter.anyOfTypes = [type];
+  } else if (SEARCHABLE_SUBTYPES.has(noun)) {
+    filter.anyOfSubtypes = [noun];
+  } else {
+    return null; // not a restriction this filter can express — report the line
+  }
+
+  if (characteristic === undefined) return filter;
+  const fields = SEARCH_BOUND_FIELDS[characteristic];
+  if (!fields) return null;
+  const value = Number.parseInt(amount ?? '', 10);
+  if (!Number.isFinite(value)) return null;
+  if (direction === 'less') filter[fields.max] = value;
+  else if (direction === 'greater') filter[fields.min] = value;
+  else {
+    filter[fields.min] = value;
+    filter[fields.max] = value;
+  }
+  return filter;
+}
+
+/**
  * The printed restrictions a "you choose a ___ card from it" discard may carry,
  * mapped to the `CardFilter` implementing each. Anything outside this table is a
  * restriction the filter cannot express, so the rule declines rather than
@@ -1366,6 +1456,31 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'search-to-hand-by-filter',
+    description:
+      '"Search your library for a TYPE card [with CHARACTERISTIC N [or less|or greater]], reveal it, put it into your hand, then shuffle" (the Mage cycle, Goblin Matron, Recruiter of the Guard, Fierce Empath)',
+    // The "reveal" is INFORMATION, not a state change: the card goes to hand
+    // either way, and nothing in this engine's state can observe the difference
+    // (the same reason `revealTopCard` does not log one). Every MECHANICAL
+    // consequence of the printed line is exact, which is the bar for a rule.
+    //
+    // The restriction is not optional decoration — a tutor that ignored "with
+    // mana value 1 or less" would fetch the best card in the deck instead of the
+    // best cheap one, i.e. a strictly better card. `searchFilterFrom` refuses
+    // anything it cannot express, so the line reports rather than over-fetches.
+    pattern: new RegExp(
+      `^search your library for an? ([a-z]+) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, reveal (?:it|that card), put (?:it|that card) into your hand, then shuffle$`,
+    ),
+    build(match) {
+      const filter = searchFilterFrom(match[1] ?? '', match[2], match[3], match[4]);
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count: 1, filter, destination: 'hand' },
+      });
+    },
+  },
+  {
     id: 'grant-flashback-to-graveyard-spell',
     description:
       '"Target instant or sorcery card in your graveyard gains flashback until end of turn. Its flashback cost is equal to its mana cost." (Snapcaster Mage)',
@@ -1569,6 +1684,53 @@ function triggerFrom(
   };
 }
 
+/**
+ * Words that make an optional clause a PRICE rather than a gift — the AI steer
+ * for {@link mayEffectsFrom}. "You may destroy target artifact" is upside and a
+ * pilot should take it; "you may sacrifice a land" costs the controller
+ * something and the default answer should be no.
+ *
+ * This changes no legality whatsoever: both answers stay available on every
+ * "you may", and a searching pilot works out the real answer for itself. It is
+ * only what a valence-answering pilot does when it has nothing better.
+ */
+const OPTIONAL_CLAUSE_COSTS: readonly string[] = Object.freeze([
+  'sacrifice',
+  'discard',
+  'pay ',
+  'lose ',
+]);
+
+/** `'loss'` when the optional clause charges its controller, else `'gain'`. */
+function optionalValence(body: string): 'gain' | 'loss' {
+  return OPTIONAL_CLAUSE_COSTS.some((cost) => body.startsWith(cost)) ? 'loss' : 'gain';
+}
+
+/**
+ * Wrap an already-compiled clause in the printed word **"you may"**.
+ *
+ * The wrapper is the `mayEffects` primitive, which asks a real yes/no and runs
+ * the clause only on a yes. Compiling the yes-half alone would be a different
+ * card — a Reclamation Sage that MUST destroy something, a druid that MUST
+ * sacrifice a land — so the option is data, never an assumption.
+ *
+ * Returns `null` when the body compiles to nothing, so the line keeps reporting
+ * instead of becoming an empty question the player has to answer for no effect.
+ */
+function mayEffectsFrom(body: string, compiled: readonly EffectRef[]): readonly EffectRef[] | null {
+  if (compiled.length === 0) return null;
+  return [
+    {
+      primitive: 'mayEffects',
+      params: {
+        prompt: `You may ${body}`,
+        valence: optionalValence(body),
+        effects: compiled,
+      },
+    },
+  ];
+}
+
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'trigger-etb',
@@ -1576,6 +1738,40 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     pattern: /^when ~ enters(?: the battlefield)?, (.+)$/,
     build(match, ctx) {
       return triggerFrom(ctx, { on: 'etb' }, match[1] ?? '', `Enters: ${match[1] ?? ''}`);
+    },
+  },
+  {
+    id: 'trigger-etb-you-may',
+    description: '"When ~ enters, you may BODY" — the optional enters-the-battlefield trigger',
+    // Ordered AFTER `trigger-etb`, deliberately. Some bodies print their own
+    // "you may" and implement it themselves — "you may return target card from
+    // your graveyard to your hand" compiles to `returnFromGraveyard` with
+    // `optional: true`, one question, exactly as Eternal Witness plays. Letting
+    // that path win first keeps those cards on the rule that knows the most
+    // about them; this wrapper is the general fallback for every other body,
+    // which without it would report rather than being asked about.
+    //
+    // The invariant that makes the order safe: a body rule may match a printed
+    // "you may" ONLY if it implements the option (both rules that do, do). A
+    // rule that swallowed the words and compiled the forced version would turn
+    // an optional card into a different one — see the Eternal Witness test.
+    pattern: /^when ~ enters(?: the battlefield)?, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      const compiled = ctx.compileTriggerBody(body);
+      if (compiled === null) return null;
+      const effectRefs = mayEffectsFrom(body, compiled.effects);
+      if (effectRefs === null) return null;
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: effectRefs,
+            label: `Enters: you may ${body}`,
+            ...(compiled.targets ? { targets: compiled.targets } : {}),
+          },
+        ],
+      };
     },
   },
   {

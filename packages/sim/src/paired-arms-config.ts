@@ -56,6 +56,15 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    * a few extra variant games in kicker decks.
    */
   'ifKicked',
+  /*
+   * `mayEffects` is the "you may" wrapper, and it is classified CONSERVATIVELY
+   * for exactly the reason `ifKicked` is: its nested clause lives in an
+   * `effects` param the decklist scan cannot see, so a "you may search your
+   * library…" would otherwise hide a library reader from the identical-game
+   * argument. Treating the wrapper as library-reading withdraws the skip for
+   * any game that resolves an optional clause — sound whatever it contains.
+   */
+  'mayEffects',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
   // Reads the whole library to choose a card.
