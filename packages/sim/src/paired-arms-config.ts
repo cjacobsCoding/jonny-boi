@@ -154,6 +154,10 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'loseLife',
   'pumpUntilEndOfTurn',
   'grantKeywordUntilEndOfTurn',
+  // The mass form reads the BATTLEFIELD (which permanents a player controls now)
+  // and writes continuous effects onto them. No library is consulted, so paired
+  // arms stay comparable for exactly the reason the single-target form does.
+  'grantKeywordToYoursUntilEndOfTurn',
   'makeToken',
   'persistReturn',
   'destroyTarget',

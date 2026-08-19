@@ -213,6 +213,23 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
 const KEYWORD_TOKEN = `(${Object.keys(KEYWORD_FLAGS).join('|')})`;
 
+/**
+ * The printed nouns an anthem-shaped static may select, mapped to the card type
+ * its filter should carry. `null` means NO type entry: "permanents you control"
+ * reaches everything, and an absent filter is exactly that.
+ *
+ * A CLOSED table. A noun outside it ("Zombies you control", "creatures you
+ * control with flying") selects by a subtype or by a characteristic the static
+ * filter deliberately cannot read, so those lines keep reporting.
+ */
+const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.freeze({
+  creature: 'creature',
+  permanent: null,
+  artifact: 'artifact',
+  enchantment: 'enchantment',
+  land: 'land',
+});
+
 /** Colour words Oracle uses in removal restrictions, mapped to color letters. */
 const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
   white: 'W',
@@ -1062,6 +1079,34 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The MASS grant: "Creatures you control gain indestructible until end of
+    // turn" (Selfless Spirit), "Permanents you control gain hexproof and
+    // indestructible until end of turn" (Heroic Intervention).
+    //
+    // It is its own primitive rather than a flag on the single-target grant
+    // because it TARGETS NOTHING: there is no chosen creature and no legality
+    // question, and the set it reaches is read off the board at resolution. Nor
+    // is it a static - the grant outlives the spell that made it (to cleanup)
+    // and reaches only what was on the battlefield when it resolved.
+    id: 'mass-grant-keyword-until-eot',
+    description: '"Creatures/permanents you control gain KEYWORDS until end of turn"',
+    pattern: new RegExp(
+      `^(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control gain (.+) until end of turn$`,
+    ),
+    build(match) {
+      const nounType = STATIC_NOUN_TYPES[match[1] ?? ''];
+      if (nounType === undefined) return null;
+      const keywords = parseKeywordList(match[2] ?? '');
+      // A keyword the engine does not model reports the whole line rather than
+      // granting only the half we understood.
+      if (keywords === null) return null;
+      return effects({
+        primitive: 'grantKeywordToYoursUntilEndOfTurn',
+        params: { keywords, ...(nounType === null ? {} : { anyOfTypes: [nounType] }) },
+      });
+    },
+  },
+  {
     // Evasion granted as a one-shot ("Target creature can't be blocked this
     // turn") - the printed body of Rogue's Passage, Manifold Key, Whirler Rogue,
     // Thassa and the spell Enter the Enigma alike. It is the same continuous
@@ -1850,7 +1895,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
     pattern: new RegExp(
-      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?creatures you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
     build(match, ctx) {
       // Only a PERMANENT can carry a static ability. An instant/sorcery printing
@@ -1861,9 +1906,14 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[3] === undefined ? 0 : Number.parseInt(match[3], 10);
-      const toughness = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
+      const power = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
+      const toughness = match[5] === undefined ? 0 : Number.parseInt(match[5], 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      // The printed NOUN decides the filter's type. "Permanent" maps to no type
+      // entry at all, because an absent filter already matches every permanent -
+      // inventing a 'permanent' type word would match nothing.
+      const nounType = STATIC_NOUN_TYPES[match[3] ?? ''];
+      if (nounType === undefined) return null;
       // "WHITE creatures you control get +1/+1" — the printed colour narrows the
       // filter, which core's shared `CardFilter` can express now
       // (`anyOfColors`, derived from cost pips exactly as protection reads
@@ -1871,14 +1921,14 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const colorWord = match[2]?.trim();
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
-      const keywordText = match[5] ?? match[6];
+      const keywordText = match[6] ?? match[7];
       const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
       // A keyword the engine does not model reports the whole line, never a
       // half-granted anthem.
       if (keywordText !== undefined && keywords === null) return null;
       const ability: StaticAbility = {
         affects: {
-          anyOfTypes: ['creature'],
+          ...(nounType === null ? {} : { anyOfTypes: [nounType] }),
           controller: 'you',
           ...(color ? { anyOfColors: [color as never] } : {}),
           // The printed word "other": the lord pumps the team, not itself.
@@ -1929,13 +1979,19 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     id: 'attachment-modification',
-    description: '"Enchanted/Equipped creature gets +2/+0 and has trample"',
+    description:
+      '"Enchanted/Equipped creature gets +2/+0 and has trample" / "the verbless can-not-be-blocked form (Whispersilk Cloak)"',
+    // The third alternative is the VERBLESS form: a printed blocking restriction
+    // is a sentence, not a keyword word, so Whispersilk Cloak's "Equipped
+    // creature can't be blocked and has shroud" carries no leading "has". It is
+    // a catch-all only in shape - `parseKeywordList` still has to recognise every
+    // conjunct, so a line naming anything else returns null and keeps reporting.
     pattern:
-      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+))$/,
+      /^(?:enchanted|equipped) creature (?:gets ([+-]\d+)\/([+-]\d+)(?: and (?:has|gains) (.+))?|(?:has|gains) (.+)|(.+))$/,
     build(match) {
       const power = match[1] === undefined ? 0 : Number.parseInt(match[1], 10);
       const toughness = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
-      const keywordText = match[3] ?? match[4];
+      const keywordText = match[3] ?? match[4] ?? match[5];
       const keywords = keywordText === undefined ? {} : parseKeywordList(keywordText);
       // An unmodelled keyword must report the whole line rather than silently
       // granting only the half we understood.
@@ -1996,17 +2052,36 @@ const EQUIP_TARGET: TargetRestriction = 'creatureYouControl';
 function parseKeywordList(text: string): Record<string, boolean> | null {
   const words = text
     .split(/,| and /)
-    .map((word) => word.trim())
+    .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
     .filter((word) => word.length > 0);
   if (words.length === 0) return null;
   const flags: Record<string, boolean> = {};
   for (const word of words) {
-    const field = KEYWORD_FLAGS[word];
+    const field = KEYWORD_FLAGS[word] ?? KEYWORD_PHRASES[word];
     if (!field) return null;
     flags[field] = true;
   }
   return flags;
 }
+
+/**
+ * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
+ * each conjunct may carry one of its own. Stripped before the lookup rather than
+ * being folded into every pattern, because the verb is grammar, not meaning.
+ */
+const LEADING_GRANT_VERB = /^(?:has|have|gains?) /;
+
+/**
+ * Printed PHRASES that name an engine keyword flag without being a keyword word.
+ * The two blocking restrictions are printed as sentences rather than as keywords
+ * ("Equipped creature can't be blocked"), so a keyword-word table alone reports
+ * a rule the engine fully implements. A CLOSED table, exactly like
+ * {@link KEYWORD_FLAGS}: a phrase outside it keeps reporting.
+ */
+const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
+  "can't be blocked": 'unblockable',
+  "can't block": 'cantBlock',
+});
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({

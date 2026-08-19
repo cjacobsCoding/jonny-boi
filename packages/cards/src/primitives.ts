@@ -28,6 +28,7 @@
 import type {
   CardDefinition,
   CardInstance,
+  CardType,
   EffectContext,
   EffectPrimitive,
   EffectRegistry,
@@ -270,6 +271,35 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
   const target = firstPermanentTarget(ctx) ?? selfIfCreature(ctx);
   if (!target || !isCreature(target.def)) return;
   ctx.addContinuousEffect({ target: target.instanceId, keywords, duration: 'endOfTurn' });
+};
+
+/**
+ * `grantKeywordToYoursUntilEndOfTurn` — the MASS form of the grant above:
+ * "Creatures you control gain indestructible until end of turn" (Selfless
+ * Spirit), "Permanents you control gain hexproof and indestructible until end of
+ * turn" (Heroic Intervention).
+ *
+ * It is a separate primitive rather than a flag on the single-target one because
+ * it targets NOTHING: there is no chosen creature, no legality question, and the
+ * set it reaches is decided at RESOLUTION from the board as it then stands. That
+ * is also why it must not be modelled as a static — the grant outlives the spell
+ * that made it (until cleanup) and reaches only the permanents that were there.
+ *
+ * `params.anyOfTypes` narrows the set the way the printed noun does; omitting it
+ * is the printed word "permanents", which narrows nothing. `params.scope` is
+ * `'you'` (the default) or `'opponent'`.
+ */
+export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
+  const keywords = keywordsParam(ctx);
+  if (isEmptyKeywords(keywords)) return;
+  const types = strArrayParam(ctx, 'anyOfTypes');
+  const opponents = strParam(ctx, 'scope') === 'opponent';
+  for (const perm of ctx.state.battlefield) {
+    const theirs = perm.controller !== ctx.controller;
+    if (theirs !== opponents) continue;
+    if (types.length > 0 && !types.some((type) => perm.def.types.includes(type as CardType))) continue;
+    ctx.addContinuousEffect({ target: perm.instanceId, keywords, duration: 'endOfTurn' });
+  }
 };
 
 /**
@@ -998,6 +1028,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   loseLife,
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
+  grantKeywordToYoursUntilEndOfTurn,
   makeToken,
   createEmblem,
   persistReturn,
