@@ -58,8 +58,16 @@ const STUBBED_NAMES = new Set(STUBBED_MECHANICS.map((entry) => entry.card));
  * one mana. The compiler reports the hybrid cost instead of shipping that.
  */
 const HUMAN_APPROXIMATIONS: Readonly<Record<string, string>> = Object.freeze({
-  Tarmogoyf: 'dynamic power/toughness (characteristic-defining */*)',
-  // Birds of Paradise used to live here: "{T}: Add one mana of any color" had no
+  // EMPTY, and that is the news: every remaining pool card is either reproduced
+  // exactly from its printed text or named in STUBBED_MECHANICS.
+  //
+  // Tarmogoyf used to live here — the pool pinned a representative 2/3 for a
+  // card whose printed box is a formula, and the compiler refused to copy the
+  // guess. Characteristic-defining P/T (CR 613.3 layer 7a) closed that gap, so
+  // the compiler reproduces the authored Tarmogoyf exactly and the card is held
+  // to the full ground-truth check like everything else.
+  //
+  // Birds of Paradise used to live here too: "{T}: Add one mana of any color" had no
   // faithful form, because a fixed `produces` bundle adds one of EACH colour and
   // would have made Birds tap for five mana. Core's modal `producesOptions` (one
   // tap = one chosen mode) closed that gap, so the compiler now reproduces the
@@ -181,16 +189,44 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
-    // Liliana COMPILES now (the planeswalker system landed), so the blocked half
-    // needs a genuinely unimplementable card: Tarmogoyf's */* P/T still is.
+    // THE BLOCKED HALF IS NO LONGER A POOL CARD, and that is the news: the last
+    // one was Cryptic Command, whose modes are now announced at cast (CR
+    // 601.2b/c), so every hand-authored card compiles from its printed text.
+    // Liliana compiles (planeswalkers), Tarmogoyf compiles (the star P/T box),
+    // Snapcaster compiles (graveyard targeting plus grants on a non-battlefield
+    // card).
+    //
+    // The partition still has to be PROVEN to separate, though — a test whose
+    // blocked half is empty by construction would pass even if `compileCards`
+    // stopped blocking anything at all. So the blocked half is a SPLIT card,
+    // which is honestly unimplementable: two castable halves on one object, with
+    // no second face to swap to (see `SECOND_CASTABLE_FACE_GAP`).
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
     const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
+    const snapcaster = scryfallFor(CARD_POOL.find((c) => c.name === 'Snapcaster Mage')!);
+    const cryptic = scryfallFor(CARD_POOL.find((c) => c.name === 'Cryptic Command')!);
+    const split: CompilableCard = {
+      id: 'split-fire-ice',
+      name: 'Fire // Ice',
+      manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+      typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+      oracleText: 'Fire deals 2 damage divided as you choose among one or two targets.',
+      power: null,
+      toughness: null,
+      keywords: [],
+    };
 
-    const { playable, blocked } = compileCards([bolt, liliana, goyf]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic, split]);
 
-    expect(playable.map((card) => card.name)).toEqual(['Lightning Bolt', 'Liliana of the Veil']);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Tarmogoyf']);
+    expect(playable.map((card) => card.name)).toEqual([
+      'Lightning Bolt',
+      'Liliana of the Veil',
+      'Tarmogoyf',
+      'Snapcaster Mage',
+      'Cryptic Command',
+    ]);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Fire // Ice']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });

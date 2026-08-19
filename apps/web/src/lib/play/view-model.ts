@@ -79,6 +79,12 @@ export interface SeatView {
   readonly hand: readonly VisibleHandCard[] | null;
   readonly libraryCount: number;
   readonly graveyardCount: number;
+  /**
+   * The graveyard's actual cards, oldest first. The graveyard is a PUBLIC zone
+   * (CR 404.2), so this is present for BOTH seats — it is what lets either play
+   * UI open a graveyard and offer flashback casts from it, not a leak.
+   */
+  readonly graveyard: readonly VisibleHandCard[];
   readonly exileCount: number;
   readonly manaPool: Readonly<Record<string, number>>;
   readonly hasLost: boolean;
@@ -158,6 +164,7 @@ function seatView(state: GameState, seat: PlayerId, name: string, reveal: boolea
     hand: reveal ? visibleHand(p.hand) : null,
     libraryCount: p.library.length,
     graveyardCount: p.graveyard.length,
+    graveyard: visibleHand(p.graveyard),
     exileCount: p.exile.length,
     manaPool: { ...p.manaPool },
     hasLost: p.hasLost,

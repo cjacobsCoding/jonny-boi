@@ -34,8 +34,10 @@
  * planeswalker LOYALTY abilities) are real: walkers enter with printed loyalty,
  * are attackable, and die at 0. Flash is a real timing flag and a printed
  * "Flashback {cost}" casts from the graveyard for real (then exiles). What it
- * still has no system for is dynamic P/T and flashback GRANTED by another card
- * (Snapcaster).
+ * A characteristic-defining star P/T box is a real formula (Tarmogoyf), and the
+ * engine remembers a short named list of turn-scoped facts (revolt). What it
+ * still has no system for is flashback GRANTED by another card (Snapcaster) and
+ * modes chosen at cast time (Cryptic Command).
  * Cards whose identity needs one of those are authored as the closest faithful
  * subset (documented per-card); their
  * vanilla body (P/T, keywords, mana production) is always correct so they play on
@@ -145,10 +147,18 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Fatal Push',
     types: ['instant'],
     cost: { B: 1 },
-    // Destroy target creature with mana value ≤ 2. (Revolt's ≤4 mode needs a
-    // "permanent left the battlefield this turn" tracker the engine lacks; we
-    // model the base mode faithfully.)
-    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', maxManaValue: 2 } }],
+    // UN-STUBBED: both modes play as printed. "Destroy target creature if it
+    // has mana value 2 or less" — or 4 or less instead, when REVOLT is on (a
+    // permanent left the battlefield under your control this turn). The switch
+    // rides one `destroyTarget` ref and is read at RESOLUTION against core's
+    // turn-scoped fact memory, so a permanent that leaves in response turns
+    // revolt on before the spell resolves, exactly as the real card does.
+    effects: [
+      {
+        primitive: 'destroyTarget',
+        params: { targets: 'creature', maxManaValue: { base: 2, revolt: 4 } },
+      },
+    ],
   },
   {
     id: 'd683d985-9888-4d21-8b5f-69e69ce4a03b',
@@ -444,16 +454,39 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     id: '2bb2eda7-3b38-4c56-870f-c3218a1056f5',
     name: 'Snapcaster Mage',
     types: ['creature'],
+    subtypes: ['Human', 'Wizard'],
     cost: { generic: 1, U: 1 },
     power: 2,
     toughness: 1,
-    keywords: {},
-    // The flashback-granting ETB still needs targeting a card in a graveyard +
-    // a continuous effect on a non-battlefield card (see STUBBED_MECHANICS); the
-    // vanilla 2/1 plays correctly. Flash timing DOES exist engine-wide now, but
-    // adding the keyword here would speed up UW Control and move every recorded
-    // gauntlet baseline — an integrator decision to make deliberately with a
-    // re-measure, not a drive-by data edit.
+    // The WHOLE printed card now. Flash is a real timing flag (`castTiming`
+    // reads it), and the ETB is a targeted trigger aimed as it goes on the
+    // stack: "target instant or sorcery card in your graveyard gains flashback
+    // until end of turn. The flashback cost is equal to its mana cost."
+    //
+    // The grant is instance-scoped, expires in cleanup, and dies with a zone
+    // change (CR 400.7) — core's `card-grants.ts`; the cast path reads it
+    // through the same `flashbackCostOf` accessor that reads a printed
+    // flashback cost, so a granted recast plays exactly like Think Twice's.
+    //
+    // ⚠️ Adding `flash` here does NOT move any recorded gauntlet baseline:
+    // no meta deck runs Snapcaster (UW Control cut it precisely because it was
+    // a blank 2/1 — see `packages/sim/data/decks/uw-control.ts`), so seed 99
+    // still reproduces byte-identically. Putting it back into a deck IS a
+    // baseline-moving decision and is deliberately left to the integrator.
+    keywords: { flash: true },
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        targets: 'instantOrSorceryInYourGraveyard',
+        effects: [
+          {
+            primitive: 'grantFlashback',
+            params: { targets: 'instantOrSorceryInYourGraveyard', cost: 'itsManaCost' },
+          },
+        ],
+        label: 'Enters: target instant or sorcery in your graveyard gains flashback',
+      },
+    ],
   },
   {
     id: 'e3afc704-220f-498f-9eaa-0821b17dc24c',
@@ -526,11 +559,15 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Tarmogoyf',
     types: ['creature'],
     cost: { generic: 1, G: 1 },
-    // P/T is "* / *+1" derived from graveyard card types — a dynamic characteristic
-    // the stat layer can't express yet. We pin a representative baseline (2/3) so
-    // it plays as a creature; the dynamic P/T is the documented stub.
-    power: 2,
-    toughness: 3,
+    // UN-STUBBED: the star box is a FORMULA now, not a pinned guess. Power is
+    // the number of card types among cards in ALL graveyards; toughness is that
+    // number plus one. It is applied in CR 613.3 layer 7a — before counters and
+    // before every pump — and re-derived on every read, so a fetchland cracking
+    // mid-combat grows it before state-based actions run.
+    characteristicPT: {
+      power: { countOf: 'cardTypesInAllGraveyards' },
+      toughness: { countOf: 'cardTypesInAllGraveyards', plus: 1 },
+    },
   },
 
   // --- Planeswalker ------------------------------------------------------------

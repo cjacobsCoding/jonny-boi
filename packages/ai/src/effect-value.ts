@@ -443,6 +443,27 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     return who === ctx.player ? value : -value;
   },
 
+  /**
+   * A GRANTED FLASHBACK (Snapcaster's ETB) is card advantage, priced off the
+   * very card it names — which is what makes the ability's aiming work: the
+   * trigger's target chooser (`answerSelectTargets`) scores each graveyard
+   * candidate through this entry, so the pilot points Snapcaster at its best
+   * instant or sorcery rather than the first one offered.
+   *
+   * Discounted by `grantedFlashbackValueShare` against simply returning the
+   * card (`returnFromGraveyard` above scores the full value): the grant wears
+   * off at end of turn and the card still costs its mana. A grant aimed at
+   * nothing — the target already gone — is worth nothing, which is also what
+   * it does.
+   */
+  grantFlashback: (_params, ctx) => {
+    const target = ctx.targets[0];
+    if (target === undefined || typeof target !== 'number') return 0;
+    const card = ctx.state.players[ctx.player].graveyard.find((c) => c.instanceId === target);
+    if (!card) return 0;
+    return cardValue(card, ctx.weights, ctx.cards) * ctx.weights.grantedFlashbackValueShare;
+  },
+
   /** A tutor is worth roughly the best thing it could find; the library is deep. */
   searchLibrary: (params, ctx) => {
     const who = subjectPlayer(params, 'who', 'controller', ctx);

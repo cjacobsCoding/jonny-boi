@@ -44,10 +44,16 @@
  */
 
 import type { CardDefinition, ProtectionQuality } from './card.js';
+import { colorsOfDefinition } from './card.js';
 import type { CardInstance, GameState } from './state.js';
 import type { ManaColor } from './mana.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { aggregateFor } from './internal/continuous.js';
+
+// `colorsOfDefinition` moved to card.ts (the shared `CardFilter` needs it too,
+// and choices.ts importing this module would cycle through the continuous
+// layer). Re-exported here so existing import sites keep working.
+export { colorsOfDefinition } from './card.js';
 
 /**
  * The effect-primitive id reserved for the ward counter — "counter the targeted
@@ -86,43 +92,6 @@ const QUALITY_COLOR_PIPS: Readonly<Partial<Record<ProtectionQuality, ManaColor>>
   red: 'R',
   green: 'G',
 });
-
-/**
- * Memo of a definition's colors. Definitions are immutable and shared (the pool
- * is frozen), and this is asked per candidate target on the legality path, so
- * the pip walk happens once per definition ever, not once per check.
- */
-const COLORS_MEMO = new WeakMap<CardDefinition, readonly ManaColor[]>();
-
-/** The five COLORS (not {C}) in canonical order — colorless is not a color. */
-const COLOR_PIPS: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
-
-/**
- * The colors of a definition: every color appearing among its cost's colored
- * pips, hybrid symbols included. A land, a free spell, or an artifact with a
- * purely generic cost has no colors ({C} pips are colorless, not a color).
- */
-export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
-  const memoized = COLORS_MEMO.get(def);
-  if (memoized) return memoized;
-  const cost = def.cost;
-  const colors: ManaColor[] = [];
-  if (cost) {
-    for (const pip of COLOR_PIPS) {
-      if ((cost[pip] ?? 0) > 0) colors.push(pip);
-    }
-    if (cost.hybrid) {
-      for (const symbol of cost.hybrid) {
-        for (const option of symbol) {
-          if (option !== 'C' && !colors.includes(option)) colors.push(option);
-        }
-      }
-    }
-  }
-  const frozen = Object.freeze(colors);
-  COLORS_MEMO.set(def, frozen);
-  return frozen;
-}
 
 /** Whether `source` has `quality` — the one definition of every quality word. */
 export function sourceHasQuality(source: CardDefinition, quality: ProtectionQuality): boolean {

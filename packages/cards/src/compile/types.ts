@@ -172,6 +172,12 @@ export interface ClauseContribution {
    */
   readonly modal?: import('@jonny-boi/core').ModalSpec;
   /**
+   * A CHARACTERISTIC-DEFINING P/T this clause prints — the formula behind a `*`
+   * box (Tarmogoyf). Present ⇒ the card's printed P/T is variable and the
+   * assembly emits `CardDefinition.characteristicPT` INSTEAD of numbers.
+   */
+  readonly characteristicPT?: import('@jonny-boi/core').CharacteristicPT;
+  /**
    * Static ("anthem") abilities this clause prints ("Creatures you control get
    * +1/+1") — continuous modifications applied by core's statics layer for as
    * long as this permanent is on the battlefield.

@@ -77,6 +77,24 @@ export type GameEvent =
       readonly amount: number;
     }
   | {
+      /**
+       * A player LOOKED AT the top `amount` cards of their library — the scry /
+       * surveil half that moves nothing (CR 701.18a, 701.42a).
+       *
+       * It carries a COUNT and nothing else, on purpose: at a real table
+       * everybody sees how many cards you picked up, and nobody sees what they
+       * are. That makes the event public as printed, and it is the only honest
+       * way to log a look — the identities never leave the choice, which travels
+       * to its chooser alone and whose public `choiceAsked` is likewise a count.
+       *
+       * Emitted only once the look's question has been ANSWERED (a primitive
+       * re-run to collect a later answer must not log the look twice).
+       */
+      readonly type: 'cardsLookedAt';
+      readonly player: PlayerId;
+      readonly amount: number;
+    }
+  | {
       /** A non-mana activated ability was activated and put on the stack. */
       readonly type: 'abilityActivated';
       readonly player: PlayerId;
@@ -244,6 +262,25 @@ export type GameEvent =
       readonly targetInstanceId: InstanceId;
       readonly sourceInstanceId: InstanceId;
       readonly duration: ContinuousDuration;
+    }
+  | {
+      // A card in a NON-battlefield zone gained an ability (Snapcaster's "gains
+      // flashback until end of turn" on a graveyard card) — see card-grants.ts.
+      // Public by nature: the zones a grant can touch (graveyard, exile) are
+      // open information, and the granting ability resolved in front of everyone.
+      readonly type: 'cardGrantAdded';
+      readonly targetInstanceId: InstanceId;
+      readonly sourceInstanceId: InstanceId;
+      readonly duration: ContinuousDuration;
+    }
+  | {
+      // A card grant was removed (cleanup's "until end of turn" expiry). A grant
+      // dropped because its card CHANGED ZONES emits nothing extra — the
+      // zoneChange already tells that story (CR 400.7: the grant simply stops
+      // being true of the new object).
+      readonly type: 'cardGrantExpired';
+      readonly targetInstanceId: InstanceId;
+      readonly sourceInstanceId: InstanceId;
     }
   | {
       // A permanent became attached to another (an Aura enchanting a creature, an

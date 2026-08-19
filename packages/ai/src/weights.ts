@@ -178,6 +178,21 @@ export interface HeuristicWeights {
    *  `choiceLandsWanted`). High enough that a pilot pitches a cheap spell before
    *  the land that would let it cast anything at all. */
   readonly choiceLandShortValue: number;
+  /**
+   * The `cardValue` a looked-at card must clear to be KEPT on top of the library
+   * by a scry or a surveil; anything at or below it is bottomed (scry) or
+   * binned (surveil).
+   *
+   * This one number is the whole scry policy, and it works because `cardValue`
+   * already knows about flooding: a land is worth `choiceLandShortValue` while
+   * its controller is below `choiceLandsWanted` and only `choiceLandValue`
+   * once the mana is built. So a threshold sitting BETWEEN those two values
+   * makes the pilot keep a land exactly while it still needs lands and bottom
+   * it the moment it is flooded — the single most valuable scry decision in
+   * real Magic — while every creature and spell (which start at
+   * `choiceCreatureBaseValue` / `choiceSpellBaseValue`) clears it and stays.
+   */
+  readonly scryKeepValueThreshold: number;
 
   // --- scoring EFFECTS (effect-value.ts — modal-spell modes) -----------------
   // Modes are scored on the SAME scale as spells above (removal ≈ 60, develop ≈ 40,
@@ -224,6 +239,18 @@ export interface HeuristicWeights {
    *  point a pump at. Below `attachPerStat` on purpose: a pump wears off at end of
    *  turn, an Equipment does not. */
   readonly modePumpPerStatValue: number;
+  /**
+   * What fraction of a card's own value a GRANTED FLASHBACK is worth — the
+   * Snapcaster ETB, priced as the card advantage it is.
+   *
+   * Below 1 on purpose, and the reason is the mechanic's one real limit: the
+   * grant expires at end of turn and the card still has to be paid for, so it
+   * is worth strictly less than returning that card to hand (`returnFromGraveyard`
+   * scores the full value). Above zero by a wide margin, because a
+   * flashed-back removal spell or draw spell is the same card twice — which is
+   * exactly the card advantage the pilot already understands.
+   */
+  readonly grantedFlashbackValueShare: number;
 }
 
 /**
@@ -326,6 +353,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // small body (a 2/2 scores 18) but still loses to a genuine bomb (a 6/6 scores 34).
   choiceLandsWanted: 4,
   choiceLandShortValue: 20,
+  // Between `choiceLandValue` (2 — a land you no longer need) and every other
+  // card's floor (`choiceSpellBaseValue` 8, `choiceCreatureBaseValue` 10, and a
+  // needed land's `choiceLandShortValue` 20). So: bottom flooded lands, keep
+  // everything else. See the field's doc comment for why one number suffices.
+  scryKeepValueThreshold: 5,
 
   // scoring effects (modal-spell modes) — the ordering these produce is
   //   lethal > counter/kill their best thing > draw a card > bounce a real threat
@@ -345,4 +377,7 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // A +2/+2 until end of turn scores 8 — worth taking over nothing, comfortably
   // below removing a real threat (60+), which is the ordering that matters.
   modePumpPerStatValue: 2,
+  // Two thirds of the card: the same card again, minus the end-of-turn clock
+  // and minus having to pay for it a second time.
+  grantedFlashbackValueShare: 2 / 3,
 });

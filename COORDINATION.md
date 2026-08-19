@@ -97,10 +97,236 @@ throughput (games/sec) from regressing.
 | feat/cast-cost-modification | worker | packages/core (card/choices/state/effects/engine/index + internal/clone + new cast-cost.test.ts), packages/cards (effect-helpers/primitives/index; compile types+compile+rules + compile.test; new cast-cost-cards.test.ts), packages/ai (choices + heuristic + choices.test), packages/sim (paired-arms-config classification only), apps/web (play/choice-view + ChoicePrompt + choice tests, about/mechanics.ts), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
 | feat/planeswalkers | worker | packages/core (card/state/actions/events/targeting/engine/effects/serialize/index + internal stats/combat/sba/clone/zones + NEW planeswalker.test.ts), packages/cards (compile types/compile/rules loyalty + NEW rules, choice-primitives sacrificeChosen+pileSplitSacrifice, primitives dealDamage-to-walker, data/pool.ts Liliana + 2 refreshed expanded entries, index.ts STUBBED, NEW planeswalker-play.test.ts), packages/ai (heuristic walker attack/burn/loyalty + effect-value + weights + NEW planeswalker-pilot.test.ts), packages/data-tools (loyalty capture + Liliana index record), packages/sim (observation +2, paired-arms +2, fidelity copy), apps/web (play board walker UI + about/mechanics + card-index regen), DESIGN §3.9/§3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
+| feat/scry-and-templates | worker | packages/core (choices.ts `keepOnTop`, events.ts `cardsLookedAt`), packages/cards (choice-primitives scry/surveil + `unlessPaidX`, compile/rules.ts 4 new rules + 1 hint reword, NEW compile/scry-surveil.test.ts), packages/ai (choices.ts keep-on-top branch + weights.ts `scryKeepValueThreshold` + choices.test additions), packages/sim (observation +1 classification, paired-arms +2), apps/web (play/choice-view copy, play-format log line, about/mechanics +2 witnesses), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | fix/scan-real-photo | worker | apps/web/src/lib/scan (config/detect/stacks/crop/ocr/match/pipeline + stacks.test rewrite + pipeline.test tweak + NEW real-photo.test.ts + NEW fixtures/user-deck-photo.jpg + fixtures/card-names-catalog.json), apps/web/package.json (+jpeg-js dev), package-lock.json, .gitignore (traineddata cache), DESIGN §3.12 | 🚧 PUSHED, not merged |
+| feat/derived-state | worker | packages/core (NEW derived.ts + turn-facts.ts + derived-state.test.ts; card/choices/state/index/protection, internal/{continuous,stats,clone,triggers-runtime}, engine.ts one line), packages/cards (effect-helpers/primitives, compile/{rules,compile,types,text}, data/pool.ts Tarmogoyf+Fatal Push, src/index.ts STUBBED, NEW derived-state.test.ts + 3 refreshed tests), packages/sim (fidelity caveat wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11 | 🚧 PUSHED, not merged |
+| feat/online-ui-parity | worker | apps/web (components/online/OnlineBoard.tsx, components/play/{PlayBoard,SeatPanel,GraveyardPanel NEW,AbilityPrompts NEW}.tsx, lib/online/{legal-actions,auto-tap,board-adapter}.ts, lib/play/{session,view-model,graveyard-cast NEW}.ts, styles.css appended), apps/server (room.ts constructor pool param + NEW online-ui-parity.test.ts), packages/protocol/src/index.test.ts (walker-visibility tests only), DESIGN §3.14 | 🚧 PUSHED, not merged |
+| feat/graveyard-grants | worker | packages/core (NEW card-grants.ts + card-grants.test.ts + bench/scavenge-probe.ts; targeting/state/events/engine/index + internal clone/zones), packages/cards (primitives grantFlashback + compile/rules new rule & 2 reworded hints + effect-helpers prune + index un-stub + data/pool.ts Snapcaster + NEW graveyard-grants.test.ts), packages/ai (effect-value/heuristic/weights + NEW graveyard-grant-pilot.test.ts), packages/sim (paired-arms +1, observation +2, uw-control comment), apps/web (about/mechanics +2 witnesses), DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `feat/derived-state` 🚧 PUSHED — **three kinds of state the engine could
+  already see but could not express. Tarmogoyf and Fatal Push are both UN-STUBBED and play as
+  printed.**
+  1. **Characteristic-defining P/T (the star box), in CR 613.3 LAYER 7a.** `CardDefinition.
+  characteristicPT` is a FORMULA over the closed derived-count vocabulary, and the layering is the
+  whole point: the continuous layer — the only layer holding the state a formula needs — computes
+  it into the NEW `AggregatedMod.basePower`/`baseToughness`, and the stat accessors use it **in
+  place of** `def.power`. So counters (7d) and pumps/anthems (7c) add ON TOP of it, not the other
+  way round. Nothing is stored, so nothing goes stale: a Tarmogoyf grows MID-COMBAT as graveyards
+  fill, before state-based actions run (pinned by a test — that is the interaction a cached value
+  would silently break). ⚠️ **THE ONE THING TO KNOW BEFORE YOU TOUCH STATS**: a bare
+  `effectivePower(inst)` with NO aggregate answers **0** for a star creature — a formula is a
+  function of the whole game and that accessor holds only the instance. Every RULES path passes an
+  aggregate (combat, SBAs, serialization, and I fixed `fight` + Swords-style "life equal to its
+  power" in `cards/primitives.ts`, which were bare reads). `packages/ai` still has ~40 bare reads,
+  so **a Tarmogoyf evaluates as 0/0 to the pilots** — deliberately NOT fixed, because threading the
+  index through those sites would ALSO make the AI see anthems and Auras for the first time and
+  move every recorded heuristic baseline. It is its own change; it is named in DESIGN §3.11.
+  2. **Turn-scoped fact memory** (`core/turn-facts.ts`) — a NAMED CLOSED vocabulary (revolt /
+  morbid / lifegain), NOT a general event query, so the compiler can only match what it genuinely
+  understands. **No new `GameEvent`**: every fact derives from events the engine already emits, fed
+  from the emit chokepoint the trigger collector uses. Cleared as a turn BEGINS (not at cleanup), so
+  "this turn" still reads true during the previous turn's end step. Fatal Push's
+  `{ base: 2, revolt: 4 }` switch is read at **RESOLUTION** — a fetchland cracked in response turns
+  revolt on, which a cast-time read would miss — and it is the CASTER's fact, tested against the
+  opponent losing a permanent instead.
+  ⚠️ **PERF, measured not guessed**: storing the facts as a `{ A, B }` record cost **~3% of sim
+  throughput**, because that is one allocation PER CLONE and the engine clones the state at every
+  action boundary. They are two flat optional NUMBERS on `GameState` now (`turnFactsA/B`, bitmasks,
+  always accessed through the helpers) and throughput is back at parity. Same trap as the frozen
+  `NO_COUNTERS` record — anything you add to `GameState` or `CardInstance` is on the clone path.
+  3. **Coloured/filtered statics.** `CardFilter.anyOfColors`, read from cost pips (hybrid included)
+  by `colorsOfDefinition` — which MOVED from `protection.ts` to `card.ts` (re-exported, so no call
+  site changed) because `choices.ts` importing protection cycles through the continuous layer. It is
+  honoured inside `matchesCardFilter` itself, so it reaches EVERY consumer — searches, discards,
+  sacrifices, attachment hosts — not just anthems, which is what the brief asked to verify.
+  👉 **Compiler**: the blanket `*` P/T refusal is now compile-WHEN-MATCHED, refusal otherwise (a
+  formula outside the closed vocabulary, or whose halves count different things, still reports by
+  name). `text.ts` gained `joinRevoltRiders`, the same precedent as `joinModalBlocks`: an
+  ability-word line MODIFIES the line above it, so ONE rule sees Fatal Push's whole idiom instead of
+  two halves that would destroy twice. New `ABILITY_WORDS` set (CR 207.2c — an ability word has no
+  rules meaning of its own) so Scryfall listing "Revolt" as a keyword stops being reported one line
+  after implementing it; the skip is CONDITIONAL on the labelled line having compiled.
+  ❌ **Deliberately NOT done, with blockers**: the AI evaluation gap above; P/T formulas outside the
+  closed count vocabulary (reported, never guessed); no new pool cards beyond the two un-stubbed;
+  no gauntlet deck runs Tarmogoyf or Fatal Push, which is WHY the baselines are untouched;
+  UNSUPPORTED-BACKLOG.md not regenerated (needs a live Scryfall fetch).
+  ✅ **Gate**: full suite **2649 passed / 0 failed** (baseline 2621 + 28 new), `npm run verify`
+  exit 0, `npm run build` exit 0; gauntlet seed 99 **79/280 = 28.2%, byte-identical** to the
+  recorded baseline; throughput at PARITY against a same-box `origin/main` worktree, 8 alternating
+  paired rounds (median ratio 1.20 in my favour, mine faster in 6/8 — the box was heavily contended
+  this wave, baseline swinging 28–103 games/sec, which is exactly why the comparison is paired and
+  why I claim parity rather than a speedup). Three tests that PINNED the old refusals were flipped
+  (Tarmogoyf's compile exemption, the "partitions a mixed list" blocked card, the coloured-anthem
+  refusal), each with a NEW refusal test in its place so the honest half still fails loudly.
+  (Worker)
+
+- 2026-08-18 worker: `feat/online-ui-parity` 🚧 PUSHED — **three shipped mechanics stopped being
+  invisible online.** Planeswalker attacks + loyalty abilities, flashback (casting from the
+  graveyard) and cast-time {X} questions were all in the server's `legalActions` with NO affordance on
+  `OnlineBoard`, so a networked player could not use any of them — the repo's "an inert feature is not
+  done" rule, failed three times over. Parity is by SHARING, never re-implementing: the online board
+  now renders the same `SeatPanel`/`ChoicePrompt`/`AbilityPrompts`/`GraveyardPanel` the hotseat does,
+  and both boards derive affordances from the same pure modules — `legal-actions.ts`
+  (`graveyardCastChoices` splits casts BY ZONE; `abilityChoices` is the online twin of the session's
+  `abilityOptions`, grouped from server offers alone so no dead buttons), `auto-tap.ts`
+  (`graveyardCastableWithTaps` + `castSequence(..., 'graveyard')`, which plan the FLASHBACK cost, not
+  the printed one) and the new `lib/play/graveyard-cast.ts` (`graveyardPanelView` — the panel's whole
+  view-model, why-disabled copy included). Casting goes through ONE chokepoint per board,
+  `activateCard(id, zone)`, so click, drag-to-play and the graveyard panel cannot diverge.
+  ⚠️ **Three traps for whoever touches this next.** (1) `CastSpellAction.fromZone` must survive the
+  round trip: casts are grouped by zone and the zone is echoed on submit — a graveyard cast that
+  forgets it is looked for in the HAND and cleanly rejected, which looks exactly like a dead button.
+  (2) Auto-pass has to count graveyard plays (`tapCastableCount` now adds `graveyardTapCastable`), or
+  the board advances past the only windows a flashback is castable in. (3) A greedy test driver that
+  taps whenever it can will hide these features rather than prove them — mana empties at the END OF
+  EVERY STEP, so tapping in upkeep leaves the main phase with an empty pool, a tapped board, no
+  fundable flashback and max X = 0. The pilot in the harness taps only in its own sorcery window.
+  **Masking needed nothing**: loyalty is public (it lives in the instance's counters and
+  `maskStateForSeat` copies the battlefield wholesale) — now PINNED by protocol tests asserting the
+  walker, its loyalty and its ability list survive for BOTH seats and for a spectator.
+  **Verified LIVE, not just unit-tested**: `apps/server/src/online-ui-parity.test.ts` drives the real
+  `Room` with two fake-connection clients through real games and asserts the very client functions the
+  board renders from — an Elves attacks Liliana via `buildDeclareAttackersAction` (loyalty drops, B's
+  life does not move), a `+1` loyalty line is offered by `abilityChoices` and moves loyalty 3→4, a
+  flashback spell is cast out of the graveyard via `castSequence(..., 'graveyard')` and ends in EXILE
+  (CR 702.34a), and an {X} cast surfaces `chooseNumber` to the CASTER while the opponent gets only the
+  redacted waiting line. All four sabotage-checked RED→GREEN.
+  ❌ **NOT done, and why:** the shipped pool has NO card with flashback, {X} or kicker (the sibling
+  branches that built those systems added no pool data — importer path only), and a `DeckList` can only
+  name cards the server's pool knows, so those two harness games are dealt from
+  `loadCardPool({ extraCards })` through a NEW optional 4th `Room` constructor param (default
+  unchanged; production always takes the shared pool). 👉 **If you add a flashback/{X}/kicker card to
+  the pool, drop the injected pool from that test and deal it for real.** Also not done: no
+  drag-to-play FROM the graveyard (click only — the drop-zone gesture is hand-specific and a second
+  drag source would need its own affordance study); kicker/pay-life prompts online are covered by the
+  same `ChoicePrompt` path as {X} but are NOT separately harnessed (no pool card asks them); no online
+  spectator affordances (spectators still correctly get no action menu). Full suite **2628 passed /
+  0 failed** on the branch alone (baseline 2621 + 7 new); after merging origin/main
+  (scry-and-templates) **2651 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0.
+  (Worker)
+- 2026-08-18 worker: `feat/graveyard-grants` 🚧 PUSHED — **effects can now TARGET and MODIFY cards
+  in graveyards, and Snapcaster Mage is UN-STUBBED.** Two systems, built together because neither is
+  worth anything on its own.
+  **(1) Targeting a graveyard card**: `TargetRestriction` gained
+  `'instantOrSorceryInYourGraveyard'`, threaded through the SAME three enforcement points as every
+  other restriction — offer (`legalTargetsFor`), accept (`isLegalTarget`), and the primitive's
+  re-check at resolution — so a target that leaves the graveyard in response FIZZLES the ability
+  instead of granting into the void (pinned at core AND through a real game). It reads "your" off
+  the ACTING player exactly as `'opponent'` does, and an absent controller makes every candidate
+  illegal rather than guessed. Hexproof/shroud/protection are deliberately NOT consulted here:
+  they read "this permanent", and a card in a graveyard is not one (CR 110.1).
+  **(2) Continuous effects on non-battlefield cards**: a NEW `GameState.cardGrants` list
+  (`packages/core/src/card-grants.ts`) — NOT the continuous layer, whose index is keyed on
+  battlefield permanents, whose statics radiate from battlefield sources, and whose
+  `pruneOrphanContinuousEffects` would have deleted a graveyard grant on sight. A grant is
+  instance-scoped, expires in cleanup, and dies with a zone change (CR 400.7) at every zone-move
+  chokepoint — core's `moveToZone`, the cast's graveyard→stack move, and `cards`'s own
+  `moveOwnedCard`/`movePermanentTo` funnels, which had to agree or a regrown card would carry a
+  stale grant.
+  ⚠️ **THE TRAP WORTH KNOWING**: pruning the grant as the card leaves the graveyard sounds like it
+  must break flashback's EXILE, and it does not — that replacement rides the stack object's own
+  `castFrom` (`spellLeaveDestination`), never the grant. CR 400.7g's "the effect keeps applying to
+  the spell it becomes" therefore falls out of state that already exists instead of being stored.
+  Pinned by a test that casts on a grant and asserts the card lands in EXILE with no grant alive.
+  **One accessor, `flashbackCostOf`**, answers printed-or-granted for `generateLegalActions`,
+  `applyCastSpell` AND both pilots — a pilot reading only `CardDefinition.flashback` would cast
+  Snapcaster and never use it, which is exactly the "legal but inert" failure the flashback branch
+  warned about.
+  ⚠️ **PERF, measured the only way that works on this box.** `cardGrants` is OPTIONAL and absent in
+  every game that grants nothing, and every reader and pruning hook opens with the same
+  one-property empty check as `isLegalTarget`'s `state.continuous.length === 0` fast path. Wall
+  clock here is **worthless**: five agents share the machine and paired alternating gauntlet runs
+  swung 0.64x–2.25x in BOTH directions. Parity was established instead with the allocation
+  instrument `engine-alloc-bench.ts`'s own header prescribes but which had never been shipped — a
+  scavenge-count probe, now added as `packages/core/bench/scavenge-probe.ts`. Result: **534 vs 533
+  median scavenges** against a same-box origin/main worktree (that header documents ±2 as the noise
+  floor), with **byte-identical play** — 30,466 actions / 63,782 events on both — and
+  `cloneState`/`planManaPayment` micro-benches level or slightly favouring the branch. Gauntlet
+  `Mono-Red Aggro --games 40 --seed 99`: **79/280 = 28.2%, byte-identical**, before AND after the
+  origin/main merge.
+  **Snapcaster Mage un-stubbed**: its real Oracle text compiles `'complete'` via a new
+  `grant-flashback-to-graveyard-spell` rule. The "The flashback cost is equal to its mana cost"
+  sentence is part of the SAME idiom on purpose — without it the line never prices the recast, and
+  a free recast is strictly better than the printed card, so that shape still reports. The curated
+  pool carries the whole card.
+  👉 **Adding `flash` to the pool entry moves NO recorded baseline**: no meta deck runs Snapcaster
+  (UW Control cut it precisely because it was a blank 2/1), and seed 99 reproduces byte-identically.
+  Putting it BACK into a deck is still an integrator call with a re-measure attached — the deck's
+  own comment now says exactly that instead of claiming the card is unimplemented.
+  **The AI is not inert**: `valueOfEffects` gained a `grantFlashback` entry pricing the grant off
+  the card it names (new weight `grantedFlashbackValueShare` = 2/3 — below `returnFromGraveyard`'s
+  full value, because the grant expires at end of turn and the card still costs its mana), so the
+  trigger's target chooser aims at the BEST spell rather than the first offered.
+  `graveyard-grant-pilot.test.ts` drives the heuristic through the WHOLE loop — it casts the
+  creature, the engine resolves the ETB, and the pilot then takes the recast — plus a control
+  proving it constructs no graveyard cast when there is no grant.
+  Classified in both enforced tables: `grantFlashback` is LIBRARY_SAFE in paired-arms-config (it
+  reads a PUBLIC zone the runner already tracks exactly, and branches on nothing a library holds),
+  and `cardGrantAdded`/`cardGrantExpired` are public in observation.ts (a graveyard is public and
+  the granting ability resolved in front of the table). Two stale hints reworded (flashback and
+  graveyard both claimed "missing" for things that now exist), About gained two witness-pinned
+  entries, and the stale Snapcaster row is gone from UNSUPPORTED-MECHANICS.md.
+  **NOT done, deliberately, with the blocker named each time**: no OTHER stubbed card un-stubs
+  through this seam — all three remaining were checked and none is blocked on graveyard targeting
+  (Tarmogoyf: characteristic-defining P/T; Fatal Push: revolt's turn-scoped event memory; Cryptic
+  Command: modes chosen at cast). No graveyard-HATE template (a Surgical-style "exile target card
+  in a graveyard" needs targeting ANY card in EITHER graveyard — a second restriction — plus an
+  exile primitive that reaches a non-battlefield zone; the targeting half is now trivial, but
+  shipping half of it would report a card that then plays wrong, so it is left named rather than
+  half-built). No play-UI affordance for a granted recast (the actions ARE in `legalActions`; same
+  open follow-up printed flashback already carries). UNSUPPORTED-BACKLOG.md not regenerated (that
+  audit needs a live Scryfall fetch). Merged origin/main (scry/surveil + six templates) — clean
+  auto-merge, both sides kept. Full suite **2673 passed / 0 failed**, `npm run verify` exit 0,
+  `npm run build` exit 0 — all re-run AFTER the merge. (Worker)
+
+- 2026-08-18 worker: `feat/scry-and-templates` 🚧 PUSHED — **scry and surveil play as printed, and
+  the Temple / surveil-land cycles compile.** The blocker DESIGN §3.11 named ("bottom-of-library
+  placement has no primitive") turned out not to exist: `moveOwnedCard`'s `'bottom'` position has
+  been the funnel all along, so what was actually missing was the QUESTION. It is one ordered
+  `selectCards` over the top N with `min: 0` and a new `SelectCardsRequest.keepOnTop` marker —
+  offering the candidates IS the look (the `transformRevealTop` precedent: a choice travels to its
+  chooser alone), the picked cards stay on top in the picked order, every unpicked one leaves.
+  Scry asks a SECOND question for the bottom ORDER, and only when 2+ cards are going down; surveil
+  asks once (a graveyard has no order). **Both collect every answer before moving a single card** —
+  the ask-first contract, which is what makes a parked scry replay safely.
+  ⚠️ **Redaction, since this is the branch that could have leaked.** New `cardsLookedAt` event =
+  player + COUNT, nothing else, so it is public exactly as a spectator watching somebody pick up
+  two cards is; the identities never leave the choice, whose `choiceAsked` observation was already
+  redacted to an option count. Surveilled cards land in a graveyard and emit a PUBLIC `zoneChange`
+  (right — they are placed face up); bottomed/kept cards move library → library and are anonymised
+  by the existing hidden-zone rule. `scry`/`surveil` are LIBRARY_READING in `paired-arms-config`:
+  they read the top and BRANCH on it, the `revealTopCard` shape.
+  **AI policy, documented, deliberately one rule with one weight** (`scryKeepValueThreshold`): keep
+  every looked-at card whose `cardValue` clears the bar, bottom/bin the rest, survivors best-first.
+  It works because `cardValue` already prices a land by whether its controller still NEEDS lands —
+  threshold between `choiceLandValue` (2) and `choiceLandShortValue` (20) — so the pilot bottoms
+  lands exactly when flooded and keeps them while short. Tested both directions on the same card.
+  **Templates CLOSED** (each: a real card compiling `'complete'` with pinned params AND an engine
+  play test — `compile/scry-surveil.test.ts`, 16 tests): `Scry N`, `Surveil N`,
+  `Scry/Surveil N, then EFFECT` (Preordain), `When ~ enters, scry 1` on an enters-tapped land
+  (Temple of Epiphany — tapland + ETB scry + dual mana, all three lines), the surveil-land shape
+  (Undercity Sewers), and `Counter target spell unless its controller pays {X}` (Condescend, which
+  needs BOTH halves at once). Failure modes are first-class tests: library shorter than N, keeping
+  nothing, keeping everything, and the chosen ORDER reproduced exactly in both directions.
+  **NOT done, with the real blocker named**: "deals X damage DIVIDED as you choose among any number
+  of targets" (Fireball's real text) needs divided targeting — one spell, several targets, each with
+  its own share — which the targeting layer cannot express; a conditional scry ("if you control an
+  artifact, scry 2") needs a condition reader; a scry rider whose TAIL chooses its own target has no
+  moment to choose it (refused, tested). Multikicker, modal, MDFC, emblems, battles, legend rule,
+  graveyard grants, dynamic P/T, revolt and colored statics are siblings' this wave — untouched.
+  UNSUPPORTED-BACKLOG.md NOT regenerated: the coverage audit needs a live Scryfall fetch and no
+  local corpus is committed, so the delta needs the integrator. For what it is worth the committed
+  backlog names `When ~ enters, scry N` (14 cards) and `When ~ enters, surveil N` (12 cards) as
+  distinct gaps, both of which these templates address — unverified until the audit re-runs.
+  Verified: full suite **2644 passed / 0 failed** (baseline 2621 + 23 new), `npm run verify` exit 0,
+  `npm run build` exit 0, gauntlet seed 99 **79/280 = 28.2% byte-identical to main's baseline** (no
+  scry card is in the gauntlet, so identical is the right answer). Throughput at PARITY on a noisy
+  shared box, measured paired: 10 alternating rounds against an origin/main worktree, median
+  **184.5 vs 171 games/sec** (both arms swing 120–202, which is exactly why the comparison is
+  paired and read as a median). (Worker)
 
 - 2026-08-18 worker: `fix/scan-real-photo` 🚧 PUSHED — **the deck-photo scanner now reads the user's
   REAL photo** (16 sleeved piles / 59 cards, fanned on dark cloth), which the fanned-piles feature —

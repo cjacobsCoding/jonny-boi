@@ -31,7 +31,7 @@
  */
 
 import type { CardDefinition, EffectRef } from './card.js';
-import { isCreature } from './card.js';
+import { hasType, isCreature } from './card.js';
 import { isPlaneswalker } from './card.js';
 import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
@@ -104,7 +104,23 @@ export type TargetRestriction =
    * mode is the canonical printing, and flattening it either way would play the
    * card differently from its text.
    */
-  | 'permanent';
+  | 'permanent'
+  /**
+   * "target instant or sorcery card in your graveyard" — Snapcaster Mage's ETB
+   * aim, and the first restriction reaching a card in a NON-battlefield zone.
+   *
+   * Like `'opponent'` and `'creatureYouControl'`, legality depends on WHO is
+   * acting: "your graveyard" is the acting player's own, so an absent
+   * `controller` makes every candidate ILLEGAL rather than guessed — being
+   * unable to aim is the safe failure, while reaching into the wrong graveyard
+   * would be a card playing wider than printed.
+   *
+   * Hexproof/shroud/protection do not apply here by RULE, not by omission:
+   * those abilities read "this permanent", and a card in a graveyard is not a
+   * permanent (CR 110.1), so the battlefield targetability gate is correctly
+   * skipped for this restriction.
+   */
+  | 'instantOrSorceryInYourGraveyard';
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -132,7 +148,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'creatureYouControl' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
-    value === 'permanent'
+    value === 'permanent' ||
+    value === 'instantOrSorceryInYourGraveyard'
   );
 }
 
@@ -145,6 +162,13 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
  * `null` is memoized too: "this definition declares no restriction" is the common
  * answer and must not be recomputed either.
  */
+/**
+ * The shared, frozen empty answer for a restriction that can offer nothing on
+ * this board. Shared so the no-candidate case allocates nothing on the
+ * legal-action loop, exactly like `internal/continuous.ts`’s EMPTY_INDEX.
+ */
+const NO_TARGETS: readonly (InstanceId | PlayerId)[] = Object.freeze([]);
+
 const RESTRICTION_MEMO = new WeakMap<CardDefinition, TargetRestriction | null>();
 
 /**
@@ -204,6 +228,20 @@ export function isLegalTarget(
     return restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker';
   }
   if (restriction === 'player' || restriction === 'opponent') return false;
+  if (restriction === 'instantOrSorceryInYourGraveyard') {
+    // "Your graveyard" needs an actor; unknown ⇒ illegal, never guessed (see
+    // the type's note). The candidate must be sitting in THAT player's
+    // graveyard right now — a card that left it mid-response is not a legal
+    // target any more, which is exactly how the resolution re-check fizzles.
+    if (controller === undefined) return false;
+    const yard = state.players[controller].graveyard;
+    for (let i = 0; i < yard.length; i++) {
+      const card = yard[i] as CardInstance;
+      if (card.instanceId !== target) continue;
+      return hasType(card.def, 'instant') || hasType(card.def, 'sorcery');
+    }
+    return false;
+  }
   if (restriction === 'spell') {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".
@@ -300,6 +338,19 @@ export function legalTargetsFor(
 ): readonly (InstanceId | PlayerId)[] {
   if (restriction === 'spell') {
     return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
+  }
+  if (restriction === 'instantOrSorceryInYourGraveyard') {
+    // With no actor there is no such thing as "your graveyard", so nothing is
+    // offered — the same safe direction as 'opponent', and the one that makes an
+    // unaimable trigger leave the stack rather than resolve pointing at nothing.
+    if (controller === undefined) return NO_TARGETS;
+    const out: (InstanceId | PlayerId)[] = [];
+    const graveyard = state.players[controller].graveyard;
+    for (let g = 0; g < graveyard.length; g++) {
+      const card = graveyard[g] as CardInstance;
+      if (hasType(card.def, 'instant') || hasType(card.def, 'sorcery')) out.push(card.instanceId);
+    }
+    return out;
   }
   const targets: (InstanceId | PlayerId)[] = [];
   if (restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker') {
@@ -447,6 +498,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a creature or a planeswalker';
     case 'permanent':
       return 'a permanent';
+    case 'instantOrSorceryInYourGraveyard':
+      return 'an instant or sorcery card in your graveyard';
     case 'any':
       return 'any target (a creature, a player, or a planeswalker)';
   }

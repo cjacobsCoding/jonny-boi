@@ -19,6 +19,7 @@ import type { ManaPool } from '../mana.js';
 import type { ContinuousEffect } from './continuous.js';
 import { NO_COUNTERS, PLAYER_IDS } from '../state.js';
 import type { PendingChoice, ResolutionFrame } from '../choices.js';
+import type { CardGrant } from '../card-grants.js';
 import { cloneChoiceAnswer } from '../choices.js';
 
 /**
@@ -253,5 +254,22 @@ export function cloneState(state: GameState): GameState {
   // which matters because a serialized state is compared field-for-field.
   if (state.pendingChoice) next.pendingChoice = clonePendingChoice(state.pendingChoice);
   if (state.resolution) next.resolution = cloneResolution(state.resolution);
+  // Same conditional rule as the two above, and the same stakes as any dropped
+  // field: forgetting this line would silently strip an active "gains flashback
+  // until end of turn" grant at the very next action boundary. Only paid for
+  // when a grant is actually in flight (nearly never).
+  if (state.cardGrants !== undefined && state.cardGrants.length > 0) {
+    next.cardGrants = state.cardGrants.map(cloneCardGrant);
+  }
+  // Two NUMBERS, so the turn's fact memory costs the clone no allocation at all
+  // (a nested { A, B } record here measured ~3% of sim throughput). Numbers copy
+  // by value, so two states can never alias each other's memory of the turn.
+  if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
+  if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
   return next;
+}
+
+/** Copy one card grant, breaking aliasing on its cost object. */
+function cloneCardGrant(grant: CardGrant): CardGrant {
+  return grant.flashback !== undefined ? { ...grant, flashback: { ...grant.flashback } } : { ...grant };
 }

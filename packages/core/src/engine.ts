@@ -85,8 +85,10 @@ import {
   orderPicks,
   picksToResolution,
 } from './modal.js';
+import { expireCardGrants, flashbackCostOf, pruneCardGrantsFor } from './card-grants.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
+import { clearTurnFacts } from './turn-facts.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
@@ -279,6 +281,10 @@ function drawCard(state: GameState, player: PlayerId, emit: (e: GameEvent) => vo
 
 /** Begin a new turn: bump turn number, set active player, run untap/upkeep/draw. */
 function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) => void): void {
+  // A new turn: nothing has happened in it yet. Cleared as the turn BEGINS
+  // rather than at cleanup, so "this turn" still reads true for anything
+  // resolving in the previous turn's end step (see turn-facts.ts).
+  clearTurnFacts(state);
   state.turnNumber += 1;
   emit({ type: 'turnBegin', turn: state.turnNumber, activePlayer: state.activePlayer });
 
@@ -393,6 +399,10 @@ function performStepTurnBasedActions(
       // only for observability; expiry before damage-clear mirrors MTG cleanup.
       expireContinuousEffects(state, 'endOfTurn', emit);
       pruneOrphanContinuousEffects(state);
+      // A grant made to a card in a graveyard wears off on the same clock
+      // (Snapcaster's "until end of turn"), through its own list — see
+      // `card-grants.ts` for why it is not part of the continuous layer.
+      expireCardGrants(state, 'endOfTurn', emit);
       for (const inst of state.battlefield) {
         inst.damageMarked = 0;
         inst.markedByDeathtouch = false;
@@ -1524,8 +1534,14 @@ function pushWardTriggers(
 function targetOptionFor(state: GameState, ref: InstanceId | PlayerId): TargetOption {
   if (isPlayerTarget(ref)) return { ref, name: `Player ${ref}`, controller: ref };
   const permanent = findOnBattlefield(state, ref);
-  return permanent
-    ? permanentTargetOption(permanent)
+  if (permanent) return permanentTargetOption(permanent);
+  // A target need not be a PERMANENT: a graveyard card is a legal target for
+  // `'instantOrSorceryInYourGraveyard'`, and describing it as `#7` would leave
+  // a UI rendering an unnamed button and the AI's own target scorer with
+  // nothing to read. Found wherever it actually is.
+  const card = findInstanceAnywhere(state, ref);
+  return card
+    ? { ref, name: card.def.name, controller: card.controller }
     : // Only reachable if the board changed between listing and describing, which
       // it cannot inside one action; described rather than dropped so a candidate
       // list can never come out shorter than the legality check that built it.
@@ -1744,7 +1760,16 @@ function applyCastSpell(
   const castDef = playableFaceOf(card.def, action.face);
   if (!castDef) return rejectWith(prevState, 'that card has no castable back face');
   if (isLand(castDef)) return rejectWith(prevState, 'lands are played, not cast');
-  if (fromZone === 'graveyard' && castDef.flashback === undefined) {
+  // Flashback may be PRINTED or GRANTED (Snapcaster Mage). One accessor answers
+  // both, so the cast path cannot disagree with the offer loop about what a card
+  // in the graveyard costs — or about whether it may be cast at all. On a face
+  // OTHER than the front, the face's own printed cost is the answer: a grant is
+  // made on the card as the granter saw it, which is its front face.
+  const flashbackCost =
+    fromZone === 'graveyard'
+      ? (castDef === card.def ? flashbackCostOf(state, card) : castDef.flashback)
+      : undefined;
+  if (fromZone === 'graveyard' && flashbackCost === undefined) {
     return rejectWith(prevState, 'that card has no flashback');
   }
 
@@ -1795,7 +1820,7 @@ function applyCastSpell(
   // Pay the mana cost from the floating pool. A flashback cast pays the
   // FLASHBACK cost, not the printed one — that substitution is the whole of
   // what "cast it for its flashback cost" means at this seam.
-  const cost = fromZone === 'graveyard' ? castDef.flashback : castDef.cost;
+  const cost = fromZone === 'graveyard' ? flashbackCost : castDef.cost;
   if (cost) {
     if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
     const result = payCost(player.manaPool, cost);
@@ -1809,6 +1834,11 @@ function applyCastSpell(
   // Move the card to the stack, out of whichever zone it was cast from.
   removeFromZoneArray(fromZone === 'graveyard' ? player.graveyard : player.hand, card.instanceId);
   card.zone = 'stack';
+  // The card just changed zones, so any grant on it stops applying (CR 400.7).
+  // Nothing is lost by dropping it here: the granted cost has already been paid,
+  // and the EXILE replacement rides the stack object's own `castFrom`
+  // (`spellLeaveDestination`) rather than the grant — see card-grants.ts.
+  pruneCardGrantsFor(state, card.instanceId);
   // THE FACE SWAP, done exactly as a transform does it: `def` IS the active face
   // and `printedDef` is the way back to the front, so every characteristic read
   // in the engine routes through the face being cast with no second code path. A
@@ -2729,7 +2759,10 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   const graveyard = player.graveyard;
   for (let g = 0; g < graveyard.length; g++) {
     const card = graveyard[g] as CardInstance;
-    const flashbackCost = card.def.flashback;
+    // Printed OR granted — one accessor, so a granted flashback is offered
+    // exactly as a printed one is, and costs one property read per graveyard
+    // card on a board where no grant exists anywhere.
+    const flashbackCost = flashbackCostOf(state, card);
     if (flashbackCost === undefined || isLand(card.def)) continue;
     const timing = castTiming(card.def);
     if (timing !== 'instant' && !sorcerySpeedWindow) continue;

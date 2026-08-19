@@ -48,6 +48,8 @@ export {
   tapTarget,
   attachToTarget,
   ifKicked,
+  grantFlashback,
+  ITS_MANA_COST,
 } from './primitives.js';
 
 // The choice-driven primitives (DESIGN §3.11): the ones that ask the player a
@@ -130,11 +132,18 @@ export {
  * because a card that plays *nearly* right silently corrupts every A/B verdict that
  * includes it.
  *
+ * ## THE LIST IS NOW EMPTY, and that is the point of keeping it
+ * Every hand-authored pool card plays as printed. The list stays — with its
+ * whole history below — because it is the mechanism, not the content: the next
+ * card the pool cannot model faithfully belongs HERE, named, rather than being
+ * quietly shipped as an approximation. `fidelity.test.ts` audits every pool card
+ * against its real Oracle text and skips exactly the cards named here, so an
+ * empty list means the audit now covers the entire pool with no exemptions.
+ *
  * Un-stubbed by the player-choice system (DESIGN §3.11) — these now play for real,
  * asking their questions through `pendingChoice`: **Brainstorm** (ordered put-back),
  * **Ponder** (top-3 reorder + optional shuffle), **Thoughtseize** (caster picks the
- * victim's nonland card), **Eternal Witness** (chosen graveyard card), **Cryptic
- * Command** (all four modes, choose two), **Path to Exile** (the controller's
+ * victim's nonland card), **Eternal Witness** (chosen graveyard card), **Path to Exile** (the controller's
  * optional basic-land search) and **Goblin Guide** (reveal the top card, take it
  * only if it is a land). Earlier waves un-stubbed Young Pyromancer, Monastery
  * Swiftspear, Kitchen Finks and Giant Growth on the trigger + continuous layers.
@@ -149,27 +158,20 @@ export {
  * The CAST-TIME modal system un-stubbed **Cryptic Command** — all four modes,
  * chosen (and aimed) as the spell is cast, per CR 601.2b/c, so the opponent
  * decides whether to respond already knowing which two halves are coming.
+ * The graveyard-grant system (targeting a card in a graveyard + core's
+ * `card-grants.ts` layer) un-stubbed **Snapcaster Mage** — flash, the targeted
+ * ETB, and the granted flashback all play as printed, and the granted cast goes
+ * through the very same path a printed "Flashback {cost}" uses.
+ * Characteristic-defining P/T (CR 613.3 layer 7a) un-stubbed **Tarmogoyf** — its
+ * star box is the real formula over card types in all graveyards, re-derived on
+ * every read; and the turn-scoped fact memory un-stubbed **Fatal Push**, whose
+ * revolt mode now reads "a permanent you controlled left the battlefield this
+ * turn" at resolution. The CAST-TIME MODAL system took the last entry off this
+ * list, un-stubbing **Cryptic Command**: all four modes, announced AND aimed as
+ * the spell is cast (CR 601.2b/c), so the opponent decides whether to respond
+ * already knowing which two halves are coming.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
-}> = Object.freeze([
-  {
-    // Flash timing AND flashback-the-mechanic both exist now (`castTiming` reads
-    // flash; `CardDefinition.flashback` casts from the graveyard and exiles on
-    // leaving the stack). What Snapcaster still needs is the GRANT: targeting an
-    // instant/sorcery card in a graveyard (targeting reaches only permanents,
-    // players and spells today) and a continuous effect that gives a
-    // NON-battlefield card a flashback cost derived from its mana cost, until end
-    // of turn. Un-stub it only when a trigger can aim at a graveyard card and the
-    // continuous layer can carry a grant on one.
-    card: 'Snapcaster Mage',
-    missingEngineSystem:
-      'granting flashback to a card in a graveyard (targeting a graveyard card + a continuous effect on a non-battlefield card)',
-  },
-  { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
-  {
-    card: 'Fatal Push',
-    missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',
-  },
-]);
+}> = Object.freeze([]);

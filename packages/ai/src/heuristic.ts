@@ -58,6 +58,7 @@ import {
   effectiveToughness,
   isCreature,
   isLand,
+  flashbackCostOf,
   isLegalTarget,
   isPlaneswalker,
   legalTargetsFor,
@@ -627,7 +628,11 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
   // reads as at least as attractive — free spells win ties naturally.)
   for (const card of view.players[me].graveyard) {
     const def = card.def;
-    const flashbackCost = def.flashback;
+    // Printed OR granted (Snapcaster). Read through core's one accessor, the
+    // same one `generateLegalActions` and `applyCastSpell` use — a pilot that
+    // read only the printed field would never take the recast its own ETB just
+    // bought, and the ability would be inert in exactly the games it was cast in.
+    const flashbackCost = flashbackCostOf(view as GameState, card);
     if (flashbackCost === undefined || isLand(def)) continue;
     const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
     if (!timingOk) continue;
