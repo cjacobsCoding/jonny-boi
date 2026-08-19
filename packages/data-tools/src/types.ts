@@ -29,6 +29,8 @@ export interface RawScryfallCard {
   toughness?: string;
   /** Planeswalkers: printed starting loyalty ("3", or "X" on a variable one). */
   loyalty?: string;
+  /** Battles: printed starting defense ("4"). Scryfall's own field name. */
+  defense?: string;
   colors?: string[];
   color_identity?: string[];
   keywords?: string[];
@@ -117,6 +119,13 @@ export interface NormalizedCard {
    * card compiler reads as "loyalty unknown — not playable until re-fetched".
    */
   loyalty?: number | null;
+  /**
+   * Printed starting defense (battles), `null` otherwise or when non-numeric.
+   * The exact contract {@link NormalizedCard.loyalty} has, and for the same
+   * reason: a battle entering with the wrong number of defense counters is a
+   * different card, so the compiler reports a missing value rather than guessing.
+   */
+  defense?: number | null;
   colors: string[];
   colorIdentity: string[];
   keywords: string[];
