@@ -66,11 +66,13 @@ import {
   planManaPayment,
   remainingToughness,
   restrictionOfEffects,
+  modalSpecOf,
+  modeCountsFor,
   targetRestrictionOf,
 } from '@jonny-boi/core';
 import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
-import { valueOfEffects } from './effect-value.js';
+import { valueOfEffects, valueOfMode } from './effect-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -155,6 +157,13 @@ type SpellIntent =
       /** False when the modification makes its host WORSE — i.e. it is removal. */
       readonly helpful: boolean;
     }
+  /**
+   * A MODAL spell ("Choose two — …"). Its value is not any one thing it does:
+   * it is the best set of modes this board lets it announce, which changes turn
+   * to turn. Recognised from `def.modal`, which is CORE data (like `attachment`)
+   * rather than a primitive id, so no rename can silently blank it.
+   */
+  | { readonly kind: 'modal' }
   | { readonly kind: 'other' };
 
 /** Build the heuristic pilot with the given (tunable) weights. */
@@ -656,6 +665,10 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
  * a burn spell that cannot hit players should never be scored as reach.
  */
 function withLegalTargets(view: PilotView, opp: PlayerId, goal: SpellGoal): SpellGoal | undefined {
+  // A MODAL spell is aimed per mode at cast time, never as a whole card, and
+  // the engine rejects a modal cast that carries a target — so the goal keeps
+  // the empty target list `scoreSpell` gave it.
+  if (modalSpecOf(goal.card.def)) return goal.targets.length === 0 ? goal : { ...goal, targets: [] };
   const restriction = targetRestrictionOf(goal.card.def);
   if (restriction === undefined) return goal; // unrestricted — the scorer's choice stands
   const state = view as GameState;
@@ -854,6 +867,43 @@ function scoreSpell(
         reason: explain
           ? `${intent.helpful ? 'suit up' : 'shrink'} ${host.def.name} with ${card.def.name}`
           : NO_REASON,
+      };
+    }
+    case 'modal': {
+      // Priced as the sum of the best modes it could announce RIGHT NOW, each
+      // aimed as well as it could be — the same `valueOfMode` ruler the pilot
+      // will use a moment later when it actually answers the mode question, so
+      // "worth casting" and "which modes" cannot disagree.
+      //
+      // TARGETS ARE DELIBERATELY EMPTY: a modal spell names no whole-card
+      // target (its aims are per mode, asked at cast), and the engine rejects a
+      // modal cast that carries one.
+      const me = otherPlayer(opp);
+      const counts = modeCountsFor(view as GameState, card.def, me);
+      if (!counts || counts.max <= 0) return undefined; // nothing announceable
+      const context = {
+        state: view as GameState,
+        player: me,
+        targets: [] as readonly (InstanceId | PlayerId)[],
+        weights,
+        cards: cardValueContext(view as GameState),
+      };
+      const values = counts.choosable
+        .map((mode) =>
+          valueOfMode(
+            { id: mode.id, effects: mode.effects, ...(mode.targets !== undefined ? { targets: mode.targets } : {}) },
+            context,
+          ),
+        )
+        .sort((a, b) => b - a);
+      const take = Math.max(counts.min, Math.min(counts.max, values.filter((v) => v > 0).length));
+      const score = values.slice(0, take).reduce((sum, v) => sum + v, 0);
+      return {
+        score,
+        card,
+        cost,
+        targets: [],
+        reason: explain ? `cast ${card.def.name} (${take} mode(s))` : NO_REASON,
       };
     }
     case 'other':
@@ -1382,6 +1432,9 @@ function classifySpell(def: CardDefinition): SpellIntent {
 }
 
 function computeSpellIntent(def: CardDefinition): SpellIntent {
+  // Checked FIRST: a modal card's whole script is its modes, so the primitive
+  // scan below would find nothing at all and score Cryptic Command as a blank.
+  if (modalSpecOf(def)) return { kind: 'modal' };
   // Checked before the creature branch so a creature Aura (bestow-style) is still
   // read as an attachment, and before the primitive scan because an attachment's
   // value is in its declared modification, not in the ref that attaches it.
