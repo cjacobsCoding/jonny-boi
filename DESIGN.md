@@ -93,7 +93,9 @@ The `chooseAction` interface + read-only game view + legal-action generator; a `
 `MctsConfig`) remains *selectable* but is a research option, not a recommendation — and this paragraph
 used to claim the opposite, which is why the numbers are recorded here rather than an impression:
 
-- **Speed:** ~0.09 games/sec vs the heuristic's ~176 — a **2000×** gap. It is structural (`sims × depth`
+- **Speed:** ~0.09 games/sec vs the heuristic's ~176 — a **2000×** gap. (Both are wall clock on a quiet
+  box. This machine is now shared, and the same heuristic build reads anywhere from 39 to 87 games/sec
+  depending on what else is running — see §3.4f on why every throughput claim here should be paired.) It is structural (`sims × depth`
   engine plies per decision), not garbage, so allocation work does not reach it: a measured 19% cut in
   MCTS-side allocation moved wall clock within run-to-run noise.
 - **Strength:** measured *worse*, not better. Over 120 seeded games with seat and play rotated it won
@@ -156,8 +158,18 @@ produced the 40.8% above). ⚠️ **Two matchups were measured, and they do not 
 | Mono-Red Aggro vs Boros Aggro, n=120 | `mcts` (vanilla) | 40.8% | [32.5%, 49.8%] | 39 ms |
 | Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(pre-§3.4e)* | **60.0%** | **[51.1%, 68.3%]** | 7.07 ms (p95 66 ms) |
 | UW Control vs Golgari Midrange, n=80 | `hybrid` *(pre-§3.4e)* | 53.8% | **[42.9%, 64.3%]** | 27.7 ms (p95 155 ms) |
-| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(current)* | **55.8%** | **[46.9%, 64.4%]** | 6.13 ms (p95 52.7 ms) |
-| UW Control vs Golgari Midrange, n=80 | `hybrid` *(current)* | 48.8% | **[38.1%, 59.5%]** | 9.05 ms (p95 88.2 ms) |
+| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(pre-§3.4f)* | **55.8%** | **[46.9%, 64.4%]** | 6.13 ms (p95 52.7 ms) |
+| UW Control vs Golgari Midrange, n=80 | `hybrid` *(pre-§3.4f)* | 48.8% | **[38.1%, 59.5%]** | 9.05 ms (p95 88.2 ms) |
+| Mono-Red Aggro vs Boros Aggro, n=120 | **`hybrid`** *(current)* | **55.0%** | **[46.1%, 63.6%]** | 14.97 ms (p95 117 ms) |
+| UW Control vs Golgari Midrange, n=80 | `hybrid` *(current)* | 45.0% | **[34.6%, 55.9%]** | 20.95 ms (p95 154 ms) |
+
+⚠️ **The `(current)` rows were re-measured on 2026-08-19 after §3.4f** (the pilots could not see the
+board). Both intervals still include 50% and both still overlap the pre-§3.4f rows, so nothing about the
+hybrid's standing changed — which is expected for the reason this section already gives twice: the
+heuristic is simultaneously the baseline and the hybrid's own prior. ⚠️ **Do NOT read the decision-time
+columns across those two pairs of rows.** They are wall clock on a box shared by six agents, and the
+same build measured 2× apart on this machine within an hour; the throughput claim that IS defensible is
+§3.4f's paired CPU-time and allocation comparison.
 
 ⚠️ **THE MARGIN SHRANK BECAUSE THE OPPONENT GOT BETTER, AND THAT IS NOT A REGRESSION IN THIS PILOT.**
 §3.4e fixed land sequencing in the `heuristic`, which is simultaneously the **baseline this table
@@ -210,6 +222,94 @@ is the **only** kind the Lab's evaluation path may use; `millis` (`PLAY_HYBRID_C
 play only. A wall-clock budget makes the search machine-dependent and destroys the common-random-numbers
 property the paired A/B verdict rests on — the same trap `MctsConfig.maxDecisionMillis` documents. Pinned
 by a test.
+
+### 3.4f The pilots could not see the board — ✅ fixed  *(the highest-value known correctness bug)*
+`packages/ai/src/board-stats.ts`. Core's stat accessors take an `AggregatedMod` that **defaults to
+"nothing modifies this"**. In core that default means "I have already established no modification can
+apply". In `packages/ai` it meant nothing of the kind: ~40 call sites simply never passed one, so every
+pilot evaluated the **printed card**.
+
+What that cost, all of it live on `main` until this branch:
+- a **characteristic-defining `*` P/T evaluated as 0/0** — a Tarmogoyf was the least threatening object
+  on the board to every pilot, because its real numbers arrive ONLY as `AggregatedMod.basePower` (§3.11);
+- **every anthem was invisible** — a pilot with a lord out attacked, blocked, traded and priced removal
+  on numbers its own board had already changed;
+- **Auras and Equipment were invisible the same way**, so the whole attachment seam was unseen by
+  evaluation, including the pilot's own decision about which creature should carry a sword;
+- **granted keywords were read two different ways**: the rules path read the granted set, while the AI's
+  `canBlockByEvasion` read `def.keywords`, so the pilot proposed blocks the engine then rejected.
+
+**The fix is a seam, not 40 edits.** `board-stats.ts` wraps the accessors with the index **required**, the
+package no longer imports the bare-defaulting ones at all, and `bare-stats.test.ts` reads the package's
+own source and fails the build if a single-argument call reappears. That is the repo's standing
+discipline — make the wrong thing unspellable rather than remember not to spell it — applied to the one
+accessor that silently lies. One `ContinuousIndex` is built per decision and threaded; `tactical.ts`'s
+`index` parameter and `assessPosition`'s went from optional to **required**, which is what closed the
+evaluator's own "no continuous index, deliberately" hole.
+
+**Guards that FAIL on the old behaviour** (`packages/sim/src/pilot-quality.test.ts`, verified red against
+a separate `origin/main` checkout and green here): removal is aimed at the creature an anthem made
+biggest rather than the biggest printed one; a `*` P/T creature is valued above zero; a 4/4 does not
+attack into an anthem-boosted 3/3 that is really a 6/6. The third carries an explicit precondition that
+the engine offered the attack at all — without it, "declared no attackers" and "was never offered one"
+are the same observation, which is the recurring failure shape in this repo.
+
+⚠️ **MEASURED: MORE CORRECT, NOT MEASURABLY STRONGER — and it ships anyway, because it is a bug fix.**
+Fixed heuristic vs the OLD heuristic head to head, one process, seat and play rotated, paired seeds, the
+old pilot loaded from a separate `origin/main` worktree built at the same commit: measured at
+origin/main `8152d7f`, before this branch merged the indestructible/menace-blocking work that
+landed after it — that work touches both arms' successors equally and is not in either arm here.
+
+| matchup | n | fixed wins | 95% CI |
+|---|---|---|---|
+| Mono-Red Aggro vs Boros Aggro | 3,000 | **50.5%** | [48.7%, 52.3%] |
+| Mono-Green Ramp vs Rakdos Goblins | 3,000 | **51.3%** | [49.5%, 53.1%] |
+| UW Control vs Golgari Midrange | 3,000 | 47.8% (129 draws) | [46.0%, 49.6%] |
+| **pooled** | **9,000** | **49.9%** | **[48.9%, 50.9%]** |
+
+The pooled interval **straddles 50%**: on this card pool the fix is worth nothing measurable. Read the
+control row with §3.4e's warning in hand — `winRate` is wins/**games**, so its 129 timeout draws count
+against the challenger; on **decisive games only that matchup is 1,435–1,436, i.e. 49.98%**. Nothing here
+says the pilot got worse.
+
+That is not surprising and it is not a reason to hold the fix. This pool contains **no anthem** and few
+attachments, so most of what the fix corrects has nothing to act on — the behaviour that does change is
+combat tricks, Equipment hosts and granted evasion. The value is that **the moment a pool gains an anthem
+or a lord, every pilot and every A/B verdict is already correct**, instead of silently pricing the board
+wrong. The repo's own precedent (§3.4d) shipped a more-correct evaluator OFF because it was not stronger;
+this one is different in kind — a wrong reading of the game state is a defect, not a tuning choice.
+
+**Baselines re-measured on this branch (2026-08-19), because the fix moves the pilot every one of them
+is measured with or against.** Machine note: this box is shared by six agents and its wall clock drifts
+~2× between runs, so the paired ratios below are **CPU time**, and the raw games/sec figures are recorded
+only for shape.
+
+| measurement | before (origin/main, same box, same seeds) | after |
+|---|---|---|
+| Gauntlet, Mono-Red Aggro, 200 games/deck, seed 4242 | 419/1400 = **29.9%** [27.6, 32.4] | 432/1400 = **30.9%** [28.5, 33.3] |
+| — its UW Control cell (the biggest single move) | 55/200 = **27.5%** | 65/200 = **32.5%** |
+| — its Mono-Green Ramp cell (mono vs mono) | 33/200 = **16.5%** | 33/200 = **16.5%** — unchanged |
+| `hybrid` vs `heuristic`, Mono-Red vs Boros, n=120 | **55.8%** [46.9, 64.4] | **55.0%** [46.1, 63.6] |
+| `hybrid` vs `heuristic`, UW vs Golgari, n=80 | **48.8%** [38.1, 59.5] | **45.0%** [34.6, 55.9] (4 draws) |
+
+The hybrid rows barely move, and for the reason §3.4a already gives: the heuristic is simultaneously the
+baseline the hybrid is measured against **and** the hybrid's own prior and rollout policy, so both sides
+of that comparison moved together.
+
+**Throughput (rule 7) — parity, measured three ways because wall clock on this box is worthless.**
+- **Allocation** (the machine-independent metric `mcts-bench.mjs` documents — semi-space pinned to 1 MB,
+  scavenges counted): **93 scavenges over 60 games vs the old pilot's 96**, i.e. 3.14e-3 vs 3.17e-3
+  scavenges per action. The fix allocates marginally **less**, not more.
+- **CPU time per decision**, both pilots answering the **identical 4,000 captured positions**, 20
+  interleaved passes, three independent runs: **0.978× / 1.009× / 0.990×**.
+- End-to-end games/sec, paired and interleaved: within the CPU clock's 15.6 ms resolution of parity.
+
+Parity is not free and was not assumed: the first implementation built the index at the top of every
+decision and a second one inside `cardValueContext`. Three changes paid for it — the index is built
+**after** the three early returns that never read a stat (a parked question, no legal actions, only-pass),
+`cardValueContext` accepts a prebuilt index instead of building its own, and the battlefield selectors
+(`creaturesControlledBy`, `findInstance`, …) became closure-free indexed loops like the action predicates
+beside them.
 
 ### 3.4b Tree reuse between decisions — ✅ built, measured, shipped OFF  *(brief §21–22)*
 The hybrid used to throw its whole search away after every macro. It can now **re-root onto the tree it
@@ -1070,8 +1170,9 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   size before state-based actions run. **Tarmogoyf is un-stubbed** (power = card types among cards
   in all graveyards, toughness that number plus one). ⚠️ The bare `effectivePower(inst)` call —
   no aggregate — answers 0 for a star creature, because a formula is a function of the whole game
-  and that accessor holds only the instance. Every RULES path passes an aggregate; the AI's
-  board-evaluation helpers still do not (see below).
+  and that accessor holds only the instance. Every RULES path passes an aggregate, and since
+  §3.4f **so does every AI path** — `packages/ai` no longer imports the bare-defaulting accessors
+  at all, and a test fails the build if one reappears.
 - ✅ *turn-scoped fact memory (revolt)* — `core/turn-facts.ts`: a NAMED CLOSED vocabulary
   (`permanentLeftBattlefield` = revolt, `creatureDied` = morbid, `youGainedLife`), not a general
   event query, so the compiler can only pattern-match what it genuinely understands. Fed from the
@@ -1147,8 +1248,10 @@ Still open, roughly by how often they block a real decklist:
   from board state** at activation time (7 — Reflecting Pool, Exotic Orchard; commander identity is
   refused for good). Lands are 24 cards of every deck, so this is the highest card-per-hour engine
   work on the board.
-- *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
-  cast-time question step now that {X}/kicker/multikicker built it), *Phyrexian costs*,
+- *alternative and additional costs still open* — **cycling, buyback and madness landed in §3.17**;
+  what remains is *suspend*, *spectacle*, *evoke*, an **{X} in a cycling cost** (Shark Typhoon: an
+  activation cost has no answer-and-charge step the way a casting cost does) and a **madness cost
+  printed in words** ("Madness—Pay six {C}"). *Phyrexian costs*,
   *split / adventure* (two castable halves on ONE object — modal DFCs landed in §3.16, but those
   are two FACES, which is a different shape),
   *flashback riders that are not mana or life* ("Flashback—{1}{U}, Discard a card" — the cast
@@ -1156,10 +1259,6 @@ Still open, roughly by how often they block a real decklist:
   *P/T formulas outside the closed count vocabulary* (a star box counting something the
   `DerivedCountName` table does not name, or whose two halves count different things, still
   reports — it is never guessed),
-  *the AI's board evaluation of a star creature* (`packages/ai` reads `effectivePower(perm)` with
-  no aggregate in ~40 places, so a Tarmogoyf evaluates as 0/0 to the pilots; threading the
-  continuous index through those call sites would ALSO make the AI see anthems and Auras for the
-  first time, which moves every recorded heuristic baseline, so it is its own change),
   *damage divided among targets* ("deals X damage divided as you choose among any number of
   targets" — needs a division the targeting layer cannot express: one spell, several targets, each
   with its own share).
@@ -1456,7 +1555,111 @@ grant ("permanents you control gain hexproof and indestructible"), the anthem st
 "can't block" as keyword names, and "target creature can't be blocked this turn". Gauntlet seed 99 is
 byte-identical to `origin/main` (79/280) with throughput at parity.
 
-### 3.18 The pool a player can actually SEE — every shipped mechanic represented — ✅ done
+### 3.18 The in-game bug reporter — ✅ done
+Ported from the same tool in Treadlight and Lightwalker, where it has been the single most effective
+route from "it did something weird" to a fixed defect. Press **B** — or tap the ⛬ button, which is the
+one that matters, because the live PWA is used on a phone with no keyboard — and from ANY view the
+screen freezes on the frame the problem is on. You scribble on that frame, type and/or **speak** what
+went wrong, and Submit hands over `bugreport_<stamp>.zip`.
+
+**The bundle is the same set of entries all three projects write**, so one habit reads a report from
+any of them: `report.md` (the same field lines), `screenshot.png`, `annotated.png`, `state_dump.txt`,
+`voice.webm` + `transcript.txt`. A browser cannot write a folder, so the web one is a zip — built by
+`lib/bugreport/zip.ts`, a ~150-line STORE-only writer, rather than a dependency, since the payloads
+(PNG, WebM) are already compressed.
+
+**A GLOBAL OVERLAY, not a view** (`components/BugReporter.tsx`, mounted once in `App.tsx`). A view
+would have to be navigated to, which loses the screen being reported about — the whole point of the
+tool. No view contains a line of code about bug reporting.
+
+**`console.txt` takes video's place.** The two games record the last N seconds of frames because a
+rendering bug has to be SEEN. Here the equivalent evidence is textual, and arguably better: the
+console/error ring (installed at app load, not at report time, or it has already missed the thing you
+opened it for) carries the warning that fired, the unsupported-mechanic signal and the thrown stack. A
+screenshot of a card grid rarely says why a verdict was wrong; the log usually does.
+
+**`state_dump.txt` is a REGISTRY, not a hardcoded list** (`lib/bugreport/state-dump.ts`). Any surface
+registers a named section with `registerStateSection` and it appears in every future report — the same
+seam the games' dumps use, and the reason theirs never go stale. Built-in sections: build (the commit
+is compiled in by `vite.config.ts`, so a report from the live PWA names the build it came from),
+environment (including installed-PWA vs browser, which changes which bugs are even possible) and
+storage. `App.tsx` registers the view, the decks and the pool size.
+
+**Three defects found by running it, each now pinned by a test in `capture-policy.test.ts`:**
+- Rasterising `document.body` captures the whole SCROLLABLE page while the reporter draws in VIEWPORT
+  coordinates, so every stroke lands somewhere else. Fixed by sizing the raster to the viewport and
+  translating the clone by the scroll offset. (Lightwalker's port hit the identical bug for the
+  equivalent reason — a framebuffer bigger than the window.)
+- `html-to-image` fetches and base64-inlines every `<img>` it clones. With ~190 card tiles the capture
+  ran past 30 s and timed out; off-screen images are now skipped, which cannot change a visible pixel.
+- The frame and the ink canvas were each fitted with `object-fit: contain`, so the canvas ELEMENT
+  filled the stage while its BITMAP was letterboxed inside it — every stroke scaled and offset. They
+  now share one aspect-ratio box, verified in the running app as `scaleX === scaleY`.
+
+⚠️ **What is NOT verified automatically, stated rather than glossed:** that the rasteriser produces a
+faithful picture. It needs a real, VISIBLE browser — in a backgrounded tab `toPng` never resolves at
+all, even for a single header element. Everything around it is tested (region, skip rule, the finite
+budget that turns a hang into a note, the zip, the report, the dump), and the whole submit path was
+driven end-to-end in the running app: two strokes, a typed note, a real zip read back out of its own
+central directory. The picture itself wants one human look.
+### 3.19 Alternative and additional casting costs — cycling, buyback, madness — ✅ done
+The third answer to "what does this card cost?", after §3.11's {X}/kicker and §3.16's modal/multikicker
+work. These three are one section because they are one question asked three ways: what a card costs,
+and **where it goes**, when it is played by some route other than "pay the printed cost from your hand".
+
+- **Cycling** (`CardDefinition.cycling`, the `cycleCard` action) — an activated ability of a card in
+  **hand**: pay the cost, **discard the card as the rest of that cost**, put the ability on the stack.
+  It is deliberately NOT an entry in `activated`: that list is activated from the battlefield by a
+  permanent, and folding the two would teach every battlefield-shaped check (summoning sickness, tap
+  costs, `findOnBattlefield`) about a zone it has never had to consider. The discard being a **cost**
+  is what makes cycling a madness card exile it, what makes a "whenever you cycle or discard" trigger
+  fire, and what makes countering the ability not give the card back. Instant speed, so a cycling land
+  becomes a card on an opponent's turn — which is the whole reason to play one over a tapland.
+- **Typecycling and landcycling** fold into cycling completely: same list, same action, same code
+  path, with the ability's effects being a **library search instead of a draw**. The searchable words
+  are a closed table (the five basic land types plus the generic "land") because each has to name
+  something `CardFilter` can genuinely select; a cycling word outside it reports rather than fetching
+  approximately the right card.
+- **Buyback** (`CardDefinition.buyback`) — an optional additional cost asked at cast time exactly as a
+  kicker is, whose answer changes not the spell's script but its **exit from the stack**. That exit is
+  one shared answer: `spellLeaveDestination(spell, reason)` in `state.ts`, which flashback already
+  owned. The `reason` argument is the whole design — a flashback card is exiled however it leaves the
+  stack, while a bought-back spell returns to hand only when it **resolves** and goes to the graveyard
+  when it is **countered** (CR 702.27a). Two exits that can disagree about where a card goes is
+  precisely the bug that helper exists to prevent, so countering asks the same function.
+- **Madness** (`CardDefinition.madness`) — not a cast-time cost at all but a **replacement on the
+  discard**, plus a cast that follows. Both discard funnels in this repo (core's `moveToZone` and the
+  cards package's `moveOwnedCard`) ask the shared `discardDestination`, so a card discarded as a cost
+  and a card discarded by an effect cannot disagree about being exiled. The exile opens a **madness
+  window** on the game state, and while it stands the legal-action generator offers exactly: mana
+  sources, the cast (`fromZone: 'exile'`, paying the madness cost, ignoring the card's printed
+  timing), and **pass — which declines**, dropping the card into the graveyard the discard would have
+  used. Modelling the window as state rather than as a trigger on the stack is what lets every seat
+  play madness with no new transport: the pilots, the hotseat UI and the online server all already
+  enumerate actions and submit one.
+
+**Both seat kinds actually use them, which is the rule against inert mechanics.** The heuristic pilot
+cycles a surplus land once it is **flooded** (`floodedLandCount` lands in play, so a further land is
+worth less than an unknown card) and cycles anything at the **end step**, where the mana would empty
+unused anyway — and it funds both through the same `planManaPayment` a spell goal uses, which is
+load-bearing: the engine offers `cycleCard` only once the pool already covers the cost, so a pilot
+that did not plan its taps would never see the action and the mechanic would be inert on a board of
+untapped lands. Madness is a one-sided judgement on purpose: the card is *already discarded*, so
+declining does not keep it, and casting is right whenever the mana exists. Humans get a hand-card menu
+when a card has more than one way to be played (a cycling land is a land drop **and** a cycling
+ability) and a prompt for the madness window, because a player who did not know the window was open
+would stall against a board that refuses every other move.
+
+**Measured** against the cached 2100-card most-played corpus with
+`packages/cards/scripts/coverage-audit.mjs --input <corpus>`: **+21 playable cards** (229 → 250
+against the main this landed on; re-measured 307 → 328 against a later one), which is
+the census's predicted yield for this system (20 sole-blocked cards) plus one. The forms that still
+report, by name: an **{X} cycling cost** (Shark Typhoon — an activation cost has no answer-and-charge
+step), a **madness cost printed in words** ("Madness—Pay six {C}"), a **cycling word with no
+expressible filter**, and **aftermath**, which is a split card and needs the `//` type rather than
+anything in this section.
+
+### 3.20 The pool a player can actually SEE — every shipped mechanic represented — ✅ done
 Sixteen engine systems shipped in two days and the built-in card pool printed almost none of them: no
 card with flashback, {X}, kicker, scry, surveil, mill, protection or ward, and exactly one
 planeswalker. Every one of those systems was reachable only by importing a decklist — which is

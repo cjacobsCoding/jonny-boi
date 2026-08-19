@@ -102,6 +102,23 @@ export interface HeuristicWeights {
   /** Score for passing priority — the floor. Any positive-scoring play beats it. */
   readonly passScore: number;
 
+  // --- cycling (alternative costs) -----------------------------------------
+  /** How many lands on the battlefield count as FLOODED — the point past which a
+   *  further land in hand is worth less than an unknown card, so cycling one away
+   *  is a gain rather than a cost. Deliberately a count of lands in play rather
+   *  than a ratio: it is the number the pilot can actually see, and it is the same
+   *  number a human uses when they say "I have plenty of lands". */
+  readonly floodedLandCount: number;
+  /** Score for cycling a surplus LAND while flooded. Above `genericSpellScore`
+   *  because trading a card that does nothing for an unknown card is close to
+   *  free, but below `playLandScore` so a pilot that still wants its land drop
+   *  takes the drop first. */
+  readonly cycleFloodedScore: number;
+  /** Score for cycling anything else when the turn is ENDING and the mana would
+   *  otherwise empty unused. Just above `passScore`: it never outbids a real
+   *  play, and it stops mana from being wasted on a turn with nothing to do. */
+  readonly cycleIdleScore: number;
+
   // --- attacking -----------------------------------------------------------
   /** Minimum net "value" (see attack evaluation) for an attack to be worth making.
    *  An attacker is sent if it can deal unblocked damage or the expected trade is at
@@ -320,6 +337,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // generic / fallback
   genericSpellScore: 25,
   passScore: 0,
+
+  // cycling
+  floodedLandCount: 5,
+  cycleFloodedScore: 45,
+  cycleIdleScore: 5,
 
   // attacking
   attackValueThreshold: 1,

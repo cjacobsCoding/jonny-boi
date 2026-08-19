@@ -17,12 +17,27 @@ const BACKGROUND_COLOR = '#0f1419';
 const DEPLOY_BASE = process.env.DEPLOY_BASE ?? '/';
 
 /**
+ * Build identity, compiled into the bundle for the in-app bug reporter.
+ *
+ * A report filed from the live PWA is useless if nobody can tell WHICH build it
+ * came from — the same symptom on two builds is two different bugs. `GITHUB_SHA`
+ * is set automatically by the deploy workflow; a local `npm run build` says
+ * 'local' rather than lying about a commit it does not know.
+ */
+const BUILD_COMMIT = process.env.GITHUB_SHA ?? process.env.BUILD_COMMIT ?? 'local';
+const BUILD_TIME = new Date().toISOString();
+
+/**
  * Vite config for the PWA shell. `vite-plugin-pwa` generates the service worker
  * (offline shell) and injects the web manifest; `registerType: 'autoUpdate'`
  * keeps installed clients current without a manual update prompt.
  */
 export default defineConfig({
   base: DEPLOY_BASE,
+  define: {
+    __BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
   plugins: [
     react(),
     VitePWA({
