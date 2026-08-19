@@ -108,8 +108,38 @@ throughput (games/sec) from regressing.
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
 | feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
 
+| feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.17, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
+  every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine
+  systems had shipped with almost nothing in the pool printing them (no flashback, {X}, kicker, scry,
+  surveil, mill, protection or ward; one planeswalker). Pool-only — **no meta deck was touched, so
+  every recorded gauntlet baseline in DESIGN §3.4a is unmoved.**
+
+  Method: candidate NAMES only (`expansion-candidates.json`); the compiler's `'complete'` verdict is
+  the sole gate. Nothing hand-authored. Now represented: scry (23), surveil (13), mill (5), printed
+  flashback (21, incl. an {X} flashback cost), {X} (10), kicker (4), modal spells (15), protection
+  (8), ward (8), +1/+1 counters (11), and a 2nd planeswalker (Samut, Tyrant Smasher — the ONLY other
+  walker in Magic whose every printed line compiles; I compiled all 337).
+
+  ⚠️ **Two defects the new cards exposed** — both fixed here, both worth knowing:
+  1. `addCounters` mutated `CardInstance.counters` in place. That record is the shared FROZEN
+     `NO_COUNTERS` for any permanent with none, so the FIRST +1/+1 counter on anything the engine
+     created threw "object is not extensible". Nine counter tests were green because every one built
+     its instances by hand. If you touch counters, replace the record — never write into it.
+  2. `fidelity.test.ts` kept a hand-copied list of core's target restrictions and had gone stale
+     ("Destroy target artifact" failed the audit). It now calls core's `isTargetRestriction`.
+
+  Still unrepresented, each MEASURED against every printed card with the mechanic: multikicker 0/19
+  (kick-count derived values), emblems 0/90 (no emblem BODY compiles), modal DFCs 0/100 (the land
+  face's pay-3-life tapland clause), battles 0/36 (Siege cast path + no defense in the index),
+  indestructible + alternative costs (in flight elsewhere). They are asserted ABSENT in
+  `pool-mechanics.test.ts` with their reasons, so whoever closes one gets told by the suite.
+
+  Corpus coverage re-measured, unchanged by this branch: **229/2100 (10.9%)**.
 
 - 2026-08-18 worker: `fix/keyword-sweep-and-mana-templates` 🚧 PUSHED — **the census's §2 bug is
   fixed and MEASURED: 193 → 228 / 2100 playable (9.2% → 10.9%).** Two things worth reading before
