@@ -77,6 +77,9 @@ const REPRESENTED: ReadonlyArray<{
   { mechanic: 'graveyard recursion', present: (_c, t) => t.includes('returnFromGraveyard') },
   { mechanic: 'continuous static buffs', present: (c) => ((c as { statics?: readonly unknown[] }).statics ?? []).length > 0 },
   { mechanic: 'indestructible', present: (_c, t) => t.includes('indestructible') },
+  { mechanic: 'cycling (an alternative cost)', present: (c) => (c as { cycling?: unknown }).cycling !== undefined },
+  { mechanic: 'madness', present: (c) => (c as { madness?: unknown }).madness !== undefined },
+  { mechanic: 'buyback', present: (c) => (c as { buyback?: unknown }).buyback !== undefined },
 ];
 
 /**
@@ -103,10 +106,6 @@ const UNREPRESENTABLE: ReadonlyArray<{ readonly mechanic: string; readonly why: 
     mechanic: 'battles',
     why: 'battles are Sieges — the back face is cast by a path the engine does not have — and the card index carries no printed defense number. 0 of 36 compile.',
   },
-  {
-    mechanic: 'alternative costs',
-    why: 'in flight on feat/alternative-costs; no compiler rule emits one yet.',
-  },
 ];
 
 describe('pool mechanic coverage — a feature nobody can see is not shipped', () => {
@@ -125,7 +124,6 @@ describe('pool mechanic coverage — a feature nobody can see is not shipped', (
       emblems: (t) => t.includes('"emblem"'),
       'modal double-faced cards': (_t, c) => (c as { backFaceCastable?: boolean }).backFaceCastable === true,
       battles: (_t, c) => c.types.includes('battle'),
-      'alternative costs': (t) => t.includes('alternativeCost'),
     };
     for (const { mechanic, why } of UNREPRESENTABLE) {
       expect(why.length, `${mechanic} needs a reason`).toBeGreaterThan(40);
@@ -465,6 +463,6 @@ describe('every pool card compiles complete from its printed text', () => {
       return record ? compileCard(record as never).status !== 'complete' : false;
     });
     expect(incomplete.map((c) => c.name)).toEqual([]);
-    expect(CARD_POOL.length).toBeGreaterThanOrEqual(331);
+    expect(CARD_POOL.length).toBeGreaterThanOrEqual(357);
   });
 });

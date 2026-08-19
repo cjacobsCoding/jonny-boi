@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 299 cards.
+ * 325 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -156,6 +156,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { lifelink: true },
     subtypes: ['cat', 'cleric'],
   },
+  // Alchemist's Greeting deals 4 damage to target creature.
+  // Madness {1}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '9aaf0df7-5e2d-4f49-a8cb-66523be15ad6',
+    name: 'Alchemist\'s Greeting',
+    types: ['sorcery'],
+    cost: { generic: 4, R: 1 },
+    madness: { generic: 1, R: 1 },
+    effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'creature' } }],
+  },
   // {T}: Add one mana of any color.
   {
     id: 'efb0394c-2a45-4dd8-bca3-08704056fa31',
@@ -289,6 +299,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Trample
+  // Madness {2}{G} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'dc7f0c33-80ea-453e-a237-473f077f038e',
+    name: 'Arrogant Wurm',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['wurm'],
+    madness: { generic: 2, G: 1 },
+  },
   // Target creature can't be blocked this turn.
   // Flashback {U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -394,6 +417,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['gate'],
     entersTapped: true,
     producesOptions: [{ W: 1 }, { U: 1 }],
+  },
+  // This land enters tapped.
+  // {T}: Add {B}.
+  // Cycling {B} ({B}, Discard this card: Draw a card.)
+  {
+    id: '326ba371-124c-4949-a048-3a0c8962e567',
+    name: 'Barren Moor',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { B: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {B}',
+      },
+    ],
+    produces: ['B'],
   },
   // When this creature enters, create two 1/1 red Goblin creature tokens.
   {
@@ -653,6 +693,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 1, U: 2 },
     effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
+  },
+  // ({T}: Add {B} or {R}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '2031b17c-0536-446f-a9aa-b46fe79b7ea7',
+    name: 'Canyon Slough',
+    types: ['land'],
+    subtypes: ['swamp', 'mountain'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ B: 1 }, { R: 1 }],
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Return target permanent to its owner's hand.
+  {
+    id: '77637eff-2963-4402-88f3-ca346f762fc8',
+    name: 'Capsize',
+    types: ['instant'],
+    cost: { generic: 1, U: 2 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
   },
   // Create three 1/1 white Soldier creature tokens.
   {
@@ -1142,6 +1210,42 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // This land enters tapped.
+  // {T}: Add {R}.
+  // Cycling {1}{R} ({1}{R}, Discard this card: Draw a card.)
+  {
+    id: '311f38a6-f68f-4d30-bc4e-62339f1e0d88',
+    name: 'Desert of the Fervent',
+    types: ['land'],
+    subtypes: ['desert'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 1, R: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {1}{R}',
+      },
+    ],
+    produces: ['R'],
+  },
+  // This land enters tapped.
+  // {T}: Add {W}.
+  // Cycling {1}{W} ({1}{W}, Discard this card: Draw a card.)
+  {
+    id: '2672e0ca-8d5c-449f-8483-35d0e697fbb2',
+    name: 'Desert of the True',
+    types: ['land'],
+    subtypes: ['desert'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 1, W: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {1}{W}',
+      },
+    ],
+    produces: ['W'],
+  },
   // Devil's Play deals X damage to any target.
   // Flashback {X}{R}{R}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -1210,6 +1314,21 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     effects: [
       { primitive: 'counterSpell', params: { targets: 'spell' } },
       { primitive: 'drawCards', params: { count: 1 } },
+    ],
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Return target creature card from your graveyard to your hand.
+  {
+    id: 'cdbaa21d-5896-4b8b-9a08-f0839ccfddfc',
+    name: 'Disturbed Burial',
+    types: ['sorcery'],
+    cost: { generic: 1, B: 1 },
+    buyback: { generic: 3 },
+    effects: [
+      {
+        primitive: 'returnFromGraveyard',
+        params: { count: 1, filter: { anyOfTypes: ['creature'] } },
+      },
     ],
   },
   // Draw two cards.
@@ -1332,6 +1451,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     subtypes: ['human', 'soldier'],
   },
+  // Buyback {4} (You may pay an additional {4} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Target creature gets +2/+2 until end of turn.
+  {
+    id: '557d2af0-04c5-461d-826b-7208c4535dc2',
+    name: 'Elvish Fury',
+    types: ['instant'],
+    cost: { G: 1 },
+    buyback: { generic: 4 },
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2, targets: 'creature' } }],
+  },
   // {T}: Add {G}.
   {
     id: '3f3b2c10-21f8-4e13-be83-4ef3fa36e123',
@@ -1375,6 +1504,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: -2, toughness: -2, keywords: {} },
     },
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Evincar's Justice deals 2 damage to each creature and each player.
+  {
+    id: 'c0d3dfc0-1ff2-4ac3-98eb-32eaa5b84c05',
+    name: 'Evincar\'s Justice',
+    types: ['sorcery'],
+    cost: { generic: 2, B: 2 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'dealDamageToEach', params: { amount: 2, creatures: true, players: true } }],
   },
   // {T}, Sacrifice this land: Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
   {
@@ -1424,6 +1563,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { doubleStrike: true },
     subtypes: ['human', 'soldier'],
+  },
+  // ({T}: Add {U} or {B}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '32b03b48-06da-4a74-a7ac-e5ae39a4f428',
+    name: 'Fetid Pools',
+    types: ['land'],
+    subtypes: ['island', 'swamp'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ U: 1 }, { B: 1 }],
+  },
+  // Fiery Temper deals 3 damage to any target.
+  // Madness {R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'f07bd49d-8e71-4d56-be2a-638514011318',
+    name: 'Fiery Temper',
+    types: ['instant'],
+    cost: { generic: 1, R: 2 },
+    madness: { R: 1 },
+    effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
   },
   // This artifact enters tapped.
   // {T}: Add {R}.
@@ -1511,6 +1678,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
+  },
+  // This land enters tapped.
+  // {T}: Add {R}.
+  // Cycling {R} ({R}, Discard this card: Draw a card.)
+  {
+    id: '394c6de5-7957-4a0b-a6b9-ee0c707cd022',
+    name: 'Forgotten Cave',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { R: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {R}',
+      },
+    ],
+    produces: ['R'],
   },
   // {T}: Add {G}.
   {
@@ -1844,6 +2028,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Haste (This creature can attack and {T} as soon as it comes under your control.)
+  // Madness {2}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '9c239027-c5cb-43c6-b4f3-93c269a1d853',
+    name: 'Incorrigible Youths',
+    types: ['creature'],
+    cost: { generic: 3, R: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { haste: true },
+    subtypes: ['vampire'],
+    madness: { generic: 2, R: 1 },
+  },
   // Choose one —
   // • Draw X cards.
   // • Invoke the Firemind deals X damage to any target.
@@ -1882,6 +2079,24 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['myr'],
     produces: ['R'],
   },
+  // ({T}: Add {W} or {U}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '406eabe2-df62-49e2-bb39-c0227509d875',
+    name: 'Irrigated Farmland',
+    types: ['land'],
+    subtypes: ['plains', 'island'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ W: 1 }, { U: 1 }],
+  },
   // This land enters tapped.
   // {T}: Add {U} or {R}.
   {
@@ -1908,6 +2123,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 1 life',
       },
     ],
+  },
+  // Return target creature to its owner's hand.
+  // Madness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '761ebd6a-8f53-46fa-b3cd-16616b773007',
+    name: 'Just the Wind',
+    types: ['instant'],
+    cost: { generic: 1, U: 1 },
+    madness: { U: 1 },
+    effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
   },
   {
     id: 'df7f697e-6886-4897-a024-61ae225c1b34',
@@ -2114,6 +2339,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 4 life',
       },
     ],
+  },
+  // This land enters tapped.
+  // {T}: Add {U}.
+  // Cycling {U} ({U}, Discard this card: Draw a card.)
+  {
+    id: '765863c8-1be0-4bb1-9e9c-db7701cffde3',
+    name: 'Lonely Sandbar',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { U: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {U}',
+      },
+    ],
+    produces: ['U'],
   },
   // Equipped creature gets +3/+0 and has trample and lifelink.
   // Equip {3}
@@ -2484,6 +2726,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 2, keywords: { flying: true } },
     },
   },
+  // Draw a card.
+  // Madness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: '116ee88e-9e13-4f21-bc6a-efa994b5bf75',
+    name: 'Obsessive Search',
+    types: ['instant'],
+    cost: { U: 1 },
+    madness: { U: 1 },
+    effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+  },
   // Flash (You may cast this spell any time you could cast an instant.)
   // When this enchantment enters, scry 2, then draw a card.
   // {2}{U}, Sacrifice this enchantment: Scry 2. (Look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
@@ -2789,6 +3041,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Trample
+  // Madness {2}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
+  {
+    id: 'c9159396-81d3-4f81-88b4-dda163ff4b74',
+    name: 'Reckless Wurm',
+    types: ['creature'],
+    cost: { generic: 3, R: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { trample: true },
+    subtypes: ['wurm'],
+    madness: { generic: 2, R: 1 },
+  },
   // Ward {3} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {3}.)
   {
     id: 'ec47cf67-2580-464f-8118-7eabea5be11c',
@@ -2934,6 +3199,24 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     subtypes: ['cat'],
   },
+  // ({T}: Add {G} or {W}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '3c87ea85-ca29-45a7-b5b2-758c62898b0a',
+    name: 'Scattered Groves',
+    types: ['land'],
+    subtypes: ['forest', 'plains'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ G: 1 }, { W: 1 }],
+  },
   // Scry 2, then draw a card.
   // Flashback {4}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -3002,6 +3285,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 3 } }],
   },
+  // This land enters tapped.
+  // {T}: Add {W}.
+  // Cycling {W} ({W}, Discard this card: Draw a card.)
+  {
+    id: '8dec6fcf-1254-4b1b-ba23-7a3e492a7241',
+    name: 'Secluded Steppe',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { W: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {W}',
+      },
+    ],
+    produces: ['W'],
+  },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   {
     id: 'fbadf7a3-0d54-40fe-a763-f641dd448e56',
@@ -3012,6 +3312,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { deathtouch: true },
     subtypes: ['scorpion'],
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Target creature gets +3/+0 until end of turn.
+  {
+    id: '2effcd1c-5833-4e0e-bb67-2d2ffb22a014',
+    name: 'Seething Anger',
+    types: ['sorcery'],
+    cost: { R: 1 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0, targets: 'creature' } }],
   },
   // This land enters tapped.
   // {T}: Add {G} or {W}.
@@ -3070,6 +3380,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ W: 1 }, { B: 1 }],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Destroy target artifact.
+  {
+    id: '77953b7a-813e-45f5-ad7f-ab72a79a0112',
+    name: 'Shattering Pulse',
+    types: ['instant'],
+    cost: { generic: 1, R: 1 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+  },
+  // ({T}: Add {R} or {G}.)
+  // This land enters tapped.
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: 'db8d8643-3d0b-4f20-bf53-f4cd26a0e8df',
+    name: 'Sheltered Thicket',
+    types: ['land'],
+    subtypes: ['mountain', 'forest'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+    producesOptions: [{ R: 1 }, { G: 1 }],
   },
   // Flying
   // {R}: This creature gets +1/+0 until end of turn.
@@ -3722,6 +4060,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // This land enters tapped.
+  // {T}: Add {G}.
+  // Cycling {G} ({G}, Discard this card: Draw a card.)
+  {
+    id: '9f8fe514-77ed-41b4-a6f3-c6f095bb97be',
+    name: 'Tranquil Thicket',
+    types: ['land'],
+    entersTapped: true,
+    cycling: [
+      {
+        cost: { G: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {G}',
+      },
+    ],
+    produces: ['G'],
+  },
   // Equipped creature gets +2/+1.
   // Equip {2}
   {
@@ -4083,6 +4438,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: -2, toughness: -1, keywords: {} },
     },
+  },
+  // Buyback {5} (You may pay an additional {5} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Draw a card.
+  {
+    id: 'a4a8af4e-8686-45ba-94fd-ccf6cc8adaae',
+    name: 'Whispers of the Muse',
+    types: ['instant'],
+    cost: { U: 1 },
+    buyback: { generic: 5 },
+    effects: [{ primitive: 'drawCards', params: { count: 1 } }],
   },
   // Equipped creature can't be blocked and has shroud. (It can't be the target of spells or abilities.)
   // Equip {2}

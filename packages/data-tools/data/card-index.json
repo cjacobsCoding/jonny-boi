@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-19T07:43:26.150Z",
+  "generatedAt": "2026-08-19T08:04:12.110Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 331,
+  "requested": 357,
   "unresolved": [],
   "cards": [
     {
@@ -474,6 +474,65 @@
       "localImages": {
         "normal": "ajani-s-sunstriker-normal.jpg",
         "art_crop": "ajani-s-sunstriker-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9aaf0df7-5e2d-4f49-a8cb-66523be15ad6",
+      "name": "Alchemist's Greeting",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Alchemist's Greeting deals 4 damage to target creature.\nMadness {1}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Madness"
+      ],
+      "set": "inr",
+      "collectorNumber": "140",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.jpg?1783908129",
+        "normal": "https://cards.scryfall.io/normal/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.jpg?1783908129",
+        "large": "https://cards.scryfall.io/large/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.jpg?1783908129",
+        "png": "https://cards.scryfall.io/png/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.png?1783908129",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.jpg?1783908129",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.jpg?1783908129",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.webp?1783908129",
+        "grid": "https://cards.scryfall.io/grid/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.webp?1783908129",
+        "display": "https://cards.scryfall.io/display/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.webp?1783908129",
+        "art": "https://cards.scryfall.io/art/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.webp?1783908129",
+        "crop": "https://cards.scryfall.io/crop/front/f/3/f36e2146-b6a9-4b61-9ccf-969a2c79b747.webp?1783908129"
+      },
+      "localImages": {
+        "normal": "alchemist-s-greeting-normal.jpg",
+        "art_crop": "alchemist-s-greeting-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -953,6 +1012,68 @@
       "faces": []
     },
     {
+      "id": "dc7f0c33-80ea-453e-a237-473f077f038e",
+      "name": "Arrogant Wurm",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wurm"
+        ]
+      },
+      "rawTypeLine": "Creature — Wurm",
+      "oracleText": "Trample\nMadness {2}{G} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Madness",
+        "Trample"
+      ],
+      "set": "vma",
+      "collectorNumber": "195",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.jpg?1783939264",
+        "normal": "https://cards.scryfall.io/normal/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.jpg?1783939264",
+        "large": "https://cards.scryfall.io/large/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.jpg?1783939264",
+        "png": "https://cards.scryfall.io/png/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.png?1783939264",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.jpg?1783939264",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.jpg?1783939264",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.webp?1783939264",
+        "grid": "https://cards.scryfall.io/grid/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.webp?1783939264",
+        "display": "https://cards.scryfall.io/display/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.webp?1783939264",
+        "art": "https://cards.scryfall.io/art/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.webp?1783939264",
+        "crop": "https://cards.scryfall.io/crop/front/2/d/2dd6977e-269a-4cd1-99ad-37846a0647a7.webp?1783939264"
+      },
+      "localImages": {
+        "normal": "arrogant-wurm-normal.jpg",
+        "art_crop": "arrogant-wurm-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "c174dcbb-03a0-439c-b3d8-ed61bd46dc67",
       "name": "Artful Dodge",
       "manaCost": {
@@ -1309,6 +1430,63 @@
       "localImages": {
         "normal": "azorius-guildgate-normal.jpg",
         "art_crop": "azorius-guildgate-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "326ba371-124c-4949-a048-3a0c8962e567",
+      "name": "Barren Moor",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "This land enters tapped.\n{T}: Add {B}.\nCycling {B} ({B}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "dsc",
+      "collectorNumber": "262",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.jpg?1783909580",
+        "normal": "https://cards.scryfall.io/normal/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.jpg?1783909580",
+        "large": "https://cards.scryfall.io/large/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.jpg?1783909580",
+        "png": "https://cards.scryfall.io/png/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.png?1783909580",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.jpg?1783909580",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.jpg?1783909580",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.webp?1783909580",
+        "grid": "https://cards.scryfall.io/grid/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.webp?1783909580",
+        "display": "https://cards.scryfall.io/display/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.webp?1783909580",
+        "art": "https://cards.scryfall.io/art/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.webp?1783909580",
+        "crop": "https://cards.scryfall.io/crop/front/3/8/380eb7fd-bc79-4cad-9c2b-9b2b10761a72.webp?1783909580"
+      },
+      "localImages": {
+        "normal": "barren-moor-normal.jpg",
+        "art_crop": "barren-moor-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -2364,6 +2542,126 @@
       "localImages": {
         "normal": "cancel-normal.jpg",
         "art_crop": "cancel-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2031b17c-0536-446f-a9aa-b46fe79b7ea7",
+      "name": "Canyon Slough",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": [
+          "Swamp",
+          "Mountain"
+        ]
+      },
+      "rawTypeLine": "Land — Swamp Mountain",
+      "oracleText": "({T}: Add {B} or {R}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B",
+        "R"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "msc",
+      "collectorNumber": "228",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.jpg?1783903208",
+        "normal": "https://cards.scryfall.io/normal/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.jpg?1783903208",
+        "large": "https://cards.scryfall.io/large/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.jpg?1783903208",
+        "png": "https://cards.scryfall.io/png/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.png?1783903208",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.jpg?1783903208",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.jpg?1783903208",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.webp?1783903208",
+        "grid": "https://cards.scryfall.io/grid/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.webp?1783903208",
+        "display": "https://cards.scryfall.io/display/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.webp?1783903208",
+        "art": "https://cards.scryfall.io/art/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.webp?1783903208",
+        "crop": "https://cards.scryfall.io/crop/front/5/8/587cc3ba-75c2-46a0-bd44-6f953fe1eb01.webp?1783903208"
+      },
+      "localImages": {
+        "normal": "canyon-slough-normal.jpg",
+        "art_crop": "canyon-slough-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "77637eff-2963-4402-88f3-ca346f762fc8",
+      "name": "Capsize",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)\nReturn target permanent to its owner's hand.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "tpr",
+      "collectorNumber": "42",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.jpg?1783938500",
+        "normal": "https://cards.scryfall.io/normal/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.jpg?1783938500",
+        "large": "https://cards.scryfall.io/large/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.jpg?1783938500",
+        "png": "https://cards.scryfall.io/png/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.png?1783938500",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.jpg?1783938500",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.jpg?1783938500",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.webp?1783938500",
+        "grid": "https://cards.scryfall.io/grid/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.webp?1783938500",
+        "display": "https://cards.scryfall.io/display/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.webp?1783938500",
+        "art": "https://cards.scryfall.io/art/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.webp?1783938500",
+        "crop": "https://cards.scryfall.io/crop/front/f/3/f36f6545-e4e0-4dc8-acea-e527e43f3e14.webp?1783938500"
+      },
+      "localImages": {
+        "normal": "capsize-normal.jpg",
+        "art_crop": "capsize-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -4635,6 +4933,124 @@
       ]
     },
     {
+      "id": "311f38a6-f68f-4d30-bc4e-62339f1e0d88",
+      "name": "Desert of the Fervent",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": [
+          "Desert"
+        ]
+      },
+      "rawTypeLine": "Land — Desert",
+      "oracleText": "This land enters tapped.\n{T}: Add {R}.\nCycling {1}{R} ({1}{R}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "otc",
+      "collectorNumber": "284",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.jpg?1783911883",
+        "normal": "https://cards.scryfall.io/normal/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.jpg?1783911883",
+        "large": "https://cards.scryfall.io/large/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.jpg?1783911883",
+        "png": "https://cards.scryfall.io/png/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.png?1783911883",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.jpg?1783911883",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.jpg?1783911883",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.webp?1783911883",
+        "grid": "https://cards.scryfall.io/grid/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.webp?1783911883",
+        "display": "https://cards.scryfall.io/display/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.webp?1783911883",
+        "art": "https://cards.scryfall.io/art/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.webp?1783911883",
+        "crop": "https://cards.scryfall.io/crop/front/f/3/f3766140-b755-4e4b-9d98-0cc0b889f15a.webp?1783911883"
+      },
+      "localImages": {
+        "normal": "desert-of-the-fervent-normal.jpg",
+        "art_crop": "desert-of-the-fervent-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2672e0ca-8d5c-449f-8483-35d0e697fbb2",
+      "name": "Desert of the True",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": [
+          "Desert"
+        ]
+      },
+      "rawTypeLine": "Land — Desert",
+      "oracleText": "This land enters tapped.\n{T}: Add {W}.\nCycling {1}{W} ({1}{W}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "otc",
+      "collectorNumber": "286",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.jpg?1783911881",
+        "normal": "https://cards.scryfall.io/normal/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.jpg?1783911881",
+        "large": "https://cards.scryfall.io/large/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.jpg?1783911881",
+        "png": "https://cards.scryfall.io/png/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.png?1783911881",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.jpg?1783911881",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.jpg?1783911881",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.webp?1783911881",
+        "grid": "https://cards.scryfall.io/grid/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.webp?1783911881",
+        "display": "https://cards.scryfall.io/display/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.webp?1783911881",
+        "art": "https://cards.scryfall.io/art/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.webp?1783911881",
+        "crop": "https://cards.scryfall.io/crop/front/8/d/8d8c5284-7f56-46e5-8226-1e5cedf2aeb9.webp?1783911881"
+      },
+      "localImages": {
+        "normal": "desert-of-the-true-normal.jpg",
+        "art_crop": "desert-of-the-true-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ee9f0b29-8a54-4cb8-8e2c-7bd67c2184ba",
       "name": "Devil's Play",
       "manaCost": {
@@ -4978,6 +5394,65 @@
       "localImages": {
         "normal": "dismiss-normal.jpg",
         "art_crop": "dismiss-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "cdbaa21d-5896-4b8b-9a08-f0839ccfddfc",
+      "name": "Disturbed Burial",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)\nReturn target creature card from your graveyard to your hand.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "tmp",
+      "collectorNumber": "129",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.jpg?1783946641",
+        "normal": "https://cards.scryfall.io/normal/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.jpg?1783946641",
+        "large": "https://cards.scryfall.io/large/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.jpg?1783946641",
+        "png": "https://cards.scryfall.io/png/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.png?1783946641",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.jpg?1783946641",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.jpg?1783946641",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.webp?1783946641",
+        "grid": "https://cards.scryfall.io/grid/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.webp?1783946641",
+        "display": "https://cards.scryfall.io/display/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.webp?1783946641",
+        "art": "https://cards.scryfall.io/art/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.webp?1783946641",
+        "crop": "https://cards.scryfall.io/crop/front/0/6/06254b6c-eb22-4ec9-9420-74e9ee15e072.webp?1783946641"
+      },
+      "localImages": {
+        "normal": "disturbed-burial-normal.jpg",
+        "art_crop": "disturbed-burial-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -5517,6 +5992,65 @@
       "faces": []
     },
     {
+      "id": "557d2af0-04c5-461d-826b-7208c4535dc2",
+      "name": "Elvish Fury",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Buyback {4} (You may pay an additional {4} as you cast this spell. If you do, put this card into your hand as it resolves.)\nTarget creature gets +2/+2 until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "mh1",
+      "collectorNumber": "162",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.jpg?1783933099",
+        "normal": "https://cards.scryfall.io/normal/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.jpg?1783933099",
+        "large": "https://cards.scryfall.io/large/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.jpg?1783933099",
+        "png": "https://cards.scryfall.io/png/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.png?1783933099",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.jpg?1783933099",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.jpg?1783933099",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.webp?1783933099",
+        "grid": "https://cards.scryfall.io/grid/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.webp?1783933099",
+        "display": "https://cards.scryfall.io/display/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.webp?1783933099",
+        "art": "https://cards.scryfall.io/art/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.webp?1783933099",
+        "crop": "https://cards.scryfall.io/crop/front/e/5/e5a24943-0121-4c64-9624-2e4cff37e6ca.webp?1783933099"
+      },
+      "localImages": {
+        "normal": "elvish-fury-normal.jpg",
+        "art_crop": "elvish-fury-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3f3b2c10-21f8-4e13-be83-4ef3fa36e123",
       "name": "Elvish Mystic",
       "manaCost": {
@@ -5758,6 +6292,65 @@
       "faces": []
     },
     {
+      "id": "c0d3dfc0-1ff2-4ac3-98eb-32eaa5b84c05",
+      "name": "Evincar's Justice",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)\nEvincar's Justice deals 2 damage to each creature and each player.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "cma",
+      "collectorNumber": "58",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.jpg?1783936286",
+        "normal": "https://cards.scryfall.io/normal/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.jpg?1783936286",
+        "large": "https://cards.scryfall.io/large/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.jpg?1783936286",
+        "png": "https://cards.scryfall.io/png/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.png?1783936286",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.jpg?1783936286",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.jpg?1783936286",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.webp?1783936286",
+        "grid": "https://cards.scryfall.io/grid/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.webp?1783936286",
+        "display": "https://cards.scryfall.io/display/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.webp?1783936286",
+        "art": "https://cards.scryfall.io/art/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.webp?1783936286",
+        "crop": "https://cards.scryfall.io/crop/front/2/e/2e0fffc6-4395-441e-95a9-c9cf33af7907.webp?1783936286"
+      },
+      "localImages": {
+        "normal": "evincar-s-justice-normal.jpg",
+        "art_crop": "evincar-s-justice-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "a75445d3-1303-4bb5-89ad-26ea93fecd48",
       "name": "Evolving Wilds",
       "manaCost": {
@@ -5990,6 +6583,126 @@
       "localImages": {
         "normal": "fencing-ace-normal.jpg",
         "art_crop": "fencing-ace-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "32b03b48-06da-4a74-a7ac-e5ae39a4f428",
+      "name": "Fetid Pools",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": [
+          "Island",
+          "Swamp"
+        ]
+      },
+      "rawTypeLine": "Land — Island Swamp",
+      "oracleText": "({T}: Add {U} or {B}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B",
+        "U"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "msc",
+      "collectorNumber": "243",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.jpg?1783903202",
+        "normal": "https://cards.scryfall.io/normal/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.jpg?1783903202",
+        "large": "https://cards.scryfall.io/large/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.jpg?1783903202",
+        "png": "https://cards.scryfall.io/png/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.png?1783903202",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.jpg?1783903202",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.jpg?1783903202",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.webp?1783903202",
+        "grid": "https://cards.scryfall.io/grid/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.webp?1783903202",
+        "display": "https://cards.scryfall.io/display/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.webp?1783903202",
+        "art": "https://cards.scryfall.io/art/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.webp?1783903202",
+        "crop": "https://cards.scryfall.io/crop/front/5/f/5fa4556f-2fdc-42e6-98cb-291cee2ca3ac.webp?1783903202"
+      },
+      "localImages": {
+        "normal": "fetid-pools-normal.jpg",
+        "art_crop": "fetid-pools-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f07bd49d-8e71-4d56-be2a-638514011318",
+      "name": "Fiery Temper",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Fiery Temper deals 3 damage to any target.\nMadness {R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Madness"
+      ],
+      "set": "inr",
+      "collectorNumber": "154",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.jpg?1783908123",
+        "normal": "https://cards.scryfall.io/normal/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.jpg?1783908123",
+        "large": "https://cards.scryfall.io/large/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.jpg?1783908123",
+        "png": "https://cards.scryfall.io/png/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.png?1783908123",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.jpg?1783908123",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.jpg?1783908123",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.webp?1783908123",
+        "grid": "https://cards.scryfall.io/grid/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.webp?1783908123",
+        "display": "https://cards.scryfall.io/display/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.webp?1783908123",
+        "art": "https://cards.scryfall.io/art/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.webp?1783908123",
+        "crop": "https://cards.scryfall.io/crop/front/1/d/1d3a3a1d-c393-4a57-8a0e-5907d1722331.webp?1783908123"
+      },
+      "localImages": {
+        "normal": "fiery-temper-normal.jpg",
+        "art_crop": "fiery-temper-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -6458,6 +7171,63 @@
       "localImages": {
         "normal": "forest-normal.jpg",
         "art_crop": "forest-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "394c6de5-7957-4a0b-a6b9-ee0c707cd022",
+      "name": "Forgotten Cave",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "This land enters tapped.\n{T}: Add {R}.\nCycling {R} ({R}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "c21",
+      "collectorNumber": "289",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.jpg?1783927493",
+        "normal": "https://cards.scryfall.io/normal/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.jpg?1783927493",
+        "large": "https://cards.scryfall.io/large/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.jpg?1783927493",
+        "png": "https://cards.scryfall.io/png/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.png?1783927493",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.jpg?1783927493",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.jpg?1783927493",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.webp?1783927493",
+        "grid": "https://cards.scryfall.io/grid/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.webp?1783927493",
+        "display": "https://cards.scryfall.io/display/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.webp?1783927493",
+        "art": "https://cards.scryfall.io/art/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.webp?1783927493",
+        "crop": "https://cards.scryfall.io/crop/front/6/2/62b0b5f8-6b51-4fa5-85ae-290475525a9d.webp?1783927493"
+      },
+      "localImages": {
+        "normal": "forgotten-cave-normal.jpg",
+        "art_crop": "forgotten-cave-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -8079,6 +8849,68 @@
       "faces": []
     },
     {
+      "id": "9c239027-c5cb-43c6-b4f3-93c269a1d853",
+      "name": "Incorrigible Youths",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire",
+      "oracleText": "Haste (This creature can attack and {T} as soon as it comes under your control.)\nMadness {2}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": 4,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Madness",
+        "Haste"
+      ],
+      "set": "soi",
+      "collectorNumber": "166",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.jpg?1783937749",
+        "normal": "https://cards.scryfall.io/normal/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.jpg?1783937749",
+        "large": "https://cards.scryfall.io/large/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.jpg?1783937749",
+        "png": "https://cards.scryfall.io/png/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.png?1783937749",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.jpg?1783937749",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.jpg?1783937749",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.webp?1783937749",
+        "grid": "https://cards.scryfall.io/grid/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.webp?1783937749",
+        "display": "https://cards.scryfall.io/display/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.webp?1783937749",
+        "art": "https://cards.scryfall.io/art/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.webp?1783937749",
+        "crop": "https://cards.scryfall.io/crop/front/4/e/4e826571-6f00-4b40-975b-d51b2b17b4a4.webp?1783937749"
+      },
+      "localImages": {
+        "normal": "incorrigible-youths-normal.jpg",
+        "art_crop": "incorrigible-youths-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2037659f-2efe-4321-afaf-961bbec35e9e",
       "name": "Invoke the Firemind",
       "manaCost": {
@@ -8193,6 +9025,67 @@
       "localImages": {
         "normal": "iron-myr-normal.jpg",
         "art_crop": "iron-myr-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "406eabe2-df62-49e2-bb39-c0227509d875",
+      "name": "Irrigated Farmland",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": [
+          "Plains",
+          "Island"
+        ]
+      },
+      "rawTypeLine": "Land — Plains Island",
+      "oracleText": "({T}: Add {W} or {U}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "U",
+        "W"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "msc",
+      "collectorNumber": "251",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.jpg?1783903199",
+        "normal": "https://cards.scryfall.io/normal/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.jpg?1783903199",
+        "large": "https://cards.scryfall.io/large/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.jpg?1783903199",
+        "png": "https://cards.scryfall.io/png/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.png?1783903199",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.jpg?1783903199",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.jpg?1783903199",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.webp?1783903199",
+        "grid": "https://cards.scryfall.io/grid/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.webp?1783903199",
+        "display": "https://cards.scryfall.io/display/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.webp?1783903199",
+        "art": "https://cards.scryfall.io/art/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.webp?1783903199",
+        "crop": "https://cards.scryfall.io/crop/front/9/9/996b4484-a701-409a-822c-aa19be89a2c6.webp?1783903199"
+      },
+      "localImages": {
+        "normal": "irrigated-farmland-normal.jpg",
+        "art_crop": "irrigated-farmland-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -8366,6 +9259,65 @@
       "localImages": {
         "normal": "jungle-hollow-normal.jpg",
         "art_crop": "jungle-hollow-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "761ebd6a-8f53-46fa-b3cd-16616b773007",
+      "name": "Just the Wind",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Return target creature to its owner's hand.\nMadness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Madness"
+      ],
+      "set": "uma",
+      "collectorNumber": "60",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.jpg?1783933840",
+        "normal": "https://cards.scryfall.io/normal/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.jpg?1783933840",
+        "large": "https://cards.scryfall.io/large/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.jpg?1783933840",
+        "png": "https://cards.scryfall.io/png/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.png?1783933840",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.jpg?1783933840",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.jpg?1783933840",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.webp?1783933840",
+        "grid": "https://cards.scryfall.io/grid/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.webp?1783933840",
+        "display": "https://cards.scryfall.io/display/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.webp?1783933840",
+        "art": "https://cards.scryfall.io/art/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.webp?1783933840",
+        "crop": "https://cards.scryfall.io/crop/front/5/9/59e40878-358d-48ec-a35f-3d9867728143.webp?1783933840"
+      },
+      "localImages": {
+        "normal": "just-the-wind-normal.jpg",
+        "art_crop": "just-the-wind-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -9559,6 +10511,63 @@
       "localImages": {
         "normal": "lone-missionary-normal.jpg",
         "art_crop": "lone-missionary-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "765863c8-1be0-4bb1-9e9c-db7701cffde3",
+      "name": "Lonely Sandbar",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "This land enters tapped.\n{T}: Add {U}.\nCycling {U} ({U}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "eoc",
+      "collectorNumber": "166",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.jpg?1783906010",
+        "normal": "https://cards.scryfall.io/normal/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.jpg?1783906010",
+        "large": "https://cards.scryfall.io/large/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.jpg?1783906010",
+        "png": "https://cards.scryfall.io/png/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.png?1783906010",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.jpg?1783906010",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.jpg?1783906010",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.webp?1783906010",
+        "grid": "https://cards.scryfall.io/grid/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.webp?1783906010",
+        "display": "https://cards.scryfall.io/display/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.webp?1783906010",
+        "art": "https://cards.scryfall.io/art/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.webp?1783906010",
+        "crop": "https://cards.scryfall.io/crop/front/4/2/42f8591e-df30-49ec-962c-a75d32e6d9f5.webp?1783906010"
+      },
+      "localImages": {
+        "normal": "lonely-sandbar-normal.jpg",
+        "art_crop": "lonely-sandbar-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -11313,6 +12322,65 @@
       "faces": []
     },
     {
+      "id": "116ee88e-9e13-4f21-bc6a-efa994b5bf75",
+      "name": "Obsessive Search",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Draw a card.\nMadness {U} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Madness"
+      ],
+      "set": "dmr",
+      "collectorNumber": "61",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.jpg?1783918490",
+        "normal": "https://cards.scryfall.io/normal/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.jpg?1783918490",
+        "large": "https://cards.scryfall.io/large/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.jpg?1783918490",
+        "png": "https://cards.scryfall.io/png/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.png?1783918490",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.jpg?1783918490",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.jpg?1783918490",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.webp?1783918490",
+        "grid": "https://cards.scryfall.io/grid/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.webp?1783918490",
+        "display": "https://cards.scryfall.io/display/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.webp?1783918490",
+        "art": "https://cards.scryfall.io/art/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.webp?1783918490",
+        "crop": "https://cards.scryfall.io/crop/front/1/d/1d97436e-329a-49a4-a7c9-671ec9ba90cc.webp?1783918490"
+      },
+      "localImages": {
+        "normal": "obsessive-search-normal.jpg",
+        "art_crop": "obsessive-search-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "41960d32-ddb5-42be-94b2-3a2e77ca148d",
       "name": "Omen of the Sea",
       "manaCost": {
@@ -12906,6 +13974,68 @@
       "faces": []
     },
     {
+      "id": "c9159396-81d3-4f81-88b4-dda163ff4b74",
+      "name": "Reckless Wurm",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Wurm"
+        ]
+      },
+      "rawTypeLine": "Creature — Wurm",
+      "oracleText": "Trample\nMadness {2}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Madness",
+        "Trample"
+      ],
+      "set": "tsr",
+      "collectorNumber": "181",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/9/59243436-b55d-44c3-962b-751eff429f71.jpg?1783927790",
+        "normal": "https://cards.scryfall.io/normal/front/5/9/59243436-b55d-44c3-962b-751eff429f71.jpg?1783927790",
+        "large": "https://cards.scryfall.io/large/front/5/9/59243436-b55d-44c3-962b-751eff429f71.jpg?1783927790",
+        "png": "https://cards.scryfall.io/png/front/5/9/59243436-b55d-44c3-962b-751eff429f71.png?1783927790",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/9/59243436-b55d-44c3-962b-751eff429f71.jpg?1783927790",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/9/59243436-b55d-44c3-962b-751eff429f71.jpg?1783927790",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/9/59243436-b55d-44c3-962b-751eff429f71.webp?1783927790",
+        "grid": "https://cards.scryfall.io/grid/front/5/9/59243436-b55d-44c3-962b-751eff429f71.webp?1783927790",
+        "display": "https://cards.scryfall.io/display/front/5/9/59243436-b55d-44c3-962b-751eff429f71.webp?1783927790",
+        "art": "https://cards.scryfall.io/art/front/5/9/59243436-b55d-44c3-962b-751eff429f71.webp?1783927790",
+        "crop": "https://cards.scryfall.io/crop/front/5/9/59243436-b55d-44c3-962b-751eff429f71.webp?1783927790"
+      },
+      "localImages": {
+        "normal": "reckless-wurm-normal.jpg",
+        "art_crop": "reckless-wurm-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ec47cf67-2580-464f-8118-7eabea5be11c",
       "name": "Rimeshield Frost Giant",
       "manaCost": {
@@ -13570,6 +14700,67 @@
       "faces": []
     },
     {
+      "id": "3c87ea85-ca29-45a7-b5b2-758c62898b0a",
+      "name": "Scattered Groves",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": [
+          "Forest",
+          "Plains"
+        ]
+      },
+      "rawTypeLine": "Land — Forest Plains",
+      "oracleText": "({T}: Add {G} or {W}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "msc",
+      "collectorNumber": "262",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.jpg?1783903194",
+        "normal": "https://cards.scryfall.io/normal/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.jpg?1783903194",
+        "large": "https://cards.scryfall.io/large/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.jpg?1783903194",
+        "png": "https://cards.scryfall.io/png/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.png?1783903194",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.jpg?1783903194",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.jpg?1783903194",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.webp?1783903194",
+        "grid": "https://cards.scryfall.io/grid/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.webp?1783903194",
+        "display": "https://cards.scryfall.io/display/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.webp?1783903194",
+        "art": "https://cards.scryfall.io/art/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.webp?1783903194",
+        "crop": "https://cards.scryfall.io/crop/front/6/b/6bd38442-854d-43b1-a80c-9d841c3a304d.webp?1783903194"
+      },
+      "localImages": {
+        "normal": "scattered-groves-normal.jpg",
+        "art_crop": "scattered-groves-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3fb9f0d9-6514-4005-b65a-7929f7c4df06",
       "name": "Scour All Possibilities",
       "manaCost": {
@@ -13803,6 +14994,63 @@
       "faces": []
     },
     {
+      "id": "8dec6fcf-1254-4b1b-ba23-7a3e492a7241",
+      "name": "Secluded Steppe",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "This land enters tapped.\n{T}: Add {W}.\nCycling {W} ({W}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "eoc",
+      "collectorNumber": "177",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.jpg?1783906007",
+        "normal": "https://cards.scryfall.io/normal/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.jpg?1783906007",
+        "large": "https://cards.scryfall.io/large/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.jpg?1783906007",
+        "png": "https://cards.scryfall.io/png/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.png?1783906007",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.jpg?1783906007",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.jpg?1783906007",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.webp?1783906007",
+        "grid": "https://cards.scryfall.io/grid/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.webp?1783906007",
+        "display": "https://cards.scryfall.io/display/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.webp?1783906007",
+        "art": "https://cards.scryfall.io/art/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.webp?1783906007",
+        "crop": "https://cards.scryfall.io/crop/front/a/a/aaa5bee9-3f6a-45b0-a282-6b23222e948f.webp?1783906007"
+      },
+      "localImages": {
+        "normal": "secluded-steppe-normal.jpg",
+        "art_crop": "secluded-steppe-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "fbadf7a3-0d54-40fe-a763-f641dd448e56",
       "name": "Sedge Scorpion",
       "manaCost": {
@@ -13859,6 +15107,65 @@
       "localImages": {
         "normal": "sedge-scorpion-normal.jpg",
         "art_crop": "sedge-scorpion-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2effcd1c-5833-4e0e-bb67-2d2ffb22a014",
+      "name": "Seething Anger",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)\nTarget creature gets +3/+0 until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "tpr",
+      "collectorNumber": "156",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.jpg?1783938466",
+        "normal": "https://cards.scryfall.io/normal/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.jpg?1783938466",
+        "large": "https://cards.scryfall.io/large/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.jpg?1783938466",
+        "png": "https://cards.scryfall.io/png/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.png?1783938466",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.jpg?1783938466",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.jpg?1783938466",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.webp?1783938466",
+        "grid": "https://cards.scryfall.io/grid/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.webp?1783938466",
+        "display": "https://cards.scryfall.io/display/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.webp?1783938466",
+        "art": "https://cards.scryfall.io/art/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.webp?1783938466",
+        "crop": "https://cards.scryfall.io/crop/front/2/2/2294ef08-c27a-4bb4-bd59-434516717961.webp?1783938466"
+      },
+      "localImages": {
+        "normal": "seething-anger-normal.jpg",
+        "art_crop": "seething-anger-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -14222,6 +15529,126 @@
       "localImages": {
         "normal": "shadowy-backstreet-normal.jpg",
         "art_crop": "shadowy-backstreet-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "77953b7a-813e-45f5-ad7f-ab72a79a0112",
+      "name": "Shattering Pulse",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)\nDestroy target artifact.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "exo",
+      "collectorNumber": "102",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.jpg?1783946507",
+        "normal": "https://cards.scryfall.io/normal/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.jpg?1783946507",
+        "large": "https://cards.scryfall.io/large/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.jpg?1783946507",
+        "png": "https://cards.scryfall.io/png/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.png?1783946507",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.jpg?1783946507",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.jpg?1783946507",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.webp?1783946507",
+        "grid": "https://cards.scryfall.io/grid/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.webp?1783946507",
+        "display": "https://cards.scryfall.io/display/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.webp?1783946507",
+        "art": "https://cards.scryfall.io/art/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.webp?1783946507",
+        "crop": "https://cards.scryfall.io/crop/front/8/9/89d3b846-6071-4d65-86ba-da08c4bd0aa1.webp?1783946507"
+      },
+      "localImages": {
+        "normal": "shattering-pulse-normal.jpg",
+        "art_crop": "shattering-pulse-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "db8d8643-3d0b-4f20-bf53-f4cd26a0e8df",
+      "name": "Sheltered Thicket",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": [
+          "Mountain",
+          "Forest"
+        ]
+      },
+      "rawTypeLine": "Land — Mountain Forest",
+      "oracleText": "({T}: Add {R} or {G}.)\nThis land enters tapped.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G",
+        "R"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "ecc",
+      "collectorNumber": "167",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.jpg?1783904519",
+        "normal": "https://cards.scryfall.io/normal/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.jpg?1783904519",
+        "large": "https://cards.scryfall.io/large/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.jpg?1783904519",
+        "png": "https://cards.scryfall.io/png/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.png?1783904519",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.jpg?1783904519",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.jpg?1783904519",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.webp?1783904519",
+        "grid": "https://cards.scryfall.io/grid/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.webp?1783904519",
+        "display": "https://cards.scryfall.io/display/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.webp?1783904519",
+        "art": "https://cards.scryfall.io/art/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.webp?1783904519",
+        "crop": "https://cards.scryfall.io/crop/front/a/d/ad7f87dd-1c43-4b6f-9d68-cc09ef76dbc2.webp?1783904519"
+      },
+      "localImages": {
+        "normal": "sheltered-thicket-normal.jpg",
+        "art_crop": "sheltered-thicket-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -17456,6 +18883,63 @@
       "faces": []
     },
     {
+      "id": "9f8fe514-77ed-41b4-a6f3-c6f095bb97be",
+      "name": "Tranquil Thicket",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "This land enters tapped.\n{T}: Add {G}.\nCycling {G} ({G}, Discard this card: Draw a card.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Cycling"
+      ],
+      "set": "dsc",
+      "collectorNumber": "318",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.jpg?1783909558",
+        "normal": "https://cards.scryfall.io/normal/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.jpg?1783909558",
+        "large": "https://cards.scryfall.io/large/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.jpg?1783909558",
+        "png": "https://cards.scryfall.io/png/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.png?1783909558",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.jpg?1783909558",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.jpg?1783909558",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.webp?1783909558",
+        "grid": "https://cards.scryfall.io/grid/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.webp?1783909558",
+        "display": "https://cards.scryfall.io/display/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.webp?1783909558",
+        "art": "https://cards.scryfall.io/art/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.webp?1783909558",
+        "crop": "https://cards.scryfall.io/crop/front/7/a/7aed7d9d-d796-493e-98fd-c5b1a26621ed.webp?1783909558"
+      },
+      "localImages": {
+        "normal": "tranquil-thicket-normal.jpg",
+        "art_crop": "tranquil-thicket-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "394fae8f-3757-4e08-b97c-5d7c451f4e72",
       "name": "Trusty Machete",
       "manaCost": {
@@ -18886,6 +20370,65 @@
       "localImages": {
         "normal": "weakness-normal.jpg",
         "art_crop": "weakness-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a4a8af4e-8686-45ba-94fd-ccf6cc8adaae",
+      "name": "Whispers of the Muse",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Buyback {5} (You may pay an additional {5} as you cast this spell. If you do, put this card into your hand as it resolves.)\nDraw a card.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "tpr",
+      "collectorNumber": "79",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.jpg?1783938488",
+        "normal": "https://cards.scryfall.io/normal/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.jpg?1783938488",
+        "large": "https://cards.scryfall.io/large/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.jpg?1783938488",
+        "png": "https://cards.scryfall.io/png/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.png?1783938488",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.jpg?1783938488",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.jpg?1783938488",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.webp?1783938488",
+        "grid": "https://cards.scryfall.io/grid/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.webp?1783938488",
+        "display": "https://cards.scryfall.io/display/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.webp?1783938488",
+        "art": "https://cards.scryfall.io/art/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.webp?1783938488",
+        "crop": "https://cards.scryfall.io/crop/front/5/8/5852a174-eef6-4c06-abcd-fd90f4b8a188.webp?1783938488"
+      },
+      "localImages": {
+        "normal": "whispers-of-the-muse-normal.jpg",
+        "art_crop": "whispers-of-the-muse-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []

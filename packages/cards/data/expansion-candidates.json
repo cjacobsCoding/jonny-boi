@@ -587,6 +587,37 @@
         "Slagwoods Bridge",
         "Thornglint Bridge"
       ]
+    },
+    {
+      "role": "alternative and additional costs — cycling, madness and buyback, now that core charges them",
+      "names": [
+        "Forgotten Cave",
+        "Barren Moor",
+        "Tranquil Thicket",
+        "Lonely Sandbar",
+        "Secluded Steppe",
+        "Sheltered Thicket",
+        "Canyon Slough",
+        "Irrigated Farmland",
+        "Fetid Pools",
+        "Scattered Groves",
+        "Desert of the Fervent",
+        "Desert of the True",
+        "Fiery Temper",
+        "Reckless Wurm",
+        "Arrogant Wurm",
+        "Just the Wind",
+        "Obsessive Search",
+        "Alchemist's Greeting",
+        "Incorrigible Youths",
+        "Capsize",
+        "Whispers of the Muse",
+        "Shattering Pulse",
+        "Disturbed Burial",
+        "Seething Anger",
+        "Elvish Fury",
+        "Evincar's Justice"
+      ]
     }
   ]
 }
