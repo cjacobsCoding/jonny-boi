@@ -2495,59 +2495,69 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   readonly pattern: RegExp;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
-  // --- mana abilities the ENGINE cannot express, named as engine work ---------
+  // --- mana abilities: four shapes SHIPPED, one still engine work -------------
   //
-  // These five sit above the generic mana hint on purpose. Core models a mana
-  // source as `produces`/`producesOptions`: a LIST OF MODES a tap adds, with no
-  // stack, no cost beyond the tap, no rider, and no condition (`CardDefinition`,
-  // `pushManaTapActions`, `applyTapForMana`). Every wording below needs the mana
-  // model itself to grow, so calling it "a template the compiler does not
-  // recognize yet" sends the next contributor to write a rule-table entry against
-  // machinery that is not there — and prices days of engine work as a line of
-  // data. The audit classifies a gap as a SYSTEM exactly when its name avoids the
-  // catch-all phrase, so naming these honestly is also what makes the ranked
-  // backlog price them correctly.
+  // Core's mana model now carries a per-ability additional cost, rider,
+  // activation restriction and board-derived colours
+  // (`CardDefinition.manaAbilities`), and MANA_RULES compiles all four. So the
+  // hints below no longer claim those systems are missing — that would send the
+  // next contributor to rebuild something that exists. What reaches them is a
+  // WORDING the rule table has no entry for yet, inside a shape the engine can
+  // already express, with two exceptions that are still genuinely engine work and
+  // say so: the SPEND RESTRICTION (the pool would have to carry it) and a cost
+  // component the model has no field for (tapping another permanent).
+  //
+  // Order matters: the first matching hint wins, so these sit above the generic
+  // mana hint.
   {
-    // Pain lands and the Talisman cycle: "{T}: Add {U} or {B}. ~ deals 1 damage
-    // to you." The damage is part of the mana ability's own resolution, and a
-    // mana MODE is a colour bundle with nowhere to hang an effect.
+    // "{T}: Add {U} or {B}. ~ deals 1 damage to you" compiles. What lands here is
+    // a rider with different wording, or one whose "add" half no rule reads.
     pattern: /: add .*\. (?:~|this (?:land|artifact|permanent|creature)) deals \d+ damage to you/,
     missingEngineSystem:
-      'a mana ability with a RIDER effect (core mana modes are colour bundles — tapping cannot also deal damage)',
+      'a mana-ability RIDER wording the compiler does not recognize yet (riders themselves are implemented — see CardDefinition.manaAbilities)',
   },
   {
-    // The Verge cycle and Nimbus Maze: "{T}: Add {R}. Activate only if you
-    // control a Swamp or a Mountain." Mana abilities are offered straight off
-    // `producesOptions`, which carries no condition to check.
+    // Subtypes, permanent colours and "N or more <type>" thresholds are read.
+    // Anything else ("only during your turn", "only if an opponent lost life")
+    // needs a new condition, not a new system.
     pattern: /: add .*\. activate only /,
     missingEngineSystem:
-      'an ACTIVATION RESTRICTION on a mana ability (core offers every mana mode unconditionally)',
+      'an "Activate only if…" CONDITION the compiler cannot read yet (mana-ability restrictions themselves are implemented)',
   },
   {
-    // A cost with two or more components before ": add" — "{T}, Pay 1 life:",
-    // "{1}, {T}:", "{R/W}, {T}:" (the filter lands), "{T}, Tap an untapped
-    // creature you control:". Core's only mana-ability cost is the tap itself.
+    // "Pay N life" and a printed mana run (including a hybrid one) are charged.
+    // "Tap an untapped creature you control" is a component the cost model has no
+    // field for AND a choice of which creature — genuinely missing, not a wording.
+    pattern: /^[^:]*,\s*tap an? [^:]*: add /,
+    missingEngineSystem:
+      'a mana-ability cost that TAPS ANOTHER PERMANENT (the cost model carries life and mana, and choosing which permanent to tap is a question nothing asks)',
+  },
+  {
+    // Any other multi-component cost before ": add".
     pattern: /^[^:]*,[^:]*: add /,
     missingEngineSystem:
-      'an ADDITIONAL COST on a mana ability (core mana sources pay only the tap — no life, no mana, no extra tap)',
+      'an ADDITIONAL-COST wording on a mana ability the compiler does not recognize yet (life and mana costs themselves are implemented)',
   },
   {
-    // Cavern of Souls, Delighted Halfling, Somberwald Sage. The mana pool records
-    // colours, not what each mana may legally pay for, so a restricted mana is
-    // indistinguishable from an unrestricted one the moment it lands in the pool.
+    // Cavern of Souls, Delighted Halfling, Somberwald Sage. STILL A SYSTEM: the
+    // restriction belongs to the MANA, not to the source, so the pool would have
+    // to carry it and every payment path would have to honour it. Nothing about
+    // `manaAbilities` helps — a restricted mana is indistinguishable from an
+    // unrestricted one the moment it lands in the pool.
     pattern: /spend this mana only to/,
     missingEngineSystem:
       'a SPEND RESTRICTION on produced mana (the mana pool records colour, not what each mana may pay for)',
   },
   {
-    // Exotic Orchard, Reflecting Pool, Fellwar Stone — and the commander-identity
-    // cards §5 of the completion plan rules out for good. The mode list is fixed
-    // when the card is compiled; these choose their colours from the board (or
-    // from an object this engine does not have) at activation time.
+    // "…that a land you control could produce" and "…that a land an opponent
+    // controls could produce" are read off the live board. What lands here is a
+    // derivation from something this engine does not have at all — a COMMANDER's
+    // colour identity (§5 of the completion plan rules those out for good), or a
+    // remembered "that land".
     pattern:
       /add one mana of any (?:color|type) (?:in|that)|of any type that (?:land|permanent) produced/,
     missingEngineSystem:
-      'mana COLOURS DERIVED FROM BOARD STATE at activation time (core fixes a source’s mode list at compile time)',
+      'a mana colour derived from an object this engine has no concept of (a commander, or a remembered permanent)',
   },
   {
     pattern: /add one mana of any color|add \{[wubrgc]\} or \{[wubrgc]\}|add one mana of any/,

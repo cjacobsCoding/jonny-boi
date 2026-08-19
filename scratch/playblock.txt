@@ -1,0 +1,74 @@
+
+describe('a real pain land, compiled from its printed text, plays as printed', () => {
+  // The end-to-end claim: the ORACLE TEXT of a card people actually play goes in,
+  // and a permanent that really costs a life to use comes out. A compile-only
+  // assertion cannot catch a definition that is shaped right and inert.
+  const reg = buildRegistry(CARD_POOL);
+  const ISLAND = CARD_POOL.find((c) => c.name === 'Island');
+  if (!ISLAND) throw new Error('pool missing Island');
+
+  const ADARKAR_WASTES = makeCard({
+    name: 'Adarkar Wastes',
+    typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+    oracleText: '{T}: Add {C}.\n{T}: Add {W} or {U}. This land deals 1 damage to you.',
+  });
+
+  function act(state: GameState, action: GameAction): GameState {
+    const result = applyAction(state, action, DEFAULT_RULES, reg);
+    const rejected = result.events.find((e) => e.type === 'actionRejected');
+    if (rejected) throw new Error(`unexpected rejection: ${(rejected as { reason: string }).reason}`);
+    return result.state;
+  }
+
+  function put(state: GameState, def: CardDefinition): InstanceId {
+    const id = state.nextInstanceId++;
+    state.battlefield.push({
+      instanceId: id,
+      def,
+      controller: 'A',
+      owner: 'A',
+      zone: 'battlefield',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+    });
+    return id;
+  }
+
+  it('hurts when tapped for colour, and does not when tapped for colorless', () => {
+    const compiledLand = compileCard(ADARKAR_WASTES);
+    expect(compiledLand.status, JSON.stringify(compiledLand.missing)).toBe('complete');
+
+    const { state } = createGame({
+      seed: SEED,
+      startingPlayer: 'A',
+      registry: reg,
+      decks: {
+        A: { cards: Array.from({ length: DECK_SIZE }, () => ISLAND) },
+        B: { cards: Array.from({ length: DECK_SIZE }, () => ISLAND) },
+      },
+    });
+    let s = state;
+    let guard = 0;
+    while (s.step !== 'precombatMain' && !s.gameOver && guard++ < 400) {
+      s = act(s, { kind: 'passPriority', player: s.priorityPlayer });
+    }
+    const painless = put(s, compiledLand.definition);
+    const painful = put(s, compiledLand.definition);
+    const startingLife = s.players.A.life;
+
+    // Mode 0 is the colourless ability: no damage.
+    s = act(s, { kind: 'tapForMana', player: 'A', instanceId: painless, mode: 0 });
+    expect(s.players.A.manaPool.C).toBe(1);
+    expect(s.players.A.life).toBe(startingLife);
+
+    // Mode 2 is {U} on the painful ability: one mana, one damage.
+    s = act(s, { kind: 'tapForMana', player: 'A', instanceId: painful, mode: 2 });
+    expect(s.players.A.manaPool.U).toBe(1);
+    expect(s.players.A.life).toBe(startingLife - 1);
+    // A mana ability never uses the stack, whatever else it prints (CR 605.3a).
+    expect(s.stack).toHaveLength(0);
+  });
+});

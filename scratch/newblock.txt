@@ -1,0 +1,197 @@
+describe('the RICH mana abilities compile, with the printed data pinned', () => {
+  /** The phrase the coverage audit reads to file a gap as cheap template data. */
+  const CATCH_ALL = /does not recognize yet/;
+
+  function compiled(card: CompilableCard) {
+    const result = compileCard(card);
+    expect(result.status, `${card.name}: ${JSON.stringify(result.missing)}`).toBe('complete');
+    return result;
+  }
+
+  it('a pain land compiles its RIDER as damage on the coloured ability only', () => {
+    // Shivan Reef. The damage belongs to the SECOND ability — tapping for {C} is
+    // painless — which is exactly why a rider lives on the ability rather than on
+    // the card.
+    const result = compiled(
+      makeCard({
+        name: 'Shivan Reef',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add {C}.\n{T}: Add {U} or {R}. This land deals 1 damage to you.',
+      }),
+    );
+    expect(result.definition.manaAbilities).toEqual([
+      { produces: [{ C: 1 }] },
+      { produces: [{ U: 1 }, { R: 1 }], rider: { damageToController: 1 } },
+    ]);
+    // The shorthands are gone: `manaAbilities` supersedes them, and leaving one
+    // behind would give core two lists to disagree about.
+    expect(result.definition.produces).toBeUndefined();
+    expect(result.definition.producesOptions).toBeUndefined();
+  });
+
+  it('a Verge land compiles its ACTIVATION RESTRICTION as the printed subtypes', () => {
+    const result = compiled(
+      makeCard({
+        name: 'Blazemire Verge',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add {B}.\n{T}: Add {R}. Activate only if you control a Swamp or a Mountain.',
+      }),
+    );
+    expect(result.definition.manaAbilities).toEqual([
+      { produces: [{ B: 1 }] },
+      { produces: [{ R: 1 }], restriction: { controlsSubtype: ['swamp', 'mountain'] } },
+    ]);
+  });
+
+  it('an "Activate only if you control a red permanent" restriction compiles as a COLOUR', () => {
+    const result = compiled(
+      makeCard({
+        name: 'Test Color Verge',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add {R}. Activate only if you control a red permanent.',
+      }),
+    );
+    expect(result.definition.manaAbilities).toEqual([
+      { produces: [{ R: 1 }], restriction: { controlsColor: ['R'] } },
+    ]);
+  });
+
+  it('Mox Opal compiles past its ability-word label, as a counted threshold', () => {
+    const result = compiled(
+      makeCard({
+        name: 'Mox Opal',
+        typeLine: { supertypes: ['Legendary'], types: ['Artifact'], subtypes: [] },
+        oracleText:
+          'Metalcraft — {T}: Add one mana of any color. Activate only if you control three or more artifacts.',
+        keywords: ['Metalcraft'],
+      }),
+    );
+    expect(result.definition.manaAbilities).toEqual([
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        restriction: { controlsTypeAtLeast: { type: 'artifact', count: 3 } },
+      },
+    ]);
+  });
+
+  it('a pay-life mana land compiles its ADDITIONAL COST as life', () => {
+    const result = compiled(
+      makeCard({
+        name: 'Mana Confluence',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}, Pay 1 life: Add one mana of any color.',
+      }),
+    );
+    expect(result.definition.manaAbilities).toEqual([
+      { produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }], cost: { life: 1 } },
+    ]);
+  });
+
+  it('a filter land compiles its HYBRID input as a real mana cost', () => {
+    const result = compiled(
+      makeCard({
+        name: 'Rugged Prairie',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add {C}.\n{R/W}, {T}: Add {R}{R}, {R}{W}, or {W}{W}.',
+      }),
+    );
+    expect(result.definition.manaAbilities).toEqual([
+      { produces: [{ C: 1 }] },
+      {
+        produces: [{ R: 2 }, { R: 1, W: 1 }, { W: 2 }],
+        cost: { mana: { hybrid: [['R', 'W']] } },
+      },
+    ]);
+  });
+
+  it('Reflecting Pool and Exotic Orchard differ by the one printed word', () => {
+    const pool = compiled(
+      makeCard({
+        name: 'Reflecting Pool',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add one mana of any type that a land you control could produce.',
+      }),
+    );
+    // "any TYPE" reaches colourless.
+    expect(pool.definition.manaAbilities).toEqual([
+      { derivedColors: 'landsYouControl', derivedIncludesColorless: true },
+    ]);
+
+    const orchard = compiled(
+      makeCard({
+        name: 'Exotic Orchard',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add one mana of any color that a land an opponent controls could produce.',
+      }),
+    );
+    // "any COLOR", and the other side of the board.
+    expect(orchard.definition.manaAbilities).toEqual([{ derivedColors: 'landsOpponentsControl' }]);
+  });
+
+  it('none of the shipped shapes is filed as cheap template data', () => {
+    // Every wording here compiles, so nothing reaches a hint at all — this
+    // asserts the RULES did the work rather than a hint quietly widening.
+    const shapes = [
+      '{T}: Add {U} or {R}. This land deals 1 damage to you.',
+      '{T}, Pay 1 life: Add {W} or {B}.',
+      '{T}: Add {W}. Activate only if you control an Island.',
+    ];
+    for (const oracle of shapes) {
+      const result = compileCard(
+        makeCard({
+          name: `Test Land ${oracle}`,
+          typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+          oracleText: oracle,
+        }),
+      );
+      expect(result.status, `${oracle}: ${JSON.stringify(result.missing)}`).toBe('complete');
+      expect(result.missing.map((m) => m.missingEngineSystem).join(' ')).not.toMatch(CATCH_ALL);
+    }
+  });
+});
+
+describe('what the mana model still does NOT have is reported by name', () => {
+  function gapsOf(card: CompilableCard): string {
+    const result = compileCard(card);
+    expect(result.status, `${card.name} unexpectedly compiled`).toBe('incomplete');
+    return result.missing.map((m) => m.missingEngineSystem).join(' | ');
+  }
+
+  it('Cavern of Souls names the SPEND RESTRICTION gap — the POOL would have to carry it', () => {
+    const gap = gapsOf(
+      makeCard({
+        name: 'Cavern of Souls',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText:
+          'As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.',
+      }),
+    );
+    expect(gap).toContain('SPEND RESTRICTION');
+  });
+
+  it('Springleaf Drum names the ADDITIONAL COST gap — tapping ANOTHER creature is not modelled', () => {
+    // The cost model carries life and mana. "Tap an untapped creature you
+    // control" is a third component AND a choice of which creature, so the card
+    // reports rather than compiling a cheaper drum.
+    const gap = gapsOf(
+      makeCard({
+        name: 'Springleaf Drum',
+        typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
+        oracleText: '{T}, Tap an untapped creature you control: Add one mana of any color.',
+      }),
+    );
+    expect(gap).toContain('ADDITIONAL COST');
+  });
+
+  it('a colour derivation the board cannot answer still reports', () => {
+    const gap = gapsOf(
+      makeCard({
+        name: 'Command Tower',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: "{T}: Add one mana of any color in your commander's color identity.",
+      }),
+    );
+    expect(gap).toContain('mana');
+  });
+});
+
