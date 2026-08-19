@@ -555,60 +555,26 @@ export function PlayBoard({
 
       {/* Which ability of this permanent? (a planeswalker's loyalty lines). Only
           engine-offered abilities are listed, so a used-this-turn or unpayable
-          line is simply absent rather than disabled. */}
+          line is simply absent rather than disabled. The prompt components are
+          SHARED with the online board — one loyalty UI, not two that drift. */}
       {abilitySource !== null && (
-        <div className="target-prompt" role="dialog" aria-label="Choose an ability to activate">
-          <div className="target-prompt__card">
-            <div className="target-prompt__title">Activate which ability of {session.nameOf(abilitySource)}?</div>
-            <div className="target-prompt__options">
-              {(abilityMenu.get(abilitySource) ?? []).map((opt) => (
-                <button
-                  key={opt.abilityIndex}
-                  type="button"
-                  className="btn"
-                  onClick={() => onChooseAbility(opt)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="btn btn--ghost" onClick={() => setAbilitySource(null)}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <AbilityMenuPrompt
+          sourceName={session.nameOf(abilitySource)}
+          options={abilityMenu.get(abilitySource) ?? []}
+          onChoose={onChooseAbility}
+          onCancel={() => setAbilitySource(null)}
+        />
       )}
 
       {/* The chosen ability targets — one button per engine-offered legal target. */}
       {pendingAbility && pendingAbility.targets !== null && (
-        <div className="target-prompt" role="dialog" aria-label="Choose a target for the ability">
-          <div className="target-prompt__card">
-            <div className="target-prompt__title">
-              {pendingAbility.sourceName} — {pendingAbility.label} Choose a target.
-            </div>
-            <div className="target-prompt__options">
-              {pendingAbility.targets.map((choice) => (
-                <button
-                  key={typeof choice.target === 'string' ? `p:${choice.target}` : `i:${choice.target}`}
-                  type="button"
-                  className="btn"
-                  onClick={() =>
-                    run(() =>
-                      session.activateAbility(pendingAbility.instanceId, pendingAbility.abilityIndex, [
-                        choice.target,
-                      ]),
-                    )
-                  }
-                >
-                  {choice.label}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="btn btn--ghost" onClick={() => setPendingAbility(null)}>
-              Cancel
-            </button>
-          </div>
-        </div>
+        <AbilityTargetPrompt
+          ability={pendingAbility}
+          onPick={(target) =>
+            run(() => session.activateAbility(pendingAbility.instanceId, pendingAbility.abilityIndex, [target]))
+          }
+          onCancel={() => setPendingAbility(null)}
+        />
       )}
 
       {/* Targeting prompt (for player/spell targets; creature targets are clicked on the board). */}

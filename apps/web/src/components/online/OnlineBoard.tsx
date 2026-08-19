@@ -1,18 +1,30 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
-import type { CardInstance, GameAction, InstanceId, PlayerId } from '@jonny-boi/core';
+import type {
+  CardDefinition,
+  CardInstance,
+  CastZone,
+  GameAction,
+  InstanceId,
+  PlayerId,
+} from '@jonny-boi/core';
+import { isPlaneswalker } from '@jonny-boi/core';
 import { stepLabel } from '../../lib/play/play-config.js';
 import { maskedViewToBoardView } from '../../lib/online/board-adapter.js';
-import { castSequence, castableWithTaps } from '../../lib/online/auto-tap.js';
+import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../../lib/online/auto-tap.js';
 import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/online/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
+import { GRAVEYARD_CAST_BADGE, reasonGraveyardCardIsDisabled } from '../../lib/play/graveyard-cast.js';
 import { AUTO_PASS_DELAY_MS, AUTO_PASS_EMPTY_PRIORITY } from '../../lib/online/online-config.js';
 import { legalTargets, optionToTarget, targetRequirement } from '../../lib/play/targeting.js';
+import { buildDeclareAttackersAction, type AbilityOption } from '../../lib/play/session.js';
 import type { GameFrame } from '../../lib/online/online-state.js';
 import {
+  abilityChoices,
   castChoices,
   declareAttackersAction,
   declareBlockersAction,
+  graveyardCastChoices,
   passAction,
   playableLandIds,
   type CastChoice,
@@ -20,6 +32,8 @@ import {
 import { answerChoiceAction, onlineChoiceView } from '../../lib/online/pending-choice.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 import { ChoicePrompt } from '../play/ChoicePrompt.js';
+import { AbilityMenuPrompt, AbilityTargetPrompt } from '../play/AbilityPrompts.js';
+import { GraveyardPanel, type GraveyardPanelCard } from '../play/GraveyardPanel.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
@@ -32,8 +46,12 @@ import '../play/action-bar.css';
  * which the hook serializes to `submitAction`. Unlike hotseat there is NO device
  * handoff: when it's not our turn we render a clear "Waiting for opponent…" state.
  *
- * It reuses `SeatPanel`/`StackPanel`/`PlayCard`/`CardBack` verbatim (DRY) — the
- * adapter is the only new glue. The game log uses the server-provided text lines.
+ * It reuses `SeatPanel`/`StackPanel`/`PlayCard`/`CardBack`/`ChoicePrompt`/
+ * `AbilityPrompts`/`GraveyardPanel` verbatim (DRY) — the adapter and the pure
+ * `legal-actions` derivations are the only new glue. Every affordance the hotseat
+ * board has is present here too (walker attacks, loyalty abilities, flashback from
+ * the graveyard), driven off the masked view instead of a local engine: a mechanic
+ * that ships must not be invisible online. The game log uses the server's lines.
  */
 export function OnlineBoard({
   frame,
@@ -52,6 +70,8 @@ export function OnlineBoard({
 
   const lands = useMemo(() => playableLandIds(legalActions), [legalActions]);
   const casts = useMemo(() => castChoices(legalActions), [legalActions]);
+  /** Flashback casts the server is ALREADY offering (its pool covers the cost). */
+  const graveyardCasts = useMemo(() => graveyardCastChoices(legalActions), [legalActions]);
   const attackTemplate = useMemo(() => declareAttackersAction(legalActions), [legalActions]);
   const blockTemplate = useMemo(() => declareBlockersAction(legalActions), [legalActions]);
   const pass = useMemo(() => passAction(legalActions), [legalActions]);
@@ -77,9 +97,26 @@ export function OnlineBoard({
   const handCardOf = (id: InstanceId): CardInstance | undefined =>
     (masked.players[masked.viewer].hand ?? []).find((c) => c.instanceId === id);
 
+  /** The viewer's graveyard instances (a PUBLIC zone — always present, both seats). */
+  const ownGraveyard = masked.players[masked.viewer].graveyard;
+  const graveyardCardOf = (id: InstanceId): CardInstance | undefined =>
+    ownGraveyard.find((c) => c.instanceId === id);
+
   const tapCastable = useMemo(
     () => castableWithTaps(masked, masked.viewer, masked.players[masked.viewer].hand ?? [], legalActions),
     [masked, legalActions],
+  );
+
+  /** The sorcery-speed window, from public facts the masked view already carries. */
+  const sorceryWindowOpen =
+    masked.activePlayer === masked.viewer &&
+    (step === 'precombatMain' || step === 'postcombatMain') &&
+    masked.stack.length === 0;
+
+  /** Flashback casts we could fund by tapping first (the server lists none of these). */
+  const graveyardTapCastable = useMemo(
+    () => graveyardCastableWithTaps(masked, masked.viewer, ownGraveyard, legalActions, sorceryWindowOpen),
+    [masked, ownGraveyard, legalActions, sorceryWindowOpen],
   );
 
   // Transient interaction state.
@@ -89,16 +126,34 @@ export function OnlineBoard({
   /** A modal source the player tapped BY HAND, awaiting the colour they want. */
   const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
   const [chosenAttackers, setChosenAttackers] = useState<Set<InstanceId>>(new Set());
+  /** attacker → the defending planeswalker it attacks (absent = attacks the player). */
+  const [walkerAssign, setWalkerAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
+  /** A permanent whose activated-ability menu is open (a walker's loyalty lines). */
+  const [abilitySource, setAbilitySource] = useState<InstanceId | null>(null);
+  /** An ability chosen from that menu, awaiting its target choice. */
+  const [pendingAbility, setPendingAbility] = useState<AbilityOption | null>(null);
   const [blockAssign, setBlockAssign] = useState<Map<InstanceId, InstanceId>>(new Map());
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
+  /** The viewer's graveyard panel (the flashback affordance's entry point). */
+  const [graveyardOpen, setGraveyardOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  /** A transient board message (the hotseat board's toast, same feel). */
+  const flash = (message: string): void => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), TOAST_MS);
+  };
 
   const reset = (): void => {
     setPendingCast(null);
     setPendingTaps([]);
     setPendingManaTap(null);
     setChosenAttackers(new Set());
+    setWalkerAssign(new Map());
     setBlockAssign(new Map());
     setActiveBlockTarget(null);
+    setAbilitySource(null);
+    setPendingAbility(null);
   };
 
   const submit = (action: GameAction): void => {
@@ -135,7 +190,10 @@ export function OnlineBoard({
       legalActions,
       stackSize: masked.stack.length,
       awaitingOwnChoice: !!ownChoice,
-      tapCastableCount: tapCastable.size,
+      // A flashback the seat could fund is a real play, exactly like a hand card —
+      // auto-passing over it would make the new affordance unreachable in the very
+      // windows the card is castable in.
+      tapCastableCount: tapCastable.size + graveyardTapCastable.size,
     });
 
   useEffect(() => {
@@ -156,7 +214,13 @@ export function OnlineBoard({
   // --- casting -------------------------------------------------------------------
   const onCastClick = (choice: CastChoice): void => {
     if (choice.canCastUntargeted) {
-      submit({ kind: 'castSpell', player: masked.viewer, instanceId: choice.instanceId, targets: [] });
+      submit({
+        kind: 'castSpell',
+        player: masked.viewer,
+        instanceId: choice.instanceId,
+        targets: [],
+        ...(choice.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+      });
     } else if (choice.targetSets.length > 0) {
       setPendingCast(choice);
     }
@@ -169,6 +233,9 @@ export function OnlineBoard({
       player: masked.viewer,
       instanceId: pendingCast.instanceId,
       targets,
+      // The zone rides the choice: a flashback cast must name its graveyard source
+      // or the server looks for the card in the hand and cleanly rejects it.
+      ...(pendingCast.fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
     };
     submitSequence([...pendingTaps, cast]);
   };
@@ -176,10 +243,11 @@ export function OnlineBoard({
   /**
    * Cast a card the server hasn't offered yet, tapping for it first. Targets are
    * derived client-side (the server only enumerates them for casts it is already
-   * offering) and the server re-validates the chosen one on arrival.
+   * offering) and the server re-validates the chosen one on arrival. Serves both
+   * zones: a graveyard cast plans against the FLASHBACK cost and carries the zone.
    */
-  const onTapCastClick = (card: CardInstance): void => {
-    const sequence = castSequence(masked, masked.viewer, card, [], legalActions);
+  const onTapCastClick = (card: CardInstance, fromZone: CastZone = 'hand'): void => {
+    const sequence = castSequence(masked, masked.viewer, card, [], legalActions, fromZone);
     if (!sequence) return;
     const requirement = targetRequirement(card.def);
     if (requirement.count === 0) {
@@ -194,18 +262,32 @@ export function OnlineBoard({
       instanceId: card.instanceId,
       targetSets: options.map((o) => [optionToTarget(o)]),
       canCastUntargeted: false,
+      fromZone,
     });
   };
 
   /**
-   * The ONE thing a hand card does right now — play the land, cast the offered
-   * spell, or start a tap-funded cast. Click and drag-to-play both route here, so
-   * a drag can never diverge from what clicking the same card would have done.
-   * Re-checks the frame's affordances on entry: a card that stopped being
-   * actionable mid-gesture (a new frame arrived) simply does nothing.
+   * The ONE thing a playable card does — play the land, cast the offered spell, or
+   * start a tap-funded cast — for a card in EITHER castable zone. Click, drag and
+   * the graveyard panel all route here, so no gesture can diverge from what
+   * clicking the same card would have done. Re-checks the frame's affordances on
+   * entry: a card that stopped being actionable mid-gesture (a new frame arrived)
+   * simply does nothing.
    */
-  const activateHandCard = (id: InstanceId): void => {
+  const activateCard = (id: InstanceId, zone: CastZone = 'hand'): void => {
     if (!yourTurn) return;
+    if (zone === 'graveyard') {
+      const offered = graveyardCasts.get(id);
+      if (offered) {
+        onCastClick(offered);
+        return;
+      }
+      if (graveyardTapCastable.has(id)) {
+        const card = graveyardCardOf(id);
+        if (card) onTapCastClick(card, 'graveyard');
+      }
+      return;
+    }
     if (lands.has(id)) {
       submit({ kind: 'playLand', player: masked.viewer, instanceId: id });
       return;
@@ -217,13 +299,76 @@ export function OnlineBoard({
     }
     if (tapCastable.has(id)) {
       const card = handCardOf(id);
-      if (card) onTapCastClick(card);
+      if (card) onTapCastClick(card, 'hand');
     }
   };
+
+  /** The hand's chokepoint (drag + click), named for the drag hook. */
+  const activateHandCard = (id: InstanceId): void => activateCard(id, 'hand');
 
   // Drag a hand card onto your battlefield — the gesture the original bug report
   // reached for first. Same action as clicking; see useDragToPlay for the model.
   const { drag, dropRef, handProps: dragHandProps } = useDragToPlay(activateHandCard);
+
+  // --- the graveyard panel ---------------------------------------------------------
+  /** Every graveyard card, judged for the panel (castable now, or why not). */
+  const graveyardPanelCards: readonly GraveyardPanelCard[] = ownGraveyard.map((c) => {
+    const actionable =
+      yourTurn && (graveyardCasts.has(c.instanceId) || graveyardTapCastable.has(c.instanceId));
+    return {
+      instanceId: c.instanceId,
+      cardId: c.def.id,
+      name: c.def.name,
+      badge: actionable ? GRAVEYARD_CAST_BADGE : undefined,
+      actionable,
+      reason: actionable
+        ? undefined
+        : reasonGraveyardCardIsDisabled(
+            { yourTurn, waitingOn: names[masked.priorityPlayer], step },
+            { hasFlashback: c.def.flashback !== undefined },
+          ),
+    };
+  });
+
+  // --- activated abilities (a planeswalker's loyalty lines) -------------------------
+  /** Definitions come from the PUBLIC battlefield the server already sent. */
+  const defOf = (id: InstanceId): CardDefinition | undefined =>
+    masked.battlefield.find((c) => c.instanceId === id)?.def;
+  const nameOfTarget = (target: InstanceId | PlayerId): string =>
+    target === 'A' || target === 'B' ? `${names[target]} (player)` : nameOfPerm(view, target);
+
+  /**
+   * The activatable abilities, grouped per source permanent — derived from the
+   * server's offers ALONE, exactly like the hotseat's `abilityOptions()`. An
+   * ability the engine did not offer (used this turn, unpayable minus, wrong
+   * timing) is simply absent, so the menu can hold no dead buttons.
+   */
+  const abilityMenu = useMemo(() => {
+    const map = new Map<InstanceId, AbilityOption[]>();
+    for (const opt of abilityChoices(legalActions, defOf, nameOfTarget)) {
+      const list = map.get(opt.instanceId);
+      if (list) list.push(opt);
+      else map.set(opt.instanceId, [opt]);
+    }
+    return map;
+    // `defOf`/`nameOfTarget` read the same frame the actions arrived on, so the
+    // frame's identity below is the whole dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legalActions, masked, names, view]);
+
+  const onChooseAbility = (opt: AbilityOption): void => {
+    setAbilitySource(null);
+    if (opt.targets === null) {
+      submit({
+        kind: 'activateAbility',
+        player: masked.viewer,
+        instanceId: opt.instanceId,
+        abilityIndex: opt.abilityIndex,
+      });
+    } else {
+      setPendingAbility(opt);
+    }
+  };
 
   // --- mana ------------------------------------------------------------------------
   const onTapForMana = (id: InstanceId): void => {
@@ -251,10 +396,55 @@ export function OnlineBoard({
   }, [blockTemplate]);
 
   const toggleAttacker = (id: InstanceId): void => {
+    const deselecting = chosenAttackers.has(id);
     setChosenAttackers((cur) => {
       const next = new Set(cur);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+    // A deselected attacker attacks nothing — drop its walker assignment too.
+    if (deselecting) {
+      setWalkerAssign((assign) => {
+        if (!assign.has(id)) return assign;
+        const cleaned = new Map(assign);
+        cleaned.delete(id);
+        return cleaned;
+      });
+    }
+  };
+
+  /**
+   * Defending planeswalkers that can be attacked instead of the player. Read off
+   * the PUBLIC battlefield in the masked view — loyalty and walker-ness are public
+   * (the protocol redacts neither), so the online client needs nothing extra.
+   */
+  const enemyWalkers = useMemo(
+    () =>
+      yourTurn && step === 'declareAttackers' && attackTemplate
+        ? masked.battlefield.filter((c) => c.controller !== masked.viewer && isPlaneswalker(c.def))
+        : [],
+    [yourTurn, step, attackTemplate, masked],
+  );
+
+  /**
+   * Clicking a defending walker routes the CURRENTLY selected attackers at it;
+   * clicking it again (when they all already attack it) sends them back at the
+   * player — identical semantics to the hotseat board, so a player who learned one
+   * has learned the other.
+   */
+  const onAssignAttackWalker = (walkerId: InstanceId): void => {
+    if (chosenAttackers.size === 0) {
+      flash('Select attackers first, then click the planeswalker to attack it.');
+      return;
+    }
+    setWalkerAssign((cur) => {
+      const next = new Map(cur);
+      const allAtWalker = [...chosenAttackers].every((a) => next.get(a) === walkerId);
+      for (const a of chosenAttackers) {
+        if (allAtWalker) next.delete(a);
+        else next.set(a, walkerId);
+      }
       return next;
     });
   };
@@ -277,8 +467,12 @@ export function OnlineBoard({
   // --- per-seat interactions -----------------------------------------------------
   const selfInteraction: PermInteraction | undefined = (() => {
     if (yourTurn && step === 'declareAttackers' && attackTemplate) {
+      // An attacker aimed at a walker says so on its marker; the rest read "ATK".
       const markers = new Map<InstanceId, string>();
-      for (const id of chosenAttackers) markers.set(id, 'ATK');
+      for (const id of chosenAttackers) {
+        const walker = walkerAssign.get(id);
+        markers.set(id, walker !== undefined ? `ATK → ${nameOfPerm(view, walker)}` : 'ATK');
+      }
       return { selectableIds: eligibleAttackers, selectedIds: chosenAttackers, markers, onClick: toggleAttacker };
     }
     if (yourTurn && inBlockStep) {
@@ -291,19 +485,51 @@ export function OnlineBoard({
         onClick: onBlockBoardClick,
       };
     }
-    // Outside a combat declaration, clicking your own untapped source taps it. The
-    // marker shows what it makes so a player knows before committing.
-    if (yourTurn && tappable.size > 0) {
+    // Outside a combat declaration, clicking your own untapped source taps it (the
+    // marker shows what it makes), and a permanent with a server-offered activated
+    // ability — a walker's loyalty lines — opens its ability menu. Mana-tapping
+    // wins an overlap: it is the frequent action, and no pool permanent is both
+    // today. Same chain, same precedence as the hotseat board.
+    const activatable = new Set(abilityMenu.keys());
+    if (yourTurn && (tappable.size > 0 || activatable.size > 0)) {
       const markers = new Map<InstanceId, string>();
+      for (const id of activatable) markers.set(id, 'activate');
       for (const [id, options] of tapMenu) {
         if (tappable.has(id)) markers.set(id, isModalTap(options) ? 'any' : (options[0]?.label ?? ''));
       }
-      return { selectableIds: tappable, selectedIds: new Set(), markers, onClick: onTapForMana };
+      return {
+        selectableIds: new Set([...activatable, ...tappable]),
+        selectedIds: new Set(),
+        markers,
+        onClick: (id) => {
+          if (tappable.has(id)) onTapForMana(id);
+          else setAbilitySource(id);
+        },
+      };
     }
     return undefined;
   })();
 
   const opponentInteraction: PermInteraction | undefined = (() => {
+    // Declaring attackers with defending walkers on the board: the walkers are
+    // clickable attack targets (see onAssignAttackWalker for the toggle semantics).
+    if (yourTurn && step === 'declareAttackers' && enemyWalkers.length > 0) {
+      const markers = new Map<InstanceId, string>();
+      const selected = new Set<InstanceId>();
+      for (const walker of enemyWalkers) {
+        const incoming = [...chosenAttackers].filter((a) => walkerAssign.get(a) === walker.instanceId).length;
+        if (incoming > 0) {
+          markers.set(walker.instanceId, `⚔ ${incoming}`);
+          selected.add(walker.instanceId);
+        }
+      }
+      return {
+        selectableIds: new Set(enemyWalkers.map((w) => w.instanceId)),
+        selectedIds: selected,
+        markers,
+        onClick: onAssignAttackWalker,
+      };
+    }
     if (yourTurn && inBlockStep) {
       const markers = new Map<InstanceId, string>();
       if (activeBlockTarget !== null) markers.set(activeBlockTarget, 'blocking…');
@@ -339,10 +565,15 @@ export function OnlineBoard({
     lands.size > 0 ||
     casts.size > 0 ||
     tapCastable.size > 0 ||
+    graveyardCasts.size > 0 ||
+    graveyardTapCastable.size > 0 ||
     tappable.size > 0 ||
+    abilityMenu.size > 0 ||
     inAttackStep ||
     inBlockStep;
   const idleNote = idleTurnNote({ yourTurn, hasAnyPlay, step });
+  /** Flashbacks available while the panel is shut — otherwise the affordance hides. */
+  const flashbackCount = graveyardCasts.size + graveyardTapCastable.size;
 
   return (
     <div className="play-board">
@@ -391,8 +622,20 @@ export function OnlineBoard({
             isActive={view.activePlayer === view.self.id}
             hasPriority={view.priorityPlayer === view.self.id}
             interaction={selfInteraction}
+            onGraveyardClick={() => setGraveyardOpen((open) => !open)}
           />
         </div>
+        {/* The opened graveyard. Flashback casts arrive in `legalActions` but the
+            hand was the only clickable zone, so they were unreachable online —
+            this is that affordance, routed through the same `activateCard`. */}
+        {graveyardOpen && (
+          <GraveyardPanel
+            ownerName={view.self.name}
+            cards={graveyardPanelCards}
+            onActivate={(id) => activateCard(id, 'graveyard')}
+            onClose={() => setGraveyardOpen(false)}
+          />
+        )}
         <div className="play-hand" aria-label={`${view.self.name} hand`} {...dragHandProps}>
           {(view.self.hand ?? []).map((c) => {
             const isLand = lands.has(c.instanceId);
@@ -424,7 +667,7 @@ export function OnlineBoard({
                   badge={c.isLand ? 'Land' : cast ? 'castable' : tapCard ? 'tap mana' : undefined}
                   disabled={!actionable}
                   reason={actionable ? undefined : reasonCardIsDisabled(disabledContext, c)}
-                  onClick={actionable ? () => activateHandCard(c.instanceId) : undefined}
+                  onClick={actionable ? () => activateCard(c.instanceId, 'hand') : undefined}
                 />
               </div>
             );
@@ -447,7 +690,15 @@ export function OnlineBoard({
                 type="button"
                 className="btn btn--primary"
                 onClick={() =>
-                  submit({ kind: 'declareAttackers', player: masked.viewer, attackers: [...chosenAttackers] })
+                  // `attackTargets` routes attackers at a defending walker; with no
+                  // assignment the action is byte-identical to the pre-walker one.
+                  submit(
+                    buildDeclareAttackersAction(
+                      masked.viewer,
+                      [...chosenAttackers],
+                      Object.fromEntries(walkerAssign),
+                    ),
+                  )
                 }
               >
                 {chosenAttackers.size > 0 ? `Attack with ${chosenAttackers.size}` : 'Attack with none'}
@@ -475,6 +726,13 @@ export function OnlineBoard({
                 Pass / advance
               </button>
             )}
+            {/* A castable flashback is invisible while the graveyard is shut, and an
+                affordance nobody can see is the same as not shipping it. */}
+            {flashbackCount > 0 && !graveyardOpen && (
+              <button type="button" className="btn btn--ghost" onClick={() => setGraveyardOpen(true)}>
+                {`Flashback available (${flashbackCount})`}
+              </button>
+            )}
             <span className="action-bar__hint">
               {drag
                 ? 'Drop the card on your battlefield to play it.'
@@ -485,7 +743,7 @@ export function OnlineBoard({
                     // generic step hint next to a hand of dead cards.
                     autoPass
                     ? 'Nothing to do this step — advancing…'
-                    : (idleNote ?? hintFor(step))}
+                    : (idleNote ?? hintFor(step, enemyWalkers.length > 0))}
             </span>
           </>
         )}
@@ -494,13 +752,44 @@ export function OnlineBoard({
       {/*
         The parked question, rendered by the SAME `ChoicePrompt` the hotseat uses —
         one choice UI, not two. It appears only for the seat the server addressed the
-        choice to, which is also the only seat that was sent its candidates.
+        choice to, which is also the only seat that was sent its candidates. Every
+        kind routes here, including the CAST-TIME questions: an {'{X}'} cost arrives
+        as `chooseNumber`, kicker as `payMana`, a shockland's as `payLife`.
       */}
       {ownChoice && (
         <ChoicePrompt
           choice={ownChoice}
           names={names}
           onAnswer={(answer) => submit(answerChoiceAction(masked.viewer, ownChoice, answer))}
+        />
+      )}
+
+      {/* Which ability of this permanent? (a planeswalker's loyalty lines). Only
+          server-offered abilities are listed, so a used-this-turn or unpayable line
+          is simply absent rather than disabled. */}
+      {abilitySource !== null && (
+        <AbilityMenuPrompt
+          sourceName={nameOfPerm(view, abilitySource)}
+          options={abilityMenu.get(abilitySource) ?? []}
+          onChoose={onChooseAbility}
+          onCancel={() => setAbilitySource(null)}
+        />
+      )}
+
+      {/* The chosen ability's targets — one button per server-offered legal target. */}
+      {pendingAbility && pendingAbility.targets !== null && (
+        <AbilityTargetPrompt
+          ability={pendingAbility}
+          onPick={(target) =>
+            submit({
+              kind: 'activateAbility',
+              player: masked.viewer,
+              instanceId: pendingAbility.instanceId,
+              abilityIndex: pendingAbility.abilityIndex,
+              targets: [target],
+            })
+          }
+          onCancel={() => setPendingAbility(null)}
         />
       )}
 
@@ -558,9 +847,18 @@ export function OnlineBoard({
           </div>
         </div>
       )}
+
+      {toast && (
+        <div className="play-toast" role="status">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
+
+/** How long a transient board message stays up (matches the hotseat board's feel). */
+const TOAST_MS = 2600;
 
 /** The running game log, rendered from the server's pre-formatted text lines. */
 function ServerLog({ lines }: { lines: readonly string[] }): ReactElement {
@@ -603,13 +901,15 @@ function describeTargetSet(
     .join(', ');
 }
 
-function hintFor(step: string): string {
+function hintFor(step: string, hasEnemyWalkers = false): string {
   switch (step) {
     case 'precombatMain':
     case 'postcombatMain':
       return 'Play a land, tap your sources for mana, then cast from your hand — or pass to advance.';
     case 'declareAttackers':
-      return 'Tap your creatures to attack, then confirm — or attack with none.';
+      return hasEnemyWalkers
+        ? 'Tap your creatures to attack, then click an enemy planeswalker to attack it instead of the player. Confirm when done.'
+        : 'Tap your creatures to attack, then confirm — or attack with none.';
     case 'declareBlockers':
       return 'Tap an attacker, then your creature, to block. Confirm when done.';
     default:
