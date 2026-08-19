@@ -1084,6 +1084,34 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
   cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
   (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
+- ✅ *the "you may" + trigger-timing pass* — the optional-trigger and trigger-vocabulary families,
+  measured against the most-played corpus and closed in `sole`-descending order (193 → 248 playable,
+  +55 cards; re-run `coverage-audit.mjs --input <corpus>` to check). What landed:
+  **The printed word "you may"** is now one composable wrapper, `mayEffects`: ask, then run the
+  nested clause only on a yes. It makes "When ~ enters, you may BODY" the ETB trigger the table
+  already knew plus one real question, instead of a primitive per optional card. **The option is
+  never assumed** — compiling a "you may" as its yes-half is a different card (a Reclamation Sage
+  that MUST destroy your own artifact), so both answers are legal, both are play-tested, and
+  `valence` only steers the pilot. It is ordered AFTER the plain ETB rule so a body that implements
+  its own option (Eternal Witness's `optional: true`) keeps the rule that knows most about it.
+  **Enters-tapped** gained the two remaining board cycles — slowlands ("two or more other lands")
+  and battlelands ("two or more **basic** lands", which needed `CardDefinition.basic`, because a
+  nonbasic dual prints the same land SUBTYPES and would otherwise be counted as a basic) — and one
+  new decision: **reveal-lands** ("you may reveal an Island or Swamp card from your hand"), modelled
+  exactly like the shockland, a real confirm raised at land-play time with the same unasked-default
+  rule (tapped) and no question at all for a controller with nothing to show.
+  **Trigger timing** grew from upkeep alone to draw step, first main phase and end step, as one rule
+  over a closed table of step words. **Board-watching triggers** ("whenever a creature you control
+  [with power 3 or greater] enters/dies") arrived as two events scoped by the shared `CardFilter`;
+  `triggers.ts` stays a pure matcher, with the permanent an event is about resolved by the runtime
+  and handed down at most once per event.
+  **Filtered tutors**: "search your library for a TYPE card with mana value / power / toughness N
+  [or less | or greater], reveal it, put it into your hand" — `CardFilter` gained printed P/T bounds,
+  where an ABSENT box matches no bound, so a `*` P/T is never a legal find for "toughness 2 or less".
+  Two refusals are load-bearing and deliberate: **"each player's <step>"** still reports (a
+  `who: 'any'` trigger would run its body for the source's controller every time, so "that player
+  draws an additional card" would draw for the wrong seat), and **"another creature you control"**
+  still reports (these conditions have no self-exclusion).
 - ✅ *the keyword sweep no longer double-reports Scry / Surveil / Mill* — a **defect**, not a feature,
   and the highest-yield single fix in the census. The compiler runs a keyword sweep after the rule
   table: anything in Scryfall's `card.keywords` it did not consume is reported. The sweep carried
@@ -1102,6 +1130,11 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   mode; a free per-mana mix is refused rather than flattened.
 
 Still open, roughly by how often they block a real decklist:
+- *aiming a trigger body at the player whose step or turn it is* ("At the beginning of each player's
+  draw step, **that player** draws an additional card" — Howling Mine, Kami of the Crescent Moon,
+  Font of Mythos). The trigger itself is expressible (`who: 'any'`); what is missing is the
+  triggering player riding the resolution the way `xValue` and `kicked` do, so a body can say "that
+  player" rather than "the controller",
 - ***the mana model itself* — the largest engine lever left in the corpus, and it was mis-filed as
   cheap template data.** Core models a mana source as a fixed list of colour bundles: one tap, no
   stack, no cost beyond the tap, no rider, no condition. Four printed shapes need it to grow, and the
@@ -1137,18 +1170,23 @@ Still open, roughly by how often they block a real decklist:
   the **group form** of `addCounters` (`each` + a controller `scope` + the shared `CardFilter`, so
   "put a +1/+1 counter on each creature you control" counts exactly the printed set and a phrase the
   filter cannot express — "each **attacking** creature" — rejects the line instead of widening it);
-  five new **trigger conditions** (`beginCombat`, `endStep`, `gainLife`, `creatureDies` for ANY
-  creature's death, `combatDamageToPlayer`); the **`permanentEtb`** condition — "whenever a creature
-  you control enters", landfall and constellation — which reads the entering permanent off the
-  battlefield through a new optional `TriggerStateView` and never fires without one; cast triggers
+  three new **trigger conditions** (`beginCombat`, `gainLife`, `combatDamageToPlayer`); cast triggers
   with `who` = any/opponent; and `StaticAffects.hasCounterKind`, the one non-printed characteristic a
   static filter may read (counters are instance state no static can change, so there is no
-  layer-dependency loop). It also uncovered a real defect: **"~ enters with N +1/+1 counters on it"
+  layer-dependency loop). The two BOARD-WATCHING conditions this family needed — an arrival and a
+  death — are `permanentEnters` / `permanentDies`, the names §3.17's you-may/trigger work introduced;
+  both branches invented their own names for them and they were **unified to one name per concept at
+  merge time**, with this branch's capabilities kept under those names: `excludeSelf` (the printed
+  word "another"), a colour word in the `permanentFilter`, an absent controller tail meaning
+  `who: 'any'` (Soul Warden), the landfall/constellation ability-word dresses, and the
+  "~ or another creature dies" phrasing. `packages/cards/src/counters-templates.test.ts` plays one
+  game in which a card from each branch watches the same event and asserts both fire, so a re-split
+  of the vocabulary goes red. It also uncovered a real defect: **"~ enters with N +1/+1 counters on it"
   put on no counters at all** — they are applied as the permanent enters (CR 614.1c), while its own
   spell is resolving and before the instance reaches the battlefield, and the primitive only looked
   at the battlefield — so every 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) died
   on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable** against the census baseline this
-  branch started from, and **252 → 280 (12.0% → 13.3%)** re-measured against `origin/main` after
+  branch started from, and **MEASURED_PLACEHOLDER** re-measured against `origin/main` after
   merging the siblings that landed meanwhile — the counters family itself going from 117 variants /
   182 card-blocks / 44 sole to 106 / 147 / 38.
   ⚠️ Still reported, by name: `indestructible` (no keyword flag), phasing, doubling counters,

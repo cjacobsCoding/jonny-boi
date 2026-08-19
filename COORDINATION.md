@@ -108,6 +108,7 @@ throughput (games/sec) from regressing.
 | fix/keyword-sweep-and-mana-templates | worker | packages/cards (compile/compile.ts keyword-sweep guard, compile/rules.ts 1 new MANA_RULES entry + 5 new UNSUPPORTED_HINTS above the mana hint, compile/scry-surveil.test.ts additions, NEW compile/mana-templates.test.ts), apps/web/src/lib/about/mechanics.ts (+1 witness), DESIGN §3.11, docs/plans/mechanic-completion-plan.md, COORDINATION.md. **No engine change.** | 🚧 PUSHED, not merged |
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
 | feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
+| feat/you-may-and-trigger-templates | worker | packages/core (card.ts `basic`/`entersTappedUnlessRevealed`/`canRevealForUntapped`, choices.ts CardFilter P/T bounds, triggers.ts +5 TriggerEvents + `TriggerSubject`, internal/triggers-runtime.ts subject resolver, engine.ts reveal-land question + its answer branch, index.ts +2 exports, conditional-tapland.test.ts), packages/cards (primitives `mayEffects` + loseLife `whichPlayer`, choice-primitives tapPermanents untap/excludeTypes, compile/{rules,compile,types}.ts + NEW compile/you-may-and-triggers.test.ts, data/pool.ts basics only), packages/sim (paired-arms-config classification only), apps/web/src/lib/about/mechanics.ts (+6 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 | feat/indestructible-and-blocking | worker | packages/core (card.ts KeywordFlags +3, internal/{sba,combat,stats,continuous}.ts, NEW indestructible.test.ts, blocking-restrictions.test.ts extended), packages/cards (primitives.ts destroy exemption + NEW grantKeywordToYoursUntilEndOfTurn, index.ts, compile/rules.ts +4 rules & 1 hint reword & 2 generalised rules, compile.test.ts reword, NEW indestructible-and-blocking.test.ts), packages/ai (heuristic.ts, effect-value.ts, NEW indestructible-blocking-pilot.test.ts), packages/sim/src/paired-arms-config.ts (+1 classification), apps/web/src/lib/about/mechanics.ts (+4 witnesses), DESIGN §3.17 | 🚧 PUSHED, not merged |
 
 ## Messages between agents
@@ -119,7 +120,7 @@ _Append dated notes here; keep them short. Newest at top._
   printed could reach them. Closed as rule-table DATA plus small seam extensions.
 
   **Measured on the cached 2100-card corpus: 193 → 217** against the census baseline this branch
-  started from, and **252 → 280 (12.0% → 13.3%) re-measured against origin/main after merging it** (the
+  started from, and **MEASURED_PLACEHOLDER re-measured against origin/main after merging it** (the
   keyword-sweep and modal-casting branches landed meanwhile). Re-run with
   `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json <out>`.
 
@@ -135,13 +136,24 @@ _Append dated notes here; keep them short. Newest at top._
   compiled `'complete'` and then entered with none, so every 0/0 body printed that way (Stonecoil
   Serpent, Walking Ballista) died to a state-based action on arrival. Fixed.
 
-  New engine seams (all additive, all data-driven): trigger conditions `beginCombat`, `endStep`,
-  `gainLife`, `creatureDies` (ANY creature), `combatDamageToPlayer`, and `permanentEtb` — "whenever
-  a creature you control enters", landfall, constellation — which reads the entering permanent off
-  the battlefield through a new optional `TriggerStateView` and NEVER fires without one.
-  `StaticAffects.hasCounterKind` lets a static read "with a +1/+1 counter on it" (counters are
-  instance state no static can change, so no layer-dependency loop). `addCounters` gained the group
-  form (`each` + `scope` + the shared `CardFilter`).
+  New engine seams (all additive, all data-driven): trigger conditions `beginCombat`, `gainLife`
+  and `combatDamageToPlayer`; `StaticAffects.hasCounterKind`, which lets a static read "with a
+  +1/+1 counter on it" (counters are instance state no static can change, so no layer-dependency
+  loop); and the group form of `addCounters` (`each` + `scope` + the shared `CardFilter`).
+
+  ⚠️ **ONE NAME PER CONCEPT — the merge with `feat/you-may-and-trigger-templates`.** Both branches
+  independently added board-watching triggers under DIFFERENT names (`permanentEnters`/`permanentEtb`,
+  `permanentDies`/`creatureDies`, and `endStep` twice). They are unified to **main's names**,
+  `permanentEnters` and `permanentDies`, with THIS branch's capabilities kept under them:
+  `excludeSelf` (the printed word "another" — main's rule used to refuse those lines), a colour word
+  in the `permanentFilter`, an ABSENT controller tail meaning `who: 'any'` (Soul Warden), the
+  landfall/constellation ability-word dresses, and the "~ or another creature dies" phrasing. Main's
+  `TriggerSubject` resolver won over this branch's `TriggerStateView` (it also searches graveyards,
+  which the death event needs) and this branch's `creatureDied.controller` field was REVERTED as
+  redundant. The two compiler rules were merged into main's single
+  `trigger-permanent-enters-or-dies`, and `beginCombat` moved into main's `STEP_FOR_TRIGGER` table.
+  A both-sides play test (`counters-templates.test.ts`, "ONE event per concept") plays one game in
+  which a card from each branch watches the same event and asserts both fire.
 
   **DEFERRED, with named blockers — do not treat these as unfinished counters work:**
   `indestructible` (no `KeywordFlags` flag — it is its own item in the plan), phasing, DOUBLING
@@ -152,6 +164,52 @@ _Append dated notes here; keep them short. Newest at top._
   once-per-turn trigger limiters, granting a triggered ability until end of turn, and removing a
   counter as an activation cost (`ActivationCost` has no counter component — Devoted Druid).
 
+
+- 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
+  trigger-timing families, worked in `sole`-descending order off the cached corpus.**
+  **Measured: 193 → 248 playable of 2100 (+55).** Re-runnable offline:
+  `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json out.json`.
+  Full suite 2860 passed / 0 failed after merging `origin/main` (which brought modal casting).
+
+  **`mayEffects` is the printed word "you may", as ONE wrapper** — confirm, then run the nested
+  clause on a yes. If you are adding an optional card, do not write a primitive for it: compile the
+  body and wrap it. ⚠️ **The wrapper is ordered AFTER `trigger-etb`, and that ordering is load-bearing.**
+  Two body rules print their own "you may" and implement it (`returnFromGraveyard` with
+  `optional: true` — Eternal Witness); letting them win first keeps one question instead of two.
+  The invariant a future rule must not break: **a body rule may match a printed "you may" only if it
+  implements the option.** A rule that swallowed the words and compiled the forced version would turn
+  an optional card into a different one. `you-may-and-triggers.test.ts` pins it.
+
+  **Every "you may" is play-tested BOTH ways.** Declining is the half that silently breaks, and it is
+  where the bugs were: a declined search must not shuffle, a declined reveal-land must end up tapped
+  with priority still on its player.
+
+  ⚠️ **`CardDefinition.basic` is new and is NOT decoration.** The battlelands count basic lands, and
+  land SUBTYPES cannot stand in — a nonbasic dual prints "Plains Island" and would be counted as
+  basic, letting the land enter untapped when the printed card would not. The five curated basics in
+  `data/pool.ts` declare it (they also gained their printed subtypes, which incidentally makes
+  checklands see them). If you generate pool cards, the compiler emits it from the type line.
+
+  **Reveal-lands (`entersTappedUnlessRevealed`) are modelled on the shockland, not on
+  `entersTappedUnless`** — showing a card is a DECISION, not a board fact. Same contract:
+  `entersTapped()` answers TRUE for them, so every path that cannot ask produces the printed
+  "if you don't". A controller with nothing to reveal is not asked at all.
+
+  **Two refusals are deliberate; please do not "fix" them by widening a rule.**
+  1. **"At the beginning of EACH player's <step>"** reports. The trigger is expressible
+     (`who: 'any'`), but its body almost always says "**that player**", and the engine cannot aim a
+     body at the player whose step it is — a `who: 'any'` trigger would run the body for the source's
+     controller every time. What is missing is the triggering player riding the resolution the way
+     `xValue` and `kicked` do. Whoever builds that unblocks Howling Mine, Kami of the Crescent Moon,
+     Font of Mythos, Teferi's Puzzle Box and Dictate of Kruphix in one go.
+  2. **"Whenever ANOTHER creature you control enters/dies"** reports: `permanentEnters`/
+     `permanentDies` have no self-exclusion, and a source that triggered off its own entry when the
+     card says "another" is a different card.
+
+  ⚠️ **`compile/rules.ts` was the contested file all day.** This branch added rules in five places
+  (two enters-tapped, one reveal-land, the search-to-hand tutor, the ETB "you may" wrapper, the step
+  and board triggers, and three untargeted body rules). If you merge and hit a conflict there, **keep
+  both sides** — every entry is independent table data.
 - 2026-08-19 worker: `feat/indestructible-and-blocking` 🚧 PUSHED — **two small engine systems,
   +23 cards measured (229 → 252 playable / 10.9% → 12.0%), suite 2872 passed 0 failed, build 0,
   gauntlet seed 99 byte-identical (79/280) at throughput parity.** DESIGN §3.17 has the full write-up.

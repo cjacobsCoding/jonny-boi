@@ -17,11 +17,10 @@
  */
 
 import type { CardType, EffectRef } from './card.js';
+import type { GameEvent } from './events.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
-import type { CardInstance } from './state.js';
-import type { GameEvent } from './events.js';
-import type { InstanceId, PlayerId } from './state.js';
+import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
 import type { TargetRestriction } from './targeting.js';
 
 /**
@@ -35,19 +34,31 @@ import type { TargetRestriction } from './targeting.js';
  *                        whether the source's controller cast it.
  *   - `upkeep`         : the beginning of a player's upkeep (by default, the source
  *                        controller's upkeep).
- *   - `beginCombat`    : the beginning of combat on a player's turn.
+ *   - `drawStep`       : the beginning of a player's draw step.
+ *   - `precombatMain`  : the beginning of a player's first main phase.
  *   - `endStep`        : the beginning of a player's end step.
+ *   - `beginCombat`    : the beginning of combat on a player's turn.
  *   - `gainLife`       : a player gained life ("whenever you gain life").
- *   - `creatureDies`   : ANY creature died, not just this one — the printed
- *                        "whenever ~ or another creature dies". Distinct from
- *                        `dies`, which is this permanent's own death, because a
- *                        card that fired on every death when it should fire on
- *                        one is a very different card.
  *   - `combatDamageToPlayer` : this permanent dealt COMBAT damage to a player.
- *   - `permanentEtb`   : ANOTHER permanent entered the battlefield — "whenever a
- *                        creature you control enters", "landfall". Filtered by
- *                        `who` (whose permanent) and `entering` (a `CardFilter`
- *                        over its printed characteristics).
+ *   - `permanentEnters`: ANOTHER permanent entered the battlefield — "whenever a
+ *                        creature you control enters", landfall, constellation.
+ *   - `permanentDies`  : a permanent died (battlefield → graveyard) — "whenever a
+ *                        creature you control dies", "whenever ~ or another
+ *                        creature dies". Distinct from `dies`, which is this
+ *                        permanent's own death: a card that fired on every death
+ *                        when it should fire on one is a very different card.
+ *
+ * The four step triggers are the same shape as `upkeep` — "at the beginning of
+ * your X" — and are scoped by `who` the same way, so "at the beginning of EACH
+ * player's draw step" is `{ on: 'drawStep', who: 'any' }`. They exist as separate
+ * events rather than one event with a step field because the compiler names the
+ * printed step, and a mis-typed step name should be a type error, not a trigger
+ * that silently never fires.
+ *
+ * `permanentEnters` and `permanentDies` are the two BOARD-WATCHING events, and
+ * they share one filter shape: `who` (whose permanent) + `permanentFilter` (a
+ * `CardFilter` over its printed characteristics) + `excludeSelf` (the printed
+ * word "another").
  */
 export type TriggerEvent =
   | 'etb'
@@ -56,12 +67,14 @@ export type TriggerEvent =
   | 'leaves'
   | 'castSpell'
   | 'upkeep'
-  | 'beginCombat'
+  | 'drawStep'
+  | 'precombatMain'
   | 'endStep'
+  | 'beginCombat'
   | 'gainLife'
-  | 'creatureDies'
   | 'combatDamageToPlayer'
-  | 'permanentEtb';
+  | 'permanentEnters'
+  | 'permanentDies';
 
 /**
  * Whose action a relational trigger (cast / a step / life gain) cares about.
@@ -94,18 +107,22 @@ export interface TriggerCondition {
    */
   readonly spellTypeNoneOf?: readonly CardType[];
   /**
-   * For `permanentEtb`: which entering permanents count, as the shared
-   * {@link CardFilter} vocabulary — "a **creature** you control enters", "a
-   * **land** you control enters" (landfall), "another **green** creature".
+   * For `permanentEnters`/`permanentDies`: which permanents count — "whenever a
+   * **creature** you control enters", "a creature you control **with power 3 or
+   * greater**", "another **green** creature".
    *
-   * Absent ⇒ any permanent, which is what the unqualified printed form means.
+   * A `CardFilter`, the same value every other filtered thing in the engine
+   * reads, so the printed restriction is expressed once and cannot mean two
+   * different things in two places. Absent ⇒ any permanent, which no printed
+   * card actually says — the compiler always supplies at least a type.
    */
-  readonly entering?: CardFilter;
+  readonly permanentFilter?: CardFilter;
   /**
-   * For `permanentEtb`: the printed word "**another**" — the source's own
-   * arrival does not set it off. A distinct flag rather than something inferred,
-   * for the same reason `StaticAffects.excludeSource` is one: getting it
-   * backwards is silent and changes what the card does on the turn it lands.
+   * For `permanentEnters`/`permanentDies`: the printed word "**another**" — the
+   * source's own arrival or death does not set it off. A distinct flag rather
+   * than something inferred, for the same reason `StaticAffects.excludeSource`
+   * is one: getting it backwards is silent and changes what the card does on the
+   * turn it lands.
    */
   readonly excludeSelf?: boolean;
 }
@@ -137,15 +154,6 @@ export interface TriggeredAbility {
    * than a silently-widened one here.
    */
   readonly targets?: TargetRestriction;
-}
-
-/**
- * The slice of game state a condition may consult. Deliberately the battlefield
- * and nothing else: a condition that needed more would be reaching past what a
- * trigger can honestly know at match time.
- */
-export interface TriggerStateView {
-  readonly battlefield: readonly CardInstance[];
 }
 
 /**
@@ -181,7 +189,7 @@ export function conditionMatches(
   event: GameEvent,
   sourceInstanceId: InstanceId,
   sourceController: PlayerId,
-  state?: TriggerStateView,
+  subject?: TriggerSubject,
 ): boolean {
   switch (condition.on) {
     case 'etb':
@@ -201,18 +209,27 @@ export function conditionMatches(
       if (condition.spellTypeNoneOf?.some((type) => event.castTypes.includes(type))) return false;
       return true;
     }
-    case 'upkeep': {
-      if (event.type !== 'stepBegin' || event.step !== 'upkeep') return false;
-      return whoMatches(condition.who, event.activePlayer, sourceController);
+    case 'permanentEnters': {
+      if (event.type !== 'zoneChange' || event.to !== 'battlefield') return false;
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
+      return subjectMatches(condition, subject, sourceController);
     }
+    case 'permanentDies': {
+      // A DEATH, not any departure: the battlefield -> graveyard move. Exiling
+      // or bouncing a creature is not a death and must not fire these.
+      if (event.type !== 'zoneChange' || event.from !== 'battlefield' || event.to !== 'graveyard') {
+        return false;
+      }
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
+      return subjectMatches(condition, subject, sourceController);
+    }
+    case 'upkeep':
+    case 'drawStep':
+    case 'precombatMain':
+    case 'endStep':
     case 'beginCombat': {
-      // "At the beginning of combat on your turn" — the same shape as upkeep,
-      // keyed on the step the turn machine already announces.
-      if (event.type !== 'stepBegin' || event.step !== 'beginCombat') return false;
-      return whoMatches(condition.who, event.activePlayer, sourceController);
-    }
-    case 'endStep': {
-      if (event.type !== 'stepBegin' || event.step !== 'end') return false;
+      if (event.type !== 'stepBegin') return false;
+      if (event.step !== STEP_FOR_TRIGGER[condition.on]) return false;
       return whoMatches(condition.who, event.activePlayer, sourceController);
     }
     case 'gainLife': {
@@ -222,36 +239,6 @@ export function conditionMatches(
       // damage would be a different card.
       if (event.type !== 'gainLife') return false;
       return whoMatches(condition.who, event.player, sourceController);
-    }
-    case 'creatureDies': {
-      // Any creature's death, this permanent's own included ("whenever ~ or
-      // another creature dies"). A `who` scope narrows it to the deaths one
-      // player's creatures ("whenever a creature YOU CONTROL dies") — honoured
-      // only when the event names the dead creature's controller. An event
-      // without it (an older log fold) does not fire a scoped trigger, which is
-      // the safe direction: a filter that cannot be verified must not be
-      // silently dropped.
-      if (event.type !== 'creatureDied') return false;
-      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
-      const scope = condition.who;
-      if (scope === undefined || scope === 'any') return true;
-      if (event.controller === undefined) return false;
-      return whoMatches(scope, event.controller, sourceController);
-    }
-    case 'permanentEtb': {
-      // Another permanent's arrival. The ENTERING permanent's controller and
-      // characteristics are not on the event, so they are read from the
-      // battlefield — where the engine has already placed it by the time the
-      // zoneChange is emitted. With no state view the condition simply never
-      // matches, which is the safe direction: a trigger that cannot verify its
-      // own filter must not fire.
-      if (event.type !== 'zoneChange' || event.to !== 'battlefield') return false;
-      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
-      if (!state) return false;
-      const entered = state.battlefield.find((c) => c.instanceId === event.instanceId);
-      if (!entered) return false;
-      if (!whoMatches(condition.who, entered.controller, sourceController)) return false;
-      return matchesCardFilter(entered, condition.entering);
     }
     case 'combatDamageToPlayer':
       // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
@@ -267,6 +254,54 @@ export function conditionMatches(
       // Unknown condition kind → never matches (safe no-op).
       return false;
   }
+}
+
+/**
+ * The turn step each step-beginning trigger watches. One table so the trigger
+ * name and the step it means cannot drift apart, and so adding a step trigger is
+ * a table entry rather than another `case` in the matcher.
+ */
+const STEP_FOR_TRIGGER: Readonly<Record<string, Step>> = Object.freeze({
+  upkeep: 'upkeep',
+  drawStep: 'draw',
+  precombatMain: 'precombatMain',
+  endStep: 'end',
+  // "At the beginning of combat on your turn" prints a different phrase from the
+  // others, but it is the same shape and the same scoping, so it belongs in the
+  // same table rather than in a case of its own.
+  beginCombat: 'beginCombat',
+});
+
+/**
+ * The permanent an event is ABOUT — who controls it and what it is — for the
+ * board-watching triggers ("whenever a creature you control enters/dies").
+ *
+ * Passed in rather than looked up here because `triggers.ts` is a pure matcher
+ * with no access to the game state; the runtime that emits the event resolves
+ * the instance once per event and hands it down.
+ */
+export interface TriggerSubject {
+  readonly controller: PlayerId;
+  readonly card: CardInstance;
+}
+
+/**
+ * Whether the permanent an event is about satisfies a board-watching condition:
+ * the right controller relation AND the printed filter.
+ *
+ * With NO subject the answer is false, never true. The subject is missing only
+ * when the runtime could not resolve the instance (it has already left every
+ * zone the lookup covers), and a trigger that fired on an unknown permanent
+ * would be a card doing more than it says.
+ */
+function subjectMatches(
+  condition: TriggerCondition,
+  subject: TriggerSubject | undefined,
+  sourceController: PlayerId,
+): boolean {
+  if (!subject) return false;
+  if (!whoMatches(condition.who, subject.controller, sourceController)) return false;
+  return matchesCardFilter(subject.card, condition.permanentFilter);
 }
 
 /** Resolve a `who` filter against the acting player and the source's controller. */
@@ -303,8 +338,20 @@ const NO_PENDING_TRIGGERS: readonly PendingTrigger[] = Object.freeze([]);
 export function matchTriggers(
   sources: readonly TriggerSource[],
   event: GameEvent,
-  state?: TriggerStateView,
+  resolveSubject?: (instanceId: InstanceId) => TriggerSubject | undefined,
 ): readonly PendingTrigger[] {
+  // Resolved at most ONCE per event, and only when something might read it:
+  // this runs for every event the engine emits, and the lookup walks zones.
+  let subject: TriggerSubject | undefined;
+  let subjectResolved = false;
+  const subjectOf = (): TriggerSubject | undefined => {
+    if (!subjectResolved) {
+      subjectResolved = true;
+      subject =
+        resolveSubject && event.type === 'zoneChange' ? resolveSubject(event.instanceId) : undefined;
+    }
+    return subject;
+  };
   let pending: PendingTrigger[] | null = null;
   for (let s = 0; s < sources.length; s++) {
     const src = sources[s] as TriggerSource;
@@ -313,7 +360,19 @@ export function matchTriggers(
     const abilities = src.triggers;
     for (let abilityIndex = 0; abilityIndex < abilities.length; abilityIndex++) {
       const ability = abilities[abilityIndex] as TriggeredAbility;
-      if (!conditionMatches(ability.condition, event, src.instanceId, src.controller, state)) continue;
+      const watchesBoard =
+        ability.condition.on === 'permanentEnters' || ability.condition.on === 'permanentDies';
+      if (
+        !conditionMatches(
+          ability.condition,
+          event,
+          src.instanceId,
+          src.controller,
+          watchesBoard ? subjectOf() : undefined,
+        )
+      ) {
+        continue;
+      }
       (pending ??= []).push({
         sourceInstanceId: src.instanceId,
         controller: src.controller,

@@ -32,6 +32,7 @@ import type {
   CardType,
   EffectContext,
   EffectPrimitive,
+  EffectRef,
   EffectRegistry,
   PlayerId,
   StaticAbility,
@@ -233,7 +234,16 @@ export const loseLife: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const useTarget = ctx.params.targetPlayer === true;
-  const player = useTarget ? firstPlayerTarget(ctx) ?? ctx.controller : ctx.controller;
+  // `whichPlayer: 'opponent'` is the same vocabulary `drawCards` uses, and it is
+  // what an UNTARGETED "each opponent loses 1 life" needs: a trigger body has no
+  // chosen target to read, so `targetPlayer` cannot express it. In this engine a
+  // game is always exactly two seats (`PLAYER_IDS`), so "each opponent" and "the
+  // opponent" name the same player — the printed plural has no other referent.
+  const player = useTarget
+    ? (firstPlayerTarget(ctx) ?? ctx.controller)
+    : strParam(ctx, 'whichPlayer') === 'opponent'
+      ? otherPlayer(ctx.controller)
+      : ctx.controller;
   changeLife(ctx, player, -amount);
 };
 
@@ -948,7 +958,7 @@ function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
   if (isIndestructible(ctx, permanent)) return;
   movePermanentTo(ctx, permanent, 'graveyard');
   if (isCreature(permanent.def)) {
-    ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name, controller: permanent.controller });
+    ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
   }
 }
 
@@ -1035,13 +1045,74 @@ export const gainControl: EffectPrimitive = (ctx) => {
  */
 export const ifKicked: EffectPrimitive = (ctx) => {
   if (ctx.kicked !== true) return;
-  const raw = ctx.params.effects;
-  if (!Array.isArray(raw)) return;
-  const refs = raw.filter(
-    (entry): entry is { primitive: string; params?: Record<string, unknown> } =>
-      typeof entry === 'object' && entry !== null && typeof (entry as { primitive?: unknown }).primitive === 'string',
-  );
+  const refs = nestedEffectRefs(ctx);
   if (refs.length > 0) ctx.enqueueEffects(refs);
+};
+
+/**
+ * The `effects` param of a wrapper primitive, filtered down to well-formed refs.
+ *
+ * Shared by {@link ifKicked} and {@link mayEffects}: both carry a nested clause
+ * in their params, and both must treat a malformed blob as "run nothing" rather
+ * than throwing — a card whose data is wrong plays as the weaker card, never as
+ * a crash and never as a stronger one.
+ */
+function nestedEffectRefs(ctx: EffectContext): readonly EffectRef[] {
+  const raw = ctx.params.effects;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is EffectRef =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as { primitive?: unknown }).primitive === 'string',
+  );
+}
+
+/**
+ * `mayEffects` — the printed word **"you may"**, as one composable wrapper: ask
+ * the controller yes/no, and run the nested clause only on a yes.
+ *
+ * This is what lets "When this creature enters, you may destroy target artifact
+ * or enchantment" be the ETB trigger the rule table already knew plus one real
+ * question, instead of a new primitive per optional card (DESIGN §1 —
+ * composition over inheritance).
+ *
+ * **The choice is genuine, and that is the whole point.** Compiling a "you may"
+ * as its yes-half would be a DIFFERENT card: Reclamation Sage that must blow up
+ * your own artifact when nothing else is legal, Springbloom Druid that must
+ * sacrifice a land. Both would silently bias every A/B verdict the lab reports,
+ * which is exactly the failure the compiler contract exists to prevent. So the
+ * question is parked like any other, both answers are legal, and the sim's
+ * pilots answer it from `valence` the way they answer every other confirm.
+ *
+ * Params:
+ *   - `effects` — the nested clause's refs. They run inside THIS resolution
+ *     (`enqueueEffects`), so they see the same targets, the same `xValue`, and
+ *     may park questions of their own.
+ *   - `prompt` — what the player is asked; defaults to the printed-ish
+ *     "You may…" so a card with no prompt is still answerable.
+ *   - `valence` — the AI's steer, `'gain'` by default because an ETB "you may"
+ *     is overwhelmingly an upside the controller wants. A clause that charges
+ *     the controller something (sacrifice, discard, life) says `'loss'`. Valence
+ *     never changes legality — both answers stand whatever it says.
+ *
+ * Ask-then-mutate: the confirm is the FIRST thing this does, so a parked
+ * question re-runs it from the top with nothing to undo.
+ */
+export const mayEffects: EffectPrimitive = (ctx) => {
+  const refs = nestedEffectRefs(ctx);
+  // Nothing to offer is not a question: asking "may I do nothing?" would stop
+  // the game for an answer that cannot matter.
+  if (refs.length === 0) return;
+  const valence = strParam(ctx, 'valence') === 'loss' ? 'loss' : 'gain';
+  const yes = ctx.confirm({
+    chooser: ctx.controller,
+    prompt: strParam(ctx, 'prompt') ?? 'You may do this',
+    valence,
+  });
+  if (yes === undefined) return; // parked — nothing mutated
+  if (!yes) return; // declined, and declining is a real, complete outcome
+  ctx.enqueueEffects(refs);
 };
 
 /**
@@ -1106,6 +1177,7 @@ export const ITS_MANA_COST = 'itsManaCost';
 export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   gainControl,
   ifKicked,
+  mayEffects,
   dealDamage,
   drawCards,
   gainLife,

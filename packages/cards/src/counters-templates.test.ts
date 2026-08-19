@@ -286,7 +286,11 @@ describe('the trigger templates the counters family needed', () => {
 
   it('compiles "whenever ~ or another creature dies" as the ANY-death trigger', () => {
     const definition = playable(CORDIAL_VAMPIRE);
-    expect(definition.triggers?.[0]?.condition).toEqual({ on: 'creatureDies', who: 'any' });
+    expect(definition.triggers?.[0]?.condition).toEqual({
+      on: 'permanentDies',
+      who: 'any',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    });
   });
 
   it('scopes "whenever a creature YOU CONTROL dies" to your own creatures', () => {
@@ -304,7 +308,11 @@ describe('the trigger templates the counters family needed', () => {
         oracleText: 'Whenever a creature you control dies, put a +1/+1 counter on Yours Only.',
       }),
     );
-    expect(definition.triggers?.[0]?.condition).toEqual({ on: 'creatureDies', who: 'you' });
+    expect(definition.triggers?.[0]?.condition).toEqual({
+      on: 'permanentDies',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    });
   });
 
   it('compiles the begin-combat and end-step templates', () => {
@@ -321,7 +329,10 @@ describe('the trigger templates the counters family needed', () => {
     );
     expect(combat.triggers?.[0]?.condition).toEqual({ on: 'beginCombat', who: 'you' });
 
-    const endStep = playable(
+    // "At the beginning of EACH end step" stays reported on purpose: main's
+    // step rule refuses a `who` other than "you" because such a body usually
+    // says "that player", which no effect can be aimed at yet.
+    const eachEndStep = compileCard(
       scryfall({
         name: 'Nightly Grower',
         cost: { G: 1 },
@@ -332,7 +343,7 @@ describe('the trigger templates the counters family needed', () => {
         oracleText: 'At the beginning of each end step, put a +1/+1 counter on Nightly Grower.',
       }),
     );
-    expect(endStep.triggers?.[0]?.condition).toEqual({ on: 'endStep', who: 'any' });
+    expect(eachEndStep.status).toBe('incomplete');
   });
 
   it('compiles "whenever ~ deals combat damage to a player"', () => {
@@ -526,6 +537,35 @@ describe('targeted counters that must not touch the opponent’s board', () => {
     ]);
   });
 
+  it('grants a whole printed keyword LIST, or reports the line', () => {
+    // Gaea's Gift — reachable only because `indestructible` is a real flag now.
+    const gift = playable(
+      scryfall({
+        name: "Gaea's Gift",
+        cost: { G: 1 },
+        types: ['Instant'],
+        oracleText:
+          'Put a +1/+1 counter on target creature you control. It gains reach, trample, hexproof, and indestructible until end of turn.',
+      }),
+    );
+    expect(gift.effects?.[1]).toEqual({
+      primitive: 'grantKeywordUntilEndOfTurn',
+      params: { keywords: { reach: true, trample: true, hexproof: true, indestructible: true } },
+    });
+
+    // One unmodelled word in the list reports the WHOLE line: a partial grant is
+    // a card playing weaker than printed, which biases a verdict just as badly.
+    const partial = compileCard(
+      scryfall({
+        name: 'Phasey Gift',
+        cost: { G: 1 },
+        types: ['Instant'],
+        oracleText: 'Put a +1/+1 counter on target creature. It gains trample and phasing until end of turn.',
+      }),
+    );
+    expect(partial.status).toBe('incomplete');
+  });
+
   it('does NOT reach "it gains …" as a sentence of its own', () => {
     // "It" means the creature the sentence BEFORE targeted, so the two sentences
     // are only trustworthy matched together. On its own the line has no prior
@@ -695,9 +735,9 @@ describe('another-permanent-enters triggers', () => {
     const definition = playable(CATHARS_CRUSADE);
     const trigger = definition.triggers?.[0];
     expect(trigger?.condition).toEqual({
-      on: 'permanentEtb',
+      on: 'permanentEnters',
       who: 'you',
-      entering: { anyOfTypes: ['creature'] },
+      permanentFilter: { anyOfTypes: ['creature'] },
     });
     expect(trigger?.effects[0]?.params).toEqual({ amount: 1, each: true, scope: 'you', filter: {} });
   });
@@ -705,9 +745,9 @@ describe('another-permanent-enters triggers', () => {
   it('carries the printed word "another" and a colour word into the condition', () => {
     const denizen = playable(IVY_LANE_DENIZEN);
     expect(denizen.triggers?.[0]?.condition).toEqual({
-      on: 'permanentEtb',
+      on: 'permanentEnters',
       who: 'you',
-      entering: { anyOfTypes: ['creature'], anyOfColors: ['G'] },
+      permanentFilter: { anyOfTypes: ['creature'], anyOfColors: ['G'] },
       excludeSelf: true,
     });
   });
@@ -728,9 +768,9 @@ describe('another-permanent-enters triggers', () => {
       }),
     );
     expect(warden.triggers?.[0]?.condition).toEqual({
-      on: 'permanentEtb',
+      on: 'permanentEnters',
       who: 'any',
-      entering: { anyOfTypes: ['creature'] },
+      permanentFilter: { anyOfTypes: ['creature'] },
       excludeSelf: true,
     });
   });
@@ -795,6 +835,106 @@ const IVY_LANE_DENIZEN = scryfall({
   power: 3,
   toughness: 3,
   oracleText: 'Whenever another green creature you control enters, put a +1/+1 counter on target creature.',
+});
+
+describe('ONE event per concept — both branches’ cards fire through it', () => {
+  /**
+   * The merge hazard this pins: `feat/you-may-and-trigger-templates` and this
+   * branch each invented a name for the same two triggers (`permanentEnters` /
+   * `permanentEtb`, `permanentDies` / `creatureDies`). Two names in the engine's
+   * vocabulary would leave the rule table able to emit either one with only one
+   * of them wired into each code path — a silent, card-level bug.
+   *
+   * So this plays ONE real game in which a card from each branch watches the
+   * SAME event, and asserts both fired. If anyone re-splits the vocabulary,
+   * exactly one of these assertions goes red.
+   */
+  const BEAR: CardDefinition = {
+    id: 'counters:Bear',
+    name: 'Grizzly Bears',
+    types: ['creature'],
+    power: 2,
+    toughness: 2,
+    cost: { generic: 1, G: 1 },
+  };
+
+  it('an arrival feeds a life-gain watcher and a counters watcher at once', () => {
+    // Ajani's Welcome and Cathars' Crusade, on green bodies so this test's
+    // Forest mana can cast them. Same printed trigger, two different branches'
+    // payloads, one `permanentEnters` event.
+    const welcome = playable(
+      scryfall({
+        name: 'Verdant Welcome',
+        cost: { G: 1 },
+        types: ['Enchantment'],
+        oracleText: 'Whenever a creature you control enters, you gain 1 life.',
+      }),
+    );
+    const crusade = playable(
+      scryfall({
+        name: 'Verdant Crusade',
+        cost: { generic: 1, G: 1 },
+        types: ['Enchantment'],
+        oracleText: 'Whenever a creature you control enters, put a +1/+1 counter on each creature you control.',
+      }),
+    );
+    expect(welcome.triggers?.[0]?.condition.on).toBe('permanentEnters');
+    expect(crusade.triggers?.[0]?.condition.on).toBe('permanentEnters');
+
+    const game = playGameCasting('Verdant Crusade', {
+      A: deckWith([welcome, crusade, BEAR], 6),
+      B: deckWith([BEAR]),
+    }, 24680);
+
+    expect(
+      game.events.some((e) => e.type === 'gainLife' && e.amount === 1),
+      'the life-gain watcher never fired off an arrival',
+    ).toBe(true);
+    expect(
+      game.events.some((e) => e.type === 'counterAdded' && e.kind === PLUS_ONE_COUNTER),
+      'the counters watcher never fired off the same arrival',
+    ).toBe(true);
+  });
+
+  it('a death feeds a life-gain watcher and a counters watcher at once', () => {
+    const mourner = playable(
+      scryfall({
+        name: 'Verdant Mourner',
+        cost: { G: 1 },
+        types: ['Enchantment'],
+        oracleText: 'Whenever a creature you control dies, you gain 1 life.',
+      }),
+    );
+    const vampire = playable(
+      scryfall({
+        name: 'Verdant Vampire',
+        cost: { G: 1 },
+        types: ['Creature'],
+        subtypes: ['Vampire'],
+        power: 1,
+        toughness: 1,
+        oracleText:
+          'Whenever Verdant Vampire or another creature dies, put a +1/+1 counter on each Vampire you control.',
+      }),
+    );
+    expect(mourner.triggers?.[0]?.condition.on).toBe('permanentDies');
+    expect(vampire.triggers?.[0]?.condition.on).toBe('permanentDies');
+
+    const game = playGameCasting('Verdant Mourner', {
+      A: deckWith([mourner, vampire, BEAR], 6),
+      B: deckWith([BEAR]),
+    }, 13579);
+
+    expect(game.events.some((e) => e.type === 'creatureDied'), 'nothing ever died').toBe(true);
+    expect(
+      game.events.some((e) => e.type === 'gainLife' && e.amount === 1),
+      'the life-gain watcher never fired off a death',
+    ).toBe(true);
+    expect(
+      game.events.some((e) => e.type === 'counterAdded' && e.kind === PLUS_ONE_COUNTER),
+      'the counters watcher never fired off the same death',
+    ).toBe(true);
+  });
 });
 
 // --- shared fixtures -------------------------------------------------------------

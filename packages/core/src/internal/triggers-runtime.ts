@@ -158,6 +158,29 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   };
   rememberSources();
 
+  /**
+   * Find the permanent a zone change is ABOUT — what the board-watching triggers
+   * ("whenever a creature you control enters/dies") read.
+   *
+   * Searched battlefield-first and then every player's graveyard, because the
+   * two events those triggers watch leave the card in exactly those places by
+   * the time the event is emitted: an entry has already landed on the
+   * battlefield, and a death has already landed in a graveyard. A card found in
+   * neither yields `undefined`, and `subjectMatches` treats that as no match —
+   * a trigger never fires on a permanent nobody can identify.
+   */
+  const resolveSubject = (instanceId: InstanceId) => {
+    for (const perm of state.battlefield) {
+      if (perm.instanceId === instanceId) return { controller: perm.controller, card: perm };
+    }
+    for (const player of Object.values(state.players)) {
+      for (const card of player.graveyard) {
+        if (card.instanceId === instanceId) return { controller: card.controller, card };
+      }
+    }
+    return undefined;
+  };
+
   const emit = (event: GameEvent): void => {
     baseEmit(event);
     // Fold the event into the turn's fact memory (revolt / morbid / lifegain).
@@ -173,7 +196,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // an empty source list always returns nothing.
     if (seenSources === null) return;
     snapshot ??= [...seenSources.values()];
-    const matched = matchTriggers(snapshot, event, state);
+    const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
     if (queue === null) queue = [];
     for (const m of matched) queue.push(m);

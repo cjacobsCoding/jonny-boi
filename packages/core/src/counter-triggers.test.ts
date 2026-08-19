@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import { conditionMatches } from './triggers.js';
 import type { GameEvent } from './events.js';
-import type { CardInstance, InstanceId, PlayerId } from './state.js';
+import type { InstanceId, PlayerId } from './state.js';
 
 const SOURCE: InstanceId = 7;
 const OTHER: InstanceId = 9;
@@ -59,20 +59,66 @@ describe('life-gain triggers', () => {
   });
 });
 
-describe('any-creature-dies triggers', () => {
-  it('fires for ANOTHER creature’s death as well as its own', () => {
-    const condition = { on: 'creatureDies' } as const;
-    expect(matches(condition, { type: 'creatureDied', instanceId: OTHER, name: 'Bear' })).toBe(true);
-    expect(matches(condition, { type: 'creatureDied', instanceId: SOURCE, name: 'Me' })).toBe(true);
+describe('permanentDies — the unified board-watching death event', () => {
+  /** The permanent an event is about, as the runtime resolves it. */
+  const subject = (controller: PlayerId, types: readonly string[] = ['creature']) =>
+    ({ controller, card: { def: { types }, counters: {} } }) as never;
+
+  const died = (instanceId: InstanceId): GameEvent => ({
+    type: 'zoneChange',
+    instanceId,
+    from: 'battlefield',
+    to: 'graveyard',
   });
 
-  it('a `who` scope narrows it to one player’s creatures, and needs the controller', () => {
-    const yours = { on: 'creatureDies', who: 'you' } as const;
-    expect(matches(yours, { type: 'creatureDied', instanceId: OTHER, name: 'Bear', controller: ME })).toBe(true);
-    expect(matches(yours, { type: 'creatureDied', instanceId: OTHER, name: 'Bear', controller: THEM })).toBe(false);
-    // An event that does not name the controller (an older log fold) cannot
-    // satisfy a scoped filter, so it does not fire.
-    expect(matches(yours, { type: 'creatureDied', instanceId: OTHER, name: 'Bear' })).toBe(false);
+  it('fires for ANOTHER creature’s death as well as its own', () => {
+    const condition = {
+      on: 'permanentDies',
+      who: 'any',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    } as const;
+    expect(conditionMatches(condition, died(OTHER), SOURCE, ME, subject(THEM))).toBe(true);
+    expect(conditionMatches(condition, died(SOURCE), SOURCE, ME, subject(ME))).toBe(true);
+  });
+
+  it('the printed word "another" excludes the source’s own death', () => {
+    const condition = {
+      on: 'permanentDies',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'] },
+      excludeSelf: true,
+    } as const;
+    expect(conditionMatches(condition, died(SOURCE), SOURCE, ME, subject(ME))).toBe(false);
+    expect(conditionMatches(condition, died(OTHER), SOURCE, ME, subject(ME))).toBe(true);
+  });
+
+  it('a `who` scope narrows it to one player’s creatures', () => {
+    const yours = {
+      on: 'permanentDies',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    } as const;
+    expect(conditionMatches(yours, died(OTHER), SOURCE, ME, subject(ME))).toBe(true);
+    expect(conditionMatches(yours, died(OTHER), SOURCE, ME, subject(THEM))).toBe(false);
+  });
+
+  it('is a DEATH, not any departure — exile and bounce do not fire it', () => {
+    const condition = {
+      on: 'permanentDies',
+      who: 'any',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    } as const;
+    for (const to of ['exile', 'hand', 'library'] as const) {
+      expect(
+        conditionMatches(
+          condition,
+          { type: 'zoneChange', instanceId: OTHER, from: 'battlefield', to },
+          SOURCE,
+          ME,
+          subject(ME),
+        ),
+      ).toBe(false);
+    }
   });
 
   it('the SELF-only "dies" condition still fires for its own death alone', () => {
@@ -105,21 +151,19 @@ describe('combat-damage-to-a-player triggers', () => {
   });
 });
 
-describe('another-permanent-enters triggers', () => {
-  /** A battlefield view holding one entering permanent. */
-  function view(instanceId: InstanceId, controller: PlayerId, types: readonly string[], colorPip?: 'G') {
-    const card = {
-      instanceId,
+describe('permanentEnters — the unified board-watching arrival event', () => {
+  /** The permanent an event is about, as the runtime resolves it. */
+  function subject(controller: PlayerId, types: readonly string[], green = false) {
+    return {
       controller,
-      def: {
-        id: `t:${instanceId}`,
-        name: `T${instanceId}`,
-        types,
-        ...(colorPip ? { cost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0 } } : {}),
+      card: {
+        def: {
+          types,
+          ...(green ? { cost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0 } } : {}),
+        },
+        counters: {},
       },
-      counters: {},
-    } as unknown as CardInstance;
-    return { battlefield: [card] };
+    } as never;
   }
 
   const entered = (instanceId: InstanceId): GameEvent => ({
@@ -131,40 +175,48 @@ describe('another-permanent-enters triggers', () => {
 
   it('fires for another creature you control and not for the opponent’s', () => {
     const condition = {
-      on: 'permanentEtb',
+      on: 'permanentEnters',
       who: 'you',
-      entering: { anyOfTypes: ['creature'] },
+      permanentFilter: { anyOfTypes: ['creature'] },
     } as const;
-    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['creature']))).toBe(true);
-    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, THEM, ['creature']))).toBe(false);
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, subject(ME, ['creature']))).toBe(true);
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, subject(THEM, ['creature']))).toBe(false);
     // A land arriving is not a creature arriving.
-    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['land']))).toBe(false);
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, subject(ME, ['land']))).toBe(false);
   });
 
   it('the printed word "another" excludes the source’s own arrival', () => {
     const another = {
-      on: 'permanentEtb',
+      on: 'permanentEnters',
       who: 'you',
       excludeSelf: true,
-      entering: { anyOfTypes: ['creature'] },
+      permanentFilter: { anyOfTypes: ['creature'] },
     } as const;
-    const plain = { on: 'permanentEtb', who: 'you', entering: { anyOfTypes: ['creature'] } } as const;
-    expect(conditionMatches(another, entered(SOURCE), SOURCE, ME, view(SOURCE, ME, ['creature']))).toBe(false);
-    expect(conditionMatches(plain, entered(SOURCE), SOURCE, ME, view(SOURCE, ME, ['creature']))).toBe(true);
+    const plain = {
+      on: 'permanentEnters',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    } as const;
+    expect(conditionMatches(another, entered(SOURCE), SOURCE, ME, subject(ME, ['creature']))).toBe(false);
+    expect(conditionMatches(plain, entered(SOURCE), SOURCE, ME, subject(ME, ['creature']))).toBe(true);
   });
 
-  it('never fires without a state view — an unverifiable filter must not fire', () => {
-    const condition = { on: 'permanentEtb', who: 'you', entering: { anyOfTypes: ['creature'] } } as const;
+  it('never fires without a resolved subject — an unverifiable filter must not fire', () => {
+    const condition = {
+      on: 'permanentEnters',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'] },
+    } as const;
     expect(conditionMatches(condition, entered(OTHER), SOURCE, ME)).toBe(false);
   });
 
   it('honours a colour filter ("another GREEN creature you control")', () => {
     const condition = {
-      on: 'permanentEtb',
+      on: 'permanentEnters',
       who: 'you',
-      entering: { anyOfTypes: ['creature'], anyOfColors: ['G'] },
+      permanentFilter: { anyOfTypes: ['creature'], anyOfColors: ['G'] },
     } as const;
-    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['creature'], 'G'))).toBe(true);
-    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['creature']))).toBe(false);
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, subject(ME, ['creature'], true))).toBe(true);
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, subject(ME, ['creature']))).toBe(false);
   });
 });
