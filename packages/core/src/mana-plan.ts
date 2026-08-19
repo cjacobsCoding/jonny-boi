@@ -13,9 +13,9 @@
  */
 
 import type { GameAction } from './actions.js';
-import { manaModesOf } from './card.js';
+import { manaExtrasOf, manaModesOf } from './card.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
-import { canPay, MANA_COLORS } from './mana.js';
+import { canPay, MANA_COLORS, payCost } from './mana.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 
 /**
@@ -29,7 +29,21 @@ import type { CardInstance, InstanceId, PlayerId } from './state.js';
  */
 export interface ManaPlanView {
   readonly battlefield: readonly CardInstance[];
-  readonly players: Readonly<Record<PlayerId, { readonly manaPool: ManaPool }>>;
+  readonly players: Readonly<
+    Record<
+      PlayerId,
+      {
+        readonly manaPool: ManaPool;
+        /**
+         * Current life, when the caller has it. OPTIONAL so a redacted online
+         * view that predates this field still satisfies the shape; the planner
+         * simply stops refusing lethal taps without it, which is the same
+         * behaviour it always had.
+         */
+        readonly life?: number;
+      }
+    >
+  >;
 }
 
 /** One activation in a funding plan: which permanent to tap, in which mode. */
@@ -126,10 +140,29 @@ function denseDistanceToPayable(pool: Int32Array, cost: Int32Array, generic: num
 const scratch = {
   /** Dense colour amounts, one row of `COLOR_COUNT` per offered tap. */
   production: new Int32Array(COLOR_COUNT * INITIAL_TAP_CAPACITY),
+  /**
+   * The MANA a tap itself costs, one entry per offered tap, parallel to
+   * `production` — the filter lands' "{R/W}, {T}: Add {R}{R}". `undefined` for
+   * every ordinary source, and never read at all unless some source on the board
+   * has one.
+   *
+   * Kept as the printed `ManaCost` rather than densified like everything else
+   * because a filter land's input is a HYBRID symbol ({R/W}), which a per-colour
+   * row cannot express — `canPay`/`payCost` are the only things that understand
+   * one, and a second opinion here would silently disagree with the engine about
+   * whether the land is usable at all.
+   */
+  tapCost: [] as (ManaCost | undefined)[],
   /** Dense forms of the cost being paid, the running pool, and one trial tap. */
   cost: new Int32Array(COLOR_COUNT),
   pool: new Int32Array(COLOR_COUNT),
   trial: new Int32Array(COLOR_COUNT),
+  /**
+   * What each tap COSTS ITS CONTROLLER IN LIFE — a "Pay 1 life" cost plus a
+   * rider's damage, added together because both come off the same total and the
+   * planner is choosing between whole activations.
+   */
+  tapPain: [] as number[],
   /** Per offered tap, parallel to `production`'s rows. */
   tapSource: [] as InstanceId[],
   tapMode: [] as number[],
@@ -207,6 +240,11 @@ export function planManaPayment(
   // one scan instead of one per mode.
   let lastSource: InstanceId | undefined;
   let lastModes: readonly ManaProduction[] | undefined;
+  let lastExtras: ReturnType<typeof manaExtrasOf>;
+  // Both stay false on every board with no cost-carrying source — which is nearly
+  // all of them — and keep the whole apparatus below out of the ranking loop.
+  let anyTapCost = false;
+  let anyTapPain = false;
   for (let i = 0; i < legalActions.length; i++) {
     const action = legalActions[i] as GameAction;
     if (action.kind !== 'tapForMana' || action.player !== player) continue;
@@ -216,6 +254,10 @@ export function planManaPayment(
     } else {
       const perm = findOnBattlefield(bf, action.instanceId);
       modes = perm ? manaModesOf(perm.def) : undefined;
+      // Inlined `manaAbilities` test for the same reason `pushManaTapActions`
+      // inlines it: one property read, no call, on the hottest path in the sim.
+      lastExtras =
+        perm && perm.def.manaAbilities !== undefined ? manaExtrasOf(perm.def) : undefined;
       lastSource = action.instanceId;
       lastModes = modes;
     }
@@ -230,6 +272,14 @@ export function planManaPayment(
       s.production = grown;
     }
     densifyInto(production, s.production, tapCount * COLOR_COUNT);
+    // A tap that itself costs mana (a filter land).
+    const ability = lastExtras?.[mode]?.ability;
+    const tapMana = ability?.cost?.mana;
+    s.tapCost[tapCount] = tapMana;
+    if (tapMana) anyTapCost = true;
+    const pain = (ability?.cost?.life ?? 0) + (ability?.rider?.damageToController ?? 0);
+    s.tapPain[tapCount] = pain;
+    if (pain > 0) anyTapPain = true;
     s.tapSource[tapCount] = action.instanceId;
     s.tapMode[tapCount] = mode;
     s.tapProduction[tapCount] = production;
@@ -268,6 +318,9 @@ export function planManaPayment(
   // object tracks the dense running total for it. It is this function's own copy.
   const pool: ManaPool = { ...current };
   const plan: ManaTapPlan[] = [];
+  // Life the plan has left to spend, tracked across taps so two pain lands cannot
+  // each be "affordable" on their own and lethal together.
+  let lifeLeft = view.players[player].life;
 
   while (!canPay(pool, cost)) {
     // At least one pip is still owed (canPay said so). Flooring at 1 matters when
@@ -278,6 +331,7 @@ export function planManaPayment(
     let bestTap = -1;
     let bestGroup = -1;
     let bestDistance = owed;
+    let bestPain = Infinity;
     let bestFlexibility = Infinity;
     let bestSize = Infinity;
 
@@ -288,22 +342,54 @@ export function planManaPayment(
       for (let k = 0; k < flexibility; k++) {
         const tap = s.order[begin + k] as number;
         const at = tap * COLOR_COUNT;
+        // A tap that costs mana of its own (a filter land) is only a candidate
+        // once the RUNNING pool can pay it — the plan is executed in order, so a
+        // funding tap earlier in the plan is what makes this one legal by the
+        // time it happens, exactly as the engine's own offer gate requires.
+        const tapMana = anyTapCost ? s.tapCost[tap] : undefined;
+        let afterCost: ManaPool | undefined;
+        if (tapMana) {
+          const paid = payCost(pool, tapMana);
+          if (!paid.ok) continue;
+          afterCost = paid.pool;
+        }
         let size = 0;
         for (let i = 0; i < COLOR_COUNT; i++) {
+          const color = MANA_COLORS[i] as ManaColor;
+          const have = afterCost ? afterCost[color] : (s.pool[i] as number);
           const add = s.production[at + i] as number;
-          s.trial[i] = (s.pool[i] as number) + add;
-          size += add;
+          s.trial[i] = have + add;
+          // "Size" ranks a tap by how much it actually commits, so a filter land
+          // that spends one to make two counts as the net one — otherwise the
+          // planner would prefer it to a plain land for a single pip.
+          size += add - (afterCost ? (s.pool[i] as number) - have : 0);
         }
         const distance = denseDistanceToPayable(s.trial, s.cost, genericOwed);
         if (distance >= owed) continue; // buys us nothing — never make this tap
+        // WHAT THIS TAP COSTS IN LIFE — a "Pay 1 life" cost plus a rider's damage.
+        // Zero on every ordinary board, where `anyTapPain` keeps this out of the
+        // loop entirely and the ranking is byte-identical to what it always was.
+        const pain = anyTapPain ? (s.tapPain[tap] as number) : 0;
+        // A plan is a way to CAST something. One that kills the caster is not a
+        // plan, so a tap whose life price is at least the life available is never
+        // planned — the player can still make that call by hand.
+        if (pain > 0 && lifeLeft !== undefined && pain >= lifeLeft) continue;
+        // Pain ranks above flexibility: given two taps that close the same
+        // shortfall, spend the one that does not cost life (a Plains before a
+        // pain land's coloured mode), which is how the card is actually played.
         const better =
           distance < bestDistance ||
-          (distance === bestDistance && flexibility < bestFlexibility) ||
-          (distance === bestDistance && flexibility === bestFlexibility && size < bestSize);
+          (distance === bestDistance && pain < bestPain) ||
+          (distance === bestDistance && pain === bestPain && flexibility < bestFlexibility) ||
+          (distance === bestDistance &&
+            pain === bestPain &&
+            flexibility === bestFlexibility &&
+            size < bestSize);
         if (better) {
           bestTap = tap;
           bestGroup = g;
           bestDistance = distance;
+          bestPain = pain;
           bestFlexibility = flexibility;
           bestSize = size;
         }
@@ -313,11 +399,29 @@ export function planManaPayment(
     if (bestTap < 0) return undefined; // nothing left that helps — the cost is unpayable
     s.sourceUntapped[bestGroup] = false; // spending the permanent spends all of its modes
     const at = bestTap * COLOR_COUNT;
+    // Charge the tap's own mana cost before crediting its production, which is
+    // the order `applyTapForMana` uses too — a filter land is a filter, not two
+    // free mana.
+    const chosenCost = anyTapCost ? s.tapCost[bestTap] : undefined;
+    if (chosenCost) {
+      const paid = payCost(pool, chosenCost);
+      // Unreachable: the candidate was only accepted after this same payment
+      // succeeded a moment ago against the same pool. Refusing rather than
+      // half-applying keeps the plan's invariant ("every tap in it is legal in
+      // order") true even if that ever stops holding.
+      if (!paid.ok) return undefined;
+      for (let i = 0; i < COLOR_COUNT; i++) {
+        const color = MANA_COLORS[i] as ManaColor;
+        pool[color] = paid.pool[color];
+        s.pool[i] = paid.pool[color];
+      }
+    }
     for (let i = 0; i < COLOR_COUNT; i++) {
       const total = (s.pool[i] as number) + (s.production[at + i] as number);
       s.pool[i] = total;
       pool[MANA_COLORS[i] as ManaColor] = total;
     }
+    if (anyTapPain && lifeLeft !== undefined) lifeLeft -= s.tapPain[bestTap] as number;
     plan.push({
       instanceId: s.tapSource[bestTap] as InstanceId,
       mode: s.tapMode[bestTap] as number,

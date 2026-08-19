@@ -140,6 +140,15 @@ export interface ClauseContribution {
    * adds exactly one mode.
    */
   readonly producesOptions?: readonly import('@jonny-boi/core').ManaProduction[];
+  /**
+   * A RICH mana ability — one that prints something beyond the colour bundle: an
+   * additional cost, a rider, an "Activate only if …", or colours derived from
+   * the board. Merged into `CardDefinition.manaAbilities`, which supersedes the
+   * two shorthands above (the assembly folds any plain bundle in as one more
+   * entry, so a pain land's "{T}: Add {C}" line and its painful line end up as
+   * two entries of one list).
+   */
+  readonly manaAbilities?: readonly import('@jonny-boi/core').ManaAbility[];
   /** Keyword flags granted to the card itself. */
   readonly keywords?: CardDefinition['keywords'];
   /** Set when the printed text says this permanent enters the battlefield tapped. */

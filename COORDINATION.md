@@ -104,6 +104,7 @@ throughput (games/sec) from regressing.
 | feat/graveyard-grants | worker | packages/core (NEW card-grants.ts + card-grants.test.ts + bench/scavenge-probe.ts; targeting/state/events/engine/index + internal clone/zones), packages/cards (primitives grantFlashback + compile/rules new rule & 2 reworded hints + effect-helpers prune + index un-stub + data/pool.ts Snapcaster + NEW graveyard-grants.test.ts), packages/ai (effect-value/heuristic/weights + NEW graveyard-grant-pilot.test.ts), packages/sim (paired-arms +1, observation +2, uw-control comment), apps/web (about/mechanics +2 witnesses), DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 | feat/battles-legend-emblems | worker | packages/core (card/state/events/choices/targeting/effects/engine/serialize/index + internal stats/combat/sba/continuous/triggers-runtime + NEW battle.test/legend-rule.test/emblem.test), packages/cards (primitives createEmblem + compile compile/rules/text/types + data/pool.ts Liliana legendary + NEW battles-legend-emblems.test), packages/data-tools (defense capture), packages/sim (paired-arms +1, observation +4), packages/ai (heuristic attack planner + weights + NEW battle-pilot.test), apps/web (view-model/board-adapter/BoardPermanentTile/planeswalker.css + about/mechanics + its test), DESIGN §3.15 | 🚧 PUSHED, not merged |
 
+| feat/mana-ability-model | worker | packages/core (card.ts mana model + engine.ts offer/apply + mana-plan.ts + index.ts + NEW mana-ability-model.test.ts), packages/cards (compile/rules.ts MANA_RULES +5 & UNSUPPORTED_HINTS reworded, compile/compile.ts + types.ts assembly, mana-templates.test.ts rewritten, 2 compile.test.ts cases), packages/ai (NEW mana-ability-pilot.test.ts only), apps/web/src/lib/about/mechanics.ts (+2 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 | fix/keyword-sweep-and-mana-templates | worker | packages/cards (compile/compile.ts keyword-sweep guard, compile/rules.ts 1 new MANA_RULES entry + 5 new UNSUPPORTED_HINTS above the mana hint, compile/scry-surveil.test.ts additions, NEW compile/mana-templates.test.ts), apps/web/src/lib/about/mechanics.ts (+1 witness), DESIGN §3.11, docs/plans/mechanic-completion-plan.md, COORDINATION.md. **No engine change.** | 🚧 PUSHED, not merged |
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
 | feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
@@ -152,6 +153,77 @@ _Append dated notes here; keep them short. Newest at top._
   ⚠️ **`npm run verify` does not type-check.** A generator bug emitted a long label as a
   character-indexed object; the whole suite AND verify stayed green while `npm run build` failed. If
   you touch generated data, run the build too.
+- 2026-08-19 worker: `feat/mana-ability-model` 🚧 PUSHED — **core's mana model grew: four of the
+  five shapes the census named are now real, and the fifth is reported by name.**
+  **Measured offline, PAIRED against the same cached corpus on the same-day `main`: 328 → 384 /
+  2100 playable (15.6% → 18.3%), +56 cards.** Gauntlet seed 99 is byte-identical to that `main`
+  (215/700, every matchup row equal), and min-of-14 paired wall time is 2.99s vs 3.05s — noise on a
+  box running several agents, with the branch faster than `main` in several individual pairs.
+
+  ✅ **`CardDefinition.manaAbilities`** — a list of separately-printed mana abilities, each with its
+  own additional **cost** (`{T}, Pay 1 life:`; the filter lands' hybrid `{W/U}, {T}:`), **rider**
+  ("~ deals 1 damage to you"), **activation restriction** ("Activate only if you control an Island /
+  a red permanent / three or more artifacts"), or **board-derived colours** (Reflecting Pool's "any
+  type" vs Exotic Orchard's "any color" — one printed word, two different cards). It SUPERSEDES
+  `produces`/`producesOptions` when present; the compiler folds a plain line in as one more entry,
+  so core never has two mode lists to disagree about.
+
+  ⚠️ **THE FOUR THINGS THAT ARE EASY TO GET WRONG HERE, and what this branch did instead.**
+  1. **A mana ability is NOT an activated ability** (CR 605.3a): no stack, nobody may respond, and it
+     is asked during payment planning. Expressing one as an `ActivatedAbility` that adds mana makes a
+     pain land respondable AND delivers its mana one stack resolution too late to fund anything.
+     `tapForMana` stayed the action; the model grew under it.
+  2. **A rider is not a cost.** A pain land at 1 life is still usable, and using it kills you — so the
+     damage compiles to `rider`, never to `cost.life`. Modelling it as a cost would silently make the
+     land unusable at low life, which is a strictly different card. (The SBA pass now runs after a tap
+     that moved a life total, so paying yourself to death ends the game there.)
+  3. **An unmet restriction must make the source INVISIBLE to the payment planner**, not merely
+     refuse after the fact — a planner that counts a source it cannot use funds spells that cannot be
+     cast. `manaModeBlockedReason` is one answer, asked by `pushManaTapActions` and by
+     `applyTapForMana`, so the menu and the engine cannot drift.
+  4. **Derived colours are recomputed per query, never stored on the definition.** The mode LIST is
+     fixed at six entries (`TapForManaAction.mode` has to mean the same thing to the generator, the
+     planner and the apply path); availability is the board question. A derived source contributes
+     nothing to another's derivation, so two Reflecting Pools read each other as empty rather than
+     looping.
+
+  ⚡ **THE HOT PATH IS UNCHANGED ON AN ORDINARY BOARD.** `planManaPayment` was deliberately built on
+  dense `Int32Array` buffers (1.89×, −94% allocation; indexing the battlefield measured SLOWER — both
+  results are recorded in its comments). `manaExtrasOf(def)` returns **`undefined`** for every plain
+  land and rock, and the planner's cost/rider apparatus sits behind `anyTapCost`/`anyTapPain` flags
+  that stay false unless a source on the board actually has one. Do not "simplify" that `undefined`
+  into an array of `undefined`s. Paired throughput vs a same-box `origin/main` worktree at gauntlet
+  seed 99 is byte-identical (79/280).
+
+  🧠 **THE AI IS NOT INERT, AND IT WEIGHS THE LIFE.** `planManaPayment` now ranks pain (life cost +
+  rider damage) ABOVE flexibility in its tie-break, so a Plains is spent before a pain land's coloured
+  mode, and it refuses to plan a payment that reduces its own controller to 0 — a plan that kills the
+  caster is not a plan (the player may still make that call by hand; the engine allows it). Because
+  the preference lives in core's SHARED planner, the hotseat/online auto-tap inherits it instead of
+  holding a second opinion. `packages/ai/src/mana-ability-pilot.test.ts` drives the real heuristic
+  pilot through all three claims.
+
+  ⛔ **WHAT IS NOT SHIPPED, AND WHY IT IS A DIFFERENT SYSTEM: the SPEND RESTRICTION** (4 sole, 15
+  blocks — Cavern of Souls, Delighted Halfling). The other four shapes decorate the SOURCE; this one
+  colours the MANA. `ManaPool` is `Record<ManaColor, number>`, so a restricted mana is
+  indistinguishable from an unrestricted one the moment it lands in the pool — the POOL would have to
+  carry the restriction and `payCost`/`canPay`/the planner's dense buffers/serialization/the AI's
+  mana math would all have to honour it. Cavern of Souls still imports `'incomplete'` naming it.
+  Two smaller residuals are also reported by name rather than approximated: a cost that **taps
+  another permanent** (Springleaf Drum — a third cost component AND a choice nothing asks), and a
+  colour derived from a **commander's** identity (refused for good, completion plan §5).
+
+  📌 **KNOWN REACH LIMIT, pinned as a test rather than left to be rediscovered:** the mana half of a
+  mana-ability cost is gated on the FLOATING pool — the same gate `unpayableActivationReason` puts on
+  every other activated ability — so a filter land is offered once its input is floating and not
+  before. That never offers an illegal action and matches how the land is played in paper, but the
+  one-shot planner therefore cannot chain Island → filter land inside a single plan.
+
+  📌 **THE HINTS MOVED.** `UNSUPPORTED_HINTS` no longer claims these four are missing systems; each
+  now names the residual honestly ("a mana-ability RIDER *wording* the compiler does not recognize
+  yet", "an 'Activate only if…' CONDITION the compiler cannot read yet"). Only the spend restriction
+  and the tap-another-permanent cost still read as system work. **Anyone re-running the coverage
+  audit will see the mana family shrink accordingly — that is the fix, not a regression.**
 
 - 2026-08-19 worker: `fix/ai-sees-continuous-effects` 🚧 PUSHED — **the pilots were evaluating the
   PRINTED card, and now they evaluate the board.** `packages/ai` called core's `effectivePower` /

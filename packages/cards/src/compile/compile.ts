@@ -263,6 +263,8 @@ interface Assembly {
   readonly triggers: TriggeredAbility[];
   readonly produces: ManaColor[];
   readonly producesOptions: ManaProduction[];
+  /** Mana abilities that print a cost, a rider, a restriction or derived colours. */
+  readonly manaAbilities: import('@jonny-boi/core').ManaAbility[];
   readonly activated: ActivatedAbility[];
   readonly statics: import('@jonny-boi/core').StaticAbility[];
   keywords: KeywordFlags;
@@ -317,6 +319,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.triggers) assembly.triggers.push(...contribution.triggers);
   if (contribution.produces) assembly.produces.push(...contribution.produces);
   if (contribution.producesOptions) assembly.producesOptions.push(...contribution.producesOptions);
+  if (contribution.manaAbilities) assembly.manaAbilities.push(...contribution.manaAbilities);
   if (contribution.keywords) {
     // Folded by the same merge rule the engine layers with: boolean flags OR,
     // protection lists UNION, ward costs ADD (`mergeKeywordGrant`).
@@ -683,6 +686,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     triggers: [],
     produces: [],
     producesOptions: [],
+    manaAbilities: [],
     activated: [],
     statics: [],
     keywords: {},
@@ -1013,6 +1017,24 @@ export function compileCard(card: CompilableCard): CompileResult {
         ]
       : [];
 
+  // A card that prints a RICH mana ability (a cost, a rider, an "Activate only
+  // if …", derived colours) emits `manaAbilities` and NOTHING ELSE — core treats
+  // that field as superseding both shorthands, so a plain line on the same card
+  // ("{T}: Add {C}" on a pain land, the basic land types on a filter land) has to
+  // come along as one more entry or it would vanish. It leads the list because it
+  // is printed first on every real card of this shape.
+  const richManaAbilities: readonly import('@jonny-boi/core').ManaAbility[] =
+    assembly.manaAbilities.length > 0
+      ? [
+          ...(manaModes.length > 0
+            ? [{ produces: manaModes }]
+            : assembly.produces.length > 0
+              ? [{ produces: [bundleAsMode(assembly.produces)] }]
+              : []),
+          ...assembly.manaAbilities,
+        ]
+      : [];
+
   const definition: CardDefinition = {
     id: card.id,
     // A double-faced card is played as its front face; the back is a separate
@@ -1061,11 +1083,13 @@ export function compileCard(card: CompilableCard): CompileResult {
       ? { flashbackLifeCost: assembly.flashbackLifeCost }
       : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
-    ...(manaModes.length > 0
-      ? { producesOptions: manaModes }
-      : assembly.produces.length > 0
-        ? { produces: assembly.produces }
-        : {}),
+    ...(richManaAbilities.length > 0
+      ? { manaAbilities: richManaAbilities }
+      : manaModes.length > 0
+        ? { producesOptions: manaModes }
+        : assembly.produces.length > 0
+          ? { produces: assembly.produces }
+          : {}),
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
     ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
     ...(assembly.statics.length > 0 ? { statics: assembly.statics } : {}),

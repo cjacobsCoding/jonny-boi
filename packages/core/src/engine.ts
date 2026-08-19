@@ -13,13 +13,16 @@
 
 import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
-import type { ActivatedAbility, CardDefinition, EffectRef } from './card.js';
+import type { ActivatedAbility, CardDefinition, EffectRef, ManaAbility, ManaModeExtra } from './card.js';
 import {
   canRevealForUntapped,
   castTiming,
+  fixedManaColorsOf,
   hasCastableBackFace,
   isLand,
   isPermanentType,
+  manaActivationConditionMet,
+  manaExtrasOf,
   manaModesOf,
   playableFaceOf,
 } from './card.js';
@@ -42,7 +45,7 @@ import type { ChoiceChannel, EffectRegistry } from './effects.js';
 import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './effects.js';
 import type { GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
-import type { ManaCost, ManaProduction } from './mana.js';
+import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { repeatCost } from './mana.js';
 import {
   addProduction,
@@ -1753,10 +1756,103 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
       manaCont ??= indexContinuous(state);
       if (!canActivateManaAbility(perm, manaCont)) continue;
     }
+    // The rich mana model (costs / riders / restrictions / derived colours) is
+    // read ONCE per source. The `manaAbilities` test is inlined rather than left
+    // to `manaExtrasOf` so the ordinary board — where no source has one — pays a
+    // single property read on an immutable definition and never a call, on the
+    // engine's hottest loop.
+    const extras = perm.def.manaAbilities === undefined ? undefined : manaExtrasOf(perm.def);
     for (let mode = 0; mode < modes.length; mode++) {
+      if (extras !== undefined && manaModeBlockedReason(state, perm, extras[mode]) !== undefined) {
+        continue;
+      }
       out.push({ kind: 'tapForMana', player, instanceId: perm.instanceId, mode });
     }
   }
+}
+
+/**
+ * Why `perm`'s mana mode cannot be activated right now, or `undefined` when it
+ * can. ONE answer, asked by the offer path and by the apply path, so a mode the
+ * menu shows is a mode the engine will accept — an unmet "Activate only if …" has
+ * to make the source *invisible* to the payment planner, not merely refuse after
+ * the planner has already counted on it.
+ *
+ * The mana half of an additional cost is checked against the FLOATING pool, which
+ * is exactly the gate `unpayableActivationReason` puts on an activated ability's
+ * mana cost. A filter land is therefore offered once its input mana is actually
+ * floating; the funding source is tapped first, which is how the activation
+ * happens in paper too (CR 605.3a lets you activate mana abilities while paying,
+ * and here that is simply the previous action).
+ */
+function manaModeBlockedReason(
+  state: GameState,
+  perm: CardInstance,
+  extra: ManaModeExtra | undefined,
+): string | undefined {
+  if (!extra) return undefined;
+  const { ability, derivedColor } = extra;
+  const player = state.players[perm.controller];
+  if (
+    ability.restriction &&
+    !manaActivationConditionMet(ability.restriction, {
+      controller: perm.controller,
+      battlefield: state.battlefield,
+    })
+  ) {
+    return `${perm.def.name}'s ability cannot be activated right now`;
+  }
+  if (derivedColor !== undefined) {
+    // "any color" never reaches {C}, whatever the board offers (see
+    // `ManaAbility.derivedIncludesColorless`).
+    if (derivedColor === 'C' && ability.derivedIncludesColorless !== true) {
+      return `${perm.def.name} cannot make colorless mana`;
+    }
+    if (!derivedManaColors(state, perm, ability).has(derivedColor)) {
+      return `no land makes {${derivedColor}} for ${perm.def.name} to copy`;
+    }
+  }
+  const cost = ability.cost;
+  if (cost) {
+    // CR 118.4: life pays down to zero and no further.
+    if (cost.life !== undefined && cost.life > 0 && player.life < cost.life) {
+      return 'you do not have enough life to pay that cost';
+    }
+    if (cost.mana && !canPay(player.manaPool, cost.mana)) {
+      return `insufficient mana to activate ${perm.def.name}`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The colours a board-derived mana ability may currently produce.
+ *
+ * Recomputed per query and never cached on the definition: the answer is a
+ * function of the battlefield, so a cached one would be a different card's answer
+ * the moment a land entered. Only sources that actually print a derived ability
+ * ever reach here, and there are a handful of those in the whole format, so the
+ * per-query set costs nothing a real board notices.
+ *
+ * The source permanent is excluded from its own derivation, and
+ * `fixedManaColorsOf` excludes every OTHER derived source too — so a pair of
+ * Reflecting Pools reads each other as producing nothing rather than looping.
+ */
+function derivedManaColors(
+  state: GameState,
+  source: CardInstance,
+  ability: ManaAbility,
+): ReadonlySet<ManaColor> {
+  const wantOpponents = ability.derivedColors === 'landsOpponentsControl';
+  const colors = new Set<ManaColor>();
+  for (const perm of state.battlefield) {
+    if (perm === source) continue;
+    const mine = perm.controller === source.controller;
+    if (wantOpponents ? mine : !mine) continue;
+    if (!isLand(perm.def)) continue;
+    for (const color of fixedManaColorsOf(perm.def)) colors.add(color);
+  }
+  return colors;
 }
 
 /**
@@ -1893,7 +1989,59 @@ function applyTapForMana(
   const production = modes[mode];
   if (!production) return rejectWith(prevState, `${source.def.name} has no mana mode ${mode}`);
 
+  // Everything a RICH mana ability prints beyond the colour bundle. `undefined`
+  // for every plain land and rock, so the ordinary tap is untouched by all of it.
+  const extra = manaExtrasOf(source.def)?.[mode];
+  if (extra) {
+    // Same single answer the offer path used, so a mode the menu showed is a mode
+    // this accepts — and one it hid is refused here too, even if a hostile client
+    // sends it anyway.
+    const blocked = manaModeBlockedReason(state, source, extra);
+    if (blocked) return rejectWith(prevState, blocked);
+    const player = state.players[action.player];
+    const cost = extra.ability.cost;
+    if (cost?.mana) {
+      // Paid BEFORE the production is added, which is what makes a filter land a
+      // filter rather than a free two mana: the input leaves the pool, then the
+      // output arrives.
+      const paid = payCost(player.manaPool, cost.mana);
+      if (!paid.ok) return rejectWith(prevState, paid.reason);
+      player.manaPool = paid.pool;
+      emit({ type: 'manaCostPaid', player: action.player, cost: { ...cost.mana } });
+    }
+    if (cost?.life !== undefined && cost.life > 0) {
+      player.life -= cost.life;
+      emit({ type: 'lifeChanged', player: action.player, delta: -cost.life, to: player.life });
+    }
+  }
+
   tapPermanentForMana(state, source, action.player, production, emit);
+
+  // The RIDER runs as part of the ability's own resolution, AFTER the mana is
+  // added — a pain land's damage is not a cost you may decline, and it is damage
+  // rather than life loss, so it goes through the same player-damage shape combat
+  // and burn use. It happens even when it is lethal; the SBA pass that follows
+  // this action is what ends the game, exactly as in paper.
+  const damage = extra?.ability.rider?.damageToController ?? 0;
+  if (damage > 0) {
+    const player = state.players[action.player];
+    player.life -= damage;
+    emit({
+      type: 'damageDealt',
+      source: source.instanceId,
+      target: action.player,
+      amount: damage,
+      combat: false,
+    });
+    emit({ type: 'lifeChanged', player: action.player, delta: -damage, to: player.life });
+  }
+  // Paying life or taking a rider's damage can reach zero, and that is legal —
+  // the player's call, not the engine's to forbid (CR 118.4). Settling it needs
+  // the SBA pass, exactly as the shockland payment does: a tap that kills you
+  // must end the game here rather than leaving a corpse holding priority. Run
+  // only when something actually changed a life total, so the ordinary tap —
+  // by far the most frequent action in the game — pays nothing for it.
+  if (damage > 0 || (extra?.ability.cost?.life ?? 0) > 0) checkStateBasedActions(state, emit);
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
 }
