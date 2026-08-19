@@ -1148,13 +1148,13 @@ Still open, roughly by how often they block a real decklist:
   spell is resolving and before the instance reaches the battlefield, and the primitive only looked
   at the battlefield — so every 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) died
   on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable** against the census baseline this
-  branch started from, and **229 → 254 (10.9% → 12.1%)** re-measured after merging the siblings that
+  branch started from, and **229 → 257 (10.9% → 12.2%)** re-measured after merging the siblings that
   landed meanwhile.
   ⚠️ Still reported, by name: `indestructible` (no keyword flag), phasing, doubling counters,
   proliferate (needs a chooser over every permanent and player with a counter), counter kinds the
   stat layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature",
-  "a creature **you control** dies" (the death event carries no controller), "**nontoken**" filters
-  (instances carry no token flag), and counter-removal activation costs (`ActivationCost` has no
+  "**nontoken**" filters (instances carry no token flag), once-per-turn trigger limiters, granting a
+  triggered ability until end of turn, and counter-removal activation costs (`ActivationCost` has no
   counter component).
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.

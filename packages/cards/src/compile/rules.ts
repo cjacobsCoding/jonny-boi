@@ -2823,9 +2823,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // finished work: indestructible, phasing, DOUBLING counters, proliferate
     // (needs a chooser over every permanent and player with a counter), counter
     // kinds the stat layer does not read (charge/quest/time/growth/keyword
-    // counters), "each ATTACKING creature", "a creature YOU CONTROL dies" (the
-    // death event carries no controller), "NONTOKEN" filters (instances carry no
-    // token flag), and removing a counter as an activation cost
+    // counters), "each ATTACKING creature", "NONTOKEN" filters (instances carry
+    // no token flag), once-per-turn trigger limiters, granting a triggered
+    // ability until end of turn, and removing a counter as an activation cost
     // (`ActivationCost` has no counter component).
     pattern: /\bcounters? on\b|\b\+1\/\+1 counter/,
     missingEngineSystem: 'a counters template the compiler does not recognize yet',

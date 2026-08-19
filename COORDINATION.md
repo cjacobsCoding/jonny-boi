@@ -118,7 +118,7 @@ _Append dated notes here; keep them short. Newest at top._
   printed could reach them. Closed as rule-table DATA plus small seam extensions.
 
   **Measured on the cached 2100-card corpus: 193 → 217** against the census baseline this branch
-  started from, and **229 → 254 (10.9% → 12.1%) re-measured after merging origin/main** (the
+  started from, and **229 → 257 (10.9% → 12.2%) re-measured after merging origin/main** (the
   keyword-sweep and modal-casting branches landed meanwhile). Re-run with
   `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json <out>`.
 
@@ -147,8 +147,8 @@ _Append dated notes here; keep them short. Newest at top._
   counters, **proliferate** (needs a chooser over every permanent AND player with a counter; the
   choice kinds cannot express that today — reported, never approximated), counter kinds the stat
   layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature"
-  (no combat state in a `CardFilter`), "a creature **you control** dies" (the `creatureDied` event
-  carries no controller), "**nontoken**" filters (instances carry no token flag), and removing a
+  (no combat state in a `CardFilter`), "**nontoken**" filters (instances carry no token flag),
+  once-per-turn trigger limiters, granting a triggered ability until end of turn, and removing a
   counter as an activation cost (`ActivationCost` has no counter component — Devoted Druid).
 
 - 2026-08-18 worker: `fix/keyword-sweep-and-mana-templates` 🚧 PUSHED — **the census's §2 bug is
