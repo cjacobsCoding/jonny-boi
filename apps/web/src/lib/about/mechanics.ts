@@ -246,6 +246,30 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'flashback-cost' },
       },
       {
+        title: 'Cycling',
+        detail:
+          'A "Cycling {cost}" card is an activated ability of a card in your HAND: pay the cost, discard the card as part of it, draw a card. Instant speed, so a cycling land turns into a card on an opponent turn. The discard is a COST, which is what lets it feed madness and a "whenever you cycle or discard" trigger. An {X} cycling cost still reports.',
+        witness: { kind: 'rule', id: 'cycling-cost' },
+      },
+      {
+        title: 'Typecycling and landcycling',
+        detail:
+          'The same mechanism with a different reward: "Plainscycling {2}" / "Landcycling {2}" search your library for a card of that type instead of drawing. Only words the card filter can genuinely select compile — the five basic land types and the generic "land"; anything else reports rather than fetching approximately the right card.',
+        witness: { kind: 'rule', id: 'typecycling-cost' },
+      },
+      {
+        title: 'Buyback',
+        detail:
+          'An optional additional cost asked at cast time, exactly like a kicker. Pay it and the card returns to your HAND as it resolves instead of going to the graveyard (CR 702.27a) — and only as it resolves: a bought-back spell that is countered goes to the graveyard like any other. Both answers come from the one helper that also decides where a flashback card goes, so the two can never disagree.',
+        witness: { kind: 'rule', id: 'buyback-cost' },
+      },
+      {
+        title: 'Madness',
+        detail:
+          'Discarding a madness card exiles it instead, and you may then cast it for its madness cost — from either discard funnel (a cost, or an effect), ignoring the timing printed on the card, with mana abilities still legal so you can pay. Passing declines and puts it in the graveyard the discard would have used. A madness cost printed in words ("Madness—Pay six {C}") still reports.',
+        witness: { kind: 'rule', id: 'madness-cost' },
+      },
+      {
         title: 'Granted flashback (Snapcaster Mage)',
         detail:
           'An effect can give a card in your GRAVEYARD flashback until end of turn, for the mana cost printed on that card. The ability targets the graveyard card as it goes on the stack (so it fizzles if the card leaves in response), the grant is scoped to that one card, it expires at end of turn, and it stops applying the moment the card changes zones (CR 400.7). Casting on the grant exiles the card exactly as a printed flashback does.',

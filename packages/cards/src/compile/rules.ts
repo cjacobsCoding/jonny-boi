@@ -27,11 +27,33 @@ import type {
   TriggerCondition,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION, formatManaCost } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols, splitCostSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
+
+/**
+ * The CYCLING words whose search this engine can express, and the filter each
+ * one means. A closed table on purpose: typecycling is only implementable when
+ * the printed word names something `CardFilter` can select, and every entry here
+ * is a printed LAND type (or the generic "land"), which is what the corpus's
+ * typecycling cards actually print. A word outside it — a creature-type cycling
+ * ("Slivercycling"), a "Wizardcycling" — has no entry, so its clause reports
+ * instead of searching for approximately the right card.
+ */
+const TYPECYCLING_FILTERS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> =
+  Object.freeze({
+    plains: { anyOfSubtypes: ['plains'] },
+    island: { anyOfSubtypes: ['island'] },
+    swamp: { anyOfSubtypes: ['swamp'] },
+    mountain: { anyOfSubtypes: ['mountain'] },
+    forest: { anyOfSubtypes: ['forest'] },
+    land: { anyOfTypes: ['land'] },
+  });
+
+/** The regex alternation of the cycling words above. */
+const TYPECYCLING_TOKEN = Object.keys(TYPECYCLING_FILTERS).join('|');
 
 /** Mana symbols as they appear in normalized (lowercased) Oracle text. */
 const MANA_SYMBOL_TO_COLOR: Readonly<Record<string, ManaColor>> = Object.freeze({
@@ -2313,6 +2335,95 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'cycling-cost',
+    description: '"Cycling {2}" — pay the cost, discard this card, draw a card',
+    // A whole ability line: the keyword followed by nothing but mana symbols.
+    // "Cycling {X}{1}{U}" (Shark Typhoon) deliberately does NOT compile — an
+    // {X} in an ACTIVATION cost has no answer-and-charge seam the way an {X} in
+    // a casting cost does, and cycling for less than printed would be strictly
+    // better than the real card. It falls through to the hint instead.
+    pattern: /^cycling ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null; // {X}/Phyrexian/hybrid — report, don't approximate
+      return {
+        cycling: [
+          {
+            cost,
+            effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            label: `Cycling ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'typecycling-cost',
+    description:
+      '"Plainscycling {2}" / "Landcycling {2}" — pay, discard, search for a card of that type',
+    // TYPECYCLING and LANDCYCLING are cycling with a different reward, which is
+    // why they are the same rule and the same engine mechanism: the ability's
+    // effects are a library search instead of a draw. The searchable words are a
+    // CLOSED table (the five basic land types plus the generic "land"), because
+    // each one has to name something `CardFilter` can actually select — a
+    // creature-type cycling word the filter cannot express must report, not
+    // search for the wrong thing.
+    pattern: new RegExp(`^(${TYPECYCLING_TOKEN})cycling ((?:\\{[^}]+\\})+)$`),
+    build(match) {
+      const word = (match[1] ?? '').toLowerCase();
+      const cost = parseManaSymbols(match[2] ?? '');
+      if (!cost) return null;
+      const filter = TYPECYCLING_FILTERS[word];
+      if (!filter) return null;
+      const printed = `${word.charAt(0).toUpperCase()}${word.slice(1)}cycling`;
+      return {
+        cycling: [
+          {
+            cost,
+            effects: [
+              {
+                primitive: 'searchLibrary',
+                // Destination hand, count 1, and the search may always fail to
+                // find — which `searchLibrary` already models with a floor of
+                // zero, exactly as the printed "search … then shuffle" allows.
+                params: { who: 'controller', count: 1, destination: 'hand', filter },
+              },
+            ],
+            label: `${printed} ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'buyback-cost',
+    description: '"Buyback {3}" — an optional additional cost that returns the spell to hand',
+    pattern: /^buyback ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      // Buyback is printed only on instants and sorceries; "put this card into
+      // your hand as it resolves" means nothing for a permanent spell, so
+      // anything else reaching here reports rather than compiling a dead field.
+      const types = ctx.card.typeLine.types.map((t) => t.toLowerCase());
+      if (!types.includes('instant') && !types.includes('sorcery')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { buyback: cost };
+    },
+  },
+  {
+    id: 'madness-cost',
+    description: '"Madness {1}{U}" — discard it to exile, then you may cast it for this cost',
+    // The em-dash form ("Madness—Pay six {C}") deliberately does not match: its
+    // cost is printed in words, and reading a number out of it would be guessing
+    // at what the card costs.
+    pattern: /^madness ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { madness: cost };
+    },
+  },
+  {
     id: 'enters-tapped',
     description: '"~ enters tapped" (the unconditional form only)',
     pattern: /^~ enters(?: the battlefield)? tapped$/,
@@ -3102,11 +3213,19 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a kicker template the compiler does not recognize yet',
   },
   {
-    // Cycling/buyback/madness are still real gaps: they cast (or discard) from
-    // moments and zones the engine does not model, which is not the cast-time
-    // cost question kicker and {X} now go through.
+    // Cycling, buyback and madness are all REAL MECHANICS now — cycling is an
+    // activated ability from HAND (`CardDefinition.cycling` + the `cycleCard`
+    // action, with typecycling/landcycling the same mechanism searching instead
+    // of drawing), buyback is a cast-time payMana whose answer decides where the
+    // card goes (`spellLeaveDestination`), and madness replaces the discard and
+    // opens a cast-from-exile window. What still lands here is a FORM none of
+    // the three can pay or express: an {X} in a cycling cost (Shark Typhoon), a
+    // madness cost printed in words ("Madness—Pay six {C}"), a cycling word
+    // naming something `CardFilter` cannot select, or a "when you cycle this
+    // card" body the effect table cannot build.
     pattern: /\bcycling\b|\bbuyback\b|\bmadness\b/,
-    missingEngineSystem: 'alternative casting costs and cost-bearing discards (cycling, buyback, madness)',
+    missingEngineSystem:
+      'a cycling/buyback/madness template the compiler does not recognize yet (the plain mana-cost forms are supported; an {X} cycling cost, a madness cost printed in words, and a cycling word with no expressible filter are not)',
   },
   {
     // Characteristic-defining P/T IS a system now (CR 613.3 layer 7a: a `*` box

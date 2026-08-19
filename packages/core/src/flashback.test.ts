@@ -197,7 +197,7 @@ describe('flashback — the cast', () => {
     const spell = state.stack[0] as SpellStackObject;
     expect(spell.castFrom).toBe('graveyard');
     expect(spell.resolvesTo).toBe('exile');
-    expect(spellLeaveDestination(spell)).toBe('exile');
+    expect(spellLeaveDestination(spell, 'resolve')).toBe('exile');
 
     state = resolveTop(state, reg);
     expect(resolved()).toBe(1); // the script genuinely ran
@@ -214,7 +214,7 @@ describe('flashback — the cast', () => {
     state = act(state, { kind: 'castSpell', player: 'A', instanceId: card!.instanceId }, reg);
     const spell = state.stack[0] as SpellStackObject;
     expect(spell.castFrom).toBeUndefined();
-    expect(spellLeaveDestination(spell)).toBe('graveyard');
+    expect(spellLeaveDestination(spell, 'resolve')).toBe('graveyard');
 
     state = resolveTop(state, reg);
     expect(state.players.A.graveyard.map((c) => c.instanceId)).toEqual([card!.instanceId]);
@@ -233,7 +233,7 @@ describe('flashback — the cast', () => {
     const cloned = cloneState(state);
     const spell = cloned.stack[0] as SpellStackObject;
     expect(spell.castFrom).toBe('graveyard');
-    expect(spellLeaveDestination(spell)).toBe('exile');
+    expect(spellLeaveDestination(spell, 'resolve')).toBe('exile');
   });
 });
 
