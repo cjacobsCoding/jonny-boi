@@ -1801,6 +1801,47 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * "Whenever [another] [COLOR] TYPE you control enters, BODY" — and its two
+     * ability-word dresses, landfall ("whenever a land you control enters") and
+     * constellation ("whenever an enchantment you control enters"), which are
+     * the same trigger with a name printed in front of it.
+     *
+     * The "**nontoken**" variant is deliberately NOT matched: instances carry no
+     * token flag, so that filter cannot be honoured and the line keeps
+     * reporting rather than firing on tokens too.
+     */
+    id: 'trigger-permanent-etb',
+    description: '"Whenever [another] [COLOR] TYPE you control enters, BODY" (incl. landfall / constellation)',
+    pattern: new RegExp(
+      `^(?:landfall — |constellation — )?whenever (another |an?other |an? )?` +
+        `((?:${Object.keys(COLOR_WORDS).join('|')}) )?([a-z]+) you control enters, (.+)$`,
+    ),
+    build(match, ctx) {
+      const type = SPELL_TYPE_WORDS[match[3] ?? ''];
+      if (!type) return null;
+      const colorWord = match[2]?.trim();
+      const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
+      if (colorWord !== undefined && color === undefined) return null;
+      const another = (match[1] ?? '').trim().startsWith('another');
+      const condition = {
+        on: 'permanentEtb',
+        who: 'you',
+        entering: {
+          anyOfTypes: [type],
+          ...(color ? { anyOfColors: [color as never] } : {}),
+        },
+        ...(another ? { excludeSelf: true } : {}),
+      } as const;
+      return triggerFrom(
+        ctx,
+        condition as never,
+        match[4] ?? '',
+        `${another ? 'Another ' : 'A '}${type} you control enters: ${match[4] ?? ''}`,
+      );
+    },
+  },
+  {
     id: 'trigger-begin-combat',
     description: '"At the beginning of combat on your turn, BODY"',
     pattern: /^at the beginning of combat on your turn, (.+)$/,
@@ -2398,6 +2439,13 @@ export const ABILITY_WORDS: ReadonlySet<string> = new Set([
   'delirium',
   'threshold',
   'metalcraft',
+  // Landfall and constellation label the permanent-ETB trigger line that
+  // `trigger-permanent-etb` now compiles. Before that rule existed the line
+  // reported anyway, so the words were left out of this set; leaving them out
+  // NOW would report a keyword one line after implementing the ability it
+  // labels (the guard's own rule: skipped only when the labelled line compiled).
+  'landfall',
+  'constellation',
 ]);
 
 /** True when a clause is vacuously satisfied and can safely be skipped. */

@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest';
 import { conditionMatches } from './triggers.js';
 import type { GameEvent } from './events.js';
-import type { InstanceId, PlayerId } from './state.js';
+import type { CardInstance, InstanceId, PlayerId } from './state.js';
 
 const SOURCE: InstanceId = 7;
 const OTHER: InstanceId = 9;
@@ -93,5 +93,69 @@ describe('combat-damage-to-a-player triggers', () => {
     expect(
       matches(condition, { type: 'damageDealt', source: SOURCE, target: OTHER, amount: 2, combat: true }),
     ).toBe(false);
+  });
+});
+
+describe('another-permanent-enters triggers', () => {
+  /** A battlefield view holding one entering permanent. */
+  function view(instanceId: InstanceId, controller: PlayerId, types: readonly string[], colorPip?: 'G') {
+    const card = {
+      instanceId,
+      controller,
+      def: {
+        id: `t:${instanceId}`,
+        name: `T${instanceId}`,
+        types,
+        ...(colorPip ? { cost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0 } } : {}),
+      },
+      counters: {},
+    } as unknown as CardInstance;
+    return { battlefield: [card] };
+  }
+
+  const entered = (instanceId: InstanceId): GameEvent => ({
+    type: 'zoneChange',
+    instanceId,
+    from: 'stack',
+    to: 'battlefield',
+  });
+
+  it('fires for another creature you control and not for the opponent’s', () => {
+    const condition = {
+      on: 'permanentEtb',
+      who: 'you',
+      entering: { anyOfTypes: ['creature'] },
+    } as const;
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['creature']))).toBe(true);
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, THEM, ['creature']))).toBe(false);
+    // A land arriving is not a creature arriving.
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['land']))).toBe(false);
+  });
+
+  it('the printed word "another" excludes the source’s own arrival', () => {
+    const another = {
+      on: 'permanentEtb',
+      who: 'you',
+      excludeSelf: true,
+      entering: { anyOfTypes: ['creature'] },
+    } as const;
+    const plain = { on: 'permanentEtb', who: 'you', entering: { anyOfTypes: ['creature'] } } as const;
+    expect(conditionMatches(another, entered(SOURCE), SOURCE, ME, view(SOURCE, ME, ['creature']))).toBe(false);
+    expect(conditionMatches(plain, entered(SOURCE), SOURCE, ME, view(SOURCE, ME, ['creature']))).toBe(true);
+  });
+
+  it('never fires without a state view — an unverifiable filter must not fire', () => {
+    const condition = { on: 'permanentEtb', who: 'you', entering: { anyOfTypes: ['creature'] } } as const;
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME)).toBe(false);
+  });
+
+  it('honours a colour filter ("another GREEN creature you control")', () => {
+    const condition = {
+      on: 'permanentEtb',
+      who: 'you',
+      entering: { anyOfTypes: ['creature'], anyOfColors: ['G'] },
+    } as const;
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['creature'], 'G'))).toBe(true);
+    expect(conditionMatches(condition, entered(OTHER), SOURCE, ME, view(OTHER, ME, ['creature']))).toBe(false);
   });
 });

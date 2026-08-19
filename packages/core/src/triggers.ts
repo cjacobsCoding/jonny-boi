@@ -17,6 +17,9 @@
  */
 
 import type { CardType, EffectRef } from './card.js';
+import type { CardFilter } from './choices.js';
+import { matchesCardFilter } from './choices.js';
+import type { CardInstance } from './state.js';
 import type { GameEvent } from './events.js';
 import type { InstanceId, PlayerId } from './state.js';
 import type { TargetRestriction } from './targeting.js';
@@ -41,6 +44,10 @@ import type { TargetRestriction } from './targeting.js';
  *                        card that fired on every death when it should fire on
  *                        one is a very different card.
  *   - `combatDamageToPlayer` : this permanent dealt COMBAT damage to a player.
+ *   - `permanentEtb`   : ANOTHER permanent entered the battlefield — "whenever a
+ *                        creature you control enters", "landfall". Filtered by
+ *                        `who` (whose permanent) and `entering` (a `CardFilter`
+ *                        over its printed characteristics).
  */
 export type TriggerEvent =
   | 'etb'
@@ -53,7 +60,8 @@ export type TriggerEvent =
   | 'endStep'
   | 'gainLife'
   | 'creatureDies'
-  | 'combatDamageToPlayer';
+  | 'combatDamageToPlayer'
+  | 'permanentEtb';
 
 /**
  * Whose action a relational trigger (cast / a step / life gain) cares about.
@@ -85,6 +93,21 @@ export interface TriggerCondition {
    * playing stronger.
    */
   readonly spellTypeNoneOf?: readonly CardType[];
+  /**
+   * For `permanentEtb`: which entering permanents count, as the shared
+   * {@link CardFilter} vocabulary — "a **creature** you control enters", "a
+   * **land** you control enters" (landfall), "another **green** creature".
+   *
+   * Absent ⇒ any permanent, which is what the unqualified printed form means.
+   */
+  readonly entering?: CardFilter;
+  /**
+   * For `permanentEtb`: the printed word "**another**" — the source's own
+   * arrival does not set it off. A distinct flag rather than something inferred,
+   * for the same reason `StaticAffects.excludeSource` is one: getting it
+   * backwards is silent and changes what the card does on the turn it lands.
+   */
+  readonly excludeSelf?: boolean;
 }
 
 /**
@@ -114,6 +137,15 @@ export interface TriggeredAbility {
    * than a silently-widened one here.
    */
   readonly targets?: TargetRestriction;
+}
+
+/**
+ * The slice of game state a condition may consult. Deliberately the battlefield
+ * and nothing else: a condition that needed more would be reaching past what a
+ * trigger can honestly know at match time.
+ */
+export interface TriggerStateView {
+  readonly battlefield: readonly CardInstance[];
 }
 
 /**
@@ -149,6 +181,7 @@ export function conditionMatches(
   event: GameEvent,
   sourceInstanceId: InstanceId,
   sourceController: PlayerId,
+  state?: TriggerStateView,
 ): boolean {
   switch (condition.on) {
     case 'etb':
@@ -196,6 +229,21 @@ export function conditionMatches(
       // controller, so a condition that claimed to watch only YOUR creatures
       // could not be honoured and is therefore not expressible here.
       return event.type === 'creatureDied';
+    case 'permanentEtb': {
+      // Another permanent's arrival. The ENTERING permanent's controller and
+      // characteristics are not on the event, so they are read from the
+      // battlefield — where the engine has already placed it by the time the
+      // zoneChange is emitted. With no state view the condition simply never
+      // matches, which is the safe direction: a trigger that cannot verify its
+      // own filter must not fire.
+      if (event.type !== 'zoneChange' || event.to !== 'battlefield') return false;
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
+      if (!state) return false;
+      const entered = state.battlefield.find((c) => c.instanceId === event.instanceId);
+      if (!entered) return false;
+      if (!whoMatches(condition.who, entered.controller, sourceController)) return false;
+      return matchesCardFilter(entered, condition.entering);
+    }
     case 'combatDamageToPlayer':
       // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
       // the string test is what distinguishes "to a player" from "to a
@@ -246,6 +294,7 @@ const NO_PENDING_TRIGGERS: readonly PendingTrigger[] = Object.freeze([]);
 export function matchTriggers(
   sources: readonly TriggerSource[],
   event: GameEvent,
+  state?: TriggerStateView,
 ): readonly PendingTrigger[] {
   let pending: PendingTrigger[] | null = null;
   for (let s = 0; s < sources.length; s++) {
@@ -255,7 +304,7 @@ export function matchTriggers(
     const abilities = src.triggers;
     for (let abilityIndex = 0; abilityIndex < abilities.length; abilityIndex++) {
       const ability = abilities[abilityIndex] as TriggeredAbility;
-      if (!conditionMatches(ability.condition, event, src.instanceId, src.controller)) continue;
+      if (!conditionMatches(ability.condition, event, src.instanceId, src.controller, state)) continue;
       (pending ??= []).push({
         sourceInstanceId: src.instanceId,
         controller: src.controller,

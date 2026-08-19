@@ -689,6 +689,90 @@ const STONECOIL_SERPENT = scryfall({
   oracleText: ['Reach, trample', 'Stonecoil Serpent enters with X +1/+1 counters on it.'].join('\n'),
 });
 
+describe('another-permanent-enters triggers', () => {
+  it('compiles Cathars’ Crusade — a creature-ETB trigger with a group payload', () => {
+    const definition = playable(CATHARS_CRUSADE);
+    const trigger = definition.triggers?.[0];
+    expect(trigger?.condition).toEqual({
+      on: 'permanentEtb',
+      who: 'you',
+      entering: { anyOfTypes: ['creature'] },
+    });
+    expect(trigger?.effects[0]?.params).toEqual({ amount: 1, each: true, scope: 'you', filter: {} });
+  });
+
+  it('carries the printed word "another" and a colour word into the condition', () => {
+    const denizen = playable(IVY_LANE_DENIZEN);
+    expect(denizen.triggers?.[0]?.condition).toEqual({
+      on: 'permanentEtb',
+      who: 'you',
+      entering: { anyOfTypes: ['creature'], anyOfColors: ['G'] },
+      excludeSelf: true,
+    });
+  });
+
+  it('REFUSES the "nontoken" variant — instances carry no token flag', () => {
+    const result = compileCard(
+      scryfall({
+        name: 'Token Hater',
+        cost: { G: 1 },
+        types: ['Creature'],
+        subtypes: ['Elf'],
+        power: 1,
+        toughness: 1,
+        oracleText: 'Whenever another nontoken creature you control enters, put a +1/+1 counter on it.',
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('really counts the team when creatures enter in a played game', () => {
+    // The printed Crusade costs {3}{W}{W}, uncastable off this test's Forests,
+    // so the play test uses the same printed ability on a green enchantment:
+    // what is under test is the trigger and its group payload, not the cost.
+    const crusade = playable(
+      scryfall({
+        name: 'Verdant Crusade',
+        cost: { generic: 1, G: 1 },
+        types: ['Enchantment'],
+        oracleText: 'Whenever a creature you control enters, put a +1/+1 counter on each creature you control.',
+      }),
+    );
+    const bearCard: CardDefinition = {
+      id: 'counters:Bear',
+      name: 'Grizzly Bears',
+      types: ['creature'],
+      power: 2,
+      toughness: 2,
+      cost: { generic: 1, G: 1 },
+    };
+    const game = playGameCasting(
+      'Verdant Crusade',
+      { A: deckWith([crusade, bearCard]), B: deckWith([bearCard]) },
+      612,
+    );
+    const counters = game.events.filter((e) => e.type === 'counterAdded' && e.kind === PLUS_ONE_COUNTER);
+    expect(counters.length, 'creatures entered and the Crusade counted nobody').toBeGreaterThan(0);
+  });
+});
+
+const CATHARS_CRUSADE = scryfall({
+  name: "Cathars' Crusade",
+  cost: { generic: 3, W: 2 },
+  types: ['Enchantment'],
+  oracleText: 'Whenever a creature you control enters, put a +1/+1 counter on each creature you control.',
+});
+
+const IVY_LANE_DENIZEN = scryfall({
+  name: 'Ivy Lane Denizen',
+  cost: { generic: 4, G: 1 },
+  types: ['Creature'],
+  subtypes: ['Elemental'],
+  power: 3,
+  toughness: 3,
+  oracleText: 'Whenever another green creature you control enters, put a +1/+1 counter on target creature.',
+});
+
 // --- shared fixtures -------------------------------------------------------------
 
 const registry = buildRegistry();

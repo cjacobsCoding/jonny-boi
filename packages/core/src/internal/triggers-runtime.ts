@@ -173,7 +173,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // an empty source list always returns nothing.
     if (seenSources === null) return;
     snapshot ??= [...seenSources.values()];
-    const matched = matchTriggers(snapshot, event);
+    const matched = matchTriggers(snapshot, event, state);
     if (matched.length === 0) return;
     if (queue === null) queue = [];
     for (const m of matched) queue.push(m);
