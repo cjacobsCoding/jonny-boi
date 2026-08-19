@@ -762,6 +762,16 @@ function placeKeptOnTop(ctx: EffectContext, who: PlayerId, kept: readonly Instan
 }
 
 /**
+ * Log the LOOK itself, as a count and nothing more — the public half of a scry
+ * or a surveil (see core's `cardsLookedAt`). Called from the mutate phase, once
+ * every answer is in: emitting it before an unanswered ask would log the same
+ * look again on every re-run of the effect.
+ */
+function emitLookedAt(ctx: EffectContext, who: PlayerId, amount: number): void {
+  if (amount > 0) ctx.emit({ type: 'cardsLookedAt', player: who, amount });
+}
+
+/**
  * `scry` — "Scry N" (CR 701.18): look at the top `params.count` cards of your
  * library, put any number of them on the bottom and the rest back on top, both
  * groups in any order.
@@ -812,6 +822,7 @@ export const scry: EffectPrimitive = (ctx) => {
   // the way), each appended to the library's end: the first-chosen bottom card
   // is pushed first and every later one lands BELOW it, so first = surfaces
   // soonest. Then the kept cards are re-seated in chosen order.
+  emitLookedAt(ctx, who, candidates.length);
   for (const id of bottomOrder) {
     moveOwnedCard(ctx, who, id, 'library', 'library', 'bottom');
   }
@@ -846,6 +857,7 @@ export const surveil: EffectPrimitive = (ctx) => {
   const { kept, candidates } = look;
   if (candidates.length === 0) return; // empty library — nothing to surveil
 
+  emitLookedAt(ctx, who, candidates.length);
   const keptSet = new Set(kept);
   for (const option of candidates) {
     if (keptSet.has(option.instanceId)) continue;
