@@ -9,9 +9,9 @@ import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
-import { GraveyardPanel, type GraveyardPanelCard } from './GraveyardPanel.js';
+import { GraveyardPanel } from './GraveyardPanel.js';
 import { AbilityMenuPrompt, AbilityTargetPrompt } from './AbilityPrompts.js';
-import { GRAVEYARD_CAST_BADGE, reasonGraveyardCardIsDisabled } from '../../lib/play/graveyard-cast.js';
+import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 import './action-bar.css';
@@ -178,25 +178,16 @@ export function PlayBoard({
   };
 
   /** The panel's view of the viewer's graveyard, with the why-disabled treatment. */
-  const graveyardPanelCards: readonly GraveyardPanelCard[] = (view.self.graveyard ?? []).map((c) => {
-    const opt = graveyardCasts.find((o) => o.instanceId === c.instanceId);
-    const hasFlashback = session.state.players[viewer].graveyard.some(
-      (inst) => inst.instanceId === c.instanceId && inst.def.flashback !== undefined,
-    );
-    return {
-      instanceId: c.instanceId,
-      cardId: c.cardId,
-      name: c.name,
-      badge: opt ? GRAVEYARD_CAST_BADGE : undefined,
-      actionable: !!opt,
-      reason: opt
-        ? undefined
-        : reasonGraveyardCardIsDisabled(
-            { yourTurn: isViewersPriority, waitingOn: names[session.priorityPlayer], step },
-            { hasFlashback },
-          ),
-    };
-  });
+  const graveyardPanelCards = graveyardPanelView(
+    session.state.players[viewer].graveyard.map((inst) => ({
+      instanceId: inst.instanceId,
+      cardId: inst.def.id,
+      name: inst.def.name,
+      hasFlashback: inst.def.flashback !== undefined,
+    })),
+    new Set(graveyardCasts.map((o) => o.instanceId)),
+    { yourTurn: isViewersPriority, waitingOn: names[session.priorityPlayer], step },
+  );
 
   // --- combat: attacker selection -----------------------------------------------
   const eligibleAttackers = useMemo(() => {

@@ -14,7 +14,7 @@ import { castSequence, castableWithTaps, graveyardCastableWithTaps } from '../..
 import { alreadyPassedFrame, shouldAutoPass } from '../../lib/online/auto-pass.js';
 import { DRAG_ID_ATTR, useDragToPlay } from '../../lib/online/useDragToPlay.js';
 import { idleTurnNote, reasonCardIsDisabled } from '../../lib/online/why-disabled.js';
-import { GRAVEYARD_CAST_BADGE, reasonGraveyardCardIsDisabled } from '../../lib/play/graveyard-cast.js';
+import { graveyardPanelView } from '../../lib/play/graveyard-cast.js';
 import { AUTO_PASS_DELAY_MS, AUTO_PASS_EMPTY_PRIORITY } from '../../lib/online/online-config.js';
 import { legalTargets, optionToTarget, targetRequirement } from '../../lib/play/targeting.js';
 import { buildDeclareAttackersAction, type AbilityOption } from '../../lib/play/session.js';
@@ -33,7 +33,7 @@ import { answerChoiceAction, onlineChoiceView } from '../../lib/online/pending-c
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 import { ChoicePrompt } from '../play/ChoicePrompt.js';
 import { AbilityMenuPrompt, AbilityTargetPrompt } from '../play/AbilityPrompts.js';
-import { GraveyardPanel, type GraveyardPanelCard } from '../play/GraveyardPanel.js';
+import { GraveyardPanel } from '../play/GraveyardPanel.js';
 import { SeatPanel, type PermInteraction } from '../play/SeatPanel.js';
 import { StackPanel } from '../play/StackPanel.js';
 import { PlayCard, CardBack } from '../play/PlayCard.js';
@@ -311,24 +311,25 @@ export function OnlineBoard({
   const { drag, dropRef, handProps: dragHandProps } = useDragToPlay(activateHandCard);
 
   // --- the graveyard panel ---------------------------------------------------------
-  /** Every graveyard card, judged for the panel (castable now, or why not). */
-  const graveyardPanelCards: readonly GraveyardPanelCard[] = ownGraveyard.map((c) => {
-    const actionable =
-      yourTurn && (graveyardCasts.has(c.instanceId) || graveyardTapCastable.has(c.instanceId));
-    return {
-      instanceId: c.instanceId,
-      cardId: c.def.id,
-      name: c.def.name,
-      badge: actionable ? GRAVEYARD_CAST_BADGE : undefined,
-      actionable,
-      reason: actionable
-        ? undefined
-        : reasonGraveyardCardIsDisabled(
-            { yourTurn, waitingOn: names[masked.priorityPlayer], step },
-            { hasFlashback: c.def.flashback !== undefined },
-          ),
-    };
-  });
+  /**
+   * Every graveyard card as the panel renders it. The judging lives in the shared
+   * pure `graveyardPanelView` — the hotseat board calls the same function, so the
+   * two graveyards cannot drift.
+   */
+  const graveyardPanelCards = useMemo(
+    () =>
+      graveyardPanelView(
+        ownGraveyard.map((c) => ({
+          instanceId: c.instanceId,
+          cardId: c.def.id,
+          name: c.def.name,
+          hasFlashback: c.def.flashback !== undefined,
+        })),
+        new Set([...graveyardCasts.keys(), ...graveyardTapCastable]),
+        { yourTurn, waitingOn: names[masked.priorityPlayer], step },
+      ),
+    [ownGraveyard, graveyardCasts, graveyardTapCastable, yourTurn, names, masked.priorityPlayer, step],
+  );
 
   // --- activated abilities (a planeswalker's loyalty lines) -------------------------
   /** Definitions come from the PUBLIC battlefield the server already sent. */

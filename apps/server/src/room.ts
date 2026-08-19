@@ -125,10 +125,23 @@ export class Room {
   /** Monotonic seed so each rematch is a fresh, still-reproducible game. */
   private nextSeed: number;
 
-  constructor(code: string, config: RulesConfig = DEFAULT_RULES, seed: number = randomGameSeed()) {
+  /**
+   * `pool` overrides the shared curated pool. Production always takes the default;
+   * it exists because the shipped pool contains no card for several REAL mechanics
+   * the engine plays (flashback, {X} costs), so an end-to-end online test of those
+   * affordances cannot deal a deck containing one. Injecting a pool built with
+   * `loadCardPool({ extraCards })` — the same seam the web app already uses for
+   * imported decks — lets the two-client harness play them for real.
+   */
+  constructor(
+    code: string,
+    config: RulesConfig = DEFAULT_RULES,
+    seed: number = randomGameSeed(),
+    pool: CardPool = getPool(),
+  ) {
     this.code = code;
     this.config = config;
-    this.pool = getPool();
+    this.pool = pool;
     this.nextSeed = seed;
     this.seats = {
       A: this.makeSeat('A'),

@@ -1,19 +1,7 @@
 import type { ReactElement } from 'react';
 import type { InstanceId } from '@jonny-boi/core';
+import type { GraveyardCardView } from '../../lib/play/graveyard-cast.js';
 import { PlayCard } from './PlayCard.js';
-
-/** One graveyard card, pre-judged by the board for the panel to render. */
-export interface GraveyardPanelCard {
-  readonly instanceId: InstanceId;
-  readonly cardId: string;
-  readonly name: string;
-  /** Corner badge ("flashback") for a currently castable card. */
-  readonly badge?: string;
-  /** True when clicking the card starts a cast (routed by the board). */
-  readonly actionable: boolean;
-  /** Why the card is NOT castable right now (tooltip on a disabled card). */
-  readonly reason?: string;
-}
 
 /**
  * The opened graveyard — shared verbatim by the hotseat and online boards (one
@@ -30,7 +18,7 @@ export function GraveyardPanel({
   onClose,
 }: {
   ownerName: string;
-  cards: readonly GraveyardPanelCard[];
+  cards: readonly GraveyardCardView[];
   /** Start the cast of a castable card (the board's single cast chokepoint). */
   onActivate: (id: InstanceId) => void;
   onClose: () => void;
