@@ -82,6 +82,16 @@ export {
  * so every consumer that already reads effective values gets statics for free.
  */
 export type { PermanentModification, StaticAbility, StaticAffects, StaticControllerScope } from './statics.js';
+
+// Derived values — the ONE evaluator behind "equal to the number of …" params
+// and characteristic-defining P/T, plus its closed count vocabulary.
+export type { CharacteristicFormula, CharacteristicPT, DerivedCountName } from './card.js';
+export { evaluateDerivedCount, characteristicValue } from './derived.js';
+
+// Turn-scoped fact memory (revolt / morbid / lifegain) — a NAMED closed
+// vocabulary, not a general event query. See turn-facts.ts.
+export type { TurnFact } from './turn-facts.js';
+export { TURN_FACTS, turnFactHolds, setTurnFact, clearTurnFacts } from './turn-facts.js';
 export {
   DEFAULT_STATIC_SCOPE,
   staticsOf,
@@ -144,6 +154,20 @@ export {
   protectionPreventsDamage,
   sourceHasQuality,
 } from './protection.js';
+
+// Card grants (card-grants.ts): continuous effects on cards in NON-battlefield
+// zones — Snapcaster Mage's "target instant or sorcery card in your graveyard
+// gains flashback until end of turn". A separate list from the continuous layer
+// because that layer is keyed on battlefield permanents; see the module header
+// for the CR 400.7 zone-change rule and the empty-check performance discipline.
+export type { CardGrant, CardGrantRequest } from './card-grants.js';
+export {
+  addCardGrant,
+  expireCardGrants,
+  flashbackCostOf,
+  hasCardGrants,
+  pruneCardGrantsFor,
+} from './card-grants.js';
 /**
  * Transforming double-faced cards (CR 701.28 / 712): a front-face definition
  * nests its back face (`CardDefinition.backFace`), which face is up is

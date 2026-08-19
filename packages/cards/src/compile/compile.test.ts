@@ -58,8 +58,16 @@ const STUBBED_NAMES = new Set(STUBBED_MECHANICS.map((entry) => entry.card));
  * one mana. The compiler reports the hybrid cost instead of shipping that.
  */
 const HUMAN_APPROXIMATIONS: Readonly<Record<string, string>> = Object.freeze({
-  Tarmogoyf: 'dynamic power/toughness (characteristic-defining */*)',
-  // Birds of Paradise used to live here: "{T}: Add one mana of any color" had no
+  // EMPTY, and that is the news: every remaining pool card is either reproduced
+  // exactly from its printed text or named in STUBBED_MECHANICS.
+  //
+  // Tarmogoyf used to live here — the pool pinned a representative 2/3 for a
+  // card whose printed box is a formula, and the compiler refused to copy the
+  // guess. Characteristic-defining P/T (CR 613.3 layer 7a) closed that gap, so
+  // the compiler reproduces the authored Tarmogoyf exactly and the card is held
+  // to the full ground-truth check like everything else.
+  //
+  // Birds of Paradise used to live here too: "{T}: Add one mana of any color" had no
   // faithful form, because a fixed `produces` bundle adds one of EACH colour and
   // would have made Birds tap for five mana. Core's modal `producesOptions` (one
   // tap = one chosen mode) closed that gap, so the compiler now reproduces the
@@ -181,16 +189,28 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
-    // Liliana COMPILES now (the planeswalker system landed), so the blocked half
-    // needs a genuinely unimplementable card: Tarmogoyf's */* P/T still is.
+    // The blocked half has to be a card that is STILL genuinely unimplementable,
+    // and that list keeps shrinking: Liliana compiles (planeswalkers), Tarmogoyf
+    // compiles (the star P/T box), and Snapcaster compiles (graveyard targeting
+    // plus grants on a non-battlefield card). What is left is Cryptic Command,
+    // whose MODES are chosen at cast — core picks targets with no mode declared.
+    // When modal casting lands, this test needs the next honestly-blocked card;
+    // if none remains, it should assert an empty blocked half instead.
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
     const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
+    const snapcaster = scryfallFor(CARD_POOL.find((c) => c.name === 'Snapcaster Mage')!);
+    const cryptic = scryfallFor(CARD_POOL.find((c) => c.name === 'Cryptic Command')!);
 
-    const { playable, blocked } = compileCards([bolt, liliana, goyf]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic]);
 
-    expect(playable.map((card) => card.name)).toEqual(['Lightning Bolt', 'Liliana of the Veil']);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Tarmogoyf']);
+    expect(playable.map((card) => card.name)).toEqual([
+      'Lightning Bolt',
+      'Liliana of the Veil',
+      'Tarmogoyf',
+      'Snapcaster Mage',
+    ]);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Cryptic Command']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });

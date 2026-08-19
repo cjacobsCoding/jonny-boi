@@ -48,6 +48,8 @@ export {
   tapTarget,
   attachToTarget,
   ifKicked,
+  grantFlashback,
+  ITS_MANA_COST,
 } from './primitives.js';
 
 // The choice-driven primitives (DESIGN §3.11): the ones that ask the player a
@@ -147,29 +149,20 @@ export {
  * included.
  * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
  * abilities play as printed (each-player discard, the edict, the pile split).
+ * The graveyard-grant system (targeting a card in a graveyard + core's
+ * `card-grants.ts` layer) un-stubbed **Snapcaster Mage** — flash, the targeted
+ * ETB, and the granted flashback all play as printed, and the granted cast goes
+ * through the very same path a printed "Flashback {cost}" uses.
+ * Characteristic-defining P/T (CR 613.3 layer 7a) un-stubbed **Tarmogoyf** — its
+ * star box is the real formula over card types in all graveyards, re-derived on
+ * every read; and the turn-scoped fact memory un-stubbed **Fatal Push**, whose
+ * revolt mode now reads "a permanent you controlled left the battlefield this
+ * turn" at resolution.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
-  {
-    // Flash timing AND flashback-the-mechanic both exist now (`castTiming` reads
-    // flash; `CardDefinition.flashback` casts from the graveyard and exiles on
-    // leaving the stack). What Snapcaster still needs is the GRANT: targeting an
-    // instant/sorcery card in a graveyard (targeting reaches only permanents,
-    // players and spells today) and a continuous effect that gives a
-    // NON-battlefield card a flashback cost derived from its mana cost, until end
-    // of turn. Un-stub it only when a trigger can aim at a graveyard card and the
-    // continuous layer can carry a grant on one.
-    card: 'Snapcaster Mage',
-    missingEngineSystem:
-      'granting flashback to a card in a graveyard (targeting a graveyard card + a continuous effect on a non-battlefield card)',
-  },
-  { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
-  {
-    card: 'Fatal Push',
-    missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',
-  },
   {
     // Everything Cryptic DOES is faithful; what is early is WHEN it is decided.
     card: 'Cryptic Command',

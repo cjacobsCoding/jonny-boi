@@ -201,9 +201,39 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'flashback-cost' },
       },
       {
+        title: 'Granted flashback (Snapcaster Mage)',
+        detail:
+          'An effect can give a card in your GRAVEYARD flashback until end of turn, for the mana cost printed on that card. The ability targets the graveyard card as it goes on the stack (so it fizzles if the card leaves in response), the grant is scoped to that one card, it expires at end of turn, and it stops applying the moment the card changes zones (CR 400.7). Casting on the grant exiles the card exactly as a printed flashback does.',
+        witness: { kind: 'rule', id: 'grant-flashback-to-graveyard-spell' },
+      },
+      {
+        title: 'Targeting a card in a graveyard',
+        detail:
+          'An ability can point at an instant or sorcery card in the graveyard of the player who controls it — the first targeting that reaches outside the battlefield, offered and re-checked exactly like every other target kind.',
+        witness: { kind: 'primitive', id: 'grantFlashback' },
+      },
+      {
         title: 'Prowess',
         detail: 'Modelled exactly: a cast trigger per noncreature spell that pumps until end of turn.',
         witness: { kind: 'card', name: 'Monastery Swiftspear' },
+      },
+      {
+        title: 'Characteristic-defining P/T (the star box)',
+        detail:
+          "A creature whose printed power/toughness is a formula plays at its real size: Tarmogoyf is the number of card types among cards in all graveyards, toughness that number plus one. It is applied in the rules' own layer 7a — BEFORE +1/+1 counters and pumps, so a counter adds on top — and re-derived on every read, so it grows the instant a fetchland fills a graveyard mid-combat.",
+        witness: { kind: 'rule', id: 'characteristic-defining-pt' },
+      },
+      {
+        title: 'Turn-scoped memory (revolt)',
+        detail:
+          'The engine remembers a short, named list of things that happened this turn — a permanent you controlled left the battlefield (revolt), a creature died, you gained life — and clears it as each turn begins. Fatal Push reads revolt when it RESOLVES, so a fetchland cracked in response turns its four-mana-value mode on.',
+        witness: { kind: 'rule', id: 'destroy-creature-mana-value-revolt' },
+      },
+      {
+        title: 'Coloured anthems & card filters',
+        detail:
+          '"White creatures you control get +1/+1" narrows by colour, read from the card’s mana pips exactly as protection reads it — and the same filter serves every other chooser (searches, discards, sacrifices), not just statics.',
+        witness: { kind: 'rule', id: 'static-buff-your-creatures' },
       },
       {
         title: 'Derived values',

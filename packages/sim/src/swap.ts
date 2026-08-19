@@ -13,7 +13,7 @@
  * Honesty about fidelity (DESIGN §3.9, done): the engine NOW models triggered
  * abilities, until-end-of-turn continuous effects, planeswalkers with loyalty,
  * transforming DFCs, and printed flashback. Only a few advanced mechanics remain
- * unimplemented (dynamic P/T, flashback granted by another card — see
+ * unimplemented (flashback granted by another card, cast-time modes — see
  * `FIDELITY_CAVEAT`), so cards using them play as a
  * simplified subset. The swap machinery and statistics are exact; the CLI prints
  * this caveat.

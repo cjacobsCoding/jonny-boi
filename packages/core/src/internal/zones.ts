@@ -9,6 +9,7 @@
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from '../state.js';
 import { NO_COUNTERS, playerZone, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
+import { pruneCardGrantsFor } from '../card-grants.js';
 
 /**
  * Find a battlefield permanent by id, or undefined.
@@ -106,6 +107,10 @@ export function moveToZone(
   const from = inst.zone;
   removeFromCurrentZone(state, inst);
   inst.zone = to;
+  // CR 400.7: a card that changes zones is a new object, and a grant made on
+  // the old object (a granted flashback on a graveyard card) does not follow
+  // it. One property read when no grant exists — see card-grants.ts.
+  pruneCardGrantsFor(state, inst.instanceId);
   if (to === 'battlefield') {
     state.battlefield.push(inst);
   } else {

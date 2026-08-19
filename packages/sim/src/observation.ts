@@ -214,6 +214,11 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   triggeredAbilityResolved: 'public',
   continuousEffectAdded: 'public',
   continuousEffectExpired: 'public',
+  // A grant to a card in a graveyard is as face-up as a pump on the battlefield:
+  // the graveyard is a public zone, the card was already named by the zoneChange
+  // that put it there, and the granting ability resolved in front of the table.
+  cardGrantAdded: 'public',
+  cardGrantExpired: 'public',
   permanentAttached: 'public',
   permanentUnattached: 'public',
   attachmentFailed: 'public',

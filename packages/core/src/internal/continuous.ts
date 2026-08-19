@@ -65,6 +65,7 @@ import type { KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import type { GameEvent } from '../events.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
+import { characteristicValue } from '../derived.js';
 
 /**
  * How long a continuous effect lasts before the engine removes it.
@@ -113,6 +114,20 @@ export interface AggregatedMod {
   readonly power: number;
   readonly toughness: number;
   readonly keywords: KeywordFlags;
+  /**
+   * CR 613.3 LAYER 7a — a characteristic-defining P/T, computed from the live
+   * state for a permanent whose definition carries `characteristicPT`
+   * (Tarmogoyf's star-power box). Present ONLY for such a permanent; absent means
+   * "use the printed numbers".
+   *
+   * It is a BASE, not a delta, which is what makes the layering right: the stat
+   * accessors use it in place of `def.power`, so counters (layer 7d) and pumps
+   * (7c) add ON TOP of it, never the other way round. A Tarmogoyf with a +1/+1
+   * counter is (types)+1 / (types)+2, and it re-derives on every read — so a
+   * fetchland cracking mid-combat grows it before state-based actions run.
+   */
+  readonly basePower?: number;
+  readonly baseToughness?: number;
 }
 
 /** A precomputed lookup from instance id to its aggregated continuous mod. */
@@ -156,6 +171,8 @@ interface MutableMod {
   power: number;
   toughness: number;
   keywords: KeywordFlags;
+  basePower?: number;
+  baseToughness?: number;
 }
 
 /**
@@ -267,6 +284,10 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   // a board that has neither an anthem nor an attachment.
   let sources: CardInstance[] | null = null;
   let attachments: CardInstance[] | null = null;
+  // Permanents whose P/T is a FORMULA (layer 7a). Collected in the same single
+  // pass as statics and attachments, so a board with none pays one extra
+  // property read per permanent and allocates nothing.
+  let characteristic: CardInstance[] | null = null;
   const permanents = state.battlefield;
   // EMBLEMS radiate statics from the COMMAND zone (CR 114): "creatures you
   // control get +1/+1 as long as this emblem exists" is the SAME continuous
@@ -288,15 +309,30 @@ export function indexContinuous(state: GameState): ContinuousIndex {
     const perm = permanents[i] as CardInstance;
     const declared = perm.def.statics;
     if (declared !== undefined && declared.length > 0) (sources ??= []).push(perm);
+    if (perm.def.characteristicPT !== undefined) (characteristic ??= []).push(perm);
     // `!= null` rather than `!== null` on purpose: an instance built by code that
     // predates this field (an older serialized state, an untyped test literal)
     // then reads as UNATTACHED instead of as an attachment with an undefined
     // host, which would corrupt the whole layering pass. One comparison either way.
     if (perm.attachedTo != null) (attachments ??= []).push(perm);
   }
-  if (sources === null && attachments === null && state.continuous.length === 0) return EMPTY_INDEX;
+  if (sources === null && attachments === null && characteristic === null && state.continuous.length === 0) {
+    return EMPTY_INDEX;
+  }
 
   const map = new Map<InstanceId, MutableMod>();
+  // Layer 7a FIRST — a characteristic-defining base is what the other layers
+  // then modify. (Arithmetically the folds commute, so the order is about the
+  // model being honest rather than about the number, and it is the order that
+  // stays correct if a value-SETTING effect is ever added.)
+  if (characteristic !== null) {
+    for (const perm of characteristic) {
+      const formula = perm.def.characteristicPT as NonNullable<CardInstance['def']['characteristicPT']>;
+      const agg = accumulatorFor(map, perm.instanceId);
+      agg.basePower = characteristicValue(state, formula.power, perm.controller);
+      agg.baseToughness = characteristicValue(state, formula.toughness, perm.controller);
+    }
+  }
   // Layer 3a — attachments. An attachment is a static whose "filter" is a single
   // named permanent, so it needs no battlefield scan at all: O(attachments), not
   // O(attachments x battlefield).
@@ -352,6 +388,13 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   // modifier against it in the SAME battlefield walk.
   const target = findPermanent(state, instanceId);
   if (target !== undefined) {
+    // Layer 7a — the formula base, before anything modifies it.
+    const formula = target.def.characteristicPT;
+    if (formula !== undefined) {
+      any = true;
+      agg.basePower = characteristicValue(state, formula.power, target.controller);
+      agg.baseToughness = characteristicValue(state, formula.toughness, target.controller);
+    }
     for (const source of state.battlefield) {
       if (source.attachedTo === instanceId) {
         const spec = source.def.attachment;

@@ -21,17 +21,20 @@ import type {
   KeywordFlags,
   ManaCost,
   PlayerId,
+  DerivedCountName,
   SpellStackObject,
   TargetRestriction,
 } from '@jonny-boi/core';
 import {
   convertedManaCost,
   DEFAULT_TARGET_RESTRICTION,
+  evaluateDerivedCount,
   entersTapped,
   isCreature,
   isPlayerTarget,
   isTargetRestriction,
   MANA_COLORS,
+  pruneCardGrantsFor,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
@@ -47,14 +50,13 @@ import {
  * names one of these or is reported unsupported. An open expression language
  * would let the compiler accept text it only approximately understands, which
  * is the one thing the whole compiler contract forbids.
+ *
+ * It is now core's `DerivedCountName`, re-exported under the name this package
+ * has always used: characteristic-defining P/T (Tarmogoyf) counts the SAME sets
+ * from the stat layer, and two vocabularies would let "cards in your graveyard"
+ * mean one thing in a damage param and another in a P/T box.
  */
-export type DerivedCount =
-  | 'creaturesYouControl'
-  | 'creaturesOpponentControls'
-  | 'creaturesOnBattlefield'
-  | 'landsYouControl'
-  | 'cardsInYourHand'
-  | 'cardsInYourGraveyard';
+export type DerivedCount = DerivedCountName;
 
 /** A numeric param that is computed at resolution instead of printed. */
 export interface DerivedValue {
@@ -116,27 +118,12 @@ function isKickedSwitch(value: unknown): value is KickedSwitchValue {
  * "Current" matters: the value is computed when the effect resolves, not when
  * the spell was cast, which is what the printed cards mean and what makes a
  * sweeper-then-pump sequence behave correctly.
+ *
+ * Delegates to core's `evaluateDerivedCount` — the same function the stat layer
+ * uses for a characteristic-defining P/T, so a count cannot mean two things.
  */
 export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number {
-  const you = ctx.controller;
-  const them = otherPlayer(you);
-  const battlefield = ctx.state.battlefield;
-  switch (value.countOf) {
-    case 'creaturesYouControl':
-      return battlefield.filter((c) => c.controller === you && isCreature(c.def)).length;
-    case 'creaturesOpponentControls':
-      return battlefield.filter((c) => c.controller === them && isCreature(c.def)).length;
-    case 'creaturesOnBattlefield':
-      return battlefield.filter((c) => isCreature(c.def)).length;
-    case 'landsYouControl':
-      return battlefield.filter((c) => c.controller === you && c.def.types.includes('land')).length;
-    case 'cardsInYourHand':
-      return ctx.state.players[you].hand.length;
-    case 'cardsInYourGraveyard':
-      return ctx.state.players[you].graveyard.length;
-    default:
-      return 0;
-  }
+  return evaluateDerivedCount(ctx.state, value.countOf, ctx.controller);
 }
 
 /**
@@ -357,6 +344,11 @@ export function moveOwnedCard(
   const [card] = source.splice(index, 1);
   if (!card) return undefined;
   card.zone = to;
+  // CR 400.7: the card is a NEW object in its new zone, so a grant made on the
+  // old one (a granted flashback on a graveyard card) does not follow it. Core's
+  // own `moveToZone` prunes for the same reason; this helper is the cards-side
+  // funnel and must agree with it — see `card-grants.ts`.
+  pruneCardGrantsFor(ctx.state, card.instanceId);
   if (position === 'top') owner[to].unshift(card);
   else owner[to].push(card);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to });
@@ -432,6 +424,9 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   // `controller` field is left as it was: it is the last-known information an
   // after-the-fact effect reads (Path to Exile compensates the creature's
   // *controller* only after the creature has already been exiled).
+  // Same CR 400.7 prune as `moveOwnedCard` — a permanent carries no grant
+  // today, but the two funnels must not disagree about what a zone change does.
+  pruneCardGrantsFor(ctx.state, perm.instanceId);
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
 }

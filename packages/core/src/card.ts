@@ -203,6 +203,27 @@ export interface CardDefinition {
   readonly power?: number;
   readonly toughness?: number;
   /**
+   * CHARACTERISTIC-DEFINING power/toughness — the printed star/star box whose value
+   * is a formula over the game state ("~'s power is equal to the number of card
+   * types among cards in all graveyards…" — Tarmogoyf, Boneyard Wurm, Maro).
+   *
+   * Present ⇒ {@link power}/{@link toughness} are ABSENT: a card defines its P/T
+   * by numbers or by formula, never both, and the compiler refuses a record that
+   * would claim both. The formula is applied in CR 613.3's layer 7a — BEFORE
+   * +1/+1 counters and continuous pumps — which the stat pipeline honours by
+   * treating the formula's value as the creature's base: base (7a) + counters +
+   * modifications, exactly the order `internal/stats.ts` documents. The value is
+   * re-derived from the live state on every read (never stored), so a Tarmogoyf
+   * grows the moment a fetchland hits a graveyard MID-combat, before the
+   * state-based actions run.
+   *
+   * The formula vocabulary is the same closed {@link DerivedCountName} list the
+   * "equal to the number of …" effect params use — one derivation, evaluated by
+   * `derived.ts`, so a CDA and a derived damage amount cannot disagree about
+   * what a count means.
+   */
+  readonly characteristicPT?: CharacteristicPT;
+  /**
    * Printed starting loyalty — planeswalkers only. The permanent ENTERS with this
    * many loyalty counters (CR 306.5b), stored in `CardInstance.counters` under
    * {@link LOYALTY_COUNTER}, and a walker whose loyalty reaches 0 is put into its
@@ -395,6 +416,89 @@ export interface CardDefinition {
    * abbreviates.
    */
   readonly attachment?: import('./attachments.js').AttachmentSpec;
+}
+
+/**
+ * The countable sets a DERIVED value may name — the closed vocabulary behind
+ * both "equal to the number of …" effect params and characteristic-defining
+ * P/T ({@link CardDefinition.characteristicPT}). Closed on purpose: each entry
+ * is a set the engine can count exactly, so a card either names one of these or
+ * is reported unsupported. An open expression language would let the compiler
+ * accept text it only approximately understands — the one thing the compiler
+ * contract forbids. Evaluated by `evaluateDerivedCount` in `derived.ts`.
+ */
+export type DerivedCountName =
+  | 'creaturesYouControl'
+  | 'creaturesOpponentControls'
+  | 'creaturesOnBattlefield'
+  | 'landsYouControl'
+  | 'cardsInYourHand'
+  | 'cardsInYourGraveyard'
+  /** Creature CARDS in your graveyard (Boneyard Wurm). */
+  | 'creaturesInYourGraveyard'
+  /** Distinct card types among cards in ALL graveyards (Tarmogoyf). */
+  | 'cardTypesInAllGraveyards';
+
+/**
+ * One half of a characteristic-defining P/T: a derived count plus an optional
+ * printed offset — Tarmogoyf's toughness is "that number plus 1".
+ */
+export interface CharacteristicFormula {
+  readonly countOf: DerivedCountName;
+  /** Added to the count ("…plus 1"). Omit for none. */
+  readonly plus?: number;
+}
+
+/** A characteristic-defining star/star box: both halves, each a formula. */
+export interface CharacteristicPT {
+  readonly power: CharacteristicFormula;
+  readonly toughness: CharacteristicFormula;
+}
+
+/**
+ * Memo of a definition's colors. Definitions are immutable and shared (the pool
+ * is frozen), and color is asked per candidate on the targeting-legality and
+ * card-filter paths, so the pip walk happens once per definition ever, not once
+ * per check. Lives here (not `protection.ts`) because BOTH protection and the
+ * shared `CardFilter` read it, and `choices.ts` importing protection would form
+ * an import cycle through the continuous layer.
+ */
+const COLORS_MEMO = new WeakMap<CardDefinition, readonly ManaColor[]>();
+
+/** The five COLORS (not {C}) in canonical order — colorless is not a color. */
+const COLOR_PIPS: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
+
+/**
+ * The colors of a definition: every color appearing among its cost's colored
+ * pips, hybrid symbols included. A land, a free spell, or an artifact with a
+ * purely generic cost has no colors ({C} pips are colorless, not a color).
+ *
+ * The engine has no color indicators and no color-changing effects, so this is
+ * the color of every card it can represent — with one documented exception: a
+ * transforming DFC's BACK face has no mana cost and reads as colorless, where
+ * the printed card carries a color indicator. Every color consumer (protection,
+ * colored card filters) inherits that limit together, from this one reader.
+ */
+export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
+  const memoized = COLORS_MEMO.get(def);
+  if (memoized) return memoized;
+  const cost = def.cost;
+  const colors: ManaColor[] = [];
+  if (cost) {
+    for (const pip of COLOR_PIPS) {
+      if ((cost[pip] ?? 0) > 0) colors.push(pip);
+    }
+    if (cost.hybrid) {
+      for (const symbol of cost.hybrid) {
+        for (const option of symbol) {
+          if (option !== 'C' && !colors.includes(option)) colors.push(option);
+        }
+      }
+    }
+  }
+  const frozen = Object.freeze(colors);
+  COLORS_MEMO.set(def, frozen);
+  return frozen;
 }
 
 /**

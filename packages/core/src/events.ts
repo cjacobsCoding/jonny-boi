@@ -283,6 +283,25 @@ export type GameEvent =
       readonly duration: ContinuousDuration;
     }
   | {
+      // A card in a NON-battlefield zone gained an ability (Snapcaster's "gains
+      // flashback until end of turn" on a graveyard card) — see card-grants.ts.
+      // Public by nature: the zones a grant can touch (graveyard, exile) are
+      // open information, and the granting ability resolved in front of everyone.
+      readonly type: 'cardGrantAdded';
+      readonly targetInstanceId: InstanceId;
+      readonly sourceInstanceId: InstanceId;
+      readonly duration: ContinuousDuration;
+    }
+  | {
+      // A card grant was removed (cleanup's "until end of turn" expiry). A grant
+      // dropped because its card CHANGED ZONES emits nothing extra — the
+      // zoneChange already tells that story (CR 400.7: the grant simply stops
+      // being true of the new object).
+      readonly type: 'cardGrantExpired';
+      readonly targetInstanceId: InstanceId;
+      readonly sourceInstanceId: InstanceId;
+    }
+  | {
       // A permanent became attached to another (an Aura enchanting a creature, an
       // Equipment being equipped). Emitted for the MOVE too — attaching an already
       // attached Equipment is one `permanentAttached`, since the log's consumer

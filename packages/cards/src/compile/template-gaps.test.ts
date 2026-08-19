@@ -270,12 +270,29 @@ describe('template gaps — the neighbouring wordings still refuse honestly', ()
     expect(result.status).toBe('incomplete');
   });
 
-  it('REFUSES a colored anthem (the static filter has no color field)', () => {
+  it('COMPILES a colored anthem now that the static filter carries colour', () => {
+    // This test used to pin the refusal. `CardFilter` gained `anyOfColors`
+    // (read from cost pips by the same reader protection uses), so the honest
+    // answer flipped: the engine can express "White creatures you control".
     const result = compileCard(
       makeCard({
         name: 'Test Honor',
         typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
         oracleText: 'White creatures you control get +1/+1.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.statics?.[0]?.affects).toMatchObject({ anyOfColors: ['W'] });
+  });
+
+  it('REFUSES an anthem whose colour word is not a colour the engine knows', () => {
+    // The refusal that MUST survive: a quality outside the closed colour table
+    // is not silently dropped down to a colourless anthem.
+    const result = compileCard(
+      makeCard({
+        name: 'Test Honor',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText: 'Legendary creatures you control get +1/+1.',
       }),
     );
     expect(result.status).toBe('incomplete');

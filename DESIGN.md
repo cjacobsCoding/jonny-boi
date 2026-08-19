@@ -758,7 +758,8 @@ The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta
 end of turn" layer** with proper cleanup-step expiry (so `pumpUntilEndOfTurn` and similar wear off — current
 behavior persists the buff and biases combat sims), and later **planeswalkers** (✅ landed — see §3.11),
 **transform/DFC**, and
-**dynamic P/T** (e.g. Tarmogoyf). Tracked here because §3.2 cards stubbed these mechanics against the MVP.
+**dynamic P/T** (e.g. Tarmogoyf — ✅ landed as characteristic-defining P/T in layer 7a; see §3.11).
+Tracked here because §3.2 cards stubbed these mechanics against the MVP.
 Prioritize triggers + EOT-expiry before leaning on §3.5/§3.6 verdicts; the rest can follow.
 
 ### 3.10 Hotseat pass-and-play — two humans, one device — ✅ done
@@ -950,9 +951,38 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   `scoredSpellGoals` scores graveyard flashback candidates through the same scorer as hand spells — so
   the hybrid search's policy candidates inherit the consideration and the mechanic is never
   pilot-inert. Only the PLAIN mana-cost form compiles (`flashback-cost` rule); {X}/additional-cost
-  flashback stays reported against the cast-cost-modification system, and flashback GRANTED by another
-  card (Snapcaster Mage) stays stubbed on targeting-a-graveyard-card + a continuous effect on a
-  non-battlefield card.
+  flashback stays reported against the cast-cost-modification system. Flashback GRANTED by another
+  card is no longer a gap — see the graveyard-grants entry below, which un-stubs Snapcaster Mage.
+- ✅ *effects that target and modify cards in graveyards* — the two systems Snapcaster Mage was
+  stubbed on, built together because neither is worth anything alone. **(1) Targeting a graveyard
+  card.** `TargetRestriction` gained `'instantOrSorceryInYourGraveyard'`, threaded through the
+  same three enforcement points every other restriction uses — offered by `legalTargetsFor`,
+  accepted (or refused) by `isLegalTarget`, and re-checked by the primitive at resolution, so a
+  card that leaves the graveyard in response makes the ability FIZZLE rather than grant into the
+  void. Like `'opponent'` and `'creatureYouControl'` it reads "your" off the ACTING player, and an
+  absent controller makes every candidate illegal rather than guessed. Hexproof/shroud/protection
+  are correctly not consulted: those read "this permanent", and a card in a graveyard is not one
+  (CR 110.1). **(2) Continuous effects on non-battlefield cards** live in a NEW list,
+  `GameState.cardGrants` (core's `card-grants.ts`) — deliberately NOT the continuous layer, whose
+  index is keyed on battlefield permanents, whose statics radiate from battlefield sources, and
+  whose orphan-pruning would delete a graveyard grant on sight. A grant is instance-scoped, expires
+  in cleanup like any until-end-of-turn effect, and is DROPPED the moment its card changes zones
+  (CR 400.7 — a new object) at every zone-move chokepoint, core's and `cards`'s alike. The one
+  exception mirrors CR 400.7g and needs no storage: casting on the grant reads the cost at
+  announcement, and the exile-on-leaving-the-stack replacement rides the stack object's own
+  `castFrom` (`spellLeaveDestination`), so pruning the grant as the card leaves the graveyard
+  loses nothing. **The cast path reads printed and granted flashback through ONE accessor**
+  (`flashbackCostOf`), so `generateLegalActions`, `applyCastSpell` and both pilots cannot
+  disagree about what a graveyard card costs. ⚠️ **Performance**: `cardGrants` is OPTIONAL and
+  absent in every game that grants nothing, and every reader and pruning hook starts with the same
+  one-property empty check (`hasCardGrants`) that `isLegalTarget`'s fast path uses — measured
+  allocation-identical to main (534 vs 533 median scavenges, inside the alloc bench's documented
+  ±2) with byte-identical play (30,466 actions / 63,782 events) and a byte-identical seed-99
+  gauntlet. **Snapcaster Mage is UN-STUBBED**: flash, the ETB aimed as it goes on the stack, the
+  grant priced at the target's own mana cost, the recast, and the exile after it all play as
+  printed, and the heuristic pilot casts it, aims it at the BEST spell in its graveyard
+  (`valueOfEffects`'s `grantFlashback` entry prices the grant off the card it names) and takes
+  the recast it just bought.
 - ✅ *cost modification / choice at cast time — {X} costs and kicker* — the cast-time question
   step. Casting a spell with an `{X}` cost or a kicker parks a question with NOTHING resolving
   (the same moment a shockland's pay-life and a trigger's aiming use): a new choice kind,
@@ -1029,16 +1059,42 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   Also closed alongside it: *"Counter target spell unless its controller pays {X}"* (Condescend),
   where the payment asked is the X the caster chose and paid for at cast time, and an X of zero is
   a cost everybody pays, so the spell simply resolves.
+- ✅ *characteristic-defining P/T (the star box)* — a creature whose printed P/T is a FORMULA
+  (`CardDefinition.characteristicPT`) over the closed derived-count vocabulary. It is applied in
+  **CR 613.3 layer 7a**, as the creature's BASE: the continuous layer (which is the only layer
+  holding the state a formula needs) computes it into `AggregatedMod.basePower`/`baseToughness`,
+  and the stat accessors use it in place of `def.power` — so +1/+1 counters (7d), anthems and
+  pumps (7c) all add ON TOP of it, never the other way round. Nothing is stored, so nothing goes
+  stale: it re-derives on every read, and a graveyard filling MID-COMBAT changes the creature's
+  size before state-based actions run. **Tarmogoyf is un-stubbed** (power = card types among cards
+  in all graveyards, toughness that number plus one). ⚠️ The bare `effectivePower(inst)` call —
+  no aggregate — answers 0 for a star creature, because a formula is a function of the whole game
+  and that accessor holds only the instance. Every RULES path passes an aggregate; the AI's
+  board-evaluation helpers still do not (see below).
+- ✅ *turn-scoped fact memory (revolt)* — `core/turn-facts.ts`: a NAMED CLOSED vocabulary
+  (`permanentLeftBattlefield` = revolt, `creatureDied` = morbid, `youGainedLife`), not a general
+  event query, so the compiler can only pattern-match what it genuinely understands. Fed from the
+  engine's emit chokepoint (no new `GameEvent` — every fact derives from events already published),
+  stored as two per-player BITMASKS as flat numbers on the state (a nested record cost ~3% of sim
+  throughput on the clone path), and cleared as each turn BEGINS, so "this turn" still reads true
+  during the previous turn's end step. **Fatal Push is un-stubbed**: its `{ base: 2, revolt: 4 }`
+  mana-value switch is read at RESOLUTION, so a permanent leaving in response turns revolt on.
+- ✅ *coloured/filtered statics* — the shared `CardFilter` gained `anyOfColors`, read from cost
+  pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
+  cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
+  (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
 Still open, roughly by how often they block a real decklist:
 - *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
   cast-time question step now that {X}/kicker built it), *multikicker*, *Phyrexian costs*,
-  *dynamic P/T* (Tarmogoyf needs characteristic-defining P/T — `StaticAbility` deltas are fixed
-  numbers and `DerivedCount` has no "card types in all graveyards" entry), *emblems* (walker ultimates that create one stay reported),
-  *modal DFCs / split / adventure (the cast-time face choice)*, *granting flashback to a graveyard card (Snapcaster Mage: needs targeting a
-  graveyard card + a continuous effect on a non-battlefield card)*,
-  *revolt-style "a permanent left the battlefield this turn" trackers* (no turn-scoped event memory
-  exists to answer Fatal Push's question),
-  *colored/filtered statics* ("White creatures you control…" — `CardFilter` has no color field),
+  *emblems* (walker ultimates that create one stay reported),
+  *modal DFCs / split / adventure (the cast-time face choice)*,
+  *P/T formulas outside the closed count vocabulary* (a star box counting something the
+  `DerivedCountName` table does not name, or whose two halves count different things, still
+  reports — it is never guessed),
+  *the AI's board evaluation of a star creature* (`packages/ai` reads `effectivePower(perm)` with
+  no aggregate in ~40 places, so a Tarmogoyf evaluates as 0/0 to the pilots; threading the
+  continuous index through those call sites would ALSO make the AI see anthems and Auras for the
+  first time, which moves every recorded heuristic baseline, so it is its own change),
   *damage divided among targets* ("deals X damage divided as you choose among any number of
   targets" — needs a division the targeting layer cannot express: one spell, several targets, each
   with its own share).

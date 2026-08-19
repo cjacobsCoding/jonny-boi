@@ -248,6 +248,18 @@ export interface HeuristicWeights {
    *  point a pump at. Below `attachPerStat` on purpose: a pump wears off at end of
    *  turn, an Equipment does not. */
   readonly modePumpPerStatValue: number;
+  /**
+   * What fraction of a card's own value a GRANTED FLASHBACK is worth — the
+   * Snapcaster ETB, priced as the card advantage it is.
+   *
+   * Below 1 on purpose, and the reason is the mechanic's one real limit: the
+   * grant expires at end of turn and the card still has to be paid for, so it
+   * is worth strictly less than returning that card to hand (`returnFromGraveyard`
+   * scores the full value). Above zero by a wide margin, because a
+   * flashed-back removal spell or draw spell is the same card twice — which is
+   * exactly the card advantage the pilot already understands.
+   */
+  readonly grantedFlashbackValueShare: number;
 }
 
 /**
@@ -381,4 +393,7 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // A +2/+2 until end of turn scores 8 — worth taking over nothing, comfortably
   // below removing a real threat (60+), which is the ordering that matters.
   modePumpPerStatValue: 2,
+  // Two thirds of the card: the same card again, minus the end-of-turn clock
+  // and minus having to pay for it a second time.
+  grantedFlashbackValueShare: 2 / 3,
 });
