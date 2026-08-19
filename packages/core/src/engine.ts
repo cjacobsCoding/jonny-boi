@@ -1671,8 +1671,15 @@ function manaModeBlockedReason(
   ) {
     return `${perm.def.name}'s ability cannot be activated right now`;
   }
-  if (derivedColor !== undefined && !derivedManaColors(state, perm, ability).has(derivedColor)) {
-    return `no permanent makes {${derivedColor}} for ${perm.def.name} to copy`;
+  if (derivedColor !== undefined) {
+    // "any color" never reaches {C}, whatever the board offers (see
+    // `ManaAbility.derivedIncludesColorless`).
+    if (derivedColor === 'C' && ability.derivedIncludesColorless !== true) {
+      return `${perm.def.name} cannot make colorless mana`;
+    }
+    if (!derivedManaColors(state, perm, ability).has(derivedColor)) {
+      return `no land makes {${derivedColor}} for ${perm.def.name} to copy`;
+    }
   }
   const cost = ability.cost;
   if (cost) {
@@ -1712,9 +1719,7 @@ function derivedManaColors(
     const mine = perm.controller === source.controller;
     if (wantOpponents ? mine : !mine) continue;
     if (!isLand(perm.def)) continue;
-    for (const color of fixedManaColorsOf(perm.def)) {
-      if (color !== 'C') colors.add(color);
-    }
+    for (const color of fixedManaColorsOf(perm.def)) colors.add(color);
   }
   return colors;
 }

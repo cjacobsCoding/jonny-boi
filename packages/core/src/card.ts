@@ -871,6 +871,14 @@ export interface ManaAbility {
   readonly produces?: readonly ManaProduction[];
   /** Present ⇒ the modes are one mana of each colour the board makes available. */
   readonly derivedColors?: DerivedManaColors;
+  /**
+   * Whether the derivation includes COLOURLESS. Oracle draws the line with one
+   * word: Reflecting Pool adds "one mana of any **type** that a land you control
+   * could produce" and can therefore make {C}; Exotic Orchard and Fellwar Stone
+   * say "any **color**" and cannot. Ignoring the distinction would hand every
+   * Orchard a colourless mode off a Wastes.
+   */
+  readonly derivedIncludesColorless?: boolean;
   /** Cost beyond the tap, if the card prints one. */
   readonly cost?: ManaAbilityCost;
   /** An effect that is part of this ability's resolution ("deals 1 damage to you"). */
@@ -894,8 +902,15 @@ export interface ManaModeExtra {
   readonly derivedColor?: ManaColor;
 }
 
-/** The colours a derived mana ability enumerates modes for, in canonical order. */
-const DERIVED_COLOR_ORDER: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
+/**
+ * The colours a derived mana ability enumerates modes for, in canonical order.
+ *
+ * ALWAYS all six, including colourless, even for a "any color" ability that can
+ * never make {C}: the mode list is the index space of `TapForManaAction.mode` and
+ * must not change shape with the wording any more than it changes with the board.
+ * The colourless mode of a colour-only ability is simply never available.
+ */
+const DERIVED_COLOR_ORDER: readonly ManaColor[] = MANA_COLORS;
 
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */
 const NO_MANA_MODES: readonly ManaProduction[] = Object.freeze([]);

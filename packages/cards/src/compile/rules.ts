@@ -18,7 +18,9 @@ import type {
   CardType,
   EffectRef,
   KeywordFlags,
+  ManaActivationCondition,
   ManaColor,
+  ManaCost,
   ManaProduction,
   ProtectionQuality,
   SpellMode,
@@ -27,7 +29,7 @@ import type {
   TriggerCondition,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION, MANA_COLORS } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols, splitCostSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
@@ -238,8 +240,13 @@ export const KEYWORD_FLAGS: Readonly<Record<string, string>> = Object.freeze({
 /** The keyword alternation used inside "gains … until end of turn" patterns. */
 const KEYWORD_TOKEN = `(${Object.keys(KEYWORD_FLAGS).join('|')})`;
 
-/** Colour words Oracle uses in removal restrictions, mapped to color letters. */
-const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
+/**
+ * Colour words Oracle uses, mapped to colour letters — in removal restrictions
+ * ("destroy target red creature") and in a mana ability's activation restriction
+ * ("Activate only if you control a red permanent"). Typed as `ManaColor` rather
+ * than `string` so a caller that needs a real colour does not have to assert one.
+ */
+const COLOR_WORDS: Readonly<Record<string, ManaColor>> = Object.freeze({
   white: 'W',
   blue: 'U',
   black: 'B',
@@ -2094,6 +2101,150 @@ function productionFromColors(colors: readonly ManaColor[]): ManaProduction {
 /** Split an "or"-list of mana runs ("{w}, {u}, or {b}") into its alternatives. */
 const MANA_ALTERNATIVE_SEPARATOR = /,? or |, /;
 
+
+/**
+ * ABILITY WORDS (CR 207.2c) as they are PRINTED — the italicized label in front
+ * of a line, which has no rules meaning of its own. Listed once and read twice:
+ * {@link ABILITY_WORDS} skips them in the keyword sweep, and
+ * {@link ABILITY_WORD_PREFIX} lets a rule match the line the label sits on
+ * (Mox Opal's "Metalcraft — {T}: Add one mana of any color").
+ */
+const ABILITY_WORD_LIST: readonly string[] = ['revolt', 'morbid', 'delirium', 'threshold', 'metalcraft'];
+
+/** An optional printed ability-word label, for patterns that must see past one. */
+const ABILITY_WORD_PREFIX = `(?:(?:${ABILITY_WORD_LIST.join('|')})\\s*[\\u2014\\u2013-]\\s*)?`;
+
+// --- the rich mana-ability shapes -------------------------------------------
+//
+// Everything below builds `CardDefinition.manaAbilities`: a mana ability that
+// prints more than a colour bundle. Core's model carries the four things a real
+// card adds — an additional cost, a rider, an "Activate only if …", and colours
+// read off the board — and each rule here transcribes exactly one of them.
+//
+// They are separate rules rather than one mega-pattern because the printed forms
+// combine independently and a single pattern would have to make every part
+// optional, which is how a rule quietly matches a wording it does not implement.
+
+/** The "add …" payload of a mana ability, as the modes ONE activation offers. */
+function parseManaPayload(payload: string): readonly ManaProduction[] | null {
+  const text = payload.trim();
+  // "one mana of any color" — five modes of one.
+  if (/^one mana of any color$/.test(text)) {
+    return ANY_COLOR.map((color) => productionFromColors([color]));
+  }
+  // "three mana of any one color" — five modes of three. "one color" is what
+  // makes it a choice of MODE; a card adding three mana of any colorS would be a
+  // different ability, so the printed word is required.
+  const multiple = text.match(new RegExp(`^${COUNT_TOKEN} mana of any one color$`));
+  if (multiple) {
+    const count = parseCount(multiple[1]);
+    if (count === null || count < 1) return null;
+    return ANY_COLOR.map((color) =>
+      productionFromColors(Array.from({ length: count }, () => color)),
+    );
+  }
+  // A printed list of symbol runs: "{W}", "{C}{C}", "{W} or {U}",
+  // "{W}{W}, {W}{U}, or {U}{U}" (the filter lands).
+  if (!/^[{}wubrgc,or\s]+$/.test(text)) return null;
+  const alternatives = text.split(MANA_ALTERNATIVE_SEPARATOR);
+  const modes: ManaProduction[] = [];
+  for (const alternative of alternatives) {
+    const colors = manaSymbols(alternative);
+    if (colors === null) return null;
+    modes.push(productionFromColors(colors));
+  }
+  return modes.length > 0 ? modes : null;
+}
+
+/** Card types an "Activate only if you control N or more …" clause may count. */
+const COUNTABLE_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  artifacts: 'artifact',
+  creatures: 'creature',
+  enchantments: 'enchantment',
+  lands: 'land',
+});
+
+/**
+ * Parse the condition half of "Activate only if you control …".
+ *
+ * Returns `null` for any wording not fully understood, so the clause reports
+ * rather than compiling into a restriction that is not the printed one — a mana
+ * source that is available when it should not be is a strictly better card.
+ */
+function parseManaActivationCondition(text: string): ManaActivationCondition | null {
+  const condition = text.trim();
+  // "a red permanent" / "a white or blue permanent".
+  const colored = condition.match(/^an? ([a-z]+(?: or [a-z]+)*) permanent$/);
+  if (colored) {
+    const colors: ManaColor[] = [];
+    for (const word of (colored[1] ?? '').split(' or ')) {
+      const color = COLOR_WORDS[word];
+      if (!color) return null;
+      colors.push(color);
+    }
+    return { controlsColor: colors };
+  }
+  // Metalcraft and friends: "three or more artifacts".
+  const counted = condition.match(new RegExp(`^${COUNT_TOKEN} or more ([a-z]+)$`));
+  if (counted) {
+    const count = parseCount(counted[1]);
+    const type = COUNTABLE_TYPE_WORDS[counted[2] ?? ''];
+    if (count === null || count < 1 || !type) return null;
+    return { controlsTypeAtLeast: { type, count } };
+  }
+  // "an Island" / "a Mountain or a Plains" — a land subtype the type line prints.
+  const subtyped = condition.match(/^an? ([a-z]+)(?: or an? ([a-z]+))?$/);
+  if (subtyped) {
+    const wanted = [subtyped[1], subtyped[2]].filter((word): word is string => Boolean(word));
+    // Only the five basic land types are safe to read as a subtype here: any
+    // other noun ("a creature", "an opponent") is a different question entirely.
+    if (wanted.every((word) => BASIC_LAND_SUBTYPES.includes(word))) {
+      return { controlsSubtype: wanted };
+    }
+  }
+  return null;
+}
+
+/** The five basic land types, lowercased — the only subtypes a Verge/Maze names. */
+const BASIC_LAND_SUBTYPES: readonly string[] = ['plains', 'island', 'swamp', 'mountain', 'forest'];
+
+/**
+ * A printed cost run that MAY contain colour/colour hybrid symbols — the filter
+ * lands' "{W/U}". `parseManaSymbols` deliberately refuses a hybrid because most
+ * callers cannot pay one; `ManaCost.hybrid` can, and a filter land's whole
+ * identity is that its input is either of two colours.
+ *
+ * Returns `null` for anything else (Phyrexian, {X}, a snow symbol), so an
+ * unmodelled cost never compiles as something cheaper than printed.
+ */
+function parseCostWithHybrids(text: string): ManaCost | null {
+  const cost: Record<string, unknown> = {};
+  const hybrid: ManaColor[][] = [];
+  const symbols = splitCostSymbols(text);
+  if (symbols.length === 0) return null;
+  for (const symbol of symbols) {
+    if (/^\d+$/.test(symbol)) {
+      cost.generic = ((cost.generic as number | undefined) ?? 0) + Number.parseInt(symbol, 10);
+      continue;
+    }
+    if ((MANA_COLORS as readonly string[]).includes(symbol)) {
+      cost[symbol] = ((cost[symbol] as number | undefined) ?? 0) + 1;
+      continue;
+    }
+    const halves = symbol.split('/');
+    if (
+      halves.length === 2 &&
+      halves.every((half) => (MANA_COLORS as readonly string[]).includes(half) && half !== 'C')
+    ) {
+      hybrid.push(halves as ManaColor[]);
+      continue;
+    }
+    return null;
+  }
+  if (hybrid.length > 0) cost.hybrid = hybrid;
+  return Object.keys(cost).length > 0 ? (cost as ManaCost) : null;
+}
+
 export const MANA_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'tap-for-mana',
@@ -2155,11 +2306,105 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       return { producesOptions: ANY_COLOR.map((color) => productionFromColors([color])) };
     },
   },
-  // NOTE: there is still deliberately NO rule for a mana ability whose colors are
-  // not a fixed printed list — "add one mana of any color that a land you control
-  // could produce", "add one mana of the chosen type". Those need the choice to be
-  // constrained by board state at activation time, which the engine cannot do, so
-  // they fall through to `missing` (see UNSUPPORTED_HINTS).
+  {
+    // A RIDER: the ability's own resolution does something besides adding mana.
+    // Every pain land and Ancient Tomb — "{T}: Add {R} or {W}. ~ deals 1 damage
+    // to you." The damage is NOT a cost (it cannot be declined and the land is
+    // still usable at 1 life), which is why it compiles to `rider` rather than to
+    // a life cost.
+    id: 'mana-ability-with-rider',
+    description: '"{T}: Add {R} or {W}. ~ deals 1 damage to you" (the pain lands)',
+    pattern: new RegExp(
+      `^\\{t\\}: add (.+)\\. (?:~|it) deals ${COUNT_TOKEN} damage to you$`,
+    ),
+    build(match) {
+      const produces = parseManaPayload(match[1] ?? '');
+      const amount = parseCount(match[2]);
+      if (!produces || amount === null || amount < 1) return null;
+      return { manaAbilities: [{ produces, rider: { damageToController: amount } }] };
+    },
+  },
+  {
+    // An ACTIVATION RESTRICTION: the Verge cycle ("Activate only if you control a
+    // red permanent"), Nimbus Maze ("… an Island"), Mox Opal ("… three or more
+    // artifacts"). The restriction is checked when the ability is OFFERED, so an
+    // unmet one makes the source invisible to the payment planner rather than
+    // refusing after it has been counted on.
+    id: 'mana-ability-activation-restriction',
+    description: '"{T}: Add {R}. Activate only if you control a red permanent" (the Verge cycle)',
+    pattern: new RegExp(
+      `^${ABILITY_WORD_PREFIX}\\{t\\}: add (.+)\\. activate only if you control (.+)$`,
+    ),
+    build(match) {
+      const produces = parseManaPayload(match[1] ?? '');
+      const restriction = parseManaActivationCondition(match[2] ?? '');
+      if (!produces || !restriction) return null;
+      return { manaAbilities: [{ produces, restriction }] };
+    },
+  },
+  {
+    // An ADDITIONAL COST, life half: Mana Confluence, the horizon lands, the
+    // Talisman cycle. Charged on activation and gated on having the life
+    // (CR 118.4), exactly as an activated ability's "Pay N life" is.
+    id: 'mana-ability-life-cost',
+    description: '"{T}, Pay 1 life: Add {W} or {B}" (Mana Confluence, the horizon lands)',
+    pattern: new RegExp(`^\\{t\\}, pay ${COUNT_TOKEN} life: add (.+)$`),
+    build(match) {
+      const life = parseCount(match[1]);
+      const produces = parseManaPayload(match[2] ?? '');
+      if (!produces || life === null || life < 1) return null;
+      return { manaAbilities: [{ produces, cost: { life } }] };
+    },
+  },
+  {
+    // An ADDITIONAL COST, mana half: the filter lands' "{W/U}, {T}: Add {W}{W},
+    // {W}{U}, or {U}{U}". The input is a HYBRID symbol, which is why the cost is
+    // parsed by `parseCostWithHybrids` rather than the usual symbol reader.
+    id: 'mana-ability-mana-cost',
+    description: '"{W/U}, {T}: Add {W}{W}, {W}{U}, or {U}{U}" (the filter lands)',
+    pattern: /^((?:\{[^}]+\})+), \{t\}: add (.+)$/,
+    build(match) {
+      const mana = parseCostWithHybrids(match[1] ?? '');
+      const produces = parseManaPayload(match[2] ?? '');
+      if (!mana || !produces) return null;
+      return { manaAbilities: [{ produces, cost: { mana } }] };
+    },
+  },
+  {
+    // COLOURS DERIVED FROM THE BOARD: Reflecting Pool, Exotic Orchard, Fellwar
+    // Stone. The mode list is the five colours either way — which colours are
+    // actually AVAILABLE is asked of the live board every time the ability is
+    // offered, so the answer is never frozen onto the shared definition.
+    id: 'mana-ability-derived-colors',
+    description: '"{T}: Add one mana of any color that a land you control could produce"',
+    pattern:
+      /^\{t\}: add one mana of any (color|type) that a land (you control|an opponent controls) could produce$/,
+    build(match) {
+      const whose = match[2];
+      const derivedColors =
+        whose === 'you control'
+          ? ('landsYouControl' as const)
+          : whose === 'an opponent controls'
+            ? ('landsOpponentsControl' as const)
+            : null;
+      if (!derivedColors) return null;
+      // "any TYPE" reaches colourless; "any COLOR" does not (Reflecting Pool vs
+      // Exotic Orchard). One printed word, two different cards.
+      const derivedIncludesColorless = match[1] === 'type';
+      return {
+        manaAbilities: [
+          derivedIncludesColorless ? { derivedColors, derivedIncludesColorless } : { derivedColors },
+        ],
+      };
+    },
+  },
+  // NOTE: there is still deliberately NO rule for a mana ability whose colours
+  // come from somewhere the engine cannot read — "add one mana of any color in
+  // your commander's color identity" (no commander here, and never will be, see
+  // the completion plan §5) or "of any type that land produced". Nor is there one
+  // for a SPEND RESTRICTION ("spend this mana only to cast creature spells"),
+  // which needs the mana POOL to carry the restriction, not the source. Those
+  // fall through to `missing` (see UNSUPPORTED_HINTS).
 ]);
 
 /**
@@ -2209,13 +2454,7 @@ export const VACUOUS_CLAUSES: readonly RegExp[] = Object.freeze([
  * did not, its text (which contains the word) is in `missing`, and the card
  * keeps reporting.
  */
-export const ABILITY_WORDS: ReadonlySet<string> = new Set([
-  'revolt',
-  'morbid',
-  'delirium',
-  'threshold',
-  'metalcraft',
-]);
+export const ABILITY_WORDS: ReadonlySet<string> = new Set(ABILITY_WORD_LIST);
 
 /** True when a clause is vacuously satisfied and can safely be skipped. */
 export function isVacuousClause(clause: string): boolean {
