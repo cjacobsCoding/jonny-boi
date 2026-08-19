@@ -265,7 +265,8 @@ const SEEDS = {
 
 describe('the pool PLAYS every mechanic it claims', () => {
   it('scry — Opt looks at the top card and the drawn card is what the look decided', () => {
-    let { s, reg } = openGame(SEEDS.scry);
+    const { s: opened, reg } = openGame(SEEDS.scry);
+    let s = opened;
     const topBefore = s.players.A.library[0]!.instanceId;
     const id = giveHand(s, 'A', getByName('Opt'));
 
@@ -280,7 +281,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('surveil — Consider can put the looked-at card in the GRAVEYARD, which scry cannot', () => {
-    let { s, reg } = openGame(SEEDS.surveil);
+    const { s: opened, reg } = openGame(SEEDS.surveil);
+    let s = opened;
     const top = s.players.A.library[0]!.instanceId;
     const graveBefore = s.players.A.graveyard.length;
     const id = giveHand(s, 'A', getByName('Consider'));
@@ -296,7 +298,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('mill — Tome Scour moves exactly five cards from the target player library to their graveyard', () => {
-    let { s, reg } = openGame(SEEDS.mill);
+    const { s: opened, reg } = openGame(SEEDS.mill);
+    let s = opened;
     const libBefore = s.players.B.library.length;
     const id = giveHand(s, 'A', getByName('Tome Scour'));
 
@@ -308,7 +311,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('flashback — Firebolt is cast again FROM THE GRAVEYARD, then exiled', () => {
-    let { s, reg } = openGame(SEEDS.flashback);
+    const { s: opened, reg } = openGame(SEEDS.flashback);
+    let s = opened;
     const id = giveHand(s, 'A', getByName('Firebolt'));
 
     s = act(s, { kind: 'castSpell', player: 'A', instanceId: id, targets: ['B'] }, reg);
@@ -332,7 +336,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('{X} — Blaze deals exactly the X its caster chose and paid for', () => {
-    let { s, reg } = openGame(SEEDS.xCost);
+    const { s: opened, reg } = openGame(SEEDS.xCost);
+    let s = opened;
     const id = giveHand(s, 'A', getByName('Blaze'));
 
     s = act(s, { kind: 'castSpell', player: 'A', instanceId: id, targets: ['B'] }, reg);
@@ -362,7 +367,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('modal — Abrade destroys an artifact or burns a creature, decided AT CAST', () => {
-    let { s, reg } = openGame(SEEDS.modal);
+    const { s: opened, reg } = openGame(SEEDS.modal);
+    let s = opened;
     const rockId = place(s, getByName('Sol Ring'), 'B');
     // A creature too, so BOTH modes are legally announceable — a mode with no
     // legal target is not on the menu (CR 601.2b), and with only one mode left
@@ -395,7 +401,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('ward — targeting Tomakul Honor Guard taxes the opponent, and the spell is countered if they decline', () => {
-    let { s, reg } = openGame(SEEDS.ward);
+    const { s: opened, reg } = openGame(SEEDS.ward);
+    let s = opened;
     const guardId = place(s, getByName('Tomakul Honor Guard'), 'B');
     const id = giveHand(s, 'A', getByName('Doom Blade'));
 
@@ -408,7 +415,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('+1/+1 counters — Sprite Dragon really grows, on a permanent the ENGINE created', () => {
-    let { s, reg } = openGame(SEEDS.counters);
+    const { s: opened, reg } = openGame(SEEDS.counters);
+    let s = opened;
     const dragonDef = getByName('Sprite Dragon');
     const dragonId = giveHand(s, 'A', dragonDef);
     s = act(s, { kind: 'castSpell', player: 'A', instanceId: dragonId }, reg);
@@ -426,7 +434,8 @@ describe('the pool PLAYS every mechanic it claims', () => {
   });
 
   it('planeswalkers — Samut enters on her PRINTED loyalty and her ability costs one', () => {
-    let { s, reg } = openGame(SEEDS.walker);
+    const { s: opened, reg } = openGame(SEEDS.walker);
+    let s = opened;
     const samut = getByName('Samut, Tyrant Smasher');
     // The printed number comes from the card record, not from the definition —
     // the committed index used to predate loyalty capture, and a walker with no
