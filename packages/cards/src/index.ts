@@ -147,6 +147,11 @@ export {
  * included.
  * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
  * abilities play as printed (each-player discard, the edict, the pile split).
+ * Characteristic-defining P/T (CR 613.3 layer 7a) un-stubbed **Tarmogoyf** — its
+ * star box is the real formula over card types in all graveyards, re-derived on
+ * every read; and the turn-scoped fact memory un-stubbed **Fatal Push**, whose
+ * revolt mode now reads "a permanent you controlled left the battlefield this
+ * turn" at resolution.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
@@ -164,11 +169,6 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
     card: 'Snapcaster Mage',
     missingEngineSystem:
       'granting flashback to a card in a graveyard (targeting a graveyard card + a continuous effect on a non-battlefield card)',
-  },
-  { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
-  {
-    card: 'Fatal Push',
-    missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',
   },
   {
     // Everything Cryptic DOES is faithful; what is early is WHEN it is decided.
