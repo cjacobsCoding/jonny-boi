@@ -77,6 +77,24 @@ export type GameEvent =
       readonly amount: number;
     }
   | {
+      /**
+       * A player LOOKED AT the top `amount` cards of their library — the scry /
+       * surveil half that moves nothing (CR 701.18a, 701.42a).
+       *
+       * It carries a COUNT and nothing else, on purpose: at a real table
+       * everybody sees how many cards you picked up, and nobody sees what they
+       * are. That makes the event public as printed, and it is the only honest
+       * way to log a look — the identities never leave the choice, which travels
+       * to its chooser alone and whose public `choiceAsked` is likewise a count.
+       *
+       * Emitted only once the look's question has been ANSWERED (a primitive
+       * re-run to collect a later answer must not log the look twice).
+       */
+      readonly type: 'cardsLookedAt';
+      readonly player: PlayerId;
+      readonly amount: number;
+    }
+  | {
       /** A non-mana activated ability was activated and put on the stack. */
       readonly type: 'abilityActivated';
       readonly player: PlayerId;

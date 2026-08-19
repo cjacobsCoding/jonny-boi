@@ -178,6 +178,21 @@ export interface HeuristicWeights {
    *  `choiceLandsWanted`). High enough that a pilot pitches a cheap spell before
    *  the land that would let it cast anything at all. */
   readonly choiceLandShortValue: number;
+  /**
+   * The `cardValue` a looked-at card must clear to be KEPT on top of the library
+   * by a scry or a surveil; anything at or below it is bottomed (scry) or
+   * binned (surveil).
+   *
+   * This one number is the whole scry policy, and it works because `cardValue`
+   * already knows about flooding: a land is worth `choiceLandShortValue` while
+   * its controller is below `choiceLandsWanted` and only `choiceLandValue`
+   * once the mana is built. So a threshold sitting BETWEEN those two values
+   * makes the pilot keep a land exactly while it still needs lands and bottom
+   * it the moment it is flooded — the single most valuable scry decision in
+   * real Magic — while every creature and spell (which start at
+   * `choiceCreatureBaseValue` / `choiceSpellBaseValue`) clears it and stays.
+   */
+  readonly scryKeepValueThreshold: number;
 
   // --- scoring EFFECTS (effect-value.ts — modal-spell modes) -----------------
   // Modes are scored on the SAME scale as spells above (removal ≈ 60, develop ≈ 40,
@@ -338,6 +353,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // small body (a 2/2 scores 18) but still loses to a genuine bomb (a 6/6 scores 34).
   choiceLandsWanted: 4,
   choiceLandShortValue: 20,
+  // Between `choiceLandValue` (2 — a land you no longer need) and every other
+  // card's floor (`choiceSpellBaseValue` 8, `choiceCreatureBaseValue` 10, and a
+  // needed land's `choiceLandShortValue` 20). So: bottom flooded lands, keep
+  // everything else. See the field's doc comment for why one number suffices.
+  scryKeepValueThreshold: 5,
 
   // scoring effects (modal-spell modes) — the ordering these produce is
   //   lethal > counter/kill their best thing > draw a card > bounce a real threat
