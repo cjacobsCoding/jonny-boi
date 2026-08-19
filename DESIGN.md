@@ -1456,6 +1456,54 @@ grant ("permanents you control gain hexproof and indestructible"), the anthem st
 "can't block" as keyword names, and "target creature can't be blocked this turn". Gauntlet seed 99 is
 byte-identical to `origin/main` (79/280) with throughput at parity.
 
+### 3.18 The in-game bug reporter — ✅ done
+Ported from the same tool in Treadlight and Lightwalker, where it has been the single most effective
+route from "it did something weird" to a fixed defect. Press **B** — or tap the ⛬ button, which is the
+one that matters, because the live PWA is used on a phone with no keyboard — and from ANY view the
+screen freezes on the frame the problem is on. You scribble on that frame, type and/or **speak** what
+went wrong, and Submit hands over `bugreport_<stamp>.zip`.
+
+**The bundle is the same set of entries all three projects write**, so one habit reads a report from
+any of them: `report.md` (the same field lines), `screenshot.png`, `annotated.png`, `state_dump.txt`,
+`voice.webm` + `transcript.txt`. A browser cannot write a folder, so the web one is a zip — built by
+`lib/bugreport/zip.ts`, a ~150-line STORE-only writer, rather than a dependency, since the payloads
+(PNG, WebM) are already compressed.
+
+**A GLOBAL OVERLAY, not a view** (`components/BugReporter.tsx`, mounted once in `App.tsx`). A view
+would have to be navigated to, which loses the screen being reported about — the whole point of the
+tool. No view contains a line of code about bug reporting.
+
+**`console.txt` takes video's place.** The two games record the last N seconds of frames because a
+rendering bug has to be SEEN. Here the equivalent evidence is textual, and arguably better: the
+console/error ring (installed at app load, not at report time, or it has already missed the thing you
+opened it for) carries the warning that fired, the unsupported-mechanic signal and the thrown stack. A
+screenshot of a card grid rarely says why a verdict was wrong; the log usually does.
+
+**`state_dump.txt` is a REGISTRY, not a hardcoded list** (`lib/bugreport/state-dump.ts`). Any surface
+registers a named section with `registerStateSection` and it appears in every future report — the same
+seam the games' dumps use, and the reason theirs never go stale. Built-in sections: build (the commit
+is compiled in by `vite.config.ts`, so a report from the live PWA names the build it came from),
+environment (including installed-PWA vs browser, which changes which bugs are even possible) and
+storage. `App.tsx` registers the view, the decks and the pool size.
+
+**Three defects found by running it, each now pinned by a test in `capture-policy.test.ts`:**
+- Rasterising `document.body` captures the whole SCROLLABLE page while the reporter draws in VIEWPORT
+  coordinates, so every stroke lands somewhere else. Fixed by sizing the raster to the viewport and
+  translating the clone by the scroll offset. (Lightwalker's port hit the identical bug for the
+  equivalent reason — a framebuffer bigger than the window.)
+- `html-to-image` fetches and base64-inlines every `<img>` it clones. With ~190 card tiles the capture
+  ran past 30 s and timed out; off-screen images are now skipped, which cannot change a visible pixel.
+- The frame and the ink canvas were each fitted with `object-fit: contain`, so the canvas ELEMENT
+  filled the stage while its BITMAP was letterboxed inside it — every stroke scaled and offset. They
+  now share one aspect-ratio box, verified in the running app as `scaleX === scaleY`.
+
+⚠️ **What is NOT verified automatically, stated rather than glossed:** that the rasteriser produces a
+faithful picture. It needs a real, VISIBLE browser — in a backgrounded tab `toPng` never resolves at
+all, even for a single header element. Everything around it is tested (region, skip rule, the finite
+budget that turns a hang into a note, the zip, the report, the dump), and the whole submit path was
+driven end-to-end in the running app: two strokes, a typed note, a real zip read back out of its own
+central directory. The picture itself wants one human look.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

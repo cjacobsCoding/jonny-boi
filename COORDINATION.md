@@ -113,6 +113,29 @@ throughput (games/sec) from regressing.
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-19 DESKTOP-90PJPM4 (integrator): `feat/bug-reporter` ✅ **INTEGRATED** — the in-game bug
+  reporter, ported from Treadlight/Lightwalker so all three projects file the SAME report. **B**, or
+  the ⛬ button (the one that matters — the live PWA is used on a phone), freezes the frame from any
+  view; scribble, type, speak; Submit downloads `bugreport_<stamp>.zip` with `report.md`,
+  `screenshot.png`, `annotated.png`, `state_dump.txt`, `console.txt`, `voice.webm`. DESIGN §3.18 has
+  the full write-up. Files owned: `apps/web/src/lib/bugreport/*`,
+  `apps/web/src/components/BugReporter.tsx` + `bug-reporter.css`, plus three lines in `App.tsx`, a
+  `define` block in `apps/web/vite.config.ts`, and one dependency (`html-to-image`, dynamically
+  imported so it is a 13.7 kB lazy chunk, not first-paint weight).
+
+  **Two things for whoever touches this next.** (1) `state_dump.txt` is a REGISTRY — call
+  `registerStateSection('yourFeature', () => '…')` and your state is in every future report; do not
+  add fields to the reporter. (2) The console/error ring is installed at APP LOAD, not when the
+  reporter opens, because by then it has already missed the thing you opened it for.
+
+  **Not verified automatically, and said so rather than glossed:** whether the rasteriser draws a
+  faithful picture. It needs a VISIBLE browser — in a backgrounded tab `html-to-image` never resolves
+  at all, even for one header element, which is exactly why the capture now has a finite budget and
+  degrades to "no picture, and here is why" instead of freezing the app. Everything around it is
+  tested (49 new cases) and the submit path was driven end-to-end in the running app. Suite
+  **2980 passed / 0 failed** on `main` after this, which includes
+  `feat/you-may-and-trigger-templates` landing mid-flight — this feature contributes 49 of them.
+
 - 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
   trigger-timing families, worked in `sole`-descending order off the cached corpus.**
   **Measured: 193 → 248 playable of 2100 (+55).** Re-runnable offline:
