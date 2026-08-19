@@ -37,6 +37,7 @@ export {
   loseLife,
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
+  grantKeywordToYoursUntilEndOfTurn,
   makeToken,
   persistReturn,
   destroyTarget,
