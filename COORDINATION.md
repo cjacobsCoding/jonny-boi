@@ -141,7 +141,14 @@ _Append dated notes here; keep them short. Newest at top._
   indestructible + alternative costs (in flight elsewhere). They are asserted ABSENT in
   `pool-mechanics.test.ts` with their reasons, so whoever closes one gets told by the suite.
 
-  Corpus coverage re-measured, unchanged by this branch: **229/2100 (10.9%)**.
+  Corpus coverage, same cached corpus: **229/2100 (10.9%)** at branch point, **307/2100 (14.6%)** after
+  merging `feat/indestructible-and-blocking` + `feat/you-may-and-trigger-templates`. None of that
+  movement is mine — this branch adds no compiler rule. Post-merge the pool is **331** (indestructible
+  now has cards: the Darksteel family + the ten Bridges).
+
+  ⚠️ **`npm run verify` does not type-check.** A generator bug emitted a long label as a
+  character-indexed object; the whole suite AND verify stayed green while `npm run build` failed. If
+  you touch generated data, run the build too.
 
 - 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
   trigger-timing families, worked in `sole`-descending order off the cached corpus.**

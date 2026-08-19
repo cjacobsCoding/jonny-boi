@@ -1504,9 +1504,17 @@ Two defects fell out of actually playing the new cards, which is the point of th
   it failed "Destroy target artifact" for declaring `'artifact'`, a restriction core has enforced
   since the attachment work. It now asks core's own `isTargetRestriction`.
 
-The corpus measurement is unchanged by this work and stated for honesty: **229 / 2100 (10.9%)** of the
-most-played Modern-legal cards compile. This section widened what the SHIPPED POOL shows; widening the
-compiler is §3.11's backlog.
+The corpus measurement is stated for honesty, because this section did not move it: the pool grew by
+using rules the compiler already had. Measured on the same cached corpus, it was **229 / 2100 (10.9%)**
+when this branch started and is **307 / 2100 (14.6%)** after merging §3.17's indestructible work and
+the you-may/trigger templates — all of that is compiler width, none of it is this section. This section
+widened what the SHIPPED POOL shows; widening the compiler is §3.11's backlog.
+
+Adding indestructible cards after that merge took the pool to **331**, on the same one-line rule: names
+in, `'complete'` verdicts out. Two more defects surfaced doing it — the generator serialized any string
+too long for one line as a character-indexed object (nothing had printed a label that long until the
+fetchlands compiled), and that broke `npm run build` while `npm run verify` stayed green, because
+verify lints and tests but never type-checks.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
