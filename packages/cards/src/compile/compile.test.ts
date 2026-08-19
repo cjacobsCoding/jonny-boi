@@ -189,28 +189,44 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
-    // The blocked half has to be a card that is STILL genuinely unimplementable,
-    // and that list keeps shrinking: Liliana compiles (planeswalkers), Tarmogoyf
-    // compiles (the star P/T box), and Snapcaster compiles (graveyard targeting
-    // plus grants on a non-battlefield card). What is left is Cryptic Command,
-    // whose MODES are chosen at cast — core picks targets with no mode declared.
-    // When modal casting lands, this test needs the next honestly-blocked card;
-    // if none remains, it should assert an empty blocked half instead.
+    // THE BLOCKED HALF IS NO LONGER A POOL CARD, and that is the news: the last
+    // one was Cryptic Command, whose modes are now announced at cast (CR
+    // 601.2b/c), so every hand-authored card compiles from its printed text.
+    // Liliana compiles (planeswalkers), Tarmogoyf compiles (the star P/T box),
+    // Snapcaster compiles (graveyard targeting plus grants on a non-battlefield
+    // card).
+    //
+    // The partition still has to be PROVEN to separate, though — a test whose
+    // blocked half is empty by construction would pass even if `compileCards`
+    // stopped blocking anything at all. So the blocked half is a SPLIT card,
+    // which is honestly unimplementable: two castable halves on one object, with
+    // no second face to swap to (see `SECOND_CASTABLE_FACE_GAP`).
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
     const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
     const snapcaster = scryfallFor(CARD_POOL.find((c) => c.name === 'Snapcaster Mage')!);
     const cryptic = scryfallFor(CARD_POOL.find((c) => c.name === 'Cryptic Command')!);
+    const split: CompilableCard = {
+      id: 'split-fire-ice',
+      name: 'Fire // Ice',
+      manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+      typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+      oracleText: 'Fire deals 2 damage divided as you choose among one or two targets.',
+      power: null,
+      toughness: null,
+      keywords: [],
+    };
 
-    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic, split]);
 
     expect(playable.map((card) => card.name)).toEqual([
       'Lightning Bolt',
       'Liliana of the Veil',
       'Tarmogoyf',
       'Snapcaster Mage',
+      'Cryptic Command',
     ]);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Cryptic Command']);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Fire // Ice']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });
@@ -562,7 +578,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
     ]);
   });
 
-  it('reports multikicker rather than flattening it into a single kick', () => {
+  it('compiles multikicker as a COUNT, never flattened into a single kick', () => {
     const result = compileCard(
       makeCard({
         name: 'Multi Thing',
@@ -575,11 +591,11 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    // `multikicker`, NOT `kicker`: the two ask different questions (a count vs a
+    // yes/no), and compiling one as the other would cap the card at one kick.
+    expect(result.definition.multikicker).toEqual({ R: 1 });
     expect(result.definition.kicker).toBeUndefined();
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'multikicker (an additional cost paid any number of times)',
-    );
   });
 
   it('compiles a colour/colour hybrid cost the mana system can pay', () => {

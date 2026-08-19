@@ -44,6 +44,7 @@ export {
   formatManaCost,
   payCost,
   canPay,
+  repeatCost,
 } from './mana.js';
 
 // Card model seam
@@ -57,6 +58,8 @@ export type {
   CastTiming,
   EffectRef,
   KeywordFlags,
+  ModalSpec,
+  SpellMode,
 } from './card.js';
 export {
   hasType,
@@ -73,6 +76,8 @@ export {
   bestManaYield,
   castTiming,
   entersTapped,
+  hasCastableBackFace,
+  playableFaceOf,
 } from './card.js';
 
 /**
@@ -178,6 +183,26 @@ export {
 export type { FaceUp } from './transform.js';
 export { transformPermanent, faceUpOf, transformTargetOf } from './transform.js';
 
+/**
+ * MODAL-SPELL seam (`./modal.ts`): which modes of a "Choose one --" card may be
+ * ANNOUNCED on this board, and what each announced mode resolves into. Read by
+ * the engine at cast time, by the AI to price a mode before choosing it, and by
+ * the web UI to label the question.
+ */
+export type { ModeCounts, ModalResolution } from './modal.js';
+export {
+  modalSpecOf,
+  modalSpellIsCastable,
+  modeById,
+  modeCountsFor,
+  modeIsChoosable,
+  choosableModes,
+  nextUnaimedPick,
+  orderPicks,
+  pickTargetIsLegal,
+  picksToResolution,
+} from './modal.js';
+
 // Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.
 export type {
   TriggeredAbility,
@@ -217,6 +242,7 @@ export type {
   StackObject,
   SpellStackObject,
   TriggeredStackObject,
+  ModePick,
   CombatState,
 } from './state.js';
 export {
