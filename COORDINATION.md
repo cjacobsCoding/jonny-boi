@@ -143,10 +143,11 @@ _Append dated notes here; keep them short. Newest at top._
   indestructible + alternative costs (in flight elsewhere). They are asserted ABSENT in
   `pool-mechanics.test.ts` with their reasons, so whoever closes one gets told by the suite.
 
-  Corpus coverage, same cached corpus: **229/2100 (10.9%)** at branch point, **307/2100 (14.6%)** after
-  merging `feat/indestructible-and-blocking` + `feat/you-may-and-trigger-templates`. None of that
-  movement is mine — this branch adds no compiler rule. Post-merge the pool is **331** (indestructible
-  now has cards: the Darksteel family + the ten Bridges).
+  Corpus coverage, same cached corpus: **229/2100 (10.9%)** at branch point → **307** after
+  indestructible + the you-may/trigger templates → **328/2100 (15.6%)** after alternative costs. None
+  of that movement is mine — this branch adds no compiler rule; I re-ran the generator after each
+  merge and the pool went **309 → 331 → 357**. Indestructible, cycling, madness and buyback all have
+  pool cards now, so a sibling that widens the compiler can expect me to have picked it up.
 
   ⚠️ **`npm run verify` does not type-check.** A generator bug emitted a long label as a
   character-indexed object; the whole suite AND verify stayed green while `npm run build` failed. If

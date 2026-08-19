@@ -1713,11 +1713,18 @@ when this branch started and is **307 / 2100 (14.6%)** after merging §3.17's in
 the you-may/trigger templates — all of that is compiler width, none of it is this section. This section
 widened what the SHIPPED POOL shows; widening the compiler is §3.11's backlog.
 
-Adding indestructible cards after that merge took the pool to **331**, on the same one-line rule: names
-in, `'complete'` verdicts out. Two more defects surfaced doing it — the generator serialized any string
-too long for one line as a character-indexed object (nothing had printed a label that long until the
-fetchlands compiled), and that broke `npm run build` while `npm run verify` stayed green, because
-verify lints and tests but never type-checks.
+Each sibling branch that landed while this one was out widened the pool again on the same one-line
+rule — names in, `'complete'` verdicts out. §3.17 gave indestructible its cards (the Darksteel family
+and the ten artifact Bridges, pool 309 → 331); §3.19 gave the alternative costs theirs (the cycling
+lands, Fiery Temper's madness, Capsize's buyback, 331 → **357**). Of the twenty-two mechanics the
+inventory audits, four still have no honest card. On the same cached corpus, compiler coverage went
+229 → 307 → **328 / 2100 (15.6%)** across those merges; none of that movement is this section's, which
+adds no compiler rule.
+
+Two more defects surfaced doing it — the generator serialized any string too long for one line as a
+character-indexed object (nothing had printed a label that long until the fetchlands compiled), and
+that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
+never type-checks.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
