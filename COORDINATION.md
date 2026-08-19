@@ -119,7 +119,7 @@ _Append dated notes here; keep them short. Newest at top._
   printed could reach them. Closed as rule-table DATA plus small seam extensions.
 
   **Measured on the cached 2100-card corpus: 193 → 217** against the census baseline this branch
-  started from, and **229 → 257 (10.9% → 12.2%) re-measured after merging origin/main** (the
+  started from, and **252 → 280 (12.0% → 13.3%) re-measured against origin/main after merging it** (the
   keyword-sweep and modal-casting branches landed meanwhile). Re-run with
   `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json <out>`.
 
