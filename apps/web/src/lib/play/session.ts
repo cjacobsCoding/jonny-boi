@@ -395,7 +395,11 @@ export class GameSession {
   /** The lands in the priority-holder's hand they may currently play (engine-gated). */
   playableLands(): InstanceId[] {
     return this.legalActions()
-      .filter((a): a is Extract<GameAction, { kind: 'playLand' }> => a.kind === 'playLand')
+      // Front face only: a modal DFC's back-face land play needs `face: 'back'`
+      // on the submitted action, and `playLand(instanceId)` cannot carry it —
+      // so the offer is withheld rather than rendered as a button that the
+      // engine would reject. Named as a gap in COORDINATION.
+      .filter((a): a is Extract<GameAction, { kind: 'playLand' }> => a.kind === 'playLand' && a.face === undefined)
       .map((a) => a.instanceId);
   }
 
@@ -417,7 +421,9 @@ export class GameSession {
     // Cards the engine already says are castable RIGHT NOW (pool already pays).
     const castableNow = new Set(
       legal
-        .filter((a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell')
+        .filter(
+          (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell' && a.face === undefined,
+        )
         .map((a) => a.instanceId),
     );
     const options: CastOption[] = [];

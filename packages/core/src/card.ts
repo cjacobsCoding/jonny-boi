@@ -233,10 +233,28 @@ export interface CardDefinition {
    * produce the kicker cost is never asked — the spell simply casts unkicked,
    * which is the printed default.
    *
-   * Only the single-kicker form is modelled; multikicker (pay any number of
-   * times) needs a count, and cards printing it stay reported.
+   * Only the single yes/no kicker form lives here; a "pay any number of times"
+   * cost is {@link multikicker}.
    */
   readonly kicker?: ManaCost;
+  /**
+   * Multikicker — "you may pay an additional [this] any number of times as you
+   * cast this spell". The COUNT is the cast-time decision: the engine asks a
+   * `chooseNumber` question ranged 0..max-affordable (computed by the same
+   * payment planner that will charge it, exactly like {@link xCost}), charges
+   * `count × multikicker` as it accepts the answer, and the count rides the
+   * stack object into the resolution (`ResolutionFrame.kickCount` →
+   * `EffectContext.kickCount`) so "for each time it was kicked" reads the
+   * number of payments that actually happened. A count of zero is the printed
+   * default and `kicked` stays false for it; any positive count also sets
+   * `kicked`, so "if this spell was kicked" riders read multikicker correctly.
+   *
+   * A PERMANENT spell that resolves records the count on the entering instance
+   * (`CardInstance.timesKicked`), which is how an enters-the-battlefield
+   * trigger ("create a token for each time it was kicked") still sees it after
+   * the resolution frame is gone.
+   */
+  readonly multikicker?: ManaCost;
   readonly power?: number;
   readonly toughness?: number;
   /**
@@ -313,6 +331,26 @@ export interface CardDefinition {
    */
   readonly effects?: readonly EffectRef[];
   /**
+   * MODAL SPELLS — "Choose one —", "Choose two —", "Choose one or both —",
+   * "Choose up to N —" (charms, commands, confluences), as data.
+   *
+   * Modes are chosen at CAST time (CR 601.2b) and each chosen mode's target is
+   * chosen at cast time too (CR 601.2c) — the engine asks both questions while
+   * the spell is being announced, records the picks on the stack object
+   * (`SpellStackObject.modePicks`, public information exactly as in paper),
+   * and the resolution runs the chosen modes' effects IN PRINTED ORDER, each
+   * against its own chosen target. A mode with no legal target is not
+   * choosable (CR 601.2c: you can only choose modes you can legally announce),
+   * and a modal spell that cannot seat `min` legal modes cannot be cast at
+   * all.
+   *
+   * Mutually exclusive with {@link effects} in practice: a modal spell's whole
+   * script IS its modes. When both are present the modal machinery wins and
+   * `effects` is ignored by the cast path (`resolveTopOfStack` builds the
+   * frame from the picks).
+   */
+  readonly modal?: ModalSpec;
+  /**
    * For *fixed-bundle* mana sources: tapping adds one mana of **each** listed
    * color at once. `['G']` is a Forest; `['C', 'C']` is Sol Ring's {C}{C}.
    *
@@ -381,11 +419,30 @@ export interface CardDefinition {
    *    would leave the stack — resolved OR countered (CR 702.34a) — never put
    *    back into the graveyard. See `spellLeaveDestination` in state.ts.
    *
-   * Only the PLAIN mana-cost form is modelled. A flashback cost with {X} or
-   * additional non-mana costs ("Flashback—{1}{U}, Discard a card") needs the
-   * cast-cost-modification system and stays reported by the compiler.
+   * The MANA half is here; two printed extensions ride beside it:
+   * {@link flashbackXCost} for "Flashback {X}{R}{R}" and
+   * {@link flashbackLifeCost} for "Flashback—{1}{U}, Pay 3 life". A flashback
+   * rider outside those cost kinds (a discard, a sacrifice) still has no cast-
+   * time cost machinery and stays reported by the compiler.
    */
   readonly flashback?: ManaCost;
+  /**
+   * How many `{X}` symbols the FLASHBACK cost prints ("Flashback {X}{R}{R}{R}"
+   * — Devil's Play). Exactly {@link xCost}'s shape, for the graveyard cast:
+   * when a spell is cast with `fromZone: 'graveyard'` the engine asks the X
+   * question off THIS count instead of the printed cost's, charges the chosen
+   * X, and the value rides into the resolution the same way. Meaningful only
+   * alongside {@link flashback}.
+   */
+  readonly flashbackXCost?: number;
+  /**
+   * A "Pay N life" rider on the flashback cost ("Flashback—{1}{U}, Pay 3
+   * life"). Charged IN FULL at cast time with the mana — a mandatory part of
+   * the cost, not a choice — and a caster who cannot pay it (CR 118.4: life
+   * pays down to zero, never past) is never offered the cast. Meaningful only
+   * alongside {@link flashback}.
+   */
+  readonly flashbackLifeCost?: number;
   /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
@@ -440,6 +497,20 @@ export interface CardDefinition {
    */
   readonly isBackFace?: boolean;
   /**
+   * Marks a {@link backFace} as CASTABLE/PLAYABLE — a MODAL double-faced card
+   * (Zendikar Rising style), where the player casts either face from any zone
+   * the card may be cast from, as opposed to a transforming DFC whose back
+   * face is only ever reached by a transform instruction (CR 712.8b).
+   *
+   * Present on the FRONT face, beside `backFace`. The cast/play actions carry
+   * `face: 'back'` to choose the second face; the instance's `def` then IS
+   * that face for as long as it is on the stack/battlefield (`printedDef`
+   * holds the front, exactly as a transform does), and leaving for a hidden
+   * or graveyard zone reverts it to the front (CR 712.8a). Playing a land
+   * back face counts as the turn's land play like any other land.
+   */
+  readonly backFaceCastable?: boolean;
+  /**
    * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
    * data: what it may be attached to, what it does to its host while attached, and
    * what the state-based actions do when it is not legally attached. See
@@ -453,6 +524,43 @@ export interface CardDefinition {
    * abbreviates.
    */
   readonly attachment?: import('./attachments.js').AttachmentSpec;
+}
+
+/**
+ * One printed mode of a modal spell ("• Counter target spell.") — effects plus
+ * an optional target requirement, as data.
+ */
+export interface SpellMode {
+  /** Stable id the chosen-modes answer refers to (`mode1`, `counter`, …). */
+  readonly id: string;
+  /** The printed mode text, for the UI and the event log. */
+  readonly label: string;
+  /** What this mode does when it resolves — ordinary effect refs. */
+  readonly effects: readonly EffectRef[];
+  /**
+   * What this mode TARGETS, when it targets at all. Unlike a whole-card
+   * restriction (where `'any'` is left unpoliced for cost reasons —
+   * `targetRestrictionOf`), a mode's requirement is explicit data: present
+   * means "this mode names exactly one target of this shape, chosen at cast",
+   * absent means the mode is target-free. `'any'` is meaningful here, because
+   * whether a mode is CHOOSABLE at all depends on a legal target existing.
+   */
+  readonly targets?: import('./targeting.js').TargetRestriction;
+}
+
+/**
+ * The modal header, as data: how many modes are chosen and whether one mode may
+ * be chosen more than once ("Choose two. You may choose the same mode more
+ * than once.").
+ */
+export interface ModalSpec {
+  /** Fewest modes the caster must choose (0 for "choose up to N"). */
+  readonly min: number;
+  /** Most modes the caster may choose. */
+  readonly max: number;
+  /** "You may choose the same mode more than once." */
+  readonly allowRepeats?: boolean;
+  readonly modes: readonly SpellMode[];
 }
 
 /**
@@ -474,7 +582,20 @@ export type DerivedCountName =
   /** Creature CARDS in your graveyard (Boneyard Wurm). */
   | 'creaturesInYourGraveyard'
   /** Distinct card types among cards in ALL graveyards (Tarmogoyf). */
-  | 'cardTypesInAllGraveyards';
+  | 'cardTypesInAllGraveyards'
+  /**
+   * How many times the SPELL that produced this effect was kicked — "for each
+   * time it was kicked" on a multikicker card.
+   *
+   * The one name in this vocabulary that is NOT a fact about the board, and so
+   * the one `evaluateDerivedCount` cannot answer: it is a fact about the
+   * resolution in progress (or, for an enters-the-battlefield trigger, about
+   * the permanent's own `timesKicked`). It lives in the shared vocabulary
+   * anyway because it is read at exactly the same seam every other count is —
+   * `intParam` — so damage, draw, life, counters and token counts all learn it
+   * at once, and no primitive changes. See `effect-helpers.ts` for the reader.
+   */
+  | 'timesThisWasKicked';
 
 /**
  * One half of a characteristic-defining P/T: a derived count plus an optional
@@ -825,6 +946,33 @@ function conditionMet(
   }
 
   return true;
+}
+
+/**
+ * The face of `def` a `'front'`/`'back'` choice names, or `undefined` when the
+ * card has no such playable face.
+ *
+ * `'back'` resolves only for a MODAL double-faced card
+ * ({@link CardDefinition.backFaceCastable}). A transforming DFC's back face is
+ * reached by a transform instruction and never by a cast or a land play (CR
+ * 712.8b), so asking for it here yields `undefined` and the caller rejects —
+ * which is what keeps a hostile online client (or a hand-built test) from
+ * casting the 3/2 Aberration half of a Delver directly.
+ */
+export function playableFaceOf(def: CardDefinition, face: 'front' | 'back' | undefined): CardDefinition | undefined {
+  if (face !== 'back') return def;
+  if (def.backFaceCastable !== true) return undefined;
+  return def.backFace;
+}
+
+/**
+ * Whether this definition offers a second, CASTABLE face — the one question
+ * every "offer both halves of this card" loop asks. Written as its own
+ * predicate so the offer (`generateLegalActions`) and the accept
+ * (`applyCastSpell`/`applyPlayLand`) cannot drift apart.
+ */
+export function hasCastableBackFace(def: CardDefinition): boolean {
+  return def.backFaceCastable === true && def.backFace !== undefined;
 }
 
 /** Resolve a definition's casting timing, defaulting to sorcery-speed. */

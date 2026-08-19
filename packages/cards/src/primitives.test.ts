@@ -49,7 +49,6 @@ import {
 import {
   discardCard,
   mayShuffleLibrary,
-  modal,
   putFromHandOnTop,
   reorderTopOfLibrary,
   returnFromGraveyard,
@@ -699,38 +698,6 @@ describe('revealTopCard', () => {
     revealTopCard(ctx); // top is now a creature → stays put
     expect(s.players.B.hand).toHaveLength(1);
     expect(s.players.B.library.map((c) => c.def.name)).toEqual(['Bear']);
-  });
-});
-
-describe('modal', () => {
-  const MODES = [
-    { id: 'counter', label: 'Counter target spell', requires: 'targetSpell', effects: [{ primitive: 'counterSpell' }] },
-    { id: 'draw', label: 'Draw a card', effects: [{ primitive: 'drawCards', params: { count: 1 } }] },
-    { id: 'tapAll', label: 'Tap all', effects: [{ primitive: 'tapPermanents' }] },
-  ];
-
-  it('enqueues the chosen modes in PRINTED order, not answer order', () => {
-    const s = emptyState();
-    const src = inst({ id: 'cc', name: 'Cryptic Command', types: ['instant'] }, 'A', 'stack');
-    const { ctx, enqueued } = ctxFor(s, src, { count: 2, modes: MODES }, [], () => ({
-      kind: 'chooseModes',
-      modeIds: ['tapAll', 'draw'],
-    }));
-
-    modal(ctx);
-
-    expect(enqueued.map((r) => r.primitive)).toEqual(['drawCards', 'tapPermanents']);
-  });
-
-  it('does not offer a mode whose target is not legal for this cast', () => {
-    const s = emptyState();
-    const src = inst({ id: 'cc', name: 'Cryptic Command', types: ['instant'] }, 'A', 'stack');
-    const { ctx, asked } = ctxFor(s, src, { count: 2, modes: MODES }); // no targets at all
-
-    modal(ctx);
-
-    const choice = asked[0]!;
-    expect(choice.kind === 'chooseModes' && choice.modes.map((m) => m.id)).toEqual(['draw', 'tapAll']);
   });
 });
 

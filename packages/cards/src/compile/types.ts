@@ -150,10 +150,16 @@ export interface ClauseContribution {
   /** Set when the text charges a LIFE price to enter untapped (a shockland). */
   readonly entersTappedUnlessLifePaid?: number;
   /**
-   * The card's printed flashback cost (`CardDefinition.flashback`) — the plain
-   * mana-cost form only; {X}/additional-cost flashback stays reported.
+   * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
+   * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N
+   * life" rider as {@link flashbackLifeCost}, so all three printed forms of
+   * flashback compile through one rule.
    */
   readonly flashback?: import('@jonny-boi/core').ManaCost;
+  /** How many `{X}` symbols the flashback cost prints ("Flashback {X}{R}{R}"). */
+  readonly flashbackXCost?: number;
+  /** A "Pay N life" rider on the flashback cost ("Flashback—{1}{U}, Pay 3 life"). */
+  readonly flashbackLifeCost?: number;
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
   /**
@@ -161,6 +167,19 @@ export interface ClauseContribution {
    * asks about at cast time (`CardDefinition.kicker`).
    */
   readonly kicker?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed "Multikicker {COST}" line — an additional cost the caster may
+   * pay ANY NUMBER of times, so the cast-time question is a count rather than a
+   * yes/no (`CardDefinition.multikicker`).
+   */
+  readonly multikicker?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed modal header and its modes ("Choose one — • … • …"), chosen at
+   * cast time (`CardDefinition.modal`). A modal card's whole script lives here
+   * rather than in {@link effects}: each mode carries its own effects AND its
+   * own target restriction, because two chosen modes point at two objects.
+   */
+  readonly modal?: import('@jonny-boi/core').ModalSpec;
   /**
    * A CHARACTERISTIC-DEFINING P/T this clause prints — the formula behind a `*`
    * box (Tarmogoyf). Present ⇒ the card's printed P/T is variable and the

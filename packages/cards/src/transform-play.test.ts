@@ -89,7 +89,7 @@ describe('the compiler plays both faces or reports the card', () => {
     expect(compiled.backFace!.id).toBe(DELVER.backFace!.id);
   });
 
-  it('a MODAL DFC keeps reporting, naming the cast-time face choice', () => {
+  it('a MODAL DFC compiles BOTH faces, with the back one marked castable', () => {
     const modal: CompilableCard = {
       id: 'modal-test',
       name: 'Malakir Rebirth // Malakir Mire',
@@ -105,7 +105,7 @@ describe('the compiler plays both faces or reports the card', () => {
           name: 'Malakir Rebirth',
           manaCost: { generic: 0, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
           typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
-          oracleText: 'Choose target creature.',
+          oracleText: 'Draw a card.',
           power: null,
           toughness: null,
         },
@@ -113,13 +113,40 @@ describe('the compiler plays both faces or reports the card', () => {
           name: 'Malakir Mire',
           manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
           typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
-          oracleText: 'Malakir Mire enters the battlefield tapped.',
+          oracleText: 'Malakir Mire enters tapped.',
           power: null,
           toughness: null,
         },
       ],
     };
     const result = compileCard(modal);
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    // The FRONT face is the definition; the back rides nested, marked both as a
+    // back face AND as castable. That second flag is the whole difference from a
+    // transforming DFC, whose back face is never cast (CR 712.8b).
+    expect(result.definition.name).toBe('Malakir Rebirth');
+    expect(result.definition.backFaceCastable).toBe(true);
+    expect(result.definition.backFace!.name).toBe('Malakir Mire');
+    expect(result.definition.backFace!.isBackFace).toBe(true);
+    expect(result.definition.backFace!.types).toEqual(['land']);
+    // Each face keeps its OWN cost — a modal DFC's back face is really cast (or
+    // played), unlike a transforming back face, which has no cost at all.
+    expect(result.definition.cost).toEqual({ B: 1 });
+    expect(result.definition.backFace!.cost).toBeUndefined();
+  });
+
+  it('a SPLIT card still reports — two castable halves are not two faces', () => {
+    const split: CompilableCard = {
+      id: 'split-test',
+      name: 'Fire // Ice',
+      manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+      typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+      oracleText: 'Fire deals 2 damage divided as you choose.',
+      power: null,
+      toughness: null,
+      keywords: [],
+    };
+    const result = compileCard(split);
     expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(SECOND_CASTABLE_FACE_GAP);
   });

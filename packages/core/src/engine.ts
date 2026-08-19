@@ -14,7 +14,7 @@
 import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
 import type { ActivatedAbility, CardDefinition, EffectRef } from './card.js';
-import { castTiming, isLand, isPermanentType, manaModesOf } from './card.js';
+import { castTiming, hasCastableBackFace, isLand, isPermanentType, manaModesOf, playableFaceOf } from './card.js';
 import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame, TargetOption } from './choices.js';
 import {
   choiceOptionCount,
@@ -35,6 +35,7 @@ import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './e
 import type { GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
 import type { ManaCost, ManaProduction } from './mana.js';
+import { repeatCost } from './mana.js';
 import {
   addProduction,
   canPay,
@@ -50,6 +51,7 @@ import type {
   CardInstance,
   GameState,
   InstanceId,
+  ModePick,
   PlayerId,
   SpellStackObject,
   StackObject,
@@ -75,6 +77,15 @@ import {
   targetRestrictionOf,
 } from './targeting.js';
 import { WARD_COST_PARAM, WARD_COUNTER_PRIMITIVE, effectiveWardOf } from './protection.js';
+import {
+  modalSpecOf,
+  modalSpellIsCastable,
+  modeById,
+  modeCountsFor,
+  nextUnaimedPick,
+  orderPicks,
+  picksToResolution,
+} from './modal.js';
 import { expireCardGrants, flashbackCostOf, pruneCardGrantsFor } from './card-grants.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
@@ -507,12 +518,19 @@ function resolveTopOfStack(
 
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
 
+  // A MODAL spell's script IS its announced modes: printed order, each mode's
+  // effects carrying that mode's OWN chosen target (a mode whose target has
+  // since become illegal simply does not happen, while its siblings still do —
+  // CR 608.2b). This is the whole payoff of choosing at cast time.
+  const picks = top.modePicks;
+  const modal = picks ? picksToResolution(state, card.def, picks, top.controller) : undefined;
+  const effects = modal ? modal.effects : card.def.effects;
+
   // Fast path: a spell with no script (every vanilla creature and land) never asks
   // anybody anything, so it skips the resolution frame entirely and pays nothing
   // for the choice machinery.
-  const effects = card.def.effects;
   if (!effects || effects.length === 0) {
-    finishSpellResolution(state, card, top.resolvesTo, emit);
+    finishSpellResolution(state, card, top.resolvesTo, emit, top);
     checkStateBasedActions(state, emit);
     return;
   }
@@ -533,6 +551,8 @@ function resolveTopOfStack(
       // the stack object, and "deals X damage" is read during (and after) it.
       ...(top.xValue !== undefined ? { xValue: top.xValue } : {}),
       ...(top.kicked !== undefined ? { kicked: top.kicked } : {}),
+      ...(top.kickCount !== undefined ? { kickCount: top.kickCount } : {}),
+      ...(modal ? { effectTargets: modal.effectTargets } : {}),
     },
     registry,
     emit,
@@ -619,12 +639,22 @@ function runResolution(
   while (frame.next < frame.effects.length) {
     const ref = frame.effects[frame.next] as EffectRef;
     const source = frameSource(state, frame);
+    // A modal spell's effects each point where THEIR mode was aimed; everything
+    // else falls back to the one frame-wide target list, exactly as before.
+    const refTargets = frame.effectTargets?.[frame.next] ?? frame.targets;
     applyEffectRef(
       registry,
       ref,
-      { state, source, controller: frame.controller, xValue: frame.xValue, kicked: frame.kicked },
+      {
+        state,
+        source,
+        controller: frame.controller,
+        xValue: frame.xValue,
+        kicked: frame.kicked,
+        kickCount: frame.kickCount,
+      },
       emit,
-      frame.targets,
+      refTargets,
       createChoiceChannel(state, frame, source, emit),
     );
     if (state.pendingChoice) {
@@ -648,7 +678,7 @@ function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: Ga
   state.resolution = null;
   state.pendingChoice = null;
   if (frame.origin === 'spell' && frame.card) {
-    finishSpellResolution(state, frame.card, frame.resolvesTo ?? 'graveyard', emit);
+    finishSpellResolution(state, frame.card, frame.resolvesTo ?? 'graveyard', emit, frame);
   } else {
     emit({
       type: 'triggeredAbilityResolved',
@@ -659,16 +689,33 @@ function finishResolution(state: GameState, frame: ResolutionFrame, emit: (e: Ga
   checkStateBasedActions(state, emit);
 }
 
+/**
+ * What a resolving spell still remembers about how it was KICKED — carried from
+ * the stack object (fast path) or the resolution frame (scripted path) so a
+ * permanent entering the battlefield can record it on the instance.
+ */
+interface KickRecord {
+  readonly kicked?: boolean;
+  readonly kickCount?: number;
+}
+
 /** Move a finished spell/permanent off the stack into its destination zone. */
 function finishSpellResolution(
   state: GameState,
   card: CardInstance,
   resolvesTo: 'battlefield' | 'graveyard' | 'exile',
   emit: (e: GameEvent) => void,
+  kick?: KickRecord,
 ): void {
   if (resolvesTo === 'battlefield') {
     // Stack objects aren't in a player zone; place directly on battlefield.
     card.zone = 'battlefield';
+    // How many times the spell was kicked follows the PERMANENT onto the
+    // battlefield: the resolution frame dies here, but an enters-the-battlefield
+    // trigger ("create a 1/1 for each time it was kicked") resolves afterwards
+    // and must still be able to read it. A plain (non-multi) kicker records 1.
+    const times = kick?.kickCount ?? (kick?.kicked === true ? 1 : 0);
+    if (times > 0) card.timesKicked = times;
     // Evaluated BEFORE the push below, so a conditional land ("unless you
     // control two or fewer other lands") never counts itself among the others.
     card.tapped = entersTapped(card.def, {
@@ -794,9 +841,19 @@ function createChoiceChannel(
     },
     enqueueEffects(refs) {
       if (refs.length === 0) return;
-      // Insert AFTER the ref now running, so a modal spell's chosen modes resolve
-      // in order as part of this same resolution (and may ask questions of their own).
+      // Insert AFTER the ref now running, so a follow-up whose shape depended on
+      // an answer resolves in order as part of this same resolution (and may ask
+      // questions of its own).
       frame.effects.splice(frame.next + 1, 0, ...refs);
+      // ⚠️ `effectTargets` is a PARALLEL array (see `ResolutionFrame`): splicing
+      // one without the other silently shifts every later effect's targets by
+      // the number of refs inserted — a modal spell's second mode would then
+      // resolve pointed at the first mode's victim. The inserted refs inherit
+      // the frame-wide targets (`undefined`), which is what an enqueued
+      // follow-up has always used.
+      if (frame.effectTargets) {
+        frame.effectTargets.splice(frame.next + 1, 0, ...refs.map(() => undefined));
+      }
     },
     shuffleLibrary(player) {
       shuffleLibraryInState(state, player);
@@ -1060,8 +1117,27 @@ function applyAnswerChoice(
   // they would be had the spell needed no question.
   const casting = spellOnStack(state, choice.sourceInstanceId);
   if (casting?.awaitingCastChoice !== undefined) {
+    // The modes announced for a modal spell. Nothing is charged (modes are free
+    // — the choice IS the card), the picks are written in printed order, and the
+    // next cast question (aiming the first targeting mode) asks immediately.
+    if (casting.awaitingCastChoice === 'modes' && choice.kind === 'chooseModes' && answer.kind === 'chooseModes') {
+      recordModePicks(state, casting.instanceId, answer.modeIds, emit);
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    // One announced mode's target. `nextUnaimedPick` names the pick being aimed
+    // — the same rule the question was raised by, so an answer cannot land on
+    // the wrong copy of a repeated mode.
+    if (
+      casting.awaitingCastChoice === 'modeTarget' &&
+      choice.kind === 'selectTargets' &&
+      answer.kind === 'selectTargets'
+    ) {
+      const index = nextUnaimedPick(casting.card.def, casting.modePicks ?? []);
+      aimModePick(state, casting.instanceId, index, answer.targets, emit);
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
     if (casting.awaitingCastChoice === 'x' && choice.kind === 'chooseNumber' && answer.kind === 'chooseNumber') {
-      const perSymbol = casting.card.def.xCost ?? 0;
+      const perSymbol = xCountForCast(casting);
       let value = answer.value;
       if (value > 0 && perSymbol > 0 && !payManaCostFromBoard(state, choice.chooser, { generic: value * perSymbol }, emit)) {
         // The board could not honour the agreed X (only reachable from a
@@ -1076,6 +1152,33 @@ function applyAnswerChoice(
       // The mana (if paid) was already spent by the shared payMana block above,
       // and a payment the board could not honour arrives here as a decline.
       patchSpellOnStack(state, casting.instanceId, { kicked: answer.pay, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (
+      casting.awaitingCastChoice === 'multikicker' &&
+      choice.kind === 'chooseNumber' &&
+      answer.kind === 'chooseNumber'
+    ) {
+      const perKick = casting.card.def.multikicker;
+      let count = answer.value;
+      if (count > 0 && perKick) {
+        // Charged ONCE, here, exactly like X — and as one payment of the
+        // repeated cost rather than N payments, so a planner that would have
+        // stranded a hybrid symbol across separate charges cannot.
+        if (!payManaCostFromBoard(state, choice.chooser, repeatCost(perKick, count), emit)) {
+          // Only reachable from a hand-built state: the offered range was
+          // computed from this board. Recorded as what actually happened.
+          count = 0;
+        }
+      }
+      patchSpellOnStack(state, casting.instanceId, {
+        kickCount: count,
+        // "If this spell was kicked" reads TRUE for any positive number of
+        // multikicks — one rider, both kicker shapes, so a card printing both
+        // (or a rider written against the single kicker) cannot disagree.
+        ...(count > 0 ? { kicked: true } : {}),
+        awaitingCastChoice: undefined,
+      });
       return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
     }
   }
@@ -1177,10 +1280,23 @@ function applyPlayLand(
   }
   const card = instanceIn(player.hand, action.instanceId);
   if (!card) return rejectWith(prevState, 'that card is not in your hand');
-  if (!isLand(card.def)) return rejectWith(prevState, 'that card is not a land');
-  // Same CR 712.8b guard as casting: a back face is never playable from hand.
+  // Same CR 712.8b guard as casting: a transforming DFC's back face is never
+  // playable from hand.
   if (card.def.isBackFace === true) {
     return rejectWith(prevState, 'the back face of a double-faced card cannot be played');
+  }
+  // WHICH FACE — a modal DFC's land half is played by naming `face: 'back'`, and
+  // it is a land play like any other (it counts against the turn's land drop,
+  // checked above). `playableFaceOf` refuses a back face that is not castable,
+  // so a transforming DFC cannot be played as its back.
+  const playDef = playableFaceOf(card.def, action.face);
+  if (!playDef) return rejectWith(prevState, 'that card has no playable back face');
+  if (!isLand(playDef)) return rejectWith(prevState, 'that card is not a land');
+  // The face swap, identical to the cast path: `def` IS the active face, and
+  // `printedDef` is the way back to the front should the land ever leave.
+  if (playDef !== card.def) {
+    card.printedDef = card.def;
+    card.def = playDef;
   }
 
   moveToZone(state, card, 'battlefield', emit, action.player);
@@ -1662,23 +1778,35 @@ function applyCastSpell(
       fromZone === 'graveyard' ? 'that card is not in your graveyard' : 'that card is not in your hand',
     );
   }
-  if (isLand(card.def)) return rejectWith(prevState, 'lands are played, not cast');
-  // Flashback may be PRINTED or GRANTED (Snapcaster Mage). One accessor answers
-  // both, so the cast path cannot disagree with the offer loop about what a card
-  // in the graveyard costs — or about whether it may be cast at all.
-  const grantedFlashback = fromZone === 'graveyard' ? flashbackCostOf(state, card) : undefined;
-  if (fromZone === 'graveyard' && grantedFlashback === undefined) {
-    return rejectWith(prevState, 'that card has no flashback');
-  }
   // CR 712.8b: the back face of a transforming DFC can never be cast. A card in
   // hand is front-face-up by construction, so this is defensive — but a state
   // built by hand (a test, a hostile online client) must be refused, not played.
   if (card.def.isBackFace === true) {
     return rejectWith(prevState, 'the back face of a double-faced card cannot be cast');
   }
+  // WHICH FACE. A modal DFC is one card with two castable halves, and every
+  // characteristic below — type, cost, timing, targets, script — belongs to the
+  // face being cast, not to the front. `playableFaceOf` refuses `'back'` for a
+  // card with no CASTABLE back face, so a transforming DFC (whose back face is
+  // only ever reached by a transform instruction) is rejected here, not cast.
+  const castDef = playableFaceOf(card.def, action.face);
+  if (!castDef) return rejectWith(prevState, 'that card has no castable back face');
+  if (isLand(castDef)) return rejectWith(prevState, 'lands are played, not cast');
+  // Flashback may be PRINTED or GRANTED (Snapcaster Mage). One accessor answers
+  // both, so the cast path cannot disagree with the offer loop about what a card
+  // in the graveyard costs — or about whether it may be cast at all. On a face
+  // OTHER than the front, the face's own printed cost is the answer: a grant is
+  // made on the card as the granter saw it, which is its front face.
+  const flashbackCost =
+    fromZone === 'graveyard'
+      ? (castDef === card.def ? flashbackCostOf(state, card) : castDef.flashback)
+      : undefined;
+  if (fromZone === 'graveyard' && flashbackCost === undefined) {
+    return rejectWith(prevState, 'that card has no flashback');
+  }
 
   // Timing: sorcery-speed spells require your main phase, empty stack, your priority.
-  const timing = castTiming(card.def);
+  const timing = castTiming(castDef);
   const sorcerySpeedOk =
     action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
   if (timing === 'sorcery' && !sorcerySpeedOk) {
@@ -1690,19 +1818,50 @@ function applyCastSpell(
   // rejected here when handed an illegal target — the engine, not the caller, is
   // the authority, so a pilot or a UI that builds its own action cannot play a
   // card as strictly better than printed.
-  const targetProblem = illegalTargetReason(state, card.def, action.targets ?? [], action.player);
-  if (targetProblem) return rejectWith(prevState, targetProblem);
+  //
+  // A MODAL spell is exempt from the whole-card check: it has no whole-card
+  // target, because each announced mode is aimed separately at cast time (CR
+  // 601.2c). Its aims are collected by the cast-time question pipeline below and
+  // policed there, one mode at a time.
+  const modalSpec = modalSpecOf(castDef);
+  if (modalSpec) {
+    if ((action.targets?.length ?? 0) > 0) {
+      return rejectWith(prevState, `${castDef.name} chooses its targets per mode, not for the whole spell`);
+    }
+    // A modal spell that can announce NO mode cannot be cast at all (CR 601.2b):
+    // every mode names a target and none has a legal one. Judged before any cost
+    // is paid, by the very helper `generateLegalActions` offers by — so offer
+    // and accept cannot disagree.
+    if (!modalSpellIsCastable(state, castDef, action.player)) {
+      return rejectWith(prevState, `${castDef.name} has no mode you could legally choose`);
+    }
+  } else {
+    const targetProblem = illegalTargetReason(state, castDef, action.targets ?? [], action.player);
+    if (targetProblem) return rejectWith(prevState, targetProblem);
+  }
+
+  // A flashback cost may print a LIFE rider ("Flashback—{1}{U}, Pay 3 life").
+  // It is a mandatory part of the cost, not a choice, so a caster who cannot pay
+  // it simply cannot cast (CR 118.4) — checked before any mana leaves the pool,
+  // so a refusal can never strand a half-paid cost.
+  const flashbackLife = fromZone === 'graveyard' ? (castDef.flashbackLifeCost ?? 0) : 0;
+  if (flashbackLife > 0 && !canAffordLifeCost(state, action.player, flashbackLife)) {
+    return rejectWith(prevState, `you do not have ${flashbackLife} life to pay this flashback cost`);
+  }
 
   // Pay the mana cost from the floating pool. A flashback cast pays the
   // FLASHBACK cost, not the printed one — that substitution is the whole of
   // what "cast it for its flashback cost" means at this seam.
-  const cost = fromZone === 'graveyard' ? grantedFlashback : card.def.cost;
+  const cost = fromZone === 'graveyard' ? flashbackCost : castDef.cost;
   if (cost) {
     if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
     const result = payCost(player.manaPool, cost);
     if (!result.ok) return rejectWith(prevState, result.reason);
     player.manaPool = result.pool;
   }
+  // The life half of the flashback cost, charged alongside the mana. Everything
+  // above is validated, so this cannot half-pay.
+  if (flashbackLife > 0) payLifeCost(state, action.player, flashbackLife, emit);
 
   // Move the card to the stack, out of whichever zone it was cast from.
   removeFromZoneArray(fromZone === 'graveyard' ? player.graveyard : player.hand, card.instanceId);
@@ -1712,11 +1871,20 @@ function applyCastSpell(
   // and the EXILE replacement rides the stack object's own `castFrom`
   // (`spellLeaveDestination`) rather than the grant — see card-grants.ts.
   pruneCardGrantsFor(state, card.instanceId);
+  // THE FACE SWAP, done exactly as a transform does it: `def` IS the active face
+  // and `printedDef` is the way back to the front, so every characteristic read
+  // in the engine routes through the face being cast with no second code path. A
+  // back-face cast that later leaves for a graveyard/hand/library reverts in
+  // `resetInstanceForNewZone` (CR 712.8a).
+  if (castDef !== card.def) {
+    card.printedDef = card.def;
+    card.def = castDef;
+  }
   // The source zone decides the exit: a permanent still resolves to the
   // battlefield, but a flashback spell resolves to EXILE, and the stack object
   // carries `castFrom` so countering reaches the same answer (see
   // `spellLeaveDestination`).
-  const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(card.def)
+  const resolvesTo: SpellStackObject['resolvesTo'] = isPermanentType(castDef)
     ? 'battlefield'
     : fromZone === 'graveyard'
       ? 'exile'
@@ -1735,8 +1903,8 @@ function applyCastSpell(
     type: 'spellCast',
     player: action.player,
     instanceId: card.instanceId,
-    name: card.def.name,
-    castTypes: [...card.def.types],
+    name: castDef.name,
+    castTypes: [...castDef.types],
     ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
   });
   // Ward (CR 702.21): targeting an opponent's warded permanent triggers the
@@ -1748,14 +1916,16 @@ function applyCastSpell(
   // Caster retains priority after putting something on the stack.
   state.priorityPlayer = action.player;
   state.consecutivePasses = 0;
-  // COST MODIFICATION AT CAST TIME. A spell with an {X} cost or a kicker asks
-  // its question(s) HERE — after the base cost is paid and the spell is on the
-  // stack, with nothing resolving (so, like a shockland's pay-life and a
-  // trigger's aiming, the question is parked with no resolution frame behind
-  // it). While one stands, the only legal action is answering it, and the
-  // ENGINE charges the extra cost as it accepts the answer. A question with
-  // only one fundable answer (X capped at 0, an unaffordable kicker) is never
-  // asked — the unpaid default is recorded and the game does not stop.
+  // CAST-TIME CHOICES. Every decision the caster makes while announcing this
+  // spell — which modes, what each mode points at, the value of X, whether to
+  // kick and how many times — is asked HERE: after the base cost is paid and
+  // the spell is on the stack, with nothing resolving (so, like a shockland's
+  // pay-life and a trigger's aiming, each question is parked with no resolution
+  // frame behind it). While one stands, the only legal action is answering it,
+  // and the ENGINE charges any extra cost as it accepts the answer. A question
+  // with only one legal answer (X capped at 0, an unaffordable kicker, a
+  // one-mode menu) is never asked — the forced answer is recorded and the game
+  // does not stop.
   askNextCastChoice(state, card.instanceId, emit);
   return { state, events };
 }
@@ -1778,7 +1948,9 @@ function spellOnStack(state: GameState, instanceId: InstanceId): SpellStackObjec
 function patchSpellOnStack(
   state: GameState,
   instanceId: InstanceId,
-  patch: Partial<Pick<SpellStackObject, 'xValue' | 'kicked' | 'awaitingCastChoice'>>,
+  patch: Partial<
+    Pick<SpellStackObject, 'xValue' | 'kicked' | 'kickCount' | 'modePicks' | 'awaitingCastChoice'>
+  >,
 ): void {
   const index = state.stack.findIndex((object) => object.kind === 'spell' && object.instanceId === instanceId);
   if (index < 0) return;
@@ -1819,18 +1991,254 @@ function maxAffordableX(state: GameState, player: PlayerId, xCount: number): num
 const MAX_X_VALUE = 64;
 
 /**
+ * The largest number of times `cost` could be paid on top of everything already
+ * spent — multikicker's bound, and the exact analogue of {@link maxAffordableX}.
+ *
+ * Asked of the SAME planner that will make the payment, so the range on offer
+ * cannot disagree with what the board can fund, and `repeatCost` (not a mana-
+ * value multiply) is what it plans against — three copies of a hybrid cost are
+ * three symbols the payer may satisfy in three different colours.
+ */
+function maxAffordableKicks(state: GameState, player: PlayerId, cost: ManaCost): number {
+  let max = 0;
+  while (max < MAX_X_VALUE && planPaymentFor(state, player, repeatCost(cost, max + 1)) !== undefined) {
+    max += 1;
+  }
+  return max;
+}
+
+/**
+ * How many `{X}` symbols THIS cast is paying for — the printed cost's, or the
+ * FLASHBACK cost's when the spell is being cast from a graveyard ("Flashback
+ * {X}{R}{R}{R}"). Read from the stack object rather than the definition alone,
+ * because which cost is being paid is a fact about the cast, not the card.
+ */
+function xCountForCast(spell: SpellStackObject): number {
+  const def = spell.card.def;
+  return spell.castFrom === 'graveyard' ? (def.flashbackXCost ?? 0) : (def.xCost ?? 0);
+}
+
+/**
  * Ask the next unanswered cast-time question for a spell being cast, or record
- * the forced answer and move on when only one answer is fundable. Order is the
- * printed announcement order (CR 601.2b): the value of X first, then the
- * optional additional cost.
+ * the forced answer and move on when only one answer is legal.
+ *
+ * ORDER IS THE PRINTED ANNOUNCEMENT ORDER (CR 601.2b–601.2h), and it is not
+ * cosmetic — each step's legal answers depend on the ones before it:
+ *   1. **Modes**, because everything after is about the modes you announced.
+ *   2. **Each chosen mode's targets**, in printed order (CR 601.2c).
+ *   3. **The value of X** (CR 601.2f), then
+ *   4. **the optional additional costs** — kicker, then multikicker.
+ * A question with a single legal answer is settled here instead of stopping the
+ * game to collect the inevitable, exactly as `isTrivialChoice` does mid-
+ * resolution.
  */
 function askNextCastChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): void {
+  if (askModeChoice(state, spellInstanceId, emit)) return;
+  if (askModeTargetChoice(state, spellInstanceId, emit)) return;
+  askCostChoices(state, spellInstanceId, emit);
+}
+
+/**
+ * Step 1 — "Choose one —". Returns true when a question was parked.
+ *
+ * The menu is the modes that can legally be announced RIGHT NOW (a mode whose
+ * target does not exist is not on it), and the counts are the printed ones
+ * clamped to that menu — which is how a "Choose two" Command with only one
+ * legal mode left still casts, as the best legal version of itself.
+ */
+function askModeChoice(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): boolean {
+  const spell = spellOnStack(state, spellInstanceId);
+  if (!spell || spell.modePicks !== undefined) return false;
+  const def = spell.card.def;
+  const spec = modalSpecOf(def);
+  if (!spec) return false;
+  const caster = spell.controller;
+  const counts = modeCountsFor(state, def, caster);
+  if (!counts) return false;
+
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'chooseModes',
+      chooser: caster,
+      prompt:
+        counts.min === counts.max
+          ? `Choose ${counts.max} — ${def.name}`
+          : `Choose up to ${counts.max} — ${def.name}`,
+      modes: counts.choosable.map((mode) => ({ id: mode.id, label: mode.label })),
+      min: counts.min,
+      max: counts.max,
+      // Choosing is the upside the caster cast the spell for; the AI prices each
+      // mode on the board rather than following this steer blindly, but the
+      // steer is what stops a neutral pilot taking the minimum every time.
+      valence: 'gain',
+      ...(spec.allowRepeats ? { allowRepeats: true } : {}),
+    },
+    { id: state.nextInstanceId++, sourceInstanceId: spell.instanceId, sourceName: def.name },
+  );
+  // Unrepresentable (a build that does not know this kind): announce as many
+  // modes as the printed floor demands, taking the menu in printed order. That
+  // is the same "safe default" `defaultAnswerFor` would produce, and it keeps a
+  // half-understood state moving instead of wedging it.
+  if (!choice) {
+    recordModePicks(state, spellInstanceId, counts.choosable.slice(0, counts.min).map((mode) => mode.id), emit);
+    return false;
+  }
+  if (isTrivialChoice(choice) || state.gameOver || state.players[caster].hasLost) {
+    const answer = defaultAnswerFor(choice);
+    emit({
+      type: 'choiceAutoAnswered',
+      choiceId: choice.id,
+      chooser: caster,
+      choiceKind: choice.kind,
+      answer,
+      reason: isTrivialChoice(choice) ? 'only one legal set of modes' : 'the chooser can no longer act',
+    });
+    recordModePicks(state, spellInstanceId, answer.kind === 'chooseModes' ? answer.modeIds : [], emit);
+    return false;
+  }
+  patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'modes' });
+  parkCastChoice(state, choice, emit);
+  return true;
+}
+
+/**
+ * Write the announced modes onto the stack object, in printed order, and say so
+ * in the log. Announced modes are PUBLIC information — in paper they are
+ * declared out loud as the spell is cast — so the event carries them plainly.
+ */
+function recordModePicks(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  modeIds: readonly string[],
+  emit: (e: GameEvent) => void,
+): void {
+  const spell = spellOnStack(state, spellInstanceId);
+  if (!spell) return;
+  const def = spell.card.def;
+  const picks = orderPicks(def, modeIds);
+  patchSpellOnStack(state, spellInstanceId, { modePicks: picks, awaitingCastChoice: undefined });
+  emit({
+    type: 'modesChosen',
+    player: spell.controller,
+    instanceId: spell.instanceId,
+    name: def.name,
+    modes: picks.map((pick) => modeById(def, pick.modeId)?.label ?? pick.modeId),
+  });
+}
+
+/**
+ * Step 2 — aim the announced modes, one question per targeting pick, in printed
+ * order. Returns true when a question was parked.
+ *
+ * This is the half a resolution-time modal system structurally cannot do: two
+ * modes of one spell point at two different objects, and both are chosen before
+ * the opponent may respond.
+ */
+function askModeTargetChoice(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  emit: (e: GameEvent) => void,
+): boolean {
+  for (;;) {
+    const spell = spellOnStack(state, spellInstanceId);
+    const picks = spell?.modePicks;
+    if (!spell || !picks) return false;
+    const def = spell.card.def;
+    const index = nextUnaimedPick(def, picks);
+    if (index < 0) return false;
+    const pick = picks[index] as ModePick;
+    const mode = modeById(def, pick.modeId);
+    const restriction = mode?.targets;
+    if (!mode || restriction === undefined) return false;
+    const caster = spell.controller;
+    const candidates = legalTargetsFor(state, restriction, caster, def);
+
+    // A mode's target can vanish between announcement and aiming only in a
+    // hand-built state (the menu was filtered by this same check a moment ago),
+    // but the branch must exist: an unaimable pick is recorded as aimed at
+    // nothing, so it contributes nothing at resolution rather than wedging the
+    // cast.
+    if (candidates.length === 0) {
+      aimModePick(state, spellInstanceId, index, [], emit);
+      continue;
+    }
+
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'selectTargets',
+        chooser: caster,
+        prompt: `Choose ${describeRestriction(restriction)} for "${mode.label}" (${def.name})`,
+        candidates: candidates.map((ref) => targetOptionFor(state, ref)),
+        restriction,
+        min: SINGLE_TARGET,
+        max: SINGLE_TARGET,
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: spell.instanceId, sourceName: def.name },
+    );
+    if (!choice) {
+      aimModePick(state, spellInstanceId, index, candidates.slice(0, SINGLE_TARGET), emit);
+      continue;
+    }
+    if (isTrivialChoice(choice) || state.gameOver || state.players[caster].hasLost) {
+      const answer = defaultAnswerFor(choice);
+      emit({
+        type: 'choiceAutoAnswered',
+        choiceId: choice.id,
+        chooser: caster,
+        choiceKind: choice.kind,
+        answer,
+        reason: isTrivialChoice(choice) ? 'only one legal target' : 'the chooser can no longer act',
+      });
+      aimModePick(state, spellInstanceId, index, answer.kind === 'selectTargets' ? answer.targets : [], emit);
+      continue;
+    }
+    patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'modeTarget' });
+    parkCastChoice(state, choice, emit);
+    return true;
+  }
+}
+
+/**
+ * Record one mode's chosen target. The pick being aimed is named by INDEX
+ * (rather than by mode id) because the same mode may legally be chosen twice,
+ * each copy with its own aim.
+ */
+function aimModePick(
+  state: GameState,
+  spellInstanceId: InstanceId,
+  index: number,
+  targets: ReadonlyArray<InstanceId | PlayerId>,
+  emit: (e: GameEvent) => void,
+): void {
+  const spell = spellOnStack(state, spellInstanceId);
+  const picks = spell?.modePicks;
+  if (!spell || !picks || index < 0 || index >= picks.length) return;
+  const def = spell.card.def;
+  const next = picks.map((pick, i) => (i === index ? { modeId: pick.modeId, targets: [...targets] } : pick));
+  patchSpellOnStack(state, spellInstanceId, { modePicks: next, awaitingCastChoice: undefined });
+  emit({
+    type: 'modeTargetChosen',
+    player: spell.controller,
+    instanceId: spell.instanceId,
+    mode: modeById(def, (picks[index] as ModePick).modeId)?.label ?? (picks[index] as ModePick).modeId,
+    targets: [...targets],
+  });
+  // A mode aimed at an opponent's warded permanent triggers ward exactly as any
+  // other targeting does — "the target of a spell or ability".
+  pushWardTriggers(state, spell.controller, targets, spell.instanceId, emit);
+}
+
+/**
+ * Steps 3 and 4 — the value of X, then the optional additional costs. Split out
+ * of {@link askNextCastChoice} so the modal steps read as their own pipeline.
+ */
+function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): void {
   const spell = spellOnStack(state, spellInstanceId);
   if (!spell) return;
   const def = spell.card.def;
   const caster = spell.controller;
 
-  const xCount = def.xCost ?? 0;
+  const xCount = xCountForCast(spell);
   if (xCount > 0 && spell.xValue === undefined) {
     const max = maxAffordableX(state, caster, xCount);
     if (max <= 0) {
@@ -1887,6 +2295,39 @@ function askNextCastChoice(state: GameState, spellInstanceId: InstanceId, emit: 
       return;
     }
     patchSpellOnStack(state, spellInstanceId, { kicked: false });
+  }
+
+  // MULTIKICKER — "you may pay {1}{G} any number of times as you cast this
+  // spell". Same seam as X, and for the same reason: the answer is a COUNT, so
+  // it is a `chooseNumber` bounded by what the planner can actually fund, never
+  // the single yes/no a plain kicker asks. A board that cannot fund even one
+  // extra payment yields the range 0..0, which is not a decision and is settled
+  // without stopping the game.
+  const afterKicker = spellOnStack(state, spellInstanceId);
+  if (!afterKicker) return;
+  if (def.multikicker && afterKicker.kickCount === undefined) {
+    const max = maxAffordableKicks(state, caster, def.multikicker);
+    if (max <= 0) {
+      patchSpellOnStack(state, spellInstanceId, { kickCount: 0 });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'chooseNumber',
+        chooser: caster,
+        prompt: `How many times do you pay the multikicker ${formatManaCost(def.multikicker)}? (${def.name})`,
+        min: 0,
+        max,
+        valence: 'gain',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: afterKicker.instanceId, sourceName: def.name },
+    );
+    if (choice) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'multikicker' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    patchSpellOnStack(state, spellInstanceId, { kickCount: 0 });
   }
 }
 
@@ -2304,8 +2745,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
-      if (isLand(card.def) && card.def.isBackFace !== true) {
+      if (card.def.isBackFace === true) continue;
+      if (isLand(card.def)) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId });
+      }
+      // A modal DFC whose SECOND face is a land offers that land play too — the
+      // spell//land MDFCs are exactly the card whose value is being able to
+      // choose. Both halves are offered when both are playable.
+      if (hasCastableBackFace(card.def) && isLand(card.def.backFace as CardDefinition)) {
+        actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, face: 'back' });
       }
     }
   }
@@ -2321,21 +2769,23 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // caller, and enumerating them here would change every consumer's action space.
   for (let h = 0; h < player.hand.length; h++) {
     const card = player.hand[h] as CardInstance;
-    if (isLand(card.def)) continue;
-    // A back face is never castable (CR 712.8b) — mirror `applyCastSpell`'s
-    // guard so the offered menu can only contain playable actions.
+    // A TRANSFORMING back face is never castable (CR 712.8b) — mirror
+    // `applyCastSpell`'s guard so the offered menu can only contain playable
+    // actions. A MODAL DFC is different: both of its faces are real casts, so
+    // each is offered on its own terms (own cost, own timing, own targets).
     if (card.def.isBackFace === true) continue;
-    const timing = castTiming(card.def);
-    const timingOk = timing === 'instant' ? true : sorcerySpeedWindow;
-    if (!timingOk) continue;
-    if (card.def.cost && !canPay(player.manaPool, card.def.cost)) continue;
-    const restriction = targetRestrictionOf(card.def);
-    if (restriction === undefined) {
-      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId });
-      continue;
-    }
-    for (const target of legalTargetsFor(state, restriction, me, card.def)) {
-      actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, targets: [target] });
+    pushCastOffers(state, card, card.def, 'front', me, player.manaPool, sorcerySpeedWindow, actions);
+    if (hasCastableBackFace(card.def)) {
+      pushCastOffers(
+        state,
+        card,
+        card.def.backFace as CardDefinition,
+        'back',
+        me,
+        player.manaPool,
+        sorcerySpeedWindow,
+        actions,
+      );
     }
   }
 
@@ -2355,7 +2805,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     const timing = castTiming(card.def);
     if (timing !== 'instant' && !sorcerySpeedWindow) continue;
     if (!canPay(player.manaPool, flashbackCost)) continue;
-    const restriction = targetRestrictionOf(card.def);
+    // A flashback cost may print a mandatory life rider ("Flashback—{1}{U}, Pay
+    // 3 life"). It is part of the cost, so a caster who cannot pay it is not
+    // offered the cast — the same gate `applyCastSpell` enforces.
+    const lifeCost = card.def.flashbackLifeCost ?? 0;
+    if (lifeCost > 0 && !canAffordLifeCost(state, me, lifeCost)) continue;
+    // A modal spell cast from the graveyard obeys the same "can you announce a
+    // mode at all?" rule as one cast from hand.
+    if (!modalSpellIsCastable(state, card.def, me)) continue;
+    const restriction = modalSpecOf(card.def) ? undefined : targetRestrictionOf(card.def);
     if (restriction === undefined) {
       actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'graveyard' });
       continue;
@@ -2449,6 +2907,53 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
  * builds itself, so a UI or a pilot that wants a specific ordering is not limited
  * to the menu.
  */
+/**
+ * Offer every legal way to cast ONE FACE of a card from hand, appending to
+ * `actions`.
+ *
+ * Extracted so a modal DFC's two faces go through identical logic — the whole
+ * point of a second castable face is that it is a real cast with its OWN cost,
+ * timing, target restriction and modal header, and a second inline copy of
+ * these gates is exactly where the two would drift apart.
+ */
+function pushCastOffers(
+  state: GameState,
+  card: CardInstance,
+  def: CardDefinition,
+  face: 'front' | 'back',
+  me: PlayerId,
+  pool: import('./mana.js').ManaPool,
+  sorcerySpeedWindow: boolean,
+  actions: GameAction[],
+): void {
+  if (isLand(def)) return; // lands are played, not cast (the MDFC land half)
+  const timing = castTiming(def);
+  if (timing !== 'instant' && !sorcerySpeedWindow) return;
+  if (def.cost && !canPay(pool, def.cost)) return;
+  // A modal spell with nothing it could legally announce cannot be cast — the
+  // same judgement `applyCastSpell` makes, from the same helper.
+  if (!modalSpellIsCastable(state, def, me)) return;
+  // Written only for a back-face offer, so a front-face cast action stays
+  // byte-for-byte the object every consumer has always seen.
+  const faceField = face === 'back' ? ({ face: 'back' } as const) : undefined;
+  // A modal spell has no whole-card target: its aims are per mode, collected by
+  // the cast-time question pipeline. So it is offered bare, exactly once.
+  const restriction = modalSpecOf(def) ? undefined : targetRestrictionOf(def);
+  if (restriction === undefined) {
+    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField });
+    return;
+  }
+  for (const target of legalTargetsFor(state, restriction, me, def)) {
+    actions.push({
+      kind: 'castSpell',
+      player: me,
+      instanceId: card.instanceId,
+      targets: [target],
+      ...faceField,
+    });
+  }
+}
+
 export function choiceActionsFor(choice: PendingChoice): readonly GameAction[] {
   return enumerateChoiceAnswers(choice).map(
     (answer): GameAction => ({ kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer }),

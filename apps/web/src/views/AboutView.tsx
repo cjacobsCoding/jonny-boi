@@ -161,17 +161,32 @@ export function AboutView(): ReactElement {
 
         <article className="about__card">
           <h4>Curated-pool cards still waiting ({stubs.length})</h4>
-          <p className="about__fine-print">
-            Famous cards the pool deliberately keeps un-playable rather than approximate — each
-            named with the system it is waiting for.
-          </p>
-          <ul className="about__mechanics about__mechanics--todo">
-            {stubs.map((stub) => (
-              <li key={stub.card}>
-                <strong>{stub.card}.</strong> {stub.missingEngineSystem}
-              </li>
-            ))}
-          </ul>
+          {/*
+            The list reached ZERO, so the empty state is a real claim rather than
+            a blank panel: every hand-authored card now plays as printed. It is
+            still rendered (not hidden) because "nothing is waiting" is exactly
+            the fact a reader of this page came to check.
+          */}
+          {stubs.length === 0 ? (
+            <p className="about__fine-print">
+              None. Every card in the curated pool now plays as printed — each one reproduced
+              exactly from its real Oracle text, with no approximations left to declare.
+            </p>
+          ) : (
+            <>
+              <p className="about__fine-print">
+                Famous cards the pool deliberately keeps un-playable rather than approximate — each
+                named with the system it is waiting for.
+              </p>
+              <ul className="about__mechanics about__mechanics--todo">
+                {stubs.map((stub) => (
+                  <li key={stub.card}>
+                    <strong>{stub.card}.</strong> {stub.missingEngineSystem}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </article>
       </div>
 
