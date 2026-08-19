@@ -23,6 +23,7 @@ import {
   isLand,
   planManaPayment,
   type CardInstance,
+  type CastZone,
   type ChoiceAnswer,
   type EffectRegistry,
   type GameAction,
@@ -65,6 +66,12 @@ export interface CastOption {
   readonly affordableNow: boolean;
   /** True when, after auto-tapping untapped mana sources, the cost could be paid. */
   readonly affordableWithTap: boolean;
+  /**
+   * The zone this cast leaves from — omitted/'hand' for an ordinary cast,
+   * `'graveyard'` for a flashback cast (whose `cost` above is the FLASHBACK
+   * cost, since that is what the cast pays).
+   */
+  readonly fromZone?: CastZone;
 }
 
 /** One legal target choice for an activated ability, labeled for the UI. */
@@ -166,6 +173,7 @@ export class GameSession {
    */
   private memoLegalActions?: readonly GameAction[];
   private memoCastOptions?: CastOption[];
+  private memoGraveyardCastOptions?: CastOption[];
   private memoAbilityOptions?: AbilityOption[];
 
   /** Legal actions for the current priority-holder (the raw engine menu). */
@@ -235,17 +243,31 @@ export class GameSession {
    * Returns the rejection reason if any step fails (state then unchanged from the
    * caller's perspective — we thread the session forward only on full success).
    */
-  castWithAutoTap(instanceId: InstanceId, targets: readonly (InstanceId | PlayerId)[]): SubmitResult {
+  castWithAutoTap(
+    instanceId: InstanceId,
+    targets: readonly (InstanceId | PlayerId)[],
+    fromZone: CastZone = 'hand',
+  ): SubmitResult {
     const player = this.priorityPlayer;
-    const card = this.state.players[player].hand.find((c) => c.instanceId === instanceId);
-    if (!card) return { session: this, rejected: 'that card is not in your hand', events: [] };
+    const zone =
+      fromZone === 'graveyard' ? this.state.players[player].graveyard : this.state.players[player].hand;
+    const card = zone.find((c) => c.instanceId === instanceId);
+    if (!card) {
+      return {
+        session: this,
+        rejected: fromZone === 'graveyard' ? 'that card is not in your graveyard' : 'that card is not in your hand',
+        events: [],
+      };
+    }
 
     // Tap sources until the pool can pay the cost (or we run out). `working` threads
     // the immutable session forward across each tap; it intentionally starts at the
     // current session (this is the seed of the fold, not an alias for mutation).
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     let working: GameSession = this;
-    const cost = card.def.cost;
+    // A flashback cast pays the FLASHBACK cost — the engine's own rule at
+    // `applyCastSpell`, mirrored so the auto-tap plans for what will be charged.
+    const cost = fromZone === 'graveyard' ? card.def.flashback : card.def.cost;
     if (cost) {
       const guard = this.state.battlefield.length + 1; // bound the loop
       let taps = 0;
@@ -262,7 +284,13 @@ export class GameSession {
       }
     }
 
-    const cast = working.submit({ kind: 'castSpell', player, instanceId, targets });
+    const cast = working.submit({
+      kind: 'castSpell',
+      player,
+      instanceId,
+      targets,
+      ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+    });
     if (cast.rejected) {
       // Roll back to the pre-tap session so a failed cast doesn't strand tapped lands.
       return { session: this, rejected: cast.rejected, events: cast.events };
@@ -424,6 +452,54 @@ export class GameSession {
         requirement: targetRequirement(card.def),
         affordableNow,
         affordableWithTap,
+      });
+    }
+    return options;
+  }
+
+  /**
+   * The FLASHBACK cast options for the priority-holder: every card in their own
+   * graveyard with a flashback cost that the current timing allows and that they
+   * could pay for (now, from the pool — in which case the engine already offers
+   * the cast — or after auto-tapping). Same shape as {@link castOptions} so the
+   * board's cast flow (target pick → `castWithAutoTap`) serves both zones; the
+   * `cost`/affordability here are computed against the FLASHBACK cost, which is
+   * what the cast pays.
+   */
+  graveyardCastOptions(): CastOption[] {
+    return (this.memoGraveyardCastOptions ??= this.computeGraveyardCastOptions());
+  }
+
+  private computeGraveyardCastOptions(): CastOption[] {
+    const player = this.priorityPlayer;
+    const legal = this.legalActions();
+    // Flashback casts the engine already offers (the pool pays the flashback cost).
+    const castableNow = new Set(
+      legal
+        .filter(
+          (a): a is Extract<GameAction, { kind: 'castSpell' }> =>
+            a.kind === 'castSpell' && a.fromZone === 'graveyard',
+        )
+        .map((a) => a.instanceId),
+    );
+    const options: CastOption[] = [];
+    for (const card of this.state.players[player].graveyard) {
+      const flashback = card.def.flashback;
+      if (flashback === undefined || isLand(card.def)) continue;
+      const affordableNow = castableNow.has(card.instanceId);
+      if (!affordableNow && !this.timingAllows(card, player)) continue;
+      const affordableWithTap = this.canAffordWithTaps(player, flashback);
+      if (!affordableNow && !affordableWithTap) continue;
+      options.push({
+        instanceId: card.instanceId,
+        cardId: card.def.id,
+        name: card.def.name,
+        cost: flashback,
+        needsTarget: needsTarget(card.def),
+        requirement: targetRequirement(card.def),
+        affordableNow,
+        affordableWithTap,
+        fromZone: 'graveyard',
       });
     }
     return options;

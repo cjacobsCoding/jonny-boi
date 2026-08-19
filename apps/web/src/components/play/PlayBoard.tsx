@@ -9,6 +9,9 @@ import { StackPanel } from './StackPanel.js';
 import { GameLog } from './GameLog.js';
 import { PlayCard, CardBack } from './PlayCard.js';
 import { ChoicePrompt } from './ChoicePrompt.js';
+import { GraveyardPanel, type GraveyardPanelCard } from './GraveyardPanel.js';
+import { AbilityMenuPrompt, AbilityTargetPrompt } from './AbilityPrompts.js';
+import { GRAVEYARD_CAST_BADGE, reasonGraveyardCardIsDisabled } from '../../lib/play/graveyard-cast.js';
 import { isChoiceForViewer, waitingForChoiceText } from '../../lib/play/choice-view.js';
 import { isModalTap, manaTapMenu, tappableIds, type ManaTapOption } from '../../lib/play/mana-tap.js';
 import './action-bar.css';
@@ -58,6 +61,8 @@ export function PlayBoard({
   const [activeBlockTarget, setActiveBlockTarget] = useState<InstanceId | null>(null);
   // A modal mana source the player tapped, awaiting the colour they want.
   const [pendingManaTap, setPendingManaTap] = useState<readonly ManaTapOption[] | null>(null);
+  // The viewer's graveyard panel (the flashback affordance's entry point).
+  const [graveyardOpen, setGraveyardOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const resetTransient = (): void => {
@@ -88,6 +93,9 @@ export function PlayBoard({
   const isViewersPriority = session.priorityPlayer === viewer && !pendingChoice;
   const playableLands = isViewersPriority ? session.playableLands() : [];
   const castOptions = isViewersPriority ? session.castOptions() : [];
+  // Flashback: cards castable OUT OF the viewer's graveyard, same option shape as
+  // the hand so the whole cast flow below (target pick → castWithAutoTap) is shared.
+  const graveyardCasts = isViewersPriority ? session.graveyardCastOptions() : [];
 
   // --- manual mana tapping --------------------------------------------------------
   // Auto-tap covers casting; this covers everything else a player does with mana by
@@ -146,16 +154,49 @@ export function PlayBoard({
   const commitCast = (targets: readonly (InstanceId | PlayerId)[]): void => {
     const cast = pendingCast;
     if (!cast) return;
-    run(() => session.castWithAutoTap(cast.instanceId, targets));
+    // `fromZone` rides the option: a flashback cast names its graveyard source
+    // (and pays the flashback cost inside castWithAutoTap); hand casts omit it.
+    run(() => session.castWithAutoTap(cast.instanceId, targets, cast.fromZone ?? 'hand'));
   };
 
   const onCastClick = (opt: CastOption): void => {
     if (opt.needsTarget) {
       setPendingCast(opt);
     } else {
-      run(() => session.castWithAutoTap(opt.instanceId, []));
+      run(() => session.castWithAutoTap(opt.instanceId, [], opt.fromZone ?? 'hand'));
     }
   };
+
+  /**
+   * Activate a graveyard card from the panel. Routed through the SAME
+   * `onCastClick` chokepoint as a hand card, so the flashback flow (target
+   * prompt, auto-tap, rejection toast) cannot diverge from the hand's.
+   */
+  const onGraveyardCardClick = (id: InstanceId): void => {
+    const opt = graveyardCasts.find((o) => o.instanceId === id);
+    if (opt) onCastClick(opt);
+  };
+
+  /** The panel's view of the viewer's graveyard, with the why-disabled treatment. */
+  const graveyardPanelCards: readonly GraveyardPanelCard[] = (view.self.graveyard ?? []).map((c) => {
+    const opt = graveyardCasts.find((o) => o.instanceId === c.instanceId);
+    const hasFlashback = session.state.players[viewer].graveyard.some(
+      (inst) => inst.instanceId === c.instanceId && inst.def.flashback !== undefined,
+    );
+    return {
+      instanceId: c.instanceId,
+      cardId: c.cardId,
+      name: c.name,
+      badge: opt ? GRAVEYARD_CAST_BADGE : undefined,
+      actionable: !!opt,
+      reason: opt
+        ? undefined
+        : reasonGraveyardCardIsDisabled(
+            { yourTurn: isViewersPriority, waitingOn: names[session.priorityPlayer], step },
+            { hasFlashback },
+          ),
+    };
+  });
 
   // --- combat: attacker selection -----------------------------------------------
   const eligibleAttackers = useMemo(() => {
@@ -405,7 +446,19 @@ export function PlayBoard({
           isActive={view.activePlayer === view.self.id}
           hasPriority={isViewersPriority}
           interaction={selfInteraction}
+          onGraveyardClick={() => setGraveyardOpen((open) => !open)}
         />
+        {/* The opened graveyard. Flashback casts live in `legalActions` but the
+            hand was the only clickable zone, so they were unreachable — this is
+            that affordance, routed through the same cast chokepoint. */}
+        {graveyardOpen && (
+          <GraveyardPanel
+            ownerName={view.self.name}
+            cards={graveyardPanelCards}
+            onActivate={onGraveyardCardClick}
+            onClose={() => setGraveyardOpen(false)}
+          />
+        )}
         <div className="play-hand" aria-label={`${view.self.name} hand`}>
           {(view.self.hand ?? []).map((c) => {
             const land = playableLands.includes(c.instanceId);
