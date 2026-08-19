@@ -1100,20 +1100,56 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
 - ✅ *modal mana with a multiplier* — `{T}: Add three mana of any one color` is five modes of three
   (Gilded Lotus), which `producesOptions` expresses exactly. "One color" is what makes it a choice of
   mode; a free per-mana mix is refused rather than flattened.
+- ✅ *the mana model grew four of its five shapes* — the largest engine lever the census found, and
+  it had been mis-filed as cheap template data. Core used to model a mana source as a fixed list of
+  colour bundles: one tap, no stack, no cost beyond the tap, no rider, no condition. It now carries
+  `CardDefinition.manaAbilities` — a list of separately-printed abilities, each with its own
+  **additional cost** (`{T}, Pay 1 life:` — Mana Confluence, the horizon lands; the filter lands'
+  hybrid `{W/U}, {T}:`), **rider** (every pain land and Ancient Tomb: the damage happens as part of
+  the ability's own resolution, is NOT a cost, and so the land still works at 1 life and can kill
+  you), **activation restriction** ("Activate only if you control an Island / a red permanent /
+  three or more artifacts" — Nimbus Maze, the Verge cycle, Mox Opal), and **board-derived colours**
+  (Reflecting Pool's "any type", Exotic Orchard's "any color", which differ by that one printed
+  word). Four properties make it faithful rather than approximately right:
+  - **It is not an activated ability.** A mana ability does not use the stack (CR 605.3a) and is
+    asked during payment planning; expressing one as an `ActivatedAbility` that adds mana would make
+    a pain land respondable and would deliver its mana one stack resolution too late to fund
+    anything.
+  - **The restriction gates the OFFER, not the apply.** An unmet "Activate only if…" makes the mode
+    invisible to `generateLegalActions` and therefore to `planManaPayment` — a planner that counts a
+    source it cannot use funds spells that cannot be cast. `manaModeBlockedReason` is the single
+    answer both paths ask.
+  - **Derived colours are recomputed per query, never stored.** The mode LIST is fixed (six entries,
+    so `TapForManaAction.mode` means the same thing to the generator, the planner and the apply
+    path); which of them is *available* is a function of the live board. A derived source
+    contributes nothing to another's derivation, so two Reflecting Pools read each other as empty
+    rather than looping.
+  - **The hot path pays one property read.** `manaExtrasOf` returns `undefined` for every plain land
+    and rock, and `planManaPayment` — the engine's hottest function, deliberately built on dense
+    `Int32Array` buffers — keeps its cost/rider apparatus behind two `anyTapCost`/`anyTapPain` flags
+    that stay false on an ordinary board. The planner also now prefers the painless source when two
+    taps close the same shortfall, and refuses to plan a payment that kills its own controller.
+  **Measured: 229 → 285 of the 2100-card most-played corpus (10.9% → 13.6%), +56 cards.**
 
 Still open, roughly by how often they block a real decklist:
-- ***the mana model itself* — the largest engine lever left in the corpus, and it was mis-filed as
-  cheap template data.** Core models a mana source as a fixed list of colour bundles: one tap, no
-  stack, no cost beyond the tap, no rider, no condition. Four printed shapes need it to grow, and the
-  compiler now names each one instead of calling it "a template we don't recognize yet"
-  (**83 sole-blocked corpus cards** between them): an **additional cost** on a mana ability (35 —
-  `{T}, Pay 1 life:`, the filter lands' `{R/W}, {T}:`, `{T}, Tap an untapped creature`), a **rider**
-  (22 — every pain land and the whole Talisman cycle: "{T}: Add {U} or {B}. ~ deals 1 damage to you"),
-  an **activation restriction** (15 — the Verge cycle, Nimbus Maze, Mox Opal), a **spend restriction**
-  (4 — Cavern of Souls; the pool records colour, not what each mana may pay for), and **colours derived
-  from board state** at activation time (7 — Reflecting Pool, Exotic Orchard; commander identity is
-  refused for good). Lands are 24 cards of every deck, so this is the highest card-per-hour engine
-  work on the board.
+- ***a SPEND RESTRICTION on produced mana* — the fifth mana shape, and the one that is genuinely a
+  different system** (4 sole-blocked, 15 blocks: Cavern of Souls, Delighted Halfling). The other
+  four decorate the SOURCE; this one colours the MANA. `ManaPool` is `Record<ManaColor, number>` —
+  a restricted mana is indistinguishable from an unrestricted one the moment it lands in the pool —
+  so the pool would have to carry the restriction and every payment path (`payCost`, `canPay`, the
+  planner's dense buffers, serialization, the AI's mana math) would have to honour it. Reported by
+  name, not approximated.
+- *two smaller mana gaps that are cost/vocabulary rather than system*: a mana-ability cost that
+  **taps another permanent** (Springleaf Drum — a third cost component AND a choice of which
+  permanent, which nothing asks), and a colour derived from an object this engine does not have (a
+  commander's identity, refused for good — see the completion plan §5).
+- *the payment planner cannot CHAIN into a filter land inside one plan.* The mana half of a mana
+  ability's cost is gated on the FLOATING pool, exactly as `unpayableActivationReason` gates every
+  other activated ability, so a filter land is offered once its input is floating and not before —
+  which never offers an illegal action, and is how the land is played in paper (tap the funding
+  source, then filter). What is lost is only the planner's ability to SEE that line while answering
+  "can I afford this?" from an empty pool. Pinned as a KNOWN REACH LIMIT test rather than left to be
+  rediscovered.
 - *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
   cast-time question step now that {X}/kicker/multikicker built it), *Phyrexian costs*,
   *split / adventure* (two castable halves on ONE object — modal DFCs landed in §3.16, but those

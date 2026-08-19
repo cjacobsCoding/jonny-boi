@@ -148,8 +148,20 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Modal mana sources',
         detail:
-          'A source that taps for a CHOICE adds one mode per tap, picked when you tap it — a dual land’s two colours, "one mana of any color", or Gilded Lotus’s three-of-one-colour. A mana ability that also costs life or mana, carries a rider ("…deals 1 damage to you"), or is gated on the board ("Activate only if…") is still refused by name: those need the mana model itself to grow.',
+          'A source that taps for a CHOICE adds one mode per tap, picked when you tap it — a dual land’s two colours, "one mana of any color", or Gilded Lotus’s three-of-one-colour.',
         witness: { kind: 'rule', id: 'tap-for-n-of-any-one-color' },
+      },
+      {
+        title: 'Mana abilities with a price',
+        detail:
+          'A mana ability may charge more than the tap and may do more than add mana. "{T}, Pay 1 life: Add one mana of any color" (Mana Confluence, the horizon lands) charges the life and is not offered when you cannot pay it; a filter land’s "{W/U}, {T}:" consumes its input before producing; a pain land’s "…deals 1 damage to you" is a RIDER, not a cost, so the land still works at 1 life and can kill you. None of it uses the stack (CR 605.3a), and the shared payment planner prefers the painless source when both close the same shortfall.',
+        witness: { kind: 'rule', id: 'mana-ability-with-rider' },
+      },
+      {
+        title: 'Conditional and board-derived mana',
+        detail:
+          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping. Still refused by name: "spend this mana only to…", which would need the mana POOL to carry the restriction.',
+        witness: { kind: 'rule', id: 'mana-ability-activation-restriction' },
       },
       {
         title: '{X} costs',
