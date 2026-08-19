@@ -671,11 +671,20 @@ export function swappedInstanceIdsFor(
   return ids;
 }
 
-/** Every effect a card can run, wherever it is authored. */
+/**
+ * Every effect a card can run, wherever it is authored.
+ *
+ * "Wherever" is load-bearing: an effect this scan cannot see is one the
+ * identical-game argument silently assumes does not read the library. CYCLING is
+ * the newest such place and the sharpest example — a landcycling card's ability
+ * IS a `searchLibrary`, reading the very library the paired arms differ in, and
+ * it is authored on `def.cycling` rather than on `def.effects`.
+ */
 function allEffectRefs(def: CardDefinition): readonly EffectRef[] {
   const refs: EffectRef[] = [...(def.effects ?? [])];
   for (const trigger of def.triggers ?? []) refs.push(...trigger.effects);
   for (const ability of def.activated ?? []) refs.push(...ability.effects);
+  for (const ability of def.cycling ?? []) refs.push(...ability.effects);
   return refs;
 }
 
