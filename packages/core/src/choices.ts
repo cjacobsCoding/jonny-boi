@@ -1114,8 +1114,13 @@ export interface ResolutionFrame {
   askCount: number;
   /** The spell card mid-resolution (absent for a trigger). */
   card?: CardInstance;
-  /** Where that card goes when the resolution finishes (exile for flashback). */
-  resolvesTo?: 'battlefield' | 'graveyard' | 'exile';
+  /**
+   * Where that card goes when the resolution finishes — exile for flashback,
+   * HAND for a bought-back spell. Computed once, as the resolution begins, by
+   * `spellLeaveDestination`, so the frame that outlives the stack object still
+   * carries the one agreed answer.
+   */
+  resolvesTo?: 'battlefield' | 'graveyard' | 'exile' | 'hand';
   /**
    * The value chosen for `{X}` when this spell was cast — carried off the stack
    * object so "deals X damage" still reads the paid-for number AFTER the spell

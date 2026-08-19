@@ -38,7 +38,42 @@ export type GameEvent =
        * the replay and the inspector can say WHICH way the spell was cast —
        * absent for the ordinary from-hand cast every existing consumer knows.
        */
-      readonly fromZone?: 'graveyard';
+      readonly fromZone?: 'graveyard' | 'exile';
+    }
+  | {
+      /**
+       * A card was CYCLED from hand (CR 702.29): its cost was paid, the card was
+       * discarded, and the cycling ability went on the stack. Distinct from the
+       * `zoneChange` the discard emits, because "you cycled a card" is what the
+       * printed triggers ask about ("When you cycle this card…", "Whenever you
+       * cycle or discard another card…") and a bare hand→graveyard move cannot
+       * tell cycling apart from any other discard.
+       */
+      readonly type: 'cardCycled';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A discarded card with madness was exiled instead, and its owner now has
+       * the window to cast it for its madness cost (CR 702.35a).
+       */
+      readonly type: 'madnessWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * The madness window closed without a cast: the card went to the graveyard
+       * the ordinary discard would have put it in. Said explicitly so a replay
+       * can distinguish "declined" from "the window is still open".
+       */
+      readonly type: 'madnessDeclined';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
     }
   | {
       readonly type: 'stackResolved';
