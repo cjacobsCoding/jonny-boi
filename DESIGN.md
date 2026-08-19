@@ -1091,6 +1091,39 @@ paired arms), asked as a single top-of-library selection whose valence follows t
 constant public prompt so the log cannot leak a declined reveal. Modal DFCs / split / adventure cards
 keep reporting `SECOND_CASTABLE_FACE_GAP` — their gap is the cast-time face choice, a different system.
 
+### 3.14 Online UI parity — every shipped mechanic reachable online — ✅ done
+The rule this section exists to enforce: **a mechanic the engine plays and the online board cannot
+reach is not done.** Three shipped systems had failed it — planeswalkers (attackable, loyalty
+abilities), flashback (casting from the graveyard) and cast-time costs ({X}/kicker/pay-life) were all
+in the server's `legalActions` with no affordance in `OnlineBoard`, so networked players could not use
+them at all.
+
+Parity is achieved by SHARING, not by re-implementing. The online board now renders the same
+`SeatPanel`/`ChoicePrompt`/`AbilityPrompts`/`GraveyardPanel` components the hotseat board does, and
+derives its affordances from three pure modules both boards call: `legal-actions.ts`
+(`castChoices` → hand casts, `graveyardCastChoices` → flashback casts, `abilityChoices` → the
+loyalty menu, all grouped from server offers alone, so a menu can hold no dead button),
+`auto-tap.ts` (`castSequence`/`graveyardCastableWithTaps`, which plan against the FLASHBACK cost for a
+graveyard cast) and `graveyard-cast.ts` (`graveyardPanelView`, the panel's whole view-model including
+its why-disabled copy). Casting flows through ONE chokepoint per board (`activateCard(id, zone)`), so
+click, drag-to-play and the graveyard panel cannot diverge.
+
+Three seams worth remembering:
+- **`CastSpellAction.fromZone` must survive the round trip.** The board groups casts BY ZONE and echoes
+  the zone back on submit; a graveyard cast that forgets it is looked for in the hand and rejected.
+- **Walkers are public, so masking needs nothing new.** Loyalty lives in the instance's counters and
+  `maskStateForSeat` copies the battlefield wholesale — pinned by a protocol test that asserts the
+  walker, its loyalty and its ability list survive for BOTH seats and for a spectator.
+- **Auto-pass must count graveyard plays.** A fundable flashback is a real play; without it in
+  `tapCastableCount` the board advances past the only windows the card is castable in.
+
+Proven live, not merely unit-tested: `apps/server/src/online-ui-parity.test.ts` drives the real `Room`
+with two fake-connection clients through real games and asserts the CLIENT functions the board renders
+from — a walker attacked via `buildDeclareAttackersAction` (loyalty drops, the defender's life does
+not), a flashback cast built by `castSequence(…, 'graveyard')` (card ends in EXILE, CR 702.34a), and an
+{X} question surfaced by `onlineChoiceView` to the caster while the opponent gets only the redacted
+waiting line. All four sabotage-checked RED→GREEN.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
