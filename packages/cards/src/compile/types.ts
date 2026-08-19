@@ -53,6 +53,14 @@ export interface CompilableCard {
    * different card.
    */
   readonly loyalty?: number | null;
+  /**
+   * Printed starting DEFENSE — battles only. `null`/absent for everything else,
+   * and for a battle whose record predates defense being captured. The compiler
+   * then reports the missing datum rather than inventing a number, because a
+   * battle entering at the wrong defense is a different card — the exact
+   * contract {@link CompilableCard.loyalty} already has.
+   */
+  readonly defense?: number | null;
   /** Scryfall's keyword list (e.g. `['Flying', 'Prowess']`). */
   readonly keywords: readonly string[];
   /**
@@ -136,6 +144,7 @@ export interface ClauseContribution {
   readonly keywords?: CardDefinition['keywords'];
   /** Set when the printed text says this permanent enters the battlefield tapped. */
   readonly entersTapped?: boolean;
+
   /** Set when the text gives a BOARD condition for entering untapped. */
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   /** Set when the text charges a LIFE price to enter untapped (a shockland). */

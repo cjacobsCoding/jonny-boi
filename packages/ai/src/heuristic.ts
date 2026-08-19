@@ -60,8 +60,11 @@ import {
   isLand,
   flashbackCostOf,
   isLegalTarget,
+  isBattle,
   isPlaneswalker,
+  protectorOf,
   legalTargetsFor,
+  defenseOf,
   loyaltyOf,
   MANA_COLORS,
   planManaPayment,
@@ -1184,41 +1187,65 @@ function planWalkerAttack(
   chosen: readonly InstanceId[],
   weights: HeuristicWeights,
 ): Record<InstanceId, InstanceId | PlayerId> | undefined {
+  // Both kinds of attackable object are considered TOGETHER against one budget of
+  // power, because they compete for the same attackers: a walker the defender
+  // controls, and a battle the defender PROTECTS (which is normally one this
+  // pilot's own side cast). Whichever is worth more and is actually finishable
+  // gets the diversion; ties go to the walker, which is the recurring threat.
   const walkers = walkersControlledBy(view, opp);
-  if (walkers.length === 0) return undefined;
+  const battles = battlesProtectedBy(view, opp);
+  if (walkers.length === 0 && battles.length === 0) return undefined;
 
   const attackers = chosen
     .map((id) => findInstance(view, id))
     .filter((c): c is CardInstance => c !== undefined);
   let totalPower = 0;
   for (const attacker of attackers) totalPower += effectivePower(attacker);
-  // Lethal to the player → the walker can be dealt with after the handshake.
+  // Lethal to the player → nothing is diverted. Winning now beats any object.
   if (totalPower >= view.players[opp].life) return undefined;
 
-  // The best walker the whole attack could finish.
+  // The best object the whole attack could FINISH, priced by kind. Chip damage is
+  // never bought for either kind: an unfinishable target trades real face damage
+  // for a discount the opponent controls, and on a battle it buys literally
+  // nothing, since the reward only pays on the last counter.
   let target: CardInstance | undefined;
+  let targetNeed = 0;
+  let targetWorth = 0;
   for (const walker of walkers) {
     const loyalty = loyaltyOf(walker);
     if (loyalty <= 0 || loyalty > totalPower) continue;
-    if (!target || loyalty > loyaltyOf(target)) target = walker;
+    const worth = weights.walkerThreatPerLoyalty * loyalty + weights.walkerKillBonus;
+    if (target === undefined || worth > targetWorth) {
+      target = walker;
+      targetNeed = loyalty;
+      targetWorth = worth;
+    }
+  }
+  for (const battle of battles) {
+    const defense = defenseOf(battle);
+    if (defense <= 0 || defense > totalPower) continue;
+    const worth = weights.battleThreatPerDefense * defense + weights.battleDefeatBonus;
+    // Strictly greater, so a walker of equal worth keeps the diversion.
+    if (target === undefined || worth > targetWorth) {
+      target = battle;
+      targetNeed = defense;
+      targetWorth = worth;
+    }
   }
   if (!target) return undefined;
-  // Only divert when killing it is actually worth more than the face damage the
-  // diverted power gives up (walkers usually are, via the per-loyalty pricing).
-  const loyalty = loyaltyOf(target);
-  const walkerWorth = weights.walkerThreatPerLoyalty * loyalty + weights.walkerKillBonus;
-  if (walkerWorth < weights.faceDamageValue * loyalty) return undefined;
+  // Only divert when the object is worth more than the face damage given up.
+  if (targetWorth < weights.faceDamageValue * targetNeed) return undefined;
 
-  // Fewest attackers: biggest first until the loyalty is covered.
+  // Fewest attackers: biggest first until the need is covered.
   const byPowerDesc = [...attackers].sort((a, b) => effectivePower(b) - effectivePower(a));
   const assigned: Record<InstanceId, InstanceId | PlayerId> = {};
   let covered = 0;
   for (const attacker of byPowerDesc) {
-    if (covered >= loyalty) break;
+    if (covered >= targetNeed) break;
     assigned[attacker.instanceId] = target.instanceId;
     covered += effectivePower(attacker);
   }
-  return covered >= loyalty ? assigned : undefined;
+  return covered >= targetNeed ? assigned : undefined;
 }
 
 /**
@@ -1470,6 +1497,20 @@ function creaturesControlledBy(view: PilotView, player: PlayerId): CardInstance[
 /** Planeswalkers a player controls on the battlefield. */
 function walkersControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
   return view.battlefield.filter((c) => c.controller === player && isPlaneswalker(c.def)) as CardInstance[];
+}
+
+/**
+ * Battles the given player PROTECTS — deliberately not the ones they control,
+ * and getting that backwards is the one way to build an attack the engine will
+ * reject.
+ *
+ * A battle is defended by its controller's OPPONENT (`protectorOf`, CR 310.11),
+ * so the battles a pilot may attack are the ones the DEFENDING player protects —
+ * in practice its own Sieges. That is the printed play pattern: you cast it, your
+ * opponent is made its protector, and you attack it to collect the reward.
+ */
+function battlesProtectedBy(view: PilotView, player: PlayerId): CardInstance[] {
+  return view.battlefield.filter((c) => isBattle(c.def) && protectorOf(c) === player) as CardInstance[];
 }
 
 /**

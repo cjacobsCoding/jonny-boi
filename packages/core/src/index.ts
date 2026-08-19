@@ -64,6 +64,7 @@ export {
   isLand,
   isCreature,
   isPlaneswalker,
+  isBattle,
   isAttackable,
   isPermanentType,
   isManaSource,
@@ -226,6 +227,7 @@ export {
   createPlayer,
   playerZone,
   opponentOf,
+  protectorOf,
   spellLeaveDestination,
 } from './state.js';
 
@@ -360,6 +362,8 @@ export {
   MINUS_ONE_COUNTER,
   LOYALTY_COUNTER,
   loyaltyOf,
+  DEFENSE_COUNTER,
+  defenseOf,
 } from './internal/stats.js';
 
 // Combat's "what was this attacker declared attacking" accessor — the walker /

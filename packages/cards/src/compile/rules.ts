@@ -28,7 +28,7 @@ import type {
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
-import { COUNT_TOKEN, parseCount, parseManaSymbols } from './text.js';
+import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
 
@@ -1454,7 +1454,81 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       );
     },
   },
+  {
+    /**
+     * A planeswalker ultimate's emblem: "You get an emblem with 'BODY'".
+     *
+     * The emblem's ability compiles through the ORDINARY rule tables, exactly as
+     * a permanent's would — so an emblem can only carry abilities the engine
+     * genuinely runs, and one whose body has no faithful implementation leaves
+     * the whole line reported rather than creating an object that sits in the
+     * command zone doing nothing. Same contract a trigger body has, which is why
+     * this rule is small.
+     *
+     * Both halves are attempted: a STATIC body ("creatures you control get
+     * +1/+1") reaches the continuous layer, and a TRIGGERED body ("at the
+     * beginning of your upkeep, …") reaches the trigger collector. A body that is
+     * neither is refused — an emblem with a one-shot ability would do its thing
+     * once and be inert forever, and no printed emblem works that way.
+     */
+    id: 'emblem-with-ability',
+    description: '"You get an emblem with “ABILITY”" (a planeswalker ultimate)',
+    // Printed text uses typographic quotes; hand-typed text may use straight
+    // ones, so both are accepted.
+    pattern: /^you get an emblem with ["“‘](.+)["”’]$/,
+    build(match, ctx) {
+      const body = match[1];
+      if (!body) return null;
+      const statics = emblemStatics(body, ctx);
+      const triggers = emblemTriggers(body, ctx);
+      if (statics.length === 0 && triggers.length === 0) return null;
+      return effects({
+        primitive: 'createEmblem',
+        params: {
+          name: `${ctx.card.name} emblem`,
+          ...(statics.length > 0 ? { statics } : {}),
+          ...(triggers.length > 0 ? { triggers } : {}),
+        },
+      });
+    },
+  },
 ]);
+
+/**
+ * The STATIC abilities an emblem body compiles to, or an empty list.
+ *
+ * Reuses {@link STATIC_RULES} — the same table that reads an anthem printed on a
+ * permanent — because "creatures you control get +1/+1" means the same thing
+ * whichever object radiates it, and a second table would be the thing that
+ * eventually disagreed with the first.
+ */
+function emblemStatics(body: string, ctx: RuleContext): readonly StaticAbility[] {
+  const clause = normalizeClause(body);
+  for (const rule of STATIC_RULES) {
+    const match = clause.match(rule.pattern);
+    if (!match) continue;
+    const statics = rule.build(match, ctx)?.statics;
+    if (statics && statics.length > 0) return statics;
+  }
+  return [];
+}
+
+/**
+ * The TRIGGERED abilities an emblem body compiles to, or an empty list. Same
+ * argument as the statics half: an emblem's "at the beginning of your upkeep" is
+ * the identical ability a permanent prints, so it goes through the identical
+ * table and inherits every trigger template the compiler already knows.
+ */
+function emblemTriggers(body: string, ctx: RuleContext): readonly TriggeredAbility[] {
+  const clause = normalizeClause(body);
+  for (const rule of TRIGGER_RULES) {
+    const match = clause.match(rule.pattern);
+    if (!match) continue;
+    const triggers = rule.build(match, ctx)?.triggers;
+    if (triggers && triggers.length > 0) return triggers;
+  }
+  return [];
+}
 
 // --- trigger rules --------------------------------------------------------------
 // Each recognizes a printed trigger prefix and compiles the BODY with the effect
@@ -1960,6 +2034,27 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
  */
 export const VACUOUS_CLAUSES: readonly RegExp[] = Object.freeze([
   /^(?:they|it) can'?t be regenerated$/,
+  // A Siege's protector line: "As this Siege enters, choose an opponent to
+  // protect it. You and others can attack it."
+  //
+  // Vacuously satisfied at two players, NOT approximated. "Choose an opponent"
+  // over a one-opponent table has exactly one legal answer, and the engine gives
+  // that answer structurally: `protectorOf` derives a battle's protector as its
+  // controller's opponent, so the resulting board is identical to the one the
+  // choice would have produced. Asking would be theatre — the same reasoning
+  // `isTrivialChoice` applies to any single-option question.
+  //
+  // The second sentence is a statement of the rules the seam already enforces:
+  // the battle's controller and everyone else CAN attack it, because attack
+  // legality asks who PROTECTS the object rather than who controls it.
+  //
+  // If a third seat is ever added this stops being vacuous and must become a
+  // real choice, because then the answer genuinely varies.
+  // Split into one pattern per SENTENCE, because vacuity is judged per sentence
+  // (`compileAbilityLine` splits the line before filtering) — a single combined
+  // pattern silently matched neither half.
+  /^as ~ enters, choose an opponent to protect it$/,
+  /^you and others can attack it$/,
 ]);
 
 /**
@@ -2035,6 +2130,32 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an enters-tapped template the compiler does not recognize yet',
   },
   {
+    // EMBLEMS ARE IMPLEMENTED NOW (core's command-zone object + the
+    // `emblem-with-ability` rule + the `createEmblem` primitive), so this hint no
+    // longer claims the system is missing - that would send the next agent to
+    // rebuild something that exists. What lands here is a TEMPLATE: an emblem
+    // whose printed ability has no rule of its own.
+    //
+    // Checked EARLY, above the generic "you may / choose", library-search and
+    // scry hints. An emblem's body is arbitrary card text, so it will often
+    // contain a word one of those matches first - and being told an emblem line
+    // needs "a scry template" names the wrong blocker entirely. The line is an
+    // emblem line, and that is what has to be said.
+    pattern: /\bemblem\b/,
+    missingEngineSystem: 'an emblem template the compiler does not recognize yet',
+  },
+  {
+    // BATTLES ARE IMPLEMENTED NOW (defense counters, the attackable-object seam,
+    // damage from combat and from burn, defeat by state-based action). What lands
+    // here is a battle TEMPLATE with no rule yet. The reason a real Siege is
+    // still reported is different and more specific - its reward is casting the
+    // BACK FACE, which the second-castable-face gap names - so this hint must not
+    // claim battles are missing, and the Siege reminder line is skipped as
+    // vacuous rather than reported at all.
+    pattern: /\bdefense counter|\bsiege\b/,
+    missingEngineSystem: 'a battle template the compiler does not recognize yet',
+  },
+  {
     // Modal cards are the one choice shape still genuinely missing a system: the
     // engine picks a spell's targets at cast with no modes declared, so a mode
     // that needs its own target can only be offered when the cast happens to have
@@ -2060,13 +2181,6 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // (search-and-reveal shapes), or a surveil rider that needs its own target.
     pattern: /\bscry\b|\bsurveil\b|look at the top/,
     missingEngineSystem: 'a library-look/reorder template the compiler does not recognize yet',
-  },
-  {
-    // Emblems live in the command zone and outlive their walker — a subsystem of
-    // their own. Checked before the loyalty hint so an ultimate that CREATES an
-    // emblem is named for the real blocker, not for the loyalty cost around it.
-    pattern: /\bemblem\b/,
-    missingEngineSystem: 'emblems (a command-zone object that persists after its planeswalker leaves)',
   },
   {
     // Planeswalker loyalty IS a system now: walkers enter with printed loyalty,

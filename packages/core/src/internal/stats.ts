@@ -99,6 +99,54 @@ export function applyEnteringLoyalty(
 }
 
 /**
+ * Counter kind for defense counters — a battle's "life total" (CR 310.4). Stored
+ * in the same generic `CardInstance.counters` record as loyalty, and for the same
+ * reason: they ARE counters, so cloning, serialization and the inspector carry
+ * them for free.
+ */
+export const DEFENSE_COUNTER = 'defense';
+
+/**
+ * A battle's current defense. Zero for anything not carrying defense counters —
+ * including a non-battle, so callers gate on the card type, not on this
+ * returning 0.
+ */
+export function defenseOf(inst: CardInstance): number {
+  return inst.counters[DEFENSE_COUNTER] ?? 0;
+}
+
+/**
+ * Remove `amount` defense counters from a battle (damage — CR 120.3d), never
+ * below zero. Returns how many counters actually left. Honors the counters
+ * replace-don't-mutate contract.
+ */
+export function removeDefense(inst: CardInstance, amount: number): number {
+  const current = inst.counters[DEFENSE_COUNTER] ?? 0;
+  const removed = Math.min(Math.max(amount, 0), current);
+  if (removed === 0) return 0;
+  inst.counters = { ...inst.counters, [DEFENSE_COUNTER]: current - removed };
+  return removed;
+}
+
+/**
+ * Give a just-entered battle its printed starting defense (CR 310.4). The ONE
+ * helper every battlefield-entry path calls, exactly like
+ * {@link applyEnteringLoyalty} — so "enters with its defense" cannot be true on
+ * one path and false on another. A non-battle (or a battle definition with no
+ * printed defense, which the compiler refuses to produce) is left untouched.
+ */
+export function applyEnteringDefense(
+  inst: CardInstance,
+  emit: (e: import('../events.js').GameEvent) => void,
+): void {
+  const printed = inst.def.defense;
+  if (printed === undefined || printed <= 0) return;
+  if (!inst.def.types.includes('battle')) return;
+  inst.counters = { ...inst.counters, [DEFENSE_COUNTER]: printed };
+  emit({ type: 'defenseChanged', instanceId: inst.instanceId, delta: printed, to: printed });
+}
+
+/**
  * Net power/toughness shift from counters on a permanent.
  *
  * Both standard kinds are read here. `-1/-1` used to be stored as a NEGATIVE

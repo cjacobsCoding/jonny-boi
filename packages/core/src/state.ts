@@ -14,6 +14,7 @@
  */
 
 import type { CardDefinition } from './card.js';
+import { isBattle } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
@@ -33,6 +34,28 @@ export const PLAYER_IDS: readonly PlayerId[] = ['A', 'B'];
  */
 export function opponentOf(player: PlayerId): PlayerId {
   return player === 'A' ? 'B' : 'A';
+}
+
+/**
+ * The player who DEFENDS an attackable permanent — i.e. the seat that must be
+ * the defending player for an attack on it to be legal, and the seat whose
+ * creatures may block those attackers.
+ *
+ *  - A **planeswalker** is defended by its controller (you attack an OPPONENT's
+ *    walker).
+ *  - A **battle** is defended by its PROTECTOR (CR 310.11): the opponent of its
+ *    controller. With two players the printed "choose its protector" has exactly
+ *    one legal answer, so it is derived rather than stored — which is also what
+ *    keeps it correct if control of the battle ever changes (the protector is
+ *    always re-read as the current controller's opponent, CR 310.11c's
+ *    redesignation collapsing to the same single choice).
+ *
+ * The consequence worth spelling out: a battle's controller attacks their OWN
+ * battle (its protector is the defending player on their turn), which is the
+ * printed play pattern of every Siege.
+ */
+export function protectorOf(inst: { readonly def: CardDefinition; readonly controller: PlayerId }): PlayerId {
+  return isBattle(inst.def) ? opponentOf(inst.controller) : inst.controller;
 }
 
 /** Opaque per-object id assigned to every card instance and stack object. */

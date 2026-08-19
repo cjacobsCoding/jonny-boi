@@ -348,7 +348,11 @@ describe('attacking a planeswalker', () => {
         attackers: [bear],
         attackTargets: { [bear]: myWalker },
       }),
-    ).toMatch(/not controlled by the defending player/);
+      // Reworded when battles landed: the question the engine asks is who
+      // DEFENDS the attacked object, not who controls it. For a walker the two
+      // are the same player; for a battle they are deliberately opposite, which
+      // is why the check had to move to `protectorOf` and the message with it.
+    ).toMatch(/not defended by the defending player/);
     expect(
       rejectionOf(s, {
         kind: 'declareAttackers',

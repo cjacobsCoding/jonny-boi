@@ -102,9 +102,106 @@ throughput (games/sec) from regressing.
 | feat/derived-state | worker | packages/core (NEW derived.ts + turn-facts.ts + derived-state.test.ts; card/choices/state/index/protection, internal/{continuous,stats,clone,triggers-runtime}, engine.ts one line), packages/cards (effect-helpers/primitives, compile/{rules,compile,types,text}, data/pool.ts Tarmogoyf+Fatal Push, src/index.ts STUBBED, NEW derived-state.test.ts + 3 refreshed tests), packages/sim (fidelity caveat wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/online-ui-parity | worker | apps/web (components/online/OnlineBoard.tsx, components/play/{PlayBoard,SeatPanel,GraveyardPanel NEW,AbilityPrompts NEW}.tsx, lib/online/{legal-actions,auto-tap,board-adapter}.ts, lib/play/{session,view-model,graveyard-cast NEW}.ts, styles.css appended), apps/server (room.ts constructor pool param + NEW online-ui-parity.test.ts), packages/protocol/src/index.test.ts (walker-visibility tests only), DESIGN §3.14 | 🚧 PUSHED, not merged |
 | feat/graveyard-grants | worker | packages/core (NEW card-grants.ts + card-grants.test.ts + bench/scavenge-probe.ts; targeting/state/events/engine/index + internal clone/zones), packages/cards (primitives grantFlashback + compile/rules new rule & 2 reworded hints + effect-helpers prune + index un-stub + data/pool.ts Snapcaster + NEW graveyard-grants.test.ts), packages/ai (effect-value/heuristic/weights + NEW graveyard-grant-pilot.test.ts), packages/sim (paired-arms +1, observation +2, uw-control comment), apps/web (about/mechanics +2 witnesses), DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
+| feat/battles-legend-emblems | worker | packages/core (card/state/events/choices/targeting/effects/engine/serialize/index + internal stats/combat/sba/continuous/triggers-runtime + NEW battle.test/legend-rule.test/emblem.test), packages/cards (primitives createEmblem + compile compile/rules/text/types + data/pool.ts Liliana legendary + NEW battles-legend-emblems.test), packages/data-tools (defense capture), packages/sim (paired-arms +1, observation +4), packages/ai (heuristic attack planner + weights + NEW battle-pilot.test), apps/web (view-model/board-adapter/BoardPermanentTile/planeswalker.css + about/mechanics + its test), DESIGN §3.15 | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `feat/battles-legend-emblems` 🚧 PUSHED — **three walker-adjacent objects:
+  battles, the legend rule, and emblems.** All three DONE as subsystems; one card-level gap is
+  reported rather than faked, and it is named below.
+
+  ✅ **BATTLES reuse the attackable-object seam and did NOT touch combat**, which is what
+  `feat/planeswalkers` built it for: `isAttackable` answers for battles, and
+  `DeclareAttackersAction.attackTargets` needed no change. A battle enters with printed **defense
+  counters** (`CardDefinition.defense` → `DEFENSE_COUNTER` via `applyEnteringDefense`, on every
+  entry path, exactly like loyalty). ⚠️ **THE ONE THING THAT IS NOT LIKE A WALKER, and the only
+  way to get battles wrong: a battle is defended by its controller's OPPONENT** (CR 310.11). Attack
+  legality now asks `protectorOf(object)` instead of comparing controllers — which is precisely
+  what makes attacking your OWN Siege legal (the printed play pattern) and lets the protector block.
+  A controller comparison passes every walker test and silently makes battles unattackable. Damage
+  from combat AND from burn strips defense (CR 120.3d); trample carries past the last counter to the
+  defender; 0 defense is defeat by SBA. "Any target" reaches battles (CR 115.4); "creature or
+  planeswalker" deliberately does not.
+
+  ⛔ **THE BATTLE SUBSYSTEM IS COMPLETE; BATTLE CARDS ARE STILL REPORTED. Those are different
+  claims, and the compiler says so per card.** Every printed battle is a Siege whose reward is casting
+  its BACK FACE — the castable-second-face system a sibling owns. So `TYPES_WITHOUT_SYSTEM` is now
+  **empty** (every printed card TYPE has a system) while a real Siege still imports `'incomplete'`
+  naming `SECOND_CASTABLE_FACE_GAP`. 👉 Whoever lands modal DFCs: battles are waiting for you
+  and need no engine work, only the reward wired to the `battleDefeated` event.
+
+  ✅ **THE LEGEND RULE is ONE shared SBA** for legendary creatures AND planeswalkers AND battles,
+  keyed on the printed **Legendary** supertype — which the compiler now parses onto
+  `CardDefinition.legendary`; supertypes were parsed and thrown away before this. Three things make
+  it unlike every other SBA, all pinned by tests: it is **per PLAYER, not global** (both players may
+  hold the same legend quite legally); the **controller chooses**, so it PARKS a question rather than
+  deciding (marked `PendingChoice.context: 'legendRule'`, so the answer routes to the rule and not to
+  a resolution frame); and losers go to their **OWNERS'** graveyards. Answering re-runs the SBAs, so a
+  second duplicated name cascades before anyone regains priority. ⚠️ `grantPriority` now
+  declines to stomp a parked chooser — state-based actions can raise a question from inside the
+  turn machine now, which was never true before. Sabotage-checked: disabling the rule fails 8 of its
+  11 tests (the 3 that stay green are the does-NOT-apply cases, correctly).
+
+  ✅ **EMBLEMS are command-zone objects nothing can remove — and that needed no enforcement
+  code.** Every removal path in the engine reaches only `state.battlefield`, so an object that never
+  enters it is unremovable BY CONSTRUCTION rather than by a list of exceptions somebody has to keep
+  complete. Their statics/triggers are live from the command zone because `indexContinuous`,
+  `aggregateFor` and the trigger collector all discover command-zone sources alongside permanents.
+  The compiler's new `emblem-with-ability` rule compiles the emblem body through the ORDINARY
+  static/trigger tables, so an emblem can only carry what the engine runs; a body with no rule reports
+  instead of creating an inert object. ⚠️ **A TEST CAUGHT A REAL BUG BEFORE IT SHIPPED:**
+  only the BULK continuous path (`indexContinuous`) knew about command-zone sources, so an emblem's
+  anthem was real in combat and INVISIBLE to the one-off `aggregateFor` read — the same board
+  reporting two different power values depending on which accessor a caller reached for. Both paths
+  agree now, and the emblem suite pins it.
+
+  ⚠️ **PERF, MEASURED NOT ASSUMED — read this before adding anything to a per-event
+  path.** Wiring emblems in cost a real **~9% regression** (paired same-box quiet rounds 0.907 /
+  0.919): the trigger collector re-walked the command zone on EVERY emitted event, and
+  `for (const pid of PLAYER_IDS)` allocates an array iterator per call for a TWO-ELEMENT list. Fixed
+  by reading `state.players.A/.B` directly behind a `.length` guard, and by walking the command zone
+  only when its SIZE changed (sound for emblems specifically: one can never leave, and its abilities
+  come from an immutable definition). Re-measured paired/alternating on the same box: **quiet rounds
+  1.011 / 1.010, median ratio 1.010 — parity.** Gauntlet seed 99 stayed **byte-identical at
+  79/280 on every single run, both sides, throughout.**
+
+  ✅ **AI is not inert**: ONE attack planner weighs walkers and battles against the same power
+  budget, finds battles by `protectorOf` (a controller-based search would never consider your own
+  Siege), prefers the walker at equal worth (it generates value every turn it lives; a battle just
+  sits there), and buys chip damage on NEITHER — on a battle chip damage buys literally nothing,
+  since the reward pays only on the last counter. A test asserts the ENGINE ACCEPTS the plan the pilot
+  builds, because a plan the engine rejects is the same as no plan. Hotseat and online boards render a
+  defense badge beside the loyalty one, in a different colour token on purpose: both occupy the same
+  slot and "3 loyalty" must not read as "3 defense".
+
+  ✅ Enforced tables updated: `paired-arms-config` classifies `createEmblem` LIBRARY_SAFE (with
+  the reason it is NOT the `ifKicked` shape — its params hold ability RECORDS, not nested effect
+  refs a decklist scan would miss); `OBSERVATION_POLICY` classifies `defenseChanged` /
+  `battleDefeated` / `legendRuleApplied` / `emblemCreated` public. Emblem + battle HINTS reworded to
+  template gaps, and the emblem hint moved EARLY in the table — an emblem body is arbitrary card
+  text, so "scry"/"choose" matched first and named the wrong blocker entirely. About page gains three
+  witness-pinned entries; its TODO test now asserts landed systems read as TEMPLATE gaps.
+
+  ❌ **Deliberately NOT done, with named blockers**: the Siege REWARD (needs the
+  castable-second-face system — sibling's); "choose an opponent to protect it" is treated as
+  VACUOUS rather than asked, which is exact at two seats (one legal answer, and `protectorOf` already
+  gives it) but **must become a real choice if a third seat is ever added**; no battle or emblem card
+  added to the curated pool or the gauntlet (no battle can compile complete until the reward lands, so
+  every recorded baseline is unchanged by construction); and no `defense` in the committed Scryfall
+  index — `normalize.ts` captures the field now, but the cached records predate it, so a real
+  battle also reports its missing defense number until someone re-fetches. Verified: full suite
+  **2762 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0, gauntlet seed 99
+  **79/280** unchanged. Merged origin/main THREE times mid-flight (scry-and-templates,
+  online-ui-parity, then graveyard-grants + derived-state), keeping both sides of every conflict —
+  all four were additive (two import lists, the paired-arms classification list, and the board's own
+  in-flight table + message log).
+  👉 **One cross-branch integration worth knowing about**: `feat/derived-state`'s new
+  `CARD_TYPE_BIT` in `packages/core/src/derived.ts` is an EXHAUSTIVE `Record<CardType, number>`, so
+  adding the `battle` card type broke its build until battle got a bit. That is the table working as
+  designed — Tarmogoyf counts card types in graveyards, and a type silently missing from it would
+  have made him quietly smaller than printed, which is the hardest kind of infidelity to notice.
+  Anyone adding a card type after me: expect that error, and give the type a bit. (Worker)
 
 - 2026-08-18 worker: `feat/derived-state` 🚧 PUSHED — **three kinds of state the engine could
   already see but could not express. Tarmogoyf and Fatal Push are both UN-STUBBED and play as

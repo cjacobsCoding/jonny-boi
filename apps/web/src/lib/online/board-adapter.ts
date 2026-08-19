@@ -20,8 +20,11 @@ import {
   effectiveToughness,
   isCreature,
   isLand,
+  isBattle,
   isPlaneswalker,
+  defenseOf,
   loyaltyOf,
+  protectorOf,
   manaColorsOffered,
   NO_MOD,
   type CardInstance,
@@ -65,6 +68,11 @@ function boardPermanent(inst: CardInstance): BoardPermanent {
     // Loyalty is carried in the instance's counters, which the server sends — so
     // the badge is authoritative online too, no engine run needed.
     loyalty: isPlaneswalker(inst.def) ? loyaltyOf(inst) : 0,
+    isBattle: isBattle(inst.def),
+    // Defense rides the same counters record loyalty does, so it is likewise
+    // authoritative online with no engine run needed.
+    defense: isBattle(inst.def) ? defenseOf(inst) : 0,
+    protector: isBattle(inst.def) ? protectorOf(inst) : null,
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
     power: creature ? effectivePower(inst, NO_MOD) : 0,

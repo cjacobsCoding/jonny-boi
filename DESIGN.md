@@ -1215,6 +1215,65 @@ not), a flashback cast built by `castSequence(…, 'graveyard')` (card ends in E
 {X} question surfaced by `onlineChoiceView` to the caster while the opponent gets only the redacted
 waiting line. All four sabotage-checked RED→GREEN.
 
+### 3.15 Battles, the legend rule, and emblems — three walker-adjacent objects — ✅ done
+Three objects that sit beside planeswalkers in the rules and had no representation in the engine.
+
+**Battles (CR 310)** reuse the attackable-object seam planeswalkers built rather than reworking
+combat: `isAttackable` now answers for battles too, and `DeclareAttackersAction.attackTargets` needed
+no change at all. A battle enters with its printed **defense counters**
+(`CardDefinition.defense` -> `DEFENSE_COUNTER`, applied by `applyEnteringDefense` on every
+battlefield-entry path, exactly as loyalty is). The one genuinely new question is **who defends it**:
+a battle is protected by its controller's OPPONENT (CR 310.11), so attack legality asks
+`protectorOf(object)` rather than comparing controllers - which is what makes attacking your OWN
+Siege the printed play pattern, and lets the protector's creatures block. Combat damage and
+"any target" burn alike strip defense counters (CR 120.3d); trample carries the excess past the last
+counter to the defending player; zero defense is defeat by state-based action (`battleDefeated`).
+"Any target" reaches battles (CR 115.4) while "creature or planeswalker" deliberately does not.
+
+> **The battle SUBSYSTEM is complete; battle CARDS are still reported, and the two are different
+> claims.** Every printed battle is a Siege whose reward is *casting its back face*, which needs the
+> castable-second-face system (`SECOND_CASTABLE_FACE_GAP`, §3.13). `TYPES_WITHOUT_SYSTEM` is now
+> empty - every printed card TYPE has a system - but a real Siege still imports as `'incomplete'`,
+> naming that gap per card. Shipping the reward as a silent no-op was the alternative, and it is
+> exactly the infidelity the compiler contract exists to prevent.
+
+**The legend rule (CR 704.5j)** is ONE state-based action shared by every legendary permanent kind -
+creatures, planeswalkers, battles alike - keyed on the printed **Legendary** supertype, which the
+compiler now parses onto `CardDefinition.legendary` (supertypes were parsed and discarded before
+this). Three details make it unlike every other SBA, and all three are pinned by tests: it applies
+**per player**, not globally (each player may hold their own copy of a legend quite legally); the
+**controller chooses** which copy survives, so the rule parks a question instead of deciding, marked
+`PendingChoice.context: 'legendRule'` so the answer routes to the rule rather than to a resolution;
+and the losers go to their **owners'** graveyards, not the chooser's. Answering re-runs the SBAs, so
+a second duplicated name settles before anyone regains priority. `grantPriority` now declines to
+stomp a parked chooser, since state-based actions can raise a question from inside the turn machine.
+
+**Emblems (CR 114)** are command-zone objects with statics and triggers that **nothing can remove** -
+and that property needs no enforcement code, deliberately: every removal path in the engine
+(targeting, destroy, exile, board wipes, state-based actions) reaches only `state.battlefield`, so an
+object that never enters it is unremovable *by construction* rather than by a list of exceptions
+somebody has to keep complete. Their abilities are live from the command zone because
+`indexContinuous`/`aggregateFor` and the trigger collector both discover command-zone sources
+alongside permanents - one path, no emblem special case. The compiler's `emblem-with-ability` rule
+compiles an ultimate's emblem body through the ORDINARY static and trigger tables, so an emblem can
+only carry abilities the engine genuinely runs; a body with no rule leaves the line reported rather
+than creating an object that provably does nothing.
+
+⚠️ **The hot-path lesson, measured not assumed.** Wiring emblems into the continuous layer and the
+trigger collector cost a real **~9% throughput regression** (paired same-box quiet rounds 0.907 /
+0.919) before it was fixed - from `for (const pid of PLAYER_IDS)` allocating an iterator per call for
+a two-element list, and from the trigger collector re-walking the command zone on *every emitted
+event*. Both now read `state.players.A/.B` directly behind a `.length` guard, and the collector walks
+only when the zone's size changed (sound for emblems specifically: one can never leave, and its
+abilities come from an immutable definition). Re-measured paired: **quiet rounds 1.011 / 1.010,
+median ratio 1.010** - parity. Gauntlet seed 99 stays **byte-identical at 79/280** throughout.
+
+AI is not inert: one attack planner weighs walkers AND battles against the same power budget, finds
+battles by `protectorOf` (a controller-based search would never consider your own Siege), and buys
+chip damage on neither - on a battle it buys literally nothing, since the reward pays only on the
+last counter. The hotseat and online boards render a defense badge beside the loyalty one, in a
+different colour token because both sit in the same slot and "3 loyalty" must not read as "3 defense".
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

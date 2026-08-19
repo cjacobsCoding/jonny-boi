@@ -17,7 +17,7 @@ import { entersTapped } from './card.js';
 import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import { applyControlChange } from './internal/continuous.js';
-import { applyEnteringLoyalty } from './internal/stats.js';
+import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {
   ChooseModesRequest,
   ChoiceAnswer,
@@ -74,6 +74,18 @@ export interface EffectContext {
    * permanent. Used by token-makers (e.g. a cast-trigger that makes a 1/1).
    */
   createToken(def: CardDefinition, controller?: PlayerId): InstanceId;
+  /**
+   * Create an EMBLEM in `controller`'s command zone (defaults to the source's
+   * controller) — what a planeswalker ultimate leaves behind. Returns the new
+   * instance id.
+   *
+   * An emblem is NOT a permanent: it never touches the battlefield, so it emits
+   * no `zoneChange` into it, sets off no enters-the-battlefield trigger, and can
+   * never be targeted, destroyed, exiled or wiped. Its statics and triggers are
+   * live from the moment it exists, for the rest of the game, because the
+   * continuous layer and the trigger collector both read the command zone.
+   */
+  createEmblem(def: CardDefinition, controller?: PlayerId): InstanceId;
   /**
    * Attach the SOURCE of this effect to the permanent `hostInstanceId` — the
    * channel an Aura's "enters attached to the creature it targets" and an
@@ -282,6 +294,9 @@ export function applyEffectRef(
     createToken(def, controller) {
       return createTokenInState(base.state, def, controller ?? base.controller, emit);
     },
+    createEmblem(def, controller) {
+      return createEmblemInState(base.state, def, controller ?? base.controller, emit);
+    },
     attach(hostInstanceId) {
       return attachTo(base.state, base.source, hostInstanceId, emit);
     },
@@ -398,6 +413,44 @@ function addContinuousEffectToState(
   return id;
 }
 
+/**
+ * Create an emblem in a player's command zone; returns its instance id.
+ *
+ * Deliberately NOT a battlefield entry, and the differences from
+ * {@link createTokenInState} are the whole point of the object:
+ *   - it lands in `players[controller].command`, so no removal path can reach it;
+ *   - it emits `emblemCreated` and NO `zoneChange` into the battlefield, so no
+ *     enters-the-battlefield trigger fires off it (an emblem does not "enter");
+ *   - it carries none of the battlefield-only per-object state that would be
+ *     meaningless on it, beyond the shape every `CardInstance` must have.
+ *
+ * The definition is stamped `isEmblem` here rather than trusted from the caller,
+ * so an emblem is always identifiable as one however it was authored.
+ */
+function createEmblemInState(
+  state: GameState,
+  def: CardDefinition,
+  controller: PlayerId,
+  emit: (event: GameEvent) => void,
+): InstanceId {
+  const instanceId = state.nextInstanceId++;
+  const emblem: CardInstance = {
+    instanceId,
+    def: def.isEmblem === true ? def : { ...def, isEmblem: true },
+    controller,
+    owner: controller,
+    zone: 'command',
+    tapped: false,
+    summoningSick: false,
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    counters: NO_COUNTERS,
+  };
+  state.players[controller].command.push(emblem);
+  emit({ type: 'emblemCreated', instanceId, controller, name: emblem.def.name });
+  return instanceId;
+}
+
 /** Create a token permanent on the battlefield; returns its instance id. */
 function createTokenInState(
   state: GameState,
@@ -426,8 +479,10 @@ function createTokenInState(
   };
   state.battlefield.push(token);
   // A planeswalker token (or copy) enters with its printed loyalty, exactly as
-  // the cast walker does — one shared helper so no entry path can disagree.
+  // the cast walker does — one shared helper so no entry path can disagree. A
+  // battle token enters with its printed defense the same way.
   applyEnteringLoyalty(token, emit);
+  applyEnteringDefense(token, emit);
   emit({ type: 'tokenCreated', instanceId, controller, name: def.name });
   // A token entering is a zoneChange into the battlefield — this is what ETB
   // triggers (its own and others') observe, keeping one mechanism for "enters".

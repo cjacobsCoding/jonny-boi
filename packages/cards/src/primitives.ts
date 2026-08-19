@@ -32,15 +32,18 @@ import type {
   EffectPrimitive,
   EffectRegistry,
   PlayerId,
+  StaticAbility,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import {
+  DEFENSE_COUNTER,
   addCardGrant,
   LOYALTY_COUNTER,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
   effectivePower,
+  isBattle,
   turnFactHolds,
   isCreature,
   isLegalTarget,
@@ -126,20 +129,47 @@ export const dealDamage: EffectPrimitive = (ctx) => {
     }
     return;
   }
+  if (isBattle(perm.def)) {
+    // Damage to a battle removes that many DEFENSE counters (CR 120.3d) — the
+    // same shape as walker loyalty just above, and what makes burn a real answer
+    // to a Siege. The 0-defense defeat is the state-based check that follows.
+    const removed = removeCountersOfKind(perm, DEFENSE_COUNTER, amount);
+    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
+    if (removed > 0) {
+      ctx.emit({
+        type: 'defenseChanged',
+        instanceId: perm.instanceId,
+        delta: -removed,
+        to: perm.counters[DEFENSE_COUNTER] ?? 0,
+      });
+    }
+    return;
+  }
   perm.damageMarked += amount;
   ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
 };
+
+/**
+ * Remove up to `amount` counters of one kind, never below zero (CR 118.5),
+ * honoring the counters replace-don't-mutate contract. Returns how many left.
+ *
+ * ONE helper for loyalty and defense alike: they are the same arithmetic on the
+ * same record, and two copies of it is how the two would eventually disagree.
+ */
+function removeCountersOfKind(perm: CardInstance, kind: string, amount: number): number {
+  const current = perm.counters[kind] ?? 0;
+  const removed = Math.min(Math.max(amount, 0), current);
+  if (removed === 0) return 0;
+  perm.counters = { ...perm.counters, [kind]: current - removed };
+  return removed;
+}
 
 /**
  * Remove up to `amount` loyalty counters (never below zero — CR 118.5), honoring
  * the counters replace-don't-mutate contract. Returns how many actually left.
  */
 function removeLoyaltyCounters(perm: CardInstance, amount: number): number {
-  const current = perm.counters[LOYALTY_COUNTER] ?? 0;
-  const removed = Math.min(Math.max(amount, 0), current);
-  if (removed === 0) return 0;
-  perm.counters = { ...perm.counters, [LOYALTY_COUNTER]: current - removed };
-  return removed;
+  return removeCountersOfKind(perm, LOYALTY_COUNTER, amount);
 }
 
 /**
@@ -265,6 +295,80 @@ export const makeToken: EffectPrimitive = (ctx) => {
   };
   for (let i = 0; i < count; i++) ctx.createToken(def);
 };
+
+/**
+ * `createEmblem` — put an EMBLEM into the controller's command zone (CR 114), the
+ * thing a planeswalker ultimate leaves behind. Everything about it is DATA from
+ * params, so there is no emblem-per-card and no magic anything:
+ *   - `name`     — what the emblem is called in the log and the UI. The printed
+ *                  wording is "an emblem with '<ability>'", so the default names
+ *                  it after the source, which is how a real emblem is referred to.
+ *   - `statics`  — static abilities it radiates ("creatures you control get
+ *                  +1/+1"), in core's `StaticAbility` shape.
+ *   - `triggers` — triggered abilities it fires ("at the beginning of your
+ *                  upkeep, …"), in core's `TriggeredAbility` shape.
+ *
+ * An emblem with NEITHER is refused rather than created: it would be an object
+ * that provably does nothing, which is exactly the "looks implemented, isn't"
+ * outcome the compiler contract exists to prevent. The compiler never emits one,
+ * so this is a guard against hand-authored data, not a live branch.
+ *
+ * Nothing here has to make the emblem unremovable — it never touches the
+ * battlefield, and every removal path in the engine reaches only there.
+ */
+export const createEmblem: EffectPrimitive = (ctx) => {
+  const statics = staticsParam(ctx);
+  const triggers = triggersParam(ctx);
+  if (statics.length === 0 && triggers.length === 0) return;
+  const name = strParam(ctx, 'name') ?? `${ctx.source.def.name} emblem`;
+  const def: CardDefinition = {
+    id: `emblem:${name}`,
+    name,
+    // An emblem has no card types at all (CR 114.1) — it is not a permanent, and
+    // an empty type line is what keeps every type-filtered effect from seeing it.
+    types: [],
+    isEmblem: true,
+    ...(statics.length > 0 ? { statics } : {}),
+    ...(triggers.length > 0 ? { triggers } : {}),
+  };
+  ctx.createEmblem(def);
+};
+
+/**
+ * The `statics` param as a `StaticAbility` list, validated shallowly: an entry
+ * must at least be an object carrying an `affects` filter, or the continuous
+ * layer would read `undefined` as "applies to everything". A malformed entry is
+ * dropped rather than thrown on (DESIGN §1 robust).
+ */
+function staticsParam(ctx: EffectContext): readonly StaticAbility[] {
+  const raw = ctx.params.statics;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is StaticAbility =>
+      typeof entry === 'object' && entry !== null && typeof (entry as { affects?: unknown }).affects === 'object',
+  );
+}
+
+/**
+ * The `triggers` param as a `TriggeredAbility` list, validated the same way: an
+ * entry must carry a condition naming an event and an effects array, or core's
+ * matcher would never fire it and the emblem would silently do nothing.
+ */
+function triggersParam(ctx: EffectContext): readonly TriggeredAbility[] {
+  const raw = ctx.params.triggers;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((entry): entry is TriggeredAbility => {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const condition = (entry as { condition?: unknown }).condition;
+    const effects = (entry as { effects?: unknown }).effects;
+    return (
+      typeof condition === 'object' &&
+      condition !== null &&
+      typeof (condition as { on?: unknown }).on === 'string' &&
+      Array.isArray(effects)
+    );
+  });
+}
 
 /**
  * `persistReturn` — the death-return half of *persist* (DESIGN §3.9). Authored as a
@@ -867,6 +971,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
   makeToken,
+  createEmblem,
   persistReturn,
   destroyTarget,
   exileTarget,

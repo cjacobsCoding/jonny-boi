@@ -436,6 +436,15 @@ interface PendingChoiceBase {
   readonly sourceName: string;
   readonly min: number;
   readonly max: number;
+  /**
+   * What machinery this parked choice belongs to, when it is NOT a resolving
+   * effect's question. `'legendRule'` marks the state-based legend-rule choice
+   * (CR 704.5j — "choose which to keep"), raised by the SBA pass with no
+   * resolution frame behind it; `applyAnswerChoice` routes the answer by this
+   * marker instead of guessing from the absence of a frame. Absent for every
+   * ordinary choice, so all existing states and tests read unchanged.
+   */
+  readonly context?: 'legendRule';
 }
 
 export interface SelectCardsChoice extends PendingChoiceBase {
