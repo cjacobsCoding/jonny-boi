@@ -17,7 +17,8 @@
  * **Faithfulness.** Every card plays in full under engine-v2 — the dorks tap for
  * mana, Recluse's deathtouch and Spider's reach are honoured in combat, Witness'
  * ETB regrowth chooses the best card, and Pelakka Wurm's ETB lifegain and
- * dies-trigger draw both fire. Tarmogoyf (dynamic P/T) is still deliberately
+ * dies-trigger draw both fire. Tarmogoyf (whose star P/T box is implemented now)
+ * is still deliberately
  * excluded: its mechanic is unimplemented, so it would play as something other
  * than what it prints. (Sakura-Tribe Elder plays in full now — sacrifice-self
  * cost + basic-land search — it just hasn't been tuned into this list.)

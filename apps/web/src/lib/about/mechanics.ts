@@ -218,6 +218,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'card', name: 'Monastery Swiftspear' },
       },
       {
+        title: 'Characteristic-defining P/T (the star box)',
+        detail:
+          "A creature whose printed power/toughness is a formula plays at its real size: Tarmogoyf is the number of card types among cards in all graveyards, toughness that number plus one. It is applied in the rules' own layer 7a — BEFORE +1/+1 counters and pumps, so a counter adds on top — and re-derived on every read, so it grows the instant a fetchland fills a graveyard mid-combat.",
+        witness: { kind: 'rule', id: 'characteristic-defining-pt' },
+      },
+      {
+        title: 'Turn-scoped memory (revolt)',
+        detail:
+          'The engine remembers a short, named list of things that happened this turn — a permanent you controlled left the battlefield (revolt), a creature died, you gained life — and clears it as each turn begins. Fatal Push reads revolt when it RESOLVES, so a fetchland cracked in response turns its four-mana-value mode on.',
+        witness: { kind: 'rule', id: 'destroy-creature-mana-value-revolt' },
+      },
+      {
+        title: 'Coloured anthems & card filters',
+        detail:
+          '"White creatures you control get +1/+1" narrows by colour, read from the card’s mana pips exactly as protection reads it — and the same filter serves every other chooser (searches, discards, sacrifices), not just statics.',
+        witness: { kind: 'rule', id: 'static-buff-your-creatures' },
+      },
+      {
         title: 'Derived values',
         detail:
           '"…equal to the number of creatures you control" works for damage, draw, life, mill and pumps alike — every numeric parameter reads the same derivation.',

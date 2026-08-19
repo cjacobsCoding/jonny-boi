@@ -1,8 +1,16 @@
 /**
 /**
  * Creature stat derivation. Effective power/toughness and keywords come from the
- * card definition's printed base, plus runtime modifiers, applied in this order:
- *   1. printed base (def.power / def.toughness / def.keywords)
+ * card definition's base, plus runtime modifiers, applied in this order:
+ *   1a. CHARACTERISTIC-DEFINING base (CR 613.3 layer 7a) — a `*` P/T box whose
+ *      value is a formula over the game state (Tarmogoyf). It REPLACES the
+ *      printed numbers rather than adding to them, and it is applied FIRST,
+ *      before counters and before every pump, which is exactly where CR 613.10
+ *      puts it. It reaches this function as `AggregatedMod.basePower` /
+ *      `baseToughness`, computed by internal/continuous.ts — the layer that has
+ *      the state a formula needs.
+ *   1b. printed base (def.power / def.toughness / def.keywords), used whenever
+ *      no characteristic-defining value was supplied.
  *   2. +1/+1 counters (a permanent per-object modifier)
  *   3. modifications radiating from permanents on the battlefield — the Aura /
  *      Equipment attached to this one, and static "anthem" abilities
@@ -107,15 +115,25 @@ function counterShift(inst: CardInstance): number {
   return (inst.counters[PLUS_ONE_COUNTER] ?? 0) - (inst.counters[MINUS_ONE_COUNTER] ?? 0);
 }
 
-/** Effective power: base + counters + continuous power delta. */
+/**
+ * Effective power: base (layer 7a formula, else printed) + counters + deltas.
+ *
+ * ⚠️ A CHARACTERISTIC-DEFINING creature read with NO `mod` answers 0, because a
+ * `*` box is a function of the whole game and this accessor is given only the
+ * instance. That is the same documented limit the module header states for the
+ * bare call ("correct only where no modification can apply"), and every RULES
+ * path — combat, state-based actions, the damage/fight primitives, serialization
+ * — passes an aggregate built by `indexContinuous`/`aggregateFor`, which supply
+ * the formula's value. Pass one whenever a `*` creature could be on the board.
+ */
 export function effectivePower(inst: CardInstance, mod: AggregatedMod = NO_MOD): number {
-  const base = inst.def.power ?? 0;
+  const base = mod.basePower ?? inst.def.power ?? 0;
   return base + counterShift(inst) + mod.power;
 }
 
-/** Effective toughness: base + counters + continuous toughness delta. */
+/** Effective toughness: base (layer 7a formula, else printed) + counters + deltas. */
 export function effectiveToughness(inst: CardInstance, mod: AggregatedMod = NO_MOD): number {
-  const base = inst.def.toughness ?? 0;
+  const base = mod.baseToughness ?? inst.def.toughness ?? 0;
   return base + counterShift(inst) + mod.toughness;
 }
 

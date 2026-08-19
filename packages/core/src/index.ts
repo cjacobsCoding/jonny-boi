@@ -81,6 +81,16 @@ export {
  * so every consumer that already reads effective values gets statics for free.
  */
 export type { PermanentModification, StaticAbility, StaticAffects, StaticControllerScope } from './statics.js';
+
+// Derived values — the ONE evaluator behind "equal to the number of …" params
+// and characteristic-defining P/T, plus its closed count vocabulary.
+export type { CharacteristicFormula, CharacteristicPT, DerivedCountName } from './card.js';
+export { evaluateDerivedCount, characteristicValue } from './derived.js';
+
+// Turn-scoped fact memory (revolt / morbid / lifegain) — a NAMED closed
+// vocabulary, not a general event query. See turn-facts.ts.
+export type { TurnFact } from './turn-facts.js';
+export { TURN_FACTS, turnFactHolds, setTurnFact, clearTurnFacts } from './turn-facts.js';
 export {
   DEFAULT_STATIC_SCOPE,
   staticsOf,

@@ -323,14 +323,17 @@ function behaviour(definition: CardDefinition): string {
       ability.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
     ]),
     loyalty: definition.loyalty ?? null,
+    // A characteristic-defining P/T IS behaviour — it is what the creature's
+    // size DOES at every read. Without it here, a Tarmogoyf compiled with the
+    // wrong count (or the wrong offset) would pass the audit silently.
+    characteristicPT: definition.characteristicPT ?? null,
   });
 }
 
 describe('pool audit — every card claimed faithful really is', () => {
-  // Tarmogoyf's `*/*` is a FRAME approximation (a pinned P/T), not a behaviour
-  // one: it has no effects or triggers, so its behaviour signature is empty and
-  // matches. It stays out of this list deliberately — the frame check that catches
-  // it lives in the compiler's own suite.
+  // Tarmogoyf used to be exempt here: its star box was a FRAME approximation (a
+  // pinned 2/3) that a behaviour signature could not see. It is a real formula
+  // now, carried in the signature below, so it is audited like everything else.
   for (const authored of CARD_POOL) {
     if (KNOWN_UNFAITHFUL.has(authored.name)) continue;
     it(`${authored.name} is reproduced exactly from its printed text`, () => {

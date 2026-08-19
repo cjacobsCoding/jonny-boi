@@ -758,7 +758,8 @@ The §3.1 MVP resolves spells/ETB scripts only. To faithfully simulate real meta
 end of turn" layer** with proper cleanup-step expiry (so `pumpUntilEndOfTurn` and similar wear off — current
 behavior persists the buff and biases combat sims), and later **planeswalkers** (✅ landed — see §3.11),
 **transform/DFC**, and
-**dynamic P/T** (e.g. Tarmogoyf). Tracked here because §3.2 cards stubbed these mechanics against the MVP.
+**dynamic P/T** (e.g. Tarmogoyf — ✅ landed as characteristic-defining P/T in layer 7a; see §3.11).
+Tracked here because §3.2 cards stubbed these mechanics against the MVP.
 Prioritize triggers + EOT-expiry before leaning on §3.5/§3.6 verdicts; the rest can follow.
 
 ### 3.10 Hotseat pass-and-play — two humans, one device — ✅ done
@@ -1058,15 +1059,42 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   Also closed alongside it: *"Counter target spell unless its controller pays {X}"* (Condescend),
   where the payment asked is the X the caster chose and paid for at cast time, and an X of zero is
   a cost everybody pays, so the spell simply resolves.
+- ✅ *characteristic-defining P/T (the star box)* — a creature whose printed P/T is a FORMULA
+  (`CardDefinition.characteristicPT`) over the closed derived-count vocabulary. It is applied in
+  **CR 613.3 layer 7a**, as the creature's BASE: the continuous layer (which is the only layer
+  holding the state a formula needs) computes it into `AggregatedMod.basePower`/`baseToughness`,
+  and the stat accessors use it in place of `def.power` — so +1/+1 counters (7d), anthems and
+  pumps (7c) all add ON TOP of it, never the other way round. Nothing is stored, so nothing goes
+  stale: it re-derives on every read, and a graveyard filling MID-COMBAT changes the creature's
+  size before state-based actions run. **Tarmogoyf is un-stubbed** (power = card types among cards
+  in all graveyards, toughness that number plus one). ⚠️ The bare `effectivePower(inst)` call —
+  no aggregate — answers 0 for a star creature, because a formula is a function of the whole game
+  and that accessor holds only the instance. Every RULES path passes an aggregate; the AI's
+  board-evaluation helpers still do not (see below).
+- ✅ *turn-scoped fact memory (revolt)* — `core/turn-facts.ts`: a NAMED CLOSED vocabulary
+  (`permanentLeftBattlefield` = revolt, `creatureDied` = morbid, `youGainedLife`), not a general
+  event query, so the compiler can only pattern-match what it genuinely understands. Fed from the
+  engine's emit chokepoint (no new `GameEvent` — every fact derives from events already published),
+  stored as two per-player BITMASKS as flat numbers on the state (a nested record cost ~3% of sim
+  throughput on the clone path), and cleared as each turn BEGINS, so "this turn" still reads true
+  during the previous turn's end step. **Fatal Push is un-stubbed**: its `{ base: 2, revolt: 4 }`
+  mana-value switch is read at RESOLUTION, so a permanent leaving in response turns revolt on.
+- ✅ *coloured/filtered statics* — the shared `CardFilter` gained `anyOfColors`, read from cost
+  pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
+  cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
+  (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
 Still open, roughly by how often they block a real decklist:
 - *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
   cast-time question step now that {X}/kicker built it), *multikicker*, *Phyrexian costs*,
-  *dynamic P/T* (Tarmogoyf needs characteristic-defining P/T — `StaticAbility` deltas are fixed
-  numbers and `DerivedCount` has no "card types in all graveyards" entry), *emblems* (walker ultimates that create one stay reported),
+  *emblems* (walker ultimates that create one stay reported),
   *modal DFCs / split / adventure (the cast-time face choice)*,
-  *revolt-style "a permanent left the battlefield this turn" trackers* (no turn-scoped event memory
-  exists to answer Fatal Push's question),
-  *colored/filtered statics* ("White creatures you control…" — `CardFilter` has no color field),
+  *P/T formulas outside the closed count vocabulary* (a star box counting something the
+  `DerivedCountName` table does not name, or whose two halves count different things, still
+  reports — it is never guessed),
+  *the AI's board evaluation of a star creature* (`packages/ai` reads `effectivePower(perm)` with
+  no aggregate in ~40 places, so a Tarmogoyf evaluates as 0/0 to the pilots; threading the
+  continuous index through those call sites would ALSO make the AI see anthems and Auras for the
+  first time, which moves every recorded heuristic baseline, so it is its own change),
   *damage divided among targets* ("deals X damage divided as you choose among any number of
   targets" — needs a division the targeting layer cannot express: one spell, several targets, each
   with its own share).

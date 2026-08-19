@@ -236,6 +236,11 @@ export function cloneState(state: GameState): GameState {
   if (state.cardGrants !== undefined && state.cardGrants.length > 0) {
     next.cardGrants = state.cardGrants.map(cloneCardGrant);
   }
+  // Two NUMBERS, so the turn's fact memory costs the clone no allocation at all
+  // (a nested { A, B } record here measured ~3% of sim throughput). Numbers copy
+  // by value, so two states can never alias each other's memory of the turn.
+  if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
+  if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
   return next;
 }
 

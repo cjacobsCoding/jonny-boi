@@ -39,7 +39,9 @@ import {
   LOYALTY_COUNTER,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
+  aggregateFor,
   effectivePower,
+  turnFactHolds,
   isCreature,
   isLegalTarget,
   isPlaneswalker,
@@ -319,6 +321,12 @@ export const persistReturn: EffectPrimitive = (ctx) => {
  * graveyard), optionally restricted by `params.notColor` (e.g. Doom Blade:
  * nonblack) or `params.maxManaValue` (e.g. Fatal Push: mana value ≤ N). A
  * target failing the restriction → safe no-op (the spell "fizzles" on it).
+ *
+ * `maxManaValue` accepts either a plain number or a REVOLT SWITCH
+ * `{ base, revolt }` — Fatal Push's "2 or less, or 4 or less instead if a
+ * permanent left the battlefield under your control this turn". Which bound
+ * applies is read from the turn's fact memory AT RESOLUTION (core's
+ * `turnFactHolds`), which is when the printed card checks it.
  */
 export const destroyTarget: EffectPrimitive = (ctx) => {
   const target = firstPermanentTarget(ctx);
@@ -340,7 +348,10 @@ export const exileTarget: EffectPrimitive = (ctx) => {
   const target = firstPermanentTarget(ctx);
   if (!target || !isCreature(target.def)) return;
   if (ctx.params.gainLifeEqualPower === true) {
-    const power = effectivePower(target);
+    // The aggregate, not a bare read: a characteristic-defining creature
+    // (Tarmogoyf) has no printed power, so "life equal to its power" would gain
+    // zero without the layer-7a value the aggregation supplies.
+    const power = effectivePower(target, aggregateFor(ctx.state, target.instanceId));
     if (power > 0) {
       changeLife(ctx, target.controller, power);
       ctx.emit({ type: 'gainLife', player: target.controller, amount: power });
@@ -471,11 +482,30 @@ function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean 
     const requires = cost ? ((cost as Record<string, number | undefined>)[notColor] ?? 0) > 0 : false;
     if (requires) return false; // e.g. nonblack filter rejects a card with {B} pips
   }
-  const maxMv = ctx.params.maxManaValue;
-  if (typeof maxMv === 'number') {
-    if (manaValueOf(target.def) > maxMv) return false;
-  }
+  const maxMv = maxManaValueBound(ctx);
+  if (maxMv !== undefined && manaValueOf(target.def) > maxMv) return false;
   return true;
+}
+
+/**
+ * The mana-value ceiling this removal enforces, or `undefined` for none.
+ *
+ * Two authored shapes: a plain number, and the revolt switch
+ * `{ base, revolt }`. The switch is read here rather than at cast time because
+ * that is when the printed card reads it — a permanent that leaves the
+ * battlefield in RESPONSE to Fatal Push turns revolt on before it resolves, and
+ * a cast-time read would miss exactly that line of play.
+ */
+function maxManaValueBound(ctx: EffectContext): number | undefined {
+  const raw = ctx.params.maxManaValue;
+  if (typeof raw === 'number') return raw;
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const bounds = raw as { readonly base?: unknown; readonly revolt?: unknown };
+  if (typeof bounds.base !== 'number') return undefined;
+  const revolted =
+    typeof bounds.revolt === 'number' &&
+    turnFactHolds(ctx.state, 'permanentLeftBattlefield', ctx.controller);
+  return revolted ? (bounds.revolt as number) : bounds.base;
 }
 
 /**
@@ -521,8 +551,10 @@ export const fight: EffectPrimitive = (ctx) => {
   if (!self || !other || !isCreature(other.def)) return;
   if (self.instanceId === other.instanceId) return; // a creature cannot fight itself
 
-  const selfPower = effectivePower(self);
-  const otherPower = effectivePower(other);
+  // Aggregates, not bare reads — a fight between a Tarmogoyf and anything must
+  // use its layer-7a size, and an anthem'd creature must fight at its real one.
+  const selfPower = effectivePower(self, aggregateFor(ctx.state, self.instanceId));
+  const otherPower = effectivePower(other, aggregateFor(ctx.state, other.instanceId));
 
   // Protection prevents the damage a protected fighter would take, in either
   // direction, without stopping the other half of the fight (CR 702.16e).

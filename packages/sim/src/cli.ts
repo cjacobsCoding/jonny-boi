@@ -85,10 +85,11 @@ Notes:
   • --no-adaptive runs the legacy fixed-budget sweep (every candidate, same games)
     for comparison.
   • Fidelity (DESIGN §3.9, done): the engine models triggered abilities, "until
-    end of turn" effects, planeswalkers with loyalty, transforming DFCs, and
-    printed flashback. A few advanced mechanics remain unimplemented (dynamic P/T,
-    flashback granted by another card) — cards using them play as a simplified
-    subset. The statistics are exact.`;
+    end of turn" effects, planeswalkers with loyalty, transforming DFCs, printed
+    flashback, the characteristic-defining star P/T box and turn-scoped memory
+    (revolt). A few advanced mechanics remain unimplemented (flashback granted by
+    another card, modes chosen at cast time) — cards using them play as a
+    simplified subset. The statistics are exact.`;
 
 /** A parsed flag bag. */
 interface Flags {

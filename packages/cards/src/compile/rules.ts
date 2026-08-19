@@ -153,6 +153,12 @@ const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
   'lands you control': 'landsYouControl',
   'cards in your hand': 'cardsInYourHand',
   'cards in your graveyard': 'cardsInYourGraveyard',
+  // Added with characteristic-defining P/T: Tarmogoyf counts the first, the
+  // Boneyard Wurm family the second. They are in the SHARED table on purpose —
+  // a spell that deals damage "equal to the number of creature cards in your
+  // graveyard" counts the identical set, and one table is what guarantees it.
+  'card types among cards in all graveyards': 'cardTypesInAllGraveyards',
+  'creature cards in your graveyard': 'creaturesInYourGraveyard',
 });
 
 /** The alternation of the phrases above, longest-first so none is truncated. */
@@ -604,6 +610,45 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
             // what makes the printed target the only thing it can be pointed at.
             params: { amount, targetPlayer: true, targets: 'player' },
           });
+    },
+  },
+  {
+    id: 'destroy-creature-mana-value-revolt',
+    description:
+      '"Destroy target creature if it has mana value N or less. Revolt — Destroy that creature if it has mana value M or less instead if a permanent left the battlefield under your control this turn." (Fatal Push)',
+    // ONE rule for BOTH printed lines: `text.ts` joins the revolt rider onto the
+    // line it modifies, because "that creature" has no referent alone and
+    // compiling the halves separately would destroy twice. The two bounds ride
+    // a single `destroyTarget` ref as a `{ base, revolt }` switch, read at
+    // RESOLUTION against the turn's fact memory — so a permanent that leaves in
+    // response to the spell turns revolt on, exactly as printed.
+    pattern: new RegExp(
+      `^destroy target creature if it has mana value ${COUNT_TOKEN} or less\\. revolt [—-] destroy that creature if it has mana value ${COUNT_TOKEN} or less instead if a permanent left the battlefield under your control this turn$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const base = parseCount(match[1]);
+      const revolt = parseCount(match[2]);
+      if (base === null || revolt === null) return null;
+      return effects({
+        primitive: 'destroyTarget',
+        params: { targets: CREATURE_TARGET, maxManaValue: { base, revolt } },
+      });
+    },
+  },
+  {
+    id: 'destroy-creature-if-mana-value',
+    description:
+      '"Destroy target creature if it has mana value N or less" — the plain (revolt-free) wording of the same restriction',
+    pattern: new RegExp(`^destroy target creature if it has mana value ${COUNT_TOKEN} or less$`),
+    needsChosenTarget: true,
+    build(match) {
+      const maxManaValue = parseCount(match[1]);
+      if (maxManaValue === null) return null;
+      return effects({
+        primitive: 'destroyTarget',
+        params: { targets: CREATURE_TARGET, maxManaValue },
+      });
     },
   },
   {
@@ -1627,10 +1672,57 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'characteristic-defining-pt',
+    description:
+      'the star P/T box: power equals the number of X, toughness that number plus N (Tarmogoyf) — a characteristic-defining P/T, applied in CR 613.3 layer 7a',
+    // The ONLY shape compiled: both halves derived from the SAME count, the
+    // toughness offset by a printed constant. That is Tarmogoyf and the whole
+    // Lhurgoyf family. A card whose two halves count DIFFERENT things, or whose
+    // count is not in the closed table, is not matched and keeps reporting —
+    // the compiler names the formula it cannot express rather than guessing one.
+    pattern: new RegExp(
+      `^~'s power is equal to the number of ${DERIVED_PHRASE} and its toughness is equal to that number plus ${COUNT_TOKEN}$`,
+    ),
+    build(match, ctx) {
+      // Only a creature has a P/T box to define.
+      if (!ctx.card.typeLine.types.some((type) => type.toLowerCase() === 'creature')) return null;
+      const count = derivedValue(match[1]!);
+      const plus = parseCount(match[2]);
+      if (!count || plus === null) return null;
+      return {
+        characteristicPT: {
+          power: { countOf: count.countOf as never },
+          toughness: { countOf: count.countOf as never, plus },
+        },
+      };
+    },
+  },
+  {
+    id: 'characteristic-defining-pt-equal',
+    description:
+      'the star P/T box: power and toughness each equal the number of X (Boneyard Wurm, Lhurgoyf-style) — both halves the same count, no offset',
+    pattern: new RegExp(
+      `^~'s power and toughness are each equal to the number of ${DERIVED_PHRASE}$`,
+    ),
+    build(match, ctx) {
+      if (!ctx.card.typeLine.types.some((type) => type.toLowerCase() === 'creature')) return null;
+      const count = derivedValue(match[1]!);
+      if (!count) return null;
+      return {
+        characteristicPT: {
+          power: { countOf: count.countOf as never },
+          toughness: { countOf: count.countOf as never },
+        },
+      };
+    },
+  },
+  {
     id: 'static-buff-your-creatures',
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
-    pattern: /^(other )?creatures you control (?:get ([+-]\d+)\/([+-]\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$/,
+    pattern: new RegExp(
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?creatures you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
+    ),
     build(match, ctx) {
       // Only a PERMANENT can carry a static ability. An instant/sorcery printing
       // this shape would be a one-shot team effect this rule does not implement
@@ -1640,10 +1732,17 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
-      const toughness = match[3] === undefined ? 0 : Number.parseInt(match[3], 10);
+      const power = match[3] === undefined ? 0 : Number.parseInt(match[3], 10);
+      const toughness = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
-      const keywordText = match[4] ?? match[5];
+      // "WHITE creatures you control get +1/+1" — the printed colour narrows the
+      // filter, which core's shared `CardFilter` can express now
+      // (`anyOfColors`, derived from cost pips exactly as protection reads
+      // colour). A colour word outside the table rejects the whole line.
+      const colorWord = match[2]?.trim();
+      const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
+      if (colorWord !== undefined && color === undefined) return null;
+      const keywordText = match[5] ?? match[6];
       const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
       // A keyword the engine does not model reports the whole line, never a
       // half-granted anthem.
@@ -1652,6 +1751,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         affects: {
           anyOfTypes: ['creature'],
           controller: 'you',
+          ...(color ? { anyOfColors: [color as never] } : {}),
           // The printed word "other": the lord pumps the team, not itself.
           ...(match[1] ? { excludeSource: true } : {}),
         },
@@ -1862,6 +1962,27 @@ export const VACUOUS_CLAUSES: readonly RegExp[] = Object.freeze([
   /^(?:they|it) can'?t be regenerated$/,
 ]);
 
+/**
+ * ABILITY WORDS (CR 207.2c) — italicized labels that have NO rules meaning of
+ * their own. "Revolt", "Morbid", "Delirium" and friends only mark a line whose
+ * printed text carries the whole condition, and `text.ts` joins that line onto
+ * the one it modifies so a single rule sees the idiom.
+ *
+ * Scryfall lists them in a card's `keywords`, which the compiler's keyword sweep
+ * would otherwise report as an unmodelled ability one line after implementing
+ * it — exactly the false report "Kicker" and "Flashback" already have their own
+ * skips for. The skip is CONDITIONAL on the labelled line having compiled: if it
+ * did not, its text (which contains the word) is in `missing`, and the card
+ * keeps reporting.
+ */
+export const ABILITY_WORDS: ReadonlySet<string> = new Set([
+  'revolt',
+  'morbid',
+  'delirium',
+  'threshold',
+  'metalcraft',
+]);
+
 /** True when a clause is vacuously satisfied and can safely be skipped. */
 export function isVacuousClause(clause: string): boolean {
   return VACUOUS_CLAUSES.some((pattern) => pattern.test(clause));
@@ -2030,6 +2151,16 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },
   {
+    // Turn-scoped fact memory EXISTS now (core's `turn-facts.ts`: revolt,
+    // morbid and the lifegain check, fed from the event stream and cleared as
+    // each turn begins), and Fatal Push's revolt mode plays as printed. What
+    // still lands here is an ability word whose LINE has no rule — a morbid or
+    // delirium body the effect table cannot build, or a fact outside the closed
+    // vocabulary ("if you've cast two spells this turn").
+    pattern: /\brevolt\b|\bmorbid\b|\bdelirium\b|\bthreshold\b|\bmetalcraft\b/,
+    missingEngineSystem: 'an ability-word template the compiler does not recognize yet',
+  },
+  {
     // Multikicker is the half of kicker still genuinely missing: it needs a
     // COUNT ("paid N times"), not the single yes/no the engine asks.
     pattern: /\bmultikicker\b/,
@@ -2051,6 +2182,15 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // cost question kicker and {X} now go through.
     pattern: /\bcycling\b|\bbuyback\b|\bmadness\b/,
     missingEngineSystem: 'alternative casting costs and cost-bearing discards (cycling, buyback, madness)',
+  },
+  {
+    // Characteristic-defining P/T IS a system now (CR 613.3 layer 7a: a `*` box
+    // compiles to a formula over the closed derived-count vocabulary, applied
+    // as the creature's BASE before counters and pumps, re-derived on every
+    // read — Tarmogoyf plays as printed). What still lands here is a FORMULA
+    // outside that vocabulary, or a P/T that changes by some other rule.
+    pattern: /power is equal to|toughness is equal to|power and toughness are each equal/,
+    missingEngineSystem: 'a characteristic-defining P/T formula the compiler does not recognize yet',
   },
   {
     // {X} costs ARE payable now (a cast-time chooseNumber the engine charges),
@@ -2106,6 +2246,12 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a leaves-the-battlefield template the compiler does not recognize yet',
   },
   {
+    // Anthems compile, and they can now be narrowed by COLOUR ("White creatures
+    // you control get +1/+1") because the shared `CardFilter` carries
+    // `anyOfColors`, read from cost pips by the same reader protection uses.
+    // What still lands here is a static whose SELECTOR is outside the filter
+    // (by power, by tapped-ness, "as long as you control…") or one that is not
+    // a plain P/T-and-keyword modification.
     pattern: /(?:other )?creatures you control (?:get|have)|as long as you control|creatures? you control gets?/,
     missingEngineSystem: 'a static-buff template the compiler does not recognize yet',
   },

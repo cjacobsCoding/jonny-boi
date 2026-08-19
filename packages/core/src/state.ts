@@ -395,6 +395,22 @@ export interface GameState {
    * lets the spell finish resolving after the answer. Set only while suspended.
    */
   resolution?: ResolutionFrame | null;
+  /**
+   * What has happened SO FAR THIS TURN, for the printed cards that ask — revolt
+   * ("a permanent you controlled left the battlefield this turn"), morbid, and
+   * the lifegain check. One BITMASK PER PLAYER over the closed `TurnFact`
+   * vocabulary, cleared as each turn begins.
+   *
+   * Two flat numbers rather than a `{ A, B }` record on purpose: the state is
+   * cloned at every action boundary, and a nested object is an allocation per
+   * clone — measured at ~3% of sim throughput for a game that never reads a
+   * fact. Never index these directly; go through `turnFactHolds` /
+   * `setTurnFact` in `turn-facts.ts`, which is also what keeps the absent case
+   * ("nothing recorded", so every fact is false) correct for every state
+   * serialized or hand-built before this existed.
+   */
+  turnFactsA?: number;
+  turnFactsB?: number;
 }
 
 /** Build a fresh, empty player. */

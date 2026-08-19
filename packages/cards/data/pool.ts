@@ -34,8 +34,10 @@
  * planeswalker LOYALTY abilities) are real: walkers enter with printed loyalty,
  * are attackable, and die at 0. Flash is a real timing flag and a printed
  * "Flashback {cost}" casts from the graveyard for real (then exiles). What it
- * still has no system for is dynamic P/T and flashback GRANTED by another card
- * (Snapcaster).
+ * A characteristic-defining star P/T box is a real formula (Tarmogoyf), and the
+ * engine remembers a short named list of turn-scoped facts (revolt). What it
+ * still has no system for is flashback GRANTED by another card (Snapcaster) and
+ * modes chosen at cast time (Cryptic Command).
  * Cards whose identity needs one of those are authored as the closest faithful
  * subset (documented per-card); their
  * vanilla body (P/T, keywords, mana production) is always correct so they play on
@@ -145,10 +147,18 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Fatal Push',
     types: ['instant'],
     cost: { B: 1 },
-    // Destroy target creature with mana value ≤ 2. (Revolt's ≤4 mode needs a
-    // "permanent left the battlefield this turn" tracker the engine lacks; we
-    // model the base mode faithfully.)
-    effects: [{ primitive: 'destroyTarget', params: { targets: 'creature', maxManaValue: 2 } }],
+    // UN-STUBBED: both modes play as printed. "Destroy target creature if it
+    // has mana value 2 or less" — or 4 or less instead, when REVOLT is on (a
+    // permanent left the battlefield under your control this turn). The switch
+    // rides one `destroyTarget` ref and is read at RESOLUTION against core's
+    // turn-scoped fact memory, so a permanent that leaves in response turns
+    // revolt on before the spell resolves, exactly as the real card does.
+    effects: [
+      {
+        primitive: 'destroyTarget',
+        params: { targets: 'creature', maxManaValue: { base: 2, revolt: 4 } },
+      },
+    ],
   },
   {
     id: 'd683d985-9888-4d21-8b5f-69e69ce4a03b',
@@ -548,11 +558,15 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Tarmogoyf',
     types: ['creature'],
     cost: { generic: 1, G: 1 },
-    // P/T is "* / *+1" derived from graveyard card types — a dynamic characteristic
-    // the stat layer can't express yet. We pin a representative baseline (2/3) so
-    // it plays as a creature; the dynamic P/T is the documented stub.
-    power: 2,
-    toughness: 3,
+    // UN-STUBBED: the star box is a FORMULA now, not a pinned guess. Power is
+    // the number of card types among cards in ALL graveyards; toughness is that
+    // number plus one. It is applied in CR 613.3 layer 7a — before counters and
+    // before every pump — and re-derived on every read, so a fetchland cracking
+    // mid-combat grows it before state-based actions run.
+    characteristicPT: {
+      power: { countOf: 'cardTypesInAllGraveyards' },
+      toughness: { countOf: 'cardTypesInAllGraveyards', plus: 1 },
+    },
   },
 
   // --- Planeswalker ------------------------------------------------------------

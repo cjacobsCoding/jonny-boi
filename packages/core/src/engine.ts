@@ -77,6 +77,7 @@ import { WARD_COST_PARAM, WARD_COUNTER_PRIMITIVE, effectiveWardOf } from './prot
 import { expireCardGrants, flashbackCostOf, pruneCardGrantsFor } from './card-grants.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
+import { clearTurnFacts } from './turn-facts.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
@@ -269,6 +270,10 @@ function drawCard(state: GameState, player: PlayerId, emit: (e: GameEvent) => vo
 
 /** Begin a new turn: bump turn number, set active player, run untap/upkeep/draw. */
 function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) => void): void {
+  // A new turn: nothing has happened in it yet. Cleared as the turn BEGINS
+  // rather than at cleanup, so "this turn" still reads true for anything
+  // resolving in the previous turn's end step (see turn-facts.ts).
+  clearTurnFacts(state);
   state.turnNumber += 1;
   emit({ type: 'turnBegin', turn: state.turnNumber, activePlayer: state.activePlayer });
 

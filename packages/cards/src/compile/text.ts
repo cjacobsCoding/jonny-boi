@@ -171,7 +171,7 @@ export function splitAbilities(oracleText: string): string[] {
     .split(/\r?\n+/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  return joinModalBlocks(lines);
+  return joinRevoltRiders(joinModalBlocks(lines));
 }
 
 /** A modal header: "Choose one —", "Choose two —", "Choose one or both —". */
@@ -215,6 +215,36 @@ function joinModalBlocks(lines: readonly string[]): string[] {
     }
     out.push(`${line} ${modes.map((mode) => `• ${mode}`).join(' ')}`);
     i = j - 1;
+  }
+  return out;
+}
+
+/**
+ * An ability-word rider that MODIFIES the line above it rather than standing on
+ * its own. Revolt is the shape: Fatal Push prints "Destroy target creature if
+ * it has mana value 2 or less." and then, on its own line, "Revolt — Destroy
+ * that creature if it has mana value 4 or less **instead** if a permanent left
+ * the battlefield under your control this turn."
+ *
+ * The second line is meaningless alone — "that creature" has no referent, and
+ * compiling the two independently would destroy twice. So it is joined onto the
+ * previous line, exactly as {@link joinModalBlocks} joins a modal header to its
+ * bullets, and ONE rule then sees the whole idiom.
+ *
+ * A rider with no line above it is left exactly as found, so it reports as
+ * unrecognized rather than silently attaching to nothing.
+ */
+const RIDER_PREFIX = /^(?:revolt|morbid|delirium|threshold|metalcraft)\s*[—-]\s*/i;
+
+function joinRevoltRiders(lines: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    if (RIDER_PREFIX.test(line) && out.length > 0) {
+      const previous = out[out.length - 1] as string;
+      out[out.length - 1] = `${previous.replace(/\.$/, '')}. ${line}`;
+      continue;
+    }
+    out.push(line);
   }
   return out;
 }

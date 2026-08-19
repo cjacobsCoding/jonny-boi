@@ -99,11 +99,69 @@ throughput (games/sec) from regressing.
 | feat/planeswalkers | worker | packages/core (card/state/actions/events/targeting/engine/effects/serialize/index + internal stats/combat/sba/clone/zones + NEW planeswalker.test.ts), packages/cards (compile types/compile/rules loyalty + NEW rules, choice-primitives sacrificeChosen+pileSplitSacrifice, primitives dealDamage-to-walker, data/pool.ts Liliana + 2 refreshed expanded entries, index.ts STUBBED, NEW planeswalker-play.test.ts), packages/ai (heuristic walker attack/burn/loyalty + effect-value + weights + NEW planeswalker-pilot.test.ts), packages/data-tools (loyalty capture + Liliana index record), packages/sim (observation +2, paired-arms +2, fidelity copy), apps/web (play board walker UI + about/mechanics + card-index regen), DESIGN §3.9/§3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 | feat/scry-and-templates | worker | packages/core (choices.ts `keepOnTop`, events.ts `cardsLookedAt`), packages/cards (choice-primitives scry/surveil + `unlessPaidX`, compile/rules.ts 4 new rules + 1 hint reword, NEW compile/scry-surveil.test.ts), packages/ai (choices.ts keep-on-top branch + weights.ts `scryKeepValueThreshold` + choices.test additions), packages/sim (observation +1 classification, paired-arms +2), apps/web (play/choice-view copy, play-format log line, about/mechanics +2 witnesses), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | fix/scan-real-photo | worker | apps/web/src/lib/scan (config/detect/stacks/crop/ocr/match/pipeline + stacks.test rewrite + pipeline.test tweak + NEW real-photo.test.ts + NEW fixtures/user-deck-photo.jpg + fixtures/card-names-catalog.json), apps/web/package.json (+jpeg-js dev), package-lock.json, .gitignore (traineddata cache), DESIGN §3.12 | 🚧 PUSHED, not merged |
+| feat/derived-state | worker | packages/core (NEW derived.ts + turn-facts.ts + derived-state.test.ts; card/choices/state/index/protection, internal/{continuous,stats,clone,triggers-runtime}, engine.ts one line), packages/cards (effect-helpers/primitives, compile/{rules,compile,types,text}, data/pool.ts Tarmogoyf+Fatal Push, src/index.ts STUBBED, NEW derived-state.test.ts + 3 refreshed tests), packages/sim (fidelity caveat wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/online-ui-parity | worker | apps/web (components/online/OnlineBoard.tsx, components/play/{PlayBoard,SeatPanel,GraveyardPanel NEW,AbilityPrompts NEW}.tsx, lib/online/{legal-actions,auto-tap,board-adapter}.ts, lib/play/{session,view-model,graveyard-cast NEW}.ts, styles.css appended), apps/server (room.ts constructor pool param + NEW online-ui-parity.test.ts), packages/protocol/src/index.test.ts (walker-visibility tests only), DESIGN §3.14 | 🚧 PUSHED, not merged |
 | feat/graveyard-grants | worker | packages/core (NEW card-grants.ts + card-grants.test.ts + bench/scavenge-probe.ts; targeting/state/events/engine/index + internal clone/zones), packages/cards (primitives grantFlashback + compile/rules new rule & 2 reworded hints + effect-helpers prune + index un-stub + data/pool.ts Snapcaster + NEW graveyard-grants.test.ts), packages/ai (effect-value/heuristic/weights + NEW graveyard-grant-pilot.test.ts), packages/sim (paired-arms +1, observation +2, uw-control comment), apps/web (about/mechanics +2 witnesses), DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-18 worker: `feat/derived-state` 🚧 PUSHED — **three kinds of state the engine could
+  already see but could not express. Tarmogoyf and Fatal Push are both UN-STUBBED and play as
+  printed.**
+  1. **Characteristic-defining P/T (the star box), in CR 613.3 LAYER 7a.** `CardDefinition.
+  characteristicPT` is a FORMULA over the closed derived-count vocabulary, and the layering is the
+  whole point: the continuous layer — the only layer holding the state a formula needs — computes
+  it into the NEW `AggregatedMod.basePower`/`baseToughness`, and the stat accessors use it **in
+  place of** `def.power`. So counters (7d) and pumps/anthems (7c) add ON TOP of it, not the other
+  way round. Nothing is stored, so nothing goes stale: a Tarmogoyf grows MID-COMBAT as graveyards
+  fill, before state-based actions run (pinned by a test — that is the interaction a cached value
+  would silently break). ⚠️ **THE ONE THING TO KNOW BEFORE YOU TOUCH STATS**: a bare
+  `effectivePower(inst)` with NO aggregate answers **0** for a star creature — a formula is a
+  function of the whole game and that accessor holds only the instance. Every RULES path passes an
+  aggregate (combat, SBAs, serialization, and I fixed `fight` + Swords-style "life equal to its
+  power" in `cards/primitives.ts`, which were bare reads). `packages/ai` still has ~40 bare reads,
+  so **a Tarmogoyf evaluates as 0/0 to the pilots** — deliberately NOT fixed, because threading the
+  index through those sites would ALSO make the AI see anthems and Auras for the first time and
+  move every recorded heuristic baseline. It is its own change; it is named in DESIGN §3.11.
+  2. **Turn-scoped fact memory** (`core/turn-facts.ts`) — a NAMED CLOSED vocabulary (revolt /
+  morbid / lifegain), NOT a general event query, so the compiler can only match what it genuinely
+  understands. **No new `GameEvent`**: every fact derives from events the engine already emits, fed
+  from the emit chokepoint the trigger collector uses. Cleared as a turn BEGINS (not at cleanup), so
+  "this turn" still reads true during the previous turn's end step. Fatal Push's
+  `{ base: 2, revolt: 4 }` switch is read at **RESOLUTION** — a fetchland cracked in response turns
+  revolt on, which a cast-time read would miss — and it is the CASTER's fact, tested against the
+  opponent losing a permanent instead.
+  ⚠️ **PERF, measured not guessed**: storing the facts as a `{ A, B }` record cost **~3% of sim
+  throughput**, because that is one allocation PER CLONE and the engine clones the state at every
+  action boundary. They are two flat optional NUMBERS on `GameState` now (`turnFactsA/B`, bitmasks,
+  always accessed through the helpers) and throughput is back at parity. Same trap as the frozen
+  `NO_COUNTERS` record — anything you add to `GameState` or `CardInstance` is on the clone path.
+  3. **Coloured/filtered statics.** `CardFilter.anyOfColors`, read from cost pips (hybrid included)
+  by `colorsOfDefinition` — which MOVED from `protection.ts` to `card.ts` (re-exported, so no call
+  site changed) because `choices.ts` importing protection cycles through the continuous layer. It is
+  honoured inside `matchesCardFilter` itself, so it reaches EVERY consumer — searches, discards,
+  sacrifices, attachment hosts — not just anthems, which is what the brief asked to verify.
+  👉 **Compiler**: the blanket `*` P/T refusal is now compile-WHEN-MATCHED, refusal otherwise (a
+  formula outside the closed vocabulary, or whose halves count different things, still reports by
+  name). `text.ts` gained `joinRevoltRiders`, the same precedent as `joinModalBlocks`: an
+  ability-word line MODIFIES the line above it, so ONE rule sees Fatal Push's whole idiom instead of
+  two halves that would destroy twice. New `ABILITY_WORDS` set (CR 207.2c — an ability word has no
+  rules meaning of its own) so Scryfall listing "Revolt" as a keyword stops being reported one line
+  after implementing it; the skip is CONDITIONAL on the labelled line having compiled.
+  ❌ **Deliberately NOT done, with blockers**: the AI evaluation gap above; P/T formulas outside the
+  closed count vocabulary (reported, never guessed); no new pool cards beyond the two un-stubbed;
+  no gauntlet deck runs Tarmogoyf or Fatal Push, which is WHY the baselines are untouched;
+  UNSUPPORTED-BACKLOG.md not regenerated (needs a live Scryfall fetch).
+  ✅ **Gate**: full suite **2649 passed / 0 failed** (baseline 2621 + 28 new), `npm run verify`
+  exit 0, `npm run build` exit 0; gauntlet seed 99 **79/280 = 28.2%, byte-identical** to the
+  recorded baseline; throughput at PARITY against a same-box `origin/main` worktree, 8 alternating
+  paired rounds (median ratio 1.20 in my favour, mine faster in 6/8 — the box was heavily contended
+  this wave, baseline swinging 28–103 games/sec, which is exactly why the comparison is paired and
+  why I claim parity rather than a speedup). Three tests that PINNED the old refusals were flipped
+  (Tarmogoyf's compile exemption, the "partitions a mixed list" blocked card, the coloured-anthem
+  refusal), each with a NEW refusal test in its place so the honest half still fails loudly.
+  (Worker)
 
 - 2026-08-18 worker: `feat/online-ui-parity` 🚧 PUSHED — **three shipped mechanics stopped being
   invisible online.** Planeswalker attacks + loyalty abilities, flashback (casting from the

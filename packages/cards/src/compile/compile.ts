@@ -47,6 +47,7 @@ import {
   MANA_RULES,
   STATIC_RULES,
   TRIGGER_RULES,
+  ABILITY_WORDS,
   explainUnsupported,
   isVacuousClause,
   parseProtectionOrWard,
@@ -212,6 +213,8 @@ interface Assembly {
   kicker?: ManaCost;
   /** The printed flashback cost, once a "Flashback {…}" line compiles. */
   flashback?: ManaCost;
+  /** The formula behind a `*` P/T box, once a line compiles one. */
+  characteristicPT?: import('@jonny-boi/core').CharacteristicPT;
   /** The "Enchant …" / "Equip {N}" half of an attachment, once some line prints it. */
   attachesAs?: ClauseContribution['attachesAs'];
   /** The "Enchanted/Equipped creature gets …" half, accumulated across lines. */
@@ -239,6 +242,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
   if (contribution.kicker) assembly.kicker = contribution.kicker;
+  if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
@@ -637,14 +641,7 @@ export function compileCard(card: CompilableCard): CompileResult {
   }
   const cost = toCoreCost(card, hybrid);
 
-  // --- power / toughness -----------------------------------------------------
   const isCreatureCard = types.includes('creature');
-  if (isCreatureCard && (card.power === null || card.toughness === null)) {
-    assembly.missing.push({
-      text: 'power/toughness',
-      missingEngineSystem: 'dynamic power/toughness (characteristic-defining */*)',
-    });
-  }
 
   // --- planeswalkers: printed starting loyalty --------------------------------
   // A walker without a usable loyalty number cannot enter at the right value, so
@@ -757,6 +754,31 @@ export function compileCard(card: CompilableCard): CompileResult {
     compileAbilityLine(line, assembly, ctx, isSpell);
   }
 
+  // --- power / toughness -----------------------------------------------------
+  // Checked AFTER the ability lines, because the answer depends on them: a `*`
+  // box (Scryfall parses it to null) is faithful exactly when some line
+  // compiled the FORMULA that defines it. The blanket refusal this replaces
+  // reported every such card; the refusal itself is kept for every card whose
+  // defining sentence the rule table cannot express, which is the honest half —
+  // a formula we cannot reproduce must be named, never approximated.
+  if (isCreatureCard && (card.power === null || card.toughness === null)) {
+    if (assembly.characteristicPT === undefined) {
+      assembly.missing.push({
+        text: 'power/toughness',
+        missingEngineSystem:
+          'a characteristic-defining P/T formula the compiler does not recognize yet (the star box is supported; this card defines it by a rule outside the closed count vocabulary)',
+      });
+    }
+  } else if (assembly.characteristicPT !== undefined) {
+    // A card printing NUMBERS and a defining sentence would be two answers to
+    // one question. No real card does it; refusing keeps the invariant that
+    // `characteristicPT` and printed P/T never coexist.
+    assembly.missing.push({
+      text: 'power/toughness',
+      missingEngineSystem: 'a card printing both a fixed P/T and a characteristic-defining formula',
+    });
+  }
+
   // --- keyword flags printed on the type line but not in the text ------------
   // Scryfall lists a card's keywords separately; anything it lists that we did
   // not already pick up from the text must still be modelled or reported.
@@ -791,6 +813,16 @@ export function compileCard(card: CompilableCard): CompileResult {
     // or additional-cost form) leaves `flashback` unset, so the keyword still
     // reports through the line's own `missing` entry.
     if (word === 'flashback' && assembly.flashback !== undefined) continue;
+    // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
+    // 207.2c. It is skipped only when the line it labels actually compiled;
+    // a line that failed put its own text (word included) into `missing`, so
+    // the card still reports through that entry.
+    if (
+      ABILITY_WORDS.has(word) &&
+      !assembly.missing.some((entry) => entry.text.toLowerCase().includes(word))
+    ) {
+      continue;
+    }
     if (!assembly.missing.some((m) => m.text.toLowerCase().includes(word))) {
       assembly.missing.push({
         text: keyword,
@@ -831,6 +863,8 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(cost ? { cost } : {}),
     ...(isCreatureCard && card.power !== null ? { power: card.power } : {}),
     ...(isCreatureCard && card.toughness !== null ? { toughness: card.toughness } : {}),
+    // A `*` box: the FORMULA replaces the numbers (never both — refused above).
+    ...(assembly.characteristicPT ? { characteristicPT: assembly.characteristicPT } : {}),
     ...(isWalkerCard && printedLoyalty !== undefined ? { loyalty: printedLoyalty } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain

@@ -153,16 +153,16 @@ export {
  * `card-grants.ts` layer) un-stubbed **Snapcaster Mage** — flash, the targeted
  * ETB, and the granted flashback all play as printed, and the granted cast goes
  * through the very same path a printed "Flashback {cost}" uses.
+ * Characteristic-defining P/T (CR 613.3 layer 7a) un-stubbed **Tarmogoyf** — its
+ * star box is the real formula over card types in all graveyards, re-derived on
+ * every read; and the turn-scoped fact memory un-stubbed **Fatal Push**, whose
+ * revolt mode now reads "a permanent you controlled left the battlefield this
+ * turn" at resolution.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
-  { card: 'Tarmogoyf', missingEngineSystem: 'dynamic */*+1 P/T derived from graveyard card types' },
-  {
-    card: 'Fatal Push',
-    missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',
-  },
   {
     // Everything Cryptic DOES is faithful; what is early is WHEN it is decided.
     card: 'Cryptic Command',
