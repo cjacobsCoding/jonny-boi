@@ -1413,8 +1413,14 @@ function pushWardTriggers(
 function targetOptionFor(state: GameState, ref: InstanceId | PlayerId): TargetOption {
   if (isPlayerTarget(ref)) return { ref, name: `Player ${ref}`, controller: ref };
   const permanent = findOnBattlefield(state, ref);
-  return permanent
-    ? permanentTargetOption(permanent)
+  if (permanent) return permanentTargetOption(permanent);
+  // A target need not be a PERMANENT: a graveyard card is a legal target for
+  // `'instantOrSorceryInYourGraveyard'`, and describing it as `#7` would leave
+  // a UI rendering an unnamed button and the AI's own target scorer with
+  // nothing to read. Found wherever it actually is.
+  const card = findInstanceAnywhere(state, ref);
+  return card
+    ? { ref, name: card.def.name, controller: card.controller }
     : // Only reachable if the board changed between listing and describing, which
       // it cannot inside one action; described rather than dropped so a candidate
       // list can never come out shorter than the legality check that built it.
