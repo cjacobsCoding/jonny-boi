@@ -114,6 +114,55 @@ describe('maskStateForSeat', () => {
   });
 });
 
+// --- planeswalkers are PUBLIC (nothing about them may be redacted) -----------------
+
+/**
+ * A walker's LOYALTY is public information — it lives in the instance's counters,
+ * printed on the battlefield for the whole table to read. The online board draws
+ * its loyalty badge, its attackability and its loyalty-ability menu straight out of
+ * the masked view, so if masking dropped or blanked any of it the client could not
+ * show the mechanic at all. These pin that it survives for BOTH seats, the walker's
+ * controller and their opponent alike, and for a spectator.
+ */
+describe('planeswalker visibility through masking', () => {
+  const liliana: CardDefinition = {
+    id: 'lili',
+    name: 'Liliana of the Veil',
+    types: ['planeswalker'],
+    cost: { generic: 1, B: 2 },
+    loyalty: 3,
+    activated: [{ cost: { loyalty: 1 }, timing: 'sorcery', label: '+1: Each player discards a card.', effects: [] }],
+  };
+
+  function stateWithWalker(): GameState {
+    const state = makeState();
+    const walker: CardInstance = {
+      ...inst(700, 'B', 'battlefield'),
+      def: liliana,
+      counters: { loyalty: 3 },
+    };
+    state.battlefield = [...state.battlefield, walker];
+    return state;
+  }
+
+  it.each(['A', 'B'] as const)('shows seat %s the walker, its loyalty and its abilities', (seat) => {
+    const view = maskStateForSeat(stateWithWalker(), seat);
+    const walker = view.battlefield.find((c) => c.instanceId === 700);
+    expect(walker, 'the walker is missing from the masked battlefield').toBeDefined();
+    expect(walker?.counters.loyalty, 'loyalty is public and must survive masking').toBe(3);
+    expect(walker?.def.types).toContain('planeswalker');
+    // The loyalty-ability MENU is derived from `def.activated` + the server's legal
+    // actions; a masked-away ability list would leave the menu permanently empty.
+    expect(walker?.def.activated).toHaveLength(1);
+    expect(walker?.controller).toBe('B');
+  });
+
+  it('shows a spectator the same public walker', () => {
+    const walker = maskStateForSpectator(stateWithWalker()).battlefield.find((c) => c.instanceId === 700);
+    expect(walker?.counters.loyalty).toBe(3);
+  });
+});
+
 // --- pending-choice masking ------------------------------------------------------
 
 /** A's hidden card ids, B's hidden card ids (see `makeState`). */
