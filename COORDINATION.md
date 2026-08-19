@@ -108,8 +108,45 @@ throughput (games/sec) from regressing.
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
 | feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
 
+| fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-19 worker: `fix/ai-sees-continuous-effects` 🚧 PUSHED — **the pilots were evaluating the
+  PRINTED card, and now they evaluate the board.** `packages/ai` called core's `effectivePower` /
+  `effectiveToughness` / `effectiveKeywords` with **no continuous aggregate in ~40 places**. A bare
+  accessor answers printed + counters, so: a **Tarmogoyf evaluated as 0/0**, **every anthem was
+  invisible**, **Auras and Equipment were invisible**, and `canBlockByEvasion` read `def.keywords` while
+  the rules path read the granted set. Fixed by a seam, not by 40 edits: `board-stats.ts` requires the
+  index, the package no longer imports the bare accessors at all, and `bare-stats.test.ts` fails the
+  build if a single-argument call reappears. `tactical.ts` / `assessPosition`'s `index` went from
+  optional to **required**, which is what closed the evaluator's own hole.
+
+  📊 **BEFORE/AFTER, all re-measured on this box against a separate `origin/main` worktree, none
+  estimated.** Full detail in DESIGN §3.4f.
+  - **Strength: no measurable change.** Fixed vs OLD heuristic, head to head, seat+play rotated,
+    paired seeds: pooled **49.9% of 9,000 games, 95% CI [48.9%, 50.9%]** — the interval straddles 50%.
+    Per matchup: aggro 50.5% [48.7, 52.3]; ramp 51.3% [49.5, 53.1]; control 47.8% [46.0, 49.6], which is
+    **1,435–1,436 on decisive games** and is depressed only by its 129 timeout draws (§3.4e's
+    wins/**games** caveat). It ships because it is a **bug fix, not a tuning choice** — and because this
+    pool contains **no anthem**, so most of what it corrects has nothing to act on yet.
+  - **Gauntlet, Mono-Red Aggro, 200 games/deck, seed 4242:** 29.9% [27.6, 32.4] → **30.9%** [28.5, 33.3];
+    the UW Control cell moved most (27.5% → 32.5%) and the mono-vs-mono cell is unchanged at 16.5%.
+  - **`hybrid` vs `heuristic`:** aggro n=120 55.8% → **55.0%** [46.1, 63.6]; control n=80 48.8% →
+    **45.0%** [34.6, 55.9]. Both still include 50%; both sides of that comparison moved together,
+    because the heuristic is the hybrid's own prior.
+  - **Throughput (rule 7): parity.** Allocation **93 vs 96 scavenges over 60 games** (marginally
+    *fewer*); paired CPU time over the identical 4,000 captured positions, 3 runs: **0.978× / 1.009× /
+    0.990×**. Parity was paid for, not assumed — the index is built AFTER the early returns that never
+    read a stat, `cardValueContext` takes a prebuilt index, and the battlefield selectors became
+    closure-free loops.
+
+  ⚠️ **For whoever measures anything on this box next: wall clock here is worthless.** The same build
+  read 39–87 games/sec within an hour, and a wall-clock "interleaved" comparison of two identical
+  arms swung between 0.85× and 1.31×. Use CPU time (`process.cpuUsage`) or scavenge counts and pair
+  everything. Two of the three re-measured tables above would have supported an entirely false claim
+  if read from a single wall-clock run.
 
 - 2026-08-18 worker: `fix/keyword-sweep-and-mana-templates` 🚧 PUSHED — **the census's §2 bug is
   fixed and MEASURED: 193 → 228 / 2100 playable (9.2% → 10.9%).** Two things worth reading before
