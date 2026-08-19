@@ -167,6 +167,9 @@ describe('each shipped attachment says what its printed line says', () => {
     ['Mask of Avacyn', 1, 2, ['hexproof']], // "gets +1/+2 and has hexproof."
     ['Loxodon Warhammer', 3, 0, ['trample', 'lifelink']], // "+3/+0 and has trample and lifelink."
     ['Sword of Vengeance', 2, 0, ['firstStrike', 'vigilance', 'trample', 'haste']],
+    ['Darksteel Axe', 2, 0, []], // "Equipped creature gets +2/+0." (the Equipment itself is indestructible)
+    ['Darksteel Plate', 0, 0, ['indestructible']], // "Equipped creature has indestructible."
+    ['Whispersilk Cloak', 0, 0, ['unblockable', 'shroud']], // "can't be blocked and has shroud."
   ];
 
   it('covers every attachment in the pool — a new card cannot slip in unread', () => {

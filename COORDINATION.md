@@ -110,11 +110,48 @@ throughput (games/sec) from regressing.
 | feat/you-may-and-trigger-templates | worker | packages/core (card.ts `basic`/`entersTappedUnlessRevealed`/`canRevealForUntapped`, choices.ts CardFilter P/T bounds, triggers.ts +5 TriggerEvents + `TriggerSubject`, internal/triggers-runtime.ts subject resolver, engine.ts reveal-land question + its answer branch, index.ts +2 exports, conditional-tapland.test.ts), packages/cards (primitives `mayEffects` + loseLife `whichPlayer`, choice-primitives tapPermanents untap/excludeTypes, compile/{rules,compile,types}.ts + NEW compile/you-may-and-triggers.test.ts, data/pool.ts basics only), packages/sim (paired-arms-config classification only), apps/web/src/lib/about/mechanics.ts (+6 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 | feat/indestructible-and-blocking | worker | packages/core (card.ts KeywordFlags +3, internal/{sba,combat,stats,continuous}.ts, NEW indestructible.test.ts, blocking-restrictions.test.ts extended), packages/cards (primitives.ts destroy exemption + NEW grantKeywordToYoursUntilEndOfTurn, index.ts, compile/rules.ts +4 rules & 1 hint reword & 2 generalised rules, compile.test.ts reword, NEW indestructible-and-blocking.test.ts), packages/ai (heuristic.ts, effect-value.ts, NEW indestructible-blocking-pilot.test.ts), packages/sim/src/paired-arms-config.ts (+1 classification), apps/web/src/lib/about/mechanics.ts (+4 witnesses), DESIGN §3.17 | 🚧 PUSHED, not merged |
 
+| feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
+  every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine
+  systems had shipped with almost nothing in the pool printing them (no flashback, {X}, kicker, scry,
+  surveil, mill, protection or ward; one planeswalker). Pool-only — **no meta deck was touched, so
+  every recorded gauntlet baseline in DESIGN §3.4a is unmoved.**
+
+  Method: candidate NAMES only (`expansion-candidates.json`); the compiler's `'complete'` verdict is
+  the sole gate. Nothing hand-authored. Now represented: scry (23), surveil (13), mill (5), printed
+  flashback (21, incl. an {X} flashback cost), {X} (10), kicker (4), modal spells (15), protection
+  (8), ward (8), +1/+1 counters (11), and a 2nd planeswalker (Samut, Tyrant Smasher — the ONLY other
+  walker in Magic whose every printed line compiles; I compiled all 337).
+
+  ⚠️ **Two defects the new cards exposed** — both fixed here, both worth knowing:
+  1. `addCounters` mutated `CardInstance.counters` in place. That record is the shared FROZEN
+     `NO_COUNTERS` for any permanent with none, so the FIRST +1/+1 counter on anything the engine
+     created threw "object is not extensible". Nine counter tests were green because every one built
+     its instances by hand. If you touch counters, replace the record — never write into it.
+  2. `fidelity.test.ts` kept a hand-copied list of core's target restrictions and had gone stale
+     ("Destroy target artifact" failed the audit). It now calls core's `isTargetRestriction`.
+
+  Still unrepresented, each MEASURED against every printed card with the mechanic: multikicker 0/19
+  (kick-count derived values), emblems 0/90 (no emblem BODY compiles), modal DFCs 0/100 (the land
+  face's pay-3-life tapland clause), battles 0/36 (Siege cast path + no defense in the index),
+  indestructible + alternative costs (in flight elsewhere). They are asserted ABSENT in
+  `pool-mechanics.test.ts` with their reasons, so whoever closes one gets told by the suite.
+
+  Corpus coverage, same cached corpus: **229/2100 (10.9%)** at branch point → **307** after
+  indestructible + the you-may/trigger templates → **328/2100 (15.6%)** after alternative costs. None
+  of that movement is mine — this branch adds no compiler rule; I re-ran the generator after each
+  merge and the pool went **309 → 331 → 357**. Indestructible, cycling, madness and buyback all have
+  pool cards now, so a sibling that widens the compiler can expect me to have picked it up.
+
+  ⚠️ **`npm run verify` does not type-check.** A generator bug emitted a long label as a
+  character-indexed object; the whole suite AND verify stayed green while `npm run build` failed. If
+  you touch generated data, run the build too.
 
 - 2026-08-19 worker: `fix/ai-sees-continuous-effects` 🚧 PUSHED — **the pilots were evaluating the
   PRINTED card, and now they evaluate the board.** `packages/ai` called core's `effectivePower` /

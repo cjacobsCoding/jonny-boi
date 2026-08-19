@@ -1659,6 +1659,73 @@ step), a **madness cost printed in words** ("Madness—Pay six {C}"), a **cyclin
 expressible filter**, and **aftermath**, which is a split card and needs the `//` type rather than
 anything in this section.
 
+### 3.20 The pool a player can actually SEE — every shipped mechanic represented — ✅ done
+Sixteen engine systems shipped in two days and the built-in card pool printed almost none of them: no
+card with flashback, {X}, kicker, scry, surveil, mill, protection or ward, and exactly one
+planeswalker. Every one of those systems was reachable only by importing a decklist — which is
+another way of saying a player using the app as shipped could not see the work at all. That is the
+rule this section closes: **a feature nobody can see is not done.**
+
+The pool is **191 → 309 cards**, and the growth is a DATA edit, not an engine change: names go into
+`packages/cards/data/expansion-candidates.json`, `scripts/build-expansion.ts --fetch` resolves them
+against Scryfall, and the second (offline) pass admits only the ones the Oracle compiler reports
+`'complete'`. Nothing was hand-authored to fill a gap, because a hand-authored card would have to
+match the compiler anyway — `fidelity.test.ts` re-derives every pool card from its printed text.
+
+What the pool now shows, per mechanic: **scry** (Opt, Preordain, Serum Visions, ten Theros temples,
+Castle Vantress, Zhalfirin Void), **surveil** (Consider, Notion Rain, the ten Ravnica surveil lands),
+**mill** (Tome Scour, Glimpse the Unthinkable), **printed flashback** (21 cards — Think Twice,
+Firebolt, Lingering Souls, Call of the Herd — including Devil's Play, whose flashback cost prints
+its own {X}), **{X}** (Blaze, Mind Spring, Condescend, Death Grasp), **kicker** (Firebending Lesson,
+Tolarian Geyser), **modal spells** (15, the charm cycle), **protection** (the knights: White, Black,
+Silver, Blood, Paladin en-Vec, Mirran Crusader), **ward** (Tomakul Honor Guard, Waterfall Aerialist,
+Archive Dragon), **+1/+1 counters** (Sprite Dragon, Electrostatic Infantry, Unspeakable Symbol), and
+a **second planeswalker** (Samut, Tyrant Smasher — the only other walker in all of Magic whose every
+printed line compiles today).
+
+`packages/cards/src/pool-mechanics.test.ts` is the guard: an executable inventory that FAILS when a
+mechanic loses its last card, plus a real seeded game per mechanic proving the card plays it (Firebolt
+is recast from the graveyard and then exiled; Blaze deals the X that was paid; Abrade's mode is chosen
+at cast; Path to Exile cannot be aimed at Black Knight; ward taxes the caster and counters the spell
+when they decline).
+
+**Six systems still have no honest card, each with a measured reason** (every printed card carrying the
+mechanic was compiled; the accept count is zero): **multikicker** (0/19 — every one spends the kick
+COUNT, a derived value with no template), **emblems** (0/90 — the wrapper compiles, no emblem BODY
+does), **modal DFCs** (0/100 — the land face's "enters tapped unless you pay 3 life" has no
+template), **battles** (0/36 — Sieges are cast by a path the engine lacks), **indestructible** and
+**alternative costs** (both still in flight). They are listed in the test with their reasons and
+asserted ABSENT, so the day one becomes representable the suite says so.
+
+Two defects fell out of actually playing the new cards, which is the point of the exercise:
+- **`addCounters` threw on every real permanent.** It wrote into `CardInstance.counters` in place, and
+  that record is the shared FROZEN `NO_COUNTERS` object for anything with no counters — so the first
+  +1/+1 counter on a permanent the ENGINE created died with "object is not extensible". Nine counter
+  tests were green because they all built their instances by hand (each with its own `{}`). No pool
+  card had ever put a counter on an engine-created permanent.
+- **The fidelity audit kept its own copy of core's target-restriction list**, which had gone stale:
+  it failed "Destroy target artifact" for declaring `'artifact'`, a restriction core has enforced
+  since the attachment work. It now asks core's own `isTargetRestriction`.
+
+The corpus measurement is stated for honesty, because this section did not move it: the pool grew by
+using rules the compiler already had. Measured on the same cached corpus, it was **229 / 2100 (10.9%)**
+when this branch started and is **307 / 2100 (14.6%)** after merging §3.17's indestructible work and
+the you-may/trigger templates — all of that is compiler width, none of it is this section. This section
+widened what the SHIPPED POOL shows; widening the compiler is §3.11's backlog.
+
+Each sibling branch that landed while this one was out widened the pool again on the same one-line
+rule — names in, `'complete'` verdicts out. §3.17 gave indestructible its cards (the Darksteel family
+and the ten artifact Bridges, pool 309 → 331); §3.19 gave the alternative costs theirs (the cycling
+lands, Fiery Temper's madness, Capsize's buyback, 331 → **357**). Of the twenty-two mechanics the
+inventory audits, four still have no honest card. On the same cached corpus, compiler coverage went
+229 → 307 → **328 / 2100 (15.6%)** across those merges; none of that movement is this section's, which
+adds no compiler rule.
+
+Two more defects surfaced doing it — the generator serialized any string too long for one line as a
+character-indexed object (nothing had printed a label that long until the fetchlands compiled), and
+that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
+never type-checks.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

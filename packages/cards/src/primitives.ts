@@ -821,20 +821,34 @@ export const addCounters: EffectPrimitive = (ctx) => {
   // be inspected ("does it have a -1/-1 counter?") and the two kinds annihilate.
   const kind = amount < 0 ? MINUS_ONE_COUNTER : PLUS_ONE_COUNTER;
   const magnitude = Math.abs(amount);
-  target.counters[kind] = (target.counters[kind] ?? 0) + magnitude;
+  // REPLACE the record, never write into it — `CardInstance.counters` is shared
+  // and FROZEN while a permanent has no counters (`NO_COUNTERS`), so an in-place
+  // write threw "object is not extensible" for the very first counter put on any
+  // permanent that entered the battlefield through the normal cast path. Only
+  // hand-built test instances (which carry their own `{}`) survived it, which is
+  // why a suite full of counter tests never saw it: the pool had no card that
+  // put a counter on a permanent the ENGINE created.
+  let counters: Record<string, number> = {
+    ...target.counters,
+    [kind]: (target.counters[kind] ?? 0) + magnitude,
+  };
   ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
 
   // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has them removed
   // in pairs as a state-based action. Without this the counts drift apart while
   // the net stays right, so "remove a -1/-1 counter" later finds one that should
   // have been annihilated turns ago.
-  const plus = target.counters[PLUS_ONE_COUNTER] ?? 0;
-  const minus = target.counters[MINUS_ONE_COUNTER] ?? 0;
+  const plus = counters[PLUS_ONE_COUNTER] ?? 0;
+  const minus = counters[MINUS_ONE_COUNTER] ?? 0;
   const annihilated = Math.min(plus, minus);
   if (annihilated > 0) {
-    target.counters[PLUS_ONE_COUNTER] = plus - annihilated;
-    target.counters[MINUS_ONE_COUNTER] = minus - annihilated;
+    counters = {
+      ...counters,
+      [PLUS_ONE_COUNTER]: plus - annihilated,
+      [MINUS_ONE_COUNTER]: minus - annihilated,
+    };
   }
+  target.counters = counters;
 };
 
 /**
