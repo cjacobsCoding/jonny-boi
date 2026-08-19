@@ -29,7 +29,7 @@ import type {
   TriggerCondition,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION, formatManaCost, MANA_COLORS } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION, PLUS_ONE_COUNTER, formatManaCost, MANA_COLORS } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols, splitCostSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
@@ -144,6 +144,7 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  * better than the printed card.
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
+/** "target creature you control" — never widened to any creature on the table. */
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
@@ -155,6 +156,68 @@ const PERMANENT_TARGET: TargetRestriction = 'permanent';
  * it against the acting player's own graveyard; see `targeting.ts`.
  */
 const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveyard';
+
+
+/**
+ * The controller scope + {@link CardFilter} a printed "each …" group phrase names,
+ * or `null` when the phrase says something the filter vocabulary cannot express.
+ *
+ * This is the whole reason a group counter rule is safe: "put a +1/+1 counter on
+ * each **attacking** creature you control" and "on each creature you control"
+ * differ by one word and by a lot of power, so a phrase that is not exactly
+ * reproducible must reject the line rather than widen to "every creature".
+ *
+ * A SUBTYPE qualifier ("each Vampire you control") is accepted only when the card
+ * being compiled prints that subtype itself — the typal-lord shape. That keeps
+ * the compiler from inventing a creature type out of an arbitrary capitalized
+ * word it cannot verify: a card naming a type it does not share stays reported.
+ */
+function groupCreatureScope(
+  phrase: string,
+  ctx: RuleContext,
+): { scope: string; filter: Record<string, unknown> } | null {
+  let text = phrase.trim();
+  let scope = GROUP_SCOPE_ANY;
+  for (const [suffix, named] of Object.entries(GROUP_SCOPE_SUFFIXES)) {
+    if (!text.endsWith(suffix)) continue;
+    text = text.slice(0, -suffix.length).trim();
+    scope = named;
+    break;
+  }
+
+  const filter: Record<string, unknown> = {};
+  // An optional colour word, exactly as the anthem rule reads one.
+  const colorMatch = /^([a-z]+) (.+)$/.exec(text);
+  if (colorMatch && COLOR_WORDS[colorMatch[1] ?? '']) {
+    filter.anyOfColors = [COLOR_WORDS[colorMatch[1] ?? ''] as string];
+    text = colorMatch[2] ?? '';
+  }
+  // An optional card-type adjective ("artifact creature"). The group primitive
+  // already requires a creature, so this narrows rather than widens.
+  const typeMatch = /^([a-z]+) creature$/.exec(text);
+  if (typeMatch) {
+    const type = SPELL_TYPE_WORDS[typeMatch[1] ?? ''];
+    if (!type || type === 'creature') return null;
+    filter.anyOfTypes = [type];
+    text = 'creature';
+  }
+  if (text === 'creature') return { scope, filter };
+
+  // A typal qualifier — accepted only when the compiling card prints it.
+  const printed = ctx.card.typeLine.subtypes.find((sub) => sub.toLowerCase() === text);
+  if (printed === undefined) return null;
+  filter.anyOfSubtypes = [printed];
+  return { scope, filter };
+}
+
+/** The printed tails that name whose permanents a group phrase reaches. */
+const GROUP_SCOPE_SUFFIXES: Readonly<Record<string, string>> = Object.freeze({
+  ' you control': 'you',
+  ' your opponents control': 'opponent',
+  ' an opponent controls': 'opponent',
+});
+/** No controller tail printed ⇒ everybody's, as "each creature" means. */
+const GROUP_SCOPE_ANY = 'any';
 
 /**
  * Every printed modal header, as the COUNT RANGE it means.
@@ -1011,6 +1074,64 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // "…on target creature YOU CONTROL" (Snakeskin Veil). Its own rule rather
+    // than a widened one: `'creature'` would let a pilot grow the opponent's
+    // board, which is a card playing differently from its printed text.
+    id: 'put-counters-on-target-you-control',
+    description: '"Put N +1/+1 counters on target creature you control"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature you control$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, targets: CREATURE_YOU_CONTROL_TARGET },
+      });
+    },
+  },
+  {
+    /**
+     * The whole two-sentence combat trick as ONE rule — "Put a +1/+1 counter on
+     * target creature you control. **It** gains hexproof until end of turn."
+     * (Snakeskin Veil).
+     *
+     * One rule rather than a rule per sentence, because "it" means *the creature
+     * the sentence before targeted*. A standalone "it gains …" rule would be
+     * aimed independently wherever the compiler met it — in a triggered ability
+     * core would aim it at any creature on the table — so the two sentences are
+     * only trustworthy while they are matched together, with a single target
+     * shared by both effects.
+     */
+    id: 'put-counters-then-grant-keyword',
+    description:
+      '"Put N +1/+1 counters on target creature [you control]. It gains KEYWORD[, KEYWORD, and KEYWORD] until end of turn"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature( you control)?\\. ` +
+        `it gains (.+) until end of turn$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      // A LIST of keywords ("reach, trample, hexproof, and indestructible" —
+      // Gaea's Gift, reachable now that `indestructible` is a real flag), read
+      // by the same parser the anthem rule uses: it rejects the whole line on
+      // any word the engine does not model, so a PARTIAL grant — a card playing
+      // weaker than printed — is never emitted.
+      const keywords = parseKeywordList(match[3] ?? '');
+      if (amount === null || keywords === null) return null;
+      const restriction = match[2] ? CREATURE_YOU_CONTROL_TARGET : CREATURE_TARGET;
+      return effects(
+        { primitive: 'addCounters', params: { amount, targets: restriction } },
+        // The grant deliberately carries NO target of its own: it reads the
+        // target already chosen for the spell, which is what "it" means.
+        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords } },
+      );
+    },
+  },
+  {
     // The same template with -1/-1 counters. Now that the stat layer reads that
     // kind in its own right, this is a faithful compile rather than an
     // approximation stored as a negative +1/+1.
@@ -1040,6 +1161,55 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
       return effects({ primitive: 'addCounters', params: { amount, self: true } });
+    },
+  },
+  {
+    /**
+     * A CONJUNCTION whose second half is a plain "you …" effect — "put a +1/+1
+     * counter on ~ **and you gain 1 life**" (Sunscorch Regent).
+     *
+     * Deliberately narrow. Only a second half beginning "you " or "draw " is
+     * joined, because such a half is self-contained: it speaks about the
+     * controller, not about whatever the first half touched, so running the two
+     * in order is exactly what the printed sentence says. A conjunction like "…and it gains
+     * flying" refers BACK to the first half's object, and joining those would be
+     * the kind of guess this table exists to refuse — so it stays reported.
+     *
+     * Both halves are compiled TARGET-FREE, which is what makes the composition
+     * safe in a triggered ability as well as in a spell: a half needing a chosen
+     * target is rejected rather than compiled into a silent no-op.
+     */
+    id: 'effect-and-you-effect',
+    description: '"EFFECT and you EFFECT" (two independent halves in one sentence)',
+    pattern: /^(.+?) and ((?:you|draw) .+)$/,
+    build(match, ctx) {
+      const first = ctx.compileEffectClause(match[1] ?? '', { targetFree: true });
+      if (first === null || first.length === 0) return null;
+      const second = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
+      if (second === null || second.length === 0) return null;
+      return { effects: [...first, ...second] };
+    },
+  },
+  {
+    // The GROUP form — "put a +1/+1 counter on EACH creature you control".
+    // Gavony Township, Steel Overseer and Cathars' Crusade all print it, and it
+    // is the same `addCounters` primitive with a scope + filter instead of a
+    // target, so the counters are the same real counters the stat layer reads.
+    id: 'put-counters-on-each',
+    description: '"Put N +1/-1 counters on each CREATURE-GROUP"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) (\\+1/\\+1|-1/-1) counters? on each (.+)$`,
+    ),
+    build(match, ctx) {
+      const magnitude = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (magnitude === null) return null;
+      const group = groupCreatureScope(match[3] ?? '', ctx);
+      if (group === null) return null;
+      const amount = match[2] === '-1/-1' ? -magnitude : magnitude;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, each: true, scope: group.scope, filter: group.filter },
+      });
     },
   },
   {
@@ -2164,27 +2334,47 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'trigger-permanent-enters-or-dies',
     description:
-      '"Whenever a creature you control [with power N or greater] enters/dies, BODY" (Ajani\'s Welcome, Elemental Bond, Grave Pact)',
-    // Both halves of the same family: a board-watching trigger scoped by WHOSE
-    // permanent it is and narrowed by a printed `CardFilter`. The filter is the
-    // fidelity: a trigger that dropped "with power 3 or greater" would fire off
-    // every token, which is a strictly better card.
+      '"Whenever [another] [COLOR] TYPE [you control / an opponent controls] [with power N or greater] enters/dies, BODY" — incl. landfall, constellation, and "~ or another creature dies"',
+    // The whole board-watching family in ONE rule, because it is one concept:
+    // an arrival or a death, scoped by WHOSE permanent it is and narrowed by a
+    // printed `CardFilter`. Two rules for it is how the engine ended up with two
+    // names for the same event in the first place.
     //
-    // "ANOTHER creature you control" deliberately does NOT match. The engine has
-    // no self-exclusion on these conditions, and a source that triggered off its
-    // own entry when the card says "another" is a different card, so those lines
-    // keep reporting.
+    // Every part is optional except the type word, and each optional part is a
+    // real fidelity knob:
+    //   - "another"  → `excludeSelf`; a source that triggered off its own entry
+    //                  when the card says "another" is a different card.
+    //   - the colour word and the "with power N or greater" bound → the filter;
+    //                  dropping either fires off permanents the card ignores.
+    //   - an ABSENT controller tail → `who: 'any'`, which is what "whenever
+    //                  another creature enters" (Soul Warden) means. Reading the
+    //                  absent tail as "you control" halves the arrivals it sees.
+    // The ability words landfall and constellation are the same trigger with a
+    // name printed in front of it (CR 207.2c).
     pattern: new RegExp(
-      `^whenever an? (${Object.keys(SPELL_TYPE_WORDS).join('|')}) (you control|an opponent controls)(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))? (enters|dies), (.+)$`,
+      `^(?:landfall — |constellation — )?whenever ` +
+        `(?:(~ or another) creature|(another )?(?:an? )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?([a-z]+)` +
+        `( you control| an opponent controls| your opponents control)?)` +
+        `(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))? (enters|dies), (.+)$`,
     ),
     build(match, ctx) {
-      const type = SPELL_TYPE_WORDS[match[1] ?? ''];
-      if (!type) return null;
-      const who = match[2] === 'you control' ? 'you' : 'opponent';
-      const filter = searchFilterFrom(match[1] ?? '', match[3], match[4], match[5]);
+      // "~ or another creature dies" (Cordial Vampire) says EVERY creature's
+      // death, this permanent's own included — so no scope and no self-exclusion.
+      const selfOrAnother = match[1] !== undefined;
+      const noun = selfOrAnother ? 'creature' : (match[4] ?? '');
+      const filter = searchFilterFrom(noun, match[6], match[7], match[8]);
       if (filter === null) return null;
-      const event = match[6] === 'enters' ? 'permanentEnters' : 'permanentDies';
-      const body = match[7] ?? '';
+      const colorWord = match[3]?.trim();
+      if (colorWord !== undefined) {
+        const color = COLOR_WORDS[colorWord];
+        if (color === undefined) return null;
+        filter.anyOfColors = [color];
+      }
+      const tail = (match[5] ?? '').trim();
+      const who = selfOrAnother || tail === '' ? 'any' : tail === 'you control' ? 'you' : 'opponent';
+      const another = !selfOrAnother && (match[2] ?? '').trim() === 'another';
+      const event = match[9] === 'enters' ? 'permanentEnters' : 'permanentDies';
+      const body = match[10] ?? '';
       const optional = body.startsWith('you may ');
       const inner = optional ? body.slice('you may '.length) : body;
       const compiled = ctx.compileTriggerBody(inner);
@@ -2194,9 +2384,14 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       return {
         triggers: [
           {
-            condition: { on: event, who, permanentFilter: filter },
+            condition: {
+              on: event,
+              who,
+              permanentFilter: filter,
+              ...(another ? { excludeSelf: true } : {}),
+            },
             effects: effectRefs,
-            label: `${match[1]} ${match[6]}: ${body}`,
+            label: `${another ? 'another ' : ''}${noun} (${who}) ${match[9]}: ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
           },
         ],
@@ -2217,6 +2412,75 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
           condition,
           effects: body,
           label: `Cast ${describeSpellFilter(condition)}: ${match[2] ?? ''}`,
+        })),
+      };
+    },
+  },
+  {
+    id: 'trigger-begin-combat',
+    description: '"At the beginning of combat on your turn, BODY"',
+    pattern: /^at the beginning of combat on your turn, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'beginCombat', who: 'you' },
+        match[1] ?? '',
+        `Begin combat: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-gain-life',
+    description: '"Whenever you gain life, BODY"',
+    pattern: /^whenever you gain life, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'gainLife', who: 'you' },
+        match[1] ?? '',
+        `Gain life: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-combat-damage-to-player',
+    description: '"Whenever ~ deals combat damage to a player, BODY"',
+    pattern: /^whenever ~ deals combat damage to a player, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'combatDamageToPlayer' },
+        match[1] ?? '',
+        `Combat damage to a player: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    // "Whenever a player casts a spell" / "Whenever an opponent casts a spell" —
+    // the same cast trigger with a different `who`, which core has always had.
+    // Only the printed shapes were missing, so Managorger Hydra and Sunscorch
+    // Regent reported despite the machinery being complete.
+    id: 'trigger-cast-spell-by',
+    description: '"Whenever a player/an opponent casts a(n) [TYPE] spell, BODY"',
+    pattern: /^whenever (a player|an opponent) casts an? (?:([a-z ]+?) )?spell, (.+)$/,
+    build(match, ctx) {
+      const who = match[1] === 'an opponent' ? 'opponent' : 'any';
+      const restriction = match[2];
+      // With no type word the trigger watches every spell; with one, it reuses
+      // the same filter table the "whenever you cast" rule does — and rejects a
+      // phrase that table does not know rather than dropping the restriction.
+      const conditions: readonly TriggerCondition[] =
+        restriction === undefined
+          ? [{ on: 'castSpell', who }]
+          : (spellFiltersFor(restriction)?.map((condition) => ({ ...condition, who })) ?? []);
+      if (conditions.length === 0) return null;
+      const body = ctx.compileEffectClause(match[3] ?? '', { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return {
+        triggers: conditions.map((condition) => ({
+          condition,
+          effects: body,
+          label: `${match[1] === 'an opponent' ? 'Opponent casts' : 'Any player casts'} ${describeSpellFilter(condition)}: ${match[3] ?? ''}`,
         })),
       };
     },
@@ -2267,6 +2531,19 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       if (amount === null) return null;
       // The permanent's own ETB script counters itself.
       return { effects: [{ primitive: 'addCounters', params: { amount, self: true } }] };
+    },
+  },
+  {
+    // "~ enters with X +1/+1 counters on it" (Stonecoil Serpent). Gated on the
+    // card actually printing {X} in its cost, exactly like every other X rule:
+    // an X defined by a "where X is …" clause is a different number, and
+    // reading it as the cast-time X would size the creature wrongly.
+    id: 'enters-with-x-counters',
+    description: '"~ enters with X +1/+1 counters on it"',
+    pattern: /^~ enters(?: the battlefield)? with x \+1\/\+1 counters on it\.?$/,
+    build(_match, ctx) {
+      if (!cardHasXCost(ctx)) return null;
+      return { effects: [{ primitive: 'addCounters', params: { amount: CHOSEN_X_PARAM, self: true } }] };
     },
   },
   {
@@ -2625,6 +2902,47 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       return { statics: [ability] };
     },
   },
+  {
+    /**
+     * A static whose reach depends on COUNTERS — "Creatures you control with
+     * +1/+1 counters on them can't be blocked" (Herald of Secret Streams),
+     * "Each creature you control with a +1/+1 counter on it has trample"
+     * (Duskshell Crawler).
+     *
+     * Counters are instance state, not a characteristic any static can change,
+     * so the filter reads them without the layer-dependency loop that keeps
+     * every other non-printed characteristic out of `StaticAffects`.
+     */
+    id: 'static-counters-grant',
+    description: `"Creatures you control with +1/+1 counters on them have KEYWORD / can't be blocked"`,
+    pattern: new RegExp(
+      `^(?:each creature|creatures) you control with (?:a |one or more )?\\+1/\\+1 counters?` +
+        `(?: on (?:it|them))? (?:(?:has|have) ${KEYWORD_TOKEN}|can'?t be blocked)$`,
+    ),
+    build(match, ctx) {
+      // Only a permanent radiates a static; an instant printing this shape would
+      // be a one-shot effect this rule does not implement.
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
+      if (!isPermanent) return null;
+      const keywords = match[1] === undefined ? { unblockable: true } : keywordFlag(match[1]);
+      if (keywords === null) return null;
+      return {
+        statics: [
+          {
+            affects: {
+              anyOfTypes: ['creature'],
+              controller: 'you',
+              hasCounterKind: PLUS_ONE_COUNTER,
+            },
+            keywords,
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
   // --- attachments: Auras and Equipment (one system, two printed forms) --------
   //
   // The three rules below are the whole of "auras and equipment" at the compiler
@@ -2796,7 +3114,21 @@ const MANA_ALTERNATIVE_SEPARATOR = /,? or |, /;
  * {@link ABILITY_WORD_PREFIX} lets a rule match the line the label sits on
  * (Mox Opal's "Metalcraft — {T}: Add one mana of any color").
  */
-const ABILITY_WORD_LIST: readonly string[] = ['revolt', 'morbid', 'delirium', 'threshold', 'metalcraft'];
+const ABILITY_WORD_LIST: readonly string[] = [
+  'revolt',
+  'morbid',
+  'delirium',
+  'threshold',
+  'metalcraft',
+  // Landfall and constellation label the permanent-enters trigger line that
+  // `trigger-permanent-enters-or-dies` compiles. Leaving them out would report a
+  // keyword one line after implementing the ability it labels — the sweep guard's
+  // own rule: a keyword is skipped only when the line it labels actually compiled.
+  // They live in this LIST rather than only in the exported set so the ability-word
+  // regex prefix below sees them too; one list, one definition.
+  'landfall',
+  'constellation',
+];
 
 /** An optional printed ability-word label, for patterns that must see past one. */
 const ABILITY_WORD_PREFIX = `(?:(?:${ABILITY_WORD_LIST.join('|')})\\s*[\\u2014\\u2013-]\\s*)?`;
@@ -3381,7 +3713,25 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bsacrifice\b/,
     missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
   },
-  { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'a counters template the compiler does not recognize yet' },
+  {
+    // COUNTERS ARE NOT A MISSING SYSTEM. `CardInstance.counters` exists, the
+    // stat pipeline reads +1/+1 and -1/-1 at CR 613.3 layer 7d, `addCounters`
+    // puts them on one creature or on a whole filtered group, a static can read
+    // "with a +1/+1 counter on it", and the trigger vocabulary now covers ETB,
+    // attacks, `permanentEnters`/`permanentDies` (with a controller scope, a
+    // `CardFilter` and the printed word "another"), life gain, combat damage to
+    // a player, begin-combat and the step-beginning triggers. What lands here
+    // is a counters TEMPLATE with no rule — and, named so nobody re-builds
+    // finished work: phasing, DOUBLING counters, proliferate
+    // (needs a chooser over every permanent and player with a counter), counter
+    // kinds the stat layer does not read (charge/quest/time/growth/keyword
+    // counters), "each ATTACKING creature", "NONTOKEN" filters (instances carry
+    // no token flag), once-per-turn trigger limiters, granting a triggered
+    // ability until end of turn, and removing a counter as an activation cost
+    // (`ActivationCost` has no counter component).
+    pattern: /\bcounters? on\b|\b\+1\/\+1 counter/,
+    missingEngineSystem: 'a counters template the compiler does not recognize yet',
+  },
   {
     // TARGETING a card in a graveyard is a real system now
     // ('instantOrSorceryInYourGraveyard' in core's targeting.ts), as is a

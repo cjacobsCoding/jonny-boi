@@ -1299,6 +1299,38 @@ Still open, roughly by how often they block a real decklist:
   *damage divided among targets* ("deals X damage divided as you choose among any number of
   targets" — needs a division the targeting layer cannot express: one spell, several targets, each
   with its own share).
+- ✅ *counters-matter templates* — the census (docs/plans/mechanic-completion-plan.md §3c) measured
+  **117 counters templates blocking 153 cards while the counters machinery was already complete**:
+  `CardInstance.counters`, the layer-7d stat pipeline, and the `addCounters` primitive all worked;
+  no printed template could reach them. Closed as rule-table data plus five small seam extensions:
+  the **group form** of `addCounters` (`each` + a controller `scope` + the shared `CardFilter`, so
+  "put a +1/+1 counter on each creature you control" counts exactly the printed set and a phrase the
+  filter cannot express — "each **attacking** creature" — rejects the line instead of widening it);
+  three new **trigger conditions** (`beginCombat`, `gainLife`, `combatDamageToPlayer`); cast triggers
+  with `who` = any/opponent; and `StaticAffects.hasCounterKind`, the one non-printed characteristic a
+  static filter may read (counters are instance state no static can change, so there is no
+  layer-dependency loop). The two BOARD-WATCHING conditions this family needed — an arrival and a
+  death — are `permanentEnters` / `permanentDies`, the names §3.17's you-may/trigger work introduced;
+  both branches invented their own names for them and they were **unified to one name per concept at
+  merge time**, with this branch's capabilities kept under those names: `excludeSelf` (the printed
+  word "another"), a colour word in the `permanentFilter`, an absent controller tail meaning
+  `who: 'any'` (Soul Warden), the landfall/constellation ability-word dresses, and the
+  "~ or another creature dies" phrasing. `packages/cards/src/counters-templates.test.ts` plays one
+  game in which a card from each branch watches the same event and asserts both fire, so a re-split
+  of the vocabulary goes red. It also uncovered a real defect: **"~ enters with N +1/+1 counters on it"
+  put on no counters at all** — they are applied as the permanent enters (CR 614.1c), while its own
+  spell is resolving and before the instance reaches the battlefield, and the primitive only looked
+  at the battlefield — so every 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) died
+  on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable** against the census baseline this
+  branch started from, and **328 → 352 (15.6% → 16.8%)** re-measured against `origin/main` (364a4f1) after
+  merging the siblings that landed meanwhile — the counters family itself going from 116 variants /
+  180 card-blocks / 46 sole to 106 / 146 / 38.
+  ⚠️ Still reported, by name: phasing (Slip Out the Back), doubling counters,
+  proliferate (needs a chooser over every permanent and player with a counter), counter kinds the
+  stat layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature",
+  "**nontoken**" filters (instances carry no token flag), once-per-turn trigger limiters, granting a
+  triggered ability until end of turn, and counter-removal activation costs (`ActivationCost` has no
+  counter component).
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
 

@@ -78,6 +78,7 @@ throughput (games/sec) from regressing.
 | feat/attachments | worker | packages/core (attachments+SBA+layers), packages/cards (primitive+compile), packages/ai (heuristic), +1 line in packages/sim/paired-arms-config | 🚧 PUSHED, not merged |
 | spike/engine-representation | worker | spikes/engine-representation (new) + 2 narrow eslint.config.js additions | 🚧 PUSHED, not merged — DECISION SPIKE, no product code |
 | feat/hybrid-search | worker | packages/ai (new: search-stats/evaluator/hybrid/hybrid-config + heuristic policy seam + bench), DESIGN §3.4a | 🚧 PUSHED, not merged |
+| feat/counters-templates | worker | packages/cards compile/rules.ts + primitives.ts, packages/core triggers.ts/statics.ts, apps/web about/mechanics.ts (1 entry), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | feat/pilot-relative-verdicts | worker | apps/web ONLY (lib/sim/pilots+history-store+protocols+run/plan/execute, lab panels, LabView/MatchView), DESIGN §3.7a | 🚧 PUSHED, not merged |
 | perf/core-hotpath | worker | packages/core (mana-plan.ts + new mana-plan.test.ts + bench/engine-alloc-bench.ts) | 🚧 PUSHED, not merged |
 | feat/tree-reuse | worker | packages/ai (new: tree-reuse.ts + tests; hybrid/hybrid-config/search-stats/index/bench), DESIGN §3.4b | 🚧 PUSHED, not merged — stacks on feat/hybrid-search |
@@ -224,6 +225,57 @@ _Append dated notes here; keep them short. Newest at top._
   yet", "an 'Activate only if…' CONDITION the compiler cannot read yet"). Only the spend restriction
   and the tap-another-permanent cost still read as system work. **Anyone re-running the coverage
   audit will see the mana family shrink accordingly — that is the fix, not a regression.**
+- 2026-08-19 worker: `feat/counters-templates` 🚧 PUSHED — **the counters-matter family**
+  (mechanic-completion-plan §3c: 117 templates, 153 card-blocks). It was never a missing system:
+  `CardInstance.counters`, the layer-7d stat pipeline and `addCounters` all worked and nothing
+  printed could reach them. Closed as rule-table DATA plus small seam extensions.
+
+  **Measured on the cached 2100-card corpus: 193 → 217** against the census baseline this branch
+  started from, and **328 → 352 (15.6% → 16.8%)** re-measured against `origin/main` (364a4f1) after
+  merging it — the counters family itself going from 116 variants / 180 card-blocks / 46 sole to
+  106 / 146 / 38. Re-run with
+  `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json <out>`.
+
+  Owned files: `packages/cards/src/compile/rules.ts`, `packages/cards/src/primitives.ts`,
+  `packages/core/src/triggers.ts`, `packages/core/src/statics.ts`,
+  `packages/core/src/internal/triggers-runtime.ts` (one line), `apps/web/src/lib/about/mechanics.ts`
+  (one entry), DESIGN §3.11, plus two new test files. ⚠️ `compile/rules.ts` is the most contested
+  file in the repo right now — this branch only ADDS table entries and one hint reword.
+
+  ⚠️ **A real defect fell out of it: "~ enters with N +1/+1 counters on it" put on NO counters.**
+  They are applied as the permanent enters (CR 614.1c) — while its own spell resolves, before the
+  instance is on the battlefield — and `addCounters` only ever looked at the battlefield. The card
+  compiled `'complete'` and then entered with none, so every 0/0 body printed that way (Stonecoil
+  Serpent, Walking Ballista) died to a state-based action on arrival. Fixed.
+
+  New engine seams (all additive, all data-driven): trigger conditions `beginCombat`, `gainLife`
+  and `combatDamageToPlayer`; `StaticAffects.hasCounterKind`, which lets a static read "with a
+  +1/+1 counter on it" (counters are instance state no static can change, so no layer-dependency
+  loop); and the group form of `addCounters` (`each` + `scope` + the shared `CardFilter`).
+
+  ⚠️ **ONE NAME PER CONCEPT — the merge with `feat/you-may-and-trigger-templates`.** Both branches
+  independently added board-watching triggers under DIFFERENT names (`permanentEnters`/`permanentEtb`,
+  `permanentDies`/`creatureDies`, and `endStep` twice). They are unified to **main's names**,
+  `permanentEnters` and `permanentDies`, with THIS branch's capabilities kept under them:
+  `excludeSelf` (the printed word "another" — main's rule used to refuse those lines), a colour word
+  in the `permanentFilter`, an ABSENT controller tail meaning `who: 'any'` (Soul Warden), the
+  landfall/constellation ability-word dresses, and the "~ or another creature dies" phrasing. Main's
+  `TriggerSubject` resolver won over this branch's `TriggerStateView` (it also searches graveyards,
+  which the death event needs) and this branch's `creatureDied.controller` field was REVERTED as
+  redundant. The two compiler rules were merged into main's single
+  `trigger-permanent-enters-or-dies`, and `beginCombat` moved into main's `STEP_FOR_TRIGGER` table.
+  A both-sides play test (`counters-templates.test.ts`, "ONE event per concept") plays one game in
+  which a card from each branch watches the same event and asserts both fire.
+
+  **DEFERRED, with named blockers — do not treat these as unfinished counters work:**
+  phasing (Slip Out the Back), DOUBLING counters, **proliferate** (needs a chooser over every permanent AND player with a counter; the
+  choice kinds cannot express that today — reported, never approximated), counter kinds the stat
+  layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature"
+  (no combat state in a `CardFilter`), "**nontoken**" filters (instances carry no token flag),
+  once-per-turn trigger limiters, granting a triggered ability until end of turn, and removing a
+  counter as an activation cost (`ActivationCost` has no counter component — Devoted Druid).
+
+
 
 - 2026-08-19 worker: `fix/ai-sees-continuous-effects` 🚧 PUSHED — **the pilots were evaluating the
   PRINTED card, and now they evaluate the board.** `packages/ai` called core's `effectivePower` /

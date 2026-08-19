@@ -964,7 +964,11 @@ describe('"Whenever a creature you control enters/dies" - board-watching trigger
     });
   });
 
-  it('REFUSES "another creature you control" - the engine has no self-exclusion here', () => {
+  it('compiles "ANOTHER creature you control" with the self-exclusion flag', () => {
+    // This line used to report, because the condition had no way to say "not
+    // me" and a source triggering off its own entry is a different card. The
+    // counters branch added `excludeSelf` for exactly that word, so the printed
+    // restriction is now carried rather than refused.
     const result = compileCard(
       makeCard({
         name: 'Test Another Watcher',
@@ -974,8 +978,13 @@ describe('"Whenever a creature you control enters/dies" - board-watching trigger
         oracleText: 'Whenever another creature you control enters, you gain 1 life.',
       }),
     );
-    expect(result.status).toBe('incomplete');
-    expect(result.definition.triggers).toBeUndefined();
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.condition).toEqual({
+      on: 'permanentEnters',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'] },
+      excludeSelf: true,
+    });
   });
 
   it("Ajani's Welcome gains life for YOUR creature and not the opponent's", () => {

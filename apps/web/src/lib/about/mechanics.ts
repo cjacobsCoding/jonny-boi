@@ -129,6 +129,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'primitive', id: 'addCounters' },
       },
       {
+        title: 'Counters matter',
+        detail:
+          'The counters-matter family plays as printed: "put a +1/+1 counter on each creature you control" counts exactly the printed set (and refuses a phrase the filter cannot express, like "each ATTACKING creature"), creatures grow off life gain, spells cast, deaths, combat damage and other creatures entering, an {X} creature really enters with X counters on it, and a static can read "creatures you control with +1/+1 counters on them cannot be blocked".',
+        witness: { kind: 'rule', id: 'put-counters-on-each' },
+      },
+      {
         title: 'Player choices during resolution',
         detail:
           'Spells can ask questions mid-resolution — select cards or players, choose modes, confirm a "you may", search the library — and the same mechanism serves the AI, hotseat play and online play.',

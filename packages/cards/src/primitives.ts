@@ -27,6 +27,7 @@
 
 import type {
   CardDefinition,
+  CardFilter,
   CardInstance,
   CardType,
   EffectContext,
@@ -50,6 +51,7 @@ import {
   turnFactHolds,
   isCreature,
   isLegalTarget,
+  matchesCardFilter,
   isPlaneswalker,
   type ManaCost,
   protectionPreventsDamage,
@@ -795,6 +797,14 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * Whose creatures a group counter effect reaches when the printed text does not
+ * say. Every printed "put a counter on each creature …" template this compiler
+ * accepts either says "you control" or names a scope explicitly, so the default
+ * is the common one and is stated here rather than as a bare string literal.
+ */
+const COUNTER_SCOPE_DEFAULT = 'you';
+
+/**
  * "Put N +1/+1 counters on target creature" — a PERMANENT stat change, unlike
  * `pumpUntilEndOfTurn`, which wears off at cleanup.
  *
@@ -805,16 +815,85 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
  * unsupported instead.
  *
  * Params: `amount` (may be negative for -1/-1), `self` (counter the source
- * rather than a target — the "enters with counters on it" template).
+ * rather than a target — the "enters with counters on it" template), and the
+ * group form `each` + `scope` + `filter` ("put a +1/+1 counter on each creature
+ * you control"), which counts every matching creature instead of one target.
  */
 export const addCounters: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount === 0) return;
-  const target = boolParam(ctx, 'self', false)
-    ? selfIfCreature(ctx)
-    : (firstPermanentTarget(ctx) ?? selfIfCreature(ctx));
-  if (!target || !isCreature(target.def)) return;
 
+  // The GROUP form — "put a +1/+1 counter on **each** creature you control".
+  // One primitive rather than a second one because the printed templates differ
+  // only in WHICH creatures are counted, and that is data: a controller scope
+  // plus the shared `CardFilter` the statics layer already speaks.
+  if (boolParam(ctx, 'each', false)) {
+    for (const permanent of eachCounterTarget(ctx)) putCountersOn(ctx, permanent, amount);
+    return;
+  }
+
+  const target = boolParam(ctx, 'self', false)
+    ? enteringOrResidentSelf(ctx)
+    : (firstPermanentTarget(ctx) ?? enteringOrResidentSelf(ctx));
+  if (!target || !isCreature(target.def)) return;
+  putCountersOn(ctx, target, amount);
+};
+
+/**
+ * The source as a counter target — the permanent on the battlefield if it is
+ * already there, otherwise the card CURRENTLY RESOLVING into play.
+ *
+ * The second half is what makes "~ enters with N +1/+1 counters on it" real. It
+ * is a replacement effect (CR 614.1c): the counters are put on as the permanent
+ * enters, which in this engine means while its own spell is resolving and before
+ * `finishSpellResolution` pushes that very instance onto the battlefield. Reading
+ * only the battlefield found nothing at that moment, so every "enters with
+ * counters" card compiled `'complete'` and then entered with none — a 0/0 body
+ * (Stonecoil Serpent, Walking Ballista) died to a state-based action on arrival.
+ */
+function enteringOrResidentSelf(ctx: EffectContext): CardInstance | undefined {
+  const resident = selfIfCreature(ctx);
+  if (resident) return resident;
+  const source = ctx.source;
+  return isCreature(source.def) ? source : undefined;
+}
+
+/**
+ * The creatures a group counter effect ("each creature you control", "each
+ * artifact creature you control", "each Vampire you control") reaches.
+ *
+ * Snapshotted into a list before any counter is put on, for the same reason
+ * `dealDamageToEach` snapshots: the counters go on simultaneously, so a creature
+ * that dies to a -1/-1 counter must not change who else is counted.
+ *
+ * `scope` is the controller relation ('you' — the default — / 'opponent' /
+ * 'any'), and `filter` is the shared {@link CardFilter} vocabulary, so a
+ * qualifier the compiler cannot express in that vocabulary is never emitted at
+ * all rather than being silently widened to "every creature".
+ */
+function eachCounterTarget(ctx: EffectContext): CardInstance[] {
+  const scope = strParam(ctx, 'scope') ?? COUNTER_SCOPE_DEFAULT;
+  const filter = ctx.params.filter as CardFilter | undefined;
+  const chosen: CardInstance[] = [];
+  for (const permanent of ctx.state.battlefield) {
+    if (!isCreature(permanent.def)) continue;
+    if (scope === 'you' && permanent.controller !== ctx.controller) continue;
+    if (scope === 'opponent' && permanent.controller === ctx.controller) continue;
+    if (filter && !matchesCardFilter(permanent, filter)) continue;
+    chosen.push(permanent);
+  }
+  return chosen;
+}
+
+/**
+ * Put `amount` +1/+1 counters (or, when negative, that many -1/-1 counters) on
+ * one permanent, annihilating the pairs CR 704.5q says must not coexist.
+ *
+ * Factored out of {@link addCounters} so the single-target and the "each
+ * creature" forms cannot drift apart on the one piece of rules bookkeeping that
+ * is easy to forget.
+ */
+function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number): void {
   // A negative amount is a -1/-1 counter, stored as its own kind rather than as
   // a negative +1/+1. The arithmetic is the same either way; the difference is
   // that the counters now genuinely EXIST as the card says they do, so state can
@@ -832,7 +911,6 @@ export const addCounters: EffectPrimitive = (ctx) => {
     ...target.counters,
     [kind]: (target.counters[kind] ?? 0) + magnitude,
   };
-  ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
 
   // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has them removed
   // in pairs as a state-based action. Without this the counts drift apart while
@@ -849,6 +927,7 @@ export const addCounters: EffectPrimitive = (ctx) => {
     };
   }
   target.counters = counters;
+  ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
 };
 
 /**
