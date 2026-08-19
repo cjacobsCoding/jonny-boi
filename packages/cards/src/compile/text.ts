@@ -67,6 +67,21 @@ export function parseCount(token: string | undefined): number | null {
  * `./rules` and one in `./compile`, which is precisely the shape a rule gains in
  * one place and not the other.
  */
+/**
+ * The bare symbols of a printed cost run, uppercased: `{X}{R}{R}` becomes
+ * `['X','R','R']`.
+ *
+ * Transcription only, with no opinion about payability — which is exactly why
+ * it is separate from {@link parseManaSymbols}. A caller that CAN pay a symbol
+ * that parser refuses (a flashback cost's `{X}`, whose value is a cast-time
+ * question) partitions the run here first and hands the rest on.
+ */
+export function splitCostSymbols(text: string): string[] {
+  const out: string[] = [];
+  for (const match of text.matchAll(/\{([^}]+)\}/g)) out.push(match[1]!.toUpperCase());
+  return out;
+}
+
 export function parseManaSymbols(text: string): ManaCost | null {
   const cost: Record<string, number> = {};
   for (const match of text.matchAll(/\{([^}]+)\}/g)) {

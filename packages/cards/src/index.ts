@@ -61,7 +61,6 @@ export {
   revealTopCard,
   discardCard,
   returnFromGraveyard,
-  modal,
   returnToHand,
   tapPermanents,
   counterUnlessPaid,
@@ -147,6 +146,9 @@ export {
  * included.
  * The planeswalker system un-stubbed **Liliana of the Veil** — all three loyalty
  * abilities play as printed (each-player discard, the edict, the pile split).
+ * The CAST-TIME modal system un-stubbed **Cryptic Command** — all four modes,
+ * chosen (and aimed) as the spell is cast, per CR 601.2b/c, so the opponent
+ * decides whether to respond already knowing which two halves are coming.
  */
 export const STUBBED_MECHANICS: ReadonlyArray<{
   readonly card: string;
@@ -169,11 +171,5 @@ export const STUBBED_MECHANICS: ReadonlyArray<{
   {
     card: 'Fatal Push',
     missingEngineSystem: 'revolt — a "a permanent you controlled left the battlefield this turn" tracker for the ≤4 mode',
-  },
-  {
-    // Everything Cryptic DOES is faithful; what is early is WHEN it is decided.
-    card: 'Cryptic Command',
-    missingEngineSystem:
-      'modes are chosen on resolution, not at cast: core picks targets at cast with no mode declared, so a mode is offered only when this cast happens to have a legal target for it (needs mode+target selection at cast time)',
   },
 ]);

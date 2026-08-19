@@ -54,7 +54,17 @@ export type DerivedCount =
   | 'creaturesOnBattlefield'
   | 'landsYouControl'
   | 'cardsInYourHand'
-  | 'cardsInYourGraveyard';
+  | 'cardsInYourGraveyard'
+  /**
+   * How many times the spell that produced this effect was KICKED — "for each
+   * time it was kicked" on a multikicker card.
+   *
+   * It is a derived COUNT rather than a param of its own for the reason every
+   * derived value exists: it lands at `intParam`, the chokepoint every numeric
+   * param already reads, so damage, draw, life, counters and token counts all
+   * learn it at once and no primitive changes.
+   */
+  | 'timesThisWasKicked';
 
 /** A numeric param that is computed at resolution instead of printed. */
 export interface DerivedValue {
@@ -134,6 +144,13 @@ export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number
       return ctx.state.players[you].hand.length;
     case 'cardsInYourGraveyard':
       return ctx.state.players[you].graveyard.length;
+    case 'timesThisWasKicked':
+      // Two readings, and both are needed. DURING the spell's own resolution the
+      // count rides the frame (`ctx.kickCount`, with a plain kicker counting as
+      // one). AFTERWARDS — an enters-the-battlefield trigger on the permanent
+      // that spell became — the frame is gone and the count lives on the
+      // instance (`timesKicked`, written as it entered).
+      return ctx.kickCount ?? (ctx.kicked === true ? 1 : (ctx.source.timesKicked ?? 0));
     default:
       return 0;
   }

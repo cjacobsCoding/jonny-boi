@@ -235,42 +235,43 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Cryptic Command',
     types: ['instant'],
     cost: { generic: 1, U: 3 },
-    // "Choose two —": all four printed modes, chosen for real. A mode whose target
-    // is not legal for this cast is not offered (MTG's own rule), so a Cryptic cast
-    // with nothing to counter still plays as the best legal version of itself.
-    // Chosen modes run in PRINTED order, as MTG resolves a modal spell.
-    effects: [
-      {
-        primitive: 'modal',
-        params: {
-          count: 2,
-          modes: [
-            {
-              id: 'counter',
-              label: 'Counter target spell',
-              requires: 'targetSpell',
-              effects: [{ primitive: 'counterSpell' }],
-            },
-            {
-              id: 'bounce',
-              label: "Return target permanent to its owner's hand",
-              requires: 'targetPermanent',
-              effects: [{ primitive: 'returnToHand' }],
-            },
-            {
-              id: 'tapAll',
-              label: 'Tap all creatures your opponents control',
-              effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
-            },
-            {
-              id: 'draw',
-              label: 'Draw a card',
-              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
-            },
-          ],
+    // "Choose two —": all four printed modes, announced AT CAST (CR 601.2b) and
+    // each aimed at cast too (CR 601.2c) — which is the whole card. A Cryptic
+    // whose modes were picked on resolution would let its controller watch the
+    // opponent's response first and then decide whether to counter it; the real
+    // card commits before anybody may respond, and so does this one.
+    //
+    // A mode with no legal target is not on the menu (MTG's own rule), so a
+    // Cryptic cast with an empty stack still plays as the best legal version of
+    // itself. Chosen modes resolve in PRINTED order, each against its own target.
+    modal: {
+      min: 2,
+      max: 2,
+      modes: [
+        {
+          id: 'counter',
+          label: 'Counter target spell',
+          targets: 'spell',
+          effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
         },
-      },
-    ],
+        {
+          id: 'bounce',
+          label: "Return target permanent to its owner's hand",
+          targets: 'permanent',
+          effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+        },
+        {
+          id: 'tapAll',
+          label: 'Tap all creatures your opponents control',
+          effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
+        },
+        {
+          id: 'draw',
+          label: 'Draw a card',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        },
+      ],
+    },
   },
 
   // --- Ritual / ramp -----------------------------------------------------------
