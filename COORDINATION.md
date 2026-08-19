@@ -167,7 +167,6 @@ _Append dated notes here; keep them short. Newest at top._
   side — 227 vs 222 games/sec, ratio **0.978, parity**, with the noisy rounds spanning 0.44–2.65 in
   both directions. One real cost was found and removed on the way: the pilot's cycling policy walked
   the battlefield on every priority decision, and now answers "does any hand card even cycle?" first.
-=======
 - 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
   trigger-timing families, worked in `sole`-descending order off the cached corpus.**
   **Measured: 193 → 248 playable of 2100 (+55).** Re-runnable offline:
