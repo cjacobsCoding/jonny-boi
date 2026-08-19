@@ -1507,7 +1507,8 @@ ability) and a prompt for the madness window, because a player who did not know 
 would stall against a board that refuses every other move.
 
 **Measured** against the cached 2100-card most-played corpus with
-`packages/cards/scripts/coverage-audit.mjs --input <corpus>`: **229 → 250 playable (+21)**, which is
+`packages/cards/scripts/coverage-audit.mjs --input <corpus>`: **+21 playable cards** (229 → 250
+against the main this landed on; re-measured 307 → 328 against a later one), which is
 the census's predicted yield for this system (20 sole-blocked cards) plus one. The forms that still
 report, by name: an **{X} cycling cost** (Shark Typhoon — an activation cost has no answer-and-charge
 step), a **madness cost printed in words** ("Madness—Pay six {C}"), a **cycling word with no

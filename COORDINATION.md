@@ -116,7 +116,8 @@ throughput (games/sec) from regressing.
 _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-19 worker: `feat/alternative-costs` 🚧 PUSHED — **cycling, typecycling/landcycling,
-  buyback and madness, measured at 229 → 250 / 2100 playable (+21)** against the cached corpus, which
+  buyback and madness, measured at +21 cards on the cached 2100-card corpus** (229 → 250 against
+  the main this branch started from; re-measured 307 → 328 against the latest main), which
   is the census's predicted yield for this system plus one. Three things are worth reading before
   anyone touches a cost or a discard.
 
@@ -160,13 +161,15 @@ _Append dated notes here; keep them short. Newest at top._
   cycle this card" triggers** (the `cardCycled` event exists for them; the trigger CONDITION does
   not). **Aftermath is not in this system at all** — it is a split card and needs the `//` type.
 
-  GATE: `npx vitest run` **2866 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0.
-  Gauntlet seed 99 is **byte-identical to origin/main on every run (212/700 = 30.3%, same per-deck
-  line)**. Throughput measured paired/alternating against a same-box `origin/main` worktree over 10
-  rounds; the box is heavily contended (six agents), so the honest read is the QUIETEST round each
-  side — 227 vs 222 games/sec, ratio **0.978, parity**, with the noisy rounds spanning 0.44–2.65 in
-  both directions. One real cost was found and removed on the way: the pilot's cycling policy walked
-  the battlefield on every priority decision, and now answers "does any hand card even cycle?" first.
+  GATE: `npx vitest run` **2967 passed / 0 failed**, `npm run verify` exit 0, `npm run build`
+  exit 0, measured after merging origin/main THREE times mid-flight (modal-casting + keyword-sweep,
+  indestructible/blocking, you-may/trigger-templates). **Gauntlet seed 99 `--games 40` reproduces
+  79/280 = 28.2% BYTE-IDENTICALLY, per-deck line for line, on every run of both sides.** Throughput
+  measured paired/alternating against a same-box `origin/main` worktree; the box is heavily
+  contended (six agents), so the honest read is the quietest round each side — 107 vs 102 games/sec,
+  ratio 0.95, with individual rounds ranging 0.44-2.65 in BOTH directions. One real cost was found
+  and removed on the way: the pilot cycling policy walked the battlefield on every priority decision
+  for a mechanic almost no deck holds, and now asks "does any hand card even cycle?" first.
 - 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
   trigger-timing families, worked in `sole`-descending order off the cached corpus.**
   **Measured: 193 → 248 playable of 2100 (+55).** Re-runnable offline:
