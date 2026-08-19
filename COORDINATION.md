@@ -108,8 +108,63 @@ throughput (games/sec) from regressing.
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
 | feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
 
+| feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.17 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-19 worker: `feat/alternative-costs` 🚧 PUSHED — **cycling, typecycling/landcycling,
+  buyback and madness, measured at 229 → 250 / 2100 playable (+21)** against the cached corpus, which
+  is the census's predicted yield for this system plus one. Three things are worth reading before
+  anyone touches a cost or a discard.
+
+  ⚠️ **`spellLeaveDestination` NOW TAKES THE REASON A SPELL LEAVES THE STACK, and that argument is
+  the design, not bookkeeping.** Flashback exiles a card **however** it leaves the stack; buyback
+  returns it to hand **only as it resolves** and lets it go to the graveyard when it is **countered**
+  (CR 702.27a). One helper answers both because two exits that can disagree is exactly the bug it was
+  written to prevent — and `reason` is REQUIRED, so a new exit cannot forget the distinction exists.
+  Every call site (resolution, `counterSpellOnStack`) now says which one it is.
+
+  ⚠️ **THERE ARE TWO DISCARD FUNNELS IN THIS REPO** — core's `moveToZone` and the cards package's
+  `moveOwnedCard` — and madness applies to both. They now share `discardDestination` (core's new
+  `madness.ts`), so a card discarded as a COST (cycling) and a card discarded by an EFFECT
+  (Thoughtseize, "each player discards") cannot disagree about being exiled. If you add a third way
+  for a card to leave a hand for a graveyard, route it there.
+
+  ✅ **Cycling is its own action kind, deliberately.** `cycleCard` indexes `CardDefinition.cycling`
+  exactly as `activateAbility` indexes `activated`, but it is NOT an entry in that list: those are
+  activated from the battlefield by a permanent, and folding the two teaches every battlefield-shaped
+  check (summoning sickness, tap costs, `findOnBattlefield`) about a zone it never had to consider.
+  **Typecycling and landcycling folded in completely** — same list, same action, effects that search
+  instead of drawing — over a CLOSED table of cycling words the card filter can genuinely select; a
+  word outside it reports rather than fetching approximately the right card.
+
+  ⚠️ **The madness window is STATE, and while it stands the engine refuses everything else.** Legal
+  actions are exactly: mana sources, the cast from exile, and **pass, which declines** and drops the
+  card in the graveyard. Mana abilities had to stay legal or the window is a trap — the cast is only
+  offered once the pool already covers the cost, so a seat with untapped lands could never fund the
+  thing it was being offered. Same trap, same fix, for cycling: the pilot funds it through
+  `planManaPayment` because `cycleCard` is likewise only offered once the pool covers it.
+
+  ⚠️ **paired-arms' effect scan was blind to a new authoring place.** `allEffectRefs` walked
+  `effects`/`triggers`/`activated`; a LANDCYCLING ability is a `searchLibrary` over the very library
+  the two arms differ in, and it lives on `def.cycling`. Fixed. Anyone adding a new home for effect
+  refs must add it there too, or the identical-game optimisation silently assumes it cannot read a
+  library.
+
+  🚫 **Reported, not faked, by name:** an **{X} cycling cost** (Shark Typhoon — an activation cost has
+  no answer-and-charge step the way a casting cost does), a **madness cost printed in words**
+  ("Madness—Pay six {C}" — Emrakul), a **cycling word with no expressible filter**, and **"when you
+  cycle this card" triggers** (the `cardCycled` event exists for them; the trigger CONDITION does
+  not). **Aftermath is not in this system at all** — it is a split card and needs the `//` type.
+
+  GATE: `npx vitest run` **2866 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0.
+  Gauntlet seed 99 is **byte-identical to origin/main on every run (212/700 = 30.3%, same per-deck
+  line)**. Throughput measured paired/alternating against a same-box `origin/main` worktree over 10
+  rounds; the box is heavily contended (six agents), so the honest read is the QUIETEST round each
+  side — 227 vs 222 games/sec, ratio **0.978, parity**, with the noisy rounds spanning 0.44–2.65 in
+  both directions. One real cost was found and removed on the way: the pilot's cycling policy walked
+  the battlefield on every priority decision, and now answers "does any hand card even cycle?" first.
 
 - 2026-08-18 worker: `fix/keyword-sweep-and-mana-templates` 🚧 PUSHED — **the census's §2 bug is
   fixed and MEASURED: 193 → 228 / 2100 playable (9.2% → 10.9%).** Two things worth reading before

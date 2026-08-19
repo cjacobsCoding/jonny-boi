@@ -1114,8 +1114,10 @@ Still open, roughly by how often they block a real decklist:
   from board state** at activation time (7 — Reflecting Pool, Exotic Orchard; commander identity is
   refused for good). Lands are 24 cards of every deck, so this is the highest card-per-hour engine
   work on the board.
-- *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
-  cast-time question step now that {X}/kicker/multikicker built it), *Phyrexian costs*,
+- *alternative and additional costs still open* — **cycling, buyback and madness landed in §3.17**;
+  what remains is *suspend*, *spectacle*, *evoke*, an **{X} in a cycling cost** (Shark Typhoon: an
+  activation cost has no answer-and-charge step the way a casting cost does) and a **madness cost
+  printed in words** ("Madness—Pay six {C}"). *Phyrexian costs*,
   *split / adventure* (two castable halves on ONE object — modal DFCs landed in §3.16, but those
   are two FACES, which is a different shape),
   *flashback riders that are not mana or life* ("Flashback—{1}{U}, Discard a card" — the cast
@@ -1368,6 +1370,62 @@ choosing "counter target spell" when the only spell on the stack is its own — 
 target for its own counter mode, and being faithful there means the pilot, not the engine, must be the
 one that declines. Humans answer through the existing `ChoicePrompt`, with repeated modes rendered as
 a count (`×2`) rather than a toggle.
+
+### 3.17 Alternative and additional casting costs — cycling, buyback, madness — ✅ done
+The third answer to "what does this card cost?", after §3.11's {X}/kicker and §3.16's modal/multikicker
+work. These three are one section because they are one question asked three ways: what a card costs,
+and **where it goes**, when it is played by some route other than "pay the printed cost from your hand".
+
+- **Cycling** (`CardDefinition.cycling`, the `cycleCard` action) — an activated ability of a card in
+  **hand**: pay the cost, **discard the card as the rest of that cost**, put the ability on the stack.
+  It is deliberately NOT an entry in `activated`: that list is activated from the battlefield by a
+  permanent, and folding the two would teach every battlefield-shaped check (summoning sickness, tap
+  costs, `findOnBattlefield`) about a zone it has never had to consider. The discard being a **cost**
+  is what makes cycling a madness card exile it, what makes a "whenever you cycle or discard" trigger
+  fire, and what makes countering the ability not give the card back. Instant speed, so a cycling land
+  becomes a card on an opponent's turn — which is the whole reason to play one over a tapland.
+- **Typecycling and landcycling** fold into cycling completely: same list, same action, same code
+  path, with the ability's effects being a **library search instead of a draw**. The searchable words
+  are a closed table (the five basic land types plus the generic "land") because each has to name
+  something `CardFilter` can genuinely select; a cycling word outside it reports rather than fetching
+  approximately the right card.
+- **Buyback** (`CardDefinition.buyback`) — an optional additional cost asked at cast time exactly as a
+  kicker is, whose answer changes not the spell's script but its **exit from the stack**. That exit is
+  one shared answer: `spellLeaveDestination(spell, reason)` in `state.ts`, which flashback already
+  owned. The `reason` argument is the whole design — a flashback card is exiled however it leaves the
+  stack, while a bought-back spell returns to hand only when it **resolves** and goes to the graveyard
+  when it is **countered** (CR 702.27a). Two exits that can disagree about where a card goes is
+  precisely the bug that helper exists to prevent, so countering asks the same function.
+- **Madness** (`CardDefinition.madness`) — not a cast-time cost at all but a **replacement on the
+  discard**, plus a cast that follows. Both discard funnels in this repo (core's `moveToZone` and the
+  cards package's `moveOwnedCard`) ask the shared `discardDestination`, so a card discarded as a cost
+  and a card discarded by an effect cannot disagree about being exiled. The exile opens a **madness
+  window** on the game state, and while it stands the legal-action generator offers exactly: mana
+  sources, the cast (`fromZone: 'exile'`, paying the madness cost, ignoring the card's printed
+  timing), and **pass — which declines**, dropping the card into the graveyard the discard would have
+  used. Modelling the window as state rather than as a trigger on the stack is what lets every seat
+  play madness with no new transport: the pilots, the hotseat UI and the online server all already
+  enumerate actions and submit one.
+
+**Both seat kinds actually use them, which is the rule against inert mechanics.** The heuristic pilot
+cycles a surplus land once it is **flooded** (`floodedLandCount` lands in play, so a further land is
+worth less than an unknown card) and cycles anything at the **end step**, where the mana would empty
+unused anyway — and it funds both through the same `planManaPayment` a spell goal uses, which is
+load-bearing: the engine offers `cycleCard` only once the pool already covers the cost, so a pilot
+that did not plan its taps would never see the action and the mechanic would be inert on a board of
+untapped lands. Madness is a one-sided judgement on purpose: the card is *already discarded*, so
+declining does not keep it, and casting is right whenever the mana exists. Humans get a hand-card menu
+when a card has more than one way to be played (a cycling land is a land drop **and** a cycling
+ability) and a prompt for the madness window, because a player who did not know the window was open
+would stall against a board that refuses every other move.
+
+**Measured** against the cached 2100-card most-played corpus with
+`packages/cards/scripts/coverage-audit.mjs --input <corpus>`: **229 → 250 playable (+21)**, which is
+the census's predicted yield for this system (20 sole-blocked cards) plus one. The forms that still
+report, by name: an **{X} cycling cost** (Shark Typhoon — an activation cost has no answer-and-charge
+step), a **madness cost printed in words** ("Madness—Pay six {C}"), a **cycling word with no
+expressible filter**, and **aftermath**, which is a split card and needs the `//` type rather than
+anything in this section.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

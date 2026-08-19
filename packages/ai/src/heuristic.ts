@@ -1225,6 +1225,21 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
   const { view } = ctx;
   const me = view.priorityPlayer;
   const hand = view.players[me].hand;
+  // CHEAPEST QUESTION FIRST, and it is not a micro-optimisation: this function
+  // runs on every priority decision of every game in a 700-game gauntlet, and
+  // almost no deck holds a cycling card at all. One property read per hand card
+  // answers "is there anything to consider?" before anything walks the
+  // battlefield — an unconditional board walk here measured on the sim's hot
+  // path for a policy that then found nothing to do.
+  let anyCycling = false;
+  for (const card of hand) {
+    const abilities = card.def.cycling;
+    if (abilities && abilities.length > 0) {
+      anyCycling = true;
+      break;
+    }
+  }
+  if (!anyCycling) return undefined;
   let landsInPlay = 0;
   for (const perm of view.battlefield) {
     if (perm.controller === me && isLand(perm.def)) landsInPlay += 1;
