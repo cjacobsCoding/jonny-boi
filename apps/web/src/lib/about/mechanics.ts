@@ -17,6 +17,7 @@
  * bugs; a capabilities page that lies is the worst kind).
  */
 
+import { hasCastableBackFace, modalSpecOf, playableFaceOf } from '@jonny-boi/core';
 import {
   CARD_POOL,
   CHOICE_PRIMITIVES,
@@ -50,7 +51,15 @@ export type MechanicWitness =
   | { readonly kind: 'primitive'; readonly id: string }
   | { readonly kind: 'keyword'; readonly word: string }
   | { readonly kind: 'card'; readonly name: string }
-  | { readonly kind: 'oracle'; readonly text: string; readonly as: 'creature' | 'instant' };
+  | { readonly kind: 'oracle'; readonly text: string; readonly as: 'creature' | 'instant' }
+  /**
+   * `engine` — a named capability the CORE engine exports, for a mechanic whose
+   * evidence is a rules SEAM rather than a compiler rule or a primitive. Modal
+   * double-faced cards are the case that needed it: nothing about "the back face
+   * is castable" lives in a rule table or a primitive id, so a rule/primitive
+   * witness would have been a claim about the wrong thing.
+   */
+  | { readonly kind: 'engine'; readonly api: keyof typeof CORE_ENGINE_API };
 
 /** One supported mechanic, in user-facing words, with its proof. */
 export interface SupportedMechanic {
@@ -145,8 +154,20 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Kicker',
         detail:
-          'An affordable kicker is offered as a cast-time payment; a caster who cannot pay is never asked. The kicked half runs only when it was paid (Burst Lightning). Multikicker still reports.',
+          'An affordable kicker is offered as a cast-time payment; a caster who cannot pay is never asked. The kicked half runs only when it was paid (Burst Lightning).',
         witness: { kind: 'rule', id: 'kicker-cost' },
+      },
+      {
+        title: 'Multikicker',
+        detail:
+          'An additional cost payable any number of times: the caster is asked HOW MANY, bounded by what the board can actually fund, and charged once. "For each time it was kicked" reads the count — during the spell\'s own resolution and afterwards, from the permanent it became.',
+        witness: { kind: 'rule', id: 'multikicker-cost' },
+      },
+      {
+        title: 'Modal spells ("Choose one —")',
+        detail:
+          'Modes are announced as the spell is CAST, and each chosen mode is aimed at cast too — so the opponent decides whether to respond already knowing which halves are coming, exactly as in paper. A mode with no legal target is not on the menu; chosen modes resolve in printed order, each against its own target. "Choose one or both", "choose up to N" and "you may choose the same mode more than once" all play as printed (Cryptic Command).',
+        witness: { kind: 'card', name: 'Cryptic Command' },
       },
     ],
   },
@@ -191,7 +212,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Flashback',
         detail:
-          'A "Flashback {cost}" instant or sorcery casts from your graveyard for that cost — honoring its normal timing — and is exiled as it leaves the stack, even when countered (CR 702.34a). Plain mana costs only; {X}/additional-cost flashback still reports.',
+          'A "Flashback {cost}" instant or sorcery casts from your graveyard for that cost — honoring its normal timing — and is exiled as it leaves the stack, even when countered (CR 702.34a). All three printed cost shapes work: plain mana, "Flashback {X}{R}{R}" (the X is asked and charged at cast), and "Flashback—{1}{U}, Pay 3 life". A non-life rider (a discard, a sacrifice) still reports.',
         witness: { kind: 'rule', id: 'flashback-cost' },
       },
       {
@@ -216,6 +237,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail:
           'Innistrad-style DFCs play both faces: the front casts, a transform instruction flips the permanent to its back face (Delver of Secrets reveals for its 3/2 flyer), counters/damage/Auras persist across the flip (CR 712), and a bounced or killed DFC turns front-face-up again.',
         witness: { kind: 'primitive', id: 'transformRevealTop' },
+      },
+      {
+        title: 'Modal double-faced cards',
+        detail:
+          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield. Split and adventure cards still report — they are two halves of one object, not two faces.',
+        witness: { kind: 'engine', api: 'hasCastableBackFace' },
       },
       {
         title: 'Gaining control of a permanent',
@@ -380,6 +407,20 @@ export function mechanicsSummary(): MechanicsSummary {
   };
 }
 
+/**
+ * The core rules seams an `engine` witness may name. A named map rather than a
+ * free string, so a claim can only cite a capability that is really imported —
+ * a deleted seam becomes a compile error here, not a silently-passing witness.
+ */
+const CORE_ENGINE_API = {
+  /** A card declares a second, CASTABLE face (a modal DFC). */
+  hasCastableBackFace,
+  /** Which face a cast/play action names. */
+  playableFaceOf,
+  /** A card's printed modal header + modes. */
+  modalSpecOf,
+} as const;
+
 /** A minimal real-shaped card wrapped around a witness's Oracle text. */
 function witnessCard(text: string, as: 'creature' | 'instant'): CompilableCard {
   return {
@@ -415,5 +456,7 @@ export function resolveWitness(witness: MechanicWitness): boolean {
       return CARD_POOL.some((card) => card.name === witness.name);
     case 'oracle':
       return compileCard(witnessCard(witness.text, witness.as)).status === 'complete';
+    case 'engine':
+      return typeof CORE_ENGINE_API[witness.api] === 'function';
   }
 }
