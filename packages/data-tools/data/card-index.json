@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-19T07:15:19.037Z",
+  "generatedAt": "2026-08-19T07:43:26.150Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 309,
+  "requested": 331,
   "unresolved": [],
   "cards": [
     {
@@ -953,6 +953,65 @@
       "faces": []
     },
     {
+      "id": "c174dcbb-03a0-439c-b3d8-ed61bd46dc67",
+      "name": "Artful Dodge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Target creature can't be blocked this turn.\nFlashback {U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flashback"
+      ],
+      "set": "dka",
+      "collectorNumber": "27",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.jpg?1783940845",
+        "normal": "https://cards.scryfall.io/normal/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.jpg?1783940845",
+        "large": "https://cards.scryfall.io/large/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.jpg?1783940845",
+        "png": "https://cards.scryfall.io/png/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.png?1783940845",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.jpg?1783940845",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.jpg?1783940845",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.webp?1783940845",
+        "grid": "https://cards.scryfall.io/grid/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.webp?1783940845",
+        "display": "https://cards.scryfall.io/display/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.webp?1783940845",
+        "art": "https://cards.scryfall.io/art/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.webp?1783940845",
+        "crop": "https://cards.scryfall.io/crop/front/d/e/de6ce6aa-e19f-4299-9807-e68920e63c73.webp?1783940845"
+      },
+      "localImages": {
+        "normal": "artful-dodge-normal.jpg",
+        "art_crop": "artful-dodge-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "edc193bf-2987-4c7b-9cf3-69089ff13764",
       "name": "Artful Takedown",
       "manaCost": {
@@ -1899,6 +1958,65 @@
       "localImages": {
         "normal": "bonesplitter-normal.jpg",
         "art_crop": "bonesplitter-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2679d0dd-ba30-4a1c-b6a0-b3ac6c790496",
+      "name": "Boros Charm",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Choose one —\n• Boros Charm deals 4 damage to target player or planeswalker.\n• Permanents you control gain indestructible until end of turn.\n• Target creature gains double strike until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R",
+        "W"
+      ],
+      "colorIdentity": [
+        "R",
+        "W"
+      ],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "721",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.jpg?1783908890",
+        "normal": "https://cards.scryfall.io/normal/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.jpg?1783908890",
+        "large": "https://cards.scryfall.io/large/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.jpg?1783908890",
+        "png": "https://cards.scryfall.io/png/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.png?1783908890",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.jpg?1783908890",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.jpg?1783908890",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.webp?1783908890",
+        "grid": "https://cards.scryfall.io/grid/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.webp?1783908890",
+        "display": "https://cards.scryfall.io/display/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.webp?1783908890",
+        "art": "https://cards.scryfall.io/art/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.webp?1783908890",
+        "crop": "https://cards.scryfall.io/crop/front/e/0/e0d8c9f6-cbbd-4694-b100-01cfb81036cc.webp?1783908890"
+      },
+      "localImages": {
+        "normal": "boros-charm-normal.jpg",
+        "art_crop": "boros-charm-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -3605,6 +3723,466 @@
       "faces": []
     },
     {
+      "id": "2065cada-4078-41c4-9e06-2460d2a2e8ee",
+      "name": "Darkmoss Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {B} or {G}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B",
+        "G"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "dsc",
+      "collectorNumber": "269",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.jpg?1783909578",
+        "normal": "https://cards.scryfall.io/normal/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.jpg?1783909578",
+        "large": "https://cards.scryfall.io/large/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.jpg?1783909578",
+        "png": "https://cards.scryfall.io/png/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.png?1783909578",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.jpg?1783909578",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.jpg?1783909578",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.webp?1783909578",
+        "grid": "https://cards.scryfall.io/grid/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.webp?1783909578",
+        "display": "https://cards.scryfall.io/display/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.webp?1783909578",
+        "art": "https://cards.scryfall.io/art/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.webp?1783909578",
+        "crop": "https://cards.scryfall.io/crop/front/3/c/3ca3ef68-ea62-4098-bd43-4597ff0647d4.webp?1783909578"
+      },
+      "localImages": {
+        "normal": "darkmoss-bridge-normal.jpg",
+        "art_crop": "darkmoss-bridge-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3b7ea3ac-ac0a-40aa-b743-d153e1c47d8c",
+      "name": "Darksteel Axe",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Indestructible (Effects that say \"destroy\" don't destroy this Equipment.)\nEquipped creature gets +2/+0.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Indestructible",
+        "Equip"
+      ],
+      "set": "2xm",
+      "collectorNumber": "247",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.jpg?1783930114",
+        "normal": "https://cards.scryfall.io/normal/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.jpg?1783930114",
+        "large": "https://cards.scryfall.io/large/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.jpg?1783930114",
+        "png": "https://cards.scryfall.io/png/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.png?1783930114",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.jpg?1783930114",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.jpg?1783930114",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.webp?1783930114",
+        "grid": "https://cards.scryfall.io/grid/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.webp?1783930114",
+        "display": "https://cards.scryfall.io/display/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.webp?1783930114",
+        "art": "https://cards.scryfall.io/art/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.webp?1783930114",
+        "crop": "https://cards.scryfall.io/crop/front/4/d/4d6bfe57-872d-4f69-bff5-a3f2584d6e0a.webp?1783930114"
+      },
+      "localImages": {
+        "normal": "darksteel-axe-normal.jpg",
+        "art_crop": "darksteel-axe-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8dc067bf-f78f-4ac4-b6e7-b305c42cf0bc",
+      "name": "Darksteel Citadel",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "Indestructible\n{T}: Add {C}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "c21",
+      "collectorNumber": "285",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.jpg?1783927495",
+        "normal": "https://cards.scryfall.io/normal/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.jpg?1783927495",
+        "large": "https://cards.scryfall.io/large/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.jpg?1783927495",
+        "png": "https://cards.scryfall.io/png/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.png?1783927495",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.jpg?1783927495",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.jpg?1783927495",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.webp?1783927495",
+        "grid": "https://cards.scryfall.io/grid/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.webp?1783927495",
+        "display": "https://cards.scryfall.io/display/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.webp?1783927495",
+        "art": "https://cards.scryfall.io/art/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.webp?1783927495",
+        "crop": "https://cards.scryfall.io/crop/front/2/b/2ba7597d-6d76-45b8-b172-342999e401bd.webp?1783927495"
+      },
+      "localImages": {
+        "normal": "darksteel-citadel-normal.jpg",
+        "art_crop": "darksteel-citadel-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a2529491-7389-4cfa-92d2-145eda779603",
+      "name": "Darksteel Ingot",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Indestructible (Effects that say \"destroy\" don't destroy this artifact.)\n{T}: Add one mana of any color.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "otc",
+      "collectorNumber": "256",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.jpg?1783911890",
+        "normal": "https://cards.scryfall.io/normal/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.jpg?1783911890",
+        "large": "https://cards.scryfall.io/large/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.jpg?1783911890",
+        "png": "https://cards.scryfall.io/png/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.png?1783911890",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.jpg?1783911890",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.jpg?1783911890",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.webp?1783911890",
+        "grid": "https://cards.scryfall.io/grid/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.webp?1783911890",
+        "display": "https://cards.scryfall.io/display/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.webp?1783911890",
+        "art": "https://cards.scryfall.io/art/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.webp?1783911890",
+        "crop": "https://cards.scryfall.io/crop/front/f/2/f279fcf1-e4f5-4873-9d73-8d62e0343b81.webp?1783911890"
+      },
+      "localImages": {
+        "normal": "darksteel-ingot-normal.jpg",
+        "art_crop": "darksteel-ingot-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f90fe86c-5cca-483b-93c2-6e856fa01c88",
+      "name": "Darksteel Myr",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Myr"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Myr",
+      "oracleText": "Indestructible (Damage and effects that say \"destroy\" don't destroy this creature. If its toughness is 0 or less, it still dies.)",
+      "power": 0,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "som",
+      "collectorNumber": "151",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.jpg?1783941710",
+        "normal": "https://cards.scryfall.io/normal/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.jpg?1783941710",
+        "large": "https://cards.scryfall.io/large/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.jpg?1783941710",
+        "png": "https://cards.scryfall.io/png/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.png?1783941710",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.jpg?1783941710",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.jpg?1783941710",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.webp?1783941710",
+        "grid": "https://cards.scryfall.io/grid/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.webp?1783941710",
+        "display": "https://cards.scryfall.io/display/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.webp?1783941710",
+        "art": "https://cards.scryfall.io/art/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.webp?1783941710",
+        "crop": "https://cards.scryfall.io/crop/front/0/f/0f5712cf-c6a9-4a2e-90db-8ca17c621724.webp?1783941710"
+      },
+      "localImages": {
+        "normal": "darksteel-myr-normal.jpg",
+        "art_crop": "darksteel-myr-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "431838a8-f020-4e4e-a6f4-2d4ca27c56df",
+      "name": "Darksteel Pendant",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "Indestructible (Effects that say \"destroy\" don't destroy this artifact.)\n{1}, {T}: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Indestructible",
+        "Scry"
+      ],
+      "set": "dst",
+      "collectorNumber": "113",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.jpg?1783944426",
+        "normal": "https://cards.scryfall.io/normal/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.jpg?1783944426",
+        "large": "https://cards.scryfall.io/large/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.jpg?1783944426",
+        "png": "https://cards.scryfall.io/png/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.png?1783944426",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.jpg?1783944426",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.jpg?1783944426",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.webp?1783944426",
+        "grid": "https://cards.scryfall.io/grid/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.webp?1783944426",
+        "display": "https://cards.scryfall.io/display/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.webp?1783944426",
+        "art": "https://cards.scryfall.io/art/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.webp?1783944426",
+        "crop": "https://cards.scryfall.io/crop/front/9/c/9c1bac5f-c41a-49f0-94b0-79653b6fa67a.webp?1783944426"
+      },
+      "localImages": {
+        "normal": "darksteel-pendant-normal.jpg",
+        "art_crop": "darksteel-pendant-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b5b4cf54-ed5e-42d0-9d98-5fec76b0b0b8",
+      "name": "Darksteel Plate",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Indestructible\nEquipped creature has indestructible.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Indestructible",
+        "Equip"
+      ],
+      "set": "2x2",
+      "collectorNumber": "304",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.jpg?1783921791",
+        "normal": "https://cards.scryfall.io/normal/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.jpg?1783921791",
+        "large": "https://cards.scryfall.io/large/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.jpg?1783921791",
+        "png": "https://cards.scryfall.io/png/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.png?1783921791",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.jpg?1783921791",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.jpg?1783921791",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.webp?1783921791",
+        "grid": "https://cards.scryfall.io/grid/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.webp?1783921791",
+        "display": "https://cards.scryfall.io/display/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.webp?1783921791",
+        "art": "https://cards.scryfall.io/art/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.webp?1783921791",
+        "crop": "https://cards.scryfall.io/crop/front/3/f/3f99fb1e-99a6-4c83-98eb-7bff23996a7f.webp?1783921791"
+      },
+      "localImages": {
+        "normal": "darksteel-plate-normal.jpg",
+        "art_crop": "darksteel-plate-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "b91c8946-591b-4c0d-a37e-36803df40db7",
+      "name": "Darksteel Sentinel",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Golem"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Golem",
+      "oracleText": "Flash (You may cast this spell any time you could cast an instant.)\nVigilance\nIndestructible (Damage and effects that say \"destroy\" don't destroy this creature. If its toughness is 0 or less, it's still put into its owner's graveyard.)",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Indestructible",
+        "Vigilance",
+        "Flash"
+      ],
+      "set": "td2",
+      "collectorNumber": "16",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.jpg?1783941281",
+        "normal": "https://cards.scryfall.io/normal/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.jpg?1783941281",
+        "large": "https://cards.scryfall.io/large/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.jpg?1783941281",
+        "png": "https://cards.scryfall.io/png/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.png?1783941281",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.jpg?1783941281",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.jpg?1783941281",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.webp?1783941281",
+        "grid": "https://cards.scryfall.io/grid/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.webp?1783941281",
+        "display": "https://cards.scryfall.io/display/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.webp?1783941281",
+        "art": "https://cards.scryfall.io/art/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.webp?1783941281",
+        "crop": "https://cards.scryfall.io/crop/front/f/9/f9bd80ce-e36a-47ff-a009-17a05afce187.webp?1783941281"
+      },
+      "localImages": {
+        "normal": "darksteel-sentinel-normal.jpg",
+        "art_crop": "darksteel-sentinel-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d057289d-5e28-43d5-8ff3-4a1bc723477d",
       "name": "Day of Judgment",
       "manaCost": {
@@ -4692,6 +5270,65 @@
       "localImages": {
         "normal": "dromar-s-charm-normal.jpg",
         "art_crop": "dromar-s-charm-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "44b83535-fdbf-4307-bf53-ca20470a768d",
+      "name": "Drossforge Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {B} or {R}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B",
+        "R"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "mh2",
+      "collectorNumber": "246",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.jpg?1783926796",
+        "normal": "https://cards.scryfall.io/normal/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.jpg?1783926796",
+        "large": "https://cards.scryfall.io/large/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.jpg?1783926796",
+        "png": "https://cards.scryfall.io/png/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.png?1783926796",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.jpg?1783926796",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.jpg?1783926796",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.webp?1783926796",
+        "grid": "https://cards.scryfall.io/grid/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.webp?1783926796",
+        "display": "https://cards.scryfall.io/display/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.webp?1783926796",
+        "art": "https://cards.scryfall.io/art/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.webp?1783926796",
+        "crop": "https://cards.scryfall.io/crop/front/5/b/5b46b8d8-723a-4752-b97d-29ef83bd294c.webp?1783926796"
+      },
+      "localImages": {
+        "normal": "drossforge-bridge-normal.jpg",
+        "art_crop": "drossforge-bridge-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -6547,6 +7184,65 @@
       "localImages": {
         "normal": "gold-myr-normal.jpg",
         "art_crop": "gold-myr-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c9b7ea9c-3bcb-4538-aa25-cdb82a52037e",
+      "name": "Goldmire Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {W} or {B}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B",
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "moc",
+      "collectorNumber": "407",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.jpg?1783917096",
+        "normal": "https://cards.scryfall.io/normal/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.jpg?1783917096",
+        "large": "https://cards.scryfall.io/large/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.jpg?1783917096",
+        "png": "https://cards.scryfall.io/png/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.png?1783917096",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.jpg?1783917096",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.jpg?1783917096",
+        "thumb": "https://cards.scryfall.io/thumb/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.webp?1783917096",
+        "grid": "https://cards.scryfall.io/grid/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.webp?1783917096",
+        "display": "https://cards.scryfall.io/display/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.webp?1783917096",
+        "art": "https://cards.scryfall.io/art/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.webp?1783917096",
+        "crop": "https://cards.scryfall.io/crop/front/3/2/3235954d-a1b1-4822-b177-1691347d1e58.webp?1783917096"
+      },
+      "localImages": {
+        "normal": "goldmire-bridge-normal.jpg",
+        "art_crop": "goldmire-bridge-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -9909,6 +10605,65 @@
       "faces": []
     },
     {
+      "id": "33ee23bc-6327-4a54-a704-dfd83be36bb5",
+      "name": "Mistvault Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {U} or {B}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "B",
+        "U"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "mh2",
+      "collectorNumber": "249",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.jpg?1783926795",
+        "normal": "https://cards.scryfall.io/normal/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.jpg?1783926795",
+        "large": "https://cards.scryfall.io/large/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.jpg?1783926795",
+        "png": "https://cards.scryfall.io/png/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.png?1783926795",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.jpg?1783926795",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.jpg?1783926795",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.webp?1783926795",
+        "grid": "https://cards.scryfall.io/grid/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.webp?1783926795",
+        "display": "https://cards.scryfall.io/display/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.webp?1783926795",
+        "art": "https://cards.scryfall.io/art/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.webp?1783926795",
+        "crop": "https://cards.scryfall.io/crop/front/9/f/9f36a6e2-3e51-4a30-a225-10cfe6650b9d.webp?1783926795"
+      },
+      "localImages": {
+        "normal": "mistvault-bridge-normal.jpg",
+        "art_crop": "mistvault-bridge-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ce87e5ed-2562-4563-9a5b-bd53c04ec4a5",
       "name": "Moan of the Unhallowed",
       "manaCost": {
@@ -11974,6 +12729,65 @@
       "faces": []
     },
     {
+      "id": "6cb37ac1-dd11-4a8c-bca5-ef44d828059f",
+      "name": "Razortide Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {W} or {U}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "U",
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "eoc",
+      "collectorNumber": "171",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.jpg?1783906009",
+        "normal": "https://cards.scryfall.io/normal/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.jpg?1783906009",
+        "large": "https://cards.scryfall.io/large/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.jpg?1783906009",
+        "png": "https://cards.scryfall.io/png/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.png?1783906009",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.jpg?1783906009",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.jpg?1783906009",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.webp?1783906009",
+        "grid": "https://cards.scryfall.io/grid/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.webp?1783906009",
+        "display": "https://cards.scryfall.io/display/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.webp?1783906009",
+        "art": "https://cards.scryfall.io/art/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.webp?1783906009",
+        "crop": "https://cards.scryfall.io/crop/front/0/b/0bbd24cd-48f7-40d7-9741-f30108f04b84.webp?1783906009"
+      },
+      "localImages": {
+        "normal": "razortide-bridge-normal.jpg",
+        "art_crop": "razortide-bridge-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "5bf4d8d9-a2b2-4dba-ac05-9d4470a89db2",
       "name": "Read the Bones",
       "manaCost": {
@@ -12385,6 +13199,65 @@
       "localImages": {
         "normal": "runeclaw-bear-normal.jpg",
         "art_crop": "runeclaw-bear-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a3faf70d-c034-4692-9e92-1922029e3852",
+      "name": "Rustvale Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {R} or {W}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R",
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "eoc",
+      "collectorNumber": "175",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.jpg?1783906007",
+        "normal": "https://cards.scryfall.io/normal/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.jpg?1783906007",
+        "large": "https://cards.scryfall.io/large/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.jpg?1783906007",
+        "png": "https://cards.scryfall.io/png/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.png?1783906007",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.jpg?1783906007",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.jpg?1783906007",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.webp?1783906007",
+        "grid": "https://cards.scryfall.io/grid/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.webp?1783906007",
+        "display": "https://cards.scryfall.io/display/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.webp?1783906007",
+        "art": "https://cards.scryfall.io/art/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.webp?1783906007",
+        "crop": "https://cards.scryfall.io/crop/front/d/a/da54e458-1d4f-45f0-a225-99eb9c4049fb.webp?1783906007"
+      },
+      "localImages": {
+        "normal": "rustvale-bridge-normal.jpg",
+        "art_crop": "rustvale-bridge-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -13049,6 +13922,68 @@
       "faces": []
     },
     {
+      "id": "8354b70e-43fc-4581-bb53-b913335bf460",
+      "name": "Seraph of the Suns",
+      "manaCost": {
+        "generic": 5,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nIndestructible (Damage and effects that say \"destroy\" don't destroy this creature. If its toughness is 0 or less, it still dies.)",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Indestructible"
+      ],
+      "set": "akh",
+      "collectorNumber": "28",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.jpg?1783941503",
+        "normal": "https://cards.scryfall.io/normal/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.jpg?1783941503",
+        "large": "https://cards.scryfall.io/large/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.jpg?1783941503",
+        "png": "https://cards.scryfall.io/png/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.png?1783941503",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.jpg?1783941503",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.jpg?1783941503",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.webp?1783941503",
+        "grid": "https://cards.scryfall.io/grid/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.webp?1783941503",
+        "display": "https://cards.scryfall.io/display/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.webp?1783941503",
+        "art": "https://cards.scryfall.io/art/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.webp?1783941503",
+        "crop": "https://cards.scryfall.io/crop/front/8/5/85dc4ed8-4674-44a1-8a06-ecce72c85e60.webp?1783941503"
+      },
+      "localImages": {
+        "normal": "seraph-of-the-suns-normal.jpg",
+        "art_crop": "seraph-of-the-suns-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "4b7ac066-e5c7-43e6-9e7e-2739b24a905d",
       "name": "Serra Angel",
       "manaCost": {
@@ -13647,6 +14582,65 @@
       "faces": []
     },
     {
+      "id": "081bfd50-a436-463b-9d2c-5bc8a32b387c",
+      "name": "Silverbluff Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {U} or {R}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "R",
+        "U"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "eoc",
+      "collectorNumber": "180",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.jpg?1783906005",
+        "normal": "https://cards.scryfall.io/normal/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.jpg?1783906005",
+        "large": "https://cards.scryfall.io/large/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.jpg?1783906005",
+        "png": "https://cards.scryfall.io/png/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.png?1783906005",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.jpg?1783906005",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.jpg?1783906005",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.webp?1783906005",
+        "grid": "https://cards.scryfall.io/grid/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.webp?1783906005",
+        "display": "https://cards.scryfall.io/display/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.webp?1783906005",
+        "art": "https://cards.scryfall.io/art/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.webp?1783906005",
+        "crop": "https://cards.scryfall.io/crop/front/8/f/8f14540a-479f-4a3c-8e5b-f482caf48451.webp?1783906005"
+      },
+      "localImages": {
+        "normal": "silverbluff-bridge-normal.jpg",
+        "art_crop": "silverbluff-bridge-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "e8705df9-6439-4930-91b6-229f818559af",
       "name": "Simic Guildgate",
       "manaCost": {
@@ -13942,6 +14936,65 @@
       "localImages": {
         "normal": "skyknight-legionnaire-normal.jpg",
         "art_crop": "skyknight-legionnaire-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "e040a8e6-b90c-42d1-a1b1-771d954c61ab",
+      "name": "Slagwoods Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {R} or {G}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G",
+        "R"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "mh2",
+      "collectorNumber": "256",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.jpg?1783926793",
+        "normal": "https://cards.scryfall.io/normal/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.jpg?1783926793",
+        "large": "https://cards.scryfall.io/large/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.jpg?1783926793",
+        "png": "https://cards.scryfall.io/png/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.png?1783926793",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.jpg?1783926793",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.jpg?1783926793",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.webp?1783926793",
+        "grid": "https://cards.scryfall.io/grid/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.webp?1783926793",
+        "display": "https://cards.scryfall.io/display/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.webp?1783926793",
+        "art": "https://cards.scryfall.io/art/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.webp?1783926793",
+        "crop": "https://cards.scryfall.io/crop/front/e/5/e51b48e9-a75a-4acd-9462-5e1ac2b0d803.webp?1783926793"
+      },
+      "localImages": {
+        "normal": "slagwoods-bridge-normal.jpg",
+        "art_crop": "slagwoods-bridge-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -14641,6 +15694,65 @@
       "localImages": {
         "normal": "swords-to-plowshares-normal.jpg",
         "art_crop": "swords-to-plowshares-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "29cd8a7c-108a-43d1-af63-f603a27c24f2",
+      "name": "Tanglepool Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {G} or {U}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G",
+        "U"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "mh2",
+      "collectorNumber": "257",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.jpg?1783926793",
+        "normal": "https://cards.scryfall.io/normal/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.jpg?1783926793",
+        "large": "https://cards.scryfall.io/large/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.jpg?1783926793",
+        "png": "https://cards.scryfall.io/png/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.png?1783926793",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.jpg?1783926793",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.jpg?1783926793",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.webp?1783926793",
+        "grid": "https://cards.scryfall.io/grid/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.webp?1783926793",
+        "display": "https://cards.scryfall.io/display/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.webp?1783926793",
+        "art": "https://cards.scryfall.io/art/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.webp?1783926793",
+        "crop": "https://cards.scryfall.io/crop/front/5/7/57d2b895-8921-4615-a674-fb85eed5ea3f.webp?1783926793"
+      },
+      "localImages": {
+        "normal": "tanglepool-bridge-normal.jpg",
+        "art_crop": "tanglepool-bridge-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -15516,6 +16628,65 @@
       "localImages": {
         "normal": "think-twice-normal.jpg",
         "art_crop": "think-twice-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "99720c65-be96-4220-8ed4-720660bf6928",
+      "name": "Thornglint Bridge",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact Land",
+      "oracleText": "This land enters tapped.\nIndestructible\n{T}: Add {G} or {W}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [
+        "G",
+        "W"
+      ],
+      "keywords": [
+        "Indestructible"
+      ],
+      "set": "mh2",
+      "collectorNumber": "258",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.jpg?1783926792",
+        "normal": "https://cards.scryfall.io/normal/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.jpg?1783926792",
+        "large": "https://cards.scryfall.io/large/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.jpg?1783926792",
+        "png": "https://cards.scryfall.io/png/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.png?1783926792",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.jpg?1783926792",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.jpg?1783926792",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.webp?1783926792",
+        "grid": "https://cards.scryfall.io/grid/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.webp?1783926792",
+        "display": "https://cards.scryfall.io/display/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.webp?1783926792",
+        "art": "https://cards.scryfall.io/art/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.webp?1783926792",
+        "crop": "https://cards.scryfall.io/crop/front/9/d/9d483643-6a11-47f7-a0aa-190e0179525f.webp?1783926792"
+      },
+      "localImages": {
+        "normal": "thornglint-bridge-normal.jpg",
+        "art_crop": "thornglint-bridge-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []
@@ -17720,6 +18891,63 @@
       "faces": []
     },
     {
+      "id": "9ad4f730-a18e-4a7c-a468-a926c718c741",
+      "name": "Whispersilk Cloak",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature can't be blocked and has shroud. (It can't be the target of spells or abilities.)\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "msc",
+      "collectorNumber": "225",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.jpg?1783903208",
+        "normal": "https://cards.scryfall.io/normal/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.jpg?1783903208",
+        "large": "https://cards.scryfall.io/large/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.jpg?1783903208",
+        "png": "https://cards.scryfall.io/png/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.png?1783903208",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.jpg?1783903208",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.jpg?1783903208",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.webp?1783903208",
+        "grid": "https://cards.scryfall.io/grid/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.webp?1783903208",
+        "display": "https://cards.scryfall.io/display/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.webp?1783903208",
+        "art": "https://cards.scryfall.io/art/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.webp?1783903208",
+        "crop": "https://cards.scryfall.io/crop/front/a/3/a3f31ac4-09ca-4712-a311-50d28824bfad.webp?1783903208"
+      },
+      "localImages": {
+        "normal": "whispersilk-cloak-normal.jpg",
+        "art_crop": "whispersilk-cloak-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "ddb021df-ae4a-4ac1-8353-d0b375761714",
       "name": "White Knight",
       "manaCost": {
@@ -18243,6 +19471,74 @@
       "localImages": {
         "normal": "youthful-knight-normal.jpg",
         "art_crop": "youthful-knight-art_crop.jpg"
+      },
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7da0e5de-3e4c-420a-8685-991206100b9d",
+      "name": "Zetalpa, Primal Dawn",
+      "manaCost": {
+        "generic": 6,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 8,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elder",
+          "Dinosaur"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Elder Dinosaur",
+      "oracleText": "Flying, double strike, vigilance, trample, indestructible",
+      "power": 4,
+      "toughness": 8,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Indestructible",
+        "Vigilance",
+        "Trample",
+        "Double strike"
+      ],
+      "set": "tdc",
+      "collectorNumber": "142",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.jpg?1783907112",
+        "normal": "https://cards.scryfall.io/normal/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.jpg?1783907112",
+        "large": "https://cards.scryfall.io/large/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.jpg?1783907112",
+        "png": "https://cards.scryfall.io/png/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.png?1783907112",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.jpg?1783907112",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.jpg?1783907112",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.webp?1783907112",
+        "grid": "https://cards.scryfall.io/grid/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.webp?1783907112",
+        "display": "https://cards.scryfall.io/display/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.webp?1783907112",
+        "art": "https://cards.scryfall.io/art/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.webp?1783907112",
+        "crop": "https://cards.scryfall.io/crop/front/7/8/78c71a23-8e73-406e-bbd0-4474c17c1d04.webp?1783907112"
+      },
+      "localImages": {
+        "normal": "zetalpa-primal-dawn-normal.jpg",
+        "art_crop": "zetalpa-primal-dawn-art_crop.jpg"
       },
       "isDoubleFaced": false,
       "faces": []

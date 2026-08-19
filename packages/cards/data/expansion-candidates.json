@@ -564,6 +564,29 @@
         "Nightwind Glider",
         "Voice of Law"
       ]
+    },
+    {
+      "role": "indestructible — the exemption from destruction and lethal damage, now that core models it",
+      "names": [
+        "Darksteel Citadel",
+        "Darksteel Plate",
+        "Darksteel Ingot",
+        "Darksteel Myr",
+        "Darksteel Pendant",
+        "Darksteel Sentinel",
+        "Zetalpa, Primal Dawn",
+        "Seraph of the Suns",
+        "Razortide Bridge",
+        "Silverbluff Bridge",
+        "Rustvale Bridge",
+        "Mistvault Bridge",
+        "Goldmire Bridge",
+        "Drossforge Bridge",
+        "Darkmoss Bridge",
+        "Tanglepool Bridge",
+        "Slagwoods Bridge",
+        "Thornglint Bridge"
+      ]
     }
   ]
 }

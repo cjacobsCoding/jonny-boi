@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 277 cards.
+ * 299 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -289,6 +289,21 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Target creature can't be blocked this turn.
+  // Flashback {U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'c174dcbb-03a0-439c-b3d8-ed61bd46dc67',
+    name: 'Artful Dodge',
+    types: ['sorcery'],
+    cost: { U: 1 },
+    flashback: { U: 1 },
+    effects: [
+      {
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { unblockable: true }, targets: 'creature' },
+      },
+    ],
+  },
   // Choose one or both —
   // • Tap target creature.
   // • Target creature gets -2/-4 until end of turn.
@@ -547,6 +562,49 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       whenIllegal: 'detach',
       label: 'Equip {1}',
       modifies: { power: 2, toughness: 0, keywords: {} },
+    },
+  },
+  // Choose one —
+  // • Boros Charm deals 4 damage to target player or planeswalker.
+  // • Permanents you control gain indestructible until end of turn.
+  // • Target creature gains double strike until end of turn.
+  {
+    id: '2679d0dd-ba30-4a1c-b6a0-b3ac6c790496',
+    name: 'Boros Charm',
+    types: ['instant'],
+    cost: { W: 1, R: 1 },
+    modal: {
+      min: 1,
+      max: 1,
+      modes: [
+        {
+          id: 'mode1',
+          label: 'Boros Charm deals 4 damage to target player or planeswalker',
+          effects: [{ primitive: 'dealDamage', params: { amount: 4, targets: 'playerOrPlaneswalker' } }],
+          targets: 'playerOrPlaneswalker',
+        },
+        {
+          id: 'mode2',
+          label: 'Permanents you control gain indestructible until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordToYoursUntilEndOfTurn',
+              params: { keywords: { indestructible: true } },
+            },
+          ],
+        },
+        {
+          id: 'mode3',
+          label: 'Target creature gains double strike until end of turn',
+          effects: [
+            {
+              primitive: 'grantKeywordUntilEndOfTurn',
+              params: { keywords: { doubleStrike: true }, targets: 'creature' },
+            },
+          ],
+          targets: 'creature',
+        },
+      ],
     },
   },
   // This land enters tapped.
@@ -894,6 +952,126 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 3, toughness: 1, keywords: {} },
     },
   },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {B} or {G}.
+  {
+    id: '2065cada-4078-41c4-9e06-2460d2a2e8ee',
+    name: 'Darkmoss Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { G: 1 }],
+  },
+  // Indestructible (Effects that say "destroy" don't destroy this Equipment.)
+  // Equipped creature gets +2/+0.
+  // Equip {2}
+  {
+    id: '3b7ea3ac-ac0a-40aa-b743-d153e1c47d8c',
+    name: 'Darksteel Axe',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    keywords: { indestructible: true },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 2, toughness: 0, keywords: {} },
+    },
+  },
+  // Indestructible
+  // {T}: Add {C}.
+  {
+    id: '8dc067bf-f78f-4ac4-b6e7-b305c42cf0bc',
+    name: 'Darksteel Citadel',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    produces: ['C'],
+  },
+  // Indestructible (Effects that say "destroy" don't destroy this artifact.)
+  // {T}: Add one mana of any color.
+  {
+    id: 'a2529491-7389-4cfa-92d2-145eda779603',
+    name: 'Darksteel Ingot',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    keywords: { indestructible: true },
+    producesOptions: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+  },
+  // Indestructible (Damage and effects that say "destroy" don't destroy this creature. If its toughness is 0 or less, it still dies.)
+  {
+    id: 'f90fe86c-5cca-483b-93c2-6e856fa01c88',
+    name: 'Darksteel Myr',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 0,
+    toughness: 1,
+    keywords: { indestructible: true },
+    subtypes: ['myr'],
+  },
+  // Indestructible (Effects that say "destroy" don't destroy this artifact.)
+  // {1}, {T}: Scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  {
+    id: '431838a8-f020-4e4e-a6f4-2d4ca27c56df',
+    name: 'Darksteel Pendant',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    keywords: { indestructible: true },
+    activated: [
+      {
+        cost: { mana: { generic: 1 }, tap: true },
+        effects: [{ primitive: 'scry' }],
+        label: '{1}, {t}: scry 1',
+      },
+    ],
+  },
+  // Indestructible
+  // Equipped creature has indestructible.
+  // Equip {2}
+  {
+    id: 'b5b4cf54-ed5e-42d0-9d98-5fec76b0b0b8',
+    name: 'Darksteel Plate',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    keywords: { indestructible: true },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { indestructible: true } },
+    },
+  },
+  // Flash (You may cast this spell any time you could cast an instant.)
+  // Vigilance
+  // Indestructible (Damage and effects that say "destroy" don't destroy this creature. If its toughness is 0 or less, it's still put into its owner's graveyard.)
+  {
+    id: 'b91c8946-591b-4c0d-a37e-36803df40db7',
+    name: 'Darksteel Sentinel',
+    types: ['artifact', 'creature'],
+    cost: { generic: 6 },
+    power: 3,
+    toughness: 3,
+    keywords: { flash: true, vigilance: true, indestructible: true },
+    subtypes: ['golem'],
+  },
   // Destroy all creatures.
   {
     id: 'd057289d-5e28-43d5-8ff3-4a1bc723477d',
@@ -1097,6 +1275,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         },
       ],
     },
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {B} or {R}.
+  {
+    id: '44b83535-fdbf-4307-bf53-ca20470a768d',
+    name: 'Drossforge Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ B: 1 }, { R: 1 }],
   },
   // Trample
   // Whenever you cast an instant or sorcery spell, put a +1/+1 counter on this creature.
@@ -1552,6 +1741,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     subtypes: ['myr'],
     produces: ['W'],
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {W} or {B}.
+  {
+    id: 'c9b7ea9c-3bcb-4538-aa25-cdb82a52037e',
+    name: 'Goldmire Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { B: 1 }],
   },
   // This land enters tapped.
   // {T}: Add {B} or {G}.
@@ -2276,6 +2476,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { doubleStrike: true, protectionFrom: ['black', 'green'] },
     subtypes: ['human', 'knight'],
   },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {U} or {B}.
+  {
+    id: '33ee23bc-6327-4a54-a704-dfd83be36bb5',
+    name: 'Mistvault Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { B: 1 }],
+  },
   // Create two 2/2 black Zombie creature tokens.
   // Flashback {5}{B}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -2649,6 +2860,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     producesOptions: [{ B: 1 }, { R: 1 }],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
   },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {W} or {U}.
+  {
+    id: '6cb37ac1-dd11-4a8c-bca5-ef44d828059f',
+    name: 'Razortide Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ W: 1 }, { U: 1 }],
+  },
   // Scry 2, then draw two cards. You lose 2 life. (To scry 2, look at the top two cards of your library, then put any number of them on the bottom and the rest on top in any order.)
   {
     id: '5bf4d8d9-a2b2-4dba-ac05-9d4470a89db2',
@@ -2742,6 +2964,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 2,
     toughness: 2,
     subtypes: ['bear'],
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {R} or {W}.
+  {
+    id: 'a3faf70d-c034-4692-9e92-1922029e3852',
+    name: 'Rustvale Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { W: 1 }],
   },
   // Sacred Fire deals 2 damage to any target and you gain 2 life.
   // Flashback {4}{R}{W} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -2900,6 +3133,18 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ G: 1 }, { W: 1 }],
   },
+  // Flying
+  // Indestructible (Damage and effects that say "destroy" don't destroy this creature. If its toughness is 0 or less, it still dies.)
+  {
+    id: '8354b70e-43fc-4581-bb53-b913335bf460',
+    name: 'Seraph of the Suns',
+    types: ['creature'],
+    cost: { generic: 5, W: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true, indestructible: true },
+    subtypes: ['angel'],
+  },
   // Enchant creature
   // Enchanted creature gets +2/+2 and has flying and vigilance. (Attacking doesn't cause it to tap.)
   {
@@ -3010,6 +3255,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     produces: ['U'],
   },
   // This land enters tapped.
+  // Indestructible
+  // {T}: Add {U} or {R}.
+  {
+    id: '081bfd50-a436-463b-9d2c-5bc8a32b387c',
+    name: 'Silverbluff Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ U: 1 }, { R: 1 }],
+  },
+  // This land enters tapped.
   // {T}: Add {G} or {U}.
   {
     id: 'e8705df9-6439-4930-91b6-229f818559af',
@@ -3059,6 +3315,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 2,
     keywords: { flying: true, haste: true },
     subtypes: ['human', 'knight'],
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {R} or {G}.
+  {
+    id: 'e040a8e6-b90c-42d1-a1b1-771d954c61ab',
+    name: 'Slagwoods Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ R: 1 }, { G: 1 }],
   },
   // Sorin's Vengeance deals 10 damage to target player or planeswalker and you gain 10 life.
   {
@@ -3210,6 +3477,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         keywords: { firstStrike: true, vigilance: true, trample: true, haste: true },
       },
     },
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {G} or {U}.
+  {
+    id: '29cd8a7c-108a-43d1-af63-f603a27c24f2',
+    name: 'Tanglepool Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { U: 1 }],
   },
   // Whenever you cast a noncreature spell, put a +1/+1 counter on this creature.
   {
@@ -3490,6 +3768,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, U: 1 },
     flashback: { generic: 2, U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // This land enters tapped.
+  // Indestructible
+  // {T}: Add {G} or {W}.
+  {
+    id: '99720c65-be96-4220-8ed4-720660bf6928',
+    name: 'Thornglint Bridge',
+    types: ['artifact', 'land'],
+    keywords: { indestructible: true },
+    entersTapped: true,
+    producesOptions: [{ G: 1 }, { W: 1 }],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -3971,7 +4260,13 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     ],
   },
   // {T}: Add {C}.
-  { id: '05d24b0c-904a-46b6-b42a-96a4d91a0dd4', name: 'Wastes', types: ['land'], produces: ['C'] },
+  {
+    id: '05d24b0c-904a-46b6-b42a-96a4d91a0dd4',
+    name: 'Wastes',
+    types: ['land'],
+    basic: true,
+    produces: ['C'],
+  },
   {
     id: 'a35c2e20-eb90-4132-b65f-be1fcb569819',
     name: 'Watchwolf',
@@ -4007,6 +4302,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       whenIllegal: 'toGraveyard',
       label: 'Enchant creature',
       modifies: { power: -2, toughness: -1, keywords: {} },
+    },
+  },
+  // Equipped creature can't be blocked and has shroud. (It can't be the target of spells or abilities.)
+  // Equip {2}
+  {
+    id: '9ad4f730-a18e-4a7c-a468-a926c718c741',
+    name: 'Whispersilk Cloak',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 0, toughness: 0, keywords: { unblockable: true, shroud: true } },
     },
   },
   // First strike (This creature deals combat damage before creatures without first strike.)
@@ -4104,6 +4422,18 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { firstStrike: true },
     subtypes: ['human', 'knight'],
+  },
+  // Flying, double strike, vigilance, trample, indestructible
+  {
+    id: '7da0e5de-3e4c-420a-8685-991206100b9d',
+    name: 'Zetalpa, Primal Dawn',
+    types: ['creature'],
+    cost: { generic: 6, W: 2 },
+    power: 4,
+    toughness: 8,
+    legendary: true,
+    keywords: { flying: true, doubleStrike: true, vigilance: true, trample: true, indestructible: true },
+    subtypes: ['elder', 'dinosaur'],
   },
   // When this land enters, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
   // {T}: Add {C}.

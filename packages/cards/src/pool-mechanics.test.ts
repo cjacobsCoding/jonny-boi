@@ -76,6 +76,7 @@ const REPRESENTED: ReadonlyArray<{
   { mechanic: 'characteristic-defining P/T', present: (c) => (c as { characteristicPT?: unknown }).characteristicPT !== undefined },
   { mechanic: 'graveyard recursion', present: (_c, t) => t.includes('returnFromGraveyard') },
   { mechanic: 'continuous static buffs', present: (c) => ((c as { statics?: readonly unknown[] }).statics ?? []).length > 0 },
+  { mechanic: 'indestructible', present: (_c, t) => t.includes('indestructible') },
 ];
 
 /**
@@ -103,10 +104,6 @@ const UNREPRESENTABLE: ReadonlyArray<{ readonly mechanic: string; readonly why: 
     why: 'battles are Sieges — the back face is cast by a path the engine does not have — and the card index carries no printed defense number. 0 of 36 compile.',
   },
   {
-    mechanic: 'indestructible',
-    why: 'not a keyword core reads yet (it is not in KEYWORD_FLAGS); it is in flight on feat/indestructible-and-blocking.',
-  },
-  {
     mechanic: 'alternative costs',
     why: 'in flight on feat/alternative-costs; no compiler rule emits one yet.',
   },
@@ -128,7 +125,6 @@ describe('pool mechanic coverage — a feature nobody can see is not shipped', (
       emblems: (t) => t.includes('"emblem"'),
       'modal double-faced cards': (_t, c) => (c as { backFaceCastable?: boolean }).backFaceCastable === true,
       battles: (_t, c) => c.types.includes('battle'),
-      indestructible: (t) => t.includes('indestructible'),
       'alternative costs': (t) => t.includes('alternativeCost'),
     };
     for (const { mechanic, why } of UNREPRESENTABLE) {
@@ -460,6 +456,6 @@ describe('every pool card compiles complete from its printed text', () => {
       return record ? compileCard(record as never).status !== 'complete' : false;
     });
     expect(incomplete.map((c) => c.name)).toEqual([]);
-    expect(CARD_POOL.length).toBeGreaterThanOrEqual(309);
+    expect(CARD_POOL.length).toBeGreaterThanOrEqual(331);
   });
 });
