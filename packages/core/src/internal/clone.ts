@@ -228,5 +228,10 @@ export function cloneState(state: GameState): GameState {
   // which matters because a serialized state is compared field-for-field.
   if (state.pendingChoice) next.pendingChoice = clonePendingChoice(state.pendingChoice);
   if (state.resolution) next.resolution = cloneResolution(state.resolution);
+  // Two numbers, copied only when a turn has actually recorded something. The
+  // record is MUTATED in place by `setTurnFact` (it is per-turn scratch, not a
+  // value shared between states), so a fresh object per clone is what keeps two
+  // states from aliasing each other's memory of the turn.
+  if (state.turnFacts !== undefined) next.turnFacts = { A: state.turnFacts.A, B: state.turnFacts.B };
   return next;
 }

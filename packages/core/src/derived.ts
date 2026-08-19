@@ -8,7 +8,7 @@
  *   1. **Derived effect params** — "deals damage equal to the number of
  *      creatures you control". The `cards` package's `intParam` chokepoint
  *      resolves those descriptors through {@link evaluateDerivedCount}.
- *   2. **Characteristic-defining P/T** — Tarmogoyf's `*/1+*`. The continuous
+ *   2. **Characteristic-defining P/T** — Tarmogoyf's star-power box. The continuous
  *      layer (`internal/continuous.ts`) folds {@link characteristicValue} in as
  *      the creature's base, CR 613.3 layer 7a.
  *

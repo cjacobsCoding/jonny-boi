@@ -17,7 +17,9 @@
  */
 
 import type { GameEvent } from '../events.js';
-import type { GameState, InstanceId } from '../state.js';
+import type { GameState, InstanceId, PlayerId } from '../state.js';
+import { recordTurnFacts } from '../turn-facts.js';
+import { findInstance } from './zones.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
 import { matchTriggers, orderPendingTriggers } from '../triggers.js';
 
@@ -105,8 +107,24 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   };
   rememberSources();
 
+  /**
+   * Who CONTROLLED a permanent that has just left the battlefield. The
+   * `zoneChange` event carries only an id, and the instance is already out of
+   * `state.battlefield` by the time we see it — but every leave path preserves
+   * `controller` as last-known information, which is precisely what "a permanent
+   * YOU controlled left the battlefield" has to read. Only consulted for the
+   * leave events themselves, so an ordinary event pays nothing for it.
+   */
+  const controllerOfLeavingPermanent = (instanceId: InstanceId): PlayerId | undefined =>
+    findInstance(state, instanceId)?.controller;
+
   const emit = (event: GameEvent): void => {
     baseEmit(event);
+    // Fold the event into the turn's fact memory (revolt / morbid / lifegain).
+    // Done HERE, before any early-out below, because this wrapper is the one
+    // chokepoint every emitted event passes through — the same argument that
+    // put trigger matching here rather than in the turn machine.
+    recordTurnFacts(state, event, controllerOfLeavingPermanent);
     // Refresh the known-source set so a permanent that entered earlier in this same
     // action can trigger on a later event.
     rememberSources();

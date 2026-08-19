@@ -195,7 +195,7 @@ export interface CardDefinition {
   readonly power?: number;
   readonly toughness?: number;
   /**
-   * CHARACTERISTIC-DEFINING power/toughness — the printed `*/*` box whose value
+   * CHARACTERISTIC-DEFINING power/toughness — the printed star/star box whose value
    * is a formula over the game state ("~'s power is equal to the number of card
    * types among cards in all graveyards…" — Tarmogoyf, Boneyard Wurm, Maro).
    *
@@ -404,7 +404,7 @@ export interface CharacteristicFormula {
   readonly plus?: number;
 }
 
-/** A characteristic-defining `*/*` box: both halves, each a formula. */
+/** A characteristic-defining star/star box: both halves, each a formula. */
 export interface CharacteristicPT {
   readonly power: CharacteristicFormula;
   readonly toughness: CharacteristicFormula;
