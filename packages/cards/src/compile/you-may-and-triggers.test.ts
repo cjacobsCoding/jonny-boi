@@ -147,6 +147,7 @@ function getByName(name: string): CardDefinition {
 const ISLAND = getByName('Island');
 const PLAINS = getByName('Plains');
 const FOREST = getByName('Forest');
+const BOLT = getByName('Lightning Bolt');
 
 function deck(def: CardDefinition, n = DECK_SIZE): { cards: CardDefinition[] } {
   return { cards: Array.from({ length: n }, () => def) };
@@ -1047,5 +1048,114 @@ describe('"Whenever a creature you control enters/dies" - board-watching trigger
 
     expect(play(small)).toBe(0);
     expect(play(big)).toBe(1);
+  });
+});
+
+// --- the death-trigger bodies -----------------------------------------------------
+
+/** Kill `victim` with a real Lightning Bolt cast by A, so the death is genuine. */
+function bolt(state: GameState, victim: number, reg: Registry): GameState {
+  const card = instance(BOLT, 'A', 'hand');
+  state.players.A.hand.push(card);
+  floodMana(state, 'A');
+  return act(
+    state,
+    { kind: 'castSpell', player: 'A', instanceId: card.instanceId, targets: [victim] },
+    reg,
+  );
+}
+
+/** Dictate of Erebos - an untargeted edict on every creature death you suffer. */
+const DICTATE_OF_EREBOS = makeCard({
+  name: 'Dictate of Erebos',
+  typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+  manaCost: { generic: 3, W: 0, U: 0, B: 2, R: 0, G: 0, C: 0, other: [] },
+  oracleText:
+    'Flash\nWhenever a creature you control dies, each opponent sacrifices a creature of their choice.',
+});
+
+/** Moldervine Reclamation - the compound body one sentence cannot be split into. */
+const MOLDERVINE_RECLAMATION = makeCard({
+  name: 'Moldervine Reclamation',
+  typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+  manaCost: { generic: 2, W: 0, U: 0, B: 1, R: 0, G: 1, C: 0, other: [] },
+  oracleText: 'Whenever a creature you control dies, you gain 1 life and draw a card.',
+});
+
+describe('death triggers - the bodies they print', () => {
+  it('compiles Dictate of Erebos completely, as an UNTARGETED sacrifice', () => {
+    const result = compileCard(DICTATE_OF_EREBOS);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.condition.on).toBe('permanentDies');
+    expect(result.definition.triggers![0]!.effects).toEqual([
+      {
+        primitive: 'sacrificeChosen',
+        params: { who: 'opponent', filter: { anyOfTypes: ['creature'] } },
+      },
+    ]);
+    // Untargeted: a trigger body has no chosen target to read.
+    expect(result.definition.triggers![0]!.targets).toBeUndefined();
+  });
+
+  it('compiles Moldervine Reclamation completely (gain life AND draw)', () => {
+    const result = compileCard(MOLDERVINE_RECLAMATION);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.effects).toEqual([
+      { primitive: 'gainLife', params: { amount: 1 } },
+      { primitive: 'drawCards', params: { count: 1 } },
+    ]);
+  });
+
+  it('a creature DEATH fires it, and an exile does not', () => {
+    const reg = buildRegistry();
+    const reclamation = compileCard(MOLDERVINE_RECLAMATION).definition;
+    const bear: CardDefinition = {
+      id: 'dyingbear',
+      name: 'Test Bear',
+      types: ['creature'],
+      cost: { G: 1 },
+      power: 2,
+      toughness: 2,
+    };
+
+    const state = gameAtMain(reg, SEEDS.combatDamage);
+    putOnBattlefield(state, reclamation, 'A');
+    const victim = putOnBattlefield(state, bear, 'A');
+    const life = state.players.A.life;
+    const hand = state.players.A.hand.length;
+
+    // Killed by a real removal spell, so the death arrives through the same
+    // path a game produces: damage, state-based actions, the move to the yard.
+    const settled = settle(bolt(state, victim.instanceId, reg), reg, () => ({
+      kind: 'confirm',
+      yes: true,
+    }));
+    expect(settled.players.A.life).toBe(life + 1);
+    // One card drawn by the trigger; the Bolt itself came from nowhere.
+    expect(settled.players.A.hand).toHaveLength(hand + 1);
+  });
+
+  it("does NOT fire on the opponent's creature dying", () => {
+    const reg = buildRegistry();
+    const reclamation = compileCard(MOLDERVINE_RECLAMATION).definition;
+    const bear: CardDefinition = {
+      id: 'theirbear',
+      name: 'Test Bear',
+      types: ['creature'],
+      cost: { G: 1 },
+      power: 2,
+      toughness: 2,
+    };
+
+    const state = gameAtMain(reg, SEEDS.combatDamage);
+    putOnBattlefield(state, reclamation, 'A');
+    const victim = putOnBattlefield(state, bear, 'B');
+    const life = state.players.A.life;
+
+    const settled = settle(bolt(state, victim.instanceId, reg), reg, () => ({
+      kind: 'confirm',
+      yes: true,
+    }));
+    expect(settled.players.A.life).toBe(life);
   });
 });

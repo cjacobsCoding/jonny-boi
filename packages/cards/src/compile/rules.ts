@@ -1540,6 +1540,61 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'each-opponent-sacrifices',
+    description:
+      '"Each opponent sacrifices a creature of their choice" (Dictate of Erebos; Grave Pact prints "each other player")',
+    // UNTARGETED, unlike `target-player-sacrifices` above — which is why it is a
+    // separate entry: a trigger body has no chosen target to read.
+    //
+    // "Each other player" and "each opponent" are the same set here and only
+    // here: this engine seats exactly two players, so the printed plural has
+    // exactly one referent. Both wordings are accepted for that reason, and for
+    // no broader one.
+    pattern:
+      /^each (?:opponent|other player) sacrifices an? (creature|land|artifact|permanent)(?: of their choice)?$/,
+    build(match) {
+      const kind = match[1]!;
+      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: { who: 'opponent', ...(filter ? { filter } : {}) },
+      });
+    },
+  },
+  {
+    id: 'each-opponent-loses-life-you-gain',
+    description:
+      '"Each opponent loses N life and you gain M life" (Bastion of Remembrance\'s death trigger)',
+    pattern: new RegExp(
+      `^each opponent loses ${COUNT_TOKEN} life and you gain ${COUNT_TOKEN} life$`,
+    ),
+    build(match) {
+      const lost = parseCount(match[1]);
+      const gained = parseCount(match[2]);
+      if (lost === null || gained === null) return null;
+      return effects(
+        { primitive: 'loseLife', params: { amount: lost, whichPlayer: 'opponent' } },
+        { primitive: 'gainLife', params: { amount: gained } },
+      );
+    },
+  },
+  {
+    id: 'gain-life-and-draw',
+    description: '"You gain N life and draw a card" (Moldervine Reclamation\'s death trigger)',
+    // The compound the sentence splitter cannot split: one printed sentence
+    // joining two clauses the table already implements separately.
+    pattern: new RegExp(`^you gain ${COUNT_TOKEN} life and draw ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const life = parseCount(match[1]);
+      const cards = parseCount(match[2]);
+      if (life === null || cards === null) return null;
+      return effects(
+        { primitive: 'gainLife', params: { amount: life } },
+        { primitive: 'drawCards', params: { count: cards } },
+      );
+    },
+  },
+  {
     id: 'pile-split-sacrifice',
     description:
       '"Separate all permanents target player controls into two piles. That player sacrifices all permanents in the pile of their choice." (Liliana\'s −6)',

@@ -230,7 +230,16 @@ export const loseLife: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const useTarget = ctx.params.targetPlayer === true;
-  const player = useTarget ? firstPlayerTarget(ctx) ?? ctx.controller : ctx.controller;
+  // `whichPlayer: 'opponent'` is the same vocabulary `drawCards` uses, and it is
+  // what an UNTARGETED "each opponent loses 1 life" needs: a trigger body has no
+  // chosen target to read, so `targetPlayer` cannot express it. In this engine a
+  // game is always exactly two seats (`PLAYER_IDS`), so "each opponent" and "the
+  // opponent" name the same player — the printed plural has no other referent.
+  const player = useTarget
+    ? (firstPlayerTarget(ctx) ?? ctx.controller)
+    : strParam(ctx, 'whichPlayer') === 'opponent'
+      ? otherPlayer(ctx.controller)
+      : ctx.controller;
   changeLife(ctx, player, -amount);
 };
 
