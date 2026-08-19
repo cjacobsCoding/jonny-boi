@@ -227,6 +227,15 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // what the ability was pointed at, and everyone sees one leave the stack for
   // want of a target.
   triggerTargetsChosen: 'public',
+  /*
+   * A modal spell's announced modes and their aims are PUBLIC by the rules: in
+   * paper the caster declares them out loud as the spell is cast, before anyone
+   * decides whether to respond. Knowing which half of a Cryptic Command is
+   * coming is precisely what the opponent is entitled to, so these are the
+   * event objects themselves — no allocation, nothing redacted.
+   */
+  modesChosen: 'public',
+  modeTargetChosen: 'public',
   triggerRemovedFromStack: 'public',
   triggeredAbilityResolved: 'public',
   continuousEffectAdded: 'public',

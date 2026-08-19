@@ -14,11 +14,27 @@ export interface PassPriorityAction {
   readonly player: PlayerId;
 }
 
+/**
+ * Which FACE of a double-faced card is being played.
+ *
+ * Only a card declaring `CardDefinition.backFaceCastable` (a MODAL DFC) accepts
+ * `'back'`; a transforming DFC's back face is never castable (CR 712.8b) and a
+ * `'back'` action naming one is rejected. Omitted means `'front'`, which keeps
+ * every action built before modal DFCs existed valid unchanged.
+ */
+export type CastFace = 'front' | 'back';
+
 /** Play a land from hand (sorcery-speed, one per turn, empty stack). */
 export interface PlayLandAction {
   readonly kind: 'playLand';
   readonly player: PlayerId;
   readonly instanceId: InstanceId;
+  /**
+   * The face to play — `'back'` plays a modal DFC's land back face (Zendikar
+   * Rising's spell//land MDFCs), which counts as the turn's land play exactly
+   * like any other land.
+   */
+  readonly face?: CastFace;
 }
 
 /** Tap a mana source for mana (adds to the controller's pool). */
@@ -67,6 +83,11 @@ export interface CastSpellAction {
   readonly instanceId: InstanceId;
   readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
   readonly fromZone?: CastZone;
+  /**
+   * The face to cast — `'back'` casts a modal DFC's second face, with THAT
+   * face's cost, types, timing, targets and script. See {@link CastFace}.
+   */
+  readonly face?: CastFace;
 }
 
 /**

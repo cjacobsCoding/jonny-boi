@@ -63,6 +63,57 @@ import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitS
  */
 const ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['enchant', 'equip']);
 
+/**
+ * Scryfall keywords that this compiler models as effect PRIMITIVES matched by the
+ * rule table rather than as keyword flags or dedicated assembly fields.
+ *
+ * Scry, Surveil and Mill each compile from their printed line (`scry-n`,
+ * `surveil-n`, `scry-then-effect`, `self-mill`, `target-player-mills`) into an
+ * `EffectRef` whose `primitive` is the name below. The keyword sweep therefore has
+ * to look at the compiled OUTPUT to decide whether the line was implemented — the
+ * same question `flashback`/`kicker` answer with a single assembly field.
+ *
+ * The guard is deliberately evidence-based, not a blanket skip: a wording the rule
+ * table does NOT match (a derived or conditional count, "look at the top N …")
+ * produces no such primitive, so that card still reports honestly.
+ */
+const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
+  scry: 'scry',
+  surveil: 'surveil',
+  mill: 'mill',
+});
+
+/**
+ * Every effect-primitive name reachable in a compiled assembly.
+ *
+ * Primitives nest: a scry can sit inside a triggered ability's effect list (the
+ * Theros temples), inside an activated ability (Castle Vantress), or inside another
+ * primitive's params (`scry-then-effect`, the "you may" wrappers). A shallow look at
+ * `assembly.effects` would miss all three and report the keyword anyway, so the walk
+ * is a deep one over the assembled data.
+ */
+function compiledPrimitives(assembly: Assembly): ReadonlySet<string> {
+  const found = new Set<string>();
+  const seen = new Set<unknown>();
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== 'object') return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    const record = node as Record<string, unknown>;
+    if (typeof record.primitive === 'string') found.add(record.primitive);
+    for (const value of Object.values(record)) visit(value);
+  };
+  visit(assembly.effects);
+  visit(assembly.triggers);
+  visit(assembly.activated);
+  visit(assembly.statics);
+  return found;
+}
+
 /** Scryfall card types → the core `CardType`s the engine understands. */
 const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
   land: 'land',
@@ -220,8 +271,16 @@ interface Assembly {
   entersTappedUnlessLifePaid?: number;
   /** The printed "Kicker {COST}", once some line prints it. */
   kicker?: ManaCost;
+  /** The printed "Multikicker {COST}" — an additional cost paid any number of times. */
+  multikicker?: ManaCost;
+  /** The printed modal header + modes ("Choose one — • … • …"). */
+  modal?: import('@jonny-boi/core').ModalSpec;
   /** The printed flashback cost, once a "Flashback {…}" line compiles. */
   flashback?: ManaCost;
+  /** How many {X} symbols the flashback cost prints. */
+  flashbackXCost?: number;
+  /** The "Pay N life" rider on a flashback cost. */
+  flashbackLifeCost?: number;
   /** Cycling abilities, accumulated — a card may print cycling AND landcycling. */
   readonly cycling: import('@jonny-boi/core').CyclingAbility[];
   /** The printed buyback cost, once a "Buyback {…}" line compiles. */
@@ -270,11 +329,17 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
   if (contribution.kicker) assembly.kicker = contribution.kicker;
+  if (contribution.multikicker) assembly.multikicker = contribution.multikicker;
+  if (contribution.modal) assembly.modal = contribution.modal;
   if (contribution.cycling) assembly.cycling.push(...contribution.cycling);
   if (contribution.buyback) assembly.buyback = contribution.buyback;
   if (contribution.madness) assembly.madness = contribution.madness;
   if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
   if (contribution.flashback !== undefined) assembly.flashback = contribution.flashback;
+  if (contribution.flashbackXCost !== undefined) assembly.flashbackXCost = contribution.flashbackXCost;
+  if (contribution.flashbackLifeCost !== undefined) {
+    assembly.flashbackLifeCost = contribution.flashbackLifeCost;
+  }
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
     // Merged rather than replaced: a card may print the P/T line and the keyword
@@ -603,6 +668,11 @@ export function compileCard(card: CompilableCard): CompileResult {
   // second face is CASTABLE, which needs the cast-time face choice the engine
   // does not have, and they are reported as exactly that below.
   if (isTransformDfc(card)) return compileTransformDfc(card);
+  // A MODAL double-faced card is compiled as two linked faces too, but with the
+  // opposite castability rule: BOTH halves are cast (or played) from hand, each
+  // for its own cost. That is `backFaceCastable`, and it is the whole
+  // difference between the two DFC layouts.
+  if (isModalDfc(card)) return compileModalDfc(card);
 
   const assembly: Assembly = {
     effects: [],
@@ -650,13 +720,14 @@ export function compileCard(card: CompilableCard): CompileResult {
     });
   }
 
-  // A multi-faced card that is NOT a transforming DFC (modal DFC, split,
-  // adventure) has a second CASTABLE face: playing it means choosing which face
-  // to cast, at cast time, with that face's own cost — the cast-time choice
-  // system this engine does not have. Transforming DFCs no longer land here
-  // (they take the `compileTransformDfc` path above); everything else stays
-  // reported rather than being played as its front face only, which would be a
-  // strictly weaker card than printed.
+  // A multi-faced card that is neither a transforming DFC nor a modal DFC still
+  // reports. Modal DFCs are cast outright as either face (`backFaceCastable`),
+  // and that is exactly what these are NOT: a SPLIT card is one object with two
+  // costs, an ADVENTURE exiles itself and is cast again later from exile, and a
+  // SIEGE's back face becomes castable only once the battle is defeated. Each
+  // needs a cast path of its own, so none is expressible as the front/back pair
+  // the face system models. They stay reported rather than being played as their
+  // first half only, which would be a strictly weaker card than printed.
   if (card.name.includes(' // ')) {
     assembly.missing.push({
       text: card.name,
@@ -837,6 +908,7 @@ export function compileCard(card: CompilableCard): CompileResult {
   // --- keyword flags printed on the type line but not in the text ------------
   // Scryfall lists a card's keywords separately; anything it lists that we did
   // not already pick up from the text must still be modelled or reported.
+  const primitivesCompiled = compiledPrimitives(assembly);
   for (const keyword of card.keywords) {
     const word = keyword.toLowerCase();
     const field = KEYWORD_FLAGS[word];
@@ -862,12 +934,26 @@ export function compileCard(card: CompilableCard): CompileResult {
     // Same story for "Kicker": Scryfall lists it as a keyword, and the printed
     // "Kicker {COST}" line has already compiled into `CardDefinition.kicker`.
     if (word === 'kicker' && assembly.kicker !== undefined) continue;
+    // Scryfall lists BOTH "Kicker" and "Multikicker" on a multikicker card (the
+    // mechanic is a kicker), so a compiled multikicker answers for either name.
+    if ((word === 'multikicker' || word === 'kicker') && assembly.multikicker !== undefined) continue;
+    // "Modal" is not printed as an ability — it is the shape of the card, and
+    // the "Choose one —" line has already compiled into `assembly.modal`.
+    if (word === 'modal' && assembly.modal !== undefined) continue;
     // Same shape for "Flashback": the printed "Flashback {…}" line compiled into
     // `assembly.flashback`, and Scryfall listing the keyword again is not a
     // second, unmodelled ability. A flashback line that did NOT compile (an {X}
     // or additional-cost form) leaves `flashback` unset, so the keyword still
     // reports through the line's own `missing` entry.
     if (word === 'flashback' && assembly.flashback !== undefined) continue;
+    // Scry / Surveil / Mill: modelled as effect primitives, so the evidence that
+    // the printed line compiled is the primitive's presence in the assembled card
+    // rather than a dedicated field. Same contract as the guards above — skip the
+    // sweep entry ONLY when the line really was implemented; a wording the rules do
+    // not match compiles no primitive and still reports through its own `missing`
+    // entry (the scry/mill template hints).
+    const backingPrimitive = PRIMITIVE_BACKED_KEYWORDS[word];
+    if (backingPrimitive !== undefined && primitivesCompiled.has(backingPrimitive)) continue;
     // Cycling and its typed variants: Scryfall lists "Cycling", "Typecycling"
     // and "Landcycling" as keywords, and the printed line has already compiled
     // into `assembly.cycling`. A cycling line that did NOT compile (an {X}
@@ -950,10 +1036,16 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),
     ...(assembly.kicker ? { kicker: assembly.kicker } : {}),
+    ...(assembly.multikicker ? { multikicker: assembly.multikicker } : {}),
+    ...(assembly.modal ? { modal: assembly.modal } : {}),
     ...(assembly.cycling.length > 0 ? { cycling: assembly.cycling } : {}),
     ...(assembly.buyback ? { buyback: assembly.buyback } : {}),
     ...(assembly.madness ? { madness: assembly.madness } : {}),
     ...(assembly.flashback !== undefined ? { flashback: assembly.flashback } : {}),
+    ...(assembly.flashbackXCost !== undefined ? { flashbackXCost: assembly.flashbackXCost } : {}),
+    ...(assembly.flashbackLifeCost !== undefined
+      ? { flashbackLifeCost: assembly.flashbackLifeCost }
+      : {}),
     ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
     ...(manaModes.length > 0
       ? { producesOptions: manaModes }
@@ -983,7 +1075,7 @@ export function compileCard(card: CompilableCard): CompileResult {
  * own branch). Named once so the report and the tests cannot drift.
  */
 export const SECOND_CASTABLE_FACE_GAP =
-  'casting either face of a modal double-faced / split card (a cast-time face choice the engine cannot ask yet)';
+  'casting the second half of a split, adventure or Siege card (a castable half reached by a cast path the engine does not have — unlike a modal DFC, whose two faces are both cast outright)';
 
 /** The id suffix a compiled back-face definition carries (`<frontId>#back`). */
 export const BACK_FACE_ID_SUFFIX = '#back';
@@ -991,6 +1083,9 @@ export const BACK_FACE_ID_SUFFIX = '#back';
 /** Scryfall's layout value / keyword for Innistrad-style transforming DFCs. */
 const TRANSFORM_LAYOUT = 'transform';
 const TRANSFORM_KEYWORD = 'transform';
+
+/** Scryfall's layout value for a Zendikar-Rising-style MODAL double-faced card. */
+const MODAL_DFC_LAYOUT = 'modal_dfc';
 
 /** The number of faces a transforming DFC prints — a front and a back. */
 const DFC_FACE_COUNT = 2;
@@ -1087,6 +1182,70 @@ function compileTransformDfc(card: CompilableCard): CompileResult {
     status: missing.length === 0 ? 'complete' : 'incomplete',
     definition,
     matchedRules: [...front.matchedRules, ...back.matchedRules, 'transforming-dfc'],
+    missing,
+  };
+}
+
+/**
+ * Whether this record is a MODAL double-faced card — a card whose SECOND FACE
+ * is castable (or playable, when it is a land), as opposed to a transforming
+ * DFC whose back face is only ever reached by a transform instruction.
+ *
+ * Detected by Scryfall's `layout` alone, with no keyword fallback: modal DFCs
+ * print no keyword that names the layout, and guessing one from a "//" name
+ * would sweep in split and adventure cards, which are NOT two faces and must
+ * keep reporting.
+ */
+function isModalDfc(card: CompilableCard): boolean {
+  return card.layout === MODAL_DFC_LAYOUT && (card.faces?.length ?? 0) === DFC_FACE_COUNT;
+}
+
+/**
+ * Compile a modal DFC: BOTH faces in full, linked as one definition whose back
+ * face is marked CASTABLE.
+ *
+ * The contract does not bend here either — the card is `'complete'` only when
+ * every printed ability of BOTH faces compiled. A modal DFC whose back half is
+ * half-modelled would be a card whose value is precisely the choice between two
+ * halves, one of which lies.
+ *
+ * Two things differ from `compileTransformDfc`, and both follow from the
+ * layout: the back face is stamped `isBackFace` AND the front stamps
+ * `backFaceCastable`, so core offers both halves at cast/play time; and each
+ * face keeps its OWN mana cost (a transforming back face has none, because it
+ * is never cast). Keyword attribution is shared with the transform path — a
+ * keyword is attributed to every face whose own text prints it, never guessed.
+ */
+function compileModalDfc(card: CompilableCard): CompileResult {
+  const faces = card.faces as NonNullable<CompilableCard['faces']>;
+  const [frontFace, backFace] = faces as [typeof faces[number], typeof faces[number]];
+
+  const missing: UnsupportedClause[] = [];
+  for (const keyword of card.keywords) {
+    const word = keyword.toLowerCase();
+    if (!faces.some((face) => face.oracleText.toLowerCase().includes(word))) {
+      missing.push({
+        text: keyword,
+        missingEngineSystem: `the "${keyword}" keyword ability (not attributable to either face's text)`,
+      });
+    }
+  }
+  const keywordsFor = (face: typeof frontFace): string[] =>
+    card.keywords.filter((keyword) => face.oracleText.toLowerCase().includes(keyword.toLowerCase()));
+
+  const front = compileFace(frontFace, card.id, keywordsFor(frontFace));
+  const back = compileFace(backFace, `${card.id}${BACK_FACE_ID_SUFFIX}`, keywordsFor(backFace));
+  missing.push(...front.missing, ...back.missing);
+
+  const definition: CardDefinition = {
+    ...front.definition,
+    backFace: { ...back.definition, isBackFace: true },
+    backFaceCastable: true,
+  };
+  return {
+    status: missing.length === 0 ? 'complete' : 'incomplete',
+    definition,
+    matchedRules: [...front.matchedRules, ...back.matchedRules, 'modal-dfc'],
     missing,
   };
 }

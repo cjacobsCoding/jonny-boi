@@ -157,6 +157,23 @@ describe('legal-actions derivation', () => {
     expect(targeted.targetSets).toEqual([[99], ['B']]);
   });
 
+  it('withholds a modal DFC’s BACK-face offers rather than merging them', () => {
+    // A modal DFC offers two casts (and possibly a land play) for ONE instance.
+    // These helpers key on the instance alone, so merging the two would put the
+    // back face's legal targets on a menu that submits the FRONT face — a
+    // wrong action, not a missing one. Until the board can render two faces per
+    // card, only the front-face offers are surfaced.
+    const mdfc: GameAction[] = [
+      { kind: 'castSpell', player: 'A', instanceId: 40 },
+      { kind: 'castSpell', player: 'A', instanceId: 40, targets: [99], face: 'back' },
+      { kind: 'playLand', player: 'A', instanceId: 41, face: 'back' },
+    ];
+    const casts = castChoices(mdfc);
+    expect(casts.get(40)?.canCastUntargeted).toBe(true);
+    expect(casts.get(40)?.targetSets).toEqual([]);
+    expect([...playableLandIds(mdfc)]).toEqual([]);
+  });
+
   it('finds the declare-attackers template and pass availability', () => {
     expect(declareAttackersAction(actions)?.attackers).toEqual([30, 31]);
     expect(canPass(actions)).toBe(true);

@@ -153,6 +153,11 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // bounced and replayed in one turn may activate again — the once-per-turn
   // marker does not survive the move. Same shape-guard as `attachedTo`.
   if (inst.loyaltyActivatedTurn !== undefined) delete inst.loyaltyActivatedTurn;
+  // How the SPELL was kicked is a fact about that announcement, and CR 400.7
+  // makes a permanent leaving the battlefield a new object — so a bounced-and-
+  // recast creature is kicked (or not) by its own new cast, never by its last
+  // one. Same shape-guard as `attachedTo`.
+  if (inst.timesKicked !== undefined) delete inst.timesKicked;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that
