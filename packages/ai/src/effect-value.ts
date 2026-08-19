@@ -42,8 +42,10 @@ import type {
   TargetRestriction,
 } from '@jonny-boi/core';
 import {
+  aggregateFor,
   canAffordManaCost,
   convertedManaCost,
+  effectiveKeywords,
   effectivePower,
   effectiveToughness,
   isCreature,
@@ -198,6 +200,18 @@ function removalValue(perm: CardInstance, weights: HeuristicWeights): number {
   return weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(perm);
 }
 
+/**
+ * Whether this permanent shrugs off an effect that says "destroy".
+ *
+ * Read through the continuous layer rather than off `def.keywords`, so a granted
+ * indestructible — the whole point of Heroic Intervention — is seen. A mode
+ * chooser that reads the printed set picks "destroy their board" into a board it
+ * cannot touch.
+ */
+function isIndestructible(state: GameState, perm: CardInstance): boolean {
+  return Boolean(effectiveKeywords(perm, aggregateFor(state, perm.instanceId)).indestructible);
+}
+
 /** The mana value of a permanent's printed card (a token has none). */
 function permanentManaValue(perm: CardInstance): number {
   return perm.def.cost ? convertedManaCost(perm.def.cost) : 0;
@@ -277,8 +291,14 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       return weights.modeBounceBaseScore + redeploy + pressure;
     }),
 
-  /** Same shape as a bounce, but the card is gone for good. */
-  destroyTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
+  /**
+   * Same shape as a bounce, but the card is gone for good — UNLESS the thing it
+   * points at is indestructible, in which case the mode does literally nothing
+   * (CR 702.12b) and must score as the blank it is. Exile has no such exemption,
+   * which is exactly why the two are not one entry.
+   */
+  destroyTarget: (_params, ctx) =>
+    againstTarget(ctx, (perm) => (isIndestructible(ctx.state, perm) ? 0 : removalValue(perm, ctx.weights))),
   exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
 
   /** Tapping one permanent is a fraction of tapping a board; price it per power. */
@@ -297,6 +317,9 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     let net = 0;
     for (const perm of ctx.state.battlefield) {
       if (!isCreature(perm.def)) continue;
+      // A wipe neither clears their indestructible creatures nor costs us ours,
+      // so neither side of the trade includes them.
+      if (isIndestructible(ctx.state, perm)) continue;
       const stats = effectivePower(perm) + effectiveToughness(perm);
       net += perm.controller === ctx.player ? -stats * weights.ownCreatureLossPerStat : stats * weights.killEnemyPerStat;
     }

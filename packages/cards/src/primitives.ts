@@ -28,6 +28,7 @@
 import type {
   CardDefinition,
   CardInstance,
+  CardType,
   EffectContext,
   EffectPrimitive,
   EffectRef,
@@ -43,6 +44,7 @@ import {
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
+  effectiveKeywords,
   effectivePower,
   isBattle,
   turnFactHolds,
@@ -279,6 +281,35 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
   const target = firstPermanentTarget(ctx) ?? selfIfCreature(ctx);
   if (!target || !isCreature(target.def)) return;
   ctx.addContinuousEffect({ target: target.instanceId, keywords, duration: 'endOfTurn' });
+};
+
+/**
+ * `grantKeywordToYoursUntilEndOfTurn` — the MASS form of the grant above:
+ * "Creatures you control gain indestructible until end of turn" (Selfless
+ * Spirit), "Permanents you control gain hexproof and indestructible until end of
+ * turn" (Heroic Intervention).
+ *
+ * It is a separate primitive rather than a flag on the single-target one because
+ * it targets NOTHING: there is no chosen creature, no legality question, and the
+ * set it reaches is decided at RESOLUTION from the board as it then stands. That
+ * is also why it must not be modelled as a static — the grant outlives the spell
+ * that made it (until cleanup) and reaches only the permanents that were there.
+ *
+ * `params.anyOfTypes` narrows the set the way the printed noun does; omitting it
+ * is the printed word "permanents", which narrows nothing. `params.scope` is
+ * `'you'` (the default) or `'opponent'`.
+ */
+export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
+  const keywords = keywordsParam(ctx);
+  if (isEmptyKeywords(keywords)) return;
+  const types = strArrayParam(ctx, 'anyOfTypes');
+  const opponents = strParam(ctx, 'scope') === 'opponent';
+  for (const perm of ctx.state.battlefield) {
+    const theirs = perm.controller !== ctx.controller;
+    if (theirs !== opponents) continue;
+    if (types.length > 0 && !types.some((type) => perm.def.types.includes(type as CardType))) continue;
+    ctx.addContinuousEffect({ target: perm.instanceId, keywords, duration: 'endOfTurn' });
+  }
 };
 
 /**
@@ -807,13 +838,40 @@ export const addCounters: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * Whether this permanent shrugs off an effect that says **destroy** (CR 702.12b).
+ *
+ * Asked through the continuous layer rather than off `def.keywords`, so a GRANTED
+ * indestructible — an until-end-of-turn "creatures you control gain
+ * indestructible", an anthem-style static — saves the permanent exactly as a
+ * printed one does. Reading the printed set here is the bug that makes a
+ * fog-the-wrath trick do nothing.
+ */
+function isIndestructible(ctx: EffectContext, permanent: CardInstance): boolean {
+  return Boolean(
+    effectiveKeywords(permanent, aggregateFor(ctx.state, permanent.instanceId)).indestructible,
+  );
+}
+
+/**
  * Destroy a permanent: move it to its owner's graveyard.
+ *
+ * An INDESTRUCTIBLE permanent is not destroyed and nothing else happens to it —
+ * no zone change, and no `creatureDied`, because it did not die. This is the one
+ * place every printed "destroy" in the pool passes through (single target, board
+ * wipe, and the destroy modes of modal spells alike), which is why the exemption
+ * lives here and not in each caller.
+ *
+ * Note what this does NOT cover, deliberately: SACRIFICE is a cost rather than
+ * destruction and goes through `sacrificePermanent` untouched, exile moves the
+ * permanent by a different path, and lethal damage is a state-based action
+ * (`internal/sba.ts`) rather than an effect.
  *
  * `creatureDied` is emitted only for an actual creature — it is what death
  * triggers key off, and firing it for a destroyed artifact would make a "when a
  * creature dies" ability trigger on something that never was one.
  */
 function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
+  if (isIndestructible(ctx, permanent)) return;
   movePermanentTo(ctx, permanent, 'graveyard');
   if (isCreature(permanent.def)) {
     ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
@@ -1042,6 +1100,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   loseLife,
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
+  grantKeywordToYoursUntilEndOfTurn,
   makeToken,
   createEmblem,
   persistReturn,
