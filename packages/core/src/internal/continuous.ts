@@ -142,13 +142,19 @@ export type ContinuousIndex = ReadonlyMap<InstanceId, AggregatedMod>;
  * three non-boolean keywords (`protectionFrom`, `ward`, `minBlockers`) carry
  * payloads and are folded by their own merge rules in {@link grantInto}.
  *
- * ⚠️ ADDING A BOOLEAN FLAG TO `KeywordFlags` AND NOT TO THIS LIST is a silent,
- * one-directional bug: the printed keyword works and every GRANT of it does
- * nothing. That is how a granted hexproof was lost, and it is why an
- * indestructible granted by a static or by a combat trick is covered by tests
- * rather than assumed.
+ * ⚠️ ADDING A BOOLEAN FLAG TO `KeywordFlags` AND NOT TO THIS LIST used to be a
+ * silent, one-directional bug: the printed keyword worked and every GRANT of it
+ * did nothing. It ate a granted hexproof once and a granted indestructible once,
+ * found both times only because someone happened to write the test.
+ *
+ * It cannot happen a third time: {@link KEYWORD_LIST_IS_EXHAUSTIVE} below is a
+ * compile-time proof that this list and the boolean half of `KeywordFlags` are
+ * the SAME set, in both directions. Add a boolean flag and this file stops
+ * type-checking until it is listed here — the same default-deny shape the sim's
+ * `OBSERVATION_POLICY` and `paired-arms-config` use, and for the same reason: a
+ * new thing must not default into the safe-looking bucket.
  */
-const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
+const KEYWORD_KEYS = [
   'flying',
   'vigilance',
   'haste',
@@ -166,7 +172,34 @@ const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'unblockable',
   'cantBlock',
   'indestructible',
-];
+] as const;
+
+/**
+ * The boolean-valued keys of `KeywordFlags`. The three payload keywords
+ * (`protectionFrom`, `ward`, `minBlockers`) are excluded BY TYPE rather than by
+ * memory: they are folded by their own merge rules in {@link grantInto}, since
+ * "set it to true" is not what granting one of them means.
+ */
+type BooleanKeywordKey = {
+  [K in keyof KeywordFlags]-?: boolean extends NonNullable<KeywordFlags[K]> ? K : never;
+}[keyof KeywordFlags];
+
+/**
+ * COMPILE-TIME PROOF that {@link KEYWORD_KEYS} is exactly the boolean keyword
+ * set — checked by `tsc` on every build, in BOTH directions:
+ *  - a boolean flag missing from the list would make grants of it do nothing;
+ *  - a listed key that is not a boolean flag would be dead weight, or a typo.
+ * Either mistake makes this initialiser fail to compile.
+ */
+type KeywordListIsExhaustive =
+  Exclude<BooleanKeywordKey, (typeof KEYWORD_KEYS)[number]> extends never
+    ? Exclude<(typeof KEYWORD_KEYS)[number], BooleanKeywordKey> extends never
+      ? true
+      : never
+    : never;
+
+/** The witness. If the two sets ever diverge, this line stops type-checking. */
+export const KEYWORD_LIST_IS_EXHAUSTIVE: KeywordListIsExhaustive = true;
 
 /**
  * The accumulator an aggregation pass folds into. Structurally an `AggregatedMod`
