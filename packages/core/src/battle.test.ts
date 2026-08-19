@@ -28,7 +28,6 @@ import {
   DEFAULT_RULES,
   DEFENSE_COUNTER,
   defenseOf,
-  generateLegalActions,
   isAttackable,
   legalTargetsFor,
   protectorOf,

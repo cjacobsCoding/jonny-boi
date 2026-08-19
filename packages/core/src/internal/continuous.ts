@@ -61,7 +61,6 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
-import { PLAYER_IDS } from '../state.js';
 import type { KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import type { GameEvent } from '../events.js';
@@ -218,6 +217,25 @@ function applyAttachment(map: Map<InstanceId, MutableMod>, attachment: CardInsta
   grantInto(agg, mod.keywords);
 }
 
+/**
+ * Append the objects in one zone that declare static abilities to `sources`,
+ * allocating the list only if there is something to put in it. Hoisted to module
+ * scope rather than written inline so the hot path does not re-create a closure
+ * per call.
+ */
+function collectStaticSources(
+  zone: readonly CardInstance[],
+  sources: CardInstance[] | null,
+): CardInstance[] | null {
+  let out = sources;
+  for (let i = 0; i < zone.length; i++) {
+    const object = zone[i] as CardInstance;
+    const declared = object.def.statics;
+    if (declared !== undefined && declared.length > 0) (out ??= []).push(object);
+  }
+  return out;
+}
+
 /** Get (creating if needed) the accumulator for one instance. */
 function accumulatorFor(map: Map<InstanceId, MutableMod>, id: InstanceId): MutableMod {
   let agg = map.get(id);
@@ -257,17 +275,15 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   // into this one pass instead of getting a layer of its own — which is also
   // what makes an emblem's buff survive a board wipe with no special case.
   //
-  // The cost on the sim's hot path is two array-length reads per call: the
-  // command zone is empty in every game that never made an emblem, and the loop
-  // body never runs.
-  for (const pid of PLAYER_IDS) {
-    const command = state.players[pid].command;
-    for (let i = 0; i < command.length; i++) {
-      const object = command[i] as CardInstance;
-      const declared = object.def.statics;
-      if (declared !== undefined && declared.length > 0) (sources ??= []).push(object);
-    }
-  }
+  // PERFORMANCE: read directly rather than through `for (const pid of
+  // PLAYER_IDS)`, which allocates an array iterator per call for a two-element
+  // list — and this function runs several times per action across combat, SBAs,
+  // legality and serialization. The `.length === 0` guard means a game that
+  // never made an emblem (all of them, today) pays two integer comparisons.
+  const commandA = state.players.A.command;
+  if (commandA.length > 0) sources = collectStaticSources(commandA, sources);
+  const commandB = state.players.B.command;
+  if (commandB.length > 0) sources = collectStaticSources(commandB, sources);
   for (let i = 0; i < permanents.length; i++) {
     const perm = permanents[i] as CardInstance;
     const declared = perm.def.statics;
@@ -361,20 +377,14 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
     // agree with `indexContinuous` about that or the same board would report two
     // different power values depending on which accessor a caller happened to
     // reach for. (It did, once: wiring only the bulk path made an emblem's anthem
-    // real in combat and invisible to a one-off read.)
-    for (const pid of PLAYER_IDS) {
-      for (const source of state.players[pid].command) {
-        const declared = source.def.statics;
-        if (declared === undefined || declared.length === 0) continue;
-        for (const ability of declared) {
-          if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
-          any = true;
-          agg.power += ability.power ?? 0;
-          agg.toughness += ability.toughness ?? 0;
-          grantInto(agg, ability.keywords);
-        }
-      }
-    }
+    // real in combat and invisible to a one-off read — caught by a test before it
+    // shipped, which is the only reason this comment is not a bug report.)
+    //
+    // Same direct-read guard as the bulk path: no iterator for a two-element list.
+    const commandA = state.players.A.command;
+    if (commandA.length > 0) any = foldCommandStatics(commandA, target, agg) || any;
+    const commandB = state.players.B.command;
+    if (commandB.length > 0) any = foldCommandStatics(commandB, target, agg) || any;
   }
   // Layer 4 — until-end-of-turn effects aimed at this instance.
   for (const eff of state.continuous) {
@@ -386,6 +396,32 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   }
 
   return any ? agg : NO_MOD;
+}
+
+/**
+ * Fold every static a command zone's objects (emblems) radiate onto ONE target's
+ * accumulator. Returns whether anything applied. The single-instance twin of
+ * {@link collectStaticSources}.
+ */
+function foldCommandStatics(
+  zone: readonly CardInstance[],
+  target: CardInstance,
+  agg: MutableMod,
+): boolean {
+  let applied = false;
+  for (let i = 0; i < zone.length; i++) {
+    const source = zone[i] as CardInstance;
+    const declared = source.def.statics;
+    if (declared === undefined || declared.length === 0) continue;
+    for (const ability of declared) {
+      if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
+      applied = true;
+      agg.power += ability.power ?? 0;
+      agg.toughness += ability.toughness ?? 0;
+      grantInto(agg, ability.keywords);
+    }
+  }
+  return applied;
 }
 
 /**
