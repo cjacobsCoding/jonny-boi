@@ -74,6 +74,24 @@ export interface CastOption {
   readonly fromZone?: CastZone;
 }
 
+/**
+ * One CYCLING ability of a card in the priority-holder's hand, pre-checked for
+ * affordability exactly as {@link CastOption} is — same two flags, same meaning,
+ * so the board can present "cycle it" beside "play it" with one shape.
+ */
+export interface CycleOption {
+  readonly instanceId: InstanceId;
+  readonly cardId: string;
+  readonly name: string;
+  /** Which printed cycling ability (a card may print cycling AND landcycling). */
+  readonly abilityIndex: number;
+  /** The printed label, e.g. `Cycling {2}` / `Islandcycling {1}`. */
+  readonly label: string;
+  readonly cost: ManaCost;
+  readonly affordableNow: boolean;
+  readonly affordableWithTap: boolean;
+}
+
 /** One legal target choice for an activated ability, labeled for the UI. */
 export interface AbilityTargetChoice {
   readonly target: InstanceId | PlayerId;
@@ -174,6 +192,8 @@ export class GameSession {
   private memoLegalActions?: readonly GameAction[];
   private memoCastOptions?: CastOption[];
   private memoGraveyardCastOptions?: CastOption[];
+  private memoExileCastOptions?: CastOption[];
+  private memoCycleOptions?: CycleOption[];
   private memoAbilityOptions?: AbilityOption[];
 
   /** Legal actions for the current priority-holder (the raw engine menu). */
@@ -250,12 +270,21 @@ export class GameSession {
   ): SubmitResult {
     const player = this.priorityPlayer;
     const zone =
-      fromZone === 'graveyard' ? this.state.players[player].graveyard : this.state.players[player].hand;
+      fromZone === 'graveyard'
+        ? this.state.players[player].graveyard
+        : fromZone === 'exile'
+          ? this.state.players[player].exile
+          : this.state.players[player].hand;
     const card = zone.find((c) => c.instanceId === instanceId);
     if (!card) {
       return {
         session: this,
-        rejected: fromZone === 'graveyard' ? 'that card is not in your graveyard' : 'that card is not in your hand',
+        rejected:
+          fromZone === 'graveyard'
+            ? 'that card is not in your graveyard'
+            : fromZone === 'exile'
+              ? 'that card is not in exile'
+              : 'that card is not in your hand',
         events: [],
       };
     }
@@ -267,7 +296,12 @@ export class GameSession {
     let working: GameSession = this;
     // A flashback cast pays the FLASHBACK cost — the engine's own rule at
     // `applyCastSpell`, mirrored so the auto-tap plans for what will be charged.
-    const cost = fromZone === 'graveyard' ? card.def.flashback : card.def.cost;
+    const cost =
+      fromZone === 'graveyard'
+        ? card.def.flashback
+        : fromZone === 'exile'
+          ? card.def.madness
+          : card.def.cost;
     if (cost) {
       const guard = this.state.battlefield.length + 1; // bound the loop
       let taps = 0;
@@ -289,7 +323,7 @@ export class GameSession {
       player,
       instanceId,
       targets,
-      ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+      ...(fromZone === 'hand' ? {} : { fromZone }),
     });
     if (cast.rejected) {
       // Roll back to the pre-tap session so a failed cast doesn't strand tapped lands.
@@ -503,6 +537,125 @@ export class GameSession {
       });
     }
     return options;
+  }
+
+  /**
+   * The MADNESS cast option, when a madness window of the priority-holder's is
+   * open: the exiled card, castable for its madness cost.
+   *
+   * Same `CastOption` shape as the hand and graveyard lists, so the board's one
+   * cast flow (target pick → `castWithAutoTap`) serves this zone too — and the
+   * cost carried is the MADNESS cost, which is what the cast pays. A window
+   * whose cost this board cannot fund still yields an option marked unaffordable
+   * rather than nothing at all, because a player who cannot pay still has to be
+   * told what they are declining.
+   */
+  exileCastOptions(): CastOption[] {
+    return (this.memoExileCastOptions ??= this.computeExileCastOptions());
+  }
+
+  private computeExileCastOptions(): CastOption[] {
+    const window = this.state.madnessWindow;
+    if (!window || window.controller !== this.priorityPlayer) return [];
+    const card = this.state.players[window.controller].exile.find(
+      (c) => c.instanceId === window.instanceId,
+    );
+    const madness = card?.def.madness;
+    if (!card || madness === undefined) return [];
+    const castableNow = this.legalActions().some(
+      (a) => a.kind === 'castSpell' && a.fromZone === 'exile' && a.instanceId === card.instanceId,
+    );
+    return [
+      {
+        instanceId: card.instanceId,
+        cardId: card.def.id,
+        name: card.def.name,
+        cost: madness,
+        needsTarget: needsTarget(card.def),
+        requirement: targetRequirement(card.def),
+        affordableNow: castableNow,
+        affordableWithTap: this.canAffordWithTaps(window.controller, madness),
+        fromZone: 'exile',
+      },
+    ];
+  }
+
+  /**
+   * The CYCLING options for the priority-holder: every printed cycling ability of
+   * every card in their hand they could pay for, now or after auto-tapping.
+   *
+   * Not derived from `legalActions` alone, for the same reason the cast lists are
+   * not: the engine offers a cycling action only once the pool ALREADY covers the
+   * cost, so a board of untapped lands would show nothing. `affordableNow`
+   * carries the engine's own offer; `affordableWithTap` is the auto-tap promise
+   * {@link cycleWithAutoTap} then keeps.
+   */
+  cycleOptions(): CycleOption[] {
+    return (this.memoCycleOptions ??= this.computeCycleOptions());
+  }
+
+  private computeCycleOptions(): CycleOption[] {
+    const player = this.priorityPlayer;
+    const offered = new Set(
+      this.legalActions()
+        .filter((a): a is Extract<GameAction, { kind: 'cycleCard' }> => a.kind === 'cycleCard')
+        .map((a) => `${a.instanceId}:${a.abilityIndex ?? 0}`),
+    );
+    const options: CycleOption[] = [];
+    for (const card of this.state.players[player].hand) {
+      const abilities = card.def.cycling;
+      if (!abilities) continue;
+      for (let index = 0; index < abilities.length; index++) {
+        const ability = abilities[index] as NonNullable<(typeof abilities)[number]>;
+        const affordableNow = offered.has(`${card.instanceId}:${index}`);
+        const affordableWithTap = this.canAffordWithTaps(player, ability.cost);
+        if (!affordableNow && !affordableWithTap) continue;
+        options.push({
+          instanceId: card.instanceId,
+          cardId: card.def.id,
+          name: card.def.name,
+          abilityIndex: index,
+          label: ability.label,
+          cost: ability.cost,
+          affordableNow,
+          affordableWithTap,
+        });
+      }
+    }
+    return options;
+  }
+
+  /**
+   * Cycle a card from hand, auto-tapping for its cycling cost first — the same
+   * convenience (and the same rollback-on-failure contract) `castWithAutoTap`
+   * gives a cast, so a player never has to micro-tap lands to cycle.
+   */
+  cycleWithAutoTap(instanceId: InstanceId, abilityIndex = 0): SubmitResult {
+    const player = this.priorityPlayer;
+    const card = this.state.players[player].hand.find((c) => c.instanceId === instanceId);
+    const ability = card?.def.cycling?.[abilityIndex];
+    if (!ability) {
+      return { session: this, rejected: 'that card has no such cycling ability', events: [] };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let working: GameSession = this;
+    const guard = this.state.battlefield.length + 1;
+    let taps = 0;
+    while (!canPay(working.state.players[player].manaPool, ability.cost) && taps < guard) {
+      const next = working.nextTapToward(player, ability.cost);
+      if (!next) break;
+      const tapped = working.tapForMana(next.instanceId, next.mode);
+      if (tapped.rejected) break;
+      working = tapped.session;
+      taps += 1;
+    }
+    if (!canPay(working.state.players[player].manaPool, ability.cost)) {
+      return { session: this, rejected: 'not enough mana available to cycle this card', events: [] };
+    }
+    const cycled = working.submit({ kind: 'cycleCard', player, instanceId, abilityIndex });
+    // Roll back to the pre-tap session so a failed cycle doesn't strand lands.
+    if (cycled.rejected) return { session: this, rejected: cycled.rejected, events: cycled.events };
+    return cycled;
   }
 
   /** Legal target options for a card's requirement against the current state. */
