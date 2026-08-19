@@ -1632,7 +1632,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
     pattern: new RegExp(
-      `^(other )?(${Object.keys(COLOR_WORDS).join('|')} )?creatures you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?creatures you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
     build(match, ctx) {
       // Only a PERMANENT can carry a static ability. An instant/sorcery printing
