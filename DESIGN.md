@@ -1147,7 +1147,9 @@ Still open, roughly by how often they block a real decklist:
   put on no counters at all** — they are applied as the permanent enters (CR 614.1c), while its own
   spell is resolving and before the instance reaches the battlefield, and the primitive only looked
   at the battlefield — so every 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) died
-  on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable (9.2% → 10.3%)**.
+  on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable** against the census baseline this
+  branch started from, and **229 → 254 (10.9% → 12.1%)** re-measured after merging the siblings that
+  landed meanwhile.
   ⚠️ Still reported, by name: `indestructible` (no keyword flag), phasing, doubling counters,
   proliferate (needs a chooser over every permanent and player with a counter), counter kinds the
   stat layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature",

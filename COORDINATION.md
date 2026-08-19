@@ -117,7 +117,9 @@ _Append dated notes here; keep them short. Newest at top._
   `CardInstance.counters`, the layer-7d stat pipeline and `addCounters` all worked and nothing
   printed could reach them. Closed as rule-table DATA plus small seam extensions.
 
-  **Measured on the cached 2100-card corpus: 193 → 217 playable (9.2% → 10.3%).** Re-run with
+  **Measured on the cached 2100-card corpus: 193 → 217** against the census baseline this branch
+  started from, and **229 → 254 (10.9% → 12.1%) re-measured after merging origin/main** (the
+  keyword-sweep and modal-casting branches landed meanwhile). Re-run with
   `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json <out>`.
 
   Owned files: `packages/cards/src/compile/rules.ts`, `packages/cards/src/primitives.ts`,
