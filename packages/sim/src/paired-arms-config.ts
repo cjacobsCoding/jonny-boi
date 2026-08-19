@@ -179,6 +179,16 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // zoneChange. No library is ever consulted, so paired arms stay comparable.
   'sacrificeChosen',
   'pileSplitSacrifice',
+  /*
+   * Granting flashback reads the GRAVEYARD (a public zone, and one whose
+   * contents the runner already tracks exactly: every card that got there
+   * announced its instance id in a `zoneChange`), writes one grant record, and
+   * branches on nothing a library holds. The recast it enables is an ordinary
+   * cast of a card the log has already named. So the identical-game argument
+   * survives it — unlike the top-of-library readers above, this one cannot see
+   * the swapped card until that card has publicly arrived in the yard.
+   */
+  'grantFlashback',
 ]);
 
 /**

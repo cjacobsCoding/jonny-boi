@@ -143,6 +143,20 @@ export {
   protectionPreventsDamage,
   sourceHasQuality,
 } from './protection.js';
+
+// Card grants (card-grants.ts): continuous effects on cards in NON-battlefield
+// zones — Snapcaster Mage's "target instant or sorcery card in your graveyard
+// gains flashback until end of turn". A separate list from the continuous layer
+// because that layer is keyed on battlefield permanents; see the module header
+// for the CR 400.7 zone-change rule and the empty-check performance discipline.
+export type { CardGrant, CardGrantRequest } from './card-grants.js';
+export {
+  addCardGrant,
+  expireCardGrants,
+  flashbackCostOf,
+  hasCardGrants,
+  pruneCardGrantsFor,
+} from './card-grants.js';
 /**
  * Transforming double-faced cards (CR 701.28 / 712): a front-face definition
  * nests its back face (`CardDefinition.backFace`), which face is up is

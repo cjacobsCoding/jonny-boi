@@ -950,9 +950,38 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   `scoredSpellGoals` scores graveyard flashback candidates through the same scorer as hand spells — so
   the hybrid search's policy candidates inherit the consideration and the mechanic is never
   pilot-inert. Only the PLAIN mana-cost form compiles (`flashback-cost` rule); {X}/additional-cost
-  flashback stays reported against the cast-cost-modification system, and flashback GRANTED by another
-  card (Snapcaster Mage) stays stubbed on targeting-a-graveyard-card + a continuous effect on a
-  non-battlefield card.
+  flashback stays reported against the cast-cost-modification system. Flashback GRANTED by another
+  card is no longer a gap — see the graveyard-grants entry below, which un-stubs Snapcaster Mage.
+- ✅ *effects that target and modify cards in graveyards* — the two systems Snapcaster Mage was
+  stubbed on, built together because neither is worth anything alone. **(1) Targeting a graveyard
+  card.** `TargetRestriction` gained `'instantOrSorceryInYourGraveyard'`, threaded through the
+  same three enforcement points every other restriction uses — offered by `legalTargetsFor`,
+  accepted (or refused) by `isLegalTarget`, and re-checked by the primitive at resolution, so a
+  card that leaves the graveyard in response makes the ability FIZZLE rather than grant into the
+  void. Like `'opponent'` and `'creatureYouControl'` it reads "your" off the ACTING player, and an
+  absent controller makes every candidate illegal rather than guessed. Hexproof/shroud/protection
+  are correctly not consulted: those read "this permanent", and a card in a graveyard is not one
+  (CR 110.1). **(2) Continuous effects on non-battlefield cards** live in a NEW list,
+  `GameState.cardGrants` (core's `card-grants.ts`) — deliberately NOT the continuous layer, whose
+  index is keyed on battlefield permanents, whose statics radiate from battlefield sources, and
+  whose orphan-pruning would delete a graveyard grant on sight. A grant is instance-scoped, expires
+  in cleanup like any until-end-of-turn effect, and is DROPPED the moment its card changes zones
+  (CR 400.7 — a new object) at every zone-move chokepoint, core's and `cards`'s alike. The one
+  exception mirrors CR 400.7g and needs no storage: casting on the grant reads the cost at
+  announcement, and the exile-on-leaving-the-stack replacement rides the stack object's own
+  `castFrom` (`spellLeaveDestination`), so pruning the grant as the card leaves the graveyard
+  loses nothing. **The cast path reads printed and granted flashback through ONE accessor**
+  (`flashbackCostOf`), so `generateLegalActions`, `applyCastSpell` and both pilots cannot
+  disagree about what a graveyard card costs. ⚠️ **Performance**: `cardGrants` is OPTIONAL and
+  absent in every game that grants nothing, and every reader and pruning hook starts with the same
+  one-property empty check (`hasCardGrants`) that `isLegalTarget`'s fast path uses — measured
+  allocation-identical to main (534 vs 533 median scavenges, inside the alloc bench's documented
+  ±2) with byte-identical play (30,466 actions / 63,782 events) and a byte-identical seed-99
+  gauntlet. **Snapcaster Mage is UN-STUBBED**: flash, the ETB aimed as it goes on the stack, the
+  grant priced at the target's own mana cost, the recast, and the exile after it all play as
+  printed, and the heuristic pilot casts it, aims it at the BEST spell in its graveyard
+  (`valueOfEffects`'s `grantFlashback` entry prices the grant off the card it names) and takes
+  the recast it just bought.
 - ✅ *cost modification / choice at cast time — {X} costs and kicker* — the cast-time question
   step. Casting a spell with an `{X}` cost or a kicker parks a question with NOTHING resolving
   (the same moment a shockland's pay-life and a trigger's aiming use): a new choice kind,
@@ -1034,8 +1063,7 @@ Still open, roughly by how often they block a real decklist:
   cast-time question step now that {X}/kicker built it), *multikicker*, *Phyrexian costs*,
   *dynamic P/T* (Tarmogoyf needs characteristic-defining P/T — `StaticAbility` deltas are fixed
   numbers and `DerivedCount` has no "card types in all graveyards" entry), *emblems* (walker ultimates that create one stay reported),
-  *modal DFCs / split / adventure (the cast-time face choice)*, *granting flashback to a graveyard card (Snapcaster Mage: needs targeting a
-  graveyard card + a continuous effect on a non-battlefield card)*,
+  *modal DFCs / split / adventure (the cast-time face choice)*,
   *revolt-style "a permanent left the battlefield this turn" trackers* (no turn-scoped event memory
   exists to answer Fatal Push's question),
   *colored/filtered statics* ("White creatures you control…" — `CardFilter` has no color field),
