@@ -143,6 +143,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'x-damage' },
       },
       {
+        title: '{X} as an optional payment',
+        detail:
+          '"Counter target spell unless its controller pays {X}" (Condescend) — the X the caster chose and paid for becomes the price the victim is asked, and an X of zero is a cost everybody pays, so the spell simply resolves.',
+        witness: { kind: 'rule', id: 'counter-target-spell-unless-pays-x' },
+      },
+      {
         title: 'Kicker',
         detail:
           'An affordable kicker is offered as a cast-time payment; a caster who cannot pay is never asked. The kicked half runs only when it was paid (Burst Lightning). Multikicker still reports.',
@@ -284,6 +290,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail:
           'Brainstorm-style ordered put-backs, Ponder-style look-and-reorder, optional shuffles, reveals, and fetch-style searches that respect land subtypes.',
         witness: { kind: 'rule', id: 'fetch-land-by-subtype' },
+      },
+      {
+        title: 'Scry & surveil',
+        detail:
+          'Scry N looks at the top N cards and splits them any way you like between the top (in the order you choose to draw them) and the bottom; Surveil N does the same with your graveyard instead of the bottom. Both play as riders too ("…, then scry 2") and as enters-the-battlefield triggers, which is what makes the Temple and Undercity-Sewers land cycles real cards. The look is private — the log records only how many cards were seen.',
+        witness: { kind: 'rule', id: 'scry-n' },
       },
       {
         title: 'Ramp & sacrifice-fetch',

@@ -997,6 +997,39 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   finishable walker (never chips one it cannot kill, never over a lethal race), and burns a killable
   walker. NOT built, on purpose: emblems (ultimates that need them stay reported), the legend rule
   (the engine has none for legendary creatures either — walkers get the same treatment), battles.
+- ✅ *scry & surveil — looking at the top of a library, and the bottom-of-library placement it
+  needed* — "Scry N" (CR 701.18) and "Surveil N" (CR 701.42) play as printed, plus the rider forms
+  ("Scry 2, then draw a card") and the enters-the-battlefield form that makes the Temple and
+  surveil-land cycles real cards. No new choice KIND was needed: the look is one ordered
+  `selectCards` over the top N with `min: 0` and a new `keepOnTop` marker — offering the candidates
+  IS the look (the choice travels to its chooser alone), the chosen cards stay on top in the chosen
+  order, and every unchosen one leaves (scry to the bottom, surveil to the graveyard). The
+  bottom-of-library placement the previous revision of this list named as the blocker is
+  `moveOwnedCard`'s existing `'bottom'` position — the same funnel every zone move already used —
+  so scry needed no new movement machinery, only the question. Scry asks a SECOND question for the
+  bottom order, and only when two or more cards are going down (one is not a decision).
+  **Both primitives obey the ask-first-then-mutate contract in full**: every answer is collected
+  before a single card moves, which is what makes a parked scry safe to replay.
+  ⚠️ **The look is hidden information, and the redaction is the interesting part.** A new
+  `cardsLookedAt` event carries a player and a COUNT and nothing else — exactly what a spectator
+  sees when somebody picks up two cards — so it is public *as printed*, while the identities never
+  leave the choice (whose `choiceAsked` observation was already redacted to an option count). The
+  consequences arrive on their own: a surveilled card's `zoneChange` into a graveyard is public,
+  a bottomed or kept card's library → library move is anonymised by the existing hidden-zone rule.
+  Both primitives are classified LIBRARY_READING in `paired-arms-config` — they read the top of a
+  library and BRANCH on what they saw, the same dangerous shape as `revealTopCard`.
+  **The AI is not inert and not random**: one documented rule with one weight
+  (`scryKeepValueThreshold`) — keep every looked-at card whose `cardValue` clears the bar, bottom
+  or bin the rest, survivors best-first because the answer is ordered. That is not arbitrary:
+  `cardValue` already prices a land by whether its controller still NEEDS lands, so the threshold
+  sitting between `choiceLandValue` and `choiceLandShortValue` makes the pilot bottom lands exactly
+  when it is flooded and keep them while it is short — the decision that carries most of a scry's
+  real value. It deliberately does not reason about the curve or about what the opponent represents;
+  both belong to the searching pilots. The hotseat prompt needed no new component — a keep-on-top
+  choice is an ordered card selection, which the prompt already numbers — only its own copy.
+  Also closed alongside it: *"Counter target spell unless its controller pays {X}"* (Condescend),
+  where the payment asked is the X the caster chose and paid for at cast time, and an X of zero is
+  a cost everybody pays, so the spell simply resolves.
 Still open, roughly by how often they block a real decklist:
 - ✅ *characteristic-defining P/T (the star box)* — a creature whose printed P/T is a FORMULA
   (`CardDefinition.characteristicPT`) over the closed derived-count vocabulary. It is applied in
@@ -1035,7 +1068,9 @@ Still open, roughly by how often they block a real decklist:
   no aggregate in ~40 places, so a Tarmogoyf evaluates as 0/0 to the pilots; threading the
   continuous index through those call sites would ALSO make the AI see anthems and Auras for the
   first time, which moves every recorded heuristic baseline, so it is its own change),
-  *scry/surveil* (bottom-of-library placement has no primitive yet).
+  *damage divided among targets* ("deals X damage divided as you choose among any number of
+  targets" — needs a division the targeting layer cannot express: one spell, several targets, each
+  with its own share).
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
 
@@ -1119,6 +1154,39 @@ look/may-reveal/transform body is one primitive (`transformRevealTop`, classifie
 paired arms), asked as a single top-of-library selection whose valence follows the top card, with a
 constant public prompt so the log cannot leak a declined reveal. Modal DFCs / split / adventure cards
 keep reporting `SECOND_CASTABLE_FACE_GAP` — their gap is the cast-time face choice, a different system.
+
+### 3.14 Online UI parity — every shipped mechanic reachable online — ✅ done
+The rule this section exists to enforce: **a mechanic the engine plays and the online board cannot
+reach is not done.** Three shipped systems had failed it — planeswalkers (attackable, loyalty
+abilities), flashback (casting from the graveyard) and cast-time costs ({X}/kicker/pay-life) were all
+in the server's `legalActions` with no affordance in `OnlineBoard`, so networked players could not use
+them at all.
+
+Parity is achieved by SHARING, not by re-implementing. The online board now renders the same
+`SeatPanel`/`ChoicePrompt`/`AbilityPrompts`/`GraveyardPanel` components the hotseat board does, and
+derives its affordances from three pure modules both boards call: `legal-actions.ts`
+(`castChoices` → hand casts, `graveyardCastChoices` → flashback casts, `abilityChoices` → the
+loyalty menu, all grouped from server offers alone, so a menu can hold no dead button),
+`auto-tap.ts` (`castSequence`/`graveyardCastableWithTaps`, which plan against the FLASHBACK cost for a
+graveyard cast) and `graveyard-cast.ts` (`graveyardPanelView`, the panel's whole view-model including
+its why-disabled copy). Casting flows through ONE chokepoint per board (`activateCard(id, zone)`), so
+click, drag-to-play and the graveyard panel cannot diverge.
+
+Three seams worth remembering:
+- **`CastSpellAction.fromZone` must survive the round trip.** The board groups casts BY ZONE and echoes
+  the zone back on submit; a graveyard cast that forgets it is looked for in the hand and rejected.
+- **Walkers are public, so masking needs nothing new.** Loyalty lives in the instance's counters and
+  `maskStateForSeat` copies the battlefield wholesale — pinned by a protocol test that asserts the
+  walker, its loyalty and its ability list survive for BOTH seats and for a spectator.
+- **Auto-pass must count graveyard plays.** A fundable flashback is a real play; without it in
+  `tapCastableCount` the board advances past the only windows the card is castable in.
+
+Proven live, not merely unit-tested: `apps/server/src/online-ui-parity.test.ts` drives the real `Room`
+with two fake-connection clients through real games and asserts the CLIENT functions the board renders
+from — a walker attacked via `buildDeclareAttackersAction` (loyalty drops, the defender's life does
+not), a flashback cast built by `castSequence(…, 'graveyard')` (card ends in EXILE, CR 702.34a), and an
+{X} question surfaced by `onlineChoiceView` to the caster while the opponent gets only the redacted
+waiting line. All four sabotage-checked RED→GREEN.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
