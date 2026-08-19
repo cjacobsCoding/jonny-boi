@@ -159,6 +159,18 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // How MANY cards were milled. The cards themselves arrive as `zoneChange`s into
   // a graveyard, which is public, so nothing is lost by this being a count.
   cardsMilled: 'public',
+  /*
+   * A scry/surveil LOOK. Public as printed — and it is worth being precise about
+   * why that is not a leak. The event carries a player and a COUNT, which is
+   * exactly what a spectator sees when somebody picks up the top two cards of
+   * their library; the identities are never in it. They live only in the
+   * `selectCards` choice, which travels to its chooser alone and whose own
+   * `choiceAsked` observation is already redacted to an option count above. The
+   * consequences that ARE public arrive on their own: a surveilled card lands in
+   * a graveyard and emits a `zoneChange` into a public zone, while a bottomed or
+   * kept card moves library → library and is anonymised by the same rule.
+   */
+  cardsLookedAt: 'public',
   abilityActivated: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',

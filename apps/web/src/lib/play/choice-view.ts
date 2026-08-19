@@ -352,6 +352,12 @@ function requirementText(choice: PendingChoice): string {
       ? `Pay ${cost}, or decline and let the effect happen.`
       : `You cannot produce ${cost}, so the only answer is to decline.`;
   }
+  // A scry/surveil look reads as a keep-or-discard, not as a count: the human is
+  // told what happens to the cards they DON'T pick, which is the whole decision.
+  if (choice.kind === 'selectCards' && choice.keepOnTop) {
+    return `Pick the cards to keep on top, in the order you want to draw them — every card you leave unpicked goes where the prompt says. Picking none is allowed.`;
+  }
+
   const { min, max, kind } = choice;
   const zone = choice.kind === 'selectCards' ? zoneLabel(choice.fromZone) : undefined;
   const suffix = zone ? ` from the ${zone}` : '';
