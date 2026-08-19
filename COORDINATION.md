@@ -112,6 +112,7 @@ throughput (games/sec) from regressing.
 | feat/indestructible-and-blocking | worker | packages/core (card.ts KeywordFlags +3, internal/{sba,combat,stats,continuous}.ts, NEW indestructible.test.ts, blocking-restrictions.test.ts extended), packages/cards (primitives.ts destroy exemption + NEW grantKeywordToYoursUntilEndOfTurn, index.ts, compile/rules.ts +4 rules & 1 hint reword & 2 generalised rules, compile.test.ts reword, NEW indestructible-and-blocking.test.ts), packages/ai (heuristic.ts, effect-value.ts, NEW indestructible-blocking-pilot.test.ts), packages/sim/src/paired-arms-config.ts (+1 classification), apps/web/src/lib/about/mechanics.ts (+4 witnesses), DESIGN §3.17 | 🚧 PUSHED, not merged |
 
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
+| fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -167,6 +168,41 @@ _Append dated notes here; keep them short. Newest at top._
   counter as an activation cost (`ActivationCost` has no counter component — Devoted Druid).
 
 
+
+- 2026-08-19 worker: `fix/ai-sees-continuous-effects` 🚧 PUSHED — **the pilots were evaluating the
+  PRINTED card, and now they evaluate the board.** `packages/ai` called core's `effectivePower` /
+  `effectiveToughness` / `effectiveKeywords` with **no continuous aggregate in ~40 places**. A bare
+  accessor answers printed + counters, so: a **Tarmogoyf evaluated as 0/0**, **every anthem was
+  invisible**, **Auras and Equipment were invisible**, and `canBlockByEvasion` read `def.keywords` while
+  the rules path read the granted set. Fixed by a seam, not by 40 edits: `board-stats.ts` requires the
+  index, the package no longer imports the bare accessors at all, and `bare-stats.test.ts` fails the
+  build if a single-argument call reappears. `tactical.ts` / `assessPosition`'s `index` went from
+  optional to **required**, which is what closed the evaluator's own hole.
+
+  📊 **BEFORE/AFTER, all re-measured on this box against a separate `origin/main` worktree, none
+  estimated.** Full detail in DESIGN §3.4f.
+  - **Strength: no measurable change.** Fixed vs OLD heuristic, head to head, seat+play rotated,
+    paired seeds: pooled **49.9% of 9,000 games, 95% CI [48.9%, 50.9%]** — the interval straddles 50%.
+    Per matchup: aggro 50.5% [48.7, 52.3]; ramp 51.3% [49.5, 53.1]; control 47.8% [46.0, 49.6], which is
+    **1,435–1,436 on decisive games** and is depressed only by its 129 timeout draws (§3.4e's
+    wins/**games** caveat). It ships because it is a **bug fix, not a tuning choice** — and because this
+    pool contains **no anthem**, so most of what it corrects has nothing to act on yet.
+  - **Gauntlet, Mono-Red Aggro, 200 games/deck, seed 4242:** 29.9% [27.6, 32.4] → **30.9%** [28.5, 33.3];
+    the UW Control cell moved most (27.5% → 32.5%) and the mono-vs-mono cell is unchanged at 16.5%.
+  - **`hybrid` vs `heuristic`:** aggro n=120 55.8% → **55.0%** [46.1, 63.6]; control n=80 48.8% →
+    **45.0%** [34.6, 55.9]. Both still include 50%; both sides of that comparison moved together,
+    because the heuristic is the hybrid's own prior.
+  - **Throughput (rule 7): parity.** Allocation **93 vs 96 scavenges over 60 games** (marginally
+    *fewer*); paired CPU time over the identical 4,000 captured positions, 3 runs: **0.978× / 1.009× /
+    0.990×**. Parity was paid for, not assumed — the index is built AFTER the early returns that never
+    read a stat, `cardValueContext` takes a prebuilt index, and the battlefield selectors became
+    closure-free loops.
+
+  ⚠️ **For whoever measures anything on this box next: wall clock here is worthless.** The same build
+  read 39–87 games/sec within an hour, and a wall-clock "interleaved" comparison of two identical
+  arms swung between 0.85× and 1.31×. Use CPU time (`process.cpuUsage`) or scavenge counts and pair
+  everything. Two of the three re-measured tables above would have supported an entirely false claim
+  if read from a single wall-clock run.
 
 - 2026-08-19 DESKTOP-90PJPM4 (integrator): `feat/bug-reporter` ✅ **INTEGRATED** — the in-game bug
   reporter, ported from Treadlight/Lightwalker so all three projects file the SAME report. **B**, or

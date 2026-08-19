@@ -213,18 +213,19 @@ interface Combatants {
 /**
  * Assess what `attacker` can force through `defender`'s blocks.
  *
- * `index` is the continuous-effects layer (anthems, auras, until-EOT pumps). It is
- * OPTIONAL and the two call sites pass different things on purpose: the decision
- * path — where the answer is *acted on* — builds the real index, while the leaf
- * evaluator omits it and reads base + counters, exactly as every other term in
- * `evaluator.ts` already does. Building the index costs a `Map` per call, and a
- * per-leaf `Map` is precisely the kind of allocation this pilot cannot afford.
+ * `index` is the continuous-effects layer (anthems, auras, until-EOT pumps) and is
+ * REQUIRED. It used to be optional so the leaf evaluator could skip building one —
+ * which meant the evaluator solved combat on printed numbers: anthems invisible,
+ * Equipment invisible, a `*` P/T box worth zero. `indexContinuous` returns a shared
+ * empty map when nothing on the board modifies anything, so the board that
+ * motivated the omission is exactly the board that now allocates nothing; a caller
+ * that already has one for this position must pass it rather than rebuild it.
  */
 export function assessAttack(
   state: GameState,
   attacker: PlayerId,
   horizon: AttackHorizon = 'now',
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
   config: TacticalConfig = DEFAULT_TACTICAL_CONFIG,
   eligible?: readonly InstanceId[],
 ): CombatAssessment {
@@ -267,7 +268,7 @@ export function assessAttack(
 export function lethalAttackers(
   state: GameState,
   attacker: PlayerId,
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
   config: TacticalConfig = DEFAULT_TACTICAL_CONFIG,
   eligible?: readonly InstanceId[],
 ): readonly InstanceId[] | undefined {
@@ -298,7 +299,7 @@ export interface TacticalPicture {
 export function assessPosition(
   state: GameState,
   player: PlayerId,
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
   config: TacticalConfig = DEFAULT_TACTICAL_CONFIG,
 ): TacticalPicture {
   return {
@@ -341,7 +342,7 @@ function collectCombatants(
   defender: PlayerId,
   horizon: AttackHorizon,
   restrictTo: readonly InstanceId[] | undefined,
-  index?: ContinuousIndex,
+  index: ContinuousIndex,
 ): Combatants {
   const battlefield = state.battlefield;
   growTo(battlefield.length);
@@ -352,7 +353,7 @@ function collectCombatants(
   for (let i = 0; i < battlefield.length; i++) {
     const perm = battlefield[i] as CardInstance;
     if (!isCreature(perm.def)) continue;
-    const mod = index?.get(perm.instanceId) ?? NO_MOD;
+    const mod = index.get(perm.instanceId) ?? NO_MOD;
     const keywords = effectiveKeywords(perm, mod);
 
     if (perm.controller === attacker) {

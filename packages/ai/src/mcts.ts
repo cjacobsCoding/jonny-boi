@@ -76,8 +76,6 @@ import {
   convertedManaCost,
   createEffectRegistry,
   DEFAULT_RULES,
-  effectivePower,
-  effectiveToughness,
   generateLegalActions,
   isCreature,
   isLand,
@@ -85,6 +83,8 @@ import {
   MANA_COLORS,
 } from '@jonny-boi/core';
 import type { DecisionContext, Pilot } from './pilot.js';
+import type { ContinuousIndex } from './board-stats.js';
+import { boardIndex, power, statTotal, toughnessLeft } from './board-stats.js';
 import type { MctsConfig } from './mcts-config.js';
 import { DEFAULT_MCTS_CONFIG } from './mcts-config.js';
 import { createRandomPilot } from './random.js';
@@ -527,12 +527,17 @@ function evaluate(
   return charged < 0 ? 0 : charged > 1 ? 1 : charged;
 }
 
-/** Board presence: summed (power + toughness) of a player's creatures. */
+/**
+ * Board presence: summed (power + toughness) of a player's creatures, read through
+ * the continuous layer so an anthem, an Equipment or a `*` P/T box counts for what
+ * it is worth rather than for what is printed.
+ */
 function boardPresence(state: GameState, player: PlayerId): number {
+  const index = boardIndex(state);
   let total = 0;
   for (const perm of state.battlefield) {
     if (perm.controller === player && isCreature(perm.def)) {
-      total += effectivePower(perm) + effectiveToughness(perm);
+      total += statTotal(perm, index);
     }
   }
   return total;
@@ -663,6 +668,10 @@ function candidateActions(state: GameState, legal: readonly GameAction[]): GameA
   const me = state.priorityPlayer;
   const opp = other(me);
   const out: GameAction[] = [];
+  // Built lazily and ONCE per call: most action lists contain no targetable cast
+  // at all, and a board with nothing modifying anything gets core's shared empty
+  // map, so the common path still allocates nothing.
+  let index: ContinuousIndex | undefined;
   for (const action of legal) {
     if (action.kind !== 'castSpell' || (action.targets?.length ?? 0) > 0) {
       out.push(action);
@@ -677,6 +686,7 @@ function candidateActions(state: GameState, legal: readonly GameAction[]): GameA
       continue;
     }
     const oppCreatures = opposingCreatures(state, opp);
+    index ??= boardIndex(state);
     let added = false;
     if (intent) {
       if (intent.canHitPlayer) {
@@ -684,13 +694,13 @@ function candidateActions(state: GameState, legal: readonly GameAction[]): GameA
         added = true;
       }
       if (intent.canHitCreature) {
-        for (const id of topThreatIds(oppCreatures, intent.amount)) {
+        for (const id of topThreatIds(oppCreatures, intent.amount, index)) {
           out.push({ ...action, targets: [id] });
           added = true;
         }
       }
     } else if (isRemoval) {
-      for (const id of topThreatIds(oppCreatures, Infinity)) {
+      for (const id of topThreatIds(oppCreatures, Infinity, index)) {
         out.push({ ...action, targets: [id] });
         added = true;
       }
@@ -742,6 +752,7 @@ function opposingCreatures(state: GameState, opp: PlayerId) {
  * removal targets so the branching factor stays bounded.
  */
 function pumpTargetIds(state: GameState, me: PlayerId): InstanceId[] {
+  const index = boardIndex(state);
   const inCombat = new Set<InstanceId>();
   if (state.combat) {
     for (const id of state.combat.attackers) inCombat.add(id);
@@ -751,7 +762,7 @@ function pumpTargetIds(state: GameState, me: PlayerId): InstanceId[] {
     .filter((c) => c.controller === me && isCreature(c.def))
     .sort((a, b) => {
       const combatDelta = Number(inCombat.has(b.instanceId)) - Number(inCombat.has(a.instanceId));
-      return combatDelta !== 0 ? combatDelta : effectivePower(b) - effectivePower(a);
+      return combatDelta !== 0 ? combatDelta : power(b, index) - power(a, index);
     })
     .slice(0, MAX_PUMP_TARGETS)
     .map((c) => c.instanceId);
@@ -810,11 +821,12 @@ function isUnspendableManaWindow(state: GameState, legal: readonly GameAction[])
 function topThreatIds(
   oppCreatures: ReturnType<typeof opposingCreatures>,
   damage: number,
+  index: ContinuousIndex,
 ): InstanceId[] {
   const MAX_CREATURE_TARGETS = 2; // keep the cast branching factor small
   return oppCreatures
-    .filter((c) => damage === Infinity || effectiveToughness(c) - c.damageMarked <= damage)
-    .sort((a, b) => effectivePower(b) - effectivePower(a))
+    .filter((c) => damage === Infinity || toughnessLeft(c, index) <= damage)
+    .sort((a, b) => power(b, index) - power(a, index))
     .slice(0, MAX_CREATURE_TARGETS)
     .map((c) => c.instanceId);
 }

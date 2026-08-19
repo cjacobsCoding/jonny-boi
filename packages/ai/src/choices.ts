@@ -255,7 +255,18 @@ function answerChooseModes(state: GameState, choice: ChooseModesChoice, weights:
  * scorer that cares supplies its own candidate target.
  */
 function castValueContext(state: GameState, player: PlayerId, weights: HeuristicWeights) {
-  return { state, player, targets: [] as readonly (InstanceId | PlayerId)[], weights, cards: cardValueContext(state) };
+  // `cardValueContext` already built the board's continuous aggregate; the effect
+  // scorer reads P/T through that same one rather than through a second — or, as
+  // it did before `board-stats.ts`, through none at all.
+  const cards = cardValueContext(state);
+  return {
+    state,
+    player,
+    targets: [] as readonly (InstanceId | PlayerId)[],
+    weights,
+    cards,
+    index: cards.index,
+  };
 }
 
 /**
