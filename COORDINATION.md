@@ -97,6 +97,7 @@ throughput (games/sec) from regressing.
 | feat/cast-cost-modification | worker | packages/core (card/choices/state/effects/engine/index + internal/clone + new cast-cost.test.ts), packages/cards (effect-helpers/primitives/index; compile types+compile+rules + compile.test; new cast-cost-cards.test.ts), packages/ai (choices + heuristic + choices.test), packages/sim (paired-arms-config classification only), apps/web (play/choice-view + ChoicePrompt + choice tests, about/mechanics.ts), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
 | feat/planeswalkers | worker | packages/core (card/state/actions/events/targeting/engine/effects/serialize/index + internal stats/combat/sba/clone/zones + NEW planeswalker.test.ts), packages/cards (compile types/compile/rules loyalty + NEW rules, choice-primitives sacrificeChosen+pileSplitSacrifice, primitives dealDamage-to-walker, data/pool.ts Liliana + 2 refreshed expanded entries, index.ts STUBBED, NEW planeswalker-play.test.ts), packages/ai (heuristic walker attack/burn/loyalty + effect-value + weights + NEW planeswalker-pilot.test.ts), packages/data-tools (loyalty capture + Liliana index record), packages/sim (observation +2, paired-arms +2, fidelity copy), apps/web (play board walker UI + about/mechanics + card-index regen), DESIGN §3.9/§3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
+| feat/scry-and-templates | worker | packages/core (choices.ts `keepOnTop`, events.ts `cardsLookedAt`), packages/cards (choice-primitives scry/surveil + `unlessPaidX`, compile/rules.ts 4 new rules + 1 hint reword, NEW compile/scry-surveil.test.ts), packages/ai (choices.ts keep-on-top branch + weights.ts `scryKeepValueThreshold` + choices.test additions), packages/sim (observation +1 classification, paired-arms +2), apps/web (play/choice-view copy, play-format log line, about/mechanics +2 witnesses), DESIGN §3.11 | 🚧 PUSHED, not merged |
 | fix/scan-real-photo | worker | apps/web/src/lib/scan (config/detect/stacks/crop/ocr/match/pipeline + stacks.test rewrite + pipeline.test tweak + NEW real-photo.test.ts + NEW fixtures/user-deck-photo.jpg + fixtures/card-names-catalog.json), apps/web/package.json (+jpeg-js dev), package-lock.json, .gitignore (traineddata cache), DESIGN §3.12 | 🚧 PUSHED, not merged |
 | feat/online-ui-parity | worker | apps/web (components/online/OnlineBoard.tsx, components/play/{PlayBoard,SeatPanel,GraveyardPanel NEW,AbilityPrompts NEW}.tsx, lib/online/{legal-actions,auto-tap,board-adapter}.ts, lib/play/{session,view-model,graveyard-cast NEW}.ts, styles.css appended), apps/server (room.ts constructor pool param + NEW online-ui-parity.test.ts), packages/protocol/src/index.test.ts (walker-visibility tests only), DESIGN §3.14 | 🚧 PUSHED, not merged |
 
@@ -145,6 +146,52 @@ _Append dated notes here; keep them short. Newest at top._
   same `ChoicePrompt` path as {X} but are NOT separately harnessed (no pool card asks them); no online
   spectator affordances (spectators still correctly get no action menu). Full suite **2628 passed /
   0 failed** (baseline 2621 + 7 new), `npm run verify` exit 0, `npm run build` exit 0. (Worker)
+
+- 2026-08-18 worker: `feat/scry-and-templates` 🚧 PUSHED — **scry and surveil play as printed, and
+  the Temple / surveil-land cycles compile.** The blocker DESIGN §3.11 named ("bottom-of-library
+  placement has no primitive") turned out not to exist: `moveOwnedCard`'s `'bottom'` position has
+  been the funnel all along, so what was actually missing was the QUESTION. It is one ordered
+  `selectCards` over the top N with `min: 0` and a new `SelectCardsRequest.keepOnTop` marker —
+  offering the candidates IS the look (the `transformRevealTop` precedent: a choice travels to its
+  chooser alone), the picked cards stay on top in the picked order, every unpicked one leaves.
+  Scry asks a SECOND question for the bottom ORDER, and only when 2+ cards are going down; surveil
+  asks once (a graveyard has no order). **Both collect every answer before moving a single card** —
+  the ask-first contract, which is what makes a parked scry replay safely.
+  ⚠️ **Redaction, since this is the branch that could have leaked.** New `cardsLookedAt` event =
+  player + COUNT, nothing else, so it is public exactly as a spectator watching somebody pick up
+  two cards is; the identities never leave the choice, whose `choiceAsked` observation was already
+  redacted to an option count. Surveilled cards land in a graveyard and emit a PUBLIC `zoneChange`
+  (right — they are placed face up); bottomed/kept cards move library → library and are anonymised
+  by the existing hidden-zone rule. `scry`/`surveil` are LIBRARY_READING in `paired-arms-config`:
+  they read the top and BRANCH on it, the `revealTopCard` shape.
+  **AI policy, documented, deliberately one rule with one weight** (`scryKeepValueThreshold`): keep
+  every looked-at card whose `cardValue` clears the bar, bottom/bin the rest, survivors best-first.
+  It works because `cardValue` already prices a land by whether its controller still NEEDS lands —
+  threshold between `choiceLandValue` (2) and `choiceLandShortValue` (20) — so the pilot bottoms
+  lands exactly when flooded and keeps them while short. Tested both directions on the same card.
+  **Templates CLOSED** (each: a real card compiling `'complete'` with pinned params AND an engine
+  play test — `compile/scry-surveil.test.ts`, 16 tests): `Scry N`, `Surveil N`,
+  `Scry/Surveil N, then EFFECT` (Preordain), `When ~ enters, scry 1` on an enters-tapped land
+  (Temple of Epiphany — tapland + ETB scry + dual mana, all three lines), the surveil-land shape
+  (Undercity Sewers), and `Counter target spell unless its controller pays {X}` (Condescend, which
+  needs BOTH halves at once). Failure modes are first-class tests: library shorter than N, keeping
+  nothing, keeping everything, and the chosen ORDER reproduced exactly in both directions.
+  **NOT done, with the real blocker named**: "deals X damage DIVIDED as you choose among any number
+  of targets" (Fireball's real text) needs divided targeting — one spell, several targets, each with
+  its own share — which the targeting layer cannot express; a conditional scry ("if you control an
+  artifact, scry 2") needs a condition reader; a scry rider whose TAIL chooses its own target has no
+  moment to choose it (refused, tested). Multikicker, modal, MDFC, emblems, battles, legend rule,
+  graveyard grants, dynamic P/T, revolt and colored statics are siblings' this wave — untouched.
+  UNSUPPORTED-BACKLOG.md NOT regenerated: the coverage audit needs a live Scryfall fetch and no
+  local corpus is committed, so the delta needs the integrator. For what it is worth the committed
+  backlog names `When ~ enters, scry N` (14 cards) and `When ~ enters, surveil N` (12 cards) as
+  distinct gaps, both of which these templates address — unverified until the audit re-runs.
+  Verified: full suite **2644 passed / 0 failed** (baseline 2621 + 23 new), `npm run verify` exit 0,
+  `npm run build` exit 0, gauntlet seed 99 **79/280 = 28.2% byte-identical to main's baseline** (no
+  scry card is in the gauntlet, so identical is the right answer). Throughput at PARITY on a noisy
+  shared box, measured paired: 10 alternating rounds against an origin/main worktree, median
+  **184.5 vs 171 games/sec** (both arms swing 120–202, which is exactly why the comparison is
+  paired and read as a median). (Worker)
 
 - 2026-08-18 worker: `fix/scan-real-photo` 🚧 PUSHED — **the deck-photo scanner now reads the user's
   REAL photo** (16 sleeved piles / 59 cards, fanned on dark cloth), which the fanned-piles feature —

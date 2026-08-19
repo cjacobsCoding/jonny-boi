@@ -166,6 +166,80 @@ describe('card ranking (what "my best / my worst card" means)', () => {
   });
 });
 
+// --- scry / surveil ----------------------------------------------------------------------
+
+describe('the scry / surveil keep-on-top policy', () => {
+  /**
+   * A scry-shaped question over `defs` seated on top of A's library, with A
+   * already controlling `lands` lands — the one board fact the policy turns on.
+   */
+  function scryChoice(defs: readonly CardDefinition[], lands: number) {
+    const state = newGame().state;
+    state.players.A.hand = [];
+    if (lands > 0) putOnBattlefield(state, 'A', Array.from({ length: lands }, () => ISLAND));
+    const looked = giveHand(state, 'A', defs);
+    // Move them out of the hand and onto the top of the library, where a scry
+    // actually looks.
+    state.players.A.hand = [];
+    for (const card of looked) card.zone = 'library';
+    state.players.A.library = [...looked, ...state.players.A.library];
+    const choice = park({
+      kind: 'selectCards',
+      chooser: 'A',
+      prompt: 'keep on top',
+      candidates: collectCardOptions(state, 'library', { controller: 'A', limit: defs.length, fromTop: true }),
+      min: 0,
+      max: defs.length,
+      ordered: true,
+      keepOnTop: true,
+      valence: 'neutral',
+      fromZone: 'library',
+    });
+    return { state, choice, looked };
+  }
+
+  function keptNames(state: GameState, choice: PendingChoice): string[] {
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectCards') throw new Error('wrong shape');
+    return action.answer.instanceIds.map(
+      (id) => state.players.A.library.find((c) => c.instanceId === id)!.def.name,
+    );
+  }
+
+  it('BOTTOMS a land while flooded, and keeps the spells', () => {
+    // A built mana base: another land is the card you do not want to draw next.
+    const { state, choice } = scryChoice([ISLAND, BEAR], WEIGHTS.choiceLandsWanted);
+    expect(keptNames(state, choice)).toEqual(['Bear']);
+  });
+
+  it('KEEPS a land while short of mana — the same card, the opposite answer', () => {
+    const { state, choice } = scryChoice([ISLAND, BEAR], 0);
+    // Both are worth keeping when the mana base is unbuilt, and the land is the
+    // more urgent card, so it is ordered first (drawn first).
+    expect(keptNames(state, choice)).toEqual(['Island', 'Bear']);
+  });
+
+  it('keeps the BEST card first — the answer order is the draw order', () => {
+    const { state, choice } = scryChoice([BEAR, DRAGON], WEIGHTS.choiceLandsWanted);
+    expect(keptNames(state, choice)).toEqual(['Dragon', 'Bear']);
+  });
+
+  it('bottoms EVERYTHING when nothing clears the bar, and that answer is legal', () => {
+    const { state, choice } = scryChoice([ISLAND, ISLAND], WEIGHTS.choiceLandsWanted);
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice') throw new Error('wrong shape');
+    expect(validateChoiceAnswer(choice, action.answer).ok).toBe(true);
+    if (action.answer.kind !== 'selectCards') throw new Error('wrong shape');
+    expect(action.answer.instanceIds).toHaveLength(0);
+  });
+
+  it('is deterministic — the same board answers identically every time', () => {
+    const first = scryChoice([ISLAND, BEAR, DRAGON], WEIGHTS.choiceLandsWanted);
+    const second = scryChoice([ISLAND, BEAR, DRAGON], WEIGHTS.choiceLandsWanted);
+    expect(keptNames(first.state, first.choice)).toEqual(keptNames(second.state, second.choice));
+  });
+});
+
 // --- answering each kind ----------------------------------------------------------------
 
 describe('the heuristic answers every choice kind sensibly', () => {

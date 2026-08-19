@@ -304,6 +304,18 @@ export interface SelectCardsRequest extends ChoiceRequestBase, ChoiceCountReques
   readonly ordered?: boolean;
   /** Where the candidates came from; UI copy + AI context only. */
   readonly fromZone?: ZoneName;
+  /**
+   * Marks the scry/surveil-shaped question: the candidates are the looked-at TOP
+   * cards of a library, the chooser picks which of them STAY on top (in order),
+   * and every unchosen candidate leaves the top (scry sends it to the bottom,
+   * surveil to the graveyard). Like {@link ChoiceRequestBase.valence} this is an
+   * ANSWERING hint only — it never changes what answers are legal — but unlike
+   * valence it is not a per-card direction: keeping a card is good exactly when
+   * that card is worth drawing next, which is a judgement about the card and the
+   * board, so the AI needs to know the question's shape to answer it sensibly
+   * (bottom lands when flooded, keep the spell it can cast).
+   */
+  readonly keepOnTop?: boolean;
 }
 
 export interface SelectPlayersRequest extends ChoiceRequestBase, ChoiceCountRequest {
@@ -407,6 +419,8 @@ export interface SelectCardsChoice extends PendingChoiceBase {
   readonly candidates: readonly CardOption[];
   readonly ordered: boolean;
   readonly fromZone?: ZoneName;
+  /** The scry/surveil shape — see {@link SelectCardsRequest.keepOnTop}. */
+  readonly keepOnTop?: boolean;
 }
 
 export interface SelectPlayersChoice extends PendingChoiceBase {
@@ -622,6 +636,7 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
         min,
         max,
         ...(request.fromZone ? { fromZone: request.fromZone } : {}),
+        ...(request.keepOnTop ? { keepOnTop: true } : {}),
       };
     }
     case 'selectPlayers': {

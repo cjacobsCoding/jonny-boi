@@ -23,6 +23,20 @@
  * vocabulary — so Cryptic Command draws a card when there is nothing worth
  * bouncing, and counters when there is something worth countering.
  *
+ * SCRY / SURVEIL is the third kind valence alone cannot answer, and for a
+ * different reason again: the question is not "how many of these do I want?"
+ * but "is THIS card worth drawing next?", asked once per looked-at card. The
+ * policy is deliberately one rule with one number — keep every card whose
+ * `cardValue` clears `scryKeepValueThreshold`, bottom (or bin) the rest,
+ * keeping the survivors best-first because the answer is `ordered` and first =
+ * drawn first. That rule is not arbitrary: `cardValue` already prices a land by
+ * whether its controller still NEEDS lands, so the threshold makes the pilot
+ * bottom lands exactly when it is flooded and keep them while it is short —
+ * the decision that carries most of a scry's real value. What it deliberately
+ * does NOT do is reason about the curve (a seven-drop with three lands out is
+ * kept), or about what the opponent is representing; both need the search
+ * pilots' machinery, not a per-card ruler.
+ *
  * Determinism: no `Math.random`, no wall clock. Every comparison falls back to
  * `instanceId` / option index, so equal-scoring options break ties in a fixed
  * order and the same seed reproduces the same answers.
@@ -133,6 +147,13 @@ function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights:
     value: cardValue(findInstance(state, option.instanceId), weights, context),
   }));
   scored.sort((a, b) => b.value - a.value || a.index - b.index);
+
+  // A SCRY/SURVEIL look is not a "how many" question — it is a per-card verdict,
+  // so it is answered by a threshold rather than by a count. See `scryKeepPicks`.
+  if (choice.keepOnTop === true) {
+    const kept = scored.filter((card) => card.value > weights.scryKeepValueThreshold);
+    return { kind: 'selectCards', instanceIds: kept.map((p) => p.instanceId) };
+  }
 
   const take = selectionSize(choice);
   // 'gain' keeps the best; 'loss' gives up the worst (the tail of the same list),
