@@ -247,7 +247,8 @@ describe('turn-scoped fact memory', () => {
 
   it('a state that predates the record answers false rather than throwing', () => {
     const state = game();
-    delete state.turnFacts;
+    delete state.turnFactsA;
+    delete state.turnFactsB;
     expect(turnFactHolds(state, 'permanentLeftBattlefield', 'A')).toBe(false);
     expect(turnFactHolds(state, 'creatureDied', 'B')).toBe(false);
   });

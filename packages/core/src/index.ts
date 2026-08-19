@@ -89,8 +89,8 @@ export { evaluateDerivedCount, characteristicValue } from './derived.js';
 
 // Turn-scoped fact memory (revolt / morbid / lifegain) — a NAMED closed
 // vocabulary, not a general event query. See turn-facts.ts.
-export type { TurnFact, TurnFacts } from './turn-facts.js';
-export { TURN_FACTS, turnFactHolds, setTurnFact, clearTurnFacts, emptyTurnFacts } from './turn-facts.js';
+export type { TurnFact } from './turn-facts.js';
+export { TURN_FACTS, turnFactHolds, setTurnFact, clearTurnFacts } from './turn-facts.js';
 export {
   DEFAULT_STATIC_SCOPE,
   staticsOf,

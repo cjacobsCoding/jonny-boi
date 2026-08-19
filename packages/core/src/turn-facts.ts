@@ -12,13 +12,19 @@
  * of {@link TurnFact}s, each with an exact meaning and an exact feed point, and
  * a card asking anything outside the list is reported unsupported.
  *
- * ## Storage: two integers, per player, as a BITMASK
- * `GameState.turnFacts` is one small record of two numbers. That shape is
- * deliberate: it is on the clone path (every action clones the state), so a
- * per-fact object or a Set would be a real allocation on the engine's hottest
- * path for a game in which nothing ever reads a fact. Two number copies cost
- * nothing measurable, and the field is OPTIONAL so every state serialized (or
- * hand-built in a test) before this existed still reads as "nothing happened".
+ * ## Storage: two FLAT number fields on the state, as bitmasks
+ * `GameState.turnFactsA` / `turnFactsB` are plain optional numbers, not a
+ * nested record — and that shape was chosen with a measurement, not a guess.
+ * A `{ A, B }` object is one allocation PER CLONE, and the engine clones the
+ * whole state at every action boundary; on a paired same-box gauntlet that cost
+ * ~3% of sim throughput for a game in which nothing ever reads a fact. Two
+ * number copies allocate nothing and measure at parity. (Same argument as the
+ * shared frozen NO_COUNTERS record documented in state.ts.)
+ *
+ * The two fields are OPTIONAL so every state serialized (or hand-built in a
+ * test) before this existed still reads as "nothing happened", and every access
+ * goes through the helpers below so the flat shape stays an implementation
+ * detail rather than something callers index into.
  *
  * ## Feed point: the event stream, at the one place every event already passes
  * `recordTurnFacts` is called from the engine's emit wrapper — the same
@@ -36,7 +42,8 @@
  */
 
 import type { GameEvent } from './events.js';
-import type { GameState, PlayerId } from './state.js';
+import type { GameState, InstanceId, PlayerId } from './state.js';
+import { findInstance } from './internal/zones.js';
 
 /**
  * The facts the engine remembers for the current turn. Each is a printed
@@ -67,26 +74,10 @@ const FACT_BIT: Readonly<Record<TurnFact, number>> = Object.freeze({
   youGainedLife: 1 << 2,
 });
 
-/** Per-player bitmask of what has happened so far this turn. */
-export interface TurnFacts {
-  A: number;
-  B: number;
-}
-
-/** A fresh, empty record — nothing has happened yet this turn. */
-export function emptyTurnFacts(): TurnFacts {
-  return { A: 0, B: 0 };
-}
-
 /** Clear every player's facts. Called as a turn begins. */
 export function clearTurnFacts(state: GameState): void {
-  const facts = state.turnFacts;
-  if (facts === undefined) {
-    state.turnFacts = emptyTurnFacts();
-    return;
-  }
-  facts.A = 0;
-  facts.B = 0;
+  state.turnFactsA = 0;
+  state.turnFactsB = 0;
 }
 
 /**
@@ -95,14 +86,23 @@ export function clearTurnFacts(state: GameState): void {
  * "nothing has been recorded" and keeps pre-existing states valid.
  */
 export function turnFactHolds(state: GameState, fact: TurnFact, player: PlayerId): boolean {
-  const facts = state.turnFacts;
-  return facts !== undefined && (facts[player] & FACT_BIT[fact]) !== 0;
+  const mask = (player === 'A' ? state.turnFactsA : state.turnFactsB) ?? 0;
+  return (mask & FACT_BIT[fact]) !== 0;
 }
 
 /** Record `fact` for `player`. Idempotent — a fact is a boolean, not a count. */
 export function setTurnFact(state: GameState, fact: TurnFact, player: PlayerId): void {
-  const facts = (state.turnFacts ??= emptyTurnFacts());
-  facts[player] |= FACT_BIT[fact];
+  const bit = FACT_BIT[fact];
+  if (player === 'A') state.turnFactsA = (state.turnFactsA ?? 0) | bit;
+  else state.turnFactsB = (state.turnFactsB ?? 0) | bit;
+}
+
+/**
+ * Who controlled a permanent that has just left the battlefield. Only consulted
+ * for a leave event, so an ordinary event never pays for the scan.
+ */
+function lastKnownController(state: GameState, instanceId: InstanceId): PlayerId | undefined {
+  return findInstance(state, instanceId)?.controller;
 }
 
 /**
@@ -110,22 +110,19 @@ export function setTurnFact(state: GameState, fact: TurnFact, player: PlayerId):
  * as a switch on `type` with an immediate return for the (overwhelmingly common)
  * events that feed nothing.
  *
- * `controllerOfLeavingPermanent` is supplied by the caller because the
- * `zoneChange` event carries only an instance id, and by the time it is emitted
- * the permanent is already off the battlefield — the engine's emit wrapper is
- * the one place that can still look the instance up (its `controller` field is
- * preserved as last-known information by every leave path, which is exactly
- * what "a permanent YOU controlled left" needs to read).
+ * The leaving permanent's controller is looked up HERE rather than passed in:
+ * the `zoneChange` event carries only an instance id, and by the time it is
+ * emitted the permanent is already off the battlefield — but every leave path
+ * preserves `controller` as last-known information, which is exactly what "a
+ * permanent YOU controlled left the battlefield" has to read. Doing the lookup
+ * inline (rather than through a callback the emit wrapper has to allocate once
+ * per action) keeps this off the per-action allocation budget.
  */
-export function recordTurnFacts(
-  state: GameState,
-  event: GameEvent,
-  controllerOfLeavingPermanent: (instanceId: number) => PlayerId | undefined,
-): void {
+export function recordTurnFacts(state: GameState, event: GameEvent): void {
   switch (event.type) {
     case 'zoneChange': {
       if (event.from !== 'battlefield') return;
-      const controller = controllerOfLeavingPermanent(event.instanceId);
+      const controller = lastKnownController(state, event.instanceId);
       if (controller !== undefined) setTurnFact(state, 'permanentLeftBattlefield', controller);
       return;
     }

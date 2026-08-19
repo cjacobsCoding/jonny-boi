@@ -18,7 +18,6 @@ import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
-import type { TurnFacts } from './turn-facts.js';
 import type { TargetRestriction } from './targeting.js';
 
 /** Opaque, stable identity for a player. */
@@ -387,15 +386,19 @@ export interface GameState {
   /**
    * What has happened SO FAR THIS TURN, for the printed cards that ask — revolt
    * ("a permanent you controlled left the battlefield this turn"), morbid, and
-   * the lifegain check. A per-player bitmask over the closed {@link TurnFact}
-   * vocabulary; see `turn-facts.ts` for why it is a named list and not an event
-   * query. Cleared as each turn begins.
+   * the lifegain check. One BITMASK PER PLAYER over the closed `TurnFact`
+   * vocabulary, cleared as each turn begins.
    *
-   * Optional for the same reason as `pendingChoice`: absent means "nothing
-   * recorded", so every state serialized (or hand-built in a test) before this
-   * existed stays valid and every fact reads false.
+   * Two flat numbers rather than a `{ A, B }` record on purpose: the state is
+   * cloned at every action boundary, and a nested object is an allocation per
+   * clone — measured at ~3% of sim throughput for a game that never reads a
+   * fact. Never index these directly; go through `turnFactHolds` /
+   * `setTurnFact` in `turn-facts.ts`, which is also what keeps the absent case
+   * ("nothing recorded", so every fact is false) correct for every state
+   * serialized or hand-built before this existed.
    */
-  turnFacts?: TurnFacts;
+  turnFactsA?: number;
+  turnFactsB?: number;
 }
 
 /** Build a fresh, empty player. */
