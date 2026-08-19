@@ -106,9 +106,56 @@ throughput (games/sec) from regressing.
 
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
 | feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
+| feat/you-may-and-trigger-templates | worker | packages/core (card.ts `basic`/`entersTappedUnlessRevealed`/`canRevealForUntapped`, choices.ts CardFilter P/T bounds, triggers.ts +5 TriggerEvents + `TriggerSubject`, internal/triggers-runtime.ts subject resolver, engine.ts reveal-land question + its answer branch, index.ts +2 exports, conditional-tapland.test.ts), packages/cards (primitives `mayEffects` + loseLife `whichPlayer`, choice-primitives tapPermanents untap/excludeTypes, compile/{rules,compile,types}.ts + NEW compile/you-may-and-triggers.test.ts, data/pool.ts basics only), packages/sim (paired-arms-config classification only), apps/web/src/lib/about/mechanics.ts (+6 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
+  trigger-timing families, worked in `sole`-descending order off the cached corpus.**
+  **Measured: 193 → 248 playable of 2100 (+55).** Re-runnable offline:
+  `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json out.json`.
+  Full suite 2860 passed / 0 failed after merging `origin/main` (which brought modal casting).
+
+  **`mayEffects` is the printed word "you may", as ONE wrapper** — confirm, then run the nested
+  clause on a yes. If you are adding an optional card, do not write a primitive for it: compile the
+  body and wrap it. ⚠️ **The wrapper is ordered AFTER `trigger-etb`, and that ordering is load-bearing.**
+  Two body rules print their own "you may" and implement it (`returnFromGraveyard` with
+  `optional: true` — Eternal Witness); letting them win first keeps one question instead of two.
+  The invariant a future rule must not break: **a body rule may match a printed "you may" only if it
+  implements the option.** A rule that swallowed the words and compiled the forced version would turn
+  an optional card into a different one. `you-may-and-triggers.test.ts` pins it.
+
+  **Every "you may" is play-tested BOTH ways.** Declining is the half that silently breaks, and it is
+  where the bugs were: a declined search must not shuffle, a declined reveal-land must end up tapped
+  with priority still on its player.
+
+  ⚠️ **`CardDefinition.basic` is new and is NOT decoration.** The battlelands count basic lands, and
+  land SUBTYPES cannot stand in — a nonbasic dual prints "Plains Island" and would be counted as
+  basic, letting the land enter untapped when the printed card would not. The five curated basics in
+  `data/pool.ts` declare it (they also gained their printed subtypes, which incidentally makes
+  checklands see them). If you generate pool cards, the compiler emits it from the type line.
+
+  **Reveal-lands (`entersTappedUnlessRevealed`) are modelled on the shockland, not on
+  `entersTappedUnless`** — showing a card is a DECISION, not a board fact. Same contract:
+  `entersTapped()` answers TRUE for them, so every path that cannot ask produces the printed
+  "if you don't". A controller with nothing to reveal is not asked at all.
+
+  **Two refusals are deliberate; please do not "fix" them by widening a rule.**
+  1. **"At the beginning of EACH player's <step>"** reports. The trigger is expressible
+     (`who: 'any'`), but its body almost always says "**that player**", and the engine cannot aim a
+     body at the player whose step it is — a `who: 'any'` trigger would run the body for the source's
+     controller every time. What is missing is the triggering player riding the resolution the way
+     `xValue` and `kicked` do. Whoever builds that unblocks Howling Mine, Kami of the Crescent Moon,
+     Font of Mythos, Teferi's Puzzle Box and Dictate of Kruphix in one go.
+  2. **"Whenever ANOTHER creature you control enters/dies"** reports: `permanentEnters`/
+     `permanentDies` have no self-exclusion, and a source that triggered off its own entry when the
+     card says "another" is a different card.
+
+  ⚠️ **`compile/rules.ts` was the contested file all day.** This branch added rules in five places
+  (two enters-tapped, one reveal-land, the search-to-hand tutor, the ETB "you may" wrapper, the step
+  and board triggers, and three untargeted body rules). If you merge and hit a conflict there, **keep
+  both sides** — every entry is independent table data.
 
 - 2026-08-18 worker: `feat/battles-legend-emblems` 🚧 PUSHED — **three walker-adjacent objects:
   battles, the legend rule, and emblems.** All three DONE as subsystems; one card-level gap is

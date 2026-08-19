@@ -2688,10 +2688,13 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a mana-ability template the compiler does not recognize yet',
   },
   {
-    // Plain taplands, fastlands/checklands (`entersTappedUnless`) AND shocklands
-    // ("you may pay 2 life" → `entersTappedUnlessLifePaid`) all COMPILE now, so
-    // what lands here is only an enters-tapped wording with no rule yet — e.g. a
-    // price other than life, or a condition the board cannot express.
+    // Plain taplands, fastlands/checklands/slowlands/battlelands
+    // (`entersTappedUnless`), shocklands ("you may pay 2 life" →
+    // `entersTappedUnlessLifePaid`) AND reveal-lands ("you may reveal an Island
+    // or Swamp card from your hand" → `entersTappedUnlessRevealed`) all COMPILE
+    // now, so what lands here is only an enters-tapped wording with no rule yet
+    // — e.g. a price that is neither life nor a reveal, a condition the board
+    // cannot express, or an entry that also does something else.
     pattern: /\benters tapped\b/,
     missingEngineSystem: 'an enters-tapped template the compiler does not recognize yet',
   },
@@ -2734,10 +2737,23 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a modal template the compiler does not recognize yet',
   },
   {
+    // The printed word "you may" IS implemented now, as the `mayEffects`
+    // wrapper: "When ~ enters, you may BODY" and "At the beginning of your
+    // <step>, you may BODY" compile to a real yes/no whose no is a complete
+    // outcome. So this hint no longer claims the system is missing — that would
+    // send the next agent to rebuild it. What still lands here is a TEMPLATE:
+    // an optional clause whose BODY has no rule (a blink, a copy, a
+    // sacrifice-then-if-you-do chain), or a "choose" that is not a yes/no.
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
   {
+    // Searches to the BATTLEFIELD (basic lands, fetchland subtypes) and to HAND
+    // filtered by type, subtype, mana value, power or toughness all compile.
+    // What still lands here is a search whose restriction the shared
+    // `CardFilter` cannot say ("a card with the same mana value as this", "an
+    // artifact card with a mana ability"), a subtype outside the closed
+    // `SEARCHABLE_SUBTYPES` table, or a destination other than hand/battlefield.
     pattern: /\bsearch your library\b|\bsearch their library\b/,
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },

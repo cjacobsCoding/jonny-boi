@@ -265,8 +265,38 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Lands that enter tapped',
         detail:
-          'Unconditional taplands, plus the conditional cycles: "unless you control two or fewer other lands" (fastlands) and "unless you control a <basic type>" (checklands).',
+          'Unconditional taplands, plus every conditional cycle: "unless you control two or fewer other lands" (fastlands), "unless you control a <basic type>" (checklands), "unless you control two or more other lands" (slowlands) and "unless you control two or more basic lands" (battlelands, which count the printed Basic supertype, so a nonbasic dual does not qualify).',
         witness: { kind: 'rule', id: 'enters-tapped-unless-few-lands' },
+      },
+      {
+        title: 'Lands that ask a question as they enter',
+        detail:
+          'A shockland asks "pay 2 life?" and a reveal-land asks "show a Plains or Island card from your hand?" — both at land-play time, both real questions with two legal answers, and both defaulting to the printed "if you don\'t" (tapped) on any path that cannot ask. A controller with nothing to reveal is not asked at all.',
+        witness: { kind: 'rule', id: 'enters-tapped-unless-revealed' },
+      },
+      {
+        title: 'Optional triggers ("you may")',
+        detail:
+          'The printed "you may" is a genuine yes/no asked as the ability resolves, and declining is a complete outcome — never auto-answered to make a card compile, because a forced yes is a different card. Reclamation-Sage-style entries, the Mage cycle\'s tutors and Farhaven Elf all play both ways.',
+        witness: { kind: 'primitive', id: 'mayEffects' },
+      },
+      {
+        title: 'Step-beginning triggers',
+        detail:
+          'Upkeep, draw step, first main phase and end step all carry triggers ("At the beginning of your end step, untap all lands you control"). "Each player\'s <step>" still reports: the engine cannot yet aim a body at the player whose step it is, and firing it for the source\'s controller would be a different card.',
+        witness: { kind: 'rule', id: 'trigger-step-begins' },
+      },
+      {
+        title: 'Board-watching triggers',
+        detail:
+          '"Whenever a creature you control [with power 3 or greater] enters/dies" watches the battlefield through the same card filter every other chooser reads, so the printed restriction is honoured rather than dropped. Ajani\'s Welcome, Elemental Bond, Grave Pact and Dictate of Erebos all play.',
+        witness: { kind: 'rule', id: 'trigger-permanent-enters-or-dies' },
+      },
+      {
+        title: 'Filtered library tutors',
+        detail:
+          'A search to hand may be narrowed by card type, printed subtype, mana value or printed power/toughness ("an artifact card with mana value 1 or less", "a creature card with toughness 2 or less"). A restriction the filter cannot express reports instead — a tutor that ignored its bound would fetch the best card in the deck.',
+        witness: { kind: 'rule', id: 'search-to-hand-by-filter' },
       },
       {
         title: 'Transforming double-faced cards',
