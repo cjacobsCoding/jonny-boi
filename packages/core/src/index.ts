@@ -51,6 +51,7 @@ export type {
   ActivatedAbility,
   ActivationCost,
   EntersUntappedCondition,
+  RevealFromHandCondition,
   EntersTappedContext,
   CardDefinition,
   CardType,
@@ -72,6 +73,7 @@ export {
   manaColorsOffered,
   bestManaYield,
   castTiming,
+  canRevealForUntapped,
   entersTapped,
 } from './card.js';
 

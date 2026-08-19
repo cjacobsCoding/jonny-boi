@@ -26,7 +26,7 @@ import type {
   PendingChoice,
   PlayerId,
 } from '@jonny-boi/core';
-import { applyAction, createGame, DEFAULT_RULES, dumpState } from '@jonny-boi/core';
+import { applyAction, createGame, DEFAULT_RULES, dumpState, entersTapped } from '@jonny-boi/core';
 import { compileCard } from './compile.js';
 import type { CompilableCard } from './types.js';
 import { buildRegistry } from '../pool.js';
@@ -692,5 +692,119 @@ describe('"When ~ enters, you may ..." - played in a real game, both answers', (
     });
 
     expect(offered).toEqual(['Test Goblin']);
+  });
+});
+
+// --- the reveal-land cycle, answered BOTH ways -----------------------------------
+
+/** Port Town, printed exactly as Scryfall has it. */
+const PORT_TOWN = makeCard({
+  name: 'Port Town',
+  typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+  oracleText:
+    "As this land enters, you may reveal a Plains or Island card from your hand. If you don't, this land enters tapped.\n{T}: Add {W} or {U}.",
+});
+
+describe('"As ~ enters, you may reveal ..." - the reveal-land cycle', () => {
+  it('compiles Port Town completely, as a decision and not a board condition', () => {
+    const result = compileCard(PORT_TOWN);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.entersTappedUnlessRevealed).toEqual({
+      anyOfSubtypes: ['plains', 'island'],
+    });
+    // Not a board read: holding the card does not untap the land, showing it does.
+    expect(result.definition.entersTappedUnless).toBeUndefined();
+    expect(result.definition.entersTapped).toBeUndefined();
+  });
+
+  it('REFUSES a reveal of something that is not a land type', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Reveal Land',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText:
+          "As this land enters, you may reveal a creature or artifact card from your hand. If you don't, this land enters tapped.",
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('enters TAPPED on any path that cannot ask - the printed "if you don\'t"', () => {
+    // The engine-level default. A path with no question (a token, a fixture with
+    // no board) must get the unpaid outcome, never a free untapped land.
+    const town = compileCard(PORT_TOWN).definition;
+    expect(entersTapped(town)).toBe(true);
+    expect(entersTapped(town, { controller: 'A', battlefield: [] })).toBe(true);
+  });
+
+  it('revealing (YES) leaves the land UNTAPPED and ready to tap for mana', () => {
+    const reg = buildRegistry();
+    const town = compileCard(PORT_TOWN).definition;
+    const state = gameAtMain(reg, SEEDS.endStep);
+    // A Plains in hand is what makes the question legal to ask at all.
+    state.players.A.hand.push(instance(PLAINS, 'A', 'hand'));
+
+    const played = playLand(state, town, 'A', reg);
+    expect(played.state.pendingChoice?.kind).toBe('confirm');
+
+    const answered = answer(played.state, reg, { kind: 'confirm', yes: true });
+    const land = answered.battlefield.find((c) => c.instanceId === played.land.instanceId);
+    expect(land!.tapped).toBe(false);
+    // The reveal shows a card; it never moves one.
+    expect(answered.players.A.hand).toHaveLength(1);
+
+    const tapped = act(
+      answered,
+      { kind: 'tapForMana', player: 'A', instanceId: played.land.instanceId, mode: 0 },
+      reg,
+    );
+    expect(tapped.players.A.manaPool.W).toBe(1);
+  });
+
+  it('DECLINING taps the land - the half that silently breaks', () => {
+    const reg = buildRegistry();
+    const town = compileCard(PORT_TOWN).definition;
+    const state = gameAtMain(reg, SEEDS.endStep);
+    state.players.A.hand.push(instance(PLAINS, 'A', 'hand'));
+
+    const played = playLand(state, town, 'A', reg);
+    const answered = answer(played.state, reg, { kind: 'confirm', yes: false });
+    const land = answered.battlefield.find((c) => c.instanceId === played.land.instanceId);
+    expect(land!.tapped).toBe(true);
+    expect(answered.pendingChoice ?? undefined).toBeUndefined();
+    // The land play never surrendered priority, so its player still has it.
+    expect(answered.priorityPlayer).toBe('A');
+  });
+
+  it('a controller with nothing to reveal is NOT asked, and the land enters tapped', () => {
+    // The question would have exactly one possible outcome, so raising it would
+    // stop the game for an answer that cannot matter.
+    const reg = buildRegistry();
+    const town = compileCard(PORT_TOWN).definition;
+    const state = gameAtMain(reg, SEEDS.endStep);
+    state.players.A.hand.push(instance(FOREST, 'A', 'hand'));
+
+    const played = playLand(state, town, 'A', reg);
+    expect(played.state.pendingChoice ?? undefined).toBeUndefined();
+    expect(played.land.tapped).toBe(true);
+  });
+
+  it('accepts a DUAL land as the reveal, exactly as the printed subtypes say', () => {
+    // "Reveal a Plains or Island card" means a card with that land TYPE - a dual
+    // printing Plains qualifies. Matching by name would have missed it.
+    const reg = buildRegistry();
+    const town = compileCard(PORT_TOWN).definition;
+    const dual: CardDefinition = {
+      id: 'dual',
+      name: 'Test Hallowed Fountain',
+      types: ['land'],
+      subtypes: ['plains', 'island'],
+      producesOptions: [{ W: 1 }, { U: 1 }],
+    };
+    const state = gameAtMain(reg, SEEDS.endStep);
+    state.players.A.hand.push(instance(dual, 'A', 'hand'));
+
+    const played = playLand(state, town, 'A', reg);
+    expect(played.state.pendingChoice?.kind).toBe('confirm');
   });
 });

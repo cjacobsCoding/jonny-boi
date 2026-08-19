@@ -218,6 +218,7 @@ interface Assembly {
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
+  entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /** The printed "Kicker {COST}", once some line prints it. */
   kicker?: ManaCost;
   /** The printed flashback cost, once a "Flashback {…}" line compiles. */
@@ -249,6 +250,9 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
+  }
+  if (contribution.entersTappedUnlessRevealed !== undefined) {
+    assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
   }
   if (contribution.kicker) assembly.kicker = contribution.kicker;
   if (contribution.characteristicPT) assembly.characteristicPT = contribution.characteristicPT;
@@ -919,6 +923,9 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.entersTappedUnless ? { entersTappedUnless: assembly.entersTappedUnless } : {}),
+    ...(assembly.entersTappedUnlessRevealed !== undefined
+      ? { entersTappedUnlessRevealed: assembly.entersTappedUnlessRevealed }
+      : {}),
     ...(assembly.entersTappedUnlessLifePaid !== undefined
       ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
       : {}),

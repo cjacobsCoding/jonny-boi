@@ -1916,6 +1916,25 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'enters-tapped-unless-revealed',
+    description:
+      `"As ~ enters, you may reveal an Island or Swamp card from your hand. If you don't, this land enters tapped." (the reveal-land cycles)`,
+    // A DECISION, like the shockland above and unlike the board-reading
+    // conditions below: holding the card does not untap the land, showing it
+    // does. The engine raises a real confirm at land-play time and both answers
+    // are legal, so the card is not silently compiled as its better half.
+    //
+    // Only LAND subtypes are accepted. "Reveal a creature card" would read the
+    // same and mean something this rule does not implement, so it reports.
+    pattern:
+      /^as ~ enters(?: the battlefield)?, you may reveal an? (\w+) or (?:an? )?(\w+) card from your hand\. if you don't, (?:it|this land|~) enters(?: the battlefield)? tapped$/,
+    build(match) {
+      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      return { entersTappedUnlessRevealed: { anyOfSubtypes: subtypes } };
+    },
+  },
+  {
     id: 'enters-tapped-unless-few-lands',
     description:
       '"~ enters tapped unless you control two or fewer other lands" (the fastland cycle)',

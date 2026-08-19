@@ -339,6 +339,25 @@ export interface CardDefinition {
    * default and the direction that can never play better than the real card.
    */
   readonly entersTappedUnlessLifePaid?: number;
+  /**
+   * A "reveal-land" (the Shadows over Innistrad / Strixhaven cycles): "As ~
+   * enters, you may **reveal** an Island or Swamp card from your hand. If you
+   * don't, this land enters tapped." The value is the printed land types the
+   * revealed card may have.
+   *
+   * A DECISION like {@link entersTappedUnlessLifePaid}, not a board condition:
+   * having the card in hand does not by itself untap the land, the controller
+   * has to choose to show it. So the same rule applies — the entry paths that
+   * can ask raise a `confirm` and override the tapped state with the answer, and
+   * **every path that does not ask enters the permanent TAPPED**, which is the
+   * printed "if you don't" and the direction that can never play better than the
+   * real card.
+   *
+   * The reveal itself moves nothing and is pure information; the engine has no
+   * `cardsRevealed` event (see `revealTopCard`), so the mechanical consequence —
+   * tapped or untapped — is the whole of it, and it is exact.
+   */
+  readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -721,6 +740,15 @@ export function bestManaYield(def: CardDefinition): number {
  * evaluated the instant the permanent enters, counting only OTHER permanents —
  * the entering one is not yet on the battlefield when the check happens.
  */
+/**
+ * The printed land types a reveal-land will accept — "an Island or Swamp card
+ * from your hand". Matched against a card's printed SUBTYPES, so a dual land
+ * with those types is a legal reveal exactly as it is on the real card.
+ */
+export interface RevealFromHandCondition {
+  readonly anyOfSubtypes: readonly string[];
+}
+
 export interface EntersUntappedCondition {
   /**
    * "unless you control two or fewer other lands" — a fastland. Satisfied when
@@ -781,12 +809,34 @@ export function entersTapped(def: CardDefinition, context?: EntersTappedContext)
   // the choice gets the unpaid outcome — never a free untapped shockland. The
   // two paths that do ask override the answer explicitly.
   if (def.entersTappedUnlessLifePaid !== undefined) return true;
+  // A reveal-land is the same shape of question, and gets the same unasked
+  // default: showing a card is a CHOICE, and this accessor cannot ask one.
+  if (def.entersTappedUnlessRevealed !== undefined) return true;
   const condition = def.entersTappedUnless;
   if (!condition) return false;
   // With no board to read we cannot evaluate the condition. Entering tapped is
   // the printed default (the "unless" is the exception), so that is the safe answer.
   if (!context) return true;
   return !conditionMet(condition, context);
+}
+
+/**
+ * Whether `hand` holds a card this reveal-land would accept.
+ *
+ * Asked before the question is raised: a controller with nothing to show is not
+ * asked at all, because the printed default is then the only outcome and
+ * stopping the game for an answer that cannot matter would be a wedge.
+ */
+export function canRevealForUntapped(
+  condition: RevealFromHandCondition,
+  hand: readonly { readonly def: CardDefinition }[],
+): boolean {
+  for (const card of hand) {
+    for (const subtype of condition.anyOfSubtypes) {
+      if (hasSubtype(card.def, subtype)) return true;
+    }
+  }
+  return false;
 }
 
 /** Whether the "enters untapped" condition holds on the current board. */
