@@ -11,10 +11,14 @@
  * of the meta. Four Sol Rings let a control deck deploy a four-mana sweeper on
  * turn three — the single most powerful card in the gauntlet, in the deck least
  * able to be punished for it. And four Snapcaster Mages were a *vanilla 2/1* here
- * (its flashback-GRANTING ability is still unimplemented — see `STUBBED_MECHANICS`;
- * flash timing and printed flashback costs are real now, but the grant is what
- * Snapcaster IS), so the
- * deck was quietly running four blank bodies and still winning. Both are gone.
+ * at the time (its flashback-granting ability was unimplemented), so the deck was
+ * quietly running four blank bodies and still winning. Both are gone.
+ *
+ * ⚠️ Snapcaster is a WHOLE card now — flash, the targeted ETB and the granted
+ * flashback all play as printed — so putting it back is a real deck-building
+ * decision rather than the free win-rate it used to be. It is deliberately still
+ * absent: adding it would move every recorded gauntlet baseline, which is an
+ * integrator call to make with a re-measure attached.
  * Removal density came down from twelve pieces to eleven, and the freed slots went
  * into card draw and lands, which is what actually makes a control deck a control
  * deck.

@@ -1896,17 +1896,18 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\btransform\b|\bflip\b|double-faced/,
     missingEngineSystem: 'a transform/double-faced template the compiler does not recognize yet',
   },
-  // Flash is a real timing flag and PLAIN flashback ("Flashback {2}{U}") is a
-  // real mechanic now (`CardDefinition.flashback` — cast from the graveyard,
-  // exiled on leaving the stack). What still lands here is a flashback the
-  // engine cannot pay or grant: an {X} or additional-cost form
+  // Flash, PLAIN flashback ("Flashback {2}{U}") and GRANTED flashback
+  // (Snapcaster Mage's "target instant or sorcery card in your graveyard gains
+  // flashback until end of turn") are all real mechanics now — the grant lives
+  // in core's `card-grants.ts`, and the cast path reads printed and granted
+  // costs through the one `flashbackCostOf` accessor. What still lands here is
+  // a flashback the engine cannot PAY — an {X} or additional-cost form
   // ("Flashback—{1}{U}, Discard a card"), which needs the cast-cost-modification
-  // system, and flashback-GRANTING text (Snapcaster Mage), which needs an effect
-  // that modifies a card in a graveyard.
+  // system — or a granting template outside the one compiled wording.
   {
     pattern: /\bflashback\b/,
     missingEngineSystem:
-      'a flashback template the compiler does not recognize yet (plain "Flashback {cost}" is supported; {X}/additional costs and granted flashback are not)',
+      'a flashback template the compiler does not recognize yet (plain "Flashback {cost}" and the Snapcaster-style grant are supported; {X}/additional-cost flashback is not)',
   },
   {
     // Attachment IS implemented now (core's `attachments.ts` + the
@@ -1927,7 +1928,18 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
   },
   { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'a counters template the compiler does not recognize yet' },
-  { pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/, missingEngineSystem: 'a graveyard template the compiler does not recognize yet' },
+  {
+    // TARGETING a card in a graveyard is a real system now
+    // ('instantOrSorceryInYourGraveyard' in core's targeting.ts), as is a
+    // continuous grant ON such a card (`card-grants.ts`), and regrowth ("return
+    // target [TYPE] card from your graveyard to your hand") already compiled.
+    // What still lands here is a graveyard TEMPLATE with no rule: exiling a
+    // card from a graveyard, "for each card in your graveyard", delve,
+    // threshold, and the reanimation shapes that put a card from a graveyard
+    // onto the battlefield.
+    pattern: /\bexiles?\b.*\bgraveyard\b|\bgraveyard\b/,
+    missingEngineSystem: 'a graveyard template the compiler does not recognize yet',
+  },
   {
     // Plain "target player mills N" and "you mill N" COMPILE now. What still
     // lands here is a mill whose count is derived or conditional, so the hint

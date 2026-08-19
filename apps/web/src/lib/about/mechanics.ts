@@ -195,6 +195,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'flashback-cost' },
       },
       {
+        title: 'Granted flashback (Snapcaster Mage)',
+        detail:
+          'An effect can give a card in your GRAVEYARD flashback until end of turn, for the mana cost printed on that card. The ability targets the graveyard card as it goes on the stack (so it fizzles if the card leaves in response), the grant is scoped to that one card, it expires at end of turn, and it stops applying the moment the card changes zones (CR 400.7). Casting on the grant exiles the card exactly as a printed flashback does.',
+        witness: { kind: 'rule', id: 'grant-flashback-to-graveyard-spell' },
+      },
+      {
+        title: 'Targeting a card in a graveyard',
+        detail:
+          'An ability can point at an instant or sorcery card in the graveyard of the player who controls it — the first targeting that reaches outside the battlefield, offered and re-checked exactly like every other target kind.',
+        witness: { kind: 'primitive', id: 'grantFlashback' },
+      },
+      {
         title: 'Prowess',
         detail: 'Modelled exactly: a cast trigger per noncreature spell that pumps until end of turn.',
         witness: { kind: 'card', name: 'Monastery Swiftspear' },
