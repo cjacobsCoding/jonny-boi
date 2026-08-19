@@ -1188,10 +1188,10 @@ Still open, roughly by how often they block a real decklist:
   spell is resolving and before the instance reaches the battlefield, and the primitive only looked
   at the battlefield — so every 0/0 body printed that way (Stonecoil Serpent, Walking Ballista) died
   on arrival. Measured on the cached 2100-card corpus: **193 → 217 playable** against the census baseline this
-  branch started from, and **MEASURED_PLACEHOLDER** re-measured against `origin/main` after
-  merging the siblings that landed meanwhile — the counters family itself going from 117 variants /
-  182 card-blocks / 44 sole to 106 / 147 / 38.
-  ⚠️ Still reported, by name: `indestructible` (no keyword flag), phasing, doubling counters,
+  branch started from, and **328 → 352 (15.6% → 16.8%)** re-measured against `origin/main` (364a4f1) after
+  merging the siblings that landed meanwhile — the counters family itself going from 116 variants /
+  180 card-blocks / 46 sole to 106 / 146 / 38.
+  ⚠️ Still reported, by name: phasing (Slip Out the Back), doubling counters,
   proliferate (needs a chooser over every permanent and player with a counter), counter kinds the
   stat layer does not read (charge/quest/time/growth/keyword counters), "each **attacking** creature",
   "**nontoken**" filters (instances carry no token flag), once-per-turn trigger limiters, granting a

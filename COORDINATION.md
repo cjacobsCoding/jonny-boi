@@ -122,8 +122,9 @@ _Append dated notes here; keep them short. Newest at top._
   printed could reach them. Closed as rule-table DATA plus small seam extensions.
 
   **Measured on the cached 2100-card corpus: 193 → 217** against the census baseline this branch
-  started from, and **MEASURED_PLACEHOLDER re-measured against origin/main after merging it** (the
-  keyword-sweep and modal-casting branches landed meanwhile). Re-run with
+  started from, and **328 → 352 (15.6% → 16.8%)** re-measured against `origin/main` (364a4f1) after
+  merging it — the counters family itself going from 116 variants / 180 card-blocks / 46 sole to
+  106 / 146 / 38. Re-run with
   `node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0 --json <out>`.
 
   Owned files: `packages/cards/src/compile/rules.ts`, `packages/cards/src/primitives.ts`,
