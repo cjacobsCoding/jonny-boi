@@ -45,6 +45,7 @@ const SEEDS = Object.freeze({
   condescend: 405,
   bottomAll: 406,
   order: 407,
+  opt: 408,
 });
 
 const DECK_SIZE = 40;
@@ -70,6 +71,15 @@ const PREORDAIN = makeCard({
   typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
   manaCost: { generic: 0, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
   oracleText: 'Scry 2, then draw a card.',
+});
+
+/** Opt, exactly as Scryfall prints it — `keywords: ['Scry']` included. */
+const OPT = makeCard({
+  name: 'Opt',
+  typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+  manaCost: { generic: 0, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
+  oracleText: 'Scry 1.\nDraw a card.',
+  keywords: ['Scry'],
 });
 
 /** Temple of Epiphany — an enters-tapped land whose ETB trigger scries. */
@@ -507,5 +517,169 @@ describe('scry & surveil — the compiled cards play as printed', () => {
     });
 
     expect(s.players.A.life, 'the un-countered Bolt resolved').toBeLessThan(lifeBefore);
+  });
+});
+
+/**
+ * THE KEYWORD SWEEP — the regression these tests exist for.
+ *
+ * Scryfall lists `Scry`, `Surveil` and `Mill` in a card's `keywords` array. The
+ * compiler models all three as effect PRIMITIVES matched by the rule table, not as
+ * keyword flags, so the post-rules keyword sweep used to report the bare keyword a
+ * second time even after the printed line had compiled perfectly — leaving Opt,
+ * Preordain, the Theros temples and the Ravnica surveil-lands `incomplete` on the
+ * strength of a word the compiler had already implemented.
+ *
+ * Every card below carries the REAL Scryfall `keywords` value; on the old behaviour
+ * each one reported `the "Scry"/"Surveil"/"Mill" keyword ability` and failed here.
+ *
+ * The second block is the half that must stay honest: a wording the rule table does
+ * NOT match compiles no primitive, so the card still reports.
+ */
+describe('the keyword sweep — Scry/Surveil/Mill are primitives, not unmodelled keywords', () => {
+  it('compiles Opt completely — the whole text compiled, so the sweep must stay quiet', () => {
+    const result = compileCard(OPT);
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.effects).toEqual([
+      { primitive: 'scry' },
+      { primitive: 'drawCards', params: { count: 1 } },
+    ]);
+  });
+
+  it('compiles Preordain with its Scryfall keyword attached', () => {
+    const result = compileCard({ ...PREORDAIN, keywords: ['Scry'] });
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+  });
+
+  it('compiles a Temple with the keyword listed — the scry sits inside an ETB TRIGGER', () => {
+    // The nesting is the point: a shallow look at the card's top-level effects
+    // finds no scry primitive here, so the guard has to walk the triggers.
+    const result = compileCard({ ...TEMPLE_OF_EPIPHANY, keywords: ['Scry'] });
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers?.[0]?.effects).toEqual([{ primitive: 'scry' }]);
+  });
+
+  it('compiles Castle Vantress — the scry sits inside an ACTIVATED ability', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Castle Vantress',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: '{T}: Add {U}.\n{2}{U}{U}, {T}: Scry 2.',
+        keywords: ['Scry'],
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.activated?.[0]?.effects).toEqual([
+      { primitive: 'scry', params: { count: 2 } },
+    ]);
+  });
+
+  it('compiles Undercity Sewers with the Surveil keyword listed', () => {
+    const result = compileCard({ ...UNDERCITY_SEWERS, keywords: ['Surveil'] });
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+  });
+
+  it('compiles a self-mill body with the Mill keyword listed', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Self Mill',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
+        oracleText: 'You mill three cards.',
+        keywords: ['Mill'],
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.effects).toEqual([
+      { primitive: 'mill', params: { amount: 3, self: true } },
+    ]);
+  });
+
+  it('compiles a targeted mill with the Mill keyword listed', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Target Mill',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        manaCost: { generic: 0, W: 0, U: 1, B: 0, R: 0, G: 0, C: 0, other: [] },
+        oracleText: 'Target player mills four cards.',
+        keywords: ['Mill'],
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+  });
+});
+
+describe('the keyword sweep — an unmatched wording still reports honestly', () => {
+  /** No compiled scry primitive → no skip. The guard is evidence-based. */
+  it('REFUSES a derived-count scry even though Scryfall lists the keyword', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Derived Scry',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'Scry X, where X is the number of creatures you control.',
+        keywords: ['Scry'],
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.length, 'reported once, by the clause — never a bare-keyword duplicate').toBe(1);
+    expect(result.missing[0]?.text).toContain('Scry X');
+  });
+
+  it('REFUSES a conditional surveil even though Scryfall lists the keyword', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Conditional Surveil',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'If you control an artifact, surveil 2.',
+        keywords: ['Surveil'],
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('REFUSES a derived-count mill even though Scryfall lists the keyword', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Derived Mill',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'Each player mills cards equal to the number of creatures they control.',
+        keywords: ['Mill'],
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('a card whose OTHER line fails still reports, with the scry keyword suppressed', () => {
+    // The scry compiled; the second line did not. Exactly one honest entry, and it
+    // names the line that actually failed rather than the keyword that worked.
+    const result = compileCard(
+      makeCard({
+        name: 'Test Half Broken',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'Scry 2.\nBolster 3.',
+        keywords: ['Scry'],
+      }),
+    );
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.some((m) => m.text.toLowerCase().includes('scry'))).toBe(false);
+  });
+});
+
+describe('the keyword sweep — Opt plays as printed once it compiles', () => {
+  const reg = buildRegistry(CARD_POOL);
+
+  it('Opt: scries 1 keeping the card, then draws exactly that card', () => {
+    const state = gameAtMain(reg, SEEDS.opt);
+    floodMana(state, 'A');
+    const [top] = stackLibrary(state, 'A', [SERRA]) as [CardInstance];
+    const [opt] = (state.players.A.hand = [instance(compileCard(OPT).definition, 'A', 'hand')]);
+
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: opt!.instanceId }, reg);
+    s = settle(s, reg, (choice) => {
+      expect(offered(choice)).toEqual([top.instanceId]);
+      return { kind: 'selectCards', instanceIds: [top.instanceId] };
+    });
+
+    expect(s.players.A.hand.map((c) => c.instanceId)).toEqual([top.instanceId]);
   });
 });

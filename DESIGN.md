@@ -1084,7 +1084,36 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
   cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
   (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
+- ✅ *the keyword sweep no longer double-reports Scry / Surveil / Mill* — a **defect**, not a feature,
+  and the highest-yield single fix in the census. The compiler runs a keyword sweep after the rule
+  table: anything in Scryfall's `card.keywords` it did not consume is reported. The sweep carried
+  "already handled" guards for ward, protection, enchant/equip, kicker, flashback and ability words —
+  but not for the three keywords this compiler models as effect **primitives** matched by rules
+  (`scry-n`, `surveil-n`, `scry-then-effect`, `self-mill`, `target-player-mills`). So Opt's entire text
+  compiled and the card was still `incomplete`, on the strength of the word "Scry" being reported
+  twice. The guard is shaped like the flashback one and is **evidence-based**: skip the sweep entry
+  only when the compiled assembly actually contains the backing primitive — deep-walked, because a
+  scry can sit inside an ETB trigger (the Theros temples), inside an activated ability (Castle
+  Vantress) or inside another primitive's params. A wording the rule table does *not* match compiles no
+  primitive and keeps reporting through its own clause, which is the honest half and is tested as
+  such. **Measured: 193 → 227 of the 2100-card most-played corpus (9.2% → 10.8%).**
+- ✅ *modal mana with a multiplier* — `{T}: Add three mana of any one color` is five modes of three
+  (Gilded Lotus), which `producesOptions` expresses exactly. "One color" is what makes it a choice of
+  mode; a free per-mana mix is refused rather than flattened.
+
 Still open, roughly by how often they block a real decklist:
+- ***the mana model itself* — the largest engine lever left in the corpus, and it was mis-filed as
+  cheap template data.** Core models a mana source as a fixed list of colour bundles: one tap, no
+  stack, no cost beyond the tap, no rider, no condition. Four printed shapes need it to grow, and the
+  compiler now names each one instead of calling it "a template we don't recognize yet"
+  (**83 sole-blocked corpus cards** between them): an **additional cost** on a mana ability (35 —
+  `{T}, Pay 1 life:`, the filter lands' `{R/W}, {T}:`, `{T}, Tap an untapped creature`), a **rider**
+  (22 — every pain land and the whole Talisman cycle: "{T}: Add {U} or {B}. ~ deals 1 damage to you"),
+  an **activation restriction** (15 — the Verge cycle, Nimbus Maze, Mox Opal), a **spend restriction**
+  (4 — Cavern of Souls; the pool records colour, not what each mana may pay for), and **colours derived
+  from board state** at activation time (7 — Reflecting Pool, Exotic Orchard; commander identity is
+  refused for good). Lands are 24 cards of every deck, so this is the highest card-per-hour engine
+  work on the board.
 - *alternative and additional costs* (suspend, spectacle, cycling — rule-table work on the
   cast-time question step now that {X}/kicker/multikicker built it), *Phyrexian costs*,
   *split / adventure* (two castable halves on ONE object — modal DFCs landed in §3.16, but those

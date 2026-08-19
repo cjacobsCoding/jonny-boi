@@ -146,6 +146,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'equip-cost' },
       },
       {
+        title: 'Modal mana sources',
+        detail:
+          'A source that taps for a CHOICE adds one mode per tap, picked when you tap it — a dual land’s two colours, "one mana of any color", or Gilded Lotus’s three-of-one-colour. A mana ability that also costs life or mana, carries a rider ("…deals 1 damage to you"), or is gated on the board ("Activate only if…") is still refused by name: those need the mana model itself to grow.',
+        witness: { kind: 'rule', id: 'tap-for-n-of-any-one-color' },
+      },
+      {
         title: '{X} costs',
         detail:
           'Casting an {X} spell asks the caster to choose X — the range bounded by what the board can actually pay — charges it, and the resolved effect reads the chosen value (Blaze, Mind Spring). X = 0 is a legal cast.',

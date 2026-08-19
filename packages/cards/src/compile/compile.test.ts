@@ -729,9 +729,10 @@ describe('compileCard — templated cards outside the curated pool', () => {
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'a mana-ability template the compiler does not recognize yet',
-    );
+    // Named as ENGINE work, not as a template: core fixes a source's mode list
+    // when the card compiles, so no rule-table entry can read the board at
+    // activation time. (mana-templates.test.ts pins the whole partition.)
+    expect(result.missing.map((gap) => gap.missingEngineSystem).join(' | ')).toContain('BOARD STATE');
   });
 
   it('compiles a self-pumping cast trigger (the printed prowess template)', () => {
