@@ -1084,6 +1084,34 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
   cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
   (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
+- ✅ *the "you may" + trigger-timing pass* — the optional-trigger and trigger-vocabulary families,
+  measured against the most-played corpus and closed in `sole`-descending order (193 → 248 playable,
+  +55 cards; re-run `coverage-audit.mjs --input <corpus>` to check). What landed:
+  **The printed word "you may"** is now one composable wrapper, `mayEffects`: ask, then run the
+  nested clause only on a yes. It makes "When ~ enters, you may BODY" the ETB trigger the table
+  already knew plus one real question, instead of a primitive per optional card. **The option is
+  never assumed** — compiling a "you may" as its yes-half is a different card (a Reclamation Sage
+  that MUST destroy your own artifact), so both answers are legal, both are play-tested, and
+  `valence` only steers the pilot. It is ordered AFTER the plain ETB rule so a body that implements
+  its own option (Eternal Witness's `optional: true`) keeps the rule that knows most about it.
+  **Enters-tapped** gained the two remaining board cycles — slowlands ("two or more other lands")
+  and battlelands ("two or more **basic** lands", which needed `CardDefinition.basic`, because a
+  nonbasic dual prints the same land SUBTYPES and would otherwise be counted as a basic) — and one
+  new decision: **reveal-lands** ("you may reveal an Island or Swamp card from your hand"), modelled
+  exactly like the shockland, a real confirm raised at land-play time with the same unasked-default
+  rule (tapped) and no question at all for a controller with nothing to show.
+  **Trigger timing** grew from upkeep alone to draw step, first main phase and end step, as one rule
+  over a closed table of step words. **Board-watching triggers** ("whenever a creature you control
+  [with power 3 or greater] enters/dies") arrived as two events scoped by the shared `CardFilter`;
+  `triggers.ts` stays a pure matcher, with the permanent an event is about resolved by the runtime
+  and handed down at most once per event.
+  **Filtered tutors**: "search your library for a TYPE card with mana value / power / toughness N
+  [or less | or greater], reveal it, put it into your hand" — `CardFilter` gained printed P/T bounds,
+  where an ABSENT box matches no bound, so a `*` P/T is never a legal find for "toughness 2 or less".
+  Two refusals are load-bearing and deliberate: **"each player's <step>"** still reports (a
+  `who: 'any'` trigger would run its body for the source's controller every time, so "that player
+  draws an additional card" would draw for the wrong seat), and **"another creature you control"**
+  still reports (these conditions have no self-exclusion).
 - ✅ *the keyword sweep no longer double-reports Scry / Surveil / Mill* — a **defect**, not a feature,
   and the highest-yield single fix in the census. The compiler runs a keyword sweep after the rule
   table: anything in Scryfall's `card.keywords` it did not consume is reported. The sweep carried
@@ -1102,6 +1130,11 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   mode; a free per-mana mix is refused rather than flattened.
 
 Still open, roughly by how often they block a real decklist:
+- *aiming a trigger body at the player whose step or turn it is* ("At the beginning of each player's
+  draw step, **that player** draws an additional card" — Howling Mine, Kami of the Crescent Moon,
+  Font of Mythos). The trigger itself is expressible (`who: 'any'`); what is missing is the
+  triggering player riding the resolution the way `xValue` and `kicked` do, so a body can say "that
+  player" rather than "the controller",
 - ***the mana model itself* — the largest engine lever left in the corpus, and it was mis-filed as
   cheap template data.** Core models a mana source as a fixed list of colour bundles: one tap, no
   stack, no cost beyond the tap, no rider, no condition. Four printed shapes need it to grow, and the
