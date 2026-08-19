@@ -202,11 +202,6 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
   const explain = ctx.trace !== undefined;
-  // ONE continuous index per decision, threaded into everything below. Built here
-  // rather than per permanent because it is O(battlefield) and every stat read in
-  // this decision wants the same answer — see `board-stats.ts` for what reading
-  // without it cost (a Tarmogoyf evaluated as 0/0 and every anthem invisible).
-  const index = boardIndex(view);
 
   // A resolving spell is asking somebody a question. That preempts everything —
   // it is the only thing the game will accept — and it is answered on its own
@@ -222,6 +217,17 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   if (legalActions.length === 0) return emit(ctx, passAction(view), 'no legal actions — passing');
   const onlyPass = everyActionIsPass(legalActions);
   if (onlyPass) return emit(ctx, legalActions[0] as GameAction, 'nothing useful — passing');
+
+  // ONE continuous index per decision, threaded into everything below. Built here
+  // rather than per permanent because it is O(battlefield) and every stat read in
+  // this decision wants the same answer — see `board-stats.ts` for what reading
+  // without it cost (a Tarmogoyf evaluated as 0/0 and every anthem invisible).
+  //
+  // Built AFTER the three early returns above on purpose: answering a parked
+  // question and "the only legal move is passing" are between them a large share
+  // of all decisions in a real game, and none of them reads a creature's stats, so
+  // an index built at the top of the function would be pure cost on every one.
+  const index = boardIndex(view);
 
   // Combat declarations are their own decision shape.
   if (view.step === 'declareAttackers' && me === view.activePlayer) {
@@ -376,7 +382,7 @@ function bestLoyaltyActivation(
     const ability = source?.def.activated?.[action.abilityIndex];
     const loyalty = ability?.cost.loyalty;
     if (!ability || loyalty === undefined) continue;
-    cards ??= cardValueContext(view as GameState);
+    cards ??= cardValueContext(view as GameState, index);
     const effectValue = valueOfEffects(ability.effects, {
       state: view as GameState,
       player: me,
@@ -870,7 +876,13 @@ function scoreSpell(
       const target = counterTarget(view, otherPlayer(opp));
       if (!target) return undefined; // nothing on the stack worth answering — hold it
       return {
-        score: weights.removalBaseScore + cardValue(target.card, weights, cardValueContext(view as GameState)),
+        // Built here rather than per decision because a counterspell with something
+        // worth countering on the stack is rare, and this is the only branch that
+        // needs the card-value ruler. The decision's index is reused, so it costs
+        // the land count and nothing else.
+        score:
+          weights.removalBaseScore +
+          cardValue(target.card, weights, cardValueContext(view as GameState, index)),
         card,
         cost,
         targets: [target.instanceId],
@@ -1599,14 +1611,33 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
 // the identical bound and that one is the leaf of the two, so keeping it here would
 // have meant two copies of a number that must agree.
 
+/*
+ * The three battlefield selectors below are indexed loops rather than `filter`,
+ * for the same reason as the action predicates further down: each `filter` takes a
+ * fresh closure, and these run several times per decision on the pilot that is
+ * also MCTS's rollout policy. They return exactly what the `filter` returned.
+ */
+
 /** Creatures a player controls on the battlefield. */
 function creaturesControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
-  return view.battlefield.filter((c) => c.controller === player && isCreature(c.def)) as CardInstance[];
+  const battlefield = view.battlefield;
+  const out: CardInstance[] = [];
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.controller === player && isCreature(perm.def)) out.push(perm);
+  }
+  return out;
 }
 
 /** Planeswalkers a player controls on the battlefield. */
 function walkersControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
-  return view.battlefield.filter((c) => c.controller === player && isPlaneswalker(c.def)) as CardInstance[];
+  const battlefield = view.battlefield;
+  const out: CardInstance[] = [];
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.controller === player && isPlaneswalker(perm.def)) out.push(perm);
+  }
+  return out;
 }
 
 /**
@@ -1620,7 +1651,13 @@ function walkersControlledBy(view: PilotView, player: PlayerId): CardInstance[] 
  * opponent is made its protector, and you attack it to collect the reward.
  */
 function battlesProtectedBy(view: PilotView, player: PlayerId): CardInstance[] {
-  return view.battlefield.filter((c) => isBattle(c.def) && protectorOf(c) === player) as CardInstance[];
+  const battlefield = view.battlefield;
+  const out: CardInstance[] = [];
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (isBattle(perm.def) && protectorOf(perm) === player) out.push(perm);
+  }
+  return out;
 }
 
 /**
@@ -1722,7 +1759,14 @@ function canBlockByEvasion(
 }
 
 function findInstance(view: PilotView, id: InstanceId): CardInstance | undefined {
-  return view.battlefield.find((c) => c.instanceId === id) as CardInstance | undefined;
+  // Indexed, closure-free: this is the single most-called helper in the file (every
+  // attacker, blocker, tap plan and offered ability resolves an id through it).
+  const battlefield = view.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.instanceId === id) return perm;
+  }
+  return undefined;
 }
 
 // --- small utilities -----------------------------------------------------------

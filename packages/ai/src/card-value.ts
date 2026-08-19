@@ -48,13 +48,19 @@ export interface CardValueContext {
   readonly index: ContinuousIndex;
 }
 
-/** Read the land counts a {@link CardValueContext} needs off a live state. */
-export function cardValueContext(state: GameState): CardValueContext {
+/**
+ * Read the land counts a {@link CardValueContext} needs off a live state.
+ *
+ * `index` is accepted rather than always built because a caller that is already
+ * holding this position's continuous index (every pilot decision is) would
+ * otherwise pay for a second identical pass over the battlefield.
+ */
+export function cardValueContext(state: GameState, index: ContinuousIndex = boardIndex(state)): CardValueContext {
   const landsInPlay: Record<PlayerId, number> = { A: 0, B: 0 };
   for (const perm of state.battlefield) {
     if (isLand(perm.def)) landsInPlay[perm.controller] += 1;
   }
-  return { landsInPlay, index: boardIndex(state) };
+  return { landsInPlay, index };
 }
 
 /**
