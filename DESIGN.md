@@ -1084,6 +1084,34 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   pips (hybrid included) by `colorsOfDefinition`, the same reader protection uses, so "white"
   cannot mean two things. Honoured by `matchesCardFilter` itself, so it reaches EVERY consumer
   (statics, library searches, discards, sacrifices, attachment hosts), not just anthems.
+- ✅ *the "you may" + trigger-timing pass* — the optional-trigger and trigger-vocabulary families,
+  measured against the most-played corpus and closed in `sole`-descending order (193 → 248 playable,
+  +55 cards; re-run `coverage-audit.mjs --input <corpus>` to check). What landed:
+  **The printed word "you may"** is now one composable wrapper, `mayEffects`: ask, then run the
+  nested clause only on a yes. It makes "When ~ enters, you may BODY" the ETB trigger the table
+  already knew plus one real question, instead of a primitive per optional card. **The option is
+  never assumed** — compiling a "you may" as its yes-half is a different card (a Reclamation Sage
+  that MUST destroy your own artifact), so both answers are legal, both are play-tested, and
+  `valence` only steers the pilot. It is ordered AFTER the plain ETB rule so a body that implements
+  its own option (Eternal Witness's `optional: true`) keeps the rule that knows most about it.
+  **Enters-tapped** gained the two remaining board cycles — slowlands ("two or more other lands")
+  and battlelands ("two or more **basic** lands", which needed `CardDefinition.basic`, because a
+  nonbasic dual prints the same land SUBTYPES and would otherwise be counted as a basic) — and one
+  new decision: **reveal-lands** ("you may reveal an Island or Swamp card from your hand"), modelled
+  exactly like the shockland, a real confirm raised at land-play time with the same unasked-default
+  rule (tapped) and no question at all for a controller with nothing to show.
+  **Trigger timing** grew from upkeep alone to draw step, first main phase and end step, as one rule
+  over a closed table of step words. **Board-watching triggers** ("whenever a creature you control
+  [with power 3 or greater] enters/dies") arrived as two events scoped by the shared `CardFilter`;
+  `triggers.ts` stays a pure matcher, with the permanent an event is about resolved by the runtime
+  and handed down at most once per event.
+  **Filtered tutors**: "search your library for a TYPE card with mana value / power / toughness N
+  [or less | or greater], reveal it, put it into your hand" — `CardFilter` gained printed P/T bounds,
+  where an ABSENT box matches no bound, so a `*` P/T is never a legal find for "toughness 2 or less".
+  Two refusals are load-bearing and deliberate: **"each player's <step>"** still reports (a
+  `who: 'any'` trigger would run its body for the source's controller every time, so "that player
+  draws an additional card" would draw for the wrong seat), and **"another creature you control"**
+  still reports (these conditions have no self-exclusion).
 - ✅ *the keyword sweep no longer double-reports Scry / Surveil / Mill* — a **defect**, not a feature,
   and the highest-yield single fix in the census. The compiler runs a keyword sweep after the rule
   table: anything in Scryfall's `card.keywords` it did not consume is reported. The sweep carried
@@ -1102,6 +1130,11 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   mode; a free per-mana mix is refused rather than flattened.
 
 Still open, roughly by how often they block a real decklist:
+- *aiming a trigger body at the player whose step or turn it is* ("At the beginning of each player's
+  draw step, **that player** draws an additional card" — Howling Mine, Kami of the Crescent Moon,
+  Font of Mythos). The trigger itself is expressible (`who: 'any'`); what is missing is the
+  triggering player riding the resolution the way `xValue` and `kicked` do, so a body can say "that
+  player" rather than "the controller",
 - ***the mana model itself* — the largest engine lever left in the corpus, and it was mis-filed as
   cheap template data.** Core models a mana source as a fixed list of colour bundles: one tap, no
   stack, no cost beyond the tap, no rider, no condition. Four printed shapes need it to grow, and the
@@ -1369,7 +1402,61 @@ target for its own counter mode, and being faithful there means the pilot, not t
 one that declines. Humans answer through the existing `ChoicePrompt`, with repeated modes rendered as
 a count (`×2`) rather than a toggle.
 
-### 3.17 The pool a player can actually SEE — every shipped mechanic represented — ✅ done
+### 3.17 Indestructible + the blocking restrictions — ✅ done
+Two small engine systems the mechanic census named together (`docs/plans/mechanic-completion-plan.md`
+§3c), sharing one lesson: **a rule belongs where it is expressible, and nowhere else.**
+
+**Indestructible is not a shield, it is an exemption from exactly two rules.** CR 702.12b removes
+the permanent from destruction — an effect that says "destroy", and lethal marked damage (CR 704.5g),
+with deathtouch's "any nonzero damage is lethal" (CR 702.2b) riding along. Everything else still
+works, and each is a *different* rule: **0 or less toughness** puts it into the graveyard by
+CR 704.5f, which the keyword does not mention; **sacrifice** is a cost, not destruction; **exile**
+moves it by another path. So the state-based-action pass asks the two creature-death questions
+separately and gates only the damage one on the flag — collapsing them into one guarded expression is
+the classic wrong implementation and makes a creature with no toughness immortal. The destroy
+exemption itself lives in `destroyPermanent`, the single function every printed "destroy" in the pool
+already passed through (single target, board wipe, modal destroy mode), so there is no per-caller
+check to forget.
+
+**A latent bug this exposed, worth more than either feature.** The continuous layer's `KEYWORD_KEYS`
+is a hand-maintained list of the boolean flags a GRANT may set. A flag added to `KeywordFlags` and not
+to that list works when printed and does *nothing* when granted — silently, and in one direction only.
+It had already eaten a granted hexproof once. Both new booleans are in it, `minBlockers` folds by MAX
+(two blocking requirements are both in force; the stricter decides, and summing would invent a third),
+and granted-not-printed cases are now covered by tests in both systems.
+
+**Blocking restrictions are split by what a check can SEE**, following the menace precedent:
+- **per pair** (`canBlock`): "can't be blocked", "~ can't block", flying/reach, protection. Each
+  disqualifies one specific attacker/blocker pairing.
+- **per declaration** (`illegalBlockDeclaration`): menace, and its general form "can't be blocked
+  except by N or more creatures" (`minBlockers`, of which menace is the N = 2 printing). Every
+  blocker is individually legal and only the *count* is not, so a per-pair check cannot express it.
+
+⛔ **Block REQUIREMENTS are NOT implemented, deliberately.** "Must be blocked if able" and "all
+creatures able to block ~ do so" are the other half of CR 509.1c/d, which resolves requirements and
+restrictions *together* — maximise satisfied requirements without violating any restriction. That is
+a solver, not a check, and half of it would be a card playing differently from its text. The compiler
+reports those cards by name, and the unsupported hint says which of the two things is missing.
+
+Also reported rather than approximated: a restriction whose SELECTOR compares the two creatures
+(skulk; Delney's "power 2 or less can't be blocked by power 3 or greater"), and a filtered set the
+static layer cannot read — `statics.ts` matches PRINTED characteristics only, on purpose, so
+Tetsuko's "power or toughness 1 or less" has no faithful filter and keeps reporting.
+
+**Both seats.** The pilot no longer "kills" an indestructible creature: destroy and exile are split
+into one intent flag, a destroy looks past indestructible creatures and holds the card if the whole
+enemy board is one, and a sweeper's value counts neither side's indestructible creatures. It also
+never proposes a declaration the engine would refuse — it assigns one blocker per attacker, so it
+declines to block a menacing attacker at all rather than voiding every other block in the same action.
+
+**Measured yield:** the top-2100 corpus went **229 → 252 playable** (10.9% → 12.0%) on the same cached
+corpus, via the keyword itself plus four rule-table entries it unlocked: the mass until-end-of-turn
+grant ("permanents you control gain hexproof and indestructible"), the anthem static generalised past
+"creatures" to any permanent noun (Darksteel Forge, Avacyn), the printed PHRASES "can't be blocked" /
+"can't block" as keyword names, and "target creature can't be blocked this turn". Gauntlet seed 99 is
+byte-identical to `origin/main` (79/280) with throughput at parity.
+
+### 3.18 The pool a player can actually SEE — every shipped mechanic represented — ✅ done
 Sixteen engine systems shipped in two days and the built-in card pool printed almost none of them: no
 card with flashback, {X}, kicker, scry, surveil, mill, protection or ward, and exactly one
 planeswalker. Every one of those systems was reachable only by importing a decklist — which is

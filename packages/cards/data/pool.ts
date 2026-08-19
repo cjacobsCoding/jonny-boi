@@ -73,11 +73,15 @@ const LAND = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
  */
 export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
   // --- Basic lands (vanilla mana sources; zero custom effects) ----------------
-  { id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99', name: 'Plains', types: ['land'], produces: ['W'] },
-  { id: 'b2c6aa39-2d2a-459c-a555-fb48ba993373', name: 'Island', types: ['land'], produces: ['U'] },
-  { id: '56719f6a-1a6c-4c0a-8d21-18f7d7350b68', name: 'Swamp', types: ['land'], produces: ['B'] },
-  { id: 'a3fb7228-e76b-4e96-a40e-20b5fed75685', name: 'Mountain', types: ['land'], produces: ['R'] },
-  { id: 'b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6', name: 'Forest', types: ['land'], produces: ['G'] },
+  // `basic: true` is the printed **Basic** supertype, not decoration: the
+  // battlelands count it ("enters tapped unless you control two or more basic
+  // lands"), and land SUBTYPES cannot stand in for it — a nonbasic dual prints
+  // the same ones.
+  { id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99', name: 'Plains', types: ['land'], basic: true, subtypes: ['plains'], produces: ['W'] },
+  { id: 'b2c6aa39-2d2a-459c-a555-fb48ba993373', name: 'Island', types: ['land'], basic: true, subtypes: ['island'], produces: ['U'] },
+  { id: '56719f6a-1a6c-4c0a-8d21-18f7d7350b68', name: 'Swamp', types: ['land'], basic: true, subtypes: ['swamp'], produces: ['B'] },
+  { id: 'a3fb7228-e76b-4e96-a40e-20b5fed75685', name: 'Mountain', types: ['land'], basic: true, subtypes: ['mountain'], produces: ['R'] },
+  { id: 'b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6', name: 'Forest', types: ['land'], basic: true, subtypes: ['forest'], produces: ['G'] },
 
   // --- Mana creatures / rocks (vanilla — mana production is data, no effects) --
   {
