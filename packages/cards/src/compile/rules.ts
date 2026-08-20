@@ -4762,10 +4762,15 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // finished work: phasing, DOUBLING counters, proliferate
     // (needs a chooser over every permanent and player with a counter), counter
     // kinds the stat layer does not read (charge/quest/time/growth/keyword
-    // counters), "each ATTACKING creature", "NONTOKEN" filters (instances carry
-    // no token flag), once-per-turn trigger limiters, granting a triggered
-    // ability until end of turn, and removing a counter as an activation cost
-    // (`ActivationCost` has no counter component).
+    // counters), "each ATTACKING creature", once-per-turn trigger limiters,
+    // granting a triggered ability until end of turn, and removing a counter as
+    // an activation cost (`ActivationCost` has no counter component).
+    //
+    // "NONTOKEN" left this list: token-ness is a real characteristic now
+    // (`CardDefinition.isToken`, read by `CardFilter.isToken`), and the printed
+    // words "token" / "nontoken" compile on the enters/dies trigger. What is
+    // still missing is a nontoken filter on templates that carry no `CardFilter`
+    // at all, `destroyAll` chief among them ("Destroy all nontoken creatures").
     pattern: /\bcounters? on\b|\b\+1\/\+1 counter/,
     missingEngineSystem: 'a counters template the compiler does not recognize yet',
   },
