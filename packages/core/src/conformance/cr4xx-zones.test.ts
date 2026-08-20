@@ -177,7 +177,7 @@ describe('CR 401 — library', () => {
     expect(s.players.A.hand.some((c) => c.def.id === marker.id)).toBe(true);
   });
 
-  crTest('401.1', 'a card drawn from the library is in the hand zone and nowhere else', () => {
+  crTest('400.1', 'a card drawn from the library is in the hand zone and nowhere else', () => {
     const state = atMain();
     const marker = creatureDef('Top Card 2', 9, 9);
     giveLibrary(state, 'A', [marker, BEAR, BEAR, BEAR, BEAR]);

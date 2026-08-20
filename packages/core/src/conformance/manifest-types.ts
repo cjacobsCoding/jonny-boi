@@ -144,6 +144,16 @@ export type ConformanceFile = (typeof CONFORMANCE_FILES)[number];
 export interface ClaimedTest {
   readonly rule: CrRule;
   readonly title: string;
+  /**
+   * The file this one test lives in, when it is NOT the entry's own `file`.
+   *
+   * A CR section does not always sit in a single conformance file: CR 608
+   * (resolving spells) is affirmed in `cr6xx`, but its "the spell goes to its
+   * owner's graveyard" half belongs beside the graveyard zone in `cr4xx`. Keeping
+   * the section's entry whole — rather than splitting one rule across two
+   * entries — is what lets a reader go from a rule number to ALL of its tests.
+   */
+  readonly file?: ConformanceFile;
 }
 
 /**
@@ -156,6 +166,15 @@ export interface Covered {
   readonly tests: readonly ClaimedTest[];
   /** Optional: what part of the section is affirmed, when it isn't all of it. */
   readonly note?: string;
+  /**
+   * What this section requires that the engine does NOT do.
+   *
+   * A section is rarely all-or-nothing, and "covered" with an unstated remainder
+   * is the exact dishonesty this manifest exists to prevent: it reads as a
+   * complete claim. Anything here is counted and printed separately from the
+   * clean `covered` total by `manifest.test.ts`.
+   */
+  readonly shortfall?: string;
 }
 
 /**
@@ -169,6 +188,8 @@ export interface Cited {
   readonly suite: string;
   /** What that suite proves about this section. */
   readonly what: string;
+  /** See {@link Covered.shortfall} — the same honesty requirement applies. */
+  readonly shortfall?: string;
 }
 
 /**
@@ -198,6 +219,18 @@ export interface Gap {
    * else's live work is written up, not raced (COORDINATION.md).
    */
   readonly owner?: string;
+  /**
+   * A GAP PIN: a conformance test that asserts what the engine does TODAY, so
+   * that closing the gap turns the suite red and forces this entry to be
+   * reclassified. Pins are never counted as coverage — they are the opposite —
+   * but they ARE collected by the file, so the per-file manifest assertion has
+   * to know about them.
+   *
+   * The idiom is the repo's own: `packages/cards/src/pool-mechanics.test.ts`
+   * asserts absent mechanics absent WITH their reasons, "so whoever closes one
+   * gets told by the suite".
+   */
+  readonly pin?: { readonly file: ConformanceFile; readonly tests: readonly ClaimedTest[] };
 }
 
 /** One section's classification. */
