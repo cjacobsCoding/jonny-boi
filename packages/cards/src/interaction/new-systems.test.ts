@@ -405,9 +405,9 @@ describe('CELL: step triggers x the triggering player (CR 603.2c)', () => {
     // referent is whose step it IS - which is the only place the other seat
     // survives, since a `who: 'any'` ability still resolves under its own
     // controller.
-    const inBsStep = { type: 'stepBegin', step: 'draw', activePlayer: 'B', turn: 4 } as const;
+    const inBsStep = { type: 'stepBegin', step: 'draw', activePlayer: 'B' } as const;
     expect(triggeringPlayerFor({ on: 'drawStep', who: 'any' }, inBsStep)).toBe('B');
-    const inAsStep = { type: 'stepBegin', step: 'draw', activePlayer: 'A', turn: 5 } as const;
+    const inAsStep = { type: 'stepBegin', step: 'draw', activePlayer: 'A' } as const;
     expect(triggeringPlayerFor({ on: 'drawStep', who: 'any' }, inAsStep)).toBe('A');
     // An event that is about a permanent, not a player, has no referent at all -
     // reported as undefined rather than defaulted to the controller.

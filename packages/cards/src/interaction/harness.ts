@@ -105,7 +105,6 @@ export function faceRecord(over: Partial<CompilableCardFace> & { name: string })
     oracleText: '',
     power: null,
     toughness: null,
-    keywords: [],
     ...over,
   };
 }
