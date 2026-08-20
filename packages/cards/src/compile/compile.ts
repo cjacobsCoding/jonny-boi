@@ -19,6 +19,7 @@
 import type {
   ActivatedAbility,
   ActivationCost,
+  AdditionalCastCost,
   AttachmentSpec,
   CardDefinition,
   CardType,
@@ -274,6 +275,11 @@ interface Assembly {
   entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /** The printed "Kicker {COST}", once some line prints it. */
   kicker?: ManaCost;
+  /**
+   * The printed "As an additional cost to cast this spell, …" — a MANDATORY cost
+   * that makes the cast illegal when it cannot be paid (CR 601.2h).
+   */
+  additionalCost?: AdditionalCastCost;
   /** The printed "Multikicker {COST}" — an additional cost paid any number of times. */
   multikicker?: ManaCost;
   /** The printed modal header + modes ("Choose one — • … • …"). */
@@ -336,6 +342,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
   }
   if (contribution.kicker) assembly.kicker = contribution.kicker;
+  if (contribution.additionalCost) assembly.additionalCost = contribution.additionalCost;
   if (contribution.multikicker) assembly.multikicker = contribution.multikicker;
   if (contribution.modal) assembly.modal = contribution.modal;
   if (contribution.cycling) assembly.cycling.push(...contribution.cycling);
@@ -1072,6 +1079,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),
     ...(assembly.kicker ? { kicker: assembly.kicker } : {}),
+    ...(assembly.additionalCost ? { additionalCost: assembly.additionalCost } : {}),
     ...(assembly.multikicker ? { multikicker: assembly.multikicker } : {}),
     ...(assembly.modal ? { modal: assembly.modal } : {}),
     ...(assembly.cycling.length > 0 ? { cycling: assembly.cycling } : {}),

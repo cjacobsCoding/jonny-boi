@@ -543,6 +543,45 @@ const DISCARD_RESTRICTIONS: Readonly<Record<string, { readonly noneOfTypes?: rea
     land: { anyOfTypes: Object.freeze(['land']) },
   });
 
+/**
+ * The permanent kinds a printed MANDATORY additional cost may sacrifice, mapped
+ * to the `CardFilter` selecting each. A CLOSED table: a noun outside it has no
+ * faithful filter, and a cost that sacrificed the wrong permanent — or nothing —
+ * would be a silently different card.
+ *
+ * The "or" forms are listed as their own entries rather than parsed, because
+ * "an artifact or creature" is ONE printed phrase whose meaning (either type)
+ * is a union, and enumerating the two printed unions that actually appear is
+ * exact where a general parser would be a guess.
+ */
+const SACRIFICE_COST_NOUNS: Readonly<Record<string, { readonly anyOfTypes: readonly CardType[] }>> =
+  Object.freeze({
+    creature: { anyOfTypes: Object.freeze<CardType[]>(['creature']) },
+    land: { anyOfTypes: Object.freeze<CardType[]>(['land']) },
+    artifact: { anyOfTypes: Object.freeze<CardType[]>(['artifact']) },
+    enchantment: { anyOfTypes: Object.freeze<CardType[]>(['enchantment']) },
+    'artifact or creature': { anyOfTypes: Object.freeze<CardType[]>(['artifact', 'creature']) },
+    'creature or artifact': { anyOfTypes: Object.freeze<CardType[]>(['creature', 'artifact']) },
+  });
+
+/** The filter a printed sacrifice-cost noun means, or null if unexpressible. */
+function sacrificeCostFilterFor(noun: string): { readonly anyOfTypes: readonly CardType[] } | null {
+  return SACRIFICE_COST_NOUNS[noun.replace(/^an? /, '').trim()] ?? null;
+}
+
+/**
+ * The filter a printed DISCARD-cost noun means. Only the unrestricted "a card"
+ * is expressible as no filter at all; the restricted forms reuse the same closed
+ * table an effect's discard restriction reads, so "discard a land card" cannot
+ * mean two different things in two places. `null` reports the line.
+ */
+function discardCostFilterFor(noun: string): Record<string, unknown> | null | undefined {
+  const word = noun.replace(/^an? /, '').trim();
+  if (word === 'card') return undefined; // any card — no filter
+  const restricted = word.endsWith(' card') ? word.slice(0, -' card'.length) : word;
+  return discardFilterFor(restricted) as Record<string, unknown> | null;
+}
+
 /** The regex alternation of the discard restrictions above. */
 const DISCARD_RESTRICTION_TOKEN = Object.keys(DISCARD_RESTRICTIONS).join('|');
 
@@ -2685,6 +2724,48 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // mana would be a cost we cannot ask for, so the line stays reported.
       const cost = parseManaSymbols(match[1]!);
       return cost === null ? null : { multikicker: cost };
+    },
+  },
+  {
+    id: 'additional-cast-cost',
+    description:
+      '"As an additional cost to cast this spell, sacrifice a creature / discard a card" (Village Rites, Thrill of Possibility, Diabolic Intent, Harrow)',
+    // A MANDATORY additional cost, and the difference from `kicker-cost` above is
+    // the whole reason it compiles to its own field: a kicker may be declined, so
+    // a caster who cannot pay it still casts the spell. This one cannot be
+    // declined — CR 601.2h makes an unpayable cost an ILLEGAL CAST — so the
+    // engine refuses to offer Village Rites with an empty board rather than
+    // printing a free two-card draw.
+    //
+    // The noun is read through a CLOSED table for the same reason every other
+    // filter word in this file is: "sacrifice a Clue" or "exile a card from your
+    // graveyard" must report, not compile into a cost that sacrifices the wrong
+    // thing (or nothing at all, which would be strictly better than printed).
+    // "Exile" and "pay N life" additional costs are outside the table on purpose:
+    // core's `AdditionalCastCost` performs a sacrifice or a discard, and a cost
+    // it cannot perform must never look implemented.
+    pattern: new RegExp(
+      `^as an additional cost to cast this spell, (sacrifice|discard) (?:${COUNT_TOKEN} )?([a-z ]+?)s?$`,
+    ),
+    build(match) {
+      const kind = match[1] === 'discard' ? 'discard' : 'sacrifice';
+      const count = match[2] === undefined ? 1 : parseCount(match[2]);
+      if (count === null || count <= 0) return null;
+      const noun = (match[3] ?? '').trim();
+      const filter = kind === 'discard' ? discardCostFilterFor(noun) : sacrificeCostFilterFor(noun);
+      if (filter === null) return null;
+      const label =
+        kind === 'discard'
+          ? `Discard ${count === 1 ? 'a card' : `${count} cards`}`
+          : `Sacrifice ${count === 1 ? noun : `${count} ${noun}s`}`;
+      return {
+        additionalCost: {
+          kind,
+          ...(count === 1 ? {} : { count }),
+          ...(filter ? { filter } : {}),
+          label,
+        },
+      };
     },
   },
   {
