@@ -286,6 +286,17 @@ formulaic, repeat across cycles, and every deck plays 24 of them.
 > smaller residuals also still report by name: a cost that taps another permanent (Springleaf Drum)
 > and a colour derived from a commander's identity (refused for good, §5).
 >
+> **✅ SHIPPED on `feat/mana-spend-restrictions` (2026-08-20): the fifth one too.** The POOL now
+> carries the restriction (`ManaAbility.spendRestriction` → `ManaPool.restricted`), and `canPay`,
+> `payCost`, the payment planner, the event log, the debug snapshot, the masked protocol view and
+> the AI all honour it. **Re-measured on this same cached corpus against `origin/main` (1dd5b90):
+> 408 → 412 playable**, and the 15-card gap is gone — four cards became playable and the rest now
+> report what they ACTUALLY need (a creature type chosen as the permanent enters; "that spell can't
+> be countered"; a production wording). The commander residual stands refused per §5, and the six
+> cards that used to share its gap name were split out: they need a tapped-for-mana TRIGGER
+> (Mirari's Wake, Zendikar Resurgent, Vorinclex, Kinnan, Extraplanar Lens, Incubation Druid), which
+> is ordinary engine work and was invisible while it shared a name with a format decision.
+>
 > The same caution applies to §4's wave 1 ("Land templates: mana-ability (24) +
 > enters-tapped (8) families, ≈305 playable"). The enters-tapped half is real template
 > work; the mana-ability half is the engine work above.
