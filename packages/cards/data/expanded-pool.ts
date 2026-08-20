@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 345 cards.
+ * 346 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -4393,6 +4393,35 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, U: 1 },
     flashback: { generic: 2, U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // Whenever you cast a noncreature spell, create a 1/1 colorless Soldier artifact creature token.
+  {
+    id: 'f7156897-2b02-4ecd-868d-d4d59244e9ed',
+    name: 'Third Path Iconoclast',
+    types: ['creature'],
+    cost: { U: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['human', 'monk'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellTypeNoneOf: ['creature'] },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Soldier',
+              colors: [],
+              subtypes: ['Soldier'],
+              types: ['artifact', 'creature'],
+            },
+          },
+        ],
+        label: 'Cast noncreature: create a 1/1 colorless soldier artifact creature token',
+      },
+    ],
   },
   // This land enters tapped.
   // Indestructible

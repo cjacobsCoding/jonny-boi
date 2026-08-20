@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-20T10:15:50.979Z",
+  "generatedAt": "2026-08-20T10:19:10.035Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 377,
+  "requested": 378,
   "unresolved": [
     "Bala Ged Recovery // Bala Ged Sanctuary",
     "Jwari Disruption // Jwari Ruins",
@@ -17076,6 +17076,62 @@
       "localImages": {
         "normal": "think-twice-normal.jpg",
         "art_crop": "think-twice-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f7156897-2b02-4ecd-868d-d4d59244e9ed",
+      "name": "Third Path Iconoclast",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Monk"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Monk",
+      "oracleText": "Whenever you cast a noncreature spell, create a 1/1 colorless Soldier artifact creature token.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R",
+        "U"
+      ],
+      "colorIdentity": [
+        "R",
+        "U"
+      ],
+      "keywords": [],
+      "set": "tdc",
+      "collectorNumber": "307",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "normal": "https://cards.scryfall.io/normal/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "large": "https://cards.scryfall.io/large/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016"
+      },
+      "localImages": {
+        "normal": "third-path-iconoclast-normal.jpg",
+        "art_crop": "third-path-iconoclast-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
