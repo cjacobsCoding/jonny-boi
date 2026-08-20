@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 483 cards.
+ * 498 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -354,6 +354,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       ],
     },
   },
+  // Enchant creature
+  // Enchanted creature can't be blocked.
+  // Whenever enchanted creature attacks, scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  {
+    id: '3378fef3-4d8c-4d9e-a338-4abb6f70d410',
+    name: 'Aqueous Form',
+    types: ['enchantment'],
+    cost: { U: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [{ primitive: 'scry' }],
+        label: 'Equipped creature attacks: scry 1',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 0, toughness: 0, keywords: { unblockable: true } },
+    },
+  },
   // Flying
   // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
   // When this creature enters, scry 2.
@@ -373,6 +397,38 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: scry 2',
       },
     ],
+  },
+  // Equipped creature gets +6/+6.
+  // Whenever equipped creature attacks, destroy target permanent.
+  // Equip {6}
+  {
+    id: 'd0a1f39b-cda4-4925-83f8-2161f575edfb',
+    name: 'Argentum Armor',
+    types: ['artifact'],
+    cost: { generic: 6 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'permanent' } }],
+        label: 'Equipped creature attacks: destroy target permanent',
+        targets: 'permanent',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 6 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {6}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {6}',
+      modifies: { power: 6, toughness: 6, keywords: {} },
+    },
   },
   // Trample
   // Madness {2}{G} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
@@ -1563,6 +1619,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ B: 1 }, { G: 1 }],
   },
+  // Prevent all combat damage that would be dealt this turn.
+  {
+    id: '932708ae-9d5c-4561-aa8b-0d2222d37fdc',
+    name: 'Darkness',
+    types: ['instant'],
+    cost: { B: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
+  },
   // Indestructible (Effects that say "destroy" don't destroy this Equipment.)
   // Equipped creature gets +2/+0.
   // Equip {2}
@@ -2076,6 +2145,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     producesOptions: [{ R: 1 }, { W: 1 }],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
   },
+  // Enchant creature
+  // Enchanted creature gets +3/+3.
+  // When enchanted creature dies, create a 3/3 green Elephant creature token.
+  {
+    id: 'c138bd7f-8751-4e96-b54a-d5082e1a491f',
+    name: 'Elephant Guide',
+    types: ['enchantment'],
+    cost: { generic: 2, G: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    triggers: [
+      {
+        condition: { on: 'dies', watches: 'attachedHost' },
+        effects: [{ primitive: 'makeToken', params: { power: 3, toughness: 3, name: 'Elephant' } }],
+        label: 'Equipped creature dies: create a 3/3 green elephant creature token',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 3, toughness: 3, keywords: {} },
+    },
+  },
   {
     id: 'b3b9a87d-cb95-435c-90b6-037406cab32e',
     name: 'Elite Vanguard',
@@ -2524,6 +2617,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     manaAbilities: [
       { produces: [{ C: 1 }] },
       { produces: [{ G: 2 }, { G: 1, U: 1 }, { U: 2 }], cost: { mana: { hybrid: [['G', 'U']] } } },
+    ],
+  },
+  // Prevent all combat damage that would be dealt this turn.
+  {
+    id: '27e9db49-7af7-4bef-ad4c-bf5dfb92030d',
+    name: 'Fog',
+    types: ['instant'],
+    cost: { G: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
     ],
   },
   // At the beginning of each player's draw step, that player draws two additional cards.
@@ -2981,6 +3087,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // If one or more +1/+1 counters would be put on a creature you control, that many plus one +1/+1 counters are put on it instead.
+  {
+    id: 'a1f3da21-af6d-450e-bf0b-985d158418e6',
+    name: 'Hardened Scales',
+    types: ['enchantment'],
+    cost: { G: 1 },
+    replacements: [
+      {
+        event: 'counters',
+        applies: {
+          recipientController: 'you',
+          recipientFilter: { anyOfTypes: ['creature'] },
+          counterKind: '+1/+1',
+        },
+        outcome: { plus: 1 },
+        label: 'if one or more +1/+1 counters would be put on a creature you control, that many plus one +1/+1 counters are put on it instead',
+      },
+    ],
+  },
   // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
   // Harmonious Grovestrider's power and toughness are each equal to the number of lands you control.
   {
@@ -3089,6 +3214,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 3,
     subtypes: ['giant'],
+  },
+  // Prevent all combat damage that would be dealt this turn.
+  {
+    id: '98423a34-f044-4811-b288-56981d604b6e',
+    name: 'Holy Day',
+    types: ['instant'],
+    cost: { W: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
   },
   // Enchant creature
   // Enchanted creature gets +1/+2.
@@ -4158,6 +4296,21 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     flashback: { generic: 5, B: 2 },
     effects: [{ primitive: 'makeToken', params: { power: 2, toughness: 2, name: 'Zombie', count: 2 } }],
   },
+  // Prevent all combat damage that would be dealt this turn.
+  // Flashback {2}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: 'b6d22228-a45e-4296-9ae2-1649e04b1c53',
+    name: 'Moment\'s Peace',
+    types: ['instant'],
+    cost: { generic: 1, G: 1 },
+    flashback: { generic: 2, G: 1 },
+    effects: [
+      {
+        primitive: 'preventDamage',
+        params: { combat: true, label: 'prevent all combat damage that would be dealt this turn' },
+      },
+    ],
+  },
   // Return target creature card from your graveyard to your hand.
   // Flashback {4}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -5181,6 +5334,28 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['artifact', 'land'],
     produces: ['U'],
   },
+  // As this land enters, choose a creature type.
+  // {T}: Add {C}.
+  // {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.
+  {
+    id: '79ba18fd-f184-43c1-86df-56ee18ce806c',
+    name: 'Secluded Courtyard',
+    types: ['land'],
+    asEntersChoice: { subject: 'creatureType' },
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        spendRestriction: {
+          label: 'only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type',
+          allow: [
+            { purpose: 'cast', types: ['creature'], subtypeChosenBySource: true },
+            { purpose: 'activate', types: ['creature'], subtypeChosenBySource: true },
+          ],
+        },
+      },
+    ],
+  },
   // This land enters tapped.
   // {T}: Add {W}.
   // Cycling {W} ({W}, Discard this card: Draw a card.)
@@ -5432,6 +5607,37 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, U: 2 },
     effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }, { primitive: 'surveil' }],
   },
+  // Equipped creature gets +1/-1.
+  // Whenever equipped creature dies, draw two cards.
+  // Equip {1}
+  {
+    id: '65986c1b-8e51-4604-b685-d82fa7d1263a',
+    name: 'Skullclamp',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'dies', watches: 'attachedHost' },
+        effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+        label: 'Equipped creature dies: draw two cards',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 1 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {1}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {1}',
+      modifies: { power: 1, toughness: -1, keywords: {} },
+    },
+  },
   // This artifact enters tapped.
   // {T}: Add {U}.
   {
@@ -5563,6 +5769,22 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { primitive: 'gainLife', params: { amount: { chosenX: true } } },
       { primitive: 'drawCards', params: { count: { chosenX: true } } },
     ],
+  },
+  // Enchant creature
+  // Enchanted creature gets +1/+1 and has protection from creatures.
+  {
+    id: '81a51328-b995-4f3b-90bc-a20ae21dd254',
+    name: 'Spirit Mantle',
+    types: ['enchantment'],
+    cost: { generic: 1, W: 1 },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 1, toughness: 1, keywords: { protectionFrom: ['creatures'] } },
+    },
   },
   // At the beginning of each player's draw step, that player draws an additional card.
   // Whenever a player draws a card, this enchantment deals 1 damage to that player.
@@ -5826,6 +6048,94 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: you gain 1 life',
       },
     ],
+  },
+  // Equipped creature gets +2/+2 and has protection from red and from blue.
+  // Whenever equipped creature deals combat damage to a player, this Equipment deals 2 damage to any target and you draw a card.
+  // Equip {2}
+  {
+    id: '2ccdc60a-49a9-44b9-a7af-0ebf18b26785',
+    name: 'Sword of Fire and Ice',
+    types: ['artifact'],
+    cost: { generic: 3 },
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer', watches: 'attachedHost' },
+        effects: [
+          { primitive: 'dealDamage', params: { amount: 2 } },
+          { primitive: 'drawCards', params: { count: 1 } },
+        ],
+        label: 'Equipped creature deals combat damage to a player: ~ deals 2 damage to any target and you draw a card',
+        targets: 'any',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 2, toughness: 2, keywords: { protectionFrom: ['red', 'blue'] } },
+    },
+  },
+  // Equipped creature gets +1/+1.
+  // Whenever equipped creature attacks, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  // Equip {2}
+  {
+    id: 'd79cbc61-6c15-48ea-bbba-3cffb819ccba',
+    name: 'Sword of the Animist',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    legendary: true,
+    subtypes: ['equipment'],
+    triggers: [
+      {
+        condition: { on: 'attacks', watches: 'attachedHost' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfTypes: ['land'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'battlefield',
+                    tapped: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Equipped creature attacks: you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle',
+      },
+    ],
+    activated: [
+      {
+        cost: { mana: { generic: 2 } },
+        effects: [{ primitive: 'attachToTarget', params: { targets: 'creatureYouControl' } }],
+        timing: 'sorcery',
+        label: 'Equip {2}',
+      },
+    ],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'], controller: 'you' },
+      whenIllegal: 'detach',
+      label: 'Equip {2}',
+      modifies: { power: 1, toughness: 1, keywords: {} },
+    },
   },
   // Equipped creature gets +2/+0 and has first strike, vigilance, trample, and haste.
   // Equip {3}
@@ -6406,6 +6716,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     },
     backFaceCastable: true,
   },
+  // If a red source you control would deal damage to an opponent or a permanent an opponent controls, it deals that much damage plus 2 instead.
+  {
+    id: '8c3495bf-02e7-4ad9-949d-92eb3d2b662a',
+    name: 'Torbran, Thane of Red Fell',
+    types: ['creature'],
+    cost: { generic: 1, R: 3 },
+    power: 2,
+    toughness: 4,
+    legendary: true,
+    subtypes: ['dwarf', 'noble'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: {
+          sourceController: 'you',
+          sourceFilter: { anyOfColors: ['R'] },
+          recipientController: 'opponent',
+        },
+        outcome: { plus: 2 },
+        label: 'if a red source you control would deal damage to an opponent or a permanent an opponent controls, it deals that much damage plus 2 instead',
+      },
+    ],
+  },
   // As an additional cost to cast this spell, discard a card.
   // Draw two cards.
   {
@@ -6618,6 +6951,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         },
       ],
     },
+  },
+  // As this land enters, choose a creature type.
+  // {T}: Add {C}.
+  // {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.
+  {
+    id: '584b15f2-6ae9-413a-8b8d-9244dbea4878',
+    name: 'Unclaimed Territory',
+    types: ['land'],
+    asEntersChoice: { subject: 'creatureType' },
+    manaAbilities: [
+      { produces: [{ C: 1 }] },
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        spendRestriction: {
+          label: 'only to cast a creature spell of the chosen type',
+          allow: [{ purpose: 'cast', types: ['creature'], subtypeChosenBySource: true }],
+        },
+      },
+    ],
   },
   // ({T}: Add {U} or {B}.)
   // This land enters tapped.

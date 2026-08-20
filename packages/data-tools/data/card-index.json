@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-20T10:45:39.708Z",
+  "generatedAt": "2026-08-20T11:08:27.770Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 515,
+  "requested": 530,
   "unresolved": [],
   "cards": [
     {
@@ -1394,6 +1394,69 @@
       "faces": []
     },
     {
+      "id": "3378fef3-4d8c-4d9e-a338-4abb6f70d410",
+      "name": "Aqueous Form",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature can't be blocked.\nWhenever enchanted creature attacks, scry 1. (Look at the top card of your library. You may put that card on the bottom.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Enchant",
+        "Scry"
+      ],
+      "set": "cmr",
+      "collectorNumber": "56",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.jpg?1783928870",
+        "normal": "https://cards.scryfall.io/normal/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.jpg?1783928870",
+        "large": "https://cards.scryfall.io/large/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.jpg?1783928870",
+        "png": "https://cards.scryfall.io/png/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.png?1783928870",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.jpg?1783928870",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.jpg?1783928870",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.webp?1783928870",
+        "grid": "https://cards.scryfall.io/grid/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.webp?1783928870",
+        "display": "https://cards.scryfall.io/display/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.webp?1783928870",
+        "art": "https://cards.scryfall.io/art/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.webp?1783928870",
+        "crop": "https://cards.scryfall.io/crop/front/c/8/c859f7cb-ac12-490e-b769-6f019791f2a5.webp?1783928870"
+      },
+      "localImages": {
+        "normal": "aqueous-form-normal.jpg",
+        "art_crop": "aqueous-form-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "cddbd819-4895-4712-b44b-d6b51f3d8646",
       "name": "Archive Dragon",
       "manaCost": {
@@ -1453,6 +1516,64 @@
       "localImages": {
         "normal": "archive-dragon-normal.jpg",
         "art_crop": "archive-dragon-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d0a1f39b-cda4-4925-83f8-2161f575edfb",
+      "name": "Argentum Armor",
+      "manaCost": {
+        "generic": 6,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +6/+6.\nWhenever equipped creature attacks, destroy target permanent.\nEquip {6}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "afc",
+      "collectorNumber": "198",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.jpg?1783926176",
+        "normal": "https://cards.scryfall.io/normal/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.jpg?1783926176",
+        "large": "https://cards.scryfall.io/large/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.jpg?1783926176",
+        "png": "https://cards.scryfall.io/png/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.png?1783926176",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.jpg?1783926176",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.jpg?1783926176",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.webp?1783926176",
+        "grid": "https://cards.scryfall.io/grid/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.webp?1783926176",
+        "display": "https://cards.scryfall.io/display/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.webp?1783926176",
+        "art": "https://cards.scryfall.io/art/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.webp?1783926176",
+        "crop": "https://cards.scryfall.io/crop/front/f/b/fb1b7468-85f9-472e-9f7c-b268f84aea1c.webp?1783926176"
+      },
+      "localImages": {
+        "normal": "argentum-armor-normal.jpg",
+        "art_crop": "argentum-armor-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -7007,6 +7128,64 @@
       "faces": []
     },
     {
+      "id": "932708ae-9d5c-4561-aa8b-0d2222d37fdc",
+      "name": "Darkness",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Prevent all combat damage that would be dealt this turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "tsb",
+      "collectorNumber": "40",
+      "rarity": "special",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.jpg?1783943276",
+        "normal": "https://cards.scryfall.io/normal/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.jpg?1783943276",
+        "large": "https://cards.scryfall.io/large/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.jpg?1783943276",
+        "png": "https://cards.scryfall.io/png/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.png?1783943276",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.jpg?1783943276",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.jpg?1783943276",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.webp?1783943276",
+        "grid": "https://cards.scryfall.io/grid/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.webp?1783943276",
+        "display": "https://cards.scryfall.io/display/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.webp?1783943276",
+        "art": "https://cards.scryfall.io/art/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.webp?1783943276",
+        "crop": "https://cards.scryfall.io/crop/front/5/8/584834fb-b7b6-40eb-9fec-8df17172ce5f.webp?1783943276"
+      },
+      "localImages": {
+        "normal": "darkness-normal.jpg",
+        "art_crop": "darkness-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3b7ea3ac-ac0a-40aa-b743-d153e1c47d8c",
       "name": "Darksteel Axe",
       "manaCost": {
@@ -9251,6 +9430,68 @@
       "faces": []
     },
     {
+      "id": "c138bd7f-8751-4e96-b54a-d5082e1a491f",
+      "name": "Elephant Guide",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +3/+3.\nWhen enchanted creature dies, create a 3/3 green Elephant creature token.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "ema",
+      "collectorNumber": "163",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.jpg?1783937568",
+        "normal": "https://cards.scryfall.io/normal/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.jpg?1783937568",
+        "large": "https://cards.scryfall.io/large/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.jpg?1783937568",
+        "png": "https://cards.scryfall.io/png/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.png?1783937568",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.jpg?1783937568",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.jpg?1783937568",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.webp?1783937568",
+        "grid": "https://cards.scryfall.io/grid/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.webp?1783937568",
+        "display": "https://cards.scryfall.io/display/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.webp?1783937568",
+        "art": "https://cards.scryfall.io/art/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.webp?1783937568",
+        "crop": "https://cards.scryfall.io/crop/front/c/9/c997fe6c-cb57-4e0e-9267-42bd12cc3b03.webp?1783937568"
+      },
+      "localImages": {
+        "normal": "elephant-guide-normal.jpg",
+        "art_crop": "elephant-guide-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "b3b9a87d-cb95-435c-90b6-037406cab32e",
       "name": "Elite Vanguard",
       "manaCost": {
@@ -11267,6 +11508,64 @@
       "localImages": {
         "normal": "flooded-grove-normal.jpg",
         "art_crop": "flooded-grove-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "27e9db49-7af7-4bef-ad4c-bf5dfb92030d",
+      "name": "Fog",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Prevent all combat damage that would be dealt this turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "ema",
+      "collectorNumber": "167",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.jpg?1783937566",
+        "normal": "https://cards.scryfall.io/normal/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.jpg?1783937566",
+        "large": "https://cards.scryfall.io/large/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.jpg?1783937566",
+        "png": "https://cards.scryfall.io/png/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.png?1783937566",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.jpg?1783937566",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.jpg?1783937566",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.webp?1783937566",
+        "grid": "https://cards.scryfall.io/grid/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.webp?1783937566",
+        "display": "https://cards.scryfall.io/display/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.webp?1783937566",
+        "art": "https://cards.scryfall.io/art/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.webp?1783937566",
+        "crop": "https://cards.scryfall.io/crop/front/b/b/bbc3152e-7b3b-4ac6-8b33-abfebde216aa.webp?1783937566"
+      },
+      "localImages": {
+        "normal": "fog-normal.jpg",
+        "art_crop": "fog-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -13574,6 +13873,64 @@
       "faces": []
     },
     {
+      "id": "a1f3da21-af6d-450e-bf0b-985d158418e6",
+      "name": "Hardened Scales",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "If one or more +1/+1 counters would be put on a creature you control, that many plus one +1/+1 counters are put on it instead.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "272",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.jpg?1783903765",
+        "normal": "https://cards.scryfall.io/normal/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.jpg?1783903765",
+        "large": "https://cards.scryfall.io/large/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.jpg?1783903765",
+        "png": "https://cards.scryfall.io/png/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.png?1783903765",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.jpg?1783903765",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.jpg?1783903765",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.webp?1783903765",
+        "grid": "https://cards.scryfall.io/grid/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.webp?1783903765",
+        "display": "https://cards.scryfall.io/display/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.webp?1783903765",
+        "art": "https://cards.scryfall.io/art/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.webp?1783903765",
+        "crop": "https://cards.scryfall.io/crop/front/9/9/99cfd1a8-49fd-4cc0-96f2-f9f159ce5d55.webp?1783903765"
+      },
+      "localImages": {
+        "normal": "hardened-scales-normal.jpg",
+        "art_crop": "hardened-scales-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "0ebec97e-3cb1-41e2-a693-0febb5623016",
       "name": "Harmonious Grovestrider",
       "manaCost": {
@@ -14123,6 +14480,64 @@
       "localImages": {
         "normal": "hill-giant-normal.jpg",
         "art_crop": "hill-giant-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "98423a34-f044-4811-b288-56981d604b6e",
+      "name": "Holy Day",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Prevent all combat damage that would be dealt this turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "10e",
+      "collectorNumber": "21",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.jpg?1783943078",
+        "normal": "https://cards.scryfall.io/normal/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.jpg?1783943078",
+        "large": "https://cards.scryfall.io/large/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.jpg?1783943078",
+        "png": "https://cards.scryfall.io/png/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.png?1783943078",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.jpg?1783943078",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.jpg?1783943078",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.webp?1783943078",
+        "grid": "https://cards.scryfall.io/grid/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.webp?1783943078",
+        "display": "https://cards.scryfall.io/display/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.webp?1783943078",
+        "art": "https://cards.scryfall.io/art/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.webp?1783943078",
+        "crop": "https://cards.scryfall.io/crop/front/f/3/f3895c0c-0db8-4962-b386-57887fb60701.webp?1783943078"
+      },
+      "localImages": {
+        "normal": "holy-day-normal.jpg",
+        "art_crop": "holy-day-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -19105,6 +19520,66 @@
       "faces": []
     },
     {
+      "id": "b6d22228-a45e-4296-9ae2-1649e04b1c53",
+      "name": "Moment's Peace",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Prevent all combat damage that would be dealt this turn.\nFlashback {2}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Flashback"
+      ],
+      "set": "ody",
+      "collectorNumber": "251",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.jpg?1783945215",
+        "normal": "https://cards.scryfall.io/normal/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.jpg?1783945215",
+        "large": "https://cards.scryfall.io/large/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.jpg?1783945215",
+        "png": "https://cards.scryfall.io/png/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.png?1783945215",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.jpg?1783945215",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.jpg?1783945215",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.webp?1783945215",
+        "grid": "https://cards.scryfall.io/grid/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.webp?1783945215",
+        "display": "https://cards.scryfall.io/display/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.webp?1783945215",
+        "art": "https://cards.scryfall.io/art/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.webp?1783945215",
+        "crop": "https://cards.scryfall.io/crop/front/4/0/40ebe935-ccf9-435e-8fe8-53bcbf3526e7.webp?1783945215"
+      },
+      "localImages": {
+        "normal": "moment-s-peace-normal.jpg",
+        "art_crop": "moment-s-peace-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "dafd2713-d1bc-474b-b390-d2ff20b5375e",
       "name": "Monastery Swiftspear",
       "manaCost": {
@@ -24077,6 +24552,60 @@
       "faces": []
     },
     {
+      "id": "79ba18fd-f184-43c1-86df-56ee18ce806c",
+      "name": "Secluded Courtyard",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "msc",
+      "collectorNumber": "265",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.jpg?1783903197",
+        "normal": "https://cards.scryfall.io/normal/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.jpg?1783903197",
+        "large": "https://cards.scryfall.io/large/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.jpg?1783903197",
+        "png": "https://cards.scryfall.io/png/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.png?1783903197",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.jpg?1783903197",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.jpg?1783903197",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.webp?1783903197",
+        "grid": "https://cards.scryfall.io/grid/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.webp?1783903197",
+        "display": "https://cards.scryfall.io/display/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.webp?1783903197",
+        "art": "https://cards.scryfall.io/art/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.webp?1783903197",
+        "crop": "https://cards.scryfall.io/crop/front/c/0/c0d17d04-cf0b-4918-bfec-b34b0d98a602.webp?1783903197"
+      },
+      "localImages": {
+        "normal": "secluded-courtyard-normal.jpg",
+        "art_crop": "secluded-courtyard-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8dec6fcf-1254-4b1b-ba23-7a3e492a7241",
       "name": "Secluded Steppe",
       "manaCost": {
@@ -25459,6 +25988,64 @@
       "faces": []
     },
     {
+      "id": "65986c1b-8e51-4604-b685-d82fa7d1263a",
+      "name": "Skullclamp",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/-1.\nWhenever equipped creature dies, draw two cards.\nEquip {1}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "msc",
+      "collectorNumber": "210",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.jpg?1783903215",
+        "normal": "https://cards.scryfall.io/normal/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.jpg?1783903215",
+        "large": "https://cards.scryfall.io/large/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.jpg?1783903215",
+        "png": "https://cards.scryfall.io/png/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.png?1783903215",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.jpg?1783903215",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.jpg?1783903215",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.webp?1783903215",
+        "grid": "https://cards.scryfall.io/grid/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.webp?1783903215",
+        "display": "https://cards.scryfall.io/display/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.webp?1783903215",
+        "art": "https://cards.scryfall.io/art/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.webp?1783903215",
+        "crop": "https://cards.scryfall.io/crop/front/1/d/1d8b007b-3169-4ee3-80c7-781fc096fc7a.webp?1783903215"
+      },
+      "localImages": {
+        "normal": "skullclamp-normal.jpg",
+        "art_crop": "skullclamp-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2224b6e0-c5ff-45d0-84e3-83758c5fc99f",
       "name": "Sky Diamond",
       "manaCost": {
@@ -26345,6 +26932,68 @@
       "localImages": {
         "normal": "sphinx-s-revelation-normal.jpg",
         "art_crop": "sphinx-s-revelation-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "81a51328-b995-4f3b-90bc-a20ae21dd254",
+      "name": "Spirit Mantle",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Aura"
+        ]
+      },
+      "rawTypeLine": "Enchantment — Aura",
+      "oracleText": "Enchant creature\nEnchanted creature gets +1/+1 and has protection from creatures.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Enchant"
+      ],
+      "set": "soc",
+      "collectorNumber": "175",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.jpg?1783903799",
+        "normal": "https://cards.scryfall.io/normal/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.jpg?1783903799",
+        "large": "https://cards.scryfall.io/large/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.jpg?1783903799",
+        "png": "https://cards.scryfall.io/png/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.png?1783903799",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.jpg?1783903799",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.jpg?1783903799",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.webp?1783903799",
+        "grid": "https://cards.scryfall.io/grid/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.webp?1783903799",
+        "display": "https://cards.scryfall.io/display/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.webp?1783903799",
+        "art": "https://cards.scryfall.io/art/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.webp?1783903799",
+        "crop": "https://cards.scryfall.io/crop/front/8/a/8ac5a048-e8aa-48e8-b51b-b4e9a5b63ea6.webp?1783903799"
+      },
+      "localImages": {
+        "normal": "spirit-mantle-normal.jpg",
+        "art_crop": "spirit-mantle-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -27299,6 +27948,124 @@
       "localImages": {
         "normal": "swiftwater-cliffs-normal.jpg",
         "art_crop": "swiftwater-cliffs-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "2ccdc60a-49a9-44b9-a7af-0ebf18b26785",
+      "name": "Sword of Fire and Ice",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Artifact — Equipment",
+      "oracleText": "Equipped creature gets +2/+2 and has protection from red and from blue.\nWhenever equipped creature deals combat damage to a player, this Equipment deals 2 damage to any target and you draw a card.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "2xm",
+      "collectorNumber": "297",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.jpg?1783930092",
+        "normal": "https://cards.scryfall.io/normal/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.jpg?1783930092",
+        "large": "https://cards.scryfall.io/large/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.jpg?1783930092",
+        "png": "https://cards.scryfall.io/png/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.png?1783930092",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.jpg?1783930092",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.jpg?1783930092",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.webp?1783930092",
+        "grid": "https://cards.scryfall.io/grid/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.webp?1783930092",
+        "display": "https://cards.scryfall.io/display/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.webp?1783930092",
+        "art": "https://cards.scryfall.io/art/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.webp?1783930092",
+        "crop": "https://cards.scryfall.io/crop/front/2/6/2626d4c9-fcef-4057-a154-7d987a4a4b84.webp?1783930092"
+      },
+      "localImages": {
+        "normal": "sword-of-fire-and-ice-normal.jpg",
+        "art_crop": "sword-of-fire-and-ice-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d79cbc61-6c15-48ea-bbba-3cffb819ccba",
+      "name": "Sword of the Animist",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": [
+          "Equipment"
+        ]
+      },
+      "rawTypeLine": "Legendary Artifact — Equipment",
+      "oracleText": "Equipped creature gets +1/+1.\nWhenever equipped creature attacks, you may search your library for a basic land card, put it onto the battlefield tapped, then shuffle.\nEquip {2}",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [
+        "Equip"
+      ],
+      "set": "cmm",
+      "collectorNumber": "413",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.jpg?1783915589",
+        "normal": "https://cards.scryfall.io/normal/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.jpg?1783915589",
+        "large": "https://cards.scryfall.io/large/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.jpg?1783915589",
+        "png": "https://cards.scryfall.io/png/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.png?1783915589",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.jpg?1783915589",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.jpg?1783915589",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.webp?1783915589",
+        "grid": "https://cards.scryfall.io/grid/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.webp?1783915589",
+        "display": "https://cards.scryfall.io/display/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.webp?1783915589",
+        "art": "https://cards.scryfall.io/art/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.webp?1783915589",
+        "crop": "https://cards.scryfall.io/crop/front/6/4/64401acc-d080-4763-b67a-95164c11c69e.webp?1783915589"
+      },
+      "localImages": {
+        "normal": "sword-of-the-animist-normal.jpg",
+        "art_crop": "sword-of-the-animist-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -30327,6 +31094,69 @@
       ]
     },
     {
+      "id": "8c3495bf-02e7-4ad9-949d-92eb3d2b662a",
+      "name": "Torbran, Thane of Red Fell",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 3,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Dwarf",
+          "Noble"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Dwarf Noble",
+      "oracleText": "If a red source you control would deal damage to an opponent or a permanent an opponent controls, it deals that much damage plus 2 instead.",
+      "power": 2,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "eld",
+      "collectorNumber": "147",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.jpg?1783932614",
+        "normal": "https://cards.scryfall.io/normal/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.jpg?1783932614",
+        "large": "https://cards.scryfall.io/large/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.jpg?1783932614",
+        "png": "https://cards.scryfall.io/png/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.png?1783932614",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.jpg?1783932614",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.jpg?1783932614",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.webp?1783932614",
+        "grid": "https://cards.scryfall.io/grid/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.webp?1783932614",
+        "display": "https://cards.scryfall.io/display/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.webp?1783932614",
+        "art": "https://cards.scryfall.io/art/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.webp?1783932614",
+        "crop": "https://cards.scryfall.io/crop/front/7/9/79f591cd-d277-4ba5-b1bf-1c09cac9cb8a.webp?1783932614"
+      },
+      "localImages": {
+        "normal": "torbran-thane-of-red-fell-normal.jpg",
+        "art_crop": "torbran-thane-of-red-fell-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "f307b5b4-e949-4f69-8dc7-856e33a45a16",
       "name": "Tormenting Voice",
       "manaCost": {
@@ -31088,6 +31918,60 @@
       "localImages": {
         "normal": "umezawa-s-charm-normal.jpg",
         "art_crop": "umezawa-s-charm-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "584b15f2-6ae9-413a-8b8d-9244dbea4878",
+      "name": "Unclaimed Territory",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Land",
+      "oracleText": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "msc",
+      "collectorNumber": "275",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.jpg?1783903190",
+        "normal": "https://cards.scryfall.io/normal/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.jpg?1783903190",
+        "large": "https://cards.scryfall.io/large/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.jpg?1783903190",
+        "png": "https://cards.scryfall.io/png/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.png?1783903190",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.jpg?1783903190",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.jpg?1783903190",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.webp?1783903190",
+        "grid": "https://cards.scryfall.io/grid/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.webp?1783903190",
+        "display": "https://cards.scryfall.io/display/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.webp?1783903190",
+        "art": "https://cards.scryfall.io/art/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.webp?1783903190",
+        "crop": "https://cards.scryfall.io/crop/front/d/3/d3782952-3839-4a94-95bc-716611d3ece6.webp?1783903190"
+      },
+      "localImages": {
+        "normal": "unclaimed-territory-normal.jpg",
+        "art_crop": "unclaimed-territory-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
