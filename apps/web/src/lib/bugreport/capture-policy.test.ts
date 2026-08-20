@@ -15,6 +15,8 @@ import {
   captureOptionsFor,
   dataUrlToBytes,
   isOffScreen,
+  lastAnchoringChild,
+  prunableChildIndices,
   withTimeout,
 } from './capture-policy.js';
 
@@ -131,5 +133,65 @@ describe('dataUrlToBytes', () => {
   it('returns nothing for a string that is not a data URL, rather than throwing', () => {
     expect(dataUrlToBytes('').length).toBe(0);
     expect(dataUrlToBytes('not-a-data-url').length).toBe(0);
+  });
+});
+
+describe('pruning the below-fold tail', () => {
+  const FOLD = 800;
+
+  it('drops the trailing children that start below the fold', () => {
+    // Four rows of a grid; the last two are scrolled off the bottom.
+    expect(prunableChildIndices([0, 400, 900, 1400], FOLD)).toEqual([2, 3]);
+  });
+
+  it('keeps everything when nothing is below the fold', () => {
+    expect(prunableChildIndices([0, 100, 200], FOLD)).toEqual([]);
+  });
+
+  it('keeps a below-fold child that is followed by a visible one', () => {
+    // Removing from the MIDDLE can re-flow the ones after it, so only a
+    // trailing run is ever safe to drop.
+    expect(prunableChildIndices([0, 900, 200, 1400], FOLD)).toEqual([3]);
+  });
+
+  it('keeps a child scrolled off the TOP — it is holding the rest down', () => {
+    expect(prunableChildIndices([-500, -100, 300], FOLD)).toEqual([]);
+  });
+
+  it('treats the fold as inclusive, so a child starting exactly at it stays', () => {
+    expect(prunableChildIndices([0, FOLD], FOLD)).toEqual([]);
+    expect(prunableChildIndices([0, FOLD + 1], FOLD)).toEqual([1]);
+  });
+
+  it('never drops a child it could not measure — the <option> regression', () => {
+    // <option> elements have no bounding box. An earlier rule dropped every
+    // child after the last MEASURABLE one, which emptied the sort dropdown: the
+    // capture came back with a blank box where the word "Name" should be. A
+    // boxless child is cheap to keep and may be drawing something.
+    expect(prunableChildIndices([null, null, null], FOLD)).toEqual([]);
+    expect(prunableChildIndices([0, null, null], FOLD)).toEqual([]);
+  });
+
+  it('never drops a child whose position is not a finite number', () => {
+    expect(prunableChildIndices([0, Number.NaN, Number.POSITIVE_INFINITY], FOLD)).toEqual([]);
+  });
+
+  it('does not let a boxless LAST child block pruning — the launcher regression', () => {
+    // The reporter's own launcher is position:fixed at the bottom of the
+    // viewport and is the last node in the body. While it anchored the run,
+    // nothing anywhere in the document was pruned and a capture took 11 s.
+    expect(prunableChildIndices([0, 1200, 1600, null], FOLD)).toEqual([1, 2]);
+  });
+
+  it('reports the anchor separately from what is prunable', () => {
+    expect(lastAnchoringChild([0, 400, 900, 1400], FOLD)).toBe(1);
+    expect(lastAnchoringChild([null, null], FOLD)).toBe(-1);
+    // A child scrolled off the top still anchors: it is on the page.
+    expect(lastAnchoringChild([-500, 900], FOLD)).toBe(0);
+  });
+
+  it('handles an empty child list', () => {
+    expect(prunableChildIndices([], FOLD)).toEqual([]);
+    expect(lastAnchoringChild([], FOLD)).toBe(-1);
   });
 });

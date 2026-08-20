@@ -93,11 +93,21 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
   );
   const [note, setNote] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
+  // The annotation lives in a ref (it is mutated on every pointer move and must
+  // not re-render the panel per point), so what the panel DISPLAYS about it is
+  // mirrored into state. `strokeTick` drives the canvas redraw; `strokeCount`
+  // is what the Undo button reads — reading the ref during render would not
+  // re-render when it changed.
   const [strokeTick, setStrokeTick] = useState(0);
+  const [strokeCount, setStrokeCount] = useState(0);
   const [status, setStatus] = useState('');
   const [discardArmed, setDiscardArmed] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordedSeconds, setRecordedSeconds] = useState(0);
+  // Whether a finished recording is being held. STATE, not a read of
+  // pendingVoiceRef during render: a ref does not re-render, so the button kept
+  // saying "Record voice" after a recording had been captured.
+  const [hasVoice, setHasVoice] = useState(false);
   const [lastBundle, setLastBundle] = useState<{ name: string; url: string } | null>(null);
 
   const annotationRef = useRef(new Annotation());
@@ -115,20 +125,27 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     installConsoleRing();
   }, []);
 
+  /** Redraw the ink and refresh what the panel says about it. */
+  const inkChanged = useCallback(() => {
+    setStrokeTick((tick) => tick + 1);
+    setStrokeCount(annotationRef.current.strokeCount);
+  }, []);
+
   const open = useCallback(async () => {
     setPhase('capturing');
     setStatus('freezing the frame…');
     annotationRef.current.clear();
-    setStrokeTick((t) => t + 1);
+    inkChanged();
     setNote('');
     setDiscardArmed(false);
     pendingVoiceRef.current = null;
+    setHasVoice(false);
     setRecordedSeconds(0);
     const captured = await captureViewport();
     setShot(captured);
     setPhase('open');
     setStatus(captured.note ? 'the screenshot failed — see the note in the report' : '');
-  }, []);
+  }, [inkChanged]);
 
   const close = useCallback(() => {
     void voiceRef.current.stop();
@@ -226,7 +243,7 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     event.currentTarget.setPointerCapture(event.pointerId);
     const p = toImagePoint(event);
     annotationRef.current.beginStroke(p.x, p.y, paletteIndex, config.strokeWidthPx);
-    setStrokeTick((t) => t + 1);
+    inkChanged();
     setDiscardArmed(false);
   };
 
@@ -234,12 +251,12 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     if (!annotationRef.current.drawing) return;
     const p = toImagePoint(event);
     annotationRef.current.extendStroke(p.x, p.y);
-    setStrokeTick((t) => t + 1);
+    inkChanged();
   };
 
   const onPointerUp = (): void => {
     annotationRef.current.endStroke();
-    setStrokeTick((t) => t + 1);
+    inkChanged();
   };
 
   const toggleRecording = async (): Promise<void> => {
@@ -253,6 +270,7 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
           transcript: result.transcript,
           note: result.note,
         };
+        setHasVoice(true);
         setRecordedSeconds(result.seconds);
         setStatus(`${result.seconds.toFixed(1)} s of voice held${result.transcript ? ' + transcript' : ''}`);
       } else {
@@ -379,12 +397,11 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     setPhase('closed');
     setShot(null);
     setStatus(`wrote ${fileName}`);
-    // eslint-disable-next-line no-console -- the console ring is the log, and a
-    // filed report should be visible in it.
+    // The console ring IS the log, so a filed report belongs in it — the next
+    // report then carries the record of the previous one.
     console.info(`[bugreport] wrote ${fileName} (${zip.length} bytes, ${entries.length} entries)`);
   };
 
-  const strokeCount = annotationRef.current.strokeCount;
   const paletteSwatches = useMemo(() => config.palette, [config.palette]);
 
   if (phase === 'closed') {
@@ -491,7 +508,7 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
             disabled={strokeCount === 0}
             onClick={() => {
               annotationRef.current.undo();
-              setStrokeTick((t) => t + 1);
+              inkChanged();
             }}
           >
             Undo ({strokeCount})
@@ -502,7 +519,7 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
             disabled={strokeCount === 0}
             onClick={() => {
               annotationRef.current.clear();
-              setStrokeTick((t) => t + 1);
+              inkChanged();
             }}
           >
             Clear drawing
@@ -516,7 +533,7 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
         >
           {recording
             ? `■ Stop recording (${recordedSeconds.toFixed(1)} s)`
-            : pendingVoiceRef.current && pendingVoiceRef.current.bytes.length > 0
+            : hasVoice
               ? `● Re-record (${recordedSeconds.toFixed(1)} s held)`
               : '● Record voice'}
         </button>

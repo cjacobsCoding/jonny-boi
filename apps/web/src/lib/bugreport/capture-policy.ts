@@ -57,6 +57,78 @@ export function isOffScreen(rect: Rect, viewport: Viewport): boolean {
   );
 }
 
+/**
+ * Which of a parent's children the rasteriser may drop: the trailing run that
+ * renders entirely below the fold.
+ *
+ * THIS IS THE SINGLE BIGGEST THING THE CAPTURE DOES. Measured on the Deck
+ * Builder (3702 nodes): the rasteriser serialises the cloned DOM into an
+ * intermediate SVG — **41 MB** of it — and building that string, not fetching
+ * images and not copying styles, is where the time goes. Nearly all of those
+ * nodes are scrolled off the bottom and cannot contribute a visible pixel.
+ * Dropping them took a capture from **10.4 s to 0.7 s**, with the two images
+ * compared pixel for pixel.
+ *
+ * WHY A TRAILING RUN OF SIBLINGS AND NOT "EVERY OFF-SCREEN ELEMENT". Removing an
+ * element can move the ones around it: a grid re-flows into the gap, a centred
+ * column re-centres. But nothing placed BEFORE an element depends on what comes
+ * after it, so dropping a trailing run of children cannot disturb what is on
+ * screen, whereas dropping one from the middle can.
+ *
+ * Per PARENT, and not once over the whole document, because a page with columns
+ * defeats the document-wide version: the Deck Builder's long card grid is
+ * followed in DOM order by a short side panel that sits above the fold, so the
+ * document-wide suffix was empty and the grid was never pruned (11.1 s, exactly
+ * as if the optimisation were not there).
+ *
+ * TWO KINDS OF "NO BOX", and conflating them was a real defect. An element with
+ * no measurable rect must not ANCHOR the run — the reporter's own launcher
+ * button is `position: fixed` at the bottom of the viewport and is the last node
+ * in the body, and while it anchored, nothing anywhere was pruned. But it must
+ * not be PRUNED either: `<option>` elements have no rect, and pruning them
+ * emptied the sort dropdown — the capture came back with a blank box where the
+ * word "Name" should be. Only an element with a real box, entirely below the
+ * fold, is safe to drop.
+ *
+ * `tops` are `getBoundingClientRect().top` per child, in order, or `null` for a
+ * child with no box or one the capture is skipping anyway.
+ */
+export function prunableChildIndices(
+  tops: readonly (number | null)[],
+  viewportHeight: number,
+): number[] {
+  let lastAnchor = -1;
+  for (let i = 0; i < tops.length; i += 1) {
+    const top = tops[i];
+    if (top === null || top === undefined) continue;
+    // NaN keeps the element: a node we cannot measure must never be the one
+    // silently cut out of the picture.
+    if (!Number.isFinite(top) || top <= viewportHeight) lastAnchor = i;
+  }
+
+  const prunable: number[] = [];
+  for (let i = lastAnchor + 1; i < tops.length; i += 1) {
+    const top = tops[i];
+    if (top === null || top === undefined || !Number.isFinite(top)) continue;
+    if (top > viewportHeight) prunable.push(i);
+  }
+  return prunable;
+}
+
+/** The index of the last child that anchors the run; -1 when none does. */
+export function lastAnchoringChild(
+  tops: readonly (number | null)[],
+  viewportHeight: number,
+): number {
+  let last = -1;
+  for (let i = 0; i < tops.length; i += 1) {
+    const top = tops[i];
+    if (top === null || top === undefined) continue;
+    if (!Number.isFinite(top) || top <= viewportHeight) last = i;
+  }
+  return last;
+}
+
 export interface CaptureOptions {
   readonly width: number;
   readonly height: number;

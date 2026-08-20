@@ -128,13 +128,31 @@ _Append dated notes here; keep them short. Newest at top._
   add fields to the reporter. (2) The console/error ring is installed at APP LOAD, not when the
   reporter opens, because by then it has already missed the thing you opened it for.
 
-  **Not verified automatically, and said so rather than glossed:** whether the rasteriser draws a
-  faithful picture. It needs a VISIBLE browser — in a backgrounded tab `html-to-image` never resolves
-  at all, even for one header element, which is exactly why the capture now has a finite budget and
-  degrades to "no picture, and here is why" instead of freezing the app. Everything around it is
-  tested (49 new cases) and the submit path was driven end-to-end in the running app. Suite
-  **2980 passed / 0 failed** on `main` after this, which includes
-  `feat/you-may-and-trigger-templates` landing mid-flight — this feature contributes 49 of them.
+  **The picture IS verified now — `npm run verify:reporter -w @jonny-boi/web`.** It drives the
+  shipping bundle in the machine's own Chrome (puppeteer-core, no browser download) and asserts on
+  what comes out: a real PNG the size of the viewport, thousands of distinct colours, a stroke landing
+  within two pixels of the pointer, and a zip containing what `report.md` claims. It writes the PNGs
+  to `apps/web/verify-out/` so a human can LOOK. This was needed because the in-app browser pane
+  cannot check it at all — in a backgrounded tab `toPng` never resolves, even for one header element.
+
+  **It immediately earned itself.** The capture was taking **8–11 s** on the Cards and Deck Builder
+  views, close enough to the 12 s budget to fail at random. The cost was neither the images (0.5 s)
+  nor the CSS property copying (0.4 s): the rasteriser builds a **41 MB** intermediate SVG, nearly all
+  of it scrolled off the bottom. Pruning the below-fold trailing run of children — per parent, since a
+  document-wide suffix is defeated by a page with columns — took **Deck Builder 10.4 s → 0.8 s** and
+  **Cards 7.3 s → 0.8 s**. The `--fidelity` mode then caught what that broke: `<option>` elements have
+  no box, were treated as prunable, and the sort dropdown came back EMPTY. Delta 207 against an
+  anti-aliasing floor of 7 — which is why the check asserts on delta magnitude, not on where the
+  pixels are (an earlier guess that measurement corrected).
+
+  Two smaller things fixed on the way: a Puppeteer harness is two programs in one file (Node outside
+  `page.evaluate`, browser inside), and lint flagged all 19 browser globals as undefined — there is now
+  a targeted `eslint.config.js` block saying so. And the reporter no longer reads refs during render:
+  the stroke count and "a recording is held" are mirrored into state, so it adds nothing to the
+  `react-hooks/refs` debt this board tracks.
+
+  Suite **2990 passed / 0 failed** on `main` after this, which includes
+  `feat/you-may-and-trigger-templates` landing mid-flight — this feature contributes 59 of them.
 
 - 2026-08-19 worker: `feat/you-may-and-trigger-templates` 🚧 PUSHED — **the "you may" and
   trigger-timing families, worked in `sole`-descending order off the cached corpus.**

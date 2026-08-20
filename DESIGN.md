@@ -1486,23 +1486,37 @@ is compiled in by `vite.config.ts`, so a report from the live PWA names the buil
 environment (including installed-PWA vs browser, which changes which bugs are even possible) and
 storage. `App.tsx` registers the view, the decks and the pool size.
 
-**Three defects found by running it, each now pinned by a test in `capture-policy.test.ts`:**
+**Defects found by RUNNING it, each now pinned by a test in `capture-policy.test.ts`:**
 - Rasterising `document.body` captures the whole SCROLLABLE page while the reporter draws in VIEWPORT
   coordinates, so every stroke lands somewhere else. Fixed by sizing the raster to the viewport and
   translating the clone by the scroll offset. (Lightwalker's port hit the identical bug for the
   equivalent reason — a framebuffer bigger than the window.)
-- `html-to-image` fetches and base64-inlines every `<img>` it clones. With ~190 card tiles the capture
-  ran past 30 s and timed out; off-screen images are now skipped, which cannot change a visible pixel.
 - The frame and the ink canvas were each fitted with `object-fit: contain`, so the canvas ELEMENT
   filled the stage while its BITMAP was letterboxed inside it — every stroke scaled and offset. They
-  now share one aspect-ratio box, verified in the running app as `scaleX === scaleY`.
+  now share one aspect-ratio box; the harness asserts `scaleX === scaleY`.
+- **The capture took 8–11 seconds on the two views people actually use.** The cost is not images and
+  not CSS: the rasteriser serialises the cloned DOM into an intermediate SVG, and on the Deck Builder
+  that string is **41 MB**. Nearly all of it is scrolled off the bottom. The capture now drops the
+  trailing run of children that renders below the fold — per parent, because the Deck Builder's long
+  grid is followed in DOM order by a short side panel, which defeated a document-wide version.
+  **Deck Builder 10.4 s → 0.8 s, Cards 7.3 s → 0.8 s**, with the two images compared pixel for pixel.
+- **That pruning then ate the sort dropdown's label.** `<option>` elements have no bounding box, and
+  the first rule dropped everything after the last *measurable* child — so the capture came back with
+  a blank box where "Name" should be. "Cannot anchor the run" and "may be pruned" are different
+  properties: the reporter's own launcher is `position: fixed` at the bottom of the viewport and is
+  the last node in the body, and while it anchored, nothing anywhere was pruned. Both regressions are
+  now unit tests.
 
-⚠️ **What is NOT verified automatically, stated rather than glossed:** that the rasteriser produces a
-faithful picture. It needs a real, VISIBLE browser — in a backgrounded tab `toPng` never resolves at
-all, even for a single header element. Everything around it is tested (region, skip rule, the finite
-budget that turns a hang into a note, the zip, the report, the dump), and the whole submit path was
-driven end-to-end in the running app: two strokes, a typed note, a real zip read back out of its own
-central directory. The picture itself wants one human look.
+**How the picture itself is verified — `npm run verify:reporter -w @jonny-boi/web`.** No unit test can
+check a third-party rasteriser's pixels, and the in-app browser pane cannot either: in a backgrounded
+tab `toPng` never resolves at all, even for one header element. So the harness drives the SHIPPING
+bundle in the Chrome already installed on the machine (puppeteer-core, no browser download): it opens
+the reporter on the worst-case view, and asserts the frame is a real PNG the size of the viewport with
+thousands of distinct colours, that a dragged stroke lands within a couple of pixels of the pointer,
+and that the submitted zip contains what `report.md` says it does. It writes `frame.png` and
+`annotated.png` so a human can LOOK. `--view <label>` picks a view; `--fidelity` additionally captures
+with and without pruning and compares every pixel — the check that caught the `<option>` defect, where
+the delta was 207 against an anti-aliasing floor of 7.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
