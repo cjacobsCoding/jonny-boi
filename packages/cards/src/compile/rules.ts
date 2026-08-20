@@ -26,8 +26,10 @@ import type {
   SpellMode,
   StaticAbility,
   TargetRestriction,
+  InterveningIf,
   TriggerCondition,
   TriggeredAbility,
+  TriggerWho,
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION, PLUS_ONE_COUNTER, formatManaCost, MANA_COLORS } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
@@ -2193,18 +2195,115 @@ const STEP_TRIGGER_EVENTS: Readonly<Record<string, TriggerCondition['on']>> = Ob
   'draw step': 'drawStep',
   'first main phase': 'precombatMain',
   'end step': 'endStep',
+  // "At the beginning of EACH combat" (Unnatural Growth, Sting). The "on your
+  // turn" phrasing is a rule of its own because it prints a different tail, but
+  // the event is the same one, from the same `STEP_FOR_TRIGGER` table in core.
+  combat: 'beginCombat',
 });
 
-/** "your …" / "each player's …" — whose step the trigger watches. */
-const STEP_TRIGGER_SCOPES: Readonly<Record<string, 'you' | 'any'>> = Object.freeze({
+/**
+ * "your …" / "each player's …" / "each opponent's …" / bare "each …" — whose
+ * step the trigger watches, in core's `TriggerWho` vocabulary.
+ *
+ * ⚠️ ORDER IS LOAD-BEARING. The alternation is built from these keys in
+ * insertion order, so the two-word scopes must precede the bare `each`; with
+ * `each` first, "at the beginning of each player's draw step" would match `each`
+ * and leave "player's draw step" as the step word, which is in no table — the
+ * card would report despite being fully expressible.
+ */
+const STEP_TRIGGER_SCOPES: Readonly<Record<string, TriggerWho>> = Object.freeze({
   your: 'you',
   "each player's": 'any',
+  "each opponent's": 'opponent',
+  // "At the beginning of each upkeep" is every player's upkeep — the same thing
+  // "each player's upkeep" says with one word fewer.
+  each: 'any',
 });
 
 /** The alternation of both tables, built FROM them so they cannot drift. */
 const STEP_TRIGGER_PHRASE = `(${Object.keys(STEP_TRIGGER_SCOPES).join('|')}) (${Object.keys(
   STEP_TRIGGER_EVENTS,
 ).join('|')})`;
+
+/**
+ * A printed intervening "if" clause, and the {@link InterveningIf} each one
+ * means. A CLOSED table for the same reason `STEP_TRIGGER_EVENTS` is one: a
+ * condition the engine cannot decide must make its card REPORT, never compile
+ * to a trigger whose condition is quietly always true (a strictly better card)
+ * or always false (a dead one).
+ */
+const INTERVENING_IF_RULES: readonly {
+  readonly pattern: RegExp;
+  build(match: RegExpMatchArray): InterveningIf | null;
+}[] = Object.freeze([
+  {
+    // "if this artifact is untapped" (Howling Mine). `selfReference` has already
+    // folded "this artifact" into `~`.
+    pattern: /^~ is untapped$/,
+    build: (): InterveningIf => ({ kind: 'sourceUntapped' }),
+  },
+  {
+    // "if you control three or more artifacts" / "an artifact" / "no snakes" /
+    // "a creature with power 4 or greater".
+    pattern: new RegExp(
+      `^you control (no|an?|${COUNT_TOKEN} or more) ([a-z]+?)s?` +
+        `(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))?$`,
+    ),
+    build(match: RegExpMatchArray): InterveningIf | null {
+      const quantifier = match[1] ?? '';
+      const noun = match[3] ?? '';
+      const filter = searchFilterFrom(noun);
+      if (filter === null) return null;
+      const condition: Record<string, unknown> = { kind: 'controlCount', filter };
+      if (quantifier === 'no') condition.max = 0;
+      else if (quantifier === 'a' || quantifier === 'an') condition.min = 1;
+      else {
+        const value = parseCount(match[2]);
+        if (value === null) return null;
+        condition.min = value;
+      }
+      const characteristic = match[4];
+      if (characteristic !== undefined) {
+        // ONLY "with power N or greater", and only as a FLOOR. The bound has to
+        // be read against EFFECTIVE power — counters and anthems are what make a
+        // creature "power 4 or greater" on the board in front of the player — and
+        // `InterveningIf.minPower` is the field that does that. A toughness or
+        // mana-value bound has no such field, so it reports rather than being
+        // silently answered from the printed box.
+        if (characteristic !== 'power' || match[6] !== 'greater') return null;
+        const bound = Number.parseInt(match[5] ?? '', 10);
+        if (!Number.isFinite(bound)) return null;
+        condition.minPower = bound;
+      }
+      return condition as unknown as InterveningIf;
+    },
+  },
+]);
+
+/**
+ * Split a trigger's text into its printed intervening "if" and the body that
+ * follows it, or report `null` when there is no such clause.
+ *
+ * Returns `'unreadable'` — distinct from "no clause" — when the text DOES print
+ * an intervening "if" that {@link INTERVENING_IF_RULES} cannot express, so the
+ * caller refuses the whole line instead of compiling the body as though the
+ * condition were not there. That distinction is the entire safety property here:
+ * "at the beginning of your upkeep, if you have 40 or more life, you win the
+ * game" must not become "at the beginning of your upkeep, you win the game".
+ */
+function splitInterveningIf(
+  text: string,
+): { readonly condition?: InterveningIf; readonly body: string } | 'unreadable' {
+  const match = /^if (.+?), (.+)$/.exec(text);
+  if (!match) return { body: text };
+  for (const rule of INTERVENING_IF_RULES) {
+    const found = rule.pattern.exec(match[1] ?? '');
+    if (!found) continue;
+    const condition = rule.build(found);
+    if (condition) return { condition, body: match[2] ?? '' };
+  }
+  return 'unreadable';
+}
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   {
@@ -2276,26 +2375,23 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    id: 'trigger-upkeep',
-    description: '"At the beginning of your upkeep, BODY"',
-    pattern: /^at the beginning of your upkeep, (.+)$/,
-    build(match, ctx) {
-      return triggerFrom(
-        ctx,
-        { on: 'upkeep', who: 'you' },
-        match[1] ?? '',
-        `Upkeep: ${match[1] ?? ''}`,
-      );
-    },
-  },
-  {
     id: 'trigger-step-begins',
     description:
-      '"At the beginning of your upkeep / draw step / first main phase / end step, BODY" — and the "each player\'s" form',
+      '"At the beginning of [your | each player’s | each opponent’s | each] upkeep / draw step / first main phase / end step / combat, [if CONDITION,] [you may] BODY"',
     // One rule for the whole family, because the printed lines differ only in
-    // which step they name and whose it is. The step words are a closed table
-    // (`STEP_TRIGGER_EVENTS`): a step the engine does not have would otherwise
-    // compile to a trigger that silently never fires.
+    // which step they name, whose it is, and whether an intervening "if" gates
+    // it. The step words are a closed table (`STEP_TRIGGER_EVENTS`): a step the
+    // engine does not have would otherwise compile to a trigger that silently
+    // never fires.
+    //
+    // ⚠️ THE "EACH PLAYER'S" FORM USED TO REPORT, AND THIS IS WHAT CHANGED.
+    // A `who: 'any'` trigger fires on both players' steps but resolves under the
+    // SOURCE's controller, so a body reading its controller would make Howling
+    // Mine draw its own controller a card on every turn. The triggering player
+    // now rides the stack object into `EffectContext.triggeringPlayer` (core's
+    // `PendingTrigger.triggeringPlayer`), which is what the bodies that print
+    // "that player" read — so the scope is finally expressible instead of being
+    // refused.
     pattern: new RegExp(`^at the beginning of ${STEP_TRIGGER_PHRASE}, (.+)$`),
     build(match, ctx) {
       const scope = match[1] ?? '';
@@ -2304,27 +2400,29 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       if (!event) return null;
       const who = STEP_TRIGGER_SCOPES[scope];
       if (!who) return null;
-      // Only the SOURCE CONTROLLER's own step is expressible today. "Each
-      // player's end step" fires on both, but its body almost always says "that
-      // player", and the engine cannot yet aim an effect at the player whose
-      // step it is — so a `who: 'any'` trigger would run the body for the
-      // controller every time, which is a different card. It reports instead.
-      if (who !== 'you') return null;
-      const body = match[3] ?? '';
-      const compiled = ctx.compileTriggerBody(body);
-      if (compiled === null || compiled.effects.length === 0) return null;
+      // The printed intervening "if", if there is one. `'unreadable'` means the
+      // line DOES print a condition this compiler cannot express — refused
+      // outright, because compiling the body without it would be a card that
+      // always does the thing it only sometimes does.
+      const split = splitInterveningIf(match[3] ?? '');
+      if (split === 'unreadable') return null;
+      const body = split.body;
       const optional = body.startsWith('you may ');
       const inner = optional ? body.slice('you may '.length) : body;
-      const effectRefs = optional
-        ? mayEffectsFrom(inner, ctx.compileTriggerBody(inner)?.effects ?? [])
-        : compiled.effects;
+      const compiled = ctx.compileTriggerBody(inner);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
       if (effectRefs === null || effectRefs.length === 0) return null;
       return {
         triggers: [
           {
-            condition: { on: event, who },
+            condition: {
+              on: event,
+              who,
+              ...(split.condition ? { intervening: split.condition } : {}),
+            },
             effects: effectRefs,
-            label: `${step}: ${body}`,
+            label: `${scope} ${step}: ${match[3] ?? ''}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
           },
         ],

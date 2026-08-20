@@ -58,6 +58,7 @@ export {
 export {
   CHOICE_PRIMITIVES,
   putFromHandOnTop,
+  handToBottomThenDraw,
   reorderTopOfLibrary,
   mayShuffleLibrary,
   searchLibrary,
