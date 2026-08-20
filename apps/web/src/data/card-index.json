@@ -1,8 +1,13 @@
 {
-  "generatedAt": "2026-08-19T08:04:12.110Z",
+  "generatedAt": "2026-08-20T10:15:50.979Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 357,
-  "unresolved": [],
+  "requested": 377,
+  "unresolved": [
+    "Bala Ged Recovery // Bala Ged Sanctuary",
+    "Jwari Disruption // Jwari Ruins",
+    "Kazandu Mammoth // Kazandu Valley",
+    "Song-Mad Treachery // Song-Mad Ruins"
+  ],
   "cards": [
     {
       "id": "f9db72dc-9a5b-48a4-a86e-7464d9a2166a",
@@ -51,6 +56,7 @@
         "normal": "abrade-normal.jpg",
         "art_crop": "abrade-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -103,6 +109,7 @@
         "normal": "absorb-normal.jpg",
         "art_crop": "absorb-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -153,6 +160,7 @@
         "normal": "accorder-s-shield-normal.jpg",
         "art_crop": "accorder-s-shield-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -203,6 +211,57 @@
         "normal": "act-of-treason-normal.jpg",
         "art_crop": "act-of-treason-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "53c730c6-2f8c-4af8-b400-b9d573a71e60",
+      "name": "Adaptive Automaton",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact",
+          "Creature"
+        ],
+        "subtypes": [
+          "Construct"
+        ]
+      },
+      "rawTypeLine": "Artifact Creature — Construct",
+      "oracleText": "As this creature enters, choose a creature type.\nThis creature is the chosen type in addition to its other types.\nOther creatures you control of the chosen type get +1/+1.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "fdn",
+      "collectorNumber": "723",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/3/e35e614c-51a9-4d5c-b7fa-1a0a87108785.jpg?1783908889",
+        "normal": "https://cards.scryfall.io/normal/front/e/3/e35e614c-51a9-4d5c-b7fa-1a0a87108785.jpg?1783908889",
+        "large": "https://cards.scryfall.io/large/front/e/3/e35e614c-51a9-4d5c-b7fa-1a0a87108785.jpg?1783908889",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/3/e35e614c-51a9-4d5c-b7fa-1a0a87108785.jpg?1783908889"
+      },
+      "localImages": {
+        "normal": "adaptive-automaton-normal.jpg",
+        "art_crop": "adaptive-automaton-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -260,6 +319,7 @@
         "normal": "aerial-responder-normal.jpg",
         "art_crop": "aerial-responder-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -310,6 +370,7 @@
         "normal": "aid-the-fallen-normal.jpg",
         "art_crop": "aid-the-fallen-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -364,6 +425,7 @@
         "normal": "air-elemental-normal.jpg",
         "art_crop": "air-elemental-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -419,6 +481,7 @@
         "normal": "ajani-s-sunstriker-normal.jpg",
         "art_crop": "ajani-s-sunstriker-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -471,6 +534,7 @@
         "normal": "alchemist-s-greeting-normal.jpg",
         "art_crop": "alchemist-s-greeting-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -520,6 +584,7 @@
         "normal": "alloy-myr-normal.jpg",
         "art_crop": "alloy-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -569,6 +634,7 @@
         "normal": "alpha-myr-normal.jpg",
         "art_crop": "alpha-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -622,6 +688,7 @@
         "normal": "ancient-grudge-normal.jpg",
         "art_crop": "ancient-grudge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -676,6 +743,7 @@
         "normal": "angel-of-mercy-normal.jpg",
         "art_crop": "angel-of-mercy-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -726,6 +794,7 @@
         "normal": "angel-s-mercy-normal.jpg",
         "art_crop": "angel-s-mercy-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -780,6 +849,7 @@
         "normal": "angelic-gift-normal.jpg",
         "art_crop": "angelic-gift-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -832,6 +902,7 @@
         "normal": "applied-biomancy-normal.jpg",
         "art_crop": "applied-biomancy-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -889,6 +960,7 @@
         "normal": "archive-dragon-normal.jpg",
         "art_crop": "archive-dragon-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -944,6 +1016,7 @@
         "normal": "arrogant-wurm-normal.jpg",
         "art_crop": "arrogant-wurm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -996,6 +1069,7 @@
         "normal": "artful-dodge-normal.jpg",
         "art_crop": "artful-dodge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1048,6 +1122,7 @@
         "normal": "artful-takedown-normal.jpg",
         "art_crop": "artful-takedown-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1103,6 +1178,7 @@
         "normal": "attended-knight-normal.jpg",
         "art_crop": "attended-knight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1158,6 +1234,7 @@
         "normal": "augury-owl-normal.jpg",
         "art_crop": "augury-owl-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1212,6 +1289,7 @@
         "normal": "avacyn-s-pilgrim-normal.jpg",
         "art_crop": "avacyn-s-pilgrim-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1263,6 +1341,58 @@
         "normal": "azorius-guildgate-normal.jpg",
         "art_crop": "azorius-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "fc5d3341-cbce-49e5-93cc-8add92479dca",
+      "name": "Bad Moon",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Black creatures get +1/+1.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "gvl",
+      "collectorNumber": "48",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "normal": "https://cards.scryfall.io/normal/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "large": "https://cards.scryfall.io/large/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752"
+      },
+      "localImages": {
+        "normal": "bad-moon-normal.jpg",
+        "art_crop": "bad-moon-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1313,6 +1443,7 @@
         "normal": "barren-moor-normal.jpg",
         "art_crop": "barren-moor-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1366,6 +1497,7 @@
         "normal": "beetleback-chief-normal.jpg",
         "art_crop": "beetleback-chief-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1419,6 +1551,7 @@
         "normal": "benalish-marshal-normal.jpg",
         "art_crop": "benalish-marshal-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1473,6 +1606,118 @@
         "normal": "birds-of-paradise-normal.jpg",
         "art_crop": "birds-of-paradise-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "5effb651-f9e0-4c14-8192-bd0e132b8d5d",
+      "name": "Bitterbloom Bearer",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Faerie",
+          "Rogue"
+        ]
+      },
+      "rawTypeLine": "Creature — Faerie Rogue",
+      "oracleText": "Flash\nFlying\nAt the beginning of your upkeep, you lose 1 life and create a 1/1 blue and black Faerie creature token with flying.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying",
+        "Flash"
+      ],
+      "set": "ecl",
+      "collectorNumber": "88",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "normal": "https://cards.scryfall.io/normal/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "large": "https://cards.scryfall.io/large/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470"
+      },
+      "localImages": {
+        "normal": "bitterbloom-bearer-normal.jpg",
+        "art_crop": "bitterbloom-bearer-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "fb868840-09fa-49b1-85cb-b08ad065e972",
+      "name": "Bitterblossom",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Kindred",
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Faerie"
+        ]
+      },
+      "rawTypeLine": "Kindred Enchantment — Faerie",
+      "oracleText": "At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "2x2",
+      "collectorNumber": "69",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "normal": "https://cards.scryfall.io/normal/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "large": "https://cards.scryfall.io/large/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908"
+      },
+      "localImages": {
+        "normal": "bitterblossom-normal.jpg",
+        "art_crop": "bitterblossom-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1529,6 +1774,7 @@
         "normal": "black-knight-normal.jpg",
         "art_crop": "black-knight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1579,6 +1825,7 @@
         "normal": "bladed-pinions-normal.jpg",
         "art_crop": "bladed-pinions-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1631,6 +1878,60 @@
         "normal": "blaze-normal.jpg",
         "art_crop": "blaze-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "310f141c-7f37-4729-aed6-dd9c09db448d",
+      "name": "Blood Artist",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire",
+      "oracleText": "Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.",
+      "power": 0,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "209",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "normal": "https://cards.scryfall.io/normal/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "large": "https://cards.scryfall.io/large/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786"
+      },
+      "localImages": {
+        "normal": "blood-artist-normal.jpg",
+        "art_crop": "blood-artist-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1687,6 +1988,7 @@
         "normal": "blood-knight-normal.jpg",
         "art_crop": "blood-knight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1736,6 +2038,7 @@
         "normal": "bloodfell-caves-normal.jpg",
         "art_crop": "bloodfell-caves-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1785,6 +2088,7 @@
         "normal": "blossoming-sands-normal.jpg",
         "art_crop": "blossoming-sands-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1835,6 +2139,7 @@
         "normal": "bone-saw-normal.jpg",
         "art_crop": "bone-saw-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1885,6 +2190,7 @@
         "normal": "bonesplitter-normal.jpg",
         "art_crop": "bonesplitter-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1937,6 +2243,7 @@
         "normal": "boros-charm-normal.jpg",
         "art_crop": "boros-charm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -1988,6 +2295,7 @@
         "normal": "boros-guildgate-normal.jpg",
         "art_crop": "boros-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2038,6 +2346,7 @@
         "normal": "brainstorm-normal.jpg",
         "art_crop": "brainstorm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2087,6 +2396,7 @@
         "normal": "bronze-sable-normal.jpg",
         "art_crop": "bronze-sable-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2140,6 +2450,7 @@
         "normal": "bump-in-the-night-normal.jpg",
         "art_crop": "bump-in-the-night-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2192,6 +2503,7 @@
         "normal": "call-of-the-herd-normal.jpg",
         "art_crop": "call-of-the-herd-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2242,6 +2554,7 @@
         "normal": "cancel-normal.jpg",
         "art_crop": "cancel-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2296,6 +2609,7 @@
         "normal": "canyon-slough-normal.jpg",
         "art_crop": "canyon-slough-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2348,6 +2662,7 @@
         "normal": "capsize-normal.jpg",
         "art_crop": "capsize-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2398,6 +2713,7 @@
         "normal": "captain-s-call-normal.jpg",
         "art_crop": "captain-s-call-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2448,6 +2764,7 @@
         "normal": "castle-vantress-normal.jpg",
         "art_crop": "castle-vantress-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2501,6 +2818,7 @@
         "normal": "centaur-courser-normal.jpg",
         "art_crop": "centaur-courser-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2549,6 +2867,7 @@
         "normal": "charcoal-diamond-normal.jpg",
         "art_crop": "charcoal-diamond-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2601,6 +2920,7 @@
         "normal": "chatter-of-the-squirrel-normal.jpg",
         "art_crop": "chatter-of-the-squirrel-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2655,6 +2975,7 @@
         "normal": "child-of-night-normal.jpg",
         "art_crop": "child-of-night-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2707,6 +3028,7 @@
         "normal": "clash-of-wills-normal.jpg",
         "art_crop": "clash-of-wills-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2762,6 +3084,7 @@
         "normal": "cloudkin-seer-normal.jpg",
         "art_crop": "cloudkin-seer-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2812,6 +3135,56 @@
         "normal": "cobbled-wings-normal.jpg",
         "art_crop": "cobbled-wings-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "21d700e8-0255-418e-96a0-6fe05b3f836d",
+      "name": "Coldsteel Heart",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [
+          "Snow"
+        ],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Snow Artifact",
+      "oracleText": "This artifact enters tapped.\nAs this artifact enters, choose a color.\n{T}: Add one mana of the chosen color.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "2x2",
+      "collectorNumber": "301",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/2/b2548ad2-3c62-4ed1-899c-1002b46cdd8f.jpg?1783921794",
+        "normal": "https://cards.scryfall.io/normal/front/b/2/b2548ad2-3c62-4ed1-899c-1002b46cdd8f.jpg?1783921794",
+        "large": "https://cards.scryfall.io/large/front/b/2/b2548ad2-3c62-4ed1-899c-1002b46cdd8f.jpg?1783921794",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/2/b2548ad2-3c62-4ed1-899c-1002b46cdd8f.jpg?1783921794"
+      },
+      "localImages": {
+        "normal": "coldsteel-heart-normal.jpg",
+        "art_crop": "coldsteel-heart-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2866,6 +3239,7 @@
         "normal": "commercial-district-normal.jpg",
         "art_crop": "commercial-district-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2916,6 +3290,7 @@
         "normal": "concentrate-normal.jpg",
         "art_crop": "concentrate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -2970,6 +3345,7 @@
         "normal": "condescend-normal.jpg",
         "art_crop": "condescend-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3022,6 +3398,7 @@
         "normal": "consider-normal.jpg",
         "art_crop": "consider-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3073,6 +3450,7 @@
         "normal": "copper-myr-normal.jpg",
         "art_crop": "copper-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3125,6 +3503,7 @@
         "normal": "coral-merfolk-normal.jpg",
         "art_crop": "coral-merfolk-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3175,6 +3554,7 @@
         "normal": "counterspell-normal.jpg",
         "art_crop": "counterspell-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3227,6 +3607,7 @@
         "normal": "craw-wurm-normal.jpg",
         "art_crop": "craw-wurm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3279,6 +3660,7 @@
         "normal": "crippling-fatigue-normal.jpg",
         "art_crop": "crippling-fatigue-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3333,6 +3715,58 @@
         "normal": "crosis-s-charm-normal.jpg",
         "art_crop": "crosis-s-charm-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4692740f-be90-459f-8d90-c4ae71771595",
+      "name": "Crusade",
+      "manaCost": {
+        "generic": 0,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "White creatures get +1/+1.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "ddf",
+      "collectorNumber": "27",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "normal": "https://cards.scryfall.io/normal/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "large": "https://cards.scryfall.io/large/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765"
+      },
+      "localImages": {
+        "normal": "crusade-normal.jpg",
+        "art_crop": "crusade-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3383,6 +3817,7 @@
         "normal": "cryptic-command-normal.jpg",
         "art_crop": "cryptic-command-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3437,6 +3872,7 @@
         "normal": "darigaaz-s-charm-normal.jpg",
         "art_crop": "darigaaz-s-charm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3491,6 +3927,7 @@
         "normal": "dark-favor-normal.jpg",
         "art_crop": "dark-favor-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3541,6 +3978,7 @@
         "normal": "dark-ritual-normal.jpg",
         "art_crop": "dark-ritual-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3593,6 +4031,7 @@
         "normal": "darkmoss-bridge-normal.jpg",
         "art_crop": "darkmoss-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3644,6 +4083,7 @@
         "normal": "darksteel-axe-normal.jpg",
         "art_crop": "darksteel-axe-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3693,6 +4133,7 @@
         "normal": "darksteel-citadel-normal.jpg",
         "art_crop": "darksteel-citadel-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3741,6 +4182,7 @@
         "normal": "darksteel-ingot-normal.jpg",
         "art_crop": "darksteel-ingot-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3792,6 +4234,7 @@
         "normal": "darksteel-myr-normal.jpg",
         "art_crop": "darksteel-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3841,6 +4284,7 @@
         "normal": "darksteel-pendant-normal.jpg",
         "art_crop": "darksteel-pendant-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3892,6 +4336,7 @@
         "normal": "darksteel-plate-normal.jpg",
         "art_crop": "darksteel-plate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3945,6 +4390,7 @@
         "normal": "darksteel-sentinel-normal.jpg",
         "art_crop": "darksteel-sentinel-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -3995,6 +4441,7 @@
         "normal": "day-of-judgment-normal.jpg",
         "art_crop": "day-of-judgment-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4049,6 +4496,7 @@
         "normal": "dead-weight-normal.jpg",
         "art_crop": "dead-weight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4104,6 +4552,7 @@
         "normal": "deadly-recluse-normal.jpg",
         "art_crop": "deadly-recluse-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4158,6 +4607,7 @@
         "normal": "death-grasp-normal.jpg",
         "art_crop": "death-grasp-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4210,6 +4660,7 @@
         "normal": "deep-reconnaissance-normal.jpg",
         "art_crop": "deep-reconnaissance-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4268,6 +4719,7 @@
         "normal": "delver-of-secrets-insectile-aberration-normal.jpg",
         "art_crop": "delver-of-secrets-insectile-aberration-art_crop.jpg"
       },
+      "layout": "transform",
       "isDoubleFaced": true,
       "faces": [
         {
@@ -4393,6 +4845,7 @@
         "normal": "desert-of-the-fervent-normal.jpg",
         "art_crop": "desert-of-the-fervent-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4445,6 +4898,7 @@
         "normal": "desert-of-the-true-normal.jpg",
         "art_crop": "desert-of-the-true-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4499,6 +4953,7 @@
         "normal": "devil-s-play-normal.jpg",
         "art_crop": "devil-s-play-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4550,6 +5005,65 @@
         "normal": "dimir-guildgate-normal.jpg",
         "art_crop": "dimir-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "70de24d9-c585-4bf6-ac2c-c5b4b7aa298c",
+      "name": "Diregraf Captain",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie Soldier",
+      "oracleText": "Deathtouch\nOther Zombie creatures you control get +1/+1.\nWhenever another Zombie you control dies, target opponent loses 1 life.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B",
+        "U"
+      ],
+      "colorIdentity": [
+        "B",
+        "U"
+      ],
+      "keywords": [
+        "Deathtouch"
+      ],
+      "set": "mic",
+      "collectorNumber": "148",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "normal": "https://cards.scryfall.io/normal/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "large": "https://cards.scryfall.io/large/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325"
+      },
+      "localImages": {
+        "normal": "diregraf-captain-normal.jpg",
+        "art_crop": "diregraf-captain-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4602,6 +5116,7 @@
         "normal": "diregraf-ghoul-normal.jpg",
         "art_crop": "diregraf-ghoul-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4652,6 +5167,7 @@
         "normal": "disfigure-normal.jpg",
         "art_crop": "disfigure-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4701,6 +5217,7 @@
         "normal": "dismal-backwater-normal.jpg",
         "art_crop": "dismal-backwater-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4751,6 +5268,7 @@
         "normal": "dismiss-normal.jpg",
         "art_crop": "dismiss-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4803,6 +5321,7 @@
         "normal": "disturbed-burial-normal.jpg",
         "art_crop": "disturbed-burial-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4853,6 +5372,7 @@
         "normal": "divination-normal.jpg",
         "art_crop": "divination-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4903,6 +5423,7 @@
         "normal": "doom-blade-normal.jpg",
         "art_crop": "doom-blade-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -4953,6 +5474,7 @@
         "normal": "dragon-fodder-normal.jpg",
         "art_crop": "dragon-fodder-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5006,6 +5528,7 @@
         "normal": "dream-twist-normal.jpg",
         "art_crop": "dream-twist-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5060,6 +5583,7 @@
         "normal": "dromar-s-charm-normal.jpg",
         "art_crop": "dromar-s-charm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5112,6 +5636,7 @@
         "normal": "drossforge-bridge-normal.jpg",
         "art_crop": "drossforge-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5167,6 +5692,7 @@
         "normal": "electrostatic-infantry-normal.jpg",
         "art_crop": "electrostatic-infantry-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5221,6 +5747,7 @@
         "normal": "elegant-parlor-normal.jpg",
         "art_crop": "elegant-parlor-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5274,6 +5801,7 @@
         "normal": "elite-vanguard-normal.jpg",
         "art_crop": "elite-vanguard-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5326,6 +5854,7 @@
         "normal": "elvish-fury-normal.jpg",
         "art_crop": "elvish-fury-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5379,6 +5908,7 @@
         "normal": "elvish-mystic-normal.jpg",
         "art_crop": "elvish-mystic-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5432,6 +5962,58 @@
         "normal": "elvish-visionary-normal.jpg",
         "art_crop": "elvish-visionary-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7a51780a-fa28-4ee0-94c7-4330800ca9cb",
+      "name": "Endless One",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [
+          "X"
+        ]
+      },
+      "cmc": 0,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Eldrazi"
+        ]
+      },
+      "rawTypeLine": "Creature — Eldrazi",
+      "oracleText": "This creature enters with X +1/+1 counters on it.",
+      "power": 0,
+      "toughness": 0,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "cmm",
+      "collectorNumber": "804",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/0/00b3c10a-799f-4922-bb0a-44981b13203b.jpg?1783915458",
+        "normal": "https://cards.scryfall.io/normal/front/0/0/00b3c10a-799f-4922-bb0a-44981b13203b.jpg?1783915458",
+        "large": "https://cards.scryfall.io/large/front/0/0/00b3c10a-799f-4922-bb0a-44981b13203b.jpg?1783915458",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/0/00b3c10a-799f-4922-bb0a-44981b13203b.jpg?1783915458"
+      },
+      "localImages": {
+        "normal": "endless-one-normal.jpg",
+        "art_crop": "endless-one-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5486,6 +6068,7 @@
         "normal": "enfeeblement-normal.jpg",
         "art_crop": "enfeeblement-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5539,6 +6122,7 @@
         "normal": "eternal-witness-normal.jpg",
         "art_crop": "eternal-witness-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5591,6 +6175,7 @@
         "normal": "evincar-s-justice-normal.jpg",
         "art_crop": "evincar-s-justice-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5637,6 +6222,7 @@
         "normal": "evolving-wilds-normal.jpg",
         "art_crop": "evolving-wilds-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5693,6 +6279,7 @@
         "normal": "faithful-watchdog-normal.jpg",
         "art_crop": "faithful-watchdog-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5745,6 +6332,7 @@
         "normal": "fatal-push-normal.jpg",
         "art_crop": "fatal-push-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5800,6 +6388,7 @@
         "normal": "fencing-ace-normal.jpg",
         "art_crop": "fencing-ace-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5854,6 +6443,7 @@
         "normal": "fetid-pools-normal.jpg",
         "art_crop": "fetid-pools-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5906,6 +6496,7 @@
         "normal": "fiery-temper-normal.jpg",
         "art_crop": "fiery-temper-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -5954,6 +6545,7 @@
         "normal": "fire-diamond-normal.jpg",
         "art_crop": "fire-diamond-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6006,6 +6598,7 @@
         "normal": "fire-elemental-normal.jpg",
         "art_crop": "fire-elemental-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6060,6 +6653,7 @@
         "normal": "firebending-lesson-normal.jpg",
         "art_crop": "firebending-lesson-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6112,6 +6706,7 @@
         "normal": "firebolt-normal.jpg",
         "art_crop": "firebolt-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6162,6 +6757,7 @@
         "normal": "fireshrieker-normal.jpg",
         "art_crop": "fireshrieker-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6212,6 +6808,7 @@
         "normal": "flame-slash-normal.jpg",
         "art_crop": "flame-slash-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6266,6 +6863,7 @@
         "normal": "flight-normal.jpg",
         "art_crop": "flight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6318,6 +6916,7 @@
         "normal": "forest-normal.jpg",
         "art_crop": "forest-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6368,6 +6967,7 @@
         "normal": "forgotten-cave-normal.jpg",
         "art_crop": "forgotten-cave-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6421,6 +7021,58 @@
         "normal": "fyndhorn-elves-normal.jpg",
         "art_crop": "fyndhorn-elves-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3754dce0-3e97-406f-8807-a4942a222c41",
+      "name": "Gaea's Anthem",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Creatures you control get +1/+1.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tsr",
+      "collectorNumber": "204",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "normal": "https://cards.scryfall.io/normal/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "large": "https://cards.scryfall.io/large/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781"
+      },
+      "localImages": {
+        "normal": "gaea-s-anthem-normal.jpg",
+        "art_crop": "gaea-s-anthem-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6475,6 +7127,7 @@
         "normal": "garruk-s-companion-normal.jpg",
         "art_crop": "garruk-s-companion-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6527,6 +7180,7 @@
         "normal": "geistflame-normal.jpg",
         "art_crop": "geistflame-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6577,6 +7231,7 @@
         "normal": "giant-growth-normal.jpg",
         "art_crop": "giant-growth-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6631,6 +7286,7 @@
         "normal": "giant-spider-normal.jpg",
         "art_crop": "giant-spider-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6690,6 +7346,7 @@
         "normal": "gift-of-orzhova-normal.jpg",
         "art_crop": "gift-of-orzhova-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6744,6 +7401,62 @@
         "normal": "glimpse-the-unthinkable-normal.jpg",
         "art_crop": "glimpse-the-unthinkable-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "368b4052-174e-4458-a6e6-eaf8093aa0fe",
+      "name": "Goblin Chieftain",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin"
+        ]
+      },
+      "rawTypeLine": "Creature — Goblin",
+      "oracleText": "Haste (This creature can attack and {T} as soon as it comes under your control.)\nOther Goblin creatures you control get +1/+1 and have haste.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "jmp",
+      "collectorNumber": "324",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "normal": "https://cards.scryfall.io/normal/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "large": "https://cards.scryfall.io/large/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390"
+      },
+      "localImages": {
+        "normal": "goblin-chieftain-normal.jpg",
+        "art_crop": "goblin-chieftain-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6799,6 +7512,7 @@
         "normal": "goblin-guide-normal.jpg",
         "art_crop": "goblin-guide-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6852,6 +7566,7 @@
         "normal": "goblin-instigator-normal.jpg",
         "art_crop": "goblin-instigator-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6905,6 +7620,7 @@
         "normal": "goblin-piker-normal.jpg",
         "art_crop": "goblin-piker-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -6959,6 +7675,7 @@
         "normal": "goblin-war-paint-normal.jpg",
         "art_crop": "goblin-war-paint-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7010,6 +7727,7 @@
         "normal": "gold-myr-normal.jpg",
         "art_crop": "gold-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7062,6 +7780,7 @@
         "normal": "goldmire-bridge-normal.jpg",
         "art_crop": "goldmire-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7113,6 +7832,7 @@
         "normal": "golgari-guildgate-normal.jpg",
         "art_crop": "golgari-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7163,6 +7883,7 @@
         "normal": "grasp-of-darkness-normal.jpg",
         "art_crop": "grasp-of-darkness-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7215,6 +7936,7 @@
         "normal": "gravedigger-normal.jpg",
         "art_crop": "gravedigger-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7265,6 +7987,7 @@
         "normal": "grim-discovery-normal.jpg",
         "art_crop": "grim-discovery-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7317,6 +8040,7 @@
         "normal": "grizzly-bears-normal.jpg",
         "art_crop": "grizzly-bears-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7368,6 +8092,7 @@
         "normal": "gruul-guildgate-normal.jpg",
         "art_crop": "gruul-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7421,6 +8146,7 @@
         "normal": "guttersnipe-normal.jpg",
         "art_crop": "guttersnipe-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7475,6 +8201,7 @@
         "normal": "harmonious-grovestrider-normal.jpg",
         "art_crop": "harmonious-grovestrider-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7530,6 +8257,7 @@
         "normal": "healer-s-hawk-normal.jpg",
         "art_crop": "healer-s-hawk-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7582,6 +8310,7 @@
         "normal": "heat-ray-normal.jpg",
         "art_crop": "heat-ray-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7636,6 +8365,7 @@
         "normal": "hedge-maze-normal.jpg",
         "art_crop": "hedge-maze-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7688,6 +8418,7 @@
         "normal": "hill-giant-normal.jpg",
         "art_crop": "hill-giant-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7742,6 +8473,114 @@
         "normal": "holy-strength-normal.jpg",
         "art_crop": "holy-strength-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a6450b8e-eb18-431c-9eb7-7daf107978b2",
+      "name": "Hordeling Outburst",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Create three 1/1 red Goblin creature tokens.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "a25",
+      "collectorNumber": "134",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "normal": "https://cards.scryfall.io/normal/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "large": "https://cards.scryfall.io/large/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146"
+      },
+      "localImages": {
+        "normal": "hordeling-outburst-normal.jpg",
+        "art_crop": "hordeling-outburst-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3b1f8108-6911-49e9-8f78-f950bb58cb6c",
+      "name": "Hornet Queen",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 3,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Insect"
+        ]
+      },
+      "rawTypeLine": "Creature — Insect",
+      "oracleText": "Flying, deathtouch\nWhen this creature enters, create four 1/1 green Insect creature tokens with flying and deathtouch.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Deathtouch",
+        "Flying"
+      ],
+      "set": "dsc",
+      "collectorNumber": "184",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "normal": "https://cards.scryfall.io/normal/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "large": "https://cards.scryfall.io/large/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606"
+      },
+      "localImages": {
+        "normal": "hornet-queen-normal.jpg",
+        "art_crop": "hornet-queen-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7795,6 +8634,7 @@
         "normal": "hurloon-battle-hymn-normal.jpg",
         "art_crop": "hurloon-battle-hymn-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7850,6 +8690,7 @@
         "normal": "incorrigible-youths-normal.jpg",
         "art_crop": "incorrigible-youths-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7904,6 +8745,7 @@
         "normal": "invoke-the-firemind-normal.jpg",
         "art_crop": "invoke-the-firemind-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -7955,6 +8797,7 @@
         "normal": "iron-myr-normal.jpg",
         "art_crop": "iron-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8009,6 +8852,7 @@
         "normal": "irrigated-farmland-normal.jpg",
         "art_crop": "irrigated-farmland-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8061,6 +8905,7 @@
         "normal": "island-normal.jpg",
         "art_crop": "island-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8112,6 +8957,7 @@
         "normal": "izzet-guildgate-normal.jpg",
         "art_crop": "izzet-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8161,6 +9007,7 @@
         "normal": "jungle-hollow-normal.jpg",
         "art_crop": "jungle-hollow-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8213,6 +9060,7 @@
         "normal": "just-the-wind-normal.jpg",
         "art_crop": "just-the-wind-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8265,6 +9113,7 @@
         "normal": "kalonian-tusker-normal.jpg",
         "art_crop": "kalonian-tusker-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8318,6 +9167,7 @@
         "normal": "kiln-fiend-normal.jpg",
         "art_crop": "kiln-fiend-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8377,6 +9227,7 @@
         "normal": "kitchen-finks-normal.jpg",
         "art_crop": "kitchen-finks-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8427,6 +9278,7 @@
         "normal": "kitesail-normal.jpg",
         "art_crop": "kitesail-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8477,6 +9329,7 @@
         "normal": "krenko-s-command-normal.jpg",
         "art_crop": "krenko-s-command-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8527,6 +9380,7 @@
         "normal": "last-gasp-normal.jpg",
         "art_crop": "last-gasp-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8579,6 +9433,7 @@
         "normal": "lava-spike-normal.jpg",
         "art_crop": "lava-spike-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8630,6 +9485,7 @@
         "normal": "leaden-myr-normal.jpg",
         "art_crop": "leaden-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8682,6 +9538,7 @@
         "normal": "leatherback-baloth-normal.jpg",
         "art_crop": "leatherback-baloth-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8732,6 +9589,7 @@
         "normal": "leonin-scimitar-normal.jpg",
         "art_crop": "leonin-scimitar-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8787,6 +9645,7 @@
         "normal": "leonin-skyhunter-normal.jpg",
         "art_crop": "leonin-skyhunter-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8847,6 +9706,7 @@
         "normal": "lightning-angel-normal.jpg",
         "art_crop": "lightning-angel-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8897,6 +9757,7 @@
         "normal": "lightning-bolt-normal.jpg",
         "art_crop": "lightning-bolt-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -8951,6 +9812,7 @@
         "normal": "lightning-elemental-normal.jpg",
         "art_crop": "lightning-elemental-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9003,6 +9865,7 @@
         "normal": "lightning-helix-normal.jpg",
         "art_crop": "lightning-helix-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9053,6 +9916,7 @@
         "normal": "lightning-strike-normal.jpg",
         "art_crop": "lightning-strike-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9107,6 +9971,7 @@
         "normal": "liliana-of-the-veil-normal.jpg",
         "art_crop": "liliana-of-the-veil-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9160,6 +10025,7 @@
         "normal": "lingering-souls-normal.jpg",
         "art_crop": "lingering-souls-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9213,6 +10079,7 @@
         "normal": "llanowar-elves-normal.jpg",
         "art_crop": "llanowar-elves-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9266,6 +10133,7 @@
         "normal": "lone-missionary-normal.jpg",
         "art_crop": "lone-missionary-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9316,6 +10184,7 @@
         "normal": "lonely-sandbar-normal.jpg",
         "art_crop": "lonely-sandbar-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9366,6 +10235,7 @@
         "normal": "loxodon-warhammer-normal.jpg",
         "art_crop": "loxodon-warhammer-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9420,6 +10290,66 @@
         "normal": "lush-portico-normal.jpg",
         "art_crop": "lush-portico-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "592c91fc-6430-4c76-9460-65f047350f67",
+      "name": "Lyra Dawnbringer",
+      "manaCost": {
+        "generic": 3,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Angel",
+      "oracleText": "Flying\nFirst strike (This creature deals combat damage before creatures without first strike.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nOther Angels you control get +1/+1 and have lifelink.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Lifelink",
+        "First strike"
+      ],
+      "set": "fdn",
+      "collectorNumber": "738",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "normal": "https://cards.scryfall.io/normal/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "large": "https://cards.scryfall.io/large/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956"
+      },
+      "localImages": {
+        "normal": "lyra-dawnbringer-normal.jpg",
+        "art_crop": "lyra-dawnbringer-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9472,6 +10402,7 @@
         "normal": "magma-jet-normal.jpg",
         "art_crop": "magma-jet-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9524,6 +10455,7 @@
         "normal": "man-o-war-normal.jpg",
         "art_crop": "man-o-war-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9574,6 +10506,7 @@
         "normal": "mana-leak-normal.jpg",
         "art_crop": "mana-leak-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9620,6 +10553,7 @@
         "normal": "manalith-normal.jpg",
         "art_crop": "manalith-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9668,6 +10602,7 @@
         "normal": "marble-diamond-normal.jpg",
         "art_crop": "marble-diamond-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9722,6 +10657,7 @@
         "normal": "mark-of-the-vampire-normal.jpg",
         "art_crop": "mark-of-the-vampire-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9772,6 +10708,7 @@
         "normal": "mask-of-avacyn-normal.jpg",
         "art_crop": "mask-of-avacyn-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9821,6 +10758,7 @@
         "normal": "memnite-normal.jpg",
         "art_crop": "memnite-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9875,6 +10813,7 @@
         "normal": "meticulous-archive-normal.jpg",
         "art_crop": "meticulous-archive-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9925,6 +10864,7 @@
         "normal": "midnight-charm-normal.jpg",
         "art_crop": "midnight-charm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -9975,6 +10915,7 @@
         "normal": "might-of-oaks-normal.jpg",
         "art_crop": "might-of-oaks-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10025,6 +10966,7 @@
         "normal": "mind-rot-normal.jpg",
         "art_crop": "mind-rot-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10077,6 +11019,7 @@
         "normal": "mind-sculpt-normal.jpg",
         "art_crop": "mind-sculpt-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10129,6 +11072,7 @@
         "normal": "mind-spring-normal.jpg",
         "art_crop": "mind-spring-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10175,6 +11119,7 @@
         "normal": "mind-stone-normal.jpg",
         "art_crop": "mind-stone-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10231,6 +11176,7 @@
         "normal": "mirran-crusader-normal.jpg",
         "art_crop": "mirran-crusader-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10283,6 +11229,7 @@
         "normal": "mistvault-bridge-normal.jpg",
         "art_crop": "mistvault-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10335,6 +11282,7 @@
         "normal": "moan-of-the-unhallowed-normal.jpg",
         "art_crop": "moan-of-the-unhallowed-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10391,6 +11339,7 @@
         "normal": "monastery-swiftspear-normal.jpg",
         "art_crop": "monastery-swiftspear-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10443,6 +11392,7 @@
         "normal": "morgue-theft-normal.jpg",
         "art_crop": "morgue-theft-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10491,6 +11441,7 @@
         "normal": "moss-diamond-normal.jpg",
         "art_crop": "moss-diamond-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10543,6 +11494,7 @@
         "normal": "mountain-normal.jpg",
         "art_crop": "mountain-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10593,6 +11545,7 @@
         "normal": "murder-normal.jpg",
         "art_crop": "murder-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10642,6 +11595,7 @@
         "normal": "myr-scrapling-normal.jpg",
         "art_crop": "myr-scrapling-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10695,6 +11649,7 @@
         "normal": "nessian-courser-normal.jpg",
         "art_crop": "nessian-courser-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10745,6 +11700,7 @@
         "normal": "night-s-whisper-normal.jpg",
         "art_crop": "night-s-whisper-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10801,6 +11757,7 @@
         "normal": "nightwind-glider-normal.jpg",
         "art_crop": "nightwind-glider-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10855,6 +11812,7 @@
         "normal": "nimbus-wings-normal.jpg",
         "art_crop": "nimbus-wings-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10907,6 +11865,7 @@
         "normal": "obsessive-search-normal.jpg",
         "art_crop": "obsessive-search-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -10960,6 +11919,61 @@
         "normal": "omen-of-the-sea-normal.jpg",
         "art_crop": "omen-of-the-sea-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "55eca80c-dcd8-4c2f-aa0f-fb0aec7b80f7",
+      "name": "Ophiomancer",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Shaman",
+      "oracleText": "At the beginning of each upkeep, if you control no Snakes, create a 1/1 black Snake creature token with deathtouch.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "118",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "normal": "https://cards.scryfall.io/normal/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "large": "https://cards.scryfall.io/large/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820"
+      },
+      "localImages": {
+        "normal": "ophiomancer-normal.jpg",
+        "art_crop": "ophiomancer-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11012,6 +12026,7 @@
         "normal": "opt-normal.jpg",
         "art_crop": "opt-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11063,6 +12078,7 @@
         "normal": "ornithopter-normal.jpg",
         "art_crop": "ornithopter-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11114,6 +12130,7 @@
         "normal": "orzhov-guildgate-normal.jpg",
         "art_crop": "orzhov-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11167,6 +12184,7 @@
         "normal": "otherworldly-gaze-normal.jpg",
         "art_crop": "otherworldly-gaze-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11221,6 +12239,7 @@
         "normal": "overrule-normal.jpg",
         "art_crop": "overrule-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11277,6 +12296,7 @@
         "normal": "paladin-en-vec-normal.jpg",
         "art_crop": "paladin-en-vec-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11326,6 +12346,7 @@
         "normal": "palladium-myr-normal.jpg",
         "art_crop": "palladium-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11377,6 +12398,7 @@
         "normal": "patchwork-automaton-normal.jpg",
         "art_crop": "patchwork-automaton-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11427,6 +12449,7 @@
         "normal": "path-to-exile-normal.jpg",
         "art_crop": "path-to-exile-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11481,6 +12504,7 @@
         "normal": "pelakka-wurm-normal.jpg",
         "art_crop": "pelakka-wurm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11534,6 +12558,7 @@
         "normal": "phantom-warrior-normal.jpg",
         "art_crop": "phantom-warrior-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11584,6 +12609,7 @@
         "normal": "phyrexian-walker-normal.jpg",
         "art_crop": "phyrexian-walker-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11636,6 +12662,7 @@
         "normal": "plains-normal.jpg",
         "art_crop": "plains-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11686,6 +12713,7 @@
         "normal": "ponder-normal.jpg",
         "art_crop": "ponder-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11738,6 +12766,7 @@
         "normal": "preordain-normal.jpg",
         "art_crop": "preordain-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11799,6 +12828,7 @@
         "normal": "punk-frogs-normal.jpg",
         "art_crop": "punk-frogs-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11849,6 +12879,7 @@
         "normal": "pyroclasm-normal.jpg",
         "art_crop": "pyroclasm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11895,6 +12926,7 @@
         "normal": "radiant-fountain-normal.jpg",
         "art_crop": "radiant-fountain-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -11950,6 +12982,7 @@
         "normal": "raging-goblin-normal.jpg",
         "art_crop": "raging-goblin-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12000,6 +13033,7 @@
         "normal": "raise-the-alarm-normal.jpg",
         "art_crop": "raise-the-alarm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12051,6 +13085,7 @@
         "normal": "rakdos-guildgate-normal.jpg",
         "art_crop": "rakdos-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12101,6 +13136,7 @@
         "normal": "rampant-growth-normal.jpg",
         "art_crop": "rampant-growth-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12155,6 +13191,7 @@
         "normal": "raucous-theater-normal.jpg",
         "art_crop": "raucous-theater-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12207,6 +13244,7 @@
         "normal": "razortide-bridge-normal.jpg",
         "art_crop": "razortide-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12259,6 +13297,7 @@
         "normal": "read-the-bones-normal.jpg",
         "art_crop": "read-the-bones-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12311,6 +13350,7 @@
         "normal": "reckless-charge-normal.jpg",
         "art_crop": "reckless-charge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12366,6 +13406,7 @@
         "normal": "reckless-wurm-normal.jpg",
         "art_crop": "reckless-wurm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12421,6 +13462,7 @@
         "normal": "rimeshield-frost-giant-normal.jpg",
         "art_crop": "rimeshield-frost-giant-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12473,6 +13515,7 @@
         "normal": "roar-of-the-wurm-normal.jpg",
         "art_crop": "roar-of-the-wurm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12522,6 +13565,7 @@
         "normal": "rugged-highlands-normal.jpg",
         "art_crop": "rugged-highlands-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12577,6 +13621,7 @@
         "normal": "ruins-recluse-normal.jpg",
         "art_crop": "ruins-recluse-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12629,6 +13674,7 @@
         "normal": "runeclaw-bear-normal.jpg",
         "art_crop": "runeclaw-bear-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12681,6 +13727,7 @@
         "normal": "rustvale-bridge-normal.jpg",
         "art_crop": "rustvale-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12735,6 +13782,7 @@
         "normal": "sacred-fire-normal.jpg",
         "art_crop": "sacred-fire-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12787,6 +13835,7 @@
         "normal": "sacred-foundry-normal.jpg",
         "art_crop": "sacred-foundry-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12840,6 +13889,7 @@
         "normal": "sakura-tribe-elder-normal.jpg",
         "art_crop": "sakura-tribe-elder-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12901,6 +13951,7 @@
         "normal": "samut-tyrant-smasher-normal.jpg",
         "art_crop": "samut-tyrant-smasher-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -12953,6 +14004,7 @@
         "normal": "savannah-lions-normal.jpg",
         "art_crop": "savannah-lions-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13007,6 +14059,7 @@
         "normal": "scattered-groves-normal.jpg",
         "art_crop": "scattered-groves-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13060,6 +14113,7 @@
         "normal": "scour-all-possibilities-normal.jpg",
         "art_crop": "scour-all-possibilities-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13109,6 +14163,7 @@
         "normal": "scoured-barrens-normal.jpg",
         "art_crop": "scoured-barrens-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13162,6 +14217,7 @@
         "normal": "scout-the-wilderness-normal.jpg",
         "art_crop": "scout-the-wilderness-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13212,6 +14268,7 @@
         "normal": "searing-spear-normal.jpg",
         "art_crop": "searing-spear-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13262,6 +14319,7 @@
         "normal": "secluded-steppe-normal.jpg",
         "art_crop": "secluded-steppe-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13316,6 +14374,7 @@
         "normal": "sedge-scorpion-normal.jpg",
         "art_crop": "sedge-scorpion-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13368,6 +14427,7 @@
         "normal": "seething-anger-normal.jpg",
         "art_crop": "seething-anger-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13419,6 +14479,7 @@
         "normal": "selesnya-guildgate-normal.jpg",
         "art_crop": "selesnya-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13474,6 +14535,7 @@
         "normal": "seraph-of-the-suns-normal.jpg",
         "art_crop": "seraph-of-the-suns-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13529,6 +14591,7 @@
         "normal": "serra-angel-normal.jpg",
         "art_crop": "serra-angel-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13583,6 +14646,7 @@
         "normal": "serra-s-embrace-normal.jpg",
         "art_crop": "serra-s-embrace-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13635,6 +14699,7 @@
         "normal": "serum-visions-normal.jpg",
         "art_crop": "serum-visions-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13689,6 +14754,7 @@
         "normal": "shadowy-backstreet-normal.jpg",
         "art_crop": "shadowy-backstreet-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13741,6 +14807,7 @@
         "normal": "shattering-pulse-normal.jpg",
         "art_crop": "shattering-pulse-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13795,6 +14862,7 @@
         "normal": "sheltered-thicket-normal.jpg",
         "art_crop": "sheltered-thicket-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13849,6 +14917,7 @@
         "normal": "shivan-dragon-normal.jpg",
         "art_crop": "shivan-dragon-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13899,6 +14968,7 @@
         "normal": "shock-normal.jpg",
         "art_crop": "shock-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -13949,6 +15019,7 @@
         "normal": "sign-in-blood-normal.jpg",
         "art_crop": "sign-in-blood-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14001,6 +15072,7 @@
         "normal": "silent-departure-normal.jpg",
         "art_crop": "silent-departure-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14057,6 +15129,7 @@
         "normal": "silver-knight-normal.jpg",
         "art_crop": "silver-knight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14108,6 +15181,7 @@
         "normal": "silver-myr-normal.jpg",
         "art_crop": "silver-myr-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14160,6 +15234,7 @@
         "normal": "silverbluff-bridge-normal.jpg",
         "art_crop": "silverbluff-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14211,6 +15286,7 @@
         "normal": "simic-guildgate-normal.jpg",
         "art_crop": "simic-guildgate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14263,6 +15339,7 @@
         "normal": "sinister-sabotage-normal.jpg",
         "art_crop": "sinister-sabotage-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14311,6 +15388,7 @@
         "normal": "sky-diamond-normal.jpg",
         "art_crop": "sky-diamond-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14367,6 +15445,7 @@
         "normal": "skyhunter-skirmisher-normal.jpg",
         "art_crop": "skyhunter-skirmisher-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14425,6 +15504,7 @@
         "normal": "skyknight-legionnaire-normal.jpg",
         "art_crop": "skyknight-legionnaire-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14477,6 +15557,7 @@
         "normal": "slagwoods-bridge-normal.jpg",
         "art_crop": "slagwoods-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14532,6 +15613,7 @@
         "normal": "snapcaster-mage-normal.jpg",
         "art_crop": "snapcaster-mage-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14578,6 +15660,7 @@
         "normal": "sol-ring-normal.jpg",
         "art_crop": "sol-ring-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14628,6 +15711,62 @@
         "normal": "sorin-s-vengeance-normal.jpg",
         "art_crop": "sorin-s-vengeance-art_crop.jpg"
       },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "71d83fca-e40e-4d0e-956d-d0d6da9cc472",
+      "name": "Sphinx's Revelation",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": [
+          "X"
+        ]
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "You gain X life and draw X cards.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U",
+        "W"
+      ],
+      "colorIdentity": [
+        "U",
+        "W"
+      ],
+      "keywords": [],
+      "set": "plst",
+      "collectorNumber": "RVR-228",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/3/6350b216-4a11-4e33-89ac-ffaf6315ab7d.jpg?1783908482",
+        "normal": "https://cards.scryfall.io/normal/front/6/3/6350b216-4a11-4e33-89ac-ffaf6315ab7d.jpg?1783908482",
+        "large": "https://cards.scryfall.io/large/front/6/3/6350b216-4a11-4e33-89ac-ffaf6315ab7d.jpg?1783908482",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/3/6350b216-4a11-4e33-89ac-ffaf6315ab7d.jpg?1783908482"
+      },
+      "localImages": {
+        "normal": "sphinx-s-revelation-normal.jpg",
+        "art_crop": "sphinx-s-revelation-art_crop.jpg"
+      },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14686,6 +15825,7 @@
         "normal": "sprite-dragon-normal.jpg",
         "art_crop": "sprite-dragon-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14737,6 +15877,7 @@
         "normal": "steel-wall-normal.jpg",
         "art_crop": "steel-wall-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14787,6 +15928,7 @@
         "normal": "strider-harness-normal.jpg",
         "art_crop": "strider-harness-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14837,6 +15979,7 @@
         "normal": "subtle-strike-normal.jpg",
         "art_crop": "subtle-strike-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14891,6 +16034,7 @@
         "normal": "suntail-hawk-normal.jpg",
         "art_crop": "suntail-hawk-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14943,6 +16087,7 @@
         "normal": "swamp-normal.jpg",
         "art_crop": "swamp-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -14992,6 +16137,7 @@
         "normal": "swiftwater-cliffs-normal.jpg",
         "art_crop": "swiftwater-cliffs-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15042,6 +16188,7 @@
         "normal": "sword-of-vengeance-normal.jpg",
         "art_crop": "sword-of-vengeance-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15092,6 +16239,7 @@
         "normal": "swords-to-plowshares-normal.jpg",
         "art_crop": "swords-to-plowshares-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15144,6 +16292,7 @@
         "normal": "tanglepool-bridge-normal.jpg",
         "art_crop": "tanglepool-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15196,6 +16345,7 @@
         "normal": "tarmogoyf-normal.jpg",
         "art_crop": "tarmogoyf-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15254,6 +16404,7 @@
         "normal": "tempest-angler-normal.jpg",
         "art_crop": "tempest-angler-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15305,6 +16456,7 @@
         "normal": "temple-of-abandon-normal.jpg",
         "art_crop": "temple-of-abandon-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15356,6 +16508,7 @@
         "normal": "temple-of-deceit-normal.jpg",
         "art_crop": "temple-of-deceit-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15407,6 +16560,7 @@
         "normal": "temple-of-enlightenment-normal.jpg",
         "art_crop": "temple-of-enlightenment-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15458,6 +16612,7 @@
         "normal": "temple-of-epiphany-normal.jpg",
         "art_crop": "temple-of-epiphany-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15509,6 +16664,7 @@
         "normal": "temple-of-malady-normal.jpg",
         "art_crop": "temple-of-malady-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15560,6 +16716,7 @@
         "normal": "temple-of-malice-normal.jpg",
         "art_crop": "temple-of-malice-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15611,6 +16768,7 @@
         "normal": "temple-of-mystery-normal.jpg",
         "art_crop": "temple-of-mystery-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15662,6 +16820,7 @@
         "normal": "temple-of-plenty-normal.jpg",
         "art_crop": "temple-of-plenty-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15713,6 +16872,7 @@
         "normal": "temple-of-silence-normal.jpg",
         "art_crop": "temple-of-silence-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15764,6 +16924,7 @@
         "normal": "temple-of-triumph-normal.jpg",
         "art_crop": "temple-of-triumph-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15816,6 +16977,7 @@
         "normal": "terminate-normal.jpg",
         "art_crop": "terminate-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15862,6 +17024,7 @@
         "normal": "terramorphic-expanse-normal.jpg",
         "art_crop": "terramorphic-expanse-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15914,6 +17077,7 @@
         "normal": "think-twice-normal.jpg",
         "art_crop": "think-twice-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -15966,6 +17130,7 @@
         "normal": "thornglint-bridge-normal.jpg",
         "art_crop": "thornglint-bridge-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16015,6 +17180,7 @@
         "normal": "thornwood-falls-normal.jpg",
         "art_crop": "thornwood-falls-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16067,6 +17233,7 @@
         "normal": "thought-scour-normal.jpg",
         "art_crop": "thought-scour-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16117,6 +17284,7 @@
         "normal": "thoughtseize-normal.jpg",
         "art_crop": "thoughtseize-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16169,6 +17337,7 @@
         "normal": "thragtusk-normal.jpg",
         "art_crop": "thragtusk-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16222,6 +17391,7 @@
         "normal": "thrill-of-the-hunt-normal.jpg",
         "art_crop": "thrill-of-the-hunt-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16276,6 +17446,7 @@
         "normal": "thundering-falls-normal.jpg",
         "art_crop": "thundering-falls-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16326,6 +17497,7 @@
         "normal": "tidings-normal.jpg",
         "art_crop": "tidings-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16376,6 +17548,7 @@
         "normal": "titanic-growth-normal.jpg",
         "art_crop": "titanic-growth-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16430,6 +17603,7 @@
         "normal": "toadstool-admirer-normal.jpg",
         "art_crop": "toadstool-admirer-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16483,6 +17657,7 @@
         "normal": "tolarian-geyser-normal.jpg",
         "art_crop": "tolarian-geyser-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16538,6 +17713,7 @@
         "normal": "tomakul-honor-guard-normal.jpg",
         "art_crop": "tomakul-honor-guard-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16590,6 +17766,7 @@
         "normal": "tome-scour-normal.jpg",
         "art_crop": "tome-scour-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16639,6 +17816,7 @@
         "normal": "tranquil-cove-normal.jpg",
         "art_crop": "tranquil-cove-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16689,6 +17867,7 @@
         "normal": "tranquil-thicket-normal.jpg",
         "art_crop": "tranquil-thicket-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16739,6 +17918,7 @@
         "normal": "trusty-machete-normal.jpg",
         "art_crop": "trusty-machete-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16793,6 +17973,7 @@
         "normal": "typhoid-rats-normal.jpg",
         "art_crop": "typhoid-rats-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16845,6 +18026,7 @@
         "normal": "tyrant-s-scorn-normal.jpg",
         "art_crop": "tyrant-s-scorn-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16895,6 +18077,7 @@
         "normal": "umezawa-s-charm-normal.jpg",
         "art_crop": "umezawa-s-charm-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -16949,6 +18132,7 @@
         "normal": "undercity-sewers-normal.jpg",
         "art_crop": "undercity-sewers-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17003,6 +18187,7 @@
         "normal": "underground-mortuary-normal.jpg",
         "art_crop": "underground-mortuary-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17059,6 +18244,7 @@
         "normal": "unflinching-courage-normal.jpg",
         "art_crop": "unflinching-courage-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17113,6 +18299,7 @@
         "normal": "unholy-strength-normal.jpg",
         "art_crop": "unholy-strength-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17163,6 +18350,7 @@
         "normal": "unspeakable-symbol-normal.jpg",
         "art_crop": "unspeakable-symbol-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17213,6 +18401,7 @@
         "normal": "unsummon-normal.jpg",
         "art_crop": "unsummon-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17259,6 +18448,7 @@
         "normal": "ur-golem-s-eye-normal.jpg",
         "art_crop": "ur-golem-s-eye-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17316,6 +18506,7 @@
         "normal": "vampire-nighthawk-normal.jpg",
         "art_crop": "vampire-nighthawk-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17371,6 +18562,7 @@
         "normal": "vine-trellis-normal.jpg",
         "art_crop": "vine-trellis-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17426,6 +18618,7 @@
         "normal": "voice-of-law-normal.jpg",
         "art_crop": "voice-of-law-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17478,6 +18671,7 @@
         "normal": "volcanic-geyser-normal.jpg",
         "art_crop": "volcanic-geyser-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17528,6 +18722,7 @@
         "normal": "vulshok-morningstar-normal.jpg",
         "art_crop": "vulshok-morningstar-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17580,6 +18775,7 @@
         "normal": "walking-corpse-normal.jpg",
         "art_crop": "walking-corpse-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17635,6 +18831,7 @@
         "normal": "wall-of-air-normal.jpg",
         "art_crop": "wall-of-air-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17690,6 +18887,7 @@
         "normal": "wall-of-blossoms-normal.jpg",
         "art_crop": "wall-of-blossoms-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17744,6 +18942,7 @@
         "normal": "wall-of-omens-normal.jpg",
         "art_crop": "wall-of-omens-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17792,6 +18991,7 @@
         "normal": "wastes-normal.jpg",
         "art_crop": "wastes-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17846,6 +19046,7 @@
         "normal": "watchwolf-normal.jpg",
         "art_crop": "watchwolf-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17902,6 +19103,7 @@
         "normal": "waterfall-aerialist-normal.jpg",
         "art_crop": "waterfall-aerialist-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -17956,6 +19158,7 @@
         "normal": "weakness-normal.jpg",
         "art_crop": "weakness-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18008,6 +19211,7 @@
         "normal": "whispers-of-the-muse-normal.jpg",
         "art_crop": "whispers-of-the-muse-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18058,6 +19262,7 @@
         "normal": "whispersilk-cloak-normal.jpg",
         "art_crop": "whispersilk-cloak-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18114,6 +19319,7 @@
         "normal": "white-knight-normal.jpg",
         "art_crop": "white-knight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18168,6 +19374,7 @@
         "normal": "wind-drake-normal.jpg",
         "art_crop": "wind-drake-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18217,6 +19424,7 @@
         "normal": "wind-scarred-crag-normal.jpg",
         "art_crop": "wind-scarred-crag-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18269,6 +19477,7 @@
         "normal": "winterflame-normal.jpg",
         "art_crop": "winterflame-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18315,6 +19524,7 @@
         "normal": "worn-powerstone-normal.jpg",
         "art_crop": "worn-powerstone-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18365,6 +19575,7 @@
         "normal": "wrath-of-god-normal.jpg",
         "art_crop": "wrath-of-god-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18415,6 +19626,7 @@
         "normal": "wring-flesh-normal.jpg",
         "art_crop": "wring-flesh-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18468,6 +19680,7 @@
         "normal": "young-pyromancer-normal.jpg",
         "art_crop": "young-pyromancer-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18523,6 +19736,7 @@
         "normal": "youthful-knight-normal.jpg",
         "art_crop": "youthful-knight-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18584,6 +19798,7 @@
         "normal": "zetalpa-primal-dawn-normal.jpg",
         "art_crop": "zetalpa-primal-dawn-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18632,6 +19847,7 @@
         "normal": "zhalfirin-void-normal.jpg",
         "art_crop": "zhalfirin-void-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     },
@@ -18685,6 +19901,7 @@
         "normal": "zombie-goliath-normal.jpg",
         "art_crop": "zombie-goliath-art_crop.jpg"
       },
+      "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
     }
