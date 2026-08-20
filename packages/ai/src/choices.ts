@@ -37,14 +37,25 @@
  * kept), or about what the opponent is representing; both need the search
  * pilots' machinery, not a per-card ruler.
  *
+ * NAMING A VALUE ("As ~ enters, choose a creature type") is the fourth kind
+ * valence cannot answer, and the one where a careless answer is most expensive:
+ * the question is never "how many" or "yes or no" but WHICH, and a wrong which
+ * turns a lord into a vanilla body — which would make every card in that family
+ * read as "no measurable difference" in an A/B verdict. The policy is written
+ * out in full on `answerChooseValue`, and it reads only the CHOOSER'S OWN cards,
+ * which is information the seat genuinely has.
+ *
  * Determinism: no `Math.random`, no wall clock. Every comparison falls back to
  * `instanceId` / option index, so equal-scoring options break ties in a fixed
  * order and the same seed reproduces the same answers.
  */
 
 import type {
+  CardInstance,
   ChoiceAnswer,
+  ChoiceValueOption,
   ChooseModesChoice,
+  ChooseValueChoice,
   EffectRef,
   InstanceId,
   StackObject,
@@ -60,7 +71,7 @@ import type {
   SelectCardsChoice,
   SelectPlayersChoice,
 } from '@jonny-boi/core';
-import { defaultAnswerFor, modeById, nextUnaimedPick, opponentOf } from '@jonny-boi/core';
+import { CHOOSABLE_COLORS, defaultAnswerFor, modeById, nextUnaimedPick, opponentOf } from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
 import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
@@ -119,6 +130,8 @@ export function answerChoiceHeuristically(
       return answerAction(choice, answerPayLife(state, choice, weights));
     case 'chooseNumber':
       return answerAction(choice, answerChooseNumber(choice));
+    case 'chooseValue':
+      return answerAction(choice, answerChooseValue(state, choice));
     case 'selectTargets':
       return answerAction(choice, answerSelectTargets(state, choice, weights));
     default:
@@ -267,6 +280,137 @@ function castValueContext(state: GameState, player: PlayerId, weights: Heuristic
     cards,
     index: cards.index,
   };
+}
+
+/**
+ * NAME A VALUE — "As ~ enters, choose a creature type / a color / a player"
+ * (core's `chooseValue`).
+ *
+ * ## Why this cannot be answered from valence
+ * Valence answers "is being selected good or bad?", and here the answer is
+ * always "good" — the question is WHICH, and a wrong which is a blank card. A
+ * Cavern of Souls that names Sliver in a Goblin deck taps for nothing; an
+ * Adaptive Automaton that names Angel is a vanilla 2/2. **A pilot that named
+ * values at random would make every card in this family noise in an A/B
+ * verdict** — the deck with the Automaton would win at exactly the rate the deck
+ * without it does, and the lab would report "no measurable difference" about a
+ * card that is in fact a lord.
+ *
+ * ## The policy, and why it is information the player really has
+ * Every branch reads the CHOOSER'S OWN CARDS — their battlefield, hand, library,
+ * graveyard and exile. A player knows their own decklist, so nothing here is
+ * information the seat does not have; the opponent's hidden zones are never
+ * touched. (The option list core offers is built the same way, for the same
+ * reason — see `as-enters.ts`.)
+ *
+ *   - **creature type / basic land type** → the type that appears on the most of
+ *     the chooser's own cards. That is the deck's tribe, which is exactly what a
+ *     human names.
+ *   - **color** → the colour the chooser's own cards need most, counted in
+ *     COLOURED PIPS rather than in cards, because a deck with one triple-black
+ *     spell wants black more than one with three single-blue cantrips wants blue.
+ *   - **card type** → the card type the chooser owns most of, over the menu the
+ *     card itself printed (Cloud Key).
+ *   - **player** → the OPPONENT. Every printed "as ~ enters, choose a player"
+ *     names a victim (Stuffy Doll aims its damage at the chosen player), so the
+ *     chooser is the wrong default and the opponent is the right one.
+ *
+ * Deterministic throughout: ties break on the option's index in the offered
+ * list, which core builds in a fixed order, so the same seed reproduces the same
+ * naming.
+ *
+ * What it deliberately does NOT do is read the card's own later text to work out
+ * what the value will be used for. That would be per-card knowledge, which this
+ * package does not have and does not want (DESIGN §1.2) — and for every card in
+ * the pool the two answers agree, because a lord's chosen type and a mana
+ * source's chosen colour are both "whatever my deck is made of".
+ */
+function answerChooseValue(state: GameState, choice: ChooseValueChoice): ChoiceAnswer {
+  const options = choice.options;
+  if (options.length === 0) return defaultAnswerFor(choice);
+  if (choice.subject === 'player') {
+    const opponent = opponentOf(choice.chooser);
+    const named = options.find((option) => option.value === opponent) ?? options[0];
+    return { kind: 'chooseValue', value: (named as ChoiceValueOption).value };
+  }
+  const score =
+    choice.subject === 'color'
+      ? colorPipDemand(state, choice.chooser)
+      : ownedPrintedWordCounts(state, choice.chooser, choice.subject);
+  let best = options[0] as ChoiceValueOption;
+  let bestScore = score.get(best.value.toLowerCase()) ?? 0;
+  for (let i = 1; i < options.length; i++) {
+    const option = options[i] as ChoiceValueOption;
+    const value = score.get(option.value.toLowerCase()) ?? 0;
+    // Strictly greater: ties keep the earlier option, which is what makes the
+    // answer a deterministic function of core's fixed option order.
+    if (value > bestScore) {
+      best = option;
+      bestScore = value;
+    }
+  }
+  return { kind: 'chooseValue', value: best.value };
+}
+
+/** Every card the chooser owns, in a fixed order (their zones plus the board). */
+function ownedCards(state: GameState, chooser: PlayerId): readonly CardInstance[] {
+  const player = state.players[chooser];
+  const out: CardInstance[] = [];
+  for (const permanent of state.battlefield) {
+    if (permanent.controller === chooser) out.push(permanent);
+  }
+  out.push(...player.hand, ...player.library, ...player.graveyard, ...player.exile);
+  return out;
+}
+
+/**
+ * How many of the chooser's own cards carry each printed SUBTYPE (for a creature
+ * or basic-land-type naming) or each printed CARD TYPE (for a card-type naming),
+ * keyed lowercase so the count and the option agree on spelling.
+ */
+function ownedPrintedWordCounts(
+  state: GameState,
+  chooser: PlayerId,
+  subject: ChooseValueChoice['subject'],
+): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  const bump = (word: string): void => {
+    const key = word.toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  };
+  for (const card of ownedCards(state, chooser)) {
+    if (subject === 'cardType') {
+      for (const type of card.def.types) bump(type);
+      continue;
+    }
+    // A creature-type naming counts CREATURE cards only: a Goblin-themed land's
+    // printed subtypes are land types, and counting them would let a deck's
+    // manabase outvote its actual tribe.
+    if (subject === 'creatureType' && !card.def.types.includes('creature')) continue;
+    for (const subtype of card.def.subtypes ?? []) bump(subtype);
+  }
+  return counts;
+}
+
+/**
+ * How badly the chooser's own cards want each colour, counted in COLOURED PIPS —
+ * `{B}{B}{B}` is three votes for black, `{1}{U}` one for blue.
+ *
+ * Pips rather than cards because that is what the mana source being named will
+ * actually have to pay for: a deck whose one bomb costs `{B}{B}{B}` needs black
+ * more than it needs the colour of three cheap cantrips.
+ */
+function colorPipDemand(state: GameState, chooser: PlayerId): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const card of ownedCards(state, chooser)) {
+    const cost = card.def.cost;
+    if (!cost) continue;
+    for (const color of CHOOSABLE_COLORS) {
+      const pips = cost[color] ?? 0;
+      if (pips > 0) counts.set(color.toLowerCase(), (counts.get(color.toLowerCase()) ?? 0) + pips);
+    }
+  }
+  return counts;
 }
 
 /**

@@ -180,6 +180,39 @@ export interface CardInstance {
    * also edit `internal/clone.ts`.
    */
   timesKicked?: number;
+  /**
+   * The value NAMED AS THIS PERMANENT ENTERED — "As ~ enters, choose a creature
+   * type / a color / a player" (CR 614.1c). A colour letter, a printed subtype,
+   * a card-type word, or a `PlayerId`, depending on
+   * `CardDefinition.asEntersChoice.subject`.
+   *
+   * **This field is the whole system.** The prompt is the easy half; what makes
+   * Cavern of Souls a card rather than a question is that the answer PERSISTS on
+   * the permanent and is READ later — by a static ("creatures you control of the
+   * chosen type get +1/+1", `StaticAffects.ofChosenSubtype`), by a mana ability
+   * ("add one mana of the chosen color", the `chosen` mana mode), and by the
+   * card's own type line ("this creature is the chosen type in addition to its
+   * other types", `CardDefinition.isChosenSubtype`).
+   *
+   * **ABSENT — OR THE EMPTY STRING — MEANS NOTHING WAS CHOSEN, AND MATCHES
+   * NOTHING.** That is the one inert default (`NOTHING_CHOSEN` in `choices.ts`),
+   * and no reader may invent a value for it. The two spellings are the two ways
+   * of reaching it, and the difference is bookkeeping rather than meaning:
+   * ABSENT is a permanent that was never asked (reanimation, another card's "put
+   * it onto the battlefield", a token, a hand-built test instance), while the
+   * EMPTY STRING is one that was asked and declined — which the asking paths need
+   * to tell apart from "not asked yet", because the land-play path re-enters its
+   * question step after every answer and would otherwise ask again forever.
+   *
+   * Cleared when the permanent leaves the battlefield (`resetInstanceForNewZone`):
+   * a new entry is a new naming, so a bounced-and-recast Adaptive Automaton must
+   * not still be lording over the type it named last time.
+   *
+   * OPTIONAL and written only by the permanents that name something, for the same
+   * object-shape/throughput reason as {@link attachedTo}. Anyone adding a field
+   * here must also edit `internal/clone.ts`.
+   */
+  chosenAsEntered?: string;
 }
 
 /**
@@ -357,8 +390,16 @@ export function spellLeaveDestination(
   reason: SpellLeaveReason,
 ): 'graveyard' | 'exile' | 'hand' {
   // Flashback first: exiling a card cast from the graveyard applies however it
-  // leaves the stack, so it outranks everything else here.
+  // leaves the stack, so it outranks everything else here. It is also what
+  // AFTERMATH (CR 702.127a) rides — its second half is cast only from the
+  // graveyard and is exiled after it resolves, which is the same sentence.
   if (spell.castFrom === 'graveyard') return 'exile';
+  // An ADVENTURE exiles its own card, but ONLY as it resolves (CR 715.3d): an
+  // adventure spell that is countered goes to the graveyard like anything else,
+  // and the creature half is then gone for good. Reading the face that is on
+  // the stack — a card is only ever an Adventure while its adventure half is
+  // being cast — is what keeps the creature half out of this branch.
+  if (reason === 'resolve' && spell.card.def.adventure === true) return 'exile';
   // Buyback returns the card to its owner's HAND — but only as it RESOLVES
   // (CR 702.27a). A bought-back spell that is countered goes to the graveyard
   // like any other countered spell; a caller that forgets the distinction
@@ -416,6 +457,20 @@ export interface TriggeredStackObject {
    * reason state-based actions are derived from the board rather than queued.
    */
   readonly awaitingTargets?: TargetRestriction;
+  /**
+   * The player the EVENT that set this ability off was about — the referent of
+   * a body's "that player" / "them". Rides the stack object so it survives into
+   * the resolution frame and then into `EffectContext`, exactly the way a cast's
+   * `xValue`/`kicked` do (see `PendingTrigger.triggeringPlayer` for why the
+   * source's controller is NOT the answer).
+   */
+  readonly triggeringPlayer?: PlayerId;
+  /**
+   * The trigger's printed intervening "if", carried so it can be re-checked as
+   * the ability RESOLVES (CR 603.4's second check). Absent for every trigger
+   * that prints no such clause, which is almost all of them.
+   */
+  readonly intervening?: import('./intervening.js').InterveningIf;
 }
 
 /** Anything that can sit on the stack. */

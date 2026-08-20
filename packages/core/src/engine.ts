@@ -11,13 +11,14 @@
  * class-per-card hierarchy. Cards are data; systems read that data.
  */
 
-import type { GameAction } from './actions.js';
+import type { CastZone, GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
 import type { ActivatedAbility, CardDefinition, EffectRef, ManaAbility, ManaModeExtra } from './card.js';
 import {
   canRevealForUntapped,
   castTiming,
   fixedManaColorsOf,
+  backFaceCastZonesOf,
   hasCastableBackFace,
   isLand,
   isPermanentType,
@@ -37,9 +38,12 @@ import {
   isTrivialChoice,
   MAX_CHOICES_PER_RESOLUTION,
   normalizeChoiceRequest,
+  NOTHING_CHOSEN,
   permanentTargetOption,
   validateChoiceAnswer,
 } from './choices.js';
+import { interveningIfHolds } from './intervening.js';
+import { asEntersOptions, asEntersPrompt, chosenColorOf, recordChosenAsEntered } from './as-enters.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
@@ -100,7 +104,14 @@ import {
   orderPicks,
   picksToResolution,
 } from './modal.js';
-import { expireCardGrants, flashbackCostOf, pruneCardGrantsFor } from './card-grants.js';
+import {
+  addCardGrant,
+  castPermissionFor,
+  expireCardGrants,
+  flashbackCostOf,
+  hasCardGrants,
+  pruneCardGrantsFor,
+} from './card-grants.js';
 import { declineMadness } from './madness.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
@@ -594,6 +605,21 @@ function resolveTriggeredAbility(
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
 ): void {
+  // CR 603.4's SECOND check: a trigger whose intervening "if" has stopped
+  // holding is removed from the stack and does nothing. Checked here, before any
+  // effect runs, against the same evaluator the collector used when the ability
+  // triggered — one condition, one reader, no way for the two to disagree.
+  if (!interveningIfHolds(state, obj.intervening, obj.sourceInstanceId, obj.controller, obj.triggeringPlayer)) {
+    emit({
+      type: 'triggerFizzled',
+      sourceInstanceId: obj.sourceInstanceId,
+      controller: obj.controller,
+      label: obj.label,
+      reason: 'its intervening "if" condition is no longer true',
+    });
+    checkStateBasedActions(state, emit);
+    return;
+  }
   runResolution(
     state,
     {
@@ -606,6 +632,10 @@ function resolveTriggeredAbility(
       askCount: 0,
       sourceInstanceId: obj.sourceInstanceId,
       label: obj.label,
+      // The triggering player rides the frame from here on, for the same reason
+      // a cast's chosen X does: the resolution outlives the stack object, and
+      // "that player draws an additional card" is read during it.
+      ...(obj.triggeringPlayer !== undefined ? { triggeringPlayer: obj.triggeringPlayer } : {}),
     },
     registry,
     emit,
@@ -674,6 +704,7 @@ function runResolution(
         xValue: frame.xValue,
         kicked: frame.kicked,
         kickCount: frame.kickCount,
+        triggeringPlayer: frame.triggeringPlayer,
       },
       emit,
       refTargets,
@@ -770,10 +801,32 @@ function finishSpellResolution(
   // leaves the stack), or → its owner's HAND when its buyback cost was paid
   // (CR 702.27a). Same move every time; only the destination differs, and it was
   // decided by `spellLeaveDestination` before this was called.
+  // Asked BEFORE the move, because `resetInstanceForNewZone` reverts the active
+  // face to the printed front (CR 712.8a) and the adventure half is exactly the
+  // face that is about to disappear.
+  const wasAdventure = card.def.adventure === true;
   card.zone = resolvesTo;
   state.players[card.owner][resolvesTo].push(card);
   resetInstanceForNewZone(card);
   emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: resolvesTo });
+  // CR 715.3d: a resolved adventure exiles its card, and its owner may cast the
+  // CREATURE half from exile later. The permission is recorded as a card grant
+  // — the list that already prunes itself whenever its card changes zones — so
+  // an exiled adventurer that is somehow moved out of exile loses it with no
+  // extra bookkeeping, exactly as CR 400.7 requires.
+  if (wasAdventure && resolvesTo === 'exile') {
+    addCardGrant(
+      state,
+      {
+        targetInstanceId: card.instanceId,
+        sourceInstanceId: card.instanceId,
+        zone: 'exile',
+        duration: 'permanent',
+        castFace: 'front',
+      },
+      emit,
+    );
+  }
 }
 
 /**
@@ -1257,6 +1310,40 @@ function applyAnswerChoice(
     }
   }
 
+  // A NAMING answer with no resolution behind it is a land naming a value as it
+  // entered (`raiseLandEntryChoice` parked it). The value is written onto the
+  // permanent the choice named — `appliesToInstanceId`, not "whatever asked", so
+  // a source that ever names on another permanent's behalf cannot silently
+  // record it on itself — and then the SAME step function is called again, which
+  // is what lets one land ask a naming AND a tapped question (Multiversal
+  // Passage, Temple of the Dragon Queen) instead of dropping the second.
+  //
+  // A naming asked mid-RESOLUTION (the `chooseAsEnters` primitive, for a
+  // permanent spell) is deliberately not handled here: it flows through the
+  // ordinary frame path below, and the primitive writes the value itself against
+  // the instance that is entering.
+  if (choice.context === 'asEnters' && answer.kind === 'chooseValue' && !state.resolution) {
+    const entering = findOnBattlefield(state, choice.appliesToInstanceId ?? choice.sourceInstanceId);
+    const naming = entering?.def.asEntersChoice;
+    if (entering && naming) {
+      recordChosenAsEntered(entering, naming, answer.value, emit);
+      raiseLandEntryChoice(state, entering, choice.chooser, emit);
+    }
+    checkStateBasedActions(state, emit);
+    // Aim any waiting trigger only once the land has finished asking. Two
+    // reasons, and they agree: the entry questions are REPLACEMENT effects that
+    // all happen as the permanent enters, before a landfall trigger is put on
+    // the stack (CR 614.1c) — and `aimPendingTriggers` parks a question of its
+    // own, which would overwrite the land's second question and lose it.
+    if (!state.pendingChoice) aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      // The land play never surrendered priority, so its player keeps the floor.
+      state.priorityPlayer = choice.chooser;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
   // A LEGEND-RULE answer belongs to the state-based actions, not to a resolution
   // (CR 704.5j — the game performs the rule; the player only picks the survivor).
   // Routed by the choice's own `context` marker rather than by "there is no frame
@@ -1373,8 +1460,30 @@ function applyPlayLand(
   if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
-  const card = instanceIn(player.hand, action.instanceId);
-  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  // Nearly every land play comes from the hand; the one that does not is an
+  // ADVENTURER card whose primary half is a land, waiting in exile with the
+  // permission its own adventure left behind ("You may play the land later from
+  // exile"). Validated the same way the cast path validates a cast from exile,
+  // by the same accessor, so neither can be tricked into playing a card that
+  // was merely exiled.
+  const fromZone = action.fromZone ?? 'hand';
+  if (fromZone !== 'hand' && fromZone !== 'exile') {
+    return rejectWith(prevState, 'a land can only be played from your hand or from exile');
+  }
+  const card =
+    fromZone === 'exile'
+      ? instanceIn(player.exile, action.instanceId)
+      : instanceIn(player.hand, action.instanceId);
+  if (!card) {
+    return rejectWith(prevState, fromZone === 'exile' ? 'that card is not in exile' : 'that card is not in your hand');
+  }
+  const permission = fromZone === 'exile' ? castPermissionFor(state, card) : undefined;
+  if (fromZone === 'exile') {
+    if (permission === undefined) return rejectWith(prevState, 'that card has no permission to be played from exile');
+    if ((action.face ?? 'front') !== permission.face) {
+      return rejectWith(prevState, 'that face of this card may not be played from exile');
+    }
+  }
   // Same CR 712.8b guard as casting: a transforming DFC's back face is never
   // playable from hand.
   if (card.def.isBackFace === true) {
@@ -1405,100 +1514,131 @@ function applyPlayLand(
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
-  // A shockland asks its question HERE — at land-play time, with nothing
-  // resolving. The land has entered with the unpaid default (tapped, from
-  // `entersTapped`); a payable question is parked, and the answer either charges
-  // the life and untaps the fresh entry (nothing has been able to observe it
-  // tapped: only answering is legal while the question stands) or confirms the
-  // default. A player who cannot pay is not asked — the default already IS the
-  // only outcome, so the game does not stop.
-  // A REVEAL-LAND asks the same shape of question in the same place, with a
-  // `confirm` instead of a price: "you may reveal an Island or Swamp card from
-  // your hand. If you don't, this land enters tapped." A controller holding
-  // nothing to show is not asked — the printed default is then the only
-  // outcome, and stopping the game for it would wedge the turn.
-  const revealCondition = card.def.entersTappedUnlessRevealed;
-  if (
-    revealCondition !== undefined &&
-    canRevealForUntapped(revealCondition, state.players[action.player].hand)
-  ) {
-    // Entered tapped above; the tapped event is deferred until the answer, so a
-    // replay never shows the land flickering tapped -> untapped.
-    card.tapped = false;
-    const choice = normalizeChoiceRequest(
-      {
-        kind: 'confirm',
-        chooser: action.player,
-        prompt: `Reveal ${describeRevealTypes(revealCondition.anyOfSubtypes)} from your hand, or ${card.def.name} enters tapped`,
-        // Showing a card costs nothing and unlocks an untapped land, so a pilot
-        // with nothing better to go on should take it.
-        valence: 'gain',
-      },
-      {
-        id: state.nextInstanceId++,
-        sourceInstanceId: card.instanceId,
-        sourceName: card.def.name,
-      },
-    );
-    if (choice) {
-      state.pendingChoice = choice;
-      emit({
-        type: 'choiceAsked',
-        choiceId: choice.id,
-        chooser: choice.chooser,
-        choiceKind: choice.kind,
-        prompt: choice.prompt,
-        sourceInstanceId: choice.sourceInstanceId,
-        optionCount: choiceOptionCount(choice),
-      });
-    }
-    player.landsPlayedThisTurn += 1;
-    emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
-    state.consecutivePasses = 0;
-    return { state, events };
-  }
-
-  const shockCost = card.def.entersTappedUnlessLifePaid;
-  if (shockCost !== undefined && canAffordLifeCost(state, action.player, shockCost)) {
-    // Entered tapped above, but the tapped event is deferred until the answer —
-    // emitted only if the decline confirms it, so a replay never shows a land
-    // flickering tapped→untapped.
-    card.tapped = false;
-    const choice = normalizeChoiceRequest(
-      {
-        kind: 'payLife',
-        chooser: action.player,
-        prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
-        amount: shockCost,
-        affordable: true,
-        valence: 'neutral',
-      },
-      {
-        id: state.nextInstanceId++,
-        sourceInstanceId: card.instanceId,
-        sourceName: card.def.name,
-      },
-    );
-    if (choice) {
-      state.pendingChoice = choice;
-      emit({
-        type: 'choiceAsked',
-        choiceId: choice.id,
-        chooser: choice.chooser,
-        choiceKind: choice.kind,
-        prompt: choice.prompt,
-        sourceInstanceId: choice.sourceInstanceId,
-        optionCount: choiceOptionCount(choice),
-      });
-    }
-  } else if (card.tapped) {
-    emit({ type: 'tapped', instanceId: card.instanceId });
-  }
+  raiseLandEntryChoice(state, card, action.player, emit);
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
   state.consecutivePasses = 0;
   return { state, events };
+}
+
+/**
+ * Ask the NEXT question a freshly-played land still owes, or settle its tapped
+ * state when it owes none.
+ *
+ * Three printed questions can land on the same permanent as it enters, and only
+ * ONE choice can be parked at a time — Multiversal Passage names a basic land
+ * type and *then* offers to pay 2 life; Temple of the Dragon Queen offers a
+ * reveal and names a colour. So this is written as a step function that asks the
+ * first unanswered question and is CALLED AGAIN from the answer handler, rather
+ * than as three independent branches that would silently drop the second one.
+ *
+ * Order is the printed order, naming first: the naming is what the land's other
+ * abilities read, and a payment question answered first would be the only one a
+ * player ever saw on a card printing both.
+ *
+ * The land has already entered with the unpaid/unrevealed default (tapped, from
+ * `entersTapped`), and the `tapped` EVENT is deferred until every question is
+ * settled — so a replay never shows a land flickering tapped→untapped, and
+ * nothing can observe the intermediate state because answering is the only legal
+ * action while a question stands.
+ */
+function raiseLandEntryChoice(
+  state: GameState,
+  card: CardInstance,
+  player: PlayerId,
+  emit: (e: GameEvent) => void,
+): void {
+  const park = (request: ChoiceRequest, context?: PendingChoice['context']): void => {
+    const normalized = normalizeChoiceRequest(request, {
+      id: state.nextInstanceId++,
+      sourceInstanceId: card.instanceId,
+      sourceName: card.def.name,
+    });
+    if (!normalized) return;
+    // The context marker is what routes the answer, exactly as the legend rule's
+    // does: "a choice with no resolution behind it" also describes the shockland
+    // question, and the two must never be confused.
+    const choice: PendingChoice =
+      context === undefined ? normalized : { ...normalized, context, appliesToInstanceId: card.instanceId };
+    state.pendingChoice = choice;
+    emit({
+      type: 'choiceAsked',
+      choiceId: choice.id,
+      chooser: choice.chooser,
+      choiceKind: choice.kind,
+      prompt: choice.prompt,
+      sourceInstanceId: choice.sourceInstanceId,
+      optionCount: choiceOptionCount(choice),
+    });
+  };
+
+  // 1. THE NAMING — "As ~ enters, choose a color / a basic land type"
+  //    (CR 614.1c). Asked only while nothing has been named yet, which is what
+  //    makes this function safe to call again after each answer.
+  const naming = card.def.asEntersChoice;
+  if (naming !== undefined && card.chosenAsEntered === undefined) {
+    const options = asEntersOptions(state, naming, player);
+    if (options.length > 0) {
+      park({
+        kind: 'chooseValue',
+        chooser: player,
+        prompt: asEntersPrompt(card.def, naming),
+        subject: naming.subject,
+        options,
+        // Naming costs nothing and unlocks the card's own abilities; the real
+        // decision is WHICH value, which a pilot makes from the board rather
+        // than from a valence.
+        valence: 'gain',
+      }, 'asEnters');
+      if (state.pendingChoice) return;
+    } else {
+      // Nothing on offer (an empty menu) settles to "nothing named" WITHOUT
+      // stopping the game — the inert default, reached honestly and announced
+      // like any other naming. Recorded rather than left absent so this step
+      // function, which is called again after every answer, cannot come back
+      // round and ask again.
+      recordChosenAsEntered(card, naming, NOTHING_CHOSEN, emit);
+    }
+  }
+
+  // 2. A REVEAL-LAND: "you may reveal an Island or Swamp card from your hand. If
+  //    you don't, this land enters tapped." A controller holding nothing to show
+  //    is not asked — the printed default is then the only outcome, and
+  //    stopping the game for it would wedge the turn.
+  const revealCondition = card.def.entersTappedUnlessRevealed;
+  if (revealCondition !== undefined && canRevealForUntapped(revealCondition, state.players[player].hand)) {
+    card.tapped = false;
+    park({
+      kind: 'confirm',
+      chooser: player,
+      prompt: `Reveal ${describeRevealTypes(revealCondition.anyOfSubtypes)} from your hand, or ${card.def.name} enters tapped`,
+      // Showing a card costs nothing and unlocks an untapped land, so a pilot
+      // with nothing better to go on should take it.
+      valence: 'gain',
+    });
+    return;
+  }
+
+  // 3. A SHOCKLAND: "you may pay N life. If you don't, it enters tapped." A
+  //    player who cannot pay is not asked — the default already IS the only
+  //    outcome, so the game does not stop.
+  const shockCost = card.def.entersTappedUnlessLifePaid;
+  if (shockCost !== undefined && canAffordLifeCost(state, player, shockCost)) {
+    card.tapped = false;
+    park({
+      kind: 'payLife',
+      chooser: player,
+      prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
+      amount: shockCost,
+      affordable: true,
+      valence: 'neutral',
+    });
+    return;
+  }
+
+  // 4. Nothing left to ask — announce the entry state.
+  if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
 }
 
 /**
@@ -1814,6 +1954,16 @@ function manaModeBlockedReason(
       return `no land makes {${derivedColor}} for ${perm.def.name} to copy`;
     }
   }
+  // A CHOSEN-colour mode is available only for the colour THIS permanent named as
+  // it entered. A permanent that named nothing has no available mode at all, so
+  // it taps for nothing — the inert default, refused here rather than silently
+  // downgraded to "any colour".
+  const modeChosenColor = extra.chosenColor;
+  if (modeChosenColor !== undefined && chosenColorOf(perm) !== modeChosenColor) {
+    return chosenColorOf(perm) === undefined
+      ? `${perm.def.name} has not named a color`
+      : `${perm.def.name} names a different color`;
+  }
   const cost = ability.cost;
   if (cost) {
     // CR 118.4: life pays down to zero and no further.
@@ -1855,7 +2005,10 @@ function derivedManaColors(
     const mine = perm.controller === source.controller;
     if (wantOpponents ? mine : !mine) continue;
     if (!isLand(perm.def)) continue;
-    for (const color of fixedManaColorsOf(perm.def)) colors.add(color);
+    // The chosen colour is read off the INSTANCE, so a Temple of the Dragon Queen
+    // that named red contributes exactly red to a Reflecting Pool — not all five,
+    // and not nothing.
+    for (const color of fixedManaColorsOf(perm.def, chosenColorOf(perm))) colors.add(color);
   }
   return colors;
 }
@@ -2113,16 +2266,31 @@ function applyCastSpell(
           : 'that card is not in your hand',
     );
   }
-  // A cast from EXILE is a madness cast, and it is legal only for the one card
-  // whose madness window is open — checked here, so a pilot or a hostile client
-  // cannot cast an arbitrary exiled card by naming the zone.
-  const madnessCost = fromZone === 'exile' ? card.def.madness : undefined;
+  // A cast from EXILE is one of exactly two things, and neither may be assumed:
+  // a MADNESS cast (the one card whose window is open), or a cast the card has
+  // been given explicit PERMISSION for — an adventurer exiled by its adventure
+  // (CR 715.3d) or a defeated Siege (CR 310.4). Both are checked here, so a
+  // pilot or a hostile client cannot cast an arbitrary exiled card by naming
+  // the zone. Madness is asked first because its window preempts the game.
+  const madnessWindowOpen =
+    fromZone === 'exile' &&
+    state.madnessWindow?.instanceId === card.instanceId &&
+    state.madnessWindow?.controller === action.player;
+  const permission = fromZone === 'exile' && !madnessWindowOpen ? castPermissionFor(state, card) : undefined;
+  const madnessCost = madnessWindowOpen ? card.def.madness : undefined;
   if (fromZone === 'exile') {
-    const window = state.madnessWindow;
-    if (!window || window.instanceId !== card.instanceId || window.controller !== action.player) {
-      return rejectWith(prevState, 'that card has no open madness window');
+    if (!madnessWindowOpen && permission === undefined) {
+      return rejectWith(prevState, 'that card has no open madness window and no permission to be cast from exile');
     }
-    if (madnessCost === undefined) return rejectWith(prevState, 'that card has no madness cost');
+    if (madnessWindowOpen && madnessCost === undefined) {
+      return rejectWith(prevState, 'that card has no madness cost');
+    }
+    // The permission names ONE face. Casting the other half of an exiled
+    // adventurer (or a Siege's battle half) is not something the rules ever
+    // allow, so it is refused rather than silently redirected.
+    if (permission !== undefined && (action.face ?? 'front') !== permission.face) {
+      return rejectWith(prevState, 'that face of this card may not be cast from exile');
+    }
   }
   // CR 712.8b: the back face of a transforming DFC can never be cast. A card in
   // hand is front-face-up by construction, so this is defensive — but a state
@@ -2138,16 +2306,27 @@ function applyCastSpell(
   const castDef = playableFaceOf(card.def, action.face);
   if (!castDef) return rejectWith(prevState, 'that card has no castable back face');
   if (isLand(castDef)) return rejectWith(prevState, 'lands are played, not cast');
+  // A back half restricted to certain zones (AFTERMATH's graveyard, a Siege
+  // reward's exile) is legal only from one of them — the same table the offer
+  // loop reads, so offer and accept cannot disagree about where a half lives.
+  if (action.face === 'back' && !backFaceCastZonesOf(card.def).includes(fromZone)) {
+    return rejectWith(prevState, `the second half of ${card.def.name} cannot be cast from your ${fromZone}`);
+  }
   // Flashback may be PRINTED or GRANTED (Snapcaster Mage). One accessor answers
   // both, so the cast path cannot disagree with the offer loop about what a card
   // in the graveyard costs — or about whether it may be cast at all. On a face
   // OTHER than the front, the face's own printed cost is the answer: a grant is
   // made on the card as the granter saw it, which is its front face.
+  //
+  // AFTERMATH is the deliberate exception: its second half is cast from the
+  // graveyard for its OWN printed cost, not for a flashback cost it does not
+  // print, so a graveyard-legal back half skips this question entirely.
+  const aftermath = fromZone === 'graveyard' && action.face === 'back';
   const flashbackCost =
-    fromZone === 'graveyard'
+    fromZone === 'graveyard' && !aftermath
       ? (castDef === card.def ? flashbackCostOf(state, card) : castDef.flashback)
       : undefined;
-  if (fromZone === 'graveyard' && flashbackCost === undefined) {
+  if (fromZone === 'graveyard' && !aftermath && flashbackCost === undefined) {
     return rejectWith(prevState, 'that card has no flashback');
   }
 
@@ -2194,7 +2373,7 @@ function applyCastSpell(
   // It is a mandatory part of the cost, not a choice, so a caster who cannot pay
   // it simply cannot cast (CR 118.4) — checked before any mana leaves the pool,
   // so a refusal can never strand a half-paid cost.
-  const flashbackLife = fromZone === 'graveyard' ? (castDef.flashbackLifeCost ?? 0) : 0;
+  const flashbackLife = fromZone === 'graveyard' && !aftermath ? (castDef.flashbackLifeCost ?? 0) : 0;
   if (flashbackLife > 0 && !canAffordLifeCost(state, action.player, flashbackLife)) {
     return rejectWith(prevState, `you do not have ${flashbackLife} life to pay this flashback cost`);
   }
@@ -2202,8 +2381,17 @@ function applyCastSpell(
   // Pay the mana cost from the floating pool. A flashback cast pays the
   // FLASHBACK cost, not the printed one — that substitution is the whole of
   // what "cast it for its flashback cost" means at this seam.
-  const cost =
-    fromZone === 'graveyard' ? flashbackCost : fromZone === 'exile' ? madnessCost : castDef.cost;
+  //
+  // A permission may say WITHOUT PAYING ITS MANA COST (a Siege reward, CR
+  // 310.4). That is data on the grant, so the one cast path charges exactly
+  // what the card says and nothing here special-cases a layout.
+  const cost = permission?.free
+    ? undefined
+    : fromZone === 'graveyard' && !aftermath
+      ? flashbackCost
+      : madnessWindowOpen
+        ? madnessCost
+        : castDef.cost;
   if (cost) {
     // WHAT the mana is being spent on, for any restricted mana in the pool. The
     // face being CAST is the object a restriction reads (a modal DFC's back face
@@ -2227,8 +2415,9 @@ function applyCastSpell(
     card.instanceId,
   );
   // The madness window is CONSUMED by the cast: the card has left exile, so
-  // nothing may decline it afterwards.
-  if (fromZone === 'exile') state.madnessWindow = null;
+  // nothing may decline it afterwards. A permission cast never had a window and
+  // must not clear somebody else's.
+  if (madnessWindowOpen) state.madnessWindow = null;
   card.zone = 'stack';
   // The card just changed zones, so any grant on it stops applying (CR 400.7).
   // Nothing is lost by dropping it here: the granted cost has already been paid,
@@ -3285,8 +3474,33 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       // A modal DFC whose SECOND face is a land offers that land play too — the
       // spell//land MDFCs are exactly the card whose value is being able to
       // choose. Both halves are offered when both are playable.
-      if (hasCastableBackFace(card.def) && isLand(card.def.backFace as CardDefinition)) {
+      if (
+        hasCastableBackFace(card.def) &&
+        backFaceCastZonesOf(card.def).includes('hand') &&
+        isLand(card.def.backFace as CardDefinition)
+      ) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, face: 'back' });
+      }
+    }
+    // The LAND half of an adventurer card, waiting in exile with permission
+    // (CR 715.3d, "you may play the land later from exile"). Behind the same
+    // empty check as every other card-grant consumer, so a game with nothing
+    // exiled under permission walks no exile zone here either.
+    if (hasCardGrants(state)) {
+      const exile = player.exile;
+      for (let e = 0; e < exile.length; e++) {
+        const card = exile[e] as CardInstance;
+        const permission = castPermissionFor(state, card);
+        if (permission === undefined) continue;
+        const playDef = playableFaceOf(card.def, permission.face);
+        if (playDef === undefined || !isLand(playDef)) continue;
+        actions.push({
+          kind: 'playLand',
+          player: me,
+          instanceId: card.instanceId,
+          ...(permission.face === 'back' ? { face: 'back' as const } : {}),
+          fromZone: 'exile',
+        });
       }
     }
   }
@@ -3307,8 +3521,24 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // actions. A MODAL DFC is different: both of its faces are real casts, so
     // each is offered on its own terms (own cost, own timing, own targets).
     if (card.def.isBackFace === true) continue;
-    pushCastOffers(state, card, card.def, 'front', me, player.manaPool, sorcerySpeedWindow, actions);
-    if (hasCastableBackFace(card.def)) {
+    // `playableFaceOf` is what makes a SPLIT card work here with no branch: on
+    // one, `'front'` means its LEFT half rather than the CR 709.4 combined
+    // object nobody can cast; on everything else it is the definition itself.
+    pushCastOffers(
+      state,
+      card,
+      playableFaceOf(card.def, 'front') as CardDefinition,
+      'front',
+      me,
+      player.manaPool,
+      sorcerySpeedWindow,
+      actions,
+    );
+    // The second half - a modal DFC's other face, a split card's right half -
+    // but only when the HAND is a zone it may be cast from. Aftermath prints a
+    // right half castable only from the graveyard (CR 702.127a), and offering
+    // it here would be a strictly better card than the one printed.
+    if (hasCastableBackFace(card.def) && backFaceCastZonesOf(card.def).includes('hand')) {
       pushCastOffers(
         state,
         card,
@@ -3333,6 +3563,23 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     // Printed OR granted — one accessor, so a granted flashback is offered
     // exactly as a printed one is, and costs one property read per graveyard
     // card on a board where no grant exists anywhere.
+    // AFTERMATH (CR 702.127a) first: a right half printed "cast this spell only
+    // from your graveyard" is offered here for its OWN cost, and is the one
+    // graveyard cast that is not a flashback. A card could print both - nothing
+    // does today - so this is an extra offer, not an early exit.
+    if (hasCastableBackFace(card.def) && backFaceCastZonesOf(card.def).includes('graveyard')) {
+      pushCastOffers(
+        state,
+        card,
+        card.def.backFace as CardDefinition,
+        'back',
+        me,
+        player.manaPool,
+        sorcerySpeedWindow,
+        actions,
+        AFTERMATH_OFFER,
+      );
+    }
     const flashbackCost = flashbackCostOf(state, card);
     if (flashbackCost === undefined || isLand(card.def)) continue;
     const timing = castTiming(card.def);
@@ -3366,6 +3613,30 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         instanceId: card.instanceId,
         targets: [target],
         fromZone: 'graveyard',
+      });
+    }
+  }
+
+  // Cast a card sitting in EXILE that has been given explicit permission - an
+  // adventurer exiled by its own adventure (CR 715.3d), or a Siege exiled when
+  // its last defense counter came off (CR 310.4). The permission names the face
+  // and whether the cast is free; everything else (timing, targets, the pool
+  // funding it) is judged by the same helper every other cast offer uses.
+  //
+  // Guarded by the SAME empty check every other card-grant consumer starts with,
+  // so a game in which nothing is ever exiled with permission walks no exile
+  // zone at all. That matters: this runs once per priority decision.
+  if (hasCardGrants(state)) {
+    const exile = player.exile;
+    for (let e = 0; e < exile.length; e++) {
+      const card = exile[e] as CardInstance;
+      const permission = castPermissionFor(state, card);
+      if (permission === undefined) continue;
+      const castDef = playableFaceOf(card.def, permission.face);
+      if (castDef === undefined) continue;
+      pushCastOffers(state, card, castDef, permission.face, me, player.manaPool, sorcerySpeedWindow, actions, {
+        fromZone: 'exile',
+        free: permission.free,
       });
     }
   }
@@ -3489,22 +3760,39 @@ function pushCastOffers(
   pool: import('./mana.js').ManaPool,
   sorcerySpeedWindow: boolean,
   actions: GameAction[],
+  options?: CastOfferOptions,
 ): void {
   if (isLand(def)) return; // lands are played, not cast (the MDFC land half)
   const timing = castTiming(def);
   if (timing !== 'instant' && !sorcerySpeedWindow) return;
-  if (def.cost && !canPay(pool, def.cost, spendPurposeIfRestricted(pool, def, 'cast'))) return;
+  // `free` is a permission that says "without paying its mana cost" (a Siege
+  // reward, CR 310.4). Otherwise the face's own printed cost - which is also
+  // exactly what an AFTERMATH half cast from the graveyard pays, and which any
+  // restricted mana in the pool is only allowed to fund if this face qualifies.
+  if (
+    options?.free !== true &&
+    def.cost &&
+    !canPay(pool, def.cost, spendPurposeIfRestricted(pool, def, 'cast'))
+  ) {
+    return;
+  }
   // A modal spell with nothing it could legally announce cannot be cast — the
   // same judgement `applyCastSpell` makes, from the same helper.
   if (!modalSpellIsCastable(state, def, me)) return;
   // Written only for a back-face offer, so a front-face cast action stays
   // byte-for-byte the object every consumer has always seen.
   const faceField = face === 'back' ? ({ face: 'back' } as const) : undefined;
+  // Same rule for the source zone: absent means `'hand'`, so every cast from
+  // hand keeps producing the action object consumers have always seen.
+  const zoneField =
+    options?.fromZone !== undefined && options.fromZone !== 'hand'
+      ? ({ fromZone: options.fromZone } as const)
+      : undefined;
   // A modal spell has no whole-card target: its aims are per mode, collected by
   // the cast-time question pipeline. So it is offered bare, exactly once.
   const restriction = modalSpecOf(def) ? undefined : targetRestrictionOf(def);
   if (restriction === undefined) {
-    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField });
+    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, ...faceField, ...zoneField });
     return;
   }
   for (const target of legalTargetsFor(state, restriction, me, def)) {
@@ -3514,9 +3802,28 @@ function pushCastOffers(
       instanceId: card.instanceId,
       targets: [target],
       ...faceField,
+      ...zoneField,
     });
   }
 }
+
+/**
+ * How a cast offer differs from the ordinary one from hand: which zone the card
+ * is being cast out of, and whether a permission waives its mana cost. Both
+ * default to the hand cast nearly every spell in the game makes, so the
+ * overwhelming majority of offers pass nothing at all.
+ */
+interface CastOfferOptions {
+  readonly fromZone?: CastZone;
+  readonly free?: boolean;
+}
+
+/**
+ * The offer shape an AFTERMATH half is made with: cast from the graveyard, for
+ * its own printed cost. Hoisted so the per-graveyard-card loop allocates no
+ * options object on a board where nothing prints aftermath.
+ */
+const AFTERMATH_OFFER: CastOfferOptions = { fromZone: 'graveyard' };
 
 export function choiceActionsFor(choice: PendingChoice): readonly GameAction[] {
   return enumerateChoiceAnswers(choice).map(

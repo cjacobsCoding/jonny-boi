@@ -18,7 +18,8 @@
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import { PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
-import { isBattle, isCreature, isPlaneswalker } from '../card.js';
+import { hasCastableBackFace, isBattle, isCreature, isPlaneswalker } from '../card.js';
+import { addCardGrant } from '../card-grants.js';
 import { cardOption, choiceOptionCount, normalizeChoiceRequest } from '../choices.js';
 import {
   defenseOf,
@@ -92,20 +93,39 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
         continue;
       }
       // CR 704.5x (generic outcome): a battle with no defense counters is put
-      // into its owner's graveyard. Sieges additionally print an exile-and-cast
-      // reward — that half needs the castable-second-face system, and cards
-      // printing it stay reported by the compiler, so a battle reaching 0 here
-      // gives up nothing the game claimed to play. Same cursor mechanics as the
-      // walker check above.
+      // into its owner's graveyard. A SIEGE instead prints its reward (CR
+      // 310.4): "exile it, then you may cast it transformed without paying its
+      // mana cost". Both endings are the same move to a different zone, plus -
+      // for the Siege - the permission that makes the reward reachable, which
+      // is recorded as a card grant on the exiled card exactly as an adventure's
+      // is. Same cursor mechanics as the walker check above.
       if (isBattle(inst.def) && !isCreature(inst.def)) {
         if (defenseOf(inst) > 0) {
           cursor += 1;
           continue;
         }
+        // Read BEFORE the move: `resetInstanceForNewZone` reverts the active
+        // face, and the reward is a property of the definition either way, but
+        // the controller (who gets to cast it) is battlefield state.
+        const reward = hasCastableBackFace(inst.def) ? inst.controller : undefined;
         const battleSizeBefore = state.battlefield.length;
         emit({ type: 'battleDefeated', instanceId: inst.instanceId, name: inst.def.name });
-        moveToZone(state, inst, 'graveyard', emit, inst.owner);
+        moveToZone(state, inst, reward === undefined ? 'graveyard' : 'exile', emit, inst.owner);
         resetInstanceForNewZone(inst);
+        if (reward !== undefined) {
+          addCardGrant(
+            state,
+            {
+              targetInstanceId: inst.instanceId,
+              sourceInstanceId: inst.instanceId,
+              zone: 'exile',
+              duration: 'permanent',
+              castFace: 'back',
+              castFree: true,
+            },
+            emit,
+          );
+        }
         changed = true;
         if (state.battlefield.length >= battleSizeBefore) cursor += 1;
         continue;

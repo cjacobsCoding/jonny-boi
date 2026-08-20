@@ -80,6 +80,13 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // ETB trigger reads after the resolution frame is gone — drop it here and the
   // trigger silently sees an unkicked spell one action boundary later.
   if (inst.timesKicked !== undefined) copy.timesKicked = inst.timesKicked;
+  // Same conditional-copy rule again, and the same stakes: this is the value the
+  // permanent NAMED as it entered, and every "of the chosen type / color" filter,
+  // mana mode and type-line read on the board resolves through it. Dropping it
+  // here would blank a Cavern of Souls or an Adaptive Automaton one action
+  // boundary after it entered — and blank it INVISIBLY, because "nothing chosen"
+  // is a legal state that matches nothing rather than a crash.
+  if (inst.chosenAsEntered !== undefined) copy.chosenAsEntered = inst.chosenAsEntered;
   return copy;
 }
 
@@ -147,6 +154,17 @@ function cloneStackObject(o: StackObject): StackObject {
       // trigger's "still needs aiming" marker on the clone `applyAction` makes at
       // every action boundary, silently resolving it at nothing.
       ...(o.awaitingTargets !== undefined ? { awaitingTargets: o.awaitingTargets } : {}),
+      // Same field-by-field stakes as `awaitingTargets`: dropping this would
+      // lose the TRIGGERING PLAYER at the very next action boundary, and every
+      // "that player draws a card" body would silently fall back to the source's
+      // controller — Howling Mine drawing its own controller a card on both
+      // turns. `clone.test.ts` pins it.
+      ...(o.triggeringPlayer !== undefined ? { triggeringPlayer: o.triggeringPlayer } : {}),
+      // Shared by reference on purpose: an `InterveningIf` is frozen compile-time
+      // data hanging off an immutable `CardDefinition`, exactly like `effects`'
+      // primitive ids — nothing mutates it. Dropping it would let a trigger whose
+      // condition had lapsed resolve anyway.
+      ...(o.intervening !== undefined ? { intervening: o.intervening } : {}),
     };
   }
   return {

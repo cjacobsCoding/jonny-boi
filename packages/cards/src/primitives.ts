@@ -66,6 +66,7 @@ import {
   restrictionParam,
   firstPermanentTarget,
   firstPlayerTarget,
+  playersForParam,
   intParam,
   isEmptyKeywords,
   isPlayerTarget,
@@ -94,6 +95,11 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
  *   - `'player'` — "target player or planeswalker" only. Lava Spike, which must
  *     never kill a creature.
  *
+ * With NO target at all it reads `params.whichPlayer` instead — the UNTARGETED
+ * player form a trigger prints ("~ deals 1 damage to that player"), resolved
+ * through the shared `playersForParam` vocabulary. That form asks nobody to aim
+ * anything, which is the printed card: the trigger already knows who it means.
+ *
  * A creature target gets marked damage (SBAs destroy it if lethal); a player target
  * loses life. The restriction is already enforced when the cast is offered and when
  * it is applied (core's targeting.ts); it is re-checked HERE because a target can
@@ -105,7 +111,21 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const target = ctx.targets[0];
-  if (target === undefined) return;
+  if (target === undefined) {
+    // The UNTARGETED player form — "~ deals 1 damage to that player" / "to
+    // them", printed by a trigger that already knows who it means. No targeting
+    // question is asked and no target restriction applies, because the printed
+    // line names no target: it names the player the trigger was about. With no
+    // `whichPlayer` either, there is genuinely nothing to damage — a safe no-op,
+    // exactly as before.
+    const whichPlayer = strParam(ctx, 'whichPlayer');
+    if (whichPlayer === undefined) return;
+    for (const victim of playersForParam(ctx, whichPlayer)) {
+      changeLife(ctx, victim, -amount);
+      ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: victim, amount, combat: false });
+    }
+    return;
+  }
   // `ctx.controller` is passed so an "opponent-only" restriction can be judged —
   // without it the check cannot tell the caster apart from their opponent.
   // The source definition rides along so protection's "can't be targeted" half
@@ -180,36 +200,35 @@ function removeLoyaltyCounters(perm: CardInstance, amount: number): number {
 }
 
 /**
- * `drawCards` — a player draws `params.count` cards. Defaults to the controller;
- * `params.whichPlayer: 'opponent'` makes the controller's opponent draw instead
- * (e.g. Goblin Guide's attack trigger gives the defending player a card), and
- * `'targetPlayer'` the first targeted player ("Target player draws two cards" —
- * Sign in Blood; falls back to the controller, matching the other primitives'
- * target fallbacks). Drawing from an empty library flags a loss via SBA on the
- * next check (we move the top card or stop). Used by Brainstorm (3), Ponder (1),
- * Cryptic Command (1).
+ * `drawCards` — `params.count` cards are drawn by whoever `params.whichPlayer`
+ * names, through the shared {@link playersForParam} vocabulary: the controller
+ * by default, `'opponent'` (Goblin Guide's attack trigger), `'targetPlayer'`
+ * (Sign in Blood), `'triggering'` — the player whose step/draw set the trigger
+ * off, which is Howling Mine's "that player" — or `'each'`, both seats in APNAP
+ * order ("each player draws a card").
+ *
+ * Drawing from an empty library flags a loss via SBA on the next check (we move
+ * the top card or stop). An empty library ends THAT PLAYER's draws and nobody
+ * else's — in "each player draws a card" the other player still draws, which is
+ * what the card says.
+ * Used by Brainstorm (3), Ponder (1), Cryptic Command (1).
  */
 export const drawCards: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
-  const whichPlayer = strParam(ctx, 'whichPlayer');
-  const drawer =
-    whichPlayer === 'opponent'
-      ? otherPlayer(ctx.controller)
-      : whichPlayer === 'targetPlayer'
-        ? (firstPlayerTarget(ctx) ?? ctx.controller)
-        : ctx.controller;
-  const player = ctx.state.players[drawer];
-  for (let i = 0; i < count; i++) {
-    const top = player.library.shift();
-    if (!top) {
-      // Decking: leave the empty library; core's SBA will register the loss when
-      // a *draw step* draw fails. A spell-driven empty draw is rare in the pool;
-      // emit nothing rather than fabricate a loss event here.
-      return;
+  for (const drawer of playersForParam(ctx, strParam(ctx, 'whichPlayer'))) {
+    const player = ctx.state.players[drawer];
+    for (let i = 0; i < count; i++) {
+      const top = player.library.shift();
+      if (!top) {
+        // Decking: leave the empty library; core's SBA will register the loss when
+        // a *draw step* draw fails. A spell-driven empty draw is rare in the pool;
+        // emit nothing rather than fabricate a loss event here.
+        break;
+      }
+      top.zone = 'hand';
+      player.hand.push(top);
+      ctx.emit({ type: 'drawCard', player: drawer, instanceId: top.instanceId });
     }
-    top.zone = 'hand';
-    player.hand.push(top);
-    ctx.emit({ type: 'drawCard', player: drawer, instanceId: top.instanceId });
   }
 };
 
@@ -229,8 +248,11 @@ export const gainLife: EffectPrimitive = (ctx) => {
 
 /**
  * `loseLife` — a player loses `params.amount` life. Defaults to the controller;
- * with `params.targetPlayer` true the first player target loses it instead.
- * Used by Thoughtseize (controller loses 2).
+ * with `params.targetPlayer` true the first player target loses it instead, and
+ * otherwise `params.whichPlayer` picks the loser from the shared
+ * {@link playersForParam} vocabulary — `'opponent'` ("each opponent loses 1
+ * life"), `'triggering'` ("that player loses 1 life"), or `'each'` ("each player
+ * … loses 1 life"). Used by Thoughtseize (controller loses 2).
  */
 export const loseLife: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
@@ -241,12 +263,10 @@ export const loseLife: EffectPrimitive = (ctx) => {
   // chosen target to read, so `targetPlayer` cannot express it. In this engine a
   // game is always exactly two seats (`PLAYER_IDS`), so "each opponent" and "the
   // opponent" name the same player — the printed plural has no other referent.
-  const player = useTarget
-    ? (firstPlayerTarget(ctx) ?? ctx.controller)
-    : strParam(ctx, 'whichPlayer') === 'opponent'
-      ? otherPlayer(ctx.controller)
-      : ctx.controller;
-  changeLife(ctx, player, -amount);
+  const victims = useTarget
+    ? [firstPlayerTarget(ctx) ?? ctx.controller]
+    : playersForParam(ctx, strParam(ctx, 'whichPlayer'));
+  for (const player of victims) changeLife(ctx, player, -amount);
 };
 
 /**

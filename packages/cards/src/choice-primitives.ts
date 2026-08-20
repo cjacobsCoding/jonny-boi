@@ -39,11 +39,15 @@ import type {
   CardType,
 } from '@jonny-boi/core';
 import {
+  NOTHING_CHOSEN,
+  asEntersOptions,
+  asEntersPrompt,
   collectCardOptions,
   formatManaCost,
   isCreature,
   isPlayerTarget,
   matchesCardFilter,
+  recordChosenAsEntered,
   transformPermanent,
 } from '@jonny-boi/core';
 import type { StackObject } from '@jonny-boi/core';
@@ -108,6 +112,12 @@ function playerParam(ctx: EffectContext, key: string, fallback: string): PlayerI
       return firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller);
     case 'targetController':
       return firstTargetInstance(ctx)?.controller;
+    case 'triggering':
+      // The player the TRIGGER's event was about — the printed "that player".
+      // Same word, same meaning as `playersForParam`'s `'triggering'`; the two
+      // vocabularies overlap deliberately so one printed phrase compiles to one
+      // param value whichever kind of primitive reads it.
+      return ctx.triggeringPlayer ?? ctx.controller;
     default:
       return ctx.controller;
   }
@@ -145,6 +155,61 @@ export const putFromHandOnTop: EffectPrimitive = (ctx) => {
   for (let i = chosen.length - 1; i >= 0; i--) {
     const id = chosen[i] as InstanceId;
     moveOwnedCard(ctx, who, id, 'hand', 'library', 'top');
+  }
+};
+
+/**
+ * `handToBottomThenDraw` — a player puts **the cards in their hand** on the
+ * bottom of their library **in any order**, then draws that many cards
+ * (Teferi's Puzzle Box).
+ *
+ * `params.who` picks the player through the shared vocabulary above, so
+ * `'triggering'` is the printed "that player" of an "at the beginning of each
+ * player's draw step" trigger.
+ *
+ * Three things this gets exactly right rather than nearly right:
+ *  - **"that many"** is the hand size AT THE MOMENT the cards leave, so an
+ *    empty hand draws nothing and a seven-card hand draws seven. Counted before
+ *    the move, never re-read after it.
+ *  - **the order is the player's**, and it is asked as one ordered selection of
+ *    the whole hand — first-chosen goes deepest, since the cards are bottomed in
+ *    the chosen order. Skipped entirely for a hand of fewer than two cards,
+ *    where there is no order to choose and a question would be an empty prompt.
+ *  - **valence `'loss'`**: the hand is being given up. The pilot answering is
+ *    not choosing WHETHER, only the order, but the valence is what tells it
+ *    these are cards leaving rather than cards arriving.
+ */
+export const handToBottomThenDraw: EffectPrimitive = (ctx) => {
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const hand = ctx.state.players[who].hand;
+  const handSize = hand.length;
+  if (handSize === 0) return;
+  let order: readonly InstanceId[];
+  if (handSize === 1) {
+    order = [hand[0]!.instanceId];
+  } else {
+    const chosen = ctx.chooseCards({
+      chooser: who,
+      prompt: 'Put the cards in your hand on the bottom of your library, in any order',
+      candidates: collectCardOptions(ctx.state, 'hand', { controller: who }),
+      min: handSize,
+      max: handSize,
+      ordered: true,
+      valence: 'loss',
+      fromZone: 'hand',
+    });
+    if (!chosen) return; // parked — nothing mutated, this ref will be re-run
+    order = chosen;
+  }
+  for (const id of order) moveOwnedCard(ctx, who, id, 'hand', 'library', 'bottom');
+  const library = ctx.state.players[who].library;
+  for (let i = 0; i < handSize; i++) {
+    const top = library.shift();
+    if (!top) break; // decked — core's SBA answers for it, this never fabricates a loss
+    top.zone = 'hand';
+    ctx.state.players[who].hand.push(top);
+    ctx.emit({ type: 'drawCard', player: who, instanceId: top.instanceId });
   }
 };
 
@@ -950,8 +1015,60 @@ export const pileSplitSacrifice: EffectPrimitive = (ctx) => {
   }
 };
 
+/**
+ * **"As ~ enters, choose a creature type / a color / a player"** (CR 614.1c) —
+ * the naming a PERMANENT SPELL makes on the way to the battlefield.
+ *
+ * ## Why this is a resolution primitive and not an engine branch
+ * A land is PLAYED, so the engine holds it mid-entry and asks there
+ * (`raiseLandEntryChoice`). A permanent SPELL resolves, and the resolution frame
+ * is already the mechanism for asking a question mid-entry — the same mechanism
+ * "enters with N +1/+1 counters" uses, and for the same reason: while the spell
+ * resolves, the card is `ctx.source` and is not yet on the battlefield. So the
+ * compiler puts this primitive FIRST in the card's script and the naming happens
+ * at exactly the printed moment, with no second question mechanism to keep in
+ * step with the first.
+ *
+ * ## It takes no params
+ * What to ask is `ctx.source.def.asEntersChoice`, the one declaration every
+ * consumer reads — the engine's land path, the AI's answering policy, the UI and
+ * the About page. A params copy would be a second place for the subject to be
+ * written, and the two would disagree the first time a compiler rule changed.
+ *
+ * ## Naming nothing is a real answer
+ * An empty menu (nothing to name) and an explicit `NOTHING_CHOSEN` both record
+ * nothing, which every reader treats as matching nothing. That is the same inert
+ * default an entry path that cannot ask at all produces — one spelling, every
+ * path.
+ */
+export const AS_ENTERS_PRIMITIVE = 'chooseAsEnters';
+
+export const chooseAsEnters: EffectPrimitive = (ctx) => {
+  const entering = ctx.source;
+  const naming = entering.def.asEntersChoice;
+  if (!naming) return;
+  // Re-entry guard: the frame re-runs this ref from the top for every later
+  // question the same resolution asks, and a permanent names once per entry.
+  if (entering.chosenAsEntered !== undefined) return;
+  const options = asEntersOptions(ctx.state, naming, ctx.controller);
+  if (options.length === 0) {
+    recordChosenAsEntered(entering, naming, NOTHING_CHOSEN, ctx.emit);
+    return;
+  }
+  const named = ctx.chooseValue({
+    prompt: asEntersPrompt(entering.def, naming),
+    subject: naming.subject,
+    options,
+    valence: 'gain',
+  });
+  if (named === undefined) return; // parked — nothing mutated, replayed on the answer
+  recordChosenAsEntered(entering, naming, named, ctx.emit);
+};
+
 export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
+  [AS_ENTERS_PRIMITIVE]: chooseAsEnters,
   putFromHandOnTop,
+  handToBottomThenDraw,
   reorderTopOfLibrary,
   mayShuffleLibrary,
   searchLibrary,

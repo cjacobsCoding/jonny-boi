@@ -62,6 +62,18 @@ export interface SerializedState {
      */
     readonly attachedTo?: number;
     /**
+     * The value this permanent NAMED as it entered — "As ~ enters, choose a
+     * creature type" (CR 614.1c). Present only when something was named, so a
+     * board with no naming serializes byte-for-byte as it always did.
+     *
+     * It is here because it is the one piece of a naming permanent's state that
+     * is invisible from the rest of the row: an Adaptive Automaton that named
+     * Goblin and one that named Sliver dump identically without it, and a
+     * bug report or a step-through of an anthem that "isn't working" is
+     * unreadable when the answer is missing.
+     */
+    readonly chosenAsEntered?: string;
+    /**
      * A planeswalker's current loyalty. Present only for walkers, so every
      * other board serializes byte-for-byte as it always did.
      */
@@ -128,6 +140,7 @@ export function serializeState(state: GameState): SerializedState {
         toughness: isCreature(c.def) ? effectiveToughness(c, mod) : undefined,
         damageMarked: c.damageMarked,
         ...(c.attachedTo != null ? { attachedTo: c.attachedTo } : {}),
+        ...(c.chosenAsEntered ? { chosenAsEntered: c.chosenAsEntered } : {}),
         ...(isPlaneswalker(c.def) ? { loyalty: loyaltyOf(c) } : {}),
         ...(isBattle(c.def) ? { defense: defenseOf(c) } : {}),
       };
@@ -179,7 +192,12 @@ export function dumpState(state: GameState): string {
       // "→[7]" reads as "attached to instance 7" — the one thing a dump of an
       // aura/equipment board is useless without.
       const attached = b.attachedTo !== undefined ? ` →[${b.attachedTo}]` : '';
-      lines.push(`    [${b.instanceId}] ${b.name}${pt} (${b.controller})${flags ? ` {${flags}}` : ''}${attached}`);
+      // "named:goblin" — what this permanent chose as it entered, without which
+      // an anthem that "isn't working" is unreadable in a dump.
+      const named = b.chosenAsEntered !== undefined ? ` named:${b.chosenAsEntered}` : '';
+      lines.push(
+        `    [${b.instanceId}] ${b.name}${pt} (${b.controller})${flags ? ` {${flags}}` : ''}${named}${attached}`,
+      );
     }
   }
   if (s.stackSize > 0) lines.push(`  stack: ${s.stackSize} object(s)`);

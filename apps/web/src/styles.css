@@ -2215,6 +2215,10 @@ button {
 .choice-prompt__cards { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .choice-prompt__list { display: flex; flex-direction: column; gap: var(--space-2); }
 .choice-prompt__list--inline { flex-direction: row; }
+/* A NAMING menu is as long as the deck is varied (a creature-type list runs to
+   dozens), so it scrolls inside the prompt instead of pushing Confirm off the
+   card — the button that unblocks the game must always be reachable. */
+.choice-prompt__list--scroll { max-height: 40vh; overflow-y: auto; }
 .choice-prompt__empty { color: var(--color-fg-faint); font-size: var(--text-sm); margin: 0; }
 .choice-option { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-fg); font: inherit; padding: var(--space-3) var(--space-4); text-align: left; cursor: pointer; }
 .choice-option:hover { background: var(--color-surface-hover); }
