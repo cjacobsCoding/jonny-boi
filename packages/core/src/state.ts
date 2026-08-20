@@ -18,6 +18,7 @@ import { isBattle } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
+import type { FloatingReplacement } from './internal/replacement.js';
 import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetRestriction } from './targeting.js';
@@ -483,6 +484,20 @@ export interface GameState {
    * (`hasCardGrants`), so the hot paths stay exactly as fast as before.
    */
   cardGrants?: CardGrant[];
+  /**
+   * FLOATING replacement and prevention effects (CR 614/615) — a fog's "prevent
+   * all combat damage that would be dealt this turn", a "prevent the next N
+   * damage" shield. See `internal/replacement.ts`. The ones PRINTED on a
+   * permanent are derived from `battlefield` on every read and never stored, for
+   * the same reason an anthem is.
+   *
+   * OPTIONAL, like `cardGrants`, and for the same two reasons: every state
+   * serialized (or hand-built in a test) before this existed stays valid, and a
+   * game that never creates one never touches the field — `indexReplacements`
+   * starts with the same one-property empty check, so the damage and counter hot
+   * paths stay exactly as fast as they were.
+   */
+  replacements?: FloatingReplacement[];
   combat: CombatState | null;
   /** Set once the game is decided. */
   winner: PlayerId | null;
