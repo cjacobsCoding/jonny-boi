@@ -45,6 +45,7 @@ import {
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
+  colorsOfDefinition,
   effectiveKeywords,
   effectivePower,
   isBattle,
@@ -53,6 +54,7 @@ import {
   isLegalTarget,
   matchesCardFilter,
   isPlaneswalker,
+  type ManaColor,
   type ManaCost,
   protectionPreventsDamage,
 } from '@jonny-boi/core';
@@ -706,11 +708,13 @@ const PERSIST_RETURN_PRIMITIVE = 'persistReturn';
 function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean {
   const notColor = strParam(ctx, 'notColor');
   if (notColor) {
-    // The engine's CardDefinition has no color field; derive color from the
-    // card's colored mana pips. A card is "of color X" if its cost requires X.
-    const cost = target.def.cost;
-    const requires = cost ? ((cost as Record<string, number | undefined>)[notColor] ?? 0) > 0 : false;
-    if (requires) return false; // e.g. nonblack filter rejects a card with {B} pips
+    // Asked through core's ONE colour reader, never off the cost record here.
+    // This used to walk `def.cost` directly, and that second opinion about what
+    // "black" means was wrong twice over: it could not see a HYBRID pip, and it
+    // could not see a printed colour with no cost behind it - so Doom Blade
+    // happily destroyed a "1/1 black Faerie Rogue creature token", which the
+    // printed card cannot target at all.
+    if (colorsOfDefinition(target.def).includes(notColor as ManaColor)) return false;
   }
   const maxMv = maxManaValueBound(ctx);
   if (maxMv !== undefined && manaValueOf(target.def) > maxMv) return false;
