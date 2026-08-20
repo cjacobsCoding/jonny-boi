@@ -296,6 +296,16 @@ interface Assembly {
   attachesAs?: ClauseContribution['attachesAs'];
   /** The "Enchanted/Equipped creature gets …" half, accumulated across lines. */
   attachmentModifies?: PermanentModification;
+  /** Set once a line prints the keyword **Changeling**. */
+  changeling?: boolean;
+  /** Set once a line prints "This spell can't be countered". */
+  cantBeCountered?: boolean;
+  /** Set once a line prints "Spells [you control] can't be countered". */
+  spellsCantBeCountered?: import('@jonny-boi/core').UncounterableSpellsAbility;
+  /** Set once a line prints "You have no maximum hand size". */
+  noMaximumHandSize?: boolean;
+  /** Land-play zones this card unlocks, accumulated across lines. */
+  playLandsFrom?: import('@jonny-boi/core').LandPlayZone[];
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -346,6 +356,16 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.flashbackXCost !== undefined) assembly.flashbackXCost = contribution.flashbackXCost;
   if (contribution.flashbackLifeCost !== undefined) {
     assembly.flashbackLifeCost = contribution.flashbackLifeCost;
+  }
+  if (contribution.changeling) assembly.changeling = true;
+  if (contribution.cantBeCountered) assembly.cantBeCountered = true;
+  if (contribution.spellsCantBeCountered) assembly.spellsCantBeCountered = contribution.spellsCantBeCountered;
+  if (contribution.noMaximumHandSize) assembly.noMaximumHandSize = true;
+  if (contribution.playLandsFrom) {
+    // Accumulated, not replaced: Bolas's Citadel prints one zone and a second
+    // line could print another, and both permissions are real at once.
+    const zones = assembly.playLandsFrom ?? (assembly.playLandsFrom = []);
+    for (const zone of contribution.playLandsFrom) if (!zones.includes(zone)) zones.push(zone);
   }
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
@@ -1056,6 +1076,15 @@ export function compileCard(card: CompilableCard): CompileResult {
     // The printed **Basic** supertype — read by the battlelands' enters-untapped
     // condition (see `EntersUntappedCondition.minBasicLands`).
     ...(isBasic ? { basic: true } : {}),
+    // Changeling is a characteristic-defining ability that applies in EVERY zone,
+    // so it rides the definition rather than the keyword-flag bag.
+    ...(assembly.changeling ? { changeling: true } : {}),
+    ...(assembly.cantBeCountered ? { cantBeCountered: true } : {}),
+    ...(assembly.spellsCantBeCountered ? { spellsCantBeCountered: assembly.spellsCantBeCountered } : {}),
+    ...(assembly.noMaximumHandSize ? { noMaximumHandSize: true } : {}),
+    ...(assembly.playLandsFrom && assembly.playLandsFrom.length > 0
+      ? { playLandsFrom: assembly.playLandsFrom }
+      : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain
     // or Plains card") match a dual land the way the printed card does.

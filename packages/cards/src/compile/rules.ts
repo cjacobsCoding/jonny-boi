@@ -15,6 +15,7 @@
  */
 
 import type {
+  CardFilter,
   CardType,
   EffectRef,
   KeywordFlags,
@@ -346,6 +347,60 @@ const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.free
   enchantment: 'enchantment',
   land: 'land',
 });
+
+/**
+ * The number words a printed count may use, as a regex alternation. Built from
+ * {@link SMALL_NUMBER_WORDS} so the pattern and the parser cannot list different
+ * words — a rule that MATCHES "five" and then fails to parse it reports a line it
+ * looked like it understood.
+ */
+const SMALL_NUMBER_WORD_TOKEN = 'one|two|three|four';
+
+/**
+ * The printed permanent NOUN of an "unless you control …" condition, as the
+ * `CardFilter` it selects.
+ *
+ * A singular or plural card-type noun ("a legendary CREATURE", "three or more
+ * other SWAMPS") or a land SUBTYPE. Anything else — a noun outside both closed
+ * tables — yields `undefined` and the line reports rather than compiling a
+ * condition that matches the wrong permanents.
+ */
+function permanentNounFilter(noun: string): CardFilter | undefined {
+  const singular = noun.endsWith('s') ? noun.slice(0, -1) : noun;
+  const nounType = STATIC_NOUN_TYPES[singular];
+  // `null` is the "permanent" entry: no type filter at all, because an absent
+  // filter already matches every permanent.
+  if (nounType === null) return {};
+  if (nounType !== undefined) return { anyOfTypes: [nounType] };
+  if (LAND_SUBTYPES.has(singular)) return { anyOfSubtypes: [singular] };
+  return undefined;
+}
+
+/**
+ * The card types in a printed spell-type list — "creature", "creature and
+ * enchantment" — as a `CardFilter`'s `anyOfTypes`.
+ *
+ * Returns `null` for anything outside the closed type table ("noncreature",
+ * "multicolored", "legendary"), so a narrowing this engine cannot express reports
+ * instead of compiling into a WIDER ability than the card prints — which, for
+ * "can't be countered", would be strictly better than printed.
+ */
+function parseSpellTypeList(text: string): CardType[] | null {
+  const words = text
+    .replace(/\band\b|\bor\b/g, ' ')
+    .split(/[\s,]+/)
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  const types: CardType[] = [];
+  for (const word of words) {
+    const type = STATIC_NOUN_TYPES[word];
+    // `null` ("permanent") is not a spell type — a permanent SPELL is every
+    // non-instant/sorcery card, which this list cannot say.
+    if (type === undefined || type === null) return null;
+    if (!types.includes(type)) types.push(type);
+  }
+  return types;
+}
 
 /**
  * Colour words Oracle uses, mapped to colour letters — in removal restrictions
@@ -2807,6 +2862,101 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'enters-tapped-unless-controls-matching',
+    description:
+      '"~ enters tapped unless you control a legendary creature / a basic land / three or more other Swamps" — the general "unless you control [N] [permanents]" condition',
+    // The GENERAL form of the four fixed conditions above, and the reason the
+    // shared `CardFilter` was worth reaching for: a legendary creature, a basic
+    // land and "three or more other Swamps" are one board question with three
+    // different filters, not three rules.
+    //
+    // Tried AFTER the fixed cycles (fastland / slowland / battleland / checkland)
+    // so those keep compiling to the fields live card data already uses — this
+    // rule's pattern would otherwise swallow "two or more basic lands" and
+    // silently re-encode a shipped cycle.
+    pattern: new RegExp(
+      `^~ enters(?: the battlefield)? tapped unless you control ` +
+        `(?:(an?|${SMALL_NUMBER_WORD_TOKEN}) )?(?:or more )?(other )?(legendary |basic )?([a-z]+)$`,
+    ),
+    build(match) {
+      const [, countWord, other, supertype, noun] = match;
+      // "a"/"an" is one; a number word is itself. Anything else (no count at all)
+      // means the line said something this rule did not actually read.
+      const minimum =
+        countWord === undefined ? null
+        : countWord === 'a' || countWord === 'an' ? 1
+        : (SMALL_NUMBER_WORDS[countWord] ?? null);
+      if (minimum === null || minimum < 1) return null;
+      const filter = permanentNounFilter(noun ?? '');
+      if (!filter) return null;
+      // "OTHER" is already the printed meaning of every enters-tapped condition
+      // (the entering land never counts itself), so the word needs no field — but
+      // it must be READ, or a line carrying it would fall through to the hint.
+      void other;
+      const supertyped =
+        supertype === 'legendary ' ? { ...filter, legendary: true }
+        : supertype === 'basic ' ? { ...filter, basic: true }
+        : filter;
+      return { entersTappedUnless: { controlsMatching: { filter: supertyped, minimum } } };
+    },
+  },
+  {
+    id: 'this-spell-cant-be-countered',
+    description: `"This spell can't be countered" (Supreme Verdict, Abrupt Decay, Dovin's Veto)`,
+    // A property of the CARD, not a targeting restriction: an uncounterable spell
+    // is a legal target for Counterspell, which resolves and does nothing. Core
+    // enforces it where a spell actually leaves the stack, so every counter path
+    // inherits it. See `countering.ts`.
+    pattern: /^this spell can'?t be countered\.?$/,
+    build() {
+      return { cantBeCountered: true };
+    },
+  },
+  {
+    id: 'spells-cant-be-countered',
+    description: `"Spells you control can't be countered" / "Creature spells you control can't be countered" / "Spells can't be countered"`,
+    // The permanent-side printing of the same rule. The card-type list is read
+    // through the shared `CardFilter`, so "creature and enchantment spells" is
+    // data rather than a rule of its own, and Lier's unrestricted wording is the
+    // same shape with an 'any' scope.
+    pattern: /^([a-z, ]+? )?spells( you control)? can'?t be countered\.?$/,
+    build(match) {
+      const typeWords = match[1];
+      const yours = match[2] !== undefined;
+      const controller = yours ? ('you' as const) : ('any' as const);
+      if (typeWords === undefined) return { spellsCantBeCountered: { controller } };
+      const types = parseSpellTypeList(typeWords);
+      // A narrowing this engine cannot express as card types ("noncreature",
+      // "multicolored") reports rather than compiling a wider ability than the
+      // card prints.
+      if (!types) return null;
+      return { spellsCantBeCountered: { controller, filter: { anyOfTypes: types } } };
+    },
+  },
+  {
+    id: 'no-maximum-hand-size',
+    description: `"You have no maximum hand size" (Reliquary Tower, Spellbook, Venser's Journal)`,
+    // Read by the cleanup step's discard (CR 514.1). The rule it removes is real:
+    // without a maximum hand size to lift, this would compile a card that does
+    // nothing.
+    pattern: /^you have no maximum hand size\.?$/,
+    build() {
+      return { noMaximumHandSize: true };
+    },
+  },
+  {
+    id: 'play-lands-from-zone',
+    description:
+      '"You may play lands from your graveyard" (Crucible of Worlds) / "from the top of your library" (Courser of Kruphix)',
+    // One rule, two zones, because the printed sentence differs by four words and
+    // the permission is the same one — `CardDefinition.playLandsFrom`.
+    pattern: /^you may play lands from (your graveyard|the top of your library)\.?$/,
+    build(match) {
+      const zone = match[1] === 'your graveyard' ? ('graveyard' as const) : ('libraryTop' as const);
+      return { playLandsFrom: [zone] };
+    },
+  },
+  {
     id: 'characteristic-defining-pt',
     description:
       'the star P/T box: power equals the number of X, toughness that number plus N (Tarmogoyf) — a characteristic-defining P/T, applied in CR 613.3 layer 7a',
@@ -3489,6 +3639,17 @@ export function isVacuousClause(clause: string): boolean {
  */
 export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContribution>> =
   Object.freeze({
+    // CHANGELING (CR 702.73a) — "this card is every creature type". It lands here
+    // rather than in `KEYWORD_FLAGS` because it is not a `KeywordFlags` boolean:
+    // it is a characteristic-defining ability that applies in EVERY zone, which is
+    // why core carries it on the definition and answers it inside `hasSubtype`. A
+    // continuous-effect flag would be wrong for the Changeling Outcast sitting in
+    // a graveyard, which is still a Zombie there.
+    //
+    // Being a builder also settles the Scryfall keyword sweep for free: the sweep
+    // skips any word with a builder, so "Changeling" is not reported a second
+    // time after the printed line compiled it.
+    changeling: () => ({ changeling: true }),
     persist: () => ({
       triggers: [
         {
