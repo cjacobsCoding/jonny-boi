@@ -188,9 +188,26 @@ export function keywordsParam(ctx: EffectContext): KeywordFlags {
   const v = ctx.params.keywords;
   if (typeof v !== 'object' || v === null) return {};
   const src = v as Record<string, unknown>;
-  const out: Record<string, boolean> = {};
+  const out: Record<string, unknown> = {};
   for (const key in src) {
     if (src[key] === true) out[key] = true;
+  }
+  // The PAYLOAD keywords are not booleans, so the true-filter above drops them —
+  // which is exactly how a granted "except by creatures with haste" would become a
+  // grant of nothing. Each is copied through by its own shape test, and only when
+  // it carries something the engine can act on, so a malformed param still yields
+  // an inert grant rather than a half-read restriction.
+  const ward = src.ward;
+  if (typeof ward === 'number' && Number.isFinite(ward) && ward > 0) out.ward = Math.trunc(ward);
+  const minBlockers = src.minBlockers;
+  if (typeof minBlockers === 'number' && Number.isFinite(minBlockers) && minBlockers > 0) {
+    out.minBlockers = Math.trunc(minBlockers);
+  }
+  const protectionFrom = src.protectionFrom;
+  if (Array.isArray(protectionFrom) && protectionFrom.length > 0) out.protectionFrom = protectionFrom;
+  const blockRestriction = src.blockRestriction;
+  if (typeof blockRestriction === 'object' && blockRestriction !== null) {
+    out.blockRestriction = blockRestriction;
   }
   return out as KeywordFlags;
 }

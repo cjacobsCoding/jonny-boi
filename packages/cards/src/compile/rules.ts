@@ -15,6 +15,7 @@
  */
 
 import type {
+  BooleanKeywordName,
   CardFilter,
   CardType,
   EffectRef,
@@ -1575,6 +1576,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The SELF form of the evasion grant, with a comparing restriction attached:
+    // "~ can't be blocked this turn except by creatures with haste" (Gingerbrute's
+    // activated ability). It is the same continuous grant as every other
+    // until-end-of-turn keyword — `grantKeywordUntilEndOfTurn` falls back to the
+    // SOURCE when no target was chosen, which is what an activated ability on the
+    // creature itself gives it — so it expires at cleanup through the one path.
+    id: 'grant-self-block-restriction-until-eot',
+    description: `"~ can't be blocked this turn except by creatures with haste" (Gingerbrute)`,
+    pattern: /^~ can'?t be blocked this turn except by creatures with ([a-z ]+)$/,
+    build(match) {
+      const keyword = BLOCKER_QUALITY_KEYWORDS[(match[1] ?? '').trim()];
+      if (keyword === undefined) return null;
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { blockRestriction: { blockerMustHaveAnyOf: [keyword] } } },
+      });
+    },
+  },
+  {
     // Evasion granted as a one-shot ("Target creature can't be blocked this
     // turn") - the printed body of Rogue's Passage, Manifold Key, Whirler Rogue,
     // Thassa and the spell Enter the Enigma alike. It is the same continuous
@@ -2862,6 +2882,68 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'must-be-blocked-if-able',
+    description: '"~ must be blocked if able" — a block REQUIREMENT (CR 509.1c)',
+    // The other half of declare-blockers from every restriction above. It is not a
+    // per-pair rule and cannot be one: "if able" is a question about the whole
+    // declaration, which is why core resolves it with a solver.
+    pattern: /^~ must be blocked if able\.?$/,
+    build() {
+      return { keywords: { mustBeBlocked: true } };
+    },
+  },
+  {
+    id: 'blocked-by-all-able',
+    description: '"All creatures able to block ~ do so" — the Lure requirement',
+    // Strictly stronger than "must be blocked": one requirement PER creature that
+    // could block, so blocking with only some of them is illegal.
+    pattern: /^all creatures able to block ~ do so\.?$/,
+    build() {
+      return { keywords: { blockedByAllAble: true } };
+    },
+  },
+  {
+    id: 'cant-be-blocked-except-by-keyword',
+    description: `"~ can't be blocked except by creatures with haste" (Gingerbrute)`,
+    // A restriction whose selector reads the BLOCKER — the shape a per-pair check
+    // could not express before `blockRestriction` carried the payload. The keyword
+    // table is closed: a quality outside it ("except by Walls", "except by
+    // artifact creatures") reports rather than compiling a weaker restriction.
+    pattern: /^~ can'?t be blocked(?: this turn)? except by creatures with ([a-z ]+)\.?$/,
+    build(match) {
+      const keyword = BLOCKER_QUALITY_KEYWORDS[(match[1] ?? '').trim()];
+      if (keyword === undefined) return null;
+      return { keywords: { blockRestriction: { blockerMustHaveAnyOf: [keyword] } } };
+    },
+  },
+  {
+    id: 'cant-be-blocked-by-power-or-toughness',
+    description: `"~ can't be blocked by creatures with power 2 or less" / "with toughness 3 or greater"`,
+    // The bound is inverted as it compiles — "can't be blocked by power 2 or
+    // LESS" is the restriction "the blocker's power must be at least 3" — so core
+    // never has to reason about the printed polarity, and both printings meet in
+    // one pair of fields.
+    pattern: new RegExp(
+      `^~ can'?t be blocked(?: this turn)? by creatures with (power|toughness) ${COUNT_TOKEN} or (less|greater|more)\\.?$`,
+    ),
+    build(match) {
+      const bound = parseCount(match[2]);
+      if (bound === null) return null;
+      const stat = match[1];
+      const direction = match[3];
+      if (direction === 'less') {
+        // Excluded up to and including `bound` ⇒ a legal blocker needs bound + 1.
+        return stat === 'power'
+          ? { keywords: { blockRestriction: { minBlockerPower: bound + 1 } } }
+          : { keywords: { blockRestriction: { minBlockerToughness: bound + 1 } } };
+      }
+      // "greater"/"more": excluded from `bound` upward ⇒ at most bound - 1.
+      return stat === 'power'
+        ? { keywords: { blockRestriction: { maxBlockerPower: bound - 1 } } }
+        : { keywords: { blockRestriction: { maxBlockerToughness: bound - 1 } } };
+    },
+  },
+  {
     id: 'enters-tapped-unless-controls-matching',
     description:
       '"~ enters tapped unless you control a legendary creature / a basic land / three or more other Swamps" — the general "unless you control [N] [permanents]" condition',
@@ -3233,6 +3315,25 @@ const LEADING_GRANT_VERB = /^(?:has|have|gains?) /;
 const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   "can't be blocked": 'unblockable',
   "can't block": 'cantBlock',
+});
+
+/**
+ * The printed QUALITIES an "except by creatures with …" restriction may name,
+ * mapped to the engine keyword a blocker must actually have.
+ *
+ * Closed on purpose, and typed as `BooleanKeywordName` so a word that does not
+ * name a real keyword cannot be added by a typo. A quality outside the table —
+ * "except by Walls", "except by artifact creatures" — is a filter over card types
+ * rather than a keyword, which this payload cannot say, so the line reports.
+ */
+const BLOCKER_QUALITY_KEYWORDS: Readonly<Record<string, BooleanKeywordName>> = Object.freeze({
+  haste: 'haste',
+  flying: 'flying',
+  reach: 'reach',
+  vigilance: 'vigilance',
+  defender: 'defender',
+  deathtouch: 'deathtouch',
+  'first strike': 'firstStrike',
 });
 
 /** Number words a printed "N or fewer" uses. */
@@ -3650,6 +3751,11 @@ export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContr
     // skips any word with a builder, so "Changeling" is not reported a second
     // time after the printed line compiled it.
     changeling: () => ({ changeling: true }),
+    // SKULK (CR 702.118a) — "can't be blocked by creatures with greater power".
+    // A payload restriction rather than a `KeywordFlags` boolean, because the
+    // bound is the ATTACKER'S OWN effective power and is read at declare-blockers
+    // time: a skulking creature pumped this turn really is harder to block.
+    skulk: () => ({ keywords: { blockRestriction: { blockerPowerAtMostMine: true } } }),
     persist: () => ({
       triggers: [
         {
