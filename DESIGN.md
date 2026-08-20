@@ -2210,13 +2210,20 @@ invisible in a win rate:
   nothing there, and two same-size attackers are otherwise interchangeable, which is exactly when
   diverting the wrong one is invisible.
 
-**Measured yield:** the top-2100 corpus went **408 → 421 playable** (19.4% → 20.0%) on the same cached
-corpus. Newly playable: Sword of Fire and Ice, Sword of the Animist, Argentum Armor, Lavaspur Boots,
-Spirit Mantle, Aqueous Form, Akroma's Memorial, Vindicate, Corpse Knight, Marauding Blight-Priest,
-Poison-Tip Archer, Elas il-Kor and Mask of Memory. Skullclamp compiles too and is already a pool
-candidate. Gauntlet seed 99 is **byte-identical** to the same-day `origin/main` (81/280, every matchup row equal) — the shipped
-pool contains no card of this family yet — and min-of-12 `process.cpuUsage` is 2625 ms on the branch
-vs 2702 ms on `main`, i.e. parity inside a noise band of ±15% on a box running ten agents.
+**Measured yield, PAIRED against the merged `origin/main` on the same cached corpus: 485 → 494
+playable (23.1% → 23.5%), +9 cards, ZERO regressions** (the two playable sets were dumped and
+diffed, not just counted). The nine: Sword of Fire and Ice, Sword of the Animist, Argentum Armor,
+Lavaspur Boots, Mask of Memory, Spirit Mantle, Aqueous Form, Akroma's Memorial and Vindicate.
+Skullclamp compiles too and is already a pool candidate.
+
+Measured alone at the branch point it was 408 → 421 (+13); four of those thirteen — Corpse Knight,
+Marauding Blight-Priest, Poison-Tip Archer, Elas il-Kor — were independently unblocked by §3.21's
+step-trigger work while this branch was out, so the paired figure is the honest one.
+
+Gauntlet seed 99 was **byte-identical** to the same-day `origin/main` (81/280, every matchup row
+equal) — the shipped pool contains no card of this family yet — and min-of-12 `process.cpuUsage` was
+2625 ms on the branch vs 2702 ms on `main`, i.e. parity inside a noise band of ±15% on a box running
+ten agents.
 
 
 ⚠️ **A DEFECT THIS EXPOSED, worth more than the feature.** `keywordsParam` — the reader every

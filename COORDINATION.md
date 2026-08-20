@@ -141,10 +141,13 @@ _Append dated notes here; keep them short. Newest at top._
   ends up with two answers to the same question. Every trigger authored before this is byte-identical
   data (the field is ABSENT, not `'self'`).
 
-  **Measured, same cached corpus: 408 → 421 / 2100 playable (19.4% → 20.0%).** Newly playable:
-  Sword of Fire and Ice, Sword of the Animist, Argentum Armor, Lavaspur Boots, Spirit Mantle, Aqueous
-  Form, Akroma's Memorial, Vindicate, Corpse Knight, Marauding Blight-Priest, Poison-Tip Archer, Elas
-  il-Kor, Mask of Memory. **Skullclamp compiles now too**, and is already in `expansion-candidates.json`.
+  **Measured PAIRED against the merged `origin/main`, same cached corpus: 485 → 494 / 2100 playable
+  (23.1% → 23.5%), +9, ZERO regressions** — both playable sets were dumped and diffed, not counted.
+  The nine: Sword of Fire and Ice, Sword of the Animist, Argentum Armor, Lavaspur Boots, Mask of
+  Memory, Spirit Mantle, Aqueous Form, Akroma's Memorial, Vindicate. **Skullclamp compiles now too**,
+  and is already in `expansion-candidates.json`. (Alone at the branch point it was 408 → 421; four of
+  those thirteen — Corpse Knight, Marauding Blight-Priest, Poison-Tip Archer, Elas il-Kor — were
+  independently unblocked by the step-trigger work, so the paired figure is the honest one.)
 
   ⚠️ **THREE THINGS THAT FAIL SILENTLY HERE, and what this branch did instead.**
   1. **The SOURCE stays the attachment.** A Sword's trigger is controlled by the Sword's controller,
@@ -217,6 +220,14 @@ _Append dated notes here; keep them short. Newest at top._
 
   ⚠️ **`apps/web/src/lib/sim/determinism.test.ts` times out at 5000 ms on a loaded box.** It
   passes on its own every time. If you see it red in a full run, re-run that file before believing it.
+
+  ✅ **Every behavioural claim was SABOTAGE-CHECKED.** Nine mutations, one per claim — ignore
+  `watches`; fall back to self when unattached; copy `attachedTo` instead of holding the live
+  permanent; drop the assembly's host-watch refusal; drop the payload keywords in `parseKeywordList`;
+  drop them again in `keywordsParam`; stop counting host triggers in `scoreEquip`; zero
+  `attackSaboteurTriggerValue`; flatten the walker-diversion tie-break — and **all nine produced at
+  least one RED test**. Nothing was survived silently. The harness is in the branch's history only
+  (a throwaway script), but the mutations are one-liners if you want to re-run them.
 - 2026-08-20 worker: `feat/step-trigger-templates` 🚧 PUSHED — **the "At the beginning of…" family,
   and the blocker that was sitting in front of all ~65 of its corpus cards.**
 
