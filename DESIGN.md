@@ -3239,6 +3239,132 @@ be attributed to neither. It wants its own branch and its own isolation, and the
 and was the useful result of the whole pass: CR 514.3a's "another cleanup step" had NO test until the
 sabotage said so.
 
+### 3.30 The hidden-information guarantee — closing the CLASS, not the two instances — ✅ done
+
+Two agents in a row found a hidden-information leak that the scan owning that guarantee could not
+have seen. Both times the instance was fixed and the scan was not, which left the class open. This
+closes the class, states what the guarantee actually promises, and deletes one mechanism that turned
+out to be asserting nothing.
+
+#### The blind spot: the scan recognised ONE key name
+
+`collectInstanceIds` — the structural "does this message mention that card?" used by the pilot feed,
+by the masked online view and by the server's adversarial tests — collected the values of keys named
+exactly **`instanceId`**. The engine names cards under **eighteen other keys**: `sourceInstanceId`,
+`targetInstanceId`, `keptInstanceId`, `hostInstanceId`, `copiedInstanceId`, `appliesToInstanceId`,
+`source`, `target`, `targets`, `attackers`, `attackTargets`, `blocks`, `blocker`, `attacker`,
+`instanceIds`, `ref`, `attachedTo`, `recipientIs`, `effectTargets`. Every one of them walked straight
+past it — which is why the CR 514.1 cleanup discard could point `choiceAsked.sourceInstanceId` at a
+card in the discarding player's HAND, travel unredacted to every pilot, and leave the anti-cheat suite
+green. Instance ids are minted sequentially from the pre-shuffle library, so publishing one is
+publishing a read on that decklist.
+
+**A key-name PATTERN would not have fixed it either.** "Ends in `InstanceId`" still misses `source`,
+`target`, `targets`, `attackers`, `blocks` and `ref` — most of combat and all of targeting.
+
+#### What replaced it: a table the compiler will not let you skip
+
+`packages/core/src/instance-ids.ts`:
+
+- **`EVENT_ID_FIELDS`** — a mapped type over **every field of every `GameEvent`** (67 events, 187
+  fields), each classified `'none' | 'id' | 'idList' | 'idKeyedMap' | 'idPairList' | 'answer'`. Adding
+  a field to an event fails the build until somebody says whether it can name a card. Verified by
+  sabotage in the shape that actually hid last time: an **optional** field added to `tapped` broke
+  exactly one file — this one — and nothing else. `CHOICE_ANSWER_ID_FIELDS` does the same one level
+  down, for the most card-naming value in the engine.
+- **`instanceIdsNamedBy(event)`** — the exact extractor the table drives. It reads BOTH HALVES of an
+  id-keyed map (`attackTargets` is attacker-id → attacked object; a scan reading only the values
+  publishes exactly half of a leak), and it **throws** on an event type nobody classified rather than
+  returning an empty set, because "I checked and found nothing" and "I did not check" must not be the
+  same answer.
+- **`INSTANCE_ID_FIELD_NAMES`** — derived from those tables, and what the structural walker in
+  `@jonny-boi/protocol` now scans by. Classifying a new field as an id extends the walker for free.
+- **`instance-ids.test.ts`** re-derives the same set by **reading core's own source**: every property
+  in `packages/core/src` whose declared type mentions `InstanceId` must be recognised, and every name
+  in the vocabulary must still be declared somewhere. That is the half a type cannot do — `InstanceId`
+  is a bare `number`, so no conditional type distinguishes it from a life total, and an id field added
+  to a STATE type changes no event at all. It fails on exactly that.
+
+#### What the guarantee actually promises — and the sentence that was wrong
+
+The tempting one-liner is "no observation ever names a card in a hidden zone". **It is not true, has
+never been true, and writing it down is worse than the leak it describes**, because the next reader
+trusts it.
+
+> An observation names a card only if that card was on **public display at the instant the observation
+> was produced.** Equivalently: the feed never reveals the identity of a card the table has not seen.
+
+⚠️ **Hole 2, decided: the event keeps the id.** A buyback spell (Capsize, Elvish Fury) returns ITSELF
+to its owner's hand, so the public `stackResolved` names a card that is hidden by the time anyone
+looks. `stackResolved` fires while the object is still ON THE STACK — a public zone (CR 405.1) the
+whole table watched it reach when it was cast (CR 601.2a) — and the move to hand is a *separate*
+`zoneChange` that the policy already anonymises. Dropping the id would leave a pilot knowing **less
+than a spectator at a paper table**, which is the opposite failure and corrupts the represented-mana
+reasoning in `superhuman-ai-program.md` §35–37. Both the promise and the reasoning now live in
+`observation.ts`, not in a commit message.
+
+#### The wider net found a third leak the two known ones did not cover
+
+Over 300 full-pool games with the wider scan: **`continuousEffectExpired` names a card in a hidden
+zone, 10 times.** Traced to seed 3246281276, instance #70 — Elvish Fury, bought back into B's hand,
+whose until-end-of-turn pump expires at **cleanup, many actions later**, naming
+`sourceInstanceId: 70` while the card really is sitting in that hand.
+
+This is what killed the previous rule. The soak scanned "hidden BEFORE the window as well as after",
+which is a **one-window approximation** of "the table has not seen it" — and this walks straight
+through it. The scan now tracks the ids that have **never once** been anywhere but a hand or a
+library. It is deliberately more permissive, and the difference is exactly the cards the table has
+already watched; it is not more permissive about the thing that matters, and the CR 514.1 leak is
+caught by it unchanged (there is a test that reintroduces that bug and watches the scan fail).
+
+#### One mechanism deleted for asserting nothing
+
+The old scanner carried an exemption — "`stackResolved` may name a bought-back spell". Measured over
+200 full-pool games / 457,536 observations, removing it changed **nothing**, and the reason is
+structural: a spell sits on the STACK, which is not a hidden zone, for at least one whole decision
+between being cast and resolving, so the never-seen rule has already recorded it. An exemption that
+cannot fire is worse than none — it reads like the thing keeping the scan honest. Deleted, with a
+positive control that pins WHY it is unnecessary: delete the window in which the card was on the stack
+and the same three observations are reported.
+
+#### Two copies of the check became one, and the weak copies were the believed ones
+
+The scanner now lives once, in `observation.ts`, used by the soak and by `observation.test.ts`. It had
+been written twice, and the copies disagreed in the dangerous direction — the soak's already knew
+about buyback and about window timing, while the one in the file whose NAME owns the guarantee knew
+neither. `apps/server/src/security.test.ts` carried a **third**, weaker still (it stopped descending
+once it matched a key), on the one path where a leak is a cheating vector rather than a biased pilot.
+It now imports the shared one.
+
+#### And it runs over decks that PLAY the mechanics
+
+`observation.test.ts` scanned three curated gauntlet matchups. It passed for a year and the card list
+is precisely why: **no curated deck plays a buyback spell.** It now drives `runSoak` over the
+mechanic-anchored generated decks with the leak scan on **every** game, and asserts that every mechanic
+the pool prints actually fired — so "the decks never played it" fails the test instead of hiding under
+it. Leak sampling went **1-in-31 → every game**: measured, paired in ONE process over the same 90
+games (wall clock on this box is worthless), **6,125 ms CPU against 5,845 ms**, about 5%.
+
+#### `maskStateForSeat`: same class checked, no hole found
+
+The online half is the twin chokepoint and the more dangerous one. `packages/sim/src/masking.test.ts`
+plays full-pool decks anchored on buyback, madness, mill/scry, flashback/surveil and cycling, and
+scans **every** masked seat view and spectator view with the widened net: no card in the opponent's
+hand and no card in either library reaches a view, at any depth, under any key name. The chooser's own
+`pendingChoice` is lifted out — Thoughtseize showing the caster the victim's hand is the printed card,
+not a bug — and the other direction (a non-chooser or spectator seeing any of it) is asserted in the
+same pass. Three sabotages confirm it goes red.
+
+**Sabotage-checked: 16 breaks, 16 caught, 0 escapes**, plus one deliberate CONTROL — reintroducing the
+CR 514.1 leak *with the old narrow scan restored* comes back **GREEN**, which is the direct measurement
+of what the widening buys.
+
+⛔ **Deferred, with its blocker.** The 450-game hunt turned up one unrelated finding: an SBA violation
+at seed 4222011655 (`#34 Blood Artist has toughness 0`), in `packages/core`'s state-based-action pass.
+It is not a redaction bug, it does not reproduce inside the fast soak's game range, and fixing it here
+would put an engine change in a branch whose diff is meant to be readable as one argument. Recorded
+for its own branch with a reproducing seed.
+
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).

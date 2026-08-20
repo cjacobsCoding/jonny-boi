@@ -136,9 +136,66 @@ throughput (games/sec) from regressing.
 | fix/token-characteristics | worker | packages/core (card/choices/events/index/derived, internal/zones + clone COMMENT ONLY, NEW token-clone.test.ts), packages/cards (primitives, effect-helpers, compile/rules + compile/compile, data/pool.ts + REGENERATED data/expanded-pool.ts & expansion-report & expansion-candidates, NEW token-characteristics.test.ts + 4 updated tests), packages/data-tools (src/client.ts + regenerated data/), packages/sim/src/observation.ts (+1 classification), apps/web (about/mechanics.ts + regenerated src/data/card-index.json), DESIGN 3.29 | PUSHED, not merged |
 
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
+| fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `fix/redaction-guarantee` 🚧 PUSHED — **the hidden-information scan recognised
+  ONE key name and walked past eighteen others; the class is now closed, and the wider net found a
+  third leak nobody had reported.** DESIGN §3.30.
+
+  **What was wrong.** `collectInstanceIds` — used by the pilot feed, by `maskStateForSeat` and by the
+  server's adversarial tests — collected keys named exactly `instanceId`. The engine also names cards
+  under `sourceInstanceId`, `targetInstanceId`, `keptInstanceId`, `hostInstanceId`,
+  `copiedInstanceId`, `appliesToInstanceId`, `source`, `target`, `targets`, `attackers`,
+  `attackTargets`, `blocks`, `blocker`, `attacker`, `instanceIds`, `ref`, `attachedTo`,
+  `recipientIs`, `effectTargets`. That is why the CR 514.1 `choiceAsked.sourceInstanceId` leak (fixed
+  on `fix/max-hand-size-and-sba` with `NO_ASKING_OBJECT`) left the anti-cheat suite green. A key-name
+  PATTERN would not have fixed it either — "ends in `InstanceId`" still misses `source`, `target`,
+  `targets`, `attackers`, `blocks` and `ref`.
+
+  **The mechanism.** `packages/core/src/instance-ids.ts` — `EVENT_ID_FIELDS`, a **mapped type over
+  every FIELD of every `GameEvent`** (67 events, 187 fields). ⚠️ **If you add a field to an event, this
+  file stops compiling until you classify it** — including an OPTIONAL field, which is the shape that
+  hid last time. Same idiom as `OBSERVATION_POLICY` / `SOAK_EVENT_WITNESS`. The scan's key vocabulary
+  is DERIVED from it, and `instance-ids.test.ts` re-derives the same set by reading core's own source,
+  so an id field on a STATE type fails a test even though no event changed.
+
+  **The third leak.** Over 300 full-pool games the wider net found `continuousEffectExpired` naming a
+  card in a hidden zone (seed 3246281276, #70 Elvish Fury): a buyback spell returns to its owner's
+  hand and the pump it left behind expires at CLEANUP, naming `sourceInstanceId` many actions later.
+  The soak's "hidden before the window as well as after" rule is a one-window approximation and this
+  walks straight through it. The scan now tracks ids that have **never once** been outside a hand or a
+  library — which is what the guarantee actually promises, now written into `observation.ts`.
+
+  **Hole 2 decided: `stackResolved` KEEPS the id.** It fires while the object is still on the stack
+  (CR 405.1 / 601.2a); the move to hand is a separate `zoneChange` that is already anonymised.
+  Dropping it would leave a pilot knowing less than a spectator. The old buyback EXEMPTION was
+  measured over 200 games / 457k observations and could not fire — deleted, with a positive control
+  that pins why.
+
+  **Two things every other branch should know:**
+  1. **`observation.test.ts` no longer uses the gauntlet decks.** It runs `runSoak` over
+     mechanic-anchored generated decks with the leak scan on EVERY game, and FAILS if any mechanic the
+     pool prints did not fire. If you add a mechanic and it does not fire, this file tells you.
+  2. **`SOAK_LEAK_SCAN_SAMPLE_EVERY` is 1, not 31.** Measured paired in one process over the same 90
+     games: 6,125 ms CPU vs 5,845 ms — ~5%. A sampled anti-cheat guarantee is not one.
+
+  `maskStateForSeat` was checked for the same class over full-pool games (`packages/sim/masking.test.ts`)
+  — **no hole**: no opponent-hand card and no library card reaches a seat or spectator view under any
+  key name. `apps/server/src/security.test.ts` had a THIRD, weaker copy of the scan; it now imports
+  the shared one.
+
+  Suite 4952 passed / 0 failed (baseline 4928). Sabotage: **16 breaks, 16 caught, 0 escapes**, plus a
+  control — reintroducing the CR 514.1 leak with the OLD narrow scan comes back GREEN, which is the
+  direct measurement of what the widening buys.
+
+  ⛔ **Unrelated finding, NOT fixed here, needs its own branch:** an SBA violation at **seed
+  4222011655** — `#34 Blood Artist has toughness 0` — surfaced by a 450-game soak hunt. It is in
+  `packages/core`'s state-based-action pass, is not a redaction bug, and does not reproduce inside the
+  fast soak's game range. Reproduce with `runSoak({ mixedGames: 400, anchorAttempts:
+  SOAK_MECHANIC_SEED_ATTEMPTS, baseSeed: SOAK_BASE_SEED })`.
 
 
 - 2026-08-20 worker: `fix/max-hand-size-and-sba` 🚧 PUSHED — **CR 704.3 at the priority boundary,
