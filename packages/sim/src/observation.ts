@@ -47,7 +47,7 @@
  * identity of a card the table has not seen.* It may say that a card everybody
  * watched is now somewhere hidden; it may never say what an unseen card is.
  *
- * Two consequences that look like leaks and are not:
+ * Three consequences that look like leaks and are not:
  *
  *  - **A buyback spell resolves back into its owner's hand** (Capsize, Elvish
  *    Fury). `stackResolved` fires while the object is still ON THE STACK — a

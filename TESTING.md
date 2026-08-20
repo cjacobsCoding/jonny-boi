@@ -243,7 +243,8 @@ walker in `@jonny-boi/protocol` scans by) is derived from the same table, and
 on a *state* type fails a test even though no event changed.
 
 **And it runs over decks that play the mechanics.** `observation.test.ts` used to scan three curated
-gauntlet matchups. It passed for a year, and the card list is exactly why: no curated deck plays a
+gauntlet matchups. It passed on every build since it was written, and the card list is exactly why:
+no curated deck plays a
 buyback spell, so the interesting case never occurred. It now runs `runSoak` over the soak's
 **mechanic-anchored** generated decks with the leak scan on **every** game, and asserts that every
 mechanic the pool prints actually fired — if the generator stops reaching buyback, this fails rather

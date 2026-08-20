@@ -22,7 +22,8 @@
  *
  * ## ⚠️ WHY THIS FILE DOES NOT USE THE GAUNTLET DECKS ANY MORE
  * It used to scan three curated matchups (`Mono-Red Aggro` vs `UW Control` and
- * friends). It passed for a year, and the card list is exactly why: **no curated
+ * friends). It passed on every build since it was written, and the card list is
+ * exactly why: **no curated
  * deck plays a buyback spell**, so the one case where a public event legitimately
  * names a card that has just landed in a hand never occurred here — it was found
  * by the full-pool soak instead, at seed 539293510. A guarantee whose test only

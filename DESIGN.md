@@ -3338,7 +3338,8 @@ It now imports the shared one.
 
 #### And it runs over decks that PLAY the mechanics
 
-`observation.test.ts` scanned three curated gauntlet matchups. It passed for a year and the card list
+`observation.test.ts` scanned three curated gauntlet matchups. It passed on every build since it was
+written and the card list
 is precisely why: **no curated deck plays a buyback spell.** It now drives `runSoak` over the
 mechanic-anchored generated decks with the leak scan on **every** game, and asserts that every mechanic
 the pool prints actually fired — so "the decks never played it" fails the test instead of hiding under

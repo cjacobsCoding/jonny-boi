@@ -10,7 +10,8 @@
  *
  * `packages/protocol/src/index.test.ts` pins the rule on hand-built fixtures, and
  * `apps/server`'s tests drive real rooms. Neither plays the CARD POOL, and that is
- * exactly the gap that hid a leak on the pilot side for a year: the curated decks
+ * exactly the gap that hid a leak on the pilot side through every green build: the
+ * curated decks
  * never played the mechanic the bug needed. So this file plays full-pool,
  * mechanic-anchored soak decks and masks every state that arises.
  *

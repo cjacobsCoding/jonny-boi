@@ -249,6 +249,11 @@ describe('collectInstanceIds (structural leak scan)', () => {
       ['attackTargets (id-keyed map)', { attackTargets: { 11: 'B' } }],
       ['nested in an array of objects', { blocks: [{ blocker: 11, attacker: 12 }] }],
       ['nested at depth', { a: [{ b: { sourceInstanceId: 11 } }] }],
+      // The BACKSTOP: names declared OUTSIDE core, where no table forces a
+      // classification (`swappedInstanceIds` in the sim, `knownInstanceIds` in a
+      // pilot's belief state) — caught by the `…instanceId(s)` suffix rule.
+      ['a conventionally-named key core has never heard of', { swappedInstanceIds: [11] }],
+      ['…and a scalar one', { victimInstanceId: 11 }],
     ];
     const missed = cases.filter(([, value]) => !collectInstanceIds(value).has(11)).map(([name]) => name);
     expect(missed, 'these ways of naming a card are invisible to the anti-cheat scan').toEqual([]);
