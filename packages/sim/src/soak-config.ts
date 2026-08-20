@@ -506,6 +506,24 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   blockersDeclared: null,
   continuousEffectAdded: null,
   continuousEffectExpired: null,
+  /*
+   * ⚠️ CLASSIFIED HERE BY A PASSING BRANCH TO UNBREAK `main`, NOT BY THE OWNER.
+   * `replacementApplied`/`replacementExpired` arrived on `main` from the
+   * replacement-effects branch while this table arrived from another, and neither
+   * saw the other: `origin/main` at a6419e5 does not compile without these two
+   * lines. That is this table working exactly as designed (a new event type stops
+   * the build until somebody classifies it) — it simply caught an integrator
+   * merge rather than an author.
+   *
+   * `null` is the CONSERVATIVE answer, not the considered one. Promoting them to
+   * a real `SoakMechanicId` means adding a `SOAK_MECHANICS` entry with a
+   * `printedBy` predicate — deciding which printed text counts as "this deck can
+   * show a replacement effect" — and that is the replacement branch's call, not
+   * a passing branch's. Until it makes that call the soak simply does not REQUIRE
+   * a replacement effect to fire; it never claims one fired when none did.
+   */
+  replacementApplied: null,
+  replacementExpired: null,
   triggeredAbilityResolved: null,
   triggerRemovedFromStack: null,
   choiceAnswered: null,
