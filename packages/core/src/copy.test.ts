@@ -242,32 +242,32 @@ describe('copiableDefOf — CR 706.2, what you actually copy', () => {
 
 describe('applyCopyExceptions — the printed "except …" tail (CR 706.3)', () => {
   it('adds types and subtypes without losing the copied ones', () => {
-    const result = applyCopyExceptions(BEAR, { addTypes: ['artifact'], addSubtypes: ['Illusion'] }, CLONE);
+    const result = applyCopyExceptions(BEAR, { addTypes: ['artifact'], addSubtypes: ['Illusion'] });
     expect(result.types).toEqual(['creature', 'artifact']);
     expect(result.subtypes).toEqual(['Bear', 'Illusion']);
     expect(result.power).toBe(2);
   });
 
   it('renames without changing anything else (Sakashima keeps its own name)', () => {
-    const result = applyCopyExceptions(BEAR, { name: 'Sakashima the Impostor' }, CLONE);
+    const result = applyCopyExceptions(BEAR, { name: 'Sakashima the Impostor' });
     expect(result.name).toBe('Sakashima the Impostor');
     expect(result.power).toBe(2);
     expect(result.keywords?.trample).toBe(true);
   });
 
   it('grants keywords ON TOP of the copied ones, never instead of them', () => {
-    const result = applyCopyExceptions(BEAR, { addKeywords: { flying: true } }, CLONE);
+    const result = applyCopyExceptions(BEAR, { addKeywords: { flying: true } });
     expect(result.keywords?.flying).toBe(true);
     expect(result.keywords?.trample).toBe(true);
   });
 
   it('clears legendary when the card says it is not legendary (Spark Double)', () => {
     const legend: CardDefinition = { ...BEAR, legendary: true };
-    expect(applyCopyExceptions(legend, { legendary: false }, CLONE).legendary).toBeUndefined();
+    expect(applyCopyExceptions(legend, { legendary: false }).legendary).toBeUndefined();
     // …and `undefined` is NOT `false`: with no clause the copied supertype stays.
-    expect(applyCopyExceptions(legend, { addTypes: ['artifact'] }, CLONE).legendary).toBe(true);
+    expect(applyCopyExceptions(legend, { addTypes: ['artifact'] }).legendary).toBe(true);
     // Sakashima's opposite clause adds it to a nonlegendary copy.
-    expect(applyCopyExceptions(BEAR, { legendary: true }, CLONE).legendary).toBe(true);
+    expect(applyCopyExceptions(BEAR, { legendary: true }).legendary).toBe(true);
   });
 
   it('gives the result its own id so it cannot collide with the copied card', () => {

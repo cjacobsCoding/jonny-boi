@@ -214,6 +214,7 @@ export {
   copiableDefOf,
   copyCandidates,
   copyResultDef,
+  COPY_ID_SUFFIX,
   extraLoyaltyForCopy,
   isCopy,
 } from './copy.js';

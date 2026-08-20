@@ -377,6 +377,22 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'engine', api: 'hasCastableBackFace' },
       },
       {
+        title: 'Copy effects (Clone)',
+        detail:
+          '"You may have this creature enter as a copy of any creature on the battlefield" plays as printed, including the "except" tail (an added type or creature type, a kept name, legendary on or off, an extra +1/+1 or loyalty counter, an "enters tapped"). A copy is applied in LAYER 1 (CR 613.2), beneath everything: the permanent keeps its OWN +1/+1 counters, the anthems on the board still shine on it, and an until-end-of-turn pump still applies — all on top of the copied card. And you copy the PRINTED card (CR 706.2), so a 1/1 wearing three counters is copied as a 1/1 and a transformed permanent is copied by its front face. Sculpting Steel, Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva and Echoing Deeps all import as playable.',
+        witness: { kind: 'rule', id: 'copy-as-enters' },
+      },
+      {
+        title: 'Copying from a graveyard',
+        detail:
+          'The objects a copy may choose from are not always on the battlefield: Echoing Deeps enters tapped "as a copy of any land card in a graveyard", and a card in a graveyard is copied by exactly the same printed values a permanent is.',
+        witness: {
+          kind: 'oracle',
+          text: "You may have this land enter tapped as a copy of any land card in a graveyard, except it's a Cave in addition to its other types.",
+          as: 'creature',
+        },
+      },
+      {
         title: 'Gaining control of a permanent',
         detail: '"Gain control of target creature until end of turn" — Act of Treason effects.',
         witness: { kind: 'rule', id: 'gain-control-until-eot' },

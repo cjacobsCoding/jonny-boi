@@ -381,6 +381,14 @@ function requirementText(choice: PendingChoice): string {
   if (choice.kind === 'selectCards' && choice.keepOnTop) {
     return `Pick the cards to keep on top, in the order you want to draw them — every card you leave unpicked goes where the prompt says. Picking none is allowed.`;
   }
+  // An as-enters COPY is not a "how many" question either: it is "which
+  // permanent do you want to be?", and the one thing a player has to be told is
+  // that they get the PRINTED card (CR 706.2) — counters and buffs on the thing
+  // they copy stay behind. A generic "choose up to 1 card from the battlefield"
+  // leaves that out, and it is exactly the part that surprises people.
+  if (choice.kind === 'selectCards' && choice.context === 'copyAsEnters') {
+    return `Pick the permanent to enter as a copy of — you get its PRINTED card, so counters and buffs on it stay behind. Picking none is allowed.`;
+  }
 
   const { min, max, kind } = choice;
   const zone = choice.kind === 'selectCards' ? zoneLabel(choice.fromZone) : undefined;

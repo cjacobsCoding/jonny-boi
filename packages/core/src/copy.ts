@@ -72,6 +72,18 @@ import type { GameEvent } from './events.js';
 export type CopySourceZone = 'battlefield' | 'graveyard';
 
 /**
+ * Appended to the copied card's id to form the copy's own definition id.
+ *
+ * The same convention (and the same reason) as the transform system's
+ * `#back`: the id has to say "this is a DERIVED definition, not the pool's row
+ * for that card", because the "except …" tail may have changed the name, the
+ * types or the counters. Consumers that resolve art and display data decode the
+ * prefix; consumers that join decklists never see one, because a copy exists
+ * only on the battlefield.
+ */
+export const COPY_ID_SUFFIX = '#copy';
+
+/**
  * The printed "**except** …" tail of a copy effect (CR 706.3): the copiable
  * values of the copy are the copied ones as modified by the copy effect itself.
  *
@@ -232,15 +244,17 @@ function addKeywordsTo(
  * caller can compute what a copy WOULD be (the AI ranking its options, a UI
  * previewing the choice) without mutating anything.
  *
- * The `id` is deliberately derived from both cards rather than reused: an id
- * collides with the copied card's own in the pool index otherwise, and a
- * definition that claims to be a different card's id would make the web card
- * index, the art lookup and the deck-list join all point at the wrong row.
+ * The `id` gains {@link COPY_ID_SUFFIX} rather than being reused verbatim.
+ * Reusing it would make a copied definition indistinguishable from the pool's
+ * own row for that card — and the two differ, because the "except" tail changed
+ * the types, the name or the counters. The suffixed form is decoded by the web
+ * app's card resolver (exactly as `#back` is) to the COPIED card's display
+ * record, so a Clone shows the art and type line of what it copied while still
+ * never joining a decklist as that card.
  */
 export function applyCopyExceptions(
   copied: CardDefinition,
   exceptions: CopyExceptions | undefined,
-  self: CardDefinition,
 ): CardDefinition {
   if (exceptions === undefined) return copied;
   const types = addTypesTo(copied.types, exceptions.addTypes);
@@ -249,7 +263,7 @@ export function applyCopyExceptions(
   const legendary = exceptions.legendary ?? copied.legendary;
   const next: CardDefinition = {
     ...copied,
-    id: `${self.id}-as-${copied.id}`,
+    id: `${copied.id}${COPY_ID_SUFFIX}`,
     ...(exceptions.name !== undefined ? { name: exceptions.name } : {}),
     types,
     ...(subtypes !== undefined ? { subtypes } : {}),
@@ -271,7 +285,8 @@ export function applyCopyExceptions(
  * a UI can preview one without mutating a thing.
  */
 export function copyResultDef(self: CardDefinition, source: CardInstance, spec: CopyAsEntersSpec): CardDefinition {
-  return applyCopyExceptions(copiableDefOf(source), spec.except, self);
+  void self; // the copying card contributes nothing but its spec (CR 706.3)
+  return applyCopyExceptions(copiableDefOf(source), spec.except);
 }
 
 /**
