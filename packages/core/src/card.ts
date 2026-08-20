@@ -447,6 +447,35 @@ export interface CardDefinition {
    * tapped or untapped — is the whole of it, and it is exact.
    */
   readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
+  /**
+   * "**As ~ enters, choose a** creature type / a color / a player / a card type"
+   * — the replacement-effect naming made as the permanent enters (CR 614.1c).
+   *
+   * The DECLARATION lives here so one record answers every consumer: the engine
+   * (which raises the question on the entry paths that can ask), the AI (whose
+   * per-subject answering policy is chosen from `subject`), the UI (which
+   * renders the option list), and the About page. The ANSWER lives on the
+   * instance, in `CardInstance.chosenAsEntered`, which is what the card's own
+   * later abilities and other cards' filters read.
+   *
+   * Same rule as {@link entersTappedUnlessLifePaid}: a naming is a DECISION, and
+   * **every entry path that cannot ask records nothing** — which matches
+   * nothing, the direction that can never play better than the real card. See
+   * `NOTHING_CHOSEN` in `choices.ts`.
+   */
+  readonly asEntersChoice?: AsEntersChoice;
+  /**
+   * "**This creature is the chosen type in addition to its other types**"
+   * (Adaptive Automaton, Metallic Mimic, Roaming Throne) — set when the printed
+   * line makes the permanent ITSELF a member of the type it named.
+   *
+   * It reads {@link asEntersChoice}'s answer off the instance, so it is only
+   * meaningful on a definition that also declares one. Absent, or with nothing
+   * chosen, the permanent has exactly its printed subtypes — see
+   * {@link subtypesOfInstance}, which is the one accessor that folds the two
+   * together.
+   */
+  readonly isChosenSubtype?: boolean;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -848,6 +877,47 @@ export function hasSubtype(def: CardDefinition, subtype: string): boolean {
     SUBTYPE_SET_MEMO.set(def, set);
   }
   return set.has(subtype.toLowerCase());
+}
+
+/**
+ * The minimum of a permanent that a chosen-value read needs: its active face and
+ * what it named as it entered.
+ *
+ * Declared structurally rather than as `CardInstance` because `state.ts` imports
+ * THIS file, so the dependency cannot run the other way — and because it makes
+ * the contract explicit: nothing else about the instance participates.
+ */
+export interface ChoiceBearingPermanent {
+  readonly def: CardDefinition;
+  readonly chosenAsEntered?: string;
+}
+
+/**
+ * Whether a PERMANENT has `subtype` — its printed subtypes, plus the one it
+ * named as it entered when the card says it is that type too ("this creature is
+ * the chosen type in addition to its other types",
+ * {@link CardDefinition.isChosenSubtype}).
+ *
+ * This is the instance-aware form of {@link hasSubtype}, and it is what every
+ * battlefield subtype question must use — a lord that named Goblin and is
+ * therefore a Goblin has to see itself in the next lord's filter, or two
+ * Adaptive Automatons stop pumping each other.
+ *
+ * It creates no layer-dependency loop (CR 613.8), for the same reason
+ * `StaticAffects.hasCounterKind` does not: the named value is instance STATE
+ * written once as the permanent entered, and no continuous effect in this engine
+ * can change it. The single-pass layering stays exact.
+ *
+ * Reads in the printed order and returns early, so the common permanent — one
+ * with no `isChosenSubtype` — pays exactly what {@link hasSubtype} costs today.
+ */
+export function permanentHasSubtype(permanent: ChoiceBearingPermanent, subtype: string): boolean {
+  if (hasSubtype(permanent.def, subtype)) return true;
+  if (permanent.def.isChosenSubtype !== true) return false;
+  const chosen = permanent.chosenAsEntered;
+  // Nothing named ⇒ no extra type. See `NOTHING_CHOSEN`: an unchosen value
+  // matches nothing, never everything.
+  return chosen !== undefined && chosen !== '' && chosen.toLowerCase() === subtype.toLowerCase();
 }
 
 /** Convenience predicates over a definition's type line. */
@@ -1275,6 +1345,27 @@ export function bestManaYield(def: CardDefinition): number {
  */
 export interface RevealFromHandCondition {
   readonly anyOfSubtypes: readonly string[];
+}
+
+/**
+ * What a permanent NAMES as it enters — see {@link CardDefinition.asEntersChoice}.
+ *
+ * `subject` is the printed noun ("a creature type", "a color", "a player"), and
+ * it is the whole record for every subject whose option list is a fixed, known
+ * set. `options` exists for the one printed form that names its own menu —
+ * Cloud Key's "choose artifact, creature, enchantment, instant, or sorcery" —
+ * where the card, not the rules, decides what is on offer.
+ */
+export interface AsEntersChoice {
+  readonly subject: import('./choices.js').ChosenValueSubject;
+  /**
+   * The explicit menu, when the card prints one. Absent ⇒ the canonical list for
+   * the subject (`asEntersOptions` in `as-enters.ts`), which for a creature type
+   * is derived from the game rather than hard-coded.
+   */
+  readonly options?: readonly string[];
+  /** Prompt override for the UI / log. Absent ⇒ built from `subject`. */
+  readonly prompt?: string;
 }
 
 export interface EntersUntappedCondition {

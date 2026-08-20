@@ -180,6 +180,35 @@ export interface CardInstance {
    * also edit `internal/clone.ts`.
    */
   timesKicked?: number;
+  /**
+   * The value NAMED AS THIS PERMANENT ENTERED — "As ~ enters, choose a creature
+   * type / a color / a player" (CR 614.1c). A colour letter, a printed subtype,
+   * a card-type word, or a `PlayerId`, depending on
+   * `CardDefinition.asEntersChoice.subject`.
+   *
+   * **This field is the whole system.** The prompt is the easy half; what makes
+   * Cavern of Souls a card rather than a question is that the answer PERSISTS on
+   * the permanent and is READ later — by a static ("creatures you control of the
+   * chosen type get +1/+1", `StaticAffects.ofChosenSubtype`), by a mana ability
+   * ("add one mana of the chosen color", the `chosen` mana mode), and by the
+   * card's own type line ("this creature is the chosen type in addition to its
+   * other types", `CardDefinition.isChosenSubtype`).
+   *
+   * **ABSENT MEANS NOTHING WAS CHOSEN, AND MATCHES NOTHING.** That is the one
+   * inert default (`NOTHING_CHOSEN` in `choices.ts`), reached by every entry path
+   * that cannot ask a question — reanimation, another card's "put it onto the
+   * battlefield", a token, a hand-built test instance. No reader may invent a
+   * value for an absent one.
+   *
+   * Cleared when the permanent leaves the battlefield (`resetInstanceForNewZone`):
+   * a new entry is a new naming, so a bounced-and-recast Adaptive Automaton must
+   * not still be lording over the type it named last time.
+   *
+   * OPTIONAL and written only by the permanents that name something, for the same
+   * object-shape/throughput reason as {@link attachedTo}. Anyone adding a field
+   * here must also edit `internal/clone.ts`.
+   */
+  chosenAsEntered?: string;
 }
 
 /**
