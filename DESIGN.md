@@ -1873,11 +1873,11 @@ invisible in a win rate:
   nothing there, and two same-size attackers are otherwise interchangeable, which is exactly when
   diverting the wrong one is invisible.
 
-**Measured yield:** the top-2100 corpus went **408 → 420 playable** (19.4% → 20.0%) on the same cached
+**Measured yield:** the top-2100 corpus went **408 → 421 playable** (19.4% → 20.0%) on the same cached
 corpus. Newly playable: Sword of Fire and Ice, Sword of the Animist, Argentum Armor, Lavaspur Boots,
 Spirit Mantle, Aqueous Form, Akroma's Memorial, Vindicate, Corpse Knight, Marauding Blight-Priest,
-Poison-Tip Archer, Elas il-Kor. Skullclamp compiles too and is already a pool candidate. Gauntlet seed
-99 is **byte-identical** to the same-day `origin/main` (81/280, every matchup row equal) — the shipped
+Poison-Tip Archer, Elas il-Kor and Mask of Memory. Skullclamp compiles too and is already a pool
+candidate. Gauntlet seed 99 is **byte-identical** to the same-day `origin/main` (81/280, every matchup row equal) — the shipped
 pool contains no card of this family yet — and min-of-12 `process.cpuUsage` is 2625 ms on the branch
 vs 2702 ms on `main`, i.e. parity inside a noise band of ±15% on a box running ten agents.
 

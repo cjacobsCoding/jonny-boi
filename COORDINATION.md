@@ -129,10 +129,10 @@ _Append dated notes here; keep them short. Newest at top._
   ends up with two answers to the same question. Every trigger authored before this is byte-identical
   data (the field is ABSENT, not `'self'`).
 
-  **Measured, same cached corpus: 408 → 420 / 2100 playable (19.4% → 20.0%).** Newly playable:
+  **Measured, same cached corpus: 408 → 421 / 2100 playable (19.4% → 20.0%).** Newly playable:
   Sword of Fire and Ice, Sword of the Animist, Argentum Armor, Lavaspur Boots, Spirit Mantle, Aqueous
   Form, Akroma's Memorial, Vindicate, Corpse Knight, Marauding Blight-Priest, Poison-Tip Archer, Elas
-  il-Kor. **Skullclamp compiles now too**, and is already in `expansion-candidates.json`.
+  il-Kor, Mask of Memory. **Skullclamp compiles now too**, and is already in `expansion-candidates.json`.
 
   ⚠️ **THREE THINGS THAT FAIL SILENTLY HERE, and what this branch did instead.**
   1. **The SOURCE stays the attachment.** A Sword's trigger is controlled by the Sword's controller,

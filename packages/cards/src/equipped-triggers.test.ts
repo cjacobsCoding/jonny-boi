@@ -238,6 +238,30 @@ describe('the printed cards this family was measured against', () => {
     );
   });
 
+  it('plays Mask of Memory — the whole card is one optional clause', () => {
+    // "You may draw two cards. If you do, discard a card." The option is
+    // all-or-nothing, so "if you do" is exactly "the may was taken" — and the
+    // discard is the CONTROLLER's own, which is the half a default-to-the-target
+    // implementation gets wrong (there is no target here at all).
+    const mask = playable(
+      scryfall({
+        name: 'Mask of Memory',
+        cost: { generic: 2 },
+        types: ['Artifact'],
+        subtypes: ['Equipment'],
+        keywords: ['Equip'],
+        oracleText:
+          'Whenever equipped creature deals combat damage to a player, you may draw two cards. If you do, discard a card.\nEquip {1}',
+      }),
+    );
+    const may = mask.triggers?.[0]?.effects[0];
+    expect(may?.primitive).toBe('mayEffects');
+    const inner = (may?.params as { effects?: readonly { primitive: string; params?: Record<string, unknown> }[] })
+      .effects;
+    expect(inner?.map((e) => e.primitive)).toEqual(['drawCards', 'discardCard']);
+    expect(inner?.[1]?.params?.who).toBe('controller');
+  });
+
   it('REPORTS the clauses that still have no faithful implementation, by clause', () => {
     // Every one of these is a real printed card whose combat-damage trigger the
     // engine cannot honour yet. Each must report the SPECIFIC clause rather than

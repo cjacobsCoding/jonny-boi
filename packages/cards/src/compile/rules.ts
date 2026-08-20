@@ -1887,6 +1887,31 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'draw-then-discard',
+    description: '"Draw N cards. If you do, discard a card" (Mask of Memory)',
+    // "If you do" is the printed acknowledgement that the whole clause hangs off
+    // an OPTION — it is the body of a "you may", and that option is all-or-
+    // nothing, so taking it means both halves happen. Outside a "you may" the
+    // phrase is vacuous (the draw always happens), which is the same effects in
+    // the same order, so one rule serves both printings.
+    pattern: new RegExp(`^draw ${COUNT_TOKEN} cards?\\. if you do, discard ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const drawn = parseCount(match[1]);
+      const discarded = parseCount(match[2]);
+      if (drawn === null || discarded === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count: drawn } },
+        // "discard a card" naming no player is the CONTROLLER's own discard,
+        // chosen by them — `discardCard`'s default victim is the TARGETED player,
+        // which this clause does not have.
+        {
+          primitive: 'discardCard',
+          params: { who: 'controller', ...(discarded === 1 ? {} : { count: discarded }) },
+        },
+      );
+    },
+  },
+  {
     id: 'each-opponent-loses-life',
     description: '"Each opponent loses N life"',
     // The half of the rule above without the lifegain — the body a saboteur
