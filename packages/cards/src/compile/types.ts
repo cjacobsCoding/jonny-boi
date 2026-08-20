@@ -161,6 +161,13 @@ export interface ClauseContribution {
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
+   * The printed "you may have ~ enter as a copy of …" replacement — which
+   * objects may be copied, and the "except …" tail
+   * (`CardDefinition.copyAsEnters`, CR 706). One clause, one field, because the
+   * whole clause is one replacement effect.
+   */
+  readonly copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
+  /**
    * "As ~ enters, choose a…" — the CR 614.1c naming this card makes as it
    * enters. Only the DECLARATION: who raises the question is decided once, by
    * the assembly, from whether the card is a land.

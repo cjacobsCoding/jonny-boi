@@ -178,7 +178,9 @@ export type SoakMechanicId =
   | 'as-enters-choice'
   | 'additional-cast-cost'
   | 'intervening-if'
-  | 'tutor-route';
+  | 'tutor-route'
+  | 'replacement-effect'
+  | 'copy-effect';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -389,6 +391,23 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   },
   { id: 'control-change', label: 'control change — a permanent changed controller', witnessKind: 'event', printedBy: (_c, t) => t.includes('gainControl') },
   { id: 'damage-prevention', label: 'damage prevention — damage prevented rather than dealt', witnessKind: 'event', printedBy: (_c, t) => t.includes('preventDamage') || t.includes('"protectionFrom"') },
+  {
+    id: 'replacement-effect',
+    label: 'replacement effect — a counter/damage/draw quantity replaced (CR 614/615)',
+    witnessKind: 'event',
+    // A card declares one through `CardDefinition.replacements`, so the printed
+    // witness is that field rather than a primitive id — the layer is data on
+    // the definition, not an effect the script runs.
+    printedBy: (_c, t) => t.includes('"replacements"'),
+  },
+  {
+    id: 'copy-effect',
+    label: 'copy effect — a permanent entered as a copy of another (CR 706, layer 1)',
+    witnessKind: 'event',
+    // Declared through `CardDefinition.copyOnEnter`-style data rather than a
+    // primitive id, like the replacement layer above.
+    printedBy: (_c, t) => t.includes('"copy') || t.includes('enterAsCopy'),
+  },
   { id: 'graveyard-recursion', label: 'graveyard recursion — a card returned from a graveyard', witnessKind: 'event', printedBy: (_c, t) => t.includes('returnFromGraveyard') || t.includes('persistReturn') },
   {
     id: 'optional-payment',
@@ -401,7 +420,7 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   /*
    * --- the 2026-08-20 arrivals -------------------------------------------------
    *
-   * Four systems landed on `main` together (§3.21 ×3 and the tutor/additional-cost
+   * Four systems landed on `main` together (§3.21–§3.23 and the tutor/additional-cost
    * templates) and the SHIPPED POOL prints none of them: the compiler got wider,
    * the pool was never regenerated. They are in the inventory anyway, and that is
    * the point of a self-maintaining inventory — today the soak reports each as
@@ -593,6 +612,17 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   triggerTargetsChosen: 'trigger-targets',
   controlChanged: 'control-change',
   damagePrevented: 'damage-prevention',
+  // The application IS the mechanic firing: a multiplier or a shield changed a
+  // quantity. `prevented > 0` is the prevention half, already witnessed above by
+  // `damagePrevented`, so this stays one id rather than splitting the family.
+  // A permanent took on another object's copiable values — the mechanic firing,
+  // and public: the table watches a Clone arrive as something.
+  becameCopy: 'copy-effect',
+  replacementApplied: 'replacement-effect',
+  // Bookkeeping, like `continuousEffectExpired`: a floating effect wearing off
+  // proves it EXISTED, not that it ever replaced anything. An unspent fog expires
+  // exactly like a spent one, so requiring this would witness the wrong thing.
+  replacementExpired: null,
   permanentAttached: 'attachment',
   gainLife: 'lifegain',
   // --- CR 614/615 replacement + prevention (merged 2026-08-20). --------------
