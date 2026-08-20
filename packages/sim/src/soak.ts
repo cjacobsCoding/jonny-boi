@@ -334,11 +334,17 @@ function mechanicOfAction(
 ): SoakMechanicId | undefined {
   switch (action.kind) {
     case 'castSpell':
-      // The zone is the whole point: an ordinary cast and a flashback cast emit
-      // the same event, and only the action says which happened.
+      // The FACE and the ZONE are the whole point: an ordinary cast, a flashback
+      // cast, a madness cast and a split card's second half all emit the same
+      // `spellCast` event, and only the action says which happened.
+      if (action.face === 'back') return 'second-castable-face';
       if (action.fromZone === 'graveyard') return 'flashback-cast';
       if (action.fromZone === 'exile') return 'madness';
       return undefined;
+    case 'playLand':
+      // A modal DFC's LAND half is played, not cast — same second-face system,
+      // different action kind.
+      return (action as { face?: string }).face === 'back' ? 'second-castable-face' : undefined;
     case 'cycleCard':
       return 'cycling';
     case 'activateAbility': {
@@ -381,7 +387,11 @@ function mechanicOfAction(
  * board — which is genuinely less than "something ran into it", and is labelled
  * as such wherever it is reported.
  */
-function mechanicsOfState(state: GameState, hits: (id: SoakMechanicId) => void): void {
+function mechanicsOfState(
+  state: GameState,
+  hits: (id: SoakMechanicId) => void,
+  defText: (def: CardDefinition) => string,
+): void {
   if ((state.turnFactsA ?? 0) !== 0 || (state.turnFactsB ?? 0) !== 0) hits('turn-facts');
   if (state.battlefield.length === 0) return;
   const cont = indexContinuous(state);
@@ -395,6 +405,12 @@ function mechanicsOfState(state: GameState, hits: (id: SoakMechanicId) => void):
     }
     if ((inst.def as { characteristicPT?: unknown }).characteristicPT !== undefined) hits('characteristic-pt');
     if (((inst.def as { statics?: readonly unknown[] }).statics ?? []).length > 0) hits('static-buff');
+    // "As ~ enters, choose a…": the value was named and is REMEMBERED on the
+    // instance, which is the whole claim the system makes.
+    if ((inst as { chosenAsEntered?: string }).chosenAsEntered !== undefined) hits('as-enters-choice');
+    // An intervening "if" is live only while its permanent is on the battlefield
+    // to be checked (CR 603.4 checks it on firing AND on resolution).
+    if (defText(inst.def).includes('"intervening"')) hits('intervening-if');
   }
 }
 
@@ -558,11 +574,27 @@ function createGameWatcher(inner: Pilot): GameWatcher {
     return text;
   };
 
+  /*
+   * The same memo keyed by DEFINITION rather than instance, for the state scan:
+   * a board holds many instances of one card, and serializing a definition per
+   * permanent per decision is the one place this harness could get genuinely
+   * slow. Keyed on the definition OBJECT, which the pool shares across copies.
+   */
+  const serializedDefs = new Map<CardDefinition, string>();
+  const defTextOf = (def: CardDefinition): string => {
+    let text = serializedDefs.get(def);
+    if (text === undefined) {
+      text = serializeDefinition(def);
+      serializedDefs.set(def, text);
+    }
+    return text;
+  };
+
   const observeState = (state: GameState, action: string): void => {
     learn(state);
     if (originalIds === null) originalIds = new Set(allInstances(state).map((e) => e.inst.instanceId));
     for (const v of checkStateInvariants(state)) record(v.invariant, v.detail, state, action);
-    mechanicsOfState(state, (id) => mechanics.add(id));
+    mechanicsOfState(state, (id) => mechanics.add(id), defTextOf);
 
     if (state.turnNumber !== lastTurn) {
       lastTurn = state.turnNumber;
@@ -684,6 +716,15 @@ function createGameWatcher(inner: Pilot): GameWatcher {
         if (text.includes('counterUnlessPaid') || text.includes('unlessPaid') || text.includes('mayEffects')) {
           mechanics.add('optional-payment');
         }
+        // A MANDATORY additional cost is asked as the spell is announced, from
+        // the card that prints it — the same source-keyed reading X and kicker
+        // use, because the question kind alone cannot tell them apart.
+        if (def && (def as { additionalCost?: unknown }).additionalCost !== undefined) {
+          mechanics.add('additional-cast-cost');
+        }
+        // A multi-destination search asks its chooser per destination; the
+        // `route` param is what makes it more than a plain tutor.
+        if (text.includes('"route"')) mechanics.add('tutor-route');
         break;
       }
       case 'effectApplied': {

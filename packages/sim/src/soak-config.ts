@@ -171,7 +171,14 @@ export type SoakMechanicId =
   | 'damage-prevention'
   | 'graveyard-recursion'
   | 'optional-payment'
-  | 'lifegain';
+  | 'lifegain'
+  // The four systems merged into main on 2026-08-20. Each is watched from the
+  // day it lands, so nobody has to remember to come back and add it.
+  | 'second-castable-face'
+  | 'as-enters-choice'
+  | 'additional-cast-cost'
+  | 'intervening-if'
+  | 'tutor-route';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -390,6 +397,56 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     printedBy: (_c, t) => t.includes('counterUnlessPaid') || t.includes('unlessPaid') || t.includes('mayEffects'),
   },
   { id: 'lifegain', label: 'life gain — a player gained life', witnessKind: 'event', printedBy: (_c, t) => t.includes('gainLife') },
+
+  /*
+   * --- the 2026-08-20 arrivals -------------------------------------------------
+   *
+   * Four systems landed on `main` together (§3.21 ×3 and the tutor/additional-cost
+   * templates) and the SHIPPED POOL prints none of them: the compiler got wider,
+   * the pool was never regenerated. They are in the inventory anyway, and that is
+   * the point of a self-maintaining inventory — today the soak reports each as
+   * "not in the pool (not required)", out loud rather than by silence, and the
+   * moment one card appears it becomes a mechanic the run FAILS without.
+   */
+  {
+    id: 'second-castable-face',
+    label: 'a second castable face — split / adventure / aftermath / modal DFC',
+    witnessKind: 'action',
+    // One flag covers the whole family: `backFaceCastable` is what makes a
+    // `castSpell` with `face: 'back'` legal, whichever layout produced it.
+    printedBy: (c) => (c as { backFaceCastable?: boolean }).backFaceCastable === true,
+  },
+  {
+    id: 'as-enters-choice',
+    label: '"as ~ enters, choose a…" — a value named on entry and remembered',
+    witnessKind: 'event',
+    printedBy: (c) => (c as { asEntersChoice?: unknown }).asEntersChoice !== undefined,
+  },
+  {
+    id: 'additional-cast-cost',
+    label: 'a mandatory additional cost paid as the spell is cast',
+    witnessKind: 'event',
+    printedBy: (c) => (c as { additionalCost?: unknown }).additionalCost !== undefined,
+  },
+  {
+    id: 'intervening-if',
+    label: 'an intervening "if" clause on a triggered ability (CR 603.4)',
+    witnessKind: 'state',
+    // Witnessed BOTH ways, and the stronger one is the event: `triggerFizzled`
+    // is CR 603.4's second check actually firing. The state witness ("a card
+    // printing one is on the battlefield") is the fallback for the far commoner
+    // case where the condition simply stays true.
+    // The clause lives on the trigger's CONDITION, so it serializes under
+    // `intervening` — checked as text because a card may print several triggers
+    // and only one of them may carry it.
+    printedBy: (_c, t) => t.includes('"intervening"'),
+  },
+  {
+    id: 'tutor-route',
+    label: 'a multi-destination library search (one card here, one there)',
+    witnessKind: 'event',
+    printedBy: (_c, t) => t.includes('"route"'),
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -509,6 +566,22 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   transformed: 'transform-dfc',
   modesChosen: 'modal-cast',
   modeTargetChosen: 'modal-cast',
+  /*
+   * ARRIVED WITH THE 2026-08-20 MERGE, and the mapped type is what made anybody
+   * look: both were new `GameEvent` members, so this file stopped compiling
+   * until they were classified. That is the whole reason it is a mapped type.
+   */
+  // A permanent ANNOUNCED the value it named as it entered — public, and a
+  // stronger witness than finding `chosenAsEntered` on a board later, because it
+  // pins the moment.
+  chosenAsEnters: 'as-enters-choice',
+  /*
+   * A trigger left the stack because its intervening "if" had stopped being true
+   * (CR 603.4's SECOND check). That is the half of the rule an `if` inside the
+   * effects could never implement, so it is the only unambiguous proof the
+   * system is doing what it claims.
+   */
+  triggerFizzled: 'intervening-if',
   cardGrantAdded: 'graveyard-grant',
   cardGrantExpired: 'graveyard-grant',
   cardCycled: 'cycling',

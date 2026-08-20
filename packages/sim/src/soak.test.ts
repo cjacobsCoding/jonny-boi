@@ -160,6 +160,8 @@ const WITNESSED_WITH_EXTRA_CONTEXT: ReadonlySet<SoakMechanicId> = new Set([
   'optional-payment',
   'graveyard-recursion',
   'counters',
+  'additional-cast-cost',
+  'tutor-route',
 ]);
 
 describe('the fast soak', () => {
