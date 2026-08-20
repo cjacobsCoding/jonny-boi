@@ -1843,8 +1843,18 @@ matchup per mechanic plus a block of mixed games, every invariant on every decis
 sized in GAMES and report CPU: wall clock on this box is worthless (the same build has measured
 39–87 games/sec inside an hour).
 
-**What it found, first run.** Three engine-shaped reports, of which one was real:
-- ✅ **FIXED — the pilot proposed blocks the rules forbid.** `canBlockByEvasion` in
+**What it found.** Three real defects, fixed here, and three reported:
+- ✅ **FIXED (core) — paying a flashback LIFE cost did not end the game.** `applyCastSpell` charges
+  "Flashback—{1}{B}, Pay 3 life" and never ran the state-based-action pass, so a caster who paid
+  itself to exactly 0 kept holding priority and casting spells (turn 20 of seed 3856639351 — once in
+  4,000 games). Paying yourself to 0 is legal (CR 118.4); surviving it is not (CR 704.3 / 704.5a). One
+  `checkStateBasedActions` call — the third copy of a rule `applyTapForMana` and the shockland
+  pay-life choice already apply.
+- ✅ **FIXED (AI) — the pilot tapped five lands toward a flashback cast it could never make.** Its
+  candidate loop checked mana and not the life rider, so below the threshold it committed the taps,
+  found no cast, and passed — floating the whole pool and wasting the turn at exactly the moment it
+  was about to die. Seed 3329123684.
+- ✅ **FIXED (AI) — the pilot proposed blocks the rules forbid.** `canBlockByEvasion` in
   `packages/ai/src/heuristic.ts` mirrored core's `canBlock` **minus its protection clause**
   (CR 702.16e), so a white creature kept being assigned to block a Black Knight. One illegal pair
   invalidates the WHOLE `declareBlockers` action, so the engine refused it and the harness passed
@@ -1857,6 +1867,11 @@ sized in GAMES and report CPU: wall clock on this box is worthless (the same bui
   (a tap cost, a rider, an activation restriction, board-derived colours) is matched by **0 of 357**
   pool cards, so nothing a player can see exercises it. That is rule 10's inert feature; it needs a
   pool regeneration, not an engine change.
+- ⚠️ **REPORTED — the redaction guarantee is narrower than it reads.** A buyback spell returns
+  itself to its owner's HAND as it resolves, so the public `stackResolved` observation names an
+  instance now in a hidden zone. Not an exploitable leak (the table watched that card go back), but
+  "no observation ever names a card in a hand or library" is false as stated, and
+  `observation.test.ts` passes only because none of its curated matchups plays a buyback card.
 - ⚠️ **REPORTED — no maximum hand size.** `RulesConfig` has no `maxHandSize` and the cleanup step
   performs no discard (CR 514.1), so hands grow without bound. Adding it would move every recorded
   win-rate baseline in §3.4a, so it is a decision, not a patch.
