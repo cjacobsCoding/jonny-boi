@@ -298,6 +298,12 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
   // or log a no-op replacement.
   const ceiling = shieldOf(entry);
   if (ceiling !== undefined && ceiling <= 0) return false;
+  // A SHIELD needs somewhere to keep its remaining count, and only a floating
+  // record has one. A `preventUpTo` declared as a PRINTED ability would prevent
+  // N every time, forever — a strictly different (and much better) card — so it
+  // is refused here rather than silently mis-played. No compiler rule emits one;
+  // this is the guard that makes that a rule of the engine rather than a habit.
+  if (entry.floating === undefined && entry.ability.outcome.preventUpTo !== undefined) return false;
 
   if (event.kind === 'damage') {
     if (applies.combat !== undefined && applies.combat !== event.combat) return false;
@@ -505,6 +511,7 @@ export function runReplacements(
   index: ReplacementIndex,
   event: ReplaceableEvent,
   emit: (e: GameEvent) => void,
+  dryRun = false,
 ): ReplaceableEvent {
   if (index.length === 0) return event;
   let applied = 0;
@@ -525,7 +532,7 @@ export function runReplacements(
     const pick = chooseFirst(candidates, event);
     const entry = candidates[pick] as ActiveReplacement;
     applied |= 1 << (candidateBits[pick] as number);
-    applyOne(state, entry, event, emit);
+    applyOne(state, entry, event, emit, dryRun);
     if (event.winsGame) break;
   }
   return event;
@@ -537,6 +544,7 @@ function applyOne(
   entry: ActiveReplacement,
   event: ReplaceableEvent,
   emit: (e: GameEvent) => void,
+  dryRun: boolean,
 ): void {
   const before = event.amount;
   const ceiling = shieldOf(entry);
@@ -546,7 +554,7 @@ function applyOne(
   if (folded.winsGame) event.winsGame = true;
 
   const floating = entry.floating;
-  if (floating !== undefined && ceiling !== undefined) {
+  if (!dryRun && floating !== undefined && ceiling !== undefined) {
     const left = ceiling - folded.shieldUsed;
     // Both writes, deliberately. `remaining` is written so an index built
     // earlier in this same damage step reads the shield as spent (see
@@ -557,6 +565,7 @@ function applyOne(
     if (left <= 0) removeFloating(state, floating.id);
   }
 
+  if (dryRun) return;
   emit({
     type: 'replacementApplied',
     source: entry.sourceInstanceId,
@@ -762,3 +771,44 @@ export function sourceHasColorFor(def: CardDefinition, applies: ReplacementAppli
   for (const color of colors) if (own.includes(color)) return true;
   return false;
 }
+
+/**
+ * What a damage event WOULD become, computed without writing anything — the
+ * accessor the AI reads.
+ *
+ * A pilot evaluating a position must be able to ask "how much does this attacker
+ * really deal?" without spending the prevention shield it is asking about. So
+ * this runs the identical loop, with the identical ordering rule, and skips
+ * exactly two things: the shield bookkeeping and the event log. There is no
+ * second copy of the arithmetic — a projection that disagreed with the engine
+ * would be worse than no projection at all, because the pilot would then be
+ * confidently wrong.
+ */
+export function projectDamage(
+  state: GameState,
+  index: ReplacementIndex,
+  source: CardInstance | undefined,
+  sourceController: PlayerId | undefined,
+  recipient: CardInstance | undefined,
+  affectedPlayer: PlayerId,
+  amount: number,
+  combat: boolean,
+): DamageReplacementResult {
+  if (index.length === 0 || amount <= 0) return { amount, prevented: 0 };
+  const event: ReplaceableEvent = {
+    kind: 'damage',
+    source,
+    sourceController,
+    recipient,
+    affectedPlayer,
+    combat,
+    amount,
+    prevented: 0,
+    winsGame: false,
+  };
+  runReplacements(state, index, event, NO_EMIT, true);
+  return { amount: event.amount, prevented: event.prevented };
+}
+
+/** The sink a dry run emits into. Hoisted so a projection allocates no closure. */
+const NO_EMIT = (): void => {};

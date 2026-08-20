@@ -274,6 +274,7 @@ export {
   expireFloatingReplacements,
   hasAnyReplacement,
   indexReplacements,
+  projectDamage,
   replaceCounters,
   replaceDamage,
   replaceDraw,
