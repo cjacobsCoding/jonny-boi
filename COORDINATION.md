@@ -115,10 +115,107 @@ throughput (games/sec) from regressing.
 | feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
+| feat/step-trigger-templates | worker | packages/core (NEW intervening.ts + step-triggers.test.ts; triggers/state/choices/effects/events/engine/index + internal triggers-runtime & clone), packages/cards (compile/rules.ts, primitives, choice-primitives, effect-helpers, index + NEW compile/step-trigger-templates.test.ts + 2 flipped tests), packages/sim (paired-arms-config +1, observation +1), apps/web/src/lib/about/mechanics.ts (3 witnesses), DESIGN §3.21 | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
 
+- 2026-08-20 worker: `feat/step-trigger-templates` 🚧 PUSHED — **the "At the beginning of…" family,
+  and the blocker that was sitting in front of all ~65 of its corpus cards.**
+
+  **Measured offline, PAIRED against the same cached 2100-card corpus: 408 → 428 playable
+  (19.4% → 20.4%), +20 cards, 0 regressions.** The twenty: Howling Mine, Kami of the Crescent Moon,
+  Dictate of Kruphix, Font of Mythos, Teferi's Puzzle Box, Spiteful Visions, Scrawling Crawler,
+  Stormfist Crusader, Dragonmaster Outcast, Colossal Majesty, Underworld Dreams, Fate Unraveler,
+  Temple Bell, Mikokoro, Forced Fruition, Corpse Knight, Kambal, Marauding Blight-Priest,
+  Poison-Tip Archer, Elas il-Kor. Half of those were in NO "At the beginning of…" bucket — the draw
+  watcher and the "each player draws" body reach them.
+
+  🔑 **THE BLOCKER WAS AN ENGINE SEAM, NOT A RULE TABLE: a trigger's resolution did not know which
+  player set it off.** `who: 'any'` fires on both turns but resolves under the SOURCE's controller,
+  so "at the beginning of **each player's** draw step, **that player** draws an additional card"
+  would have drawn for Howling Mine's own controller every turn. `trigger-step-begins` carried an
+  explicit `if (who !== 'you') return null;` saying exactly that.
+
+  **The fix follows `feat/cast-cost-modification`'s seam rather than inventing one.** A chosen `{X}`
+  rides `SpellStackObject → ResolutionFrame → EffectContext`; the triggering player now rides the
+  same three hops: `PendingTrigger.triggeringPlayer` → `TriggeredStackObject.triggeringPlayer` →
+  `ResolutionFrame.triggeringPlayer` → `EffectContext.triggeringPlayer`. `triggeringPlayerFor` is the
+  ONE place the answer is decided (active player for a step, the drawer for a draw, the life-gainer,
+  the caster, a permanent's controller for an arrival/death, `undefined` when the event is about no
+  player) and it runs only for triggers that actually FIRED — the per-event scan pays nothing.
+
+  ⚠️ **REUSED, NOT RENAMED.** Everything here is under main's existing vocabulary: `permanentEnters`,
+  `permanentDies`, `endStep`, `beginCombat`, `gainLife`, `combatDamageToPlayer`, `STEP_FOR_TRIGGER`,
+  `TriggerSubject`/`resolveSubject`, `excludeSelf`, `permanentFilter`, and `mayEffects` for the "you
+  may" wrapper. The additions are one new event (`drawsCard`), one new field on `PendingTrigger` /
+  the stack object / the frame / the context, and one new module.
+
+  🆕 **The printed intervening "if"** (`packages/core/src/intervening.ts`), because half the family
+  prints one. It is part of the trigger CONDITION, not the body, because **CR 603.4 checks it twice**:
+  a false condition stops the ability reaching the stack at all (so nobody may respond to it), and one
+  that has lapsed by resolution removes it doing nothing (new `triggerFizzled` event). An `if` wrapper
+  inside the effects would have implemented only the second check. Two kinds ship — `sourceUntapped`
+  and `controlCount` (a `CardFilter` + a count bound; `max: 0` is the printed word "no") — and a
+  `minPower` bound reads **EFFECTIVE** power, because counters and anthems are what make a creature
+  "power 4 or greater" on the board. `splitInterveningIf` distinguishes "no clause" from "a clause I
+  cannot read", so Felidar Sovereign's "if you have 40 or more life, you win the game" REPORTS rather
+  than compiling to an unconditional "you win the game".
+
+  🗣️ **ONE "whichPlayer" vocabulary** in `effect-helpers.playersForParam`: `'controller'` ·
+  `'opponent'` · `'targetPlayer'` · `'triggering'` · `'each'` (both seats, ACTIVE PLAYER FIRST — the
+  order decides a mutual deck-out correctly). `drawCards`, `loseLife` and `dealDamage` all speak it,
+  so "each player", "that player" and "each opponent" mean one thing each wherever printed. Please
+  extend this rather than adding a second player-selector.
+
+  🧹 **`trigger-upkeep` was DELETED.** `trigger-step-begins` subsumed it and also handles the "you
+  may" wrapper and the intervening "if", which `trigger-upkeep` silently could not — a card printing
+  either would win the older rule and then fall through. One rule per concept.
+
+  ⚡ **Rule 7: parity, measured properly.** Gauntlet seed 99 is **byte-identical** to a same-box
+  `origin/main` worktree (81/280, every matchup row equal, 0 draws either side). Paired CPU time
+  (`process.cpuUsage`, min-of-N, three interleaved rounds): branch/main = 1.005× / 0.888× / 1.039×,
+  pooled minimum 2656 ms vs 2828 ms. ⚠️ **The wall clock on this box was, again, worthless** — the
+  same 280-game gauntlet read 23.08s and 9.36s within ten minutes because another agent's build was
+  running. Do not report a games/sec here.
+
+  ✅ Enforced tables updated: `paired-arms-config.ts` classifies the new `handToBottomThenDraw`
+  primitive LIBRARY-READING (it writes the whole hand into the library, and its order is chosen by a
+  pilot looking at a hand the swap may have changed); `observation.ts` classifies `triggerFizzled`
+  public; `internal/clone.ts` copies both new stack-object fields CONDITIONALLY, with a test that
+  fails if either is dropped AND asserts an ordinary trigger still clones byte-for-byte.
+
+  📌 **Two existing tests flipped from REFUSAL to SUPPORT** and now assert the shipped behaviour:
+  `you-may-and-triggers.test.ts`'s "REFUSES each player's" and `counters-templates.test.ts`'s "each
+  end step stays reported". Both refusals were correct when written; they are the thing this branch
+  removed, so leaving them red-as-documentation was not an option.
+
+  ⛔ **Reported by name, never approximated** — each is a different system, not a missing rule:
+  "you win / you lose the game"; a DELAYED trigger ("at the beginning of your NEXT upkeep" — Pact of
+  Negation); blink (Conjurer's Closet, Soulherder, Thassa, Teleportation Circle, Y'shtola); token
+  COPIES of a permanent; ascend / the city's blessing; amass; discover; the Ring; "no maximum hand
+  size"; a spell-cost increase or decrease static (God-Pharaoh's Statue, The Immortal Sun);
+  "players can't activate loyalty abilities"; DOUBLING power and toughness (Unnatural Growth,
+  Zopandrel); "life lost this turn" (Wound Reflection); a count derived from a REVEALED card's mana
+  value (Dark Confidant, Twilight Prophet).
+
+  ⚠️ **A PRE-EXISTING infidelity this ran into and deliberately did NOT fix, so nobody rediscovers
+  it: a created token has no COLOUR.** `makeToken` builds a `CardDefinition` with no cost and
+  `colorsOfDefinition` reads colour off cost pips — so "a 1/1 **black** Faerie token" and "a 5/5
+  **red** Dragon token" both enter colourless and are invisible to a "black creatures you control"
+  anthem or to protection from red. Every token card already in the pool has this; closing it needs a
+  `colors` field on `CardDefinition` plus the colour reader honouring it. It belongs to whoever owns
+  `makeToken`, not to a trigger branch — but it is the reason Bitterblossom and Ophiomancer were left
+  reporting here rather than pushed through the existing token rule.
+
+  Files owned: `packages/core` (NEW `intervening.ts` + `step-triggers.test.ts`; `triggers.ts`,
+  `state.ts`, `choices.ts`, `effects.ts`, `events.ts`, `engine.ts`, `index.ts`,
+  `internal/triggers-runtime.ts`, `internal/clone.ts`), `packages/cards` (`compile/rules.ts`,
+  `primitives.ts`, `choice-primitives.ts`, `effect-helpers.ts`, `index.ts`, NEW
+  `compile/step-trigger-templates.test.ts`, plus the two flipped tests),
+  `packages/sim/src/paired-arms-config.ts` + `observation.ts` (one classification each),
+  `apps/web/src/lib/about/mechanics.ts` (three witnesses), DESIGN §3.21 + the §3.11 open list,
+  COORDINATION.md.
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine
   systems had shipped with almost nothing in the pool printing them (no flashback, {X}, kicker, scry,
