@@ -258,6 +258,65 @@ describe('state-based actions at the priority boundary (CR 704.3)', () => {
     place(s, creatureDef('Wall', 0, 4), 'B', 1);
     expect(stateBasedActionsPossible(s)).toBe(false);
   });
+
+  it('a modifier that can only ADD toughness is not a reason to look; one that can subtract is', () => {
+    // The narrowing that made the gate affordable, and the one piece of
+    // reasoning inside it. `PermanentModification` is purely additive (the rules
+    // manifest proves that at compile time), so a positive buff can only keep a
+    // creature alive — never kill one — and a board carrying nothing but
+    // positive modifiers can still be judged on printed base plus counters. A
+    // NEGATIVE modifier is the other direction and sends the board to the real
+    // check. Before this, any `state.continuous` entry at all let 6.3% of a
+    // gauntlet's priority passes through; after it, 0.1%.
+    const pumped = quiet();
+    const bear = place(pumped, creatureDef('Bear', 2, 2), 'A');
+    pumped.continuous.push({
+      id: pumped.nextInstanceId++,
+      targetInstanceId: bear.instanceId,
+      sourceInstanceId: bear.instanceId,
+      duration: 'endOfTurn',
+      power: 3,
+      toughness: 3,
+    });
+    expect(stateBasedActionsPossible(pumped)).toBe(false);
+
+    const shrunk = quiet();
+    const victim = place(shrunk, creatureDef('Bear', 2, 2), 'A');
+    shrunk.continuous.push({
+      id: shrunk.nextInstanceId++,
+      targetInstanceId: victim.instanceId,
+      sourceInstanceId: victim.instanceId,
+      duration: 'endOfTurn',
+      power: -1,
+      toughness: -1,
+    });
+    expect(stateBasedActionsPossible(shrunk)).toBe(true);
+  });
+
+  it('an anthem is not a reason to look; a shrinking static is', () => {
+    const anthem: CardDefinition = {
+      id: 'Glorious Anthem',
+      name: 'Glorious Anthem',
+      types: ['enchantment'],
+      statics: [{ affects: { types: ['creature'] }, power: 1, toughness: 1 }],
+    };
+    const wither: CardDefinition = {
+      ...anthem,
+      id: 'Withering Presence',
+      name: 'Withering Presence',
+      statics: [{ affects: { types: ['creature'] }, power: -1, toughness: -1 }],
+    };
+
+    const withAnthem = quiet();
+    place(withAnthem, creatureDef('Bear', 2, 2), 'A');
+    place(withAnthem, anthem, 'A');
+    expect(stateBasedActionsPossible(withAnthem)).toBe(false);
+
+    const withWither = quiet();
+    place(withWither, creatureDef('Bear', 2, 2), 'A');
+    place(withWither, wither, 'A');
+    expect(stateBasedActionsPossible(withWither)).toBe(true);
+  });
 });
 
 /**

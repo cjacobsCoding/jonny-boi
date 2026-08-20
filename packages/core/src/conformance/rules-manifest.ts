@@ -707,6 +707,10 @@ export const RULES_MANIFEST: RulesManifest = {
       { rule: '514.2', title: 'damage marked on permanents is removed as the turn ends' },
       { rule: '514.2', title: '"until end of turn" effects end during the cleanup step' },
       { rule: '514.3', title: 'no player receives priority during the cleanup step' },
+      {
+        rule: '514.3a',
+        title: 'a cleanup that DID open a priority window is followed by another cleanup step',
+      },
       { rule: '514.3a', title: 'a discard alone does NOT open a priority window; the turn simply ends' },
     ],
     note:

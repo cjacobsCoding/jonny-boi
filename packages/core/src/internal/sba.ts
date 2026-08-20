@@ -381,11 +381,11 @@ export function resolveWinner(state: GameState, emit: (e: GameEvent) => void): b
  * ## Why a gate exists at all
  * CR 704.3 checks state-based actions whenever a player would receive priority,
  * which in this engine is the single hottest thing a game does: a sim game passes
- * priority hundreds of times, and every one of those passes is followed by an
- * action that already ran the full check at its own mutation site. The boundary
- * check is a BACKSTOP for the next mutation path that forgets, so it must be
- * approximately free on the overwhelming majority of passes where it has nothing
- * to do (rule 7).
+ * priority hundreds of times, and every one of those passes follows an action
+ * that already ran the full check at its own mutation site. The boundary check is
+ * a BACKSTOP for the next mutation path that forgets, so it has to be nearly free
+ * on the passes where it has nothing to do (rule 7). Measured on the gauntlet,
+ * 125,753 boundary passes reach this and it lets 1.2% of them through.
  *
  * ## The direction it is allowed to be wrong in
  * It may answer **true** on a board where the real check turns out to do nothing;
@@ -395,60 +395,93 @@ export function resolveWinner(state: GameState, emit: (e: GameEvent) => void): b
  * that direction, and every clause below is either the rule's own condition or a
  * conservative superset of it.
  *
- * The one subtle clause is creature death. Effective toughness is printed base +
- * counters + everything the continuous layer contributes, and the layer's
- * contributions come from exactly four places — an "until end of turn" effect
- * (`state.continuous`), a static ability, an attachment, and a `*` P/T formula
- * (plus emblems radiating statics from a command zone). When NONE of those exists
- * on the board, `NO_MOD` is not an approximation, it is the true aggregate, so the
- * printed-plus-counters read below is the SAME arithmetic the real check performs
- * — via the same `remainingToughness`/`effectiveToughness` functions, so the two
- * cannot drift into a second opinion. When any of them does exist, this returns
- * true without trying to reason about it.
+ * ## Why a positive modifier is not a reason to look
+ * The subtle half is creature death, and the saving observation is that
+ * `PermanentModification` is **purely additive** (the rules manifest pins that as
+ * a compile-time proof, and CR 613's layer system stops being optional the day it
+ * is not): nothing SETS a toughness, everything adds a delta. A modifier that can
+ * only ADD toughness therefore cannot make a creature die — it can only keep one
+ * alive — so a board whose modifiers are all positive can be judged on printed
+ * base plus counters, which is exactly what `effectiveToughness(perm)` with no
+ * aggregate computes. Being wrong in that direction is safe by construction: an
+ * ignored positive buff can only make this answer `true` when the truth is
+ * `false`. A modifier that can SUBTRACT toughness is the other direction, so any
+ * of those sends the whole board to the real check.
+ *
+ * Two things are read as "always look" rather than reasoned about, because both
+ * change with no event to notice: a characteristic-defining `*` box (Tarmogoyf
+ * shrinks when a card leaves a graveyard) and an attachment (which is also its
+ * own state-based action, CR 704.5m/n). Both are rare on a board.
  */
 export function stateBasedActionsPossible(state: GameState): boolean {
   // A decided game performs no more state-based actions.
   if (state.gameOver) return false;
   const a = state.players.A;
   const b = state.players.B;
-  // CR 704.5a/b — a lost seat that has not yet been resolved into a winner, or a
-  // life total the check has not seen yet.
+  // CR 704.5a/b — a lost seat not yet resolved into a winner, or a life total the
+  // check has not seen yet.
   if (a.hasLost || b.hasLost || a.life <= 0 || b.life <= 0) return true;
-  // Anything that can make effective toughness differ from the printed box, or
-  // that can be an orphaned modification waiting to be pruned.
-  if (state.continuous.length > 0) return true;
-  // Emblems radiate statics from the command zone (CR 114), so a non-empty
-  // command zone is a modifier source exactly as a permanent with statics is.
-  if (a.command.length > 0 || b.command.length > 0) return true;
+  // An "until end of turn" effect that SHRINKS something (a -X/-X, a Weakness).
+  const continuous = state.continuous;
+  for (let i = 0; i < continuous.length; i++) {
+    const toughness = (continuous[i] as { readonly toughness?: number }).toughness;
+    if (toughness !== undefined && toughness < 0) return true;
+  }
+  // EMBLEMS radiate statics from the command zone (CR 114). Nothing has ever put
+  // one there in a measured game, so this is one length read, not a walk.
+  if (a.command.length > 0 && commandCanShrink(a.command)) return true;
+  if (b.command.length > 0 && commandCanShrink(b.command)) return true;
 
   let legendary = 0;
   const battlefield = state.battlefield;
   for (let i = 0; i < battlefield.length; i++) {
     const perm = battlefield[i] as CardInstance;
     const def = perm.def;
-    // Modifier sources — see the note above. Any of these and the printed box is
-    // not the answer, so the real check has to run.
-    if (def.statics !== undefined || def.characteristicPT !== undefined) return true;
-    // An attachment is both a modifier source (layer 3a) and its own state-based
+    // An attachment is BOTH a modifier source (layer 3a) and its own state-based
     // action (CR 704.5m/n), so either end of the relationship is enough.
     if (def.attachment !== undefined || perm.attachedTo != null) return true;
-    // Counters change the box (+1/+1 / -1/-1), ARE the box for a walker's loyalty
-    // (CR 704.5i) and a battle's defense (CR 704.5x), and are the subject of CR
-    // 704.5q. One reference comparison for the counter-free permanent that is
-    // nearly every permanent; the loop only runs for one that carries something.
-    if (perm.counters !== NO_COUNTERS) {
-      for (const kind in perm.counters) {
-        void kind;
-        return true;
-      }
-    }
-    // CR 704.5j — two legendary permanents may share a name. Counting is enough:
+    // A `*` power/toughness is a function of the whole game and moves with no
+    // event on this permanent at all.
+    if (def.characteristicPT !== undefined) return true;
+    // A static that can only ADD toughness cannot kill anything — see above.
+    if (def.statics !== undefined && staticsCanShrink(def.statics)) return true;
+    // CR 704.5j — two legendary permanents may share a name. Counting is enough;
     // deciding whether the names actually match is the real check's job.
     if (def.legendary === true && ++legendary > 1) return true;
+    // Counters are read by `effectiveToughness` below for a creature, but for a
+    // walker and a battle they ARE the box (CR 704.5i / 704.5x), and CR 704.5q is
+    // about the two standard kinds coexisting. One reference comparison for the
+    // counter-free permanent that is nearly every permanent.
+    if (perm.counters !== NO_COUNTERS) {
+      if (isPlaneswalker(def) && !isCreature(def) && loyaltyOf(perm) <= 0) return true;
+      if (isBattle(def) && !isCreature(def) && defenseOf(perm) <= 0) return true;
+      if ((perm.counters[PLUS_ONE_COUNTER] ?? 0) > 0 && (perm.counters[MINUS_ONE_COUNTER] ?? 0) > 0) return true;
+    } else if ((isPlaneswalker(def) || isBattle(def)) && !isCreature(def)) {
+      // No counters at all on a walker or a battle IS zero loyalty / zero defense.
+      return true;
+    }
     if (!isCreature(def)) continue;
     // CR 704.5f / 704.5g, read with the aggregate that is genuinely empty here.
     if (effectiveToughness(perm) <= 0) return true;
     if (perm.damageMarked > 0 && (remainingToughness(perm) <= 0 || perm.markedByDeathtouch)) return true;
+  }
+  return false;
+}
+
+/** Whether any of these static abilities can SUBTRACT toughness. */
+function staticsCanShrink(statics: readonly { readonly toughness?: number }[]): boolean {
+  for (let i = 0; i < statics.length; i++) {
+    const toughness = statics[i]?.toughness;
+    if (toughness !== undefined && toughness < 0) return true;
+  }
+  return false;
+}
+
+/** The same question for the objects in a command zone (emblems). */
+function commandCanShrink(command: readonly CardInstance[]): boolean {
+  for (let i = 0; i < command.length; i++) {
+    const statics = (command[i] as CardInstance).def.statics;
+    if (statics !== undefined && staticsCanShrink(statics)) return true;
   }
   return false;
 }

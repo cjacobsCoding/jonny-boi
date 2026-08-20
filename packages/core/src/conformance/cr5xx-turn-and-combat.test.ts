@@ -61,6 +61,21 @@ const PUMP: CardDefinition = {
 
 const PUMP_AMOUNT = 3;
 
+/**
+ * A card with MADNESS — the only thing in this engine that can make a cleanup
+ * step hand out priority, because a discarded madness card is exiled instead
+ * and its controller may cast it (CR 702.35a).
+ */
+const MADNESS_SPELL: CardDefinition = {
+  id: 'madness-bolt',
+  name: 'Madness Bolt',
+  types: ['instant'],
+  timing: 'instant',
+  cost: { R: 2 },
+  madness: { R: 1 },
+  effects: [{ primitive: 'noop' }],
+};
+
 const registry = registryWith({
   noop: () => {},
   pump: (ctx) => {
@@ -514,6 +529,57 @@ describe('CR 511 / 514 — end of combat and cleanup', () => {
       }
     }
     expect(s.turnNumber).toBeGreaterThanOrEqual(startedAt + 6);
+  });
+
+  crTest('514.3a', 'a cleanup that DID open a priority window is followed by another cleanup step', () => {
+    // The other half of CR 514.3a, and the half that needs a real reason for
+    // anybody to hold priority in a cleanup step. A discarded MADNESS card is
+    // exiled instead (CR 702.35a) and its controller may cast it, which is a
+    // priority window inside cleanup — and the rule says that once the stack is
+    // empty and everybody has passed, ANOTHER cleanup step begins. Not the next
+    // turn: another cleanup step, with its turn-based actions performed again.
+    const maximum = DEFAULT_RULES.maximumHandSize;
+    const state = atMain();
+    giveHand(state, 'A', Array.from({ length: maximum }, () => MOUNTAIN));
+    const [madCard] = giveHand(state, 'A', [MADNESS_SPELL]);
+
+    let s = state;
+    for (let guard = 0; guard < 200 && s.pendingChoice?.context !== 'cleanupDiscard'; guard++) {
+      s = pass(s, registry);
+    }
+    const choice = s.pendingChoice;
+    if (!choice) throw new Error('the cleanup discard was never asked');
+    const turnBefore = s.turnNumber;
+
+    // Pitch the madness card itself.
+    const afterDiscard = actWithEvents(
+      s,
+      {
+        kind: 'answerChoice',
+        player: choice.chooser,
+        choiceId: choice.id,
+        answer: { kind: 'selectCards', instanceIds: [madCard!.instanceId] },
+      },
+      registry,
+    );
+    // The window is open, the card is in EXILE, and the turn has NOT ended.
+    expect(afterDiscard.state.madnessWindow?.instanceId).toBe(madCard!.instanceId);
+    expect(afterDiscard.state.step).toBe('cleanup');
+    expect(afterDiscard.state.turnNumber).toBe(turnBefore);
+
+    // Decline it (a pass with a window open IS the decline, CR 702.35a), then
+    // pass the window's own priority round out.
+    let done = act(afterDiscard.state, { kind: 'passPriority', player: 'A' }, registry);
+    const cleanupSteps = { seen: 0 };
+    for (let guard = 0; guard < 40 && done.turnNumber === turnBefore; guard++) {
+      const result = actWithEvents(done, { kind: 'passPriority', player: done.priorityPlayer }, registry);
+      cleanupSteps.seen += eventsNamed(result.events, 'stepBegin').filter((e) => e.step === 'cleanup').length;
+      done = result.state;
+    }
+    // ANOTHER cleanup step happened before the turn was handed over…
+    expect(cleanupSteps.seen).toBeGreaterThanOrEqual(1);
+    // …and then it did end, rather than looping.
+    expect(done.turnNumber).toBe(turnBefore + 1);
   });
 
   crTest('514.3a', 'a discard alone does NOT open a priority window; the turn simply ends', () => {
