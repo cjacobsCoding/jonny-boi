@@ -470,7 +470,10 @@ export const RULES_MANIFEST: RulesManifest = {
     status: 'cited',
     suite: 'packages/core/src/battle.test.ts',
     what:
-      'CR 310.4 (enters with defense counters), CR 310.11 (a battle is protected by an opponent ' +
+      'CR 310.4 (enters with defense counters; a defeated Siege is exiled and its reward half may be ' +
+      'cast without paying its mana cost — split-cards.test.ts drives that with an EMPTY mana ' +
+      'pool, which is what makes "without paying" a real claim), CR 310.11 (a battle is ' +
+      'protected by an opponent ' +
       'of its controller, and only an attack from the protector\'s opponent is legal) — five ' +
       'separate tests drive the real attack path.',
   },
@@ -492,7 +495,9 @@ export const RULES_MANIFEST: RulesManifest = {
     note:
       'CR 400.7 is one of this engine\'s load-bearing invariants — it has its own chokepoint ' +
       '(`internal/zones.ts`\'s `resetInstanceForNewZone`) and four more affirmations in ' +
-      'engine-regressions.test.ts, card-grants.test.ts and modal-casting.test.ts.',
+      'engine-regressions.test.ts, card-grants.test.ts and modal-casting.test.ts — and now ' +
+      'as-enters.test.ts, whose "is CLEARED when the permanent leaves the battlefield" applies the ' +
+      'rule to a value the permanent NAMED rather than to its damage or its counters.',
   },
   '401': {
     status: 'covered',
@@ -718,7 +723,13 @@ export const RULES_MANIFEST: RulesManifest = {
       'CR 601.2b (modes and {X} announced at cast time) has a 23-test matrix across ' +
       'cast-cost.test.ts and modal-casting.test.ts — the deepest per-feature coverage in the ' +
       'repo. Cited, not copied.',
-    shortfall: 'CR 601.2g — the mana-ability window DURING casting — exists only as the payment planner, not as a priority-free window a player can act in.',
+    shortfall:
+      'CR 601.2g — the mana-ability window DURING casting — exists only as the payment planner, ' +
+      'not as a priority-free window a player can act in. (CR 601.2b ADDITIONAL COSTS are covered ' +
+      'elsewhere: additional-cast-cost.test.ts drives the mandatory kind end-to-end — a spell whose ' +
+      'extra cost nothing can pay is NOT OFFERED, and is REJECTED if a hand-built action tries it ' +
+      'anyway, "and nothing is half-paid", which is the CR 601.2h guarantee that an unpayable cost ' +
+      'makes the whole cast illegal rather than partially applied.)',
   },
   '602': {
     status: 'covered',
@@ -738,11 +749,18 @@ export const RULES_MANIFEST: RulesManifest = {
       { rule: '603.3d', title: 'a triggered ability’s targets are chosen as it is put on the stack' },
       { rule: '603.3', title: 'a trigger whose condition never occurs never goes on the stack' },
     ],
-    note: 'The trigger-matching matrix (which events fire what, "another", combat-only) lives in counter-triggers.test.ts.',
+    note:
+      'The trigger-matching matrix (which events fire what, "another", combat-only) lives in ' +
+      'counter-triggers.test.ts. CR 603.4 — the printed intervening "if", CHECKED TWICE — is ' +
+      'affirmed by packages/core/src/step-triggers.test.ts: "a false condition stops the ability ' +
+      'REACHING the stack, not merely resolving" AND "a condition that LAPSES between trigger and ' +
+      'resolution fizzles the ability". Both halves matter — a condition written inside the effect ' +
+      'body would implement only the second, and nobody could tell from a passing test. ' +
+      'CR 603.3b (APNAP for simultaneous triggers) is in triggers.test.ts.',
     shortfall:
-      'CR 603.4 STATE TRIGGERS ("whenever you have no cards in hand") are not modelled — every ' +
-      'trigger here is an event trigger. CR 603.7 reflexive triggers and CR 603.10 (delayed ' +
-      'triggers) exist only as ad-hoc effects.',
+      'CR 603.8 STATE TRIGGERS ("whenever you have no cards in hand") are not modelled — every ' +
+      'trigger here is an event trigger. CR 603.7 reflexive triggers and CR 603.10 delayed ' +
+      'triggers exist only as ad-hoc effects.',
   },
   '604': {
     status: 'cited',
@@ -857,7 +875,10 @@ export const RULES_MANIFEST: RulesManifest = {
       'this engine implements, and it is implemented well: taplands, conditional taplands, ' +
       'shocklands, reveal-lands, counters-on-entry and loyalty/defense all run through it, with ' +
       'sixteen affirmations across engine-regressions, hybrid-and-tapped, conditional-tapland and ' +
-      'shockland.',
+      'shockland. packages/core/src/as-enters.test.ts adds the ORDERING case only a SECOND ' +
+      'as-enters clause can expose: "asks the NAMING and THEN the payment — one land, two ' +
+      'questions, neither dropped", and "declining the second question still leaves the first ' +
+      'answer standing".',
     shortfall:
       'It is the only shape. There is no general replacement layer: no "if damage would be dealt ' +
       '… instead", no CR 614.5 once-only rule (nothing can recurse, because nothing replaces), ' +
@@ -928,8 +949,10 @@ export const RULES_MANIFEST: RulesManifest = {
       'flash (protection-and-flash.test.ts), flashback (flashback.test.ts, seven tests).',
     shortfall:
       'Of ~160 keyword abilities in the CR, this engine has 20 plus cycling (702.29), kicker ' +
-      '(702.33), buyback (702.27) and madness (702.35). Everything else is refused by the ' +
-      'compiler and listed in UNSUPPORTED-BACKLOG.md.',
+      '(702.33), buyback (702.27), madness (702.35) and aftermath (702.127a — the half castable ' +
+      'only from the graveyard, for its OWN printed cost rather than a flashback cost; affirmed in ' +
+      'split-cards.test.ts). Everything else is refused by the compiler and listed in ' +
+      'UNSUPPORTED-BACKLOG.md.',
   },
   '703': {
     status: 'cited',
@@ -995,7 +1018,19 @@ export const RULES_MANIFEST: RulesManifest = {
       'is the half a copy implementation most often gets wrong.',
   },
   '708': { status: 'not-applicable', reason: 'Face-down spells and permanents (morph, manifest). ' + noCardHasIt('morph or manifest card') },
-  '709': { status: 'not-applicable', reason: noCardHasIt('split card that compiles (the data pipeline resolves split NAMES, but no split card is in the pool)') },
+  '709': {
+    status: 'cited',
+    suite: 'packages/core/src/split-cards.test.ts',
+    what:
+      'CR 709.4 — a split card in a zone other than the stack is the COMBINED object: both names, ' +
+      'the union of the type lines, the SUM of the two mana costs. "Is neither half while it sits ' +
+      'in a zone: the combined name, types and mana value" pins exactly that, and it is the ' +
+      'modelling call that would have been silent if wrong — a split card modelled as its left ' +
+      'half would mis-answer every discard filter and "mana value 3 or less" clause in the game ' +
+      'while looking perfectly fine in a cast test. CR 709.3 (cast one half, pay that half) and ' +
+      'the revert to the combined object as it leaves the stack are separately affirmed.',
+    shortfall: 'Fuse is absent — no split card may be cast as both halves.',
+  },
   '710': { status: 'not-applicable', reason: noCardHasIt('flip card') },
   '711': { status: 'not-applicable', reason: noCardHasIt('leveler card') },
   '712': {
@@ -1011,7 +1046,18 @@ export const RULES_MANIFEST: RulesManifest = {
   },
   '713': { status: 'not-applicable', reason: 'Substitute cards — a physical-play convenience. Nothing to model.' },
   '714': { status: 'not-applicable', reason: noCardHasIt('Saga') },
-  '715': { status: 'not-applicable', reason: noCardHasIt('Adventurer card') },
+  '715': {
+    status: 'cited',
+    suite: 'packages/core/src/split-cards.test.ts',
+    what:
+      'CR 715.2 — an adventurer card is defined by its CREATURE half, not by a combined object ' +
+      '(unlike a split card under CR 709.4; the two are deliberately modelled differently, and the ' +
+      'difference is asserted rather than assumed). CR 715.3d — the adventure exiles the card AS IT ' +
+      'RESOLVES, so "a COUNTERED adventure goes to the graveyard — the exile is a RESOLUTION ' +
+      'replacement" is the test that separates a resolution replacement from an on-cast one. ' +
+      'Casting the creature half from exile, refusing the wrong face, and refusing a card with no ' +
+      'permission at all, are each affirmed.',
+  },
   '716': { status: 'not-applicable', reason: noCardHasIt('Class card') },
   '717': { status: 'not-applicable', reason: noCardHasIt('Attraction card') },
   '718': { status: 'not-applicable', reason: noCardHasIt('prototype card') },

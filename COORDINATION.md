@@ -192,6 +192,29 @@ _Append dated notes here; keep them short. Newest at top._
   `feat/copy-effects` (section 707 — note CR 707.2's "counters are NOT copied" clause, the half a
   copy implementation most often gets wrong). Please flip them when you land.
 
+  🔁 **UPDATE after merging today's origin/main** (step-triggers, split/adventure/Siege,
+  as-enters, tutor + mandatory additional costs). Four of those systems are now INDEXED, and each
+  citation was sabotage-checked through its own suite:
+  **CR 603.4** intervening "if" → `step-triggers.test.ts` (both checks: a false condition must stop
+  the ability REACHING the stack, not merely fizzle at resolution) · **CR 709.4** a split card is
+  the COMBINED object in every zone but the stack, and **CR 715.2/715.3d** an adventurer is defined
+  by its creature half with the exile as a RESOLUTION replacement → `split-cards.test.ts` ·
+  **CR 400.7** a NAMED value dies with the object → `as-enters.test.ts` · **CR 601.2h** an
+  unpayable mandatory additional cost makes the cast illegal with nothing half-paid →
+  `additional-cast-cost.test.ts` · **CR 310.4** the Siege reward cast from an EMPTY pool.
+  Sections **709 and 715 moved from not-applicable to cited** — they were written off as "no card
+  in the pool is one", and today that stopped being true. **If your branch makes a not-applicable
+  section applicable, say so and I (or you) will reclassify it**; that is the one drift the compiler
+  cannot catch, because "no card does this yet" is a fact about the pool, not about a type.
+
+  ⚠️ **`intervening.ts`'s own comment says CR 603.4 and is RIGHT.** But note my earlier
+  correction table: my first draft of the manifest wrote "CR 603.4 state triggers", which is wrong —
+  **state triggers are CR 603.8**; 603.4 is the intervening "if". Fixed here.
+
+  📐 **DESIGN §3.21 is claimed by THREE branches at once** (step-triggers, split-cards,
+  as-enters) plus mine. I renumbered mine to **§3.24** to get out of the way; the other three still
+  collide with each other and the integrator will need to settle them.
+
   Not duplicated with `test/full-pool-soak` (randomized whole-pool play) or
   `test/interaction-matrix` (pairwise system interactions): this is the INDEX, one named rule per
   test, and where an existing per-feature suite already affirms a rule properly the manifest CITES

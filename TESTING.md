@@ -137,8 +137,17 @@ told by the suite".
 crosses systems pairwise; `packages/sim`'s `rules-audit.test.ts` asserts basic law
 across full games. This suite is the **index**: one named rule per test. Where an
 existing per-feature suite already affirms a rule properly, the manifest CITES it
-rather than copying it — 40 sections are covered that way, and a manifest that
+rather than copying it — 42 sections are covered that way, and a manifest that
 points at a good test is better than a second copy of it.
+
+#### Every claim here has been seen to fail
+
+33 sabotages: break the rule in the engine, confirm the suite goes RED, restore.
+33 caught, 0 escapes. **Four sabotages came back green on the first attempt and
+every one was a bad anchor rather than a weak test** — one patched a branch the
+test never reaches, one changed only a TYPE (Vitest strips types, so a type edit
+can never fail a test), two named fields that do not exist. If a sabotage stays
+green, suspect the sabotage first.
 
 ### Rules engine — `packages/core`
 The pure, deterministic MTG engine. Everything here runs without DOM or network.
