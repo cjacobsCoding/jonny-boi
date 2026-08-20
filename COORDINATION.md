@@ -120,9 +120,95 @@ throughput (games/sec) from regressing.
 
 | feat/as-enters-choices | worker | packages/core (NEW as-enters.ts + as-enters.test.ts; card/choices/state/statics/triggers/effects/events/engine/index, internal clone+zones+triggers-runtime), packages/cards (choice-primitives `chooseAsEnters`, compile rules/compile/types + NEW as-enters-cards.test.ts), packages/ai (choices.ts + NEW as-enters-pilot.test.ts), packages/sim (observation +1, paired-arms +1), apps/web (play/choice-view + ChoicePrompt + styles.css + play-format + replay-format + about/mechanics + 2 tests), DESIGN §3.21, COORDINATION | 🚧 PUSHED, not merged |
 | feat/tutor-and-sacrifice-templates | worker | packages/core (card.ts `AdditionalCastCost`, state.ts stack field, engine.ts cast gate + cost question + payment, index.ts export, internal/clone.ts +1 field, NEW additional-cast-cost.test.ts), packages/cards (choice-primitives searchLibrary `route`/graveyard, compile/{rules,compile,types}.ts, NEW tutors-and-additional-costs.test.ts, 1 reworded template-gaps case), packages/ai (choices.ts tutor-reach policy + weights.ts +2 entries + choices.test additions), packages/sim/src/paired-arms-config.ts (COMMENT only), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
+| feat/replacement-effects | worker | packages/core (NEW replacement.ts + internal/replacement.ts + replacement.test.ts; card.ts `replacements`, state.ts `replacements`, events.ts +2, effects.ts `addReplacementEffect`, turn-facts.ts +1 fact, engine.ts draw+cleanup, index.ts exports, internal/{clone,combat,sba}.ts), packages/cards (primitives.ts damage/counters/draws + NEW `preventDamage`, compile/{rules,compile,types}.ts, NEW replacement-effects.test.ts), packages/ai (heuristic.ts fog intent + incoming damage, tactical.ts attacker re-pricing, weights.ts +2, effect-value.ts +1, NEW replacement-pilot.test.ts), packages/sim (observation +2, paired-arms +1), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.22, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `feat/replacement-effects` 🚧 PUSHED — **replacement and prevention effects
+  (CR 614/615/616), a layer the engine had never had.** Three template buckets that are ONE system
+  underneath: counter multipliers, damage scaling, and prevention/fogs — plus draw replacement, which
+  is the same machinery watching a third event. Full write-up in DESIGN §3.22.
+
+  **Measured PAIRED against the same-day `origin/main` (`068be3d`), same cached corpus: 485 → 501 of
+  2100 playable (23.1% → 23.9%), +16 cards.** (The same +16 against the pre-merge main this branch
+  started from, 408 → 424 — the families that landed meanwhile moved the baseline, not this
+  contribution.) Suite: **3,864 passed, 0 failed** after merging origin/main.
+
+  ⚠️ **THE THREE THINGS THAT ARE EASY TO GET WRONG HERE, and what this branch did instead.**
+  1. **CR 614.5 — an effect applies at most ONCE per event.** A doubling effect matches its own
+     output, so the naive loop never returns (or, quieter, applies twice and reports a plausible
+     wrong number). The applicable set is a **bitmask over the candidate list**, so the loop runs at
+     most `candidates.length` times BY CONSTRUCTION — no recursion, no depth counter to tune. Two
+     doublers on one event give ×4 and log exactly two applications.
+  2. **CR 616.1 — the ORDER is a real choice, and it is SETTLED rather than asked.** Hardened Scales
+     then Corpsejack Menace puts **4** counters; the other order puts **3**. The engine enumerates
+     the orders (exhaustive to `ORDER_SEARCH_MAX_CANDIDATES = 4`, canonical beyond) and takes the one
+     the affected player would take, under ONE named objective (`affectedPlayerPrefersMore`: least
+     damage, most `+1/+1`, fewest of anything else), ties broken by an order that is a function of
+     the state alone so a paired A/B run cannot diverge. **It is not asked because it could not be
+     asked consistently:** the hottest call site is the combat damage step, a synchronous batch with
+     no resolution frame to park a `pendingChoice` in, and a layer that asked for a Lightning Bolt
+     and decided silently for a combat hit is exactly the drift this repo keeps unwinding. Same class
+     of delegated sub-decision as "which lands get tapped", which the shared planner has always
+     answered (§3.11) — every order it can produce is legal.
+  3. **A prevention SHIELD is consumed and cannot resurrect.** `remaining` is written back AND the
+     record is spliced out of `GameState.replacements` at zero. Both, deliberately: an index built
+     earlier IN THE SAME DAMAGE STEP still references the record, so the write is what stops the
+     second attacker re-using a spent shield, and the removal is what stops any later index seeing
+     it. A shield declared as a PRINTED ability is refused outright — it has nowhere to keep its
+     count and would prevent N every time, forever.
+
+  ⚡ **INERT AND ALLOCATION-FREE WHEN NOTHING REPLACES ANYTHING** — it sits on the damage and counter
+  paths, so this was the design constraint, not an afterthought. `indexReplacements` returns the
+  SHARED FROZEN EMPTY ARRAY by reference and the guard everywhere is `index.length === 0`;
+  `GameState.replacements` is optional and ABSENT in every game that never makes one (the `cardGrants`
+  discipline). Evidence, three ways, because wall clock here is worthless (the same build read 39 and
+  108 games/sec in one session):
+  - **Allocation:** 561 vs main's 560 median scavenges over 40 seeded self-play games (semi-space
+    pinned to 1 MB), with an identical 29,899 actions — +1, inside the ±2 band `card-grants`
+    documents.
+  - **The added work, counted directly:** `indexReplacements` runs **4,324 times over 120 games and
+    reads 60,530 permanent properties in total, allocating nothing**.
+  - **Gauntlet seed 99: 81/280, every matchup row equal to `origin/main`.** (⚠️ main measures
+    **81/280**, not the 79/280 some briefs still quote — verified in a separate `origin/main`
+    worktree on this box.)
+  - CPU, `process.cpuUsage`, paired and interleaved, 8 pairs: median **1.004×**. Read it with its own
+    caveat — the BASE arm alone swung 48% run to run, so anything under ~10% is below this box's
+    resolution.
+
+  🧠 **THE AI IS NOT BLIND TO IT.** `tactical.ts` re-prices every attacker through the layer, so
+  `maxDamage`, guaranteed damage, the **lethal** flag and the clock read the doubled swing; a pilot
+  that owned a Gratuitous Violence and attacked on printed power would decline a lethal attack.
+  Blocking reads it too. Both go through `projectDamage`, which runs the IDENTICAL loop with the
+  IDENTICAL ordering rule and **writes nothing** — no second copy of the arithmetic, and a pilot
+  weighing its options cannot spend the shield it is weighing. A new `fog` intent is priced by what it
+  actually prevents (zero in a main phase, `lethalBurnScore` in front of lethal, with a named floor so
+  a poke does not buy a card).
+
+  ⚠️ **A REAL PILOT DEFECT FELL OUT OF IT, and it is not about fogs — anyone touching the pilot
+  should know.** `chooseBlock` used to `return` a pass when no block was worth making, which made
+  **every instant-speed response in the declare-blockers step unreachable** for a pilot that declined
+  to block: a combat trick, a burn spell to finish the turn, a fog. It now falls through to the
+  priority logic, which ends in the same pass when nothing is worth casting. **Gauntlet seed 99 is
+  unchanged (81/280, every row equal)** — the shipped pool has no instant the pilot wants in that
+  window, so this is the fix that makes the pool's next one work rather than a play change.
+
+  ⛔ **DEFERRED, with named blockers — do not read these as unfinished replacement work.** Each is
+  now its own `UNSUPPORTED_HINTS` entry, so the audit names the residual instead of a solved system:
+  a **TOKEN-count** replacement (Doubling Season's other half — the layer scales a number, creating
+  extra objects is a different outcome; 12 corpus cards), a **ZONE-CHANGE** replacement ("if it would
+  die, exile it instead" — quantities, not destinations), a **LIFE-CHANGE** event (Alhammarret's
+  Archive, Rhox Faithmender — one more event kind on this same layer, blocked on nothing but a
+  chokepoint at `changeLife`; 6 cards), a prevention **RIDER** (Vigor, The Mindskinner), a shield
+  bound to **a source of your choice** (Deflecting Palm), and a draw replacement whose result is a
+  different **ACTION** (Notion Thief, Abundance).
+
+  ⚠️ **NOT IN THE SHIPPED POOL YET.** Every card above plays as printed through the deck importer,
+  but none is in `expanded-pool.ts`, so a player browsing the pool cannot see the mechanic. Closing it
+  is a DATA edit on the §3.20 path (names → `expansion-candidates.json` → `build-expansion.ts` → a
+  data-tools re-fetch → the web card-index regeneration). It needs the NETWORK and rewrites three
+  generated files that other branches own, so it is left for whoever next runs that pipeline.
 
 - 2026-08-20 worker: `feat/step-trigger-templates` 🚧 PUSHED — **the "At the beginning of…" family,
   and the blocker that was sitting in front of all ~65 of its corpus cards.**

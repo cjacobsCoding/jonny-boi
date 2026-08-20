@@ -2147,6 +2147,153 @@ missing you-may template:
 - **Multiversal Passage's "this land is the chosen type"** — a type-changing effect that would have to
   grant the named basic land type's mana ability.
 
+### 3.22 Replacement and prevention effects — a layer the engine never had — ✅ done
+CR 614/615/616. A replacement effect never goes on the stack and never "happens": it watches for an
+event that *would* happen and changes what happens instead. Three printed families that looked like
+three template buckets are **one system underneath**, and this ships as one layer that damage,
+counters and draws all consult — `packages/core/src/replacement.ts` (what a card DECLARES) and
+`packages/core/src/internal/replacement.ts` (what the layer DOES), beside `internal/continuous.ts`
+and `internal/combat.ts`.
+
+**What plays as printed now.**
+- **Counter multipliers** — "If one or more +1/+1 counters would be put on a creature you control,
+  that many **plus one** are put on it instead" (Hardened Scales, Conclave Mentor, Ozolith, Kami of
+  Whispered Hopes) and "**twice** that many" (Corpsejack Menace, Branching Evolution, Doubling
+  Season's counter half).
+- **Damage scaling** — "If a **red** source **you control** would deal damage to **an opponent or a
+  permanent an opponent controls**, it deals that much damage **plus 2** instead" (Torbran) and the
+  doubling/tripling forms (Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+  Tyrant, Dictate of the Twin Gods, Gisela). All three restrictions are kept: a colour read off the
+  cost pips by the same reader protection uses, a source TYPE ("a creature you control"), and whose
+  objects may be hit. A clause with no controller tail is the symmetric card and is **not** quietly
+  read as "yours".
+- **Prevention** — the one-shot form ("Prevent all combat damage that would be dealt this turn" —
+  Fog, Darkness, Spore Frog's sacrifice ability) registers a floating effect that expires in cleanup;
+  the STATIC form ("Prevent all combat damage that would be dealt to **attacking** creatures you
+  control" — Dolmen Gate) is card data whose lifetime is derived from the battlefield. The two are
+  separated by the printed tail "this turn" and by a permanent check, because compiling a Fog as a
+  static would prevent damage for the rest of the game. "Prevent **half** that damage, rounded up"
+  (Gisela's second clause) is its own outcome, since halving produces a prevented amount the log must
+  report and the rounding direction is printed.
+- **Draw replacement** — "If you would draw a card **except the first one you draw in each of your
+  draw steps**, draw two cards instead" (Teferi's Ageless Insight) and "…**while your library has no
+  cards in it, you win the game** instead" (Laboratory Maniac). The printed exception is EXACT, not
+  approximated: core records a `drewInOwnDrawStep` turn fact as the draw-step draw happens, so the
+  second and every later draw in that step really is replaced.
+
+**⚠️ THE THREE THINGS THAT ARE EASY TO GET WRONG HERE, and what this branch did instead.**
+
+**1. CR 614.5 — an effect applies AT MOST ONCE to a given event.** This is the rule that makes a
+doubling effect terminate. After a replacement modifies the event the engine re-asks which effects
+apply *to the modified event*, and Doubling Season still matches its own output. The applicable set
+is therefore a **bitmask over the candidate list**, so an effect already applied is never offered
+again and the loop runs at most `candidates.length` times **by construction** — no recursion, no
+depth counter to tune. Two doublers on one event give ×4; one doubler gives ×2 and logs exactly one
+application.
+
+**2. CR 616.1 — the ORDER is the affected player's, and it is a real choice.** Hardened Scales then
+Corpsejack Menace puts **4** counters; the other order puts **3**. This engine settles that
+decision **deterministically, in one place, for every seat and every call site**: it enumerates the
+orders (exhaustively up to `ORDER_SEARCH_MAX_CANDIDATES = 4`, canonical order beyond) and takes the
+one the affected player would take — least damage, most `+1/+1` counters, fewest counters of any
+other kind (`affectedPlayerPrefersMore`, one named objective) — with ties broken by a canonical
+order that is a function of the state alone, so a paired A/B run cannot diverge on it.
+
+⚠️ **It is settled rather than ASKED, and the reason is structural, not laziness.** The hottest call
+site is the combat damage step, which is a synchronous batch inside the turn machine: `resolveCombatDamage`
+applies every assignment before priority exists again, so there is no resolution frame to park a
+`pendingChoice` in. A layer that asked a question for a Lightning Bolt and decided silently for a
+combat hit would be exactly the drift this repo keeps having to unwind. This is the same class of
+delegated sub-decision as "which lands get tapped to pay this cost", which core's shared payment
+planner has always answered on the player's behalf (§3.11) — every order it can produce is legal, and
+the decision the CARD prints is modelled in full.
+
+**3. A prevention SHIELD is consumed, and cannot resurrect.** "Prevent the next N damage" carries
+`remaining` on its floating record; it is decremented by exactly what it prevented, written back
+*and* spliced out of `GameState.replacements` the moment it hits zero. Both writes are deliberate:
+an index built earlier **in the same damage step** still holds a reference to the record, so the
+write is what stops the second attacker in one combat re-using a spent shield, and the removal is
+what stops any later index seeing it at all. A shield declared as a PRINTED ability is refused by the
+layer outright — it would have nowhere to keep its count and would prevent N *every time, forever*,
+which is a different and much better card.
+
+**⚡ THE LAYER IS INERT AND ALLOCATION-FREE WHEN NOTHING REPLACES ANYTHING.** This sits on the damage
+and counter paths, the hottest in the game, so `indexReplacements` returns the **shared frozen empty
+array by reference** unless some permanent, emblem or floating record actually declares a
+replacement; the guard at every call site is `index.length === 0`. The discovery loop is the same
+shape as `indexContinuous`'s — an indexed `for` over `state.battlefield`, one property read per
+permanent, no iterator, no output array unless something is found — and `GameState.replacements` is
+OPTIONAL and **absent** in every game that never makes one, exactly like `cardGrants`.
+
+**Measured three ways, because wall clock on this box is worthless** (the same build read 39 and then
+108 games/sec within one session):
+| measurement | origin/main | this branch |
+|---|---|---|
+| **Allocation** — scavenges over 40 seeded self-play games, semi-space pinned to 1 MB, median of 3 | **560** | **561** (identical 29,899 actions) |
+| **The added work itself** — `indexReplacements` calls / permanent property reads over 120 games | — | **4,324 calls / 60,530 reads, zero allocation** |
+| **Gauntlet, Mono-Red Aggro, 40 games/deck, seed 99** | **81/280** | **81/280 — every matchup row equal** |
+| **CPU time**, `process.cpuUsage`, paired and interleaved, 8 pairs | median 1844 ms | median 1851 ms (**1.004×**) |
+
+⚠️ Read the CPU row with its own caveat: the BASE arm alone swung 1421–2109 ms run to run (48%) on
+this shared box, so anything under ~10% there is below the machine's resolution. The allocation row
+and the byte-identical gauntlet are the load-bearing evidence.
+
+**The AI is not blind to it, and that was two separate fixes.** `packages/ai/src/tactical.ts`
+re-prices every attacker's damage through the layer (`projectDamage`), so `maxDamage`, the guaranteed
+damage after optimal blocks, the **lethal** flag and the clock all read the doubled swing — a pilot
+that owned a Gratuitous Violence and still attacked on printed power would decline a lethal attack.
+`totalIncomingDamage` does the same for the blocking decision. Both go through `projectDamage`, which
+runs the **identical** loop with the identical ordering rule and **writes nothing** — there is no
+second copy of the arithmetic, and a pilot weighing its options cannot spend the prevention shield it
+is weighing. A new `fog` spell intent is priced by exactly what it prevents (zero in a main phase,
+`lethalBurnScore` in front of a lethal swing, with a named floor so a poke does not buy a card).
+
+⚠️ **A REAL PILOT DEFECT FELL OUT OF IT, and it was not about fogs.** `chooseBlock` used to `return`
+a pass when no block was worth making, which made **every instant-speed response in the
+declare-blockers step unreachable** for a pilot that had declined to block — a fog, a combat trick, a
+burn spell to finish the turn. "Nothing is worth blocking" is an answer to WHICH BLOCKS, not to what
+to do with priority; it now falls through to the priority logic, which ends in the same pass when
+nothing is worth casting. **Gauntlet seed 99 is unchanged** (81/280, every row equal), because the
+shipped pool contains no instant the pilot wants in that window — the fix is what makes the pool's
+next one work.
+
+**Measured PAIRED against the same-day `origin/main` (`068be3d`) on the same cached corpus:
+485 → 501 of 2100 playable (23.1% → 23.9%), +16 cards.** The same +16 was measured against the
+pre-merge main this branch started from (408 → 424), which is the useful cross-check: the families
+that landed meanwhile moved the baseline, not this work's contribution. Re-run with
+`node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0`.
+
+The 16, by shape: **counter multipliers** (Hardened Scales, Branching Evolution, Corpsejack Menace),
+**damage scaling** (Torbran, Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+Tyrant, Dictate of the Twin Gods, Gisela), **prevention** (Fog, Darkness, Spore Frog, Dolmen Gate)
+and **draws** (Laboratory Maniac, Teferi's Ageless Insight). Several more cards in these families
+compile their replacement clause correctly and stay `incomplete` on a DIFFERENT line — Conclave
+Mentor on "gain life equal to its power", City on Fire on convoke, Iroas on devotion — which is the
+contract working, not a gap in this system.
+
+**Still reported, by name, never approximated** (each is now its own `UNSUPPORTED_HINTS` entry, so
+the audit names the residual rather than a solved system):
+- a **TOKEN-count** replacement ("twice that many of those tokens are created instead" — Doubling
+  Season's other half, Parallel Lives, Anointed Procession): the layer scales a NUMBER, and creating
+  extra objects is a different outcome;
+- a **ZONE-CHANGE** replacement ("if it would die, exile it instead" — Rest in Peace, Dauthi
+  Voidwalker): the layer changes quantities, not destinations;
+- a **LIFE-CHANGE** event (Alhammarret's Archive, Rhox Faithmender, Bloodletter of Aclazotz) — one
+  more event kind on this same layer, blocked on nothing but a chokepoint at `changeLife`;
+- a prevention **RIDER** ("prevent that damage AND put a +1/+1 counter on it for each 1 prevented" —
+  Vigor, The Mindskinner): prevention itself is implemented, the rider is not;
+- a shield bound to **a source of your choice** (Deflecting Palm) — choosing a source is a question
+  nothing asks;
+- a draw replacement whose result is a different **ACTION** (Notion Thief's skip-and-redirect,
+  Abundance's reveal-until).
+
+⚠️ **NOT YET IN THE SHIPPED POOL.** Every card above is reachable through the deck importer and plays
+as printed, but none is in `packages/cards/data/expanded-pool.ts` yet, so a player browsing the pool
+cannot see the mechanic. Closing that is a DATA edit on the §3.20 path (add the names to
+`expansion-candidates.json`, re-run `build-expansion.ts`, re-fetch data-tools, regenerate the web card
+index) — it needs the network and it rewrites three generated files, so it is deliberately left to
+whoever next runs that pipeline rather than done from this branch.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.
