@@ -2407,6 +2407,11 @@ are creature types without the card being a creature, and that it counts as a ca
 (Tarmogoyf) — so it is a member of `CardType`, has a bit in `CARD_TYPE_BIT`, and `TYPES_WITHOUT_SYSTEM`
 stays honestly empty. A record whose ONLY type is Kindred still reports: CR 308.1 requires a second.
 
+> ✅ **The first two of these SHIPPED in §3.31** — copying a spell on the stack and token copies.
+> The paragraph below is left as written because it is the record of what this section reported and
+> WHY, and its diagnosis was exactly right; what it lists is no longer the open work. (Its "CR 706"
+> citations are also corrected to CR 707 in the source — copying objects is section 707.)
+
 **Reported by name, not half-built:** copying a SPELL on the stack (Reverberate, Narset's Reversal) and
 TOKEN copies (Rite of Replication, Kiki-Jiki) need a stack object that is **not a card** and ceases to
 exist as it resolves (CR 707.10 — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of
