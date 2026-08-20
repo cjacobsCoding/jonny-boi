@@ -424,6 +424,42 @@ export function indexContinuous(state: GameState): ContinuousIndex {
 }
 
 /**
+ * Whether ANY continuous modification could be in force on this board right now
+ * — the cheap gate a caller uses before deciding whether it has to build the
+ * index at all.
+ *
+ * ⚠️ **`state.continuous.length === 0` is NOT that gate, and using it as one is a
+ * shipped-bug shape.** That list holds only layer-4 "until end of turn" effects.
+ * Layer 3 — an Aura or Equipment's grant to its host, an anthem-style static, an
+ * emblem radiating from the command zone — is DERIVED from the battlefield and the
+ * command zones on every read and puts nothing in that list at all (see the
+ * `statics.ts` "lifetime is derived" note). So a fast path keyed on it silently
+ * answers "printed keywords only" on exactly the boards where an equipped,
+ * enchanted or anthem'd creature is standing there wearing a granted keyword. That
+ * is how a real pool card (Mask of Avacyn — "equipped creature … has hexproof")
+ * stayed targetable by an opponent's burn.
+ *
+ * Cost: short-circuits on the first modifying source, and on a board with none it
+ * is one or two property reads per permanent with NO allocation — the same shape,
+ * and the same reason, as `internal/sba.ts`'s `collectAttachments`.
+ */
+export function anyContinuousModification(state: GameState): boolean {
+  if (state.continuous.length > 0) return true;
+  if (state.players.A.command.length > 0 || state.players.B.command.length > 0) return true;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const declared = perm.def.statics;
+    if (declared !== undefined && declared.length > 0) return true;
+    // `!= null` for the same reason `indexContinuous` uses it: an instance built
+    // before this field existed must read as unattached, not as an attachment
+    // with an undefined host.
+    if (perm.attachedTo != null) return true;
+  }
+  return false;
+}
+
+/**
  * Aggregate every active modification for a SINGLE instance without building the
  * whole index. Use for one-off reads; for bulk reads prefer `indexContinuous` + map
  * lookup, which shares the battlefield scan across every permanent.

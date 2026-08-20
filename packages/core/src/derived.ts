@@ -52,6 +52,10 @@ const CARD_TYPE_BIT: Readonly<Record<CardType, number>> = Object.freeze({
   enchantment: 1 << 5,
   planeswalker: 1 << 6,
   battle: 1 << 7,
+  // Kindred IS a card type (CR 308), so a Kindred Sorcery in a graveyard counts
+  // for two — which is exactly the kind of quietly-wrong number this record
+  // exists to prevent.
+  kindred: 1 << 8,
 });
 
 /** Count distinct card types among cards in BOTH graveyards (Tarmogoyf). */

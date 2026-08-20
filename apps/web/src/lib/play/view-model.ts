@@ -25,14 +25,42 @@ import {
   loyaltyOf,
   protectorOf,
   manaColorsOffered,
+  MANA_COLORS,
   NO_MOD,
   type CardInstance,
   type GameState,
   type InstanceId,
   type KeywordFlags,
+  type ManaPool,
   type PlayerId,
   type StackObject,
 } from '@jonny-boi/core';
+
+/**
+ * The six colour counts of a pool as a plain record — the shape every view, the
+ * replay format and the online board expect.
+ *
+ * Spelled out rather than `{ ...pool }` ON PURPOSE: a pool carrying spend
+ * restrictions also carries a `restricted` array, and spreading it into a
+ * `Record<string, number>` would smuggle a non-number through a view type and
+ * into the replay wire format. The restriction travels as
+ * {@link poolRestrictionLabels} instead, which is a shape the UI can render.
+ */
+export function poolColorCounts(pool: ManaPool): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const color of MANA_COLORS) out[color] = pool[color];
+  return out;
+}
+
+/** The printed spend restrictions on the mana currently floating, in add order. */
+export function poolRestrictionLabels(pool: ManaPool): readonly string[] {
+  const parcels = pool.restricted;
+  if (parcels === undefined) return EMPTY_RESTRICTIONS;
+  return parcels.map((parcel) => `${parcel.amount} {${parcel.color}} ${parcel.restriction.label}`);
+}
+
+/** Shared empty list so the ordinary pool allocates nothing to describe none. */
+const EMPTY_RESTRICTIONS: readonly string[] = Object.freeze([]);
 
 /** A hand card the viewer is allowed to see (their own hand). */
 export interface VisibleHandCard {
@@ -105,6 +133,17 @@ export interface SeatView {
   readonly graveyard: readonly VisibleHandCard[];
   readonly exileCount: number;
   readonly manaPool: Readonly<Record<string, number>>;
+  /**
+   * The printed SPEND RESTRICTIONS on mana currently floating — "only to cast a
+   * creature spell". One entry per restricted parcel, in the order the mana was
+   * added, so a seat holding two differently-restricted mana shows both.
+   *
+   * Public information, exactly like the mana itself: the restriction was printed
+   * on a permanent everyone can read, and the whole table watched it be tapped.
+   * Shown because a pool reading "3 mana" while only one of them can pay for the
+   * spell in hand is otherwise an unexplained refusal.
+   */
+  readonly restrictedMana: readonly string[];
   readonly hasLost: boolean;
   readonly permanents: readonly BoardPermanent[];
 }
@@ -189,7 +228,8 @@ function seatView(state: GameState, seat: PlayerId, name: string, reveal: boolea
     graveyardCount: p.graveyard.length,
     graveyard: visibleHand(p.graveyard),
     exileCount: p.exile.length,
-    manaPool: { ...p.manaPool },
+    manaPool: poolColorCounts(p.manaPool),
+    restrictedMana: poolRestrictionLabels(p.manaPool),
     hasLost: p.hasLost,
     permanents,
   };

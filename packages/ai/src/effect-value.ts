@@ -54,7 +54,7 @@ import {
 import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
-import { keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
+import { boardIndex, keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -372,6 +372,34 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /** Life is cheap at a healthy total and priceless when the clock is on us. */
+  /**
+   * PREVENTION — a fog, or a mode of one (Dawn Charm's first bullet). Its value
+   * is not a property of the card: it is exactly the damage it stops, which is
+   * ZERO unless an attack has already been declared against us. So this asks the
+   * same three questions the main-phase scorer does, in one place, and answers
+   * zero cheaply the rest of the time — a modal spell whose prevention mode
+   * scored a flat number would pick that mode in an empty main phase and throw
+   * the card away.
+   */
+  preventDamage: (_params, ctx) => {
+    const combat = ctx.state.combat;
+    if (!combat || !combat.attackersDeclared || combat.attackers.length === 0) return 0;
+    if (ctx.state.activePlayer === ctx.player) return 0; // we are the attacker
+    const index = boardIndex(ctx.state);
+    let incoming = 0;
+    for (const id of combat.attackers) {
+      const attacker = ctx.state.battlefield.find((c) => c.instanceId === id);
+      if (attacker && attacker.controller !== ctx.player) incoming += effPower(attacker, index);
+    }
+    if (incoming <= 0) return 0;
+    const life = ctx.state.players[ctx.player].life;
+    if (incoming >= life) return ctx.weights.lethalBurnScore;
+    if (incoming < ctx.weights.fogMinimumDamagePrevented && life > ctx.weights.desperateLifeThreshold) {
+      return 0;
+    }
+    return incoming * ctx.weights.fogValuePerDamagePrevented;
+  },
+
   gainLife: (params, ctx) => lifeSwing(intParam(params, 'amount', 0), ctx, params),
   loseLife: (params, ctx) => -lifeSwing(intParam(params, 'amount', 0), ctx, params),
 

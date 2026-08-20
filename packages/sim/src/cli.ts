@@ -8,6 +8,10 @@
  *   gauntlet <deck> [opts]                  deck vs every sample deck
  *   swap <deck> --out X --in Y [opts]       the paired A/B single-card-swap verdict
  *   suggest <deck> [opts]                   rank candidate swaps that improve the deck
+ *   soak [--games N] [--seed S]             the FULL-POOL SOAK: randomised legal
+ *                                           decks from the whole pool, every
+ *                                           invariant checked, every mechanic
+ *                                           required to fire (see soak.ts)
  *
  * Common options: --games N, --seed S, --pilot <id>. The accepted ids are read
  * from `SELECTABLE_PILOT_IDS`, so a new pilot appears in the usage text and in
@@ -37,6 +41,8 @@ import { suggestSwaps, type SuggestionReport } from './suggest.js';
 import type { HistoryRejection, SuggestionHistory } from './suggest-history.js';
 import { DEFAULT_SUGGEST_CONFIG } from './suggest-config.js';
 import { DEFAULT_SIM_CONFIG, DEFAULT_STATS_CONFIG, DEFAULT_SWAP_SCOPE, FIDELITY_CAVEAT, type SwapScope } from './config.js';
+import { SOAK_BASE_SEED, SOAK_DEEP_DEFAULT_GAMES, SOAK_DEEP_ENV_VAR, SOAK_MECHANIC_SEED_ATTEMPTS } from './soak-config.js';
+import { formatSoakReport, runSoak } from './soak.js';
 import type { ProportionCI } from './stats.js';
 
 const PROGRAM = 'jonny-boi sim';
@@ -51,6 +57,7 @@ Usage:
   npm run sim -- swap <deck> --out "<card>" --in "<card>" [--games N] [--seed S] [--pilot id] [--scope one|playset]
   npm run sim -- suggest <deck> [--games N] [--cut "<card>"] [--max-candidates K] [--seed S]
                                [--pilot id] [--history <file>] [--no-adaptive]
+  npm run sim -- soak [--games N] [--seed S] [--pilot id]
 
 Notes:
   • Decks and cards may be given by NAME (quote names with spaces) or by id.
@@ -84,6 +91,14 @@ Notes:
     shortlist and prints the same answer.
   • --no-adaptive runs the legacy fixed-budget sweep (every candidate, same games)
     for comparison.
+  • soak plays RANDOMISED-BUT-LEGAL decks built from the whole card pool — not the
+    curated gauntlet — checking every invariant in \`soak-config.ts\` on every
+    settled state and FAILING if a mechanic the pool prints never fires. Exit code
+    is non-zero when it finds anything. Every failure prints the seed and both
+    decklists, so it replays. --games N is the number of unanchored MIXED games
+    (default ${SOAK_DEEP_DEFAULT_GAMES}); a block of mechanic-anchored games runs
+    first regardless. The same run is available inside Vitest:
+    \`${SOAK_DEEP_ENV_VAR}=N npx vitest run packages/sim/src/soak-deep.test.ts\`.
   • Fidelity (DESIGN §3.9, done): the engine models triggered abilities, "until
     end of turn" effects, planeswalkers with loyalty, transforming DFCs, printed
     flashback, the characteristic-defining star P/T box and turn-scoped memory
@@ -632,6 +647,48 @@ function writeHistoryFile(path: string, history: SuggestionHistory): void {
 
 // --- entry ---------------------------------------------------------------------
 
+/**
+ * `soak` — the full-pool soak (see `soak.ts`).
+ *
+ * Prints the report whatever happens (a green soak whose output was silence is
+ * indistinguishable from a soak that never ran) and exits non-zero if it found
+ * anything: an invariant break, a game that could not end, or a mechanic the
+ * pool prints that never fired.
+ *
+ * Progress is a game COUNT, not an ETA. Ten agents share this box and the same
+ * build has measured 39–87 games/sec inside an hour, so a projected finish time
+ * here would be fiction.
+ */
+function cmdSoak(flags: Flags): number {
+  const lab = makeLab();
+  const games = flags.games ?? SOAK_DEEP_DEFAULT_GAMES;
+  const seed = flags.seed ?? SOAK_BASE_SEED;
+  const pilot = resolvePilots(flags).pilotA;
+  console.log(`Soak: ${games} mixed games + one anchored matchup per mechanic, seed ${seed}, pilot "${pilot.id}"`);
+
+  const progressEvery = Math.max(1, Math.floor(games / SOAK_PROGRESS_LINES));
+  const report = runSoak({
+    pool: lab.pool,
+    registry: lab.registry,
+    pilot,
+    mixedGames: games,
+    anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS,
+    baseSeed: seed,
+    onGame: (played, total) => {
+      if (played % progressEvery === 0) console.log(`  … ${played}/${total} games`);
+    },
+  });
+
+  console.log(`\n${formatSoakReport(report)}`);
+  const failed =
+    report.violations.length > 0 || report.actionCapHits > 0 || report.inertMechanics.length > 0;
+  console.log(failed ? '\nSOAK FAILED — see above.' : '\nSoak clean.');
+  return failed ? 1 : 0;
+}
+
+/** How many progress lines a soak prints, whatever its size. */
+const SOAK_PROGRESS_LINES = 20;
+
 function run(argv: readonly string[]): number {
   const args = argv.slice(2);
   if (args.length === 0) {
@@ -656,6 +713,8 @@ function run(argv: readonly string[]): number {
       return cmdSwap(flags);
     case 'suggest':
       return cmdSuggest(flags);
+    case 'soak':
+      return cmdSoak(flags);
     default:
       throw new CliError(`unknown command "${command}". Run with --help for usage.`);
   }

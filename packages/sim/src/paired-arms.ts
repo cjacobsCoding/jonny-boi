@@ -49,6 +49,7 @@ import { applySwap, copiesSwappedBy, summarizePairedSwap } from './swap.js';
 import { DEFAULT_DECK_RULES, DEFAULT_SWAP_SCOPE, type DeckRules } from './config.js';
 import type { PairedTable } from './stats.js';
 import {
+  acquiresForeignAbilities,
   CONTROL_CHANGING_PRIMITIVES,
   HERO_FIRST_INSTANCE_ID,
   HERO_SEAT,
@@ -737,6 +738,22 @@ function decideIdenticalGameSkip(
         reason:
           `pilot "${pilot.id}" reasons over hidden library contents (it rolls out real draws), ` +
           'so a game can differ even when the swapped card is never drawn',
+      };
+    }
+  }
+
+  // A COPY effect (CR 706) detaches a permanent's abilities from its decklist
+  // row, which is the map `peekCouldReadHeroLibrary` reasons through. See
+  // `ABILITY_ACQUIRING_DEFINITION_FIELDS` for why this is withdrawn wholesale
+  // rather than handled per instance.
+  for (const deck of [baseLoaded, ...opponents]) {
+    const copier = deck.library.find((def) => acquiresForeignAbilities(def));
+    if (copier) {
+      return {
+        enabled: false,
+        reason:
+          `"${copier.name}" can enter as a COPY of another permanent, so its abilities are not the ones ` +
+          'its decklist row prints and a library read through them would be invisible to the skip',
       };
     }
   }

@@ -17,6 +17,8 @@ import { entersTapped } from './card.js';
 import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import { applyControlChange } from './internal/continuous.js';
+import type { ReplacementAbility } from './replacement.js';
+import { addFloatingReplacement } from './internal/replacement.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {
   ChooseModesRequest,
@@ -92,6 +94,18 @@ export interface EffectContext {
    * replacement for modelling pumps as permanent +1/+1 counters.
    */
   addContinuousEffect(mod: ContinuousModRequest): number;
+  /**
+   * Register a FLOATING replacement/prevention effect (CR 614/615) — the channel
+   * every fog uses ("prevent all combat damage that would be dealt this turn"),
+   * and every shield ("prevent the next 3 damage that would be dealt to target
+   * creature"). Returns the new record's id.
+   *
+   * `controller` defaults to the source's controller and is what every `'you'` /
+   * `'opponent'` scope in the filter is read against; `duration` defaults to
+   * `'endOfTurn'`, which is what every printed one-shot prints. A shield's
+   * ceiling comes from `outcome.preventUpTo` and is consumed as it prevents.
+   */
+  addReplacementEffect(request: ReplacementEffectRequest): number;
   /**
    * Create a token permanent on the battlefield under `controller` (defaults to the
    * source's controller) from a token card definition. Returns the new instance id.
@@ -236,6 +250,19 @@ export interface ChoiceChannel {
  * The data a primitive supplies to register a continuous effect. `target` defaults
  * to the source instance; `duration` defaults to `'endOfTurn'`.
  */
+/**
+ * What a primitive asks for when it registers a floating replacement/prevention
+ * effect. The ability half is the same {@link ReplacementAbility} a card prints,
+ * so a fog and a printed prevention static say the same thing in the same words;
+ * only the lifetime fields are extra.
+ */
+export interface ReplacementEffectRequest extends ReplacementAbility {
+  /** Whose "you" the filter's controller scopes mean. Defaults to the source's controller. */
+  readonly controller?: PlayerId;
+  /** Defaults to `'endOfTurn'`, which is what every printed one-shot prints. */
+  readonly duration?: ContinuousDuration;
+}
+
 export interface ContinuousModRequest {
   readonly target?: InstanceId;
   readonly duration?: ContinuousDuration;
@@ -327,6 +354,17 @@ export function applyEffectRef(
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
+    },
+    addReplacementEffect(request) {
+      return addFloatingReplacement(base.state, {
+        event: request.event,
+        applies: request.applies,
+        outcome: request.outcome,
+        sourceInstanceId: base.source.instanceId,
+        controller: request.controller ?? base.controller,
+        duration: request.duration ?? 'endOfTurn',
+        ...(request.label !== undefined ? { label: request.label } : {}),
+      });
     },
     createToken(def, controller) {
       return createTokenInState(base.state, def, controller ?? base.controller, emit);

@@ -54,6 +54,7 @@ import type {
   InstanceId,
   ManaColor,
   ManaCost,
+  ManaPool,
   PlayerId,
 } from '@jonny-boi/core';
 import {
@@ -436,12 +437,14 @@ function bestUnlockedValue(
     const value = query.values[i] as number;
     if (value <= best) continue;
     if (!couldPay(query.pips, i, query.capWithLand, query.availableWithLand)) continue;
-    const cost = (spells[i] as CardInstance).def.cost as ManaCost;
+    const spell = spells[i] as CardInstance;
+    const cost = spell.def.cost as ManaCost;
 
     let already = query.payableNow[i];
     if (already === undefined) {
       already = couldPay(query.pips, i, query.colorCap, query.availableMana)
-        ? planManaPayment(view as unknown as GameState, me, cost, legalActions) !== undefined
+        ? planManaPayment(view as unknown as GameState, me, cost, legalActions, spell.def, 'cast') !==
+          undefined
         : false;
       query.payableNow[i] = already;
     }
@@ -454,14 +457,22 @@ function bestUnlockedValue(
         actionsWithLand.push({ kind: 'tapForMana', player: me, instanceId: land.instanceId, mode });
       }
     }
-    if (planManaPayment(withLand, me, cost, actionsWithLand as GameAction[]) === undefined) continue;
+    // The DEFINITION, not a prebuilt purpose: the restricted mana this land would
+    // make does not exist yet, so a purpose gated on the live pool would be
+    // `undefined` and the land would look like it unlocks nothing.
+    if (
+      planManaPayment(withLand, me, cost, actionsWithLand as GameAction[], spell.def, 'cast') ===
+      undefined
+    ) {
+      continue;
+    }
     best = value;
   }
   return best;
 }
 
 /** The shape `planManaPayment` needs from `players`, without a `GameState` cast. */
-type ManaPlanPlayers = Readonly<Record<PlayerId, { readonly manaPool: Readonly<Record<ManaColor, number>> }>>;
+type ManaPlanPlayers = Readonly<Record<PlayerId, { readonly manaPool: ManaPool }>>;
 
 // --- the cheap payability filter -------------------------------------------------
 
