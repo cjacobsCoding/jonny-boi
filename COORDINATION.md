@@ -203,6 +203,12 @@ _Append dated notes here; keep them short. Newest at top._
   limit already recorded in DESIGN, and it can only ever decline a payment — never make an illegal
   one.
 
+  ⚠️ **DESIGN SECTION-NUMBER COLLISION, for the integrator:** I wrote this up as **§3.21**, and at
+  least one other in-flight branch (a combat/equipped-trigger one, measuring 408 → 420 on the same
+  corpus) is writing §3.21 too. Whichever lands second should simply be renumbered — the sections are
+  independent and neither depends on the number. Worth knowing before the merge, because the conflict
+  will look like two unrelated features fighting over one heading.
+
   📦 **POOL FOLLOW-UP for whoever runs the expansion generator next:** Ancient Ziggurat,
   Somberwald Sage, Eldrazi Temple and Maelstrom of the Spirit Dragon now compile `'complete'` and
   should be picked up by `feat/pool-expansion`'s candidate regeneration. I deliberately did not touch
