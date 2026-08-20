@@ -146,12 +146,25 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
       // from the immutable DEFINITION, but `inst.def` is the ACTIVE face and a
       // transform swaps it — so identity of the trigger list, not presence of
       // the entry, is what proves the cached source is still current.
+      //
+      // NOTE what is deliberately NOT in this check: the permanent's ATTACHMENT.
+      // An Equipment moving from one creature to another does not invalidate the
+      // entry, because the entry carries the live instance (`permanent`) rather
+      // than a copy of `attachedTo` — `matchTriggers` reads the current value at
+      // match time. Adding `attachedTo` here would rebuild the source on every
+      // equip for no benefit.
       if (known !== undefined && known.controller === inst.controller && known.triggers === triggers) continue;
       (seenSources ??= new Map()).set(inst.instanceId, {
         instanceId: inst.instanceId,
         controller: inst.controller,
         name: inst.def.name,
         triggers,
+        // The live permanent, read only by a `watches: 'attachedHost'` condition
+        // ("Whenever equipped creature deals combat damage to a player"). A
+        // reference costs nothing to store and is the ONLY way the answer stays
+        // current for an Equipment whose host dies to first-strike damage
+        // between the two combat-damage steps of one action.
+        permanent: inst,
       });
       snapshot = null;
     }

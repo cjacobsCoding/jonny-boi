@@ -221,10 +221,16 @@ export type {
   TriggerCondition,
   TriggerEvent,
   TriggerWho,
+  TriggerWatches,
   PendingTrigger,
   TriggerSource,
 } from './triggers.js';
-export { conditionMatches, matchTriggers, orderPendingTriggers } from './triggers.js';
+export {
+  DEFAULT_TRIGGER_WATCHES,
+  conditionMatches,
+  matchTriggers,
+  orderPendingTriggers,
+} from './triggers.js';
 
 // Continuous-effects seam (DESIGN §3.9): the ONE layering path. `indexContinuous`
 // aggregates both lifetimes — "until end of turn" P/T buffs / keyword grants AND the

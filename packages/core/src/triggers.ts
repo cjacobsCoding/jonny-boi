@@ -83,6 +83,32 @@ export type TriggerEvent =
 export type TriggerWho = 'you' | 'opponent' | 'any';
 
 /**
+ * WHICH OBJECT a self-referential trigger (`etb`/`attacks`/`dies`/`leaves`/
+ * `combatDamageToPlayer`) is watching.
+ *
+ *   - `self`         — the permanent the ability is printed on. Every trigger
+ *                      means this unless it says otherwise, so it is the default
+ *                      and absent from every condition that does not say
+ *                      otherwise.
+ *   - `attachedHost` — the permanent this one is ATTACHED TO: an Equipment's
+ *                      "Whenever **equipped creature** deals combat damage to a
+ *                      player, …" and "Whenever **equipped creature** attacks, …".
+ *
+ * A SCOPE on the existing events rather than a parallel family of
+ * `equippedDealsCombatDamage` events, because the game occurrence is identical —
+ * a creature dealt combat damage to a player — and only the object being watched
+ * differs. Two event names for one occurrence is how a matcher ends up with two
+ * answers to the same question.
+ *
+ * ⚠️ The SOURCE of the ability is still the attachment. A Sword's trigger is
+ * controlled by the Sword's controller, is ordered by the Sword's battlefield
+ * position, and its "~ deals 2 damage" means the Sword. Only the *watched*
+ * object moves — which is exactly why this is a field on the condition and not
+ * a different `sourceInstanceId`.
+ */
+export type TriggerWatches = 'self' | 'attachedHost';
+
+/**
  * A trigger condition: the event to watch plus optional filters. `who` scopes
  * cast/upkeep triggers (default `'you'` — "whenever YOU cast …", "at the beginning
  * of YOUR upkeep"). `spellType` scopes a cast trigger to a card type.
@@ -125,7 +151,21 @@ export interface TriggerCondition {
    * turn it lands.
    */
   readonly excludeSelf?: boolean;
+  /**
+   * For the SELF-REFERENTIAL events: which object this trigger is watching.
+   * Defaults to {@link DEFAULT_TRIGGER_WATCHES} (`'self'`), which is what every
+   * printed trigger means unless it names the equipped/enchanted creature.
+   *
+   * `'attachedHost'` on a source attached to NOTHING matches nothing at all —
+   * it never falls back to the source itself. A Sword lying loose on the
+   * battlefield has an ability that can never trigger, and a fallback would be
+   * the Sword swinging on its own: a card doing something it does not say.
+   */
+  readonly watches?: TriggerWatches;
 }
+
+/** What a condition watches when it does not say: the permanent it is printed on. */
+export const DEFAULT_TRIGGER_WATCHES: TriggerWatches = 'self';
 
 /**
  * A declared triggered ability: a condition + the effects to run when it resolves.
@@ -177,12 +217,34 @@ export interface TriggerSource {
   readonly controller: PlayerId;
   readonly name: string;
   readonly triggers: readonly TriggeredAbility[];
+  /**
+   * The LIVE permanent this source is, read only to answer "what is it attached
+   * to right now" for a `watches: 'attachedHost'` condition.
+   *
+   * A live reference and NOT a copied `attachedTo` id, and that is the whole
+   * point of the field. The runtime caches a `TriggerSource` per permanent and
+   * refreshes it only when the controller or the ability list changes, so a
+   * copied id would go stale exactly where it matters most: an Equipment whose
+   * host died to first-strike damage is unattached by the time regular damage
+   * is dealt, and an Equipment that has LEFT the battlefield had its
+   * `attachedTo` cleared by `resetInstanceForNewZone`. Both read correctly
+   * through the reference and wrongly through a copy.
+   *
+   * Typed as the one field rather than as a whole `CardInstance` so nothing
+   * else can start reading (possibly stale) state through this door.
+   */
+  readonly permanent?: { readonly attachedTo?: InstanceId | null };
 }
 
 /**
  * Decide whether a single ability's condition matches `event`, given the source's
  * controller and (for self-referential triggers like etb/attacks/dies) the source's
  * own instance id. Returns true/false; never throws on a malformed condition.
+ *
+ * `attachedTo` is the object the source is attached to RIGHT NOW, needed only by
+ * a `watches: 'attachedHost'` condition. Passed in (rather than read off a
+ * cached copy) so the answer is the current attachment at the instant the event
+ * is matched — see {@link TriggerSource.permanent}.
  */
 export function conditionMatches(
   condition: TriggerCondition,
@@ -190,18 +252,37 @@ export function conditionMatches(
   sourceInstanceId: InstanceId,
   sourceController: PlayerId,
   subject?: TriggerSubject,
+  attachedTo?: InstanceId | null,
 ): boolean {
   switch (condition.on) {
-    case 'etb':
+    case 'etb': {
       // A permanent's own ETB: a zoneChange into the battlefield for this instance.
-      return event.type === 'zoneChange' && event.to === 'battlefield' && event.instanceId === sourceInstanceId;
-    case 'attacks':
-      return event.type === 'attackersDeclared' && event.attackers.includes(sourceInstanceId);
-    case 'dies':
-      return event.type === 'creatureDied' && event.instanceId === sourceInstanceId;
-    case 'leaves':
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return (
+        watched !== null &&
+        event.type === 'zoneChange' &&
+        event.to === 'battlefield' &&
+        event.instanceId === watched
+      );
+    }
+    case 'attacks': {
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return watched !== null && event.type === 'attackersDeclared' && event.attackers.includes(watched);
+    }
+    case 'dies': {
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return watched !== null && event.type === 'creatureDied' && event.instanceId === watched;
+    }
+    case 'leaves': {
       // Leaving the battlefield: a zoneChange out of the battlefield for this instance.
-      return event.type === 'zoneChange' && event.from === 'battlefield' && event.instanceId === sourceInstanceId;
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return (
+        watched !== null &&
+        event.type === 'zoneChange' &&
+        event.from === 'battlefield' &&
+        event.instanceId === watched
+      );
+    }
     case 'castSpell': {
       if (event.type !== 'spellCast') return false;
       if (!whoMatches(condition.who, event.player, sourceController)) return false;
@@ -240,16 +321,22 @@ export function conditionMatches(
       if (event.type !== 'gainLife') return false;
       return whoMatches(condition.who, event.player, sourceController);
     }
-    case 'combatDamageToPlayer':
+    case 'combatDamageToPlayer': {
       // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
       // the string test is what distinguishes "to a player" from "to a
       // creature or planeswalker" without a second event field.
+      //
+      // `watched` is the source itself for "Whenever ~ deals combat damage to a
+      // player" and the EQUIPPED CREATURE for a Sword's copy of the same line.
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
       return (
+        watched !== null &&
         event.type === 'damageDealt' &&
         event.combat &&
-        event.source === sourceInstanceId &&
+        event.source === watched &&
         typeof event.target === 'string'
       );
+    }
     default:
       // Unknown condition kind → never matches (safe no-op).
       return false;
@@ -302,6 +389,25 @@ function subjectMatches(
   if (!subject) return false;
   if (!whoMatches(condition.who, subject.controller, sourceController)) return false;
   return matchesCardFilter(subject.card, condition.permanentFilter);
+}
+
+/**
+ * The instance a self-referential condition is actually about, or `null` when
+ * there is no such object right now.
+ *
+ * One function so every self-referential case answers "which object?" the same
+ * way. The `null` for an unattached `attachedHost` watcher is the load-bearing
+ * half: a Sword nobody has equipped must match NOTHING, never fall back to
+ * itself. (It also cannot silently match instance id 0 — which is why this
+ * returns `null` rather than `undefined`-as-a-number.)
+ */
+function watchedInstanceId(
+  condition: TriggerCondition,
+  sourceInstanceId: InstanceId,
+  attachedTo: InstanceId | null | undefined,
+): InstanceId | null {
+  if ((condition.watches ?? DEFAULT_TRIGGER_WATCHES) === 'self') return sourceInstanceId;
+  return attachedTo ?? null;
 }
 
 /** Resolve a `who` filter against the acting player and the source's controller. */
@@ -362,6 +468,12 @@ export function matchTriggers(
       const ability = abilities[abilityIndex] as TriggeredAbility;
       const watchesBoard =
         ability.condition.on === 'permanentEnters' || ability.condition.on === 'permanentDies';
+      // Read LIVE, per event, and only for the conditions that ask: an
+      // Equipment's host can change (or vanish) between two events of the same
+      // action, and the cached `TriggerSource` is deliberately not rebuilt for
+      // that. Every other trigger pays one comparison and reads nothing.
+      const attachedTo =
+        ability.condition.watches === 'attachedHost' ? (src.permanent?.attachedTo ?? null) : undefined;
       if (
         !conditionMatches(
           ability.condition,
@@ -369,6 +481,7 @@ export function matchTriggers(
           src.instanceId,
           src.controller,
           watchesBoard ? subjectOf() : undefined,
+          attachedTo,
         )
       ) {
         continue;
