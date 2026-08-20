@@ -1843,7 +1843,8 @@ called only for triggers that actually FIRED, so the per-event scan pays nothing
 
 `packages/cards` reads it through **one shared "whichPlayer" vocabulary** (`playersForParam`):
 `'controller'` · `'opponent'` · `'targetPlayer'` · `'triggering'` · `'each'` (both seats, active player
-first — the order decides a mutual deck-out correctly). `drawCards`, `loseLife` and `dealDamage` all
+first — APNAP, fixed here so the effect is reproducible from a seed rather than dependent on which
+seat the source sits in). `drawCards`, `loseLife` and `dealDamage` all
 speak it, so "each player", "that player" and "each opponent" mean one thing each wherever printed.
 
 **The printed intervening "if" landed with it** (`packages/core/src/intervening.ts`), because half the

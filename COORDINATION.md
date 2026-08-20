@@ -163,8 +163,8 @@ _Append dated notes here; keep them short. Newest at top._
   than compiling to an unconditional "you win the game".
 
   🗣️ **ONE "whichPlayer" vocabulary** in `effect-helpers.playersForParam`: `'controller'` ·
-  `'opponent'` · `'targetPlayer'` · `'triggering'` · `'each'` (both seats, ACTIVE PLAYER FIRST — the
-  order decides a mutual deck-out correctly). `drawCards`, `loseLife` and `dealDamage` all speak it,
+  `'opponent'` · `'targetPlayer'` · `'triggering'` · `'each'` (both seats, ACTIVE PLAYER FIRST — APNAP,
+  fixed here so the effect is reproducible from a seed, not dependent on which seat the source sits in). `drawCards`, `loseLife` and `dealDamage` all speak it,
   so "each player", "that player" and "each opponent" mean one thing each wherever printed. Please
   extend this rather than adding a second player-selector.
 

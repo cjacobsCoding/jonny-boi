@@ -206,9 +206,9 @@ function removeLoyaltyCounters(perm: CardInstance, amount: number): number {
  * order ("each player draws a card").
  *
  * Drawing from an empty library flags a loss via SBA on the next check (we move
- * the top card or stop). A decked player ENDS THAT PLAYER's draws and no one
- * else's: in "each player draws a card" the other player still draws, which is
- * what the card says and what decides a mutual-deck-out race correctly.
+ * the top card or stop). An empty library ends THAT PLAYER's draws and nobody
+ * else's — in "each player draws a card" the other player still draws, which is
+ * what the card says.
  * Used by Brainstorm (3), Ponder (1), Cryptic Command (1).
  */
 export const drawCards: EffectPrimitive = (ctx) => {

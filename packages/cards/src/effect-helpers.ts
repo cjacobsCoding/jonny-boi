@@ -302,10 +302,11 @@ export function instanceAnywhere(state: GameState, id: InstanceId): CardInstance
  *                     reading `ctx.controller` here is the Howling-Mine bug.
  *                     Falls back to the controller when the resolution carries
  *                     no triggering player (a spell, a self-ETB trigger).
- *   `'each'`        — BOTH seats, active player first. The order is APNAP and it
- *                     is load-bearing: "each player draws a card" resolves for
- *                     the active player first, so a deck-out is decided in the
- *                     right order.
+ *   `'each'`        — BOTH seats, ACTIVE PLAYER FIRST. APNAP is the order the
+ *                     rules sequence anything that happens to each player in
+ *                     turn, and fixing it here is what makes "each player draws
+ *                     a card" reproducible from a seed rather than dependent on
+ *                     which seat the source happens to sit in.
  *
  * An unrecognised word resolves to the controller alone — the same safe
  * degradation every other param has. The compiler never emits one.
