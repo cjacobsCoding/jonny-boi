@@ -587,6 +587,19 @@ export {
 // attackable-permanent half of combat, shared with the AI and any UI.
 export { attackedObjectOf } from './internal/combat.js';
 
+/**
+ * The state-based action pass, and the cheap gate the CR 704.3 priority boundary
+ * asks before running it.
+ *
+ * Exported because a test that builds a position by hand — putting counters on a
+ * permanent, setting a life total — is asking about a rule the GAME performs, and
+ * the only honest way to observe it is to make the game perform it. The
+ * alternative is a test that re-implements the rule and then agrees with itself.
+ * Nothing outside core's own machinery should CALL the check to drive play: the
+ * engine already runs it at every mutation site and at the priority boundary.
+ */
+export { checkStateBasedActions, stateBasedActionsPossible } from './internal/sba.js';
+
 // Debug / inspector seam
 export type { SerializedState } from './serialize.js';
 export { serializeState, dumpState } from './serialize.js';

@@ -110,6 +110,12 @@ function pass(state: GameState, reg: EffectRegistry): GameState {
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
 }
 
+/**
+ * Turn-runner: pass until the target, ANSWERING anything the game asks on the
+ * way — CR 514.1's cleanup discard is a real question a turn now ends with. See
+ * `pass` above: it answers whatever is asked, which is what a bare pass
+ * loop can no longer do now that a turn ends with a question.
+ */
 function advanceToStep(state: GameState, target: string, reg: EffectRegistry, max = 400): GameState {
   let s = state;
   let g = 0;

@@ -268,11 +268,10 @@ export const RULES_MANIFEST: RulesManifest = {
     ],
     note:
       'CR 117.3b (priority back to the active player after a resolution) is affirmed in ' +
-      'cr4xx-zones, and CR 117.3c (priority back to whoever cast) in cr6xx — both live beside the ' +
-      'stack behaviour they are about.',
-    shortfall:
-      'CR 117.5 — "each time a player would get priority, the game first performs state-based ' +
-      'actions" — is NOT how this engine is wired. See the gap on section 704.',
+      'cr4xx-zones, and CR 117.3c (priority back to whoever cast) in cr6xx — both live beside ' +
+      'the stack behaviour they are about. CR 117.5 — "each time a player would get priority, ' +
+      'the game first performs state-based actions" — is now how this engine is wired: see the ' +
+      'CR 704.3 boundary test under section 704.',
   },
   '118': {
     status: 'cited',
@@ -317,8 +316,9 @@ export const RULES_MANIFEST: RulesManifest = {
     tests: [
       { rule: '122.1a', title: '+1/+1 counters raise both power and toughness through the effective accessors' },
     ],
-    shortfall:
-      'CR 122.3 — the +1/+1 / -1/-1 annihilation state-based action is missing; see section 704.',
+    note:
+      'CR 122.3 — a permanent may not carry both a +1/+1 and a -1/-1 counter — is affirmed as ' +
+      'the state-based action it is, under section 704.',
   },
   '123': { status: 'not-applicable', reason: noCardHasIt('sticker card (an Unfinity mechanic)') },
 
@@ -506,22 +506,26 @@ export const RULES_MANIFEST: RulesManifest = {
     shortfall: 'CR 401.4 — no card may look at or reorder a library beyond scry/surveil.',
   },
   '402': {
-    status: 'gap',
-    rule:
-      'CR 402.2 — "Each player has a maximum hand size, which is normally seven cards", enforced ' +
-      'by the CR 514.1 cleanup-step discard.',
-    engine:
-      'THERE IS NO MAXIMUM HAND SIZE. `RulesConfig` has `startingHandSize` and ' +
-      '`cardsPerDrawStep` but no maximum, and `engine.ts`\'s cleanup branch expires effects, ' +
-      'clears damage and empties mana pools without ever asking anybody to discard. A player may ' +
-      'hold an unbounded hand for the whole game. This is not cosmetic for a deck-tuning lab: it ' +
-      'changes the value of card draw and of holding reactive spells, so every recorded gauntlet ' +
-      'baseline was measured under it. Reproduce: draw past seven and inspect ' +
-      '`state.players.A.hand.length` after `advanceToTurn(state, n, "untap")`.',
-    owner:
-      'Unowned, and NOT a drive-by fix: it needs a config value, a discard CHOICE at cleanup ' +
-      '(the player picks), pilot support for that choice, hotseat + online UI, and it MOVES every ' +
-      'recorded baseline in DESIGN §3.4a. Written up in COORDINATION.md.',
+    status: 'covered',
+    file: 'cr4xx-zones',
+    tests: [
+      {
+        rule: '402.2',
+        title: 'a hand over the maximum is cut back to it, and one at the maximum is not asked',
+      },
+      { rule: '402.2', title: 'a player at or under the maximum is never asked to discard at all' },
+    ],
+    note:
+      'The maximum is `RulesConfig.maximumHandSize` (7 by default), never a literal, so a format ' +
+      'that changes it is a config edit. It is ENFORCED by the CR 514.1 cleanup discard, whose own ' +
+      'tests live under section 514 — the two entries are one rule seen from the zone side and one ' +
+      'seen from the step side. WARNING: closing this MOVED every recorded gauntlet baseline in ' +
+      'DESIGN section 3.4a. An unbounded hand changes what card draw and held-back reactive spells ' +
+      'are worth, which is the quantity this product exists to measure.',
+    shortfall:
+      'CR 402.6 — a printed "you have no maximum hand size" (Reliquary Tower, Spellbook) is not ' +
+      'modelled: the maximum is a rules-config value, not a per-player one a continuous effect can ' +
+      'raise. No card in the pool prints it.',
   },
   '403': {
     status: 'cited',
@@ -695,13 +699,31 @@ export const RULES_MANIFEST: RulesManifest = {
     status: 'covered',
     file: 'cr5xx-turn-and-combat',
     tests: [
+      {
+        rule: '514.1',
+        title: 'the ACTIVE player discards down to their maximum hand size, and chooses which',
+      },
+      { rule: '514.1', title: 'the discard happens every turn, so a hand cannot grow without bound' },
       { rule: '514.2', title: 'damage marked on permanents is removed as the turn ends' },
       { rule: '514.2', title: '"until end of turn" effects end during the cleanup step' },
       { rule: '514.3', title: 'no player receives priority during the cleanup step' },
+      {
+        rule: '514.3a',
+        title: 'a cleanup that DID open a priority window is followed by another cleanup step',
+      },
+      { rule: '514.3a', title: 'a discard alone does NOT open a priority window; the turn simply ends' },
     ],
-    shortfall:
-      'CR 514.1 — the discard down to maximum hand size — does not happen at all. See the gap on ' +
-      'section 402, which is the same defect from the zone\'s side.',
+    note:
+      'The step runs in the printed order: the CR 514.1 discard first — a CHOICE the active player ' +
+      'makes, so the step suspends on it — then the CR 514.2 simultaneous damage removal and ' +
+      'end-of-turn expiry. CR 514.3a is implemented as a RE-ENTRANT cleanup step: reaching the turn ' +
+      'machine step advance while the step is STILL cleanup can only mean a priority window was ' +
+      'opened during it, which is exactly what "another cleanup step begins" describes, so it needs ' +
+      'no state flag. Two of the three clauses in CR 514.3a are UNREACHABLE rather than ' +
+      'unimplemented: no `TriggerEvent` in this engine watches a card leave a hand, and nothing a ' +
+      'cleanup step does can make a state-based action applicable. What IS reachable is madness ' +
+      '(CR 702.35a) on a discarded card, which this engine models as a window rather than as a ' +
+      'trigger and which is therefore asked for by name.',
   },
 
   // ======================= 6 — SPELLS, ABILITIES, EFFECTS =======================
@@ -965,40 +987,32 @@ export const RULES_MANIFEST: RulesManifest = {
       'and 514.3 prove.',
   },
   '704': {
-    status: 'gap',
-    rule:
-      'CR 704.3 — "Whenever a player would get priority, the game checks for any of the listed ' +
-      'conditions for state-based actions"; CR 117.5 says the same thing from priority\'s side. ' +
-      'CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has N of each REMOVED.',
-    engine:
-      'TWO distinct shortfalls, one structural and one missing.\n' +
-      '(1) TIMING. State-based actions are not checked at the priority boundary. ' +
-      '`checkStateBasedActions` is called from about a dozen explicit mutation sites (after each ' +
-      'resolution, after combat damage, after a life payment, at step transitions) and NOT from ' +
-      '`onPassPriority`. Reproduce: `state.players.B.life = 0; pass(state)` leaves B alive with ' +
-      '`hasLost === false` and the game not over. Every path that exists today does call one of ' +
-      'the sites — the CR 704.3 invariant test in cr7xx passes — so this is a LATENT gap: it is a ' +
-      'missing backstop, not a live wrong answer. The fix is one line, and it is NOT free: the ' +
-      'check walks the battlefield and rebuilds the continuous index, and rule 7 forbids ' +
-      'regressing the hot path the sim spends its life in.\n' +
-      '(2) CR 704.5q is absent. `internal/stats.ts` nets the two counter tallies arithmetically ' +
-      'and never removes the pair, so a permanent keeps both. Currently unobservable — nothing in ' +
-      'the pool asks whether a -1/-1 counter is present — and pinned below so that stops being ' +
-      'true loudly.',
-    owner:
-      'engine.ts and internal/sba.ts are touched by several in-flight branches ' +
-      '(feat/planeswalkers, feat/battles-legend-emblems, feat/source-aware-targeting). Written up ' +
-      'in COORDINATION.md with the reproduction rather than raced.',
-    pin: {
-      file: 'cr7xx-sba-keywords-copy',
-      tests: [
-        { rule: '704.3', title: 'no state-based action is left outstanding while a player holds priority' },
-        { rule: '704.5a', title: 'a player reduced to 0 life loses as the spell that did it finishes resolving' },
-        { rule: '704.5f', title: 'a creature at 0 or less toughness is put into the graveyard, not destroyed' },
-        { rule: '704.5g', title: 'a creature with lethal damage marked is destroyed at the next check' },
-        { rule: '704.5q', title: 'GAP PIN — +1/+1 and -1/-1 counters are netted arithmetically, never REMOVED' },
-      ],
-    },
+    status: 'covered',
+    file: 'cr7xx-sba-keywords-copy',
+    tests: [
+      { rule: '704.3', title: 'no state-based action is left outstanding while a player holds priority' },
+      {
+        rule: '704.3',
+        title: 'a condition nobody announced is caught the moment a player would get priority',
+      },
+      { rule: '704.5a', title: 'a player reduced to 0 life loses as the spell that did it finishes resolving' },
+      { rule: '704.5f', title: 'a creature at 0 or less toughness is put into the graveyard, not destroyed' },
+      { rule: '704.5g', title: 'a creature with lethal damage marked is destroyed at the next check' },
+      { rule: '704.5q', title: '+1/+1 and -1/-1 counters on one permanent are REMOVED in pairs' },
+    ],
+    note:
+      'CR 704.3 is answered from BOTH sides, which is the point: the invariant test proves the ' +
+      'engine settles every condition its own mutation sites create, and the boundary test proves ' +
+      'the backstop by creating one with no mutation site behind it at all. The check now runs in ' +
+      '`onPassPriority` behind `stateBasedActionsPossible`, a single allocation-free walk that is ' +
+      'conservative in one direction only — it may say yes on a board with nothing to do, and ' +
+      'never says no on one that has something. CR 704.5q lives in the state-based action pass ' +
+      'rather than inside the counters primitive, so counters that arrive by any other route ' +
+      '(persist, a token created with counters) annihilate too.',
+    shortfall:
+      'CR 704.5c (a token that has left the battlefield ceases to exist) and CR 704.5d (a counter ' +
+      'on an object it cannot have) are not modelled; see section 111. CR 704.5b decking is ' +
+      'flagged at the draw rather than as a state-based action; see section 121.',
   },
   '705': { status: 'not-applicable', reason: noCardHasIt('coin-flipping card') },
   '706': { status: 'not-applicable', reason: noCardHasIt('die-rolling card') },

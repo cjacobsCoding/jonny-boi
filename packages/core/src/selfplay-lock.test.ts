@@ -30,32 +30,50 @@ import type { GameState } from './state.js';
 
 /**
  * seed | winner | over/cut | turns | actions | events | eventLogHash | finalStateHash
+ *
+ * ⚠️ REGENERATED DELIBERATELY on `fix/max-hand-size-and-sba`, and the SHAPE of
+ * the move is the evidence. Every seed keeps its winner, its turn count, its
+ * action count, its EVENT COUNT and its final-state hash; only the event-log
+ * hash differs. The engine plays the identical game — one field inside one
+ * event changed.
+ *
+ * That field is the CR 514.1 discard question's `sourceInstanceId`. It used to
+ * name the first card in the discarding player's HAND; it now names no object
+ * at all (`NO_ASKING_OBJECT`), because `choiceAsked` carries that field
+ * unredacted into every pilot's observation feed and was therefore publishing
+ * the identity of a hidden card. Regenerating this table with the old value
+ * restores the previous hashes exactly, which is how the attribution was
+ * checked rather than assumed.
+ *
+ * That the event COUNTS did not move is the second measurement in here: the new
+ * CR 704.3 state-based-action check at the priority boundary fires nothing at
+ * all across 24 full games, which is exactly what a backstop should do.
  */
 const GOLDEN: readonly string[] = [
-  '1|A|over|33|902|1863|b1a1d4e3|339507b6',
-  '2|A|over|27|756|1617|5d5f317a|f495342b',
-  '3|B|over|38|1140|2418|4f5e1004|db7cc0fc',
-  '4|B|over|26|719|1537|50f74cf3|0c8192ff',
-  '5|A|over|21|561|1147|52fa7b0d|901c6e23',
-  '6|B|over|24|642|1342|ea3aa1b7|c5a35b05',
-  '7|A|over|27|778|1644|16121709|e24a6688',
-  '8|A|over|23|650|1367|1841af33|c0deaba8',
-  '9|A|over|19|512|1075|b6d71ab5|84b06ae3',
-  '10|A|over|43|1243|2643|9becec54|2a0ff2fa',
-  '11|B|over|32|892|1894|205a8698|32049998',
-  '12|B|over|30|849|1797|885968fb|40a3b377',
-  '13|B|over|26|696|1405|360712b5|b13f0c8e',
-  '14|B|over|32|874|1843|9a2cd26b|0b625e1b',
-  '15|B|over|24|654|1379|f59dc3e5|8c7fae94',
-  '16|B|over|20|541|1122|3b670261|9e5bcab3',
-  '17|B|over|34|907|1887|edf5a228|b84fbe72',
-  '18|A|over|23|620|1273|b77d55c8|2c427f5b',
-  '19|A|over|23|631|1352|dc1e2fb3|95a7910a',
-  '20|B|over|26|714|1469|1c3a8e44|38d75fea',
-  '21|B|over|30|826|1738|feb0627f|04950240',
-  '22|A|over|37|1065|2254|71146792|581c1745',
-  '23|B|over|24|678|1413|8fd4f2e7|eb8fb2fd',
-  '24|A|over|27|753|1598|a7cb7903|d8f48334',
+  '1|A|over|33|902|1863|b4dffd10|339507b6',
+  '2|A|over|27|756|1617|7738464c|f495342b',
+  '3|B|over|38|1140|2418|dac8c29b|db7cc0fc',
+  '4|B|over|26|719|1537|62540ed1|0c8192ff',
+  '5|A|over|21|561|1147|0c878a59|901c6e23',
+  '6|B|over|24|642|1342|bd451eb9|c5a35b05',
+  '7|A|over|27|778|1644|245db919|e24a6688',
+  '8|A|over|23|650|1367|c196981b|c0deaba8',
+  '9|A|over|19|512|1075|8870571b|84b06ae3',
+  '10|A|over|43|1243|2643|8d68c95b|2a0ff2fa',
+  '11|B|over|32|892|1894|56fd13f9|32049998',
+  '12|B|over|30|849|1797|013fa061|40a3b377',
+  '13|B|over|26|696|1405|89b3dbad|b13f0c8e',
+  '14|B|over|32|874|1843|af67c4bd|0b625e1b',
+  '15|B|over|24|654|1379|1225492c|8c7fae94',
+  '16|B|over|20|541|1122|7d458e36|9e5bcab3',
+  '17|B|over|34|907|1887|2717487a|b84fbe72',
+  '18|A|over|23|620|1273|6d0c1957|2c427f5b',
+  '19|A|over|23|631|1352|5c46d713|95a7910a',
+  '20|B|over|26|714|1469|2e601e8c|38d75fea',
+  '21|B|over|30|826|1738|504d87b2|04950240',
+  '22|A|over|37|1065|2254|8e9e941a|581c1745',
+  '23|B|over|24|678|1413|5e3ca4f4|eb8fb2fd',
+  '24|A|over|27|753|1598|23944d00|d8f48334',
 ];
 
 describe('self-play behaviour lock', () => {
@@ -76,12 +94,6 @@ describe('self-play behaviour lock', () => {
   });
 });
 
-/**
- * The purity contract `applyAction` sells: the caller's state comes back
- * untouched. A clone optimization that starts SHARING structure with the input
- * would pass the digest test above (which only ever looks forward) and break this
- * one, so both are needed.
- */
 describe('applyAction purity', () => {
   const decks = selfPlayDecks();
 

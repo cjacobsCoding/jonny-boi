@@ -30,7 +30,7 @@ import {
 } from './index.js';
 import { createEffectRegistry } from './effects.js';
 import { creatureDef, deckOf, giveHand, landDef } from './test-fixtures.js';
-import type { CardInstance, InstanceId, PlayerId } from './state.js';
+import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
 
 const ISLAND = landDef('Island', 'U');
 const registry = createEffectRegistry();
@@ -87,6 +87,23 @@ function pass(state: GameState): GameState {
     });
   }
   return act(state, { kind: 'passPriority', player: state.priorityPlayer });
+}
+
+/**
+ * Advance to `player`'s `step` — a WHOLE-TURN runner, and the one to reach for
+ * when a test means "a turn or two later".
+ *
+ * `advanceToStep(s, 'cleanup')` used to be the idiom for that, and it never
+ * worked: a cleanup step that grants no priority sets `step` and hands the turn
+ * over inside one call, so nothing ever observed `step === 'cleanup'` and the
+ * loop simply ran out its guard. It advanced "some number of steps", which is
+ * not a thing a test should be asserting against.
+ */
+function advanceToPlayersStep(state: GameState, player: PlayerId, step: Step, max = 400): GameState {
+  let s = state;
+  let guard = 0;
+  while (!(s.activePlayer === player && s.step === step) && !s.gameOver && guard++ < max) s = pass(s);
+  return s;
 }
 
 /** Advance whole turns until the given player is active. */
@@ -223,9 +240,8 @@ describe('loyalty abilities', () => {
 
   it('loyalty abilities are sorcery-speed only', () => {
     const { state, walker } = mainWithWalker(5);
-    const atUpkeep = advanceToStep(advanceToStep(state, 'cleanup'), 'upkeep');
     // B's upkeep — A holds no sorcery window anywhere here; try at A's priority.
-    let s = atUpkeep;
+    let s = advanceToPlayersStep(state, 'B', 'upkeep');
     while (s.priorityPlayer !== 'A' && !s.gameOver) s = pass(s);
     expect(
       rejectionOf(s, { kind: 'activateAbility', player: 'A', instanceId: walker, abilityIndex: 0 }),

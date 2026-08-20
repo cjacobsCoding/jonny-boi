@@ -25,6 +25,16 @@ export interface RulesConfig {
    * A player whose board says otherwise (`CardDefinition.noMaximumHandSize` —
    * Reliquary Tower) has no limit at all and skips the discard entirely; that is a
    * card ability, not a config value, so it is not expressed here.
+   *
+   * It is a SEPARATE knob from {@link startingHandSize} even though both are
+   * seven in the default rules, because they are different rules — CR 103.4
+   * draws the opening hand, CR 402.2 caps what you may keep — and a format may
+   * move one without the other.
+   *
+   * ⚠️ Not a cosmetic knob in a deck-tuning lab. An unbounded hand changes what
+   * card draw and held-back reactive spells are worth, which is exactly the
+   * quantity every gauntlet and every A/B verdict measures. Moving this number
+   * moves every recorded baseline in DESIGN §3.4a.
    */
   readonly maximumHandSize: number;
 }

@@ -16,7 +16,7 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
-import { PLAYER_IDS } from '../state.js';
+import { NO_COUNTERS, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
 import { hasCastableBackFace, isBattle, isCreature, isPlaneswalker } from '../card.js';
 import { addCardGrant } from '../card-grants.js';
@@ -26,6 +26,8 @@ import {
   effectiveKeywords,
   effectiveToughness,
   loyaltyOf,
+  MINUS_ONE_COUNTER,
+  PLUS_ONE_COUNTER,
   remainingToughness,
 } from './stats.js';
 import { moveToZone, resetInstanceForNewZone } from './zones.js';
@@ -169,6 +171,10 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
       if (state.battlefield.length >= sizeBefore) cursor += 1;
     }
 
+    // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has N of each
+    // removed, where N is the smaller number. See {@link annihilateCounters}.
+    if (annihilateCounters(state, emit)) changed = true;
+
     // Player loss by life total.
     for (const pid of PLAYER_IDS) {
       const p = state.players[pid];
@@ -197,6 +203,61 @@ export function checkStateBasedActions(state: GameState, emit: (e: GameEvent) =>
   // "until end of turn" pump — a re-cast 2/2 read as a 5/5. SBAs run at every point
   // a permanent can have just changed zones, so this is the right place to let go.
   pruneOrphanContinuousEffects(state);
+}
+
+/**
+ * CR 704.5q — "if a permanent has both a +1/+1 counter and a -1/-1 counter on it,
+ * N +1/+1 and N -1/-1 counters are removed from it, where N is the smaller of the
+ * two numbers."
+ *
+ * ## Why it lives HERE and not in the primitive that puts the counters on
+ * `putCountersOn` used to do this itself, which is right for the one path that
+ * calls it and wrong for every other. Counters arrive on a permanent by several
+ * routes — a resolving effect, a trigger, persist returning a creature with a
+ * -1/-1 counter, a token created with counters, and whatever the next branch adds
+ * — and a rule implemented inside ONE of those routes is a rule the others do not
+ * have. CR 704.5q is a state-based action, so the state-based action pass is the
+ * seam: every route now gets it, at the moment the rules say, and there is one
+ * implementation to keep right instead of one per producer.
+ *
+ * The arithmetic is unchanged either way ({@link counterShift} nets the tallies),
+ * so what this fixes is the STATE rather than the numbers: after it runs, "does
+ * this permanent have a -1/-1 counter on it?" — which persist, undying and
+ * "remove a counter" all ask — has the answer the printed card gives.
+ *
+ * Returns true when it removed anything, so the fixpoint runs another pass.
+ *
+ * Cost: one reference comparison per permanent on a board where nothing carries a
+ * counter, and no allocation at all. `NO_COUNTERS` is the shared frozen empty
+ * record every counter-free permanent points at, so the common board never even
+ * enumerates a key.
+ */
+function annihilateCounters(state: GameState, emit: (e: GameEvent) => void): boolean {
+  let removedAny = false;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const counters = perm.counters;
+    if (counters === NO_COUNTERS) continue;
+    const plus = counters[PLUS_ONE_COUNTER] ?? 0;
+    const minus = counters[MINUS_ONE_COUNTER] ?? 0;
+    // Both kinds must be genuinely PRESENT. A negative tally is not a counter of
+    // the other kind (nothing in the rules can put "minus one +1/+1 counter" on a
+    // permanent), so `Math.min` alone would happily "annihilate" a pair that is
+    // not there.
+    if (plus <= 0 || minus <= 0) continue;
+    const n = Math.min(plus, minus);
+    // REPLACE the record, never write into it — `CardInstance.counters` is shared
+    // and frozen while a permanent has none. Same contract `putCountersOn` obeys.
+    perm.counters = { ...counters, [PLUS_ONE_COUNTER]: plus - n, [MINUS_ONE_COUNTER]: minus - n };
+    // Reported as the two removals it is, through the existing counter event with
+    // a NEGATIVE amount — the vocabulary persist already speaks. A dedicated
+    // "annihilated" event would be a second way to say "these counters left".
+    emit({ type: 'counterAdded', instanceId: perm.instanceId, kind: PLUS_ONE_COUNTER, amount: -n });
+    emit({ type: 'counterAdded', instanceId: perm.instanceId, kind: MINUS_ONE_COUNTER, amount: -n });
+    removedAny = true;
+  }
+  return removedAny;
 }
 
 /**
@@ -290,16 +351,137 @@ export function winGame(state: GameState, player: PlayerId, reason: string, emit
   }
 }
 
-/** If the game is decided, set winner/gameOver. Returns true if it changed. */
+/**
+ * If the game is decided, set winner/gameOver. Returns true if it changed.
+ *
+ * The two seats are read DIRECTLY rather than through `PLAYER_IDS.filter(...)`,
+ * which allocated a predicate closure and a result array on every state-based
+ * action check — after every resolution, every draw, every combat-damage step
+ * and (now) every priority boundary — to decide a question about two booleans.
+ * Same answer, no allocation. (The same reason `indexContinuous` reads the two
+ * command zones directly instead of looping `PLAYER_IDS`.)
+ */
 export function resolveWinner(state: GameState, emit: (e: GameEvent) => void): boolean {
   if (state.gameOver) return false;
-  const alive = PLAYER_IDS.filter((pid) => !state.players[pid].hasLost);
-  if (alive.length <= 1) {
-    const winner = alive.length === 1 ? (alive[0] as PlayerId) : null;
-    state.winner = winner;
-    state.gameOver = true;
-    emit({ type: 'gameOver', winner });
-    return true;
+  const aLost = state.players.A.hasLost;
+  const bLost = state.players.B.hasLost;
+  if (!aLost && !bLost) return false;
+  // Both out at once is a draw, exactly as `alive.length === 0` was.
+  const winner: PlayerId | null = aLost && bLost ? null : aLost ? 'B' : 'A';
+  state.winner = winner;
+  state.gameOver = true;
+  emit({ type: 'gameOver', winner });
+  return true;
+}
+
+/**
+ * Whether any state-based action could POSSIBLY apply right now — the cheap gate
+ * in front of the CR 704.3 priority-boundary check.
+ *
+ * ## Why a gate exists at all
+ * CR 704.3 checks state-based actions whenever a player would receive priority,
+ * which in this engine is the single hottest thing a game does: a sim game passes
+ * priority hundreds of times, and every one of those passes follows an action
+ * that already ran the full check at its own mutation site. The boundary check is
+ * a BACKSTOP for the next mutation path that forgets, so it has to be nearly free
+ * on the passes where it has nothing to do (rule 7). Measured on the gauntlet,
+ * 125,753 boundary passes reach this and it lets 1.2% of them through.
+ *
+ * ## The direction it is allowed to be wrong in
+ * It may answer **true** on a board where the real check turns out to do nothing;
+ * that costs one wasted check. It must NEVER answer false on a board where the
+ * real check would act — that would silently defer a state-based action, which is
+ * the whole defect this backstop exists to prevent. Every test of it is written in
+ * that direction, and every clause below is either the rule's own condition or a
+ * conservative superset of it.
+ *
+ * ## Why a positive modifier is not a reason to look
+ * The subtle half is creature death, and the saving observation is that
+ * `PermanentModification` is **purely additive** (the rules manifest pins that as
+ * a compile-time proof, and CR 613's layer system stops being optional the day it
+ * is not): nothing SETS a toughness, everything adds a delta. A modifier that can
+ * only ADD toughness therefore cannot make a creature die — it can only keep one
+ * alive — so a board whose modifiers are all positive can be judged on printed
+ * base plus counters, which is exactly what `effectiveToughness(perm)` with no
+ * aggregate computes. Being wrong in that direction is safe by construction: an
+ * ignored positive buff can only make this answer `true` when the truth is
+ * `false`. A modifier that can SUBTRACT toughness is the other direction, so any
+ * of those sends the whole board to the real check.
+ *
+ * Two things are read as "always look" rather than reasoned about, because both
+ * change with no event to notice: a characteristic-defining `*` box (Tarmogoyf
+ * shrinks when a card leaves a graveyard) and an attachment (which is also its
+ * own state-based action, CR 704.5m/n). Both are rare on a board.
+ */
+export function stateBasedActionsPossible(state: GameState): boolean {
+  // A decided game performs no more state-based actions.
+  if (state.gameOver) return false;
+  const a = state.players.A;
+  const b = state.players.B;
+  // CR 704.5a/b — a lost seat not yet resolved into a winner, or a life total the
+  // check has not seen yet.
+  if (a.hasLost || b.hasLost || a.life <= 0 || b.life <= 0) return true;
+  // An "until end of turn" effect that SHRINKS something (a -X/-X, a Weakness).
+  const continuous = state.continuous;
+  for (let i = 0; i < continuous.length; i++) {
+    const toughness = (continuous[i] as { readonly toughness?: number }).toughness;
+    if (toughness !== undefined && toughness < 0) return true;
+  }
+  // EMBLEMS radiate statics from the command zone (CR 114). Nothing has ever put
+  // one there in a measured game, so this is one length read, not a walk.
+  if (a.command.length > 0 && commandCanShrink(a.command)) return true;
+  if (b.command.length > 0 && commandCanShrink(b.command)) return true;
+
+  let legendary = 0;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const def = perm.def;
+    // An attachment is BOTH a modifier source (layer 3a) and its own state-based
+    // action (CR 704.5m/n), so either end of the relationship is enough.
+    if (def.attachment !== undefined || perm.attachedTo != null) return true;
+    // A `*` power/toughness is a function of the whole game and moves with no
+    // event on this permanent at all.
+    if (def.characteristicPT !== undefined) return true;
+    // A static that can only ADD toughness cannot kill anything — see above.
+    if (def.statics !== undefined && staticsCanShrink(def.statics)) return true;
+    // CR 704.5j — two legendary permanents may share a name. Counting is enough;
+    // deciding whether the names actually match is the real check's job.
+    if (def.legendary === true && ++legendary > 1) return true;
+    // Counters are read by `effectiveToughness` below for a creature, but for a
+    // walker and a battle they ARE the box (CR 704.5i / 704.5x), and CR 704.5q is
+    // about the two standard kinds coexisting. One reference comparison for the
+    // counter-free permanent that is nearly every permanent.
+    if (perm.counters !== NO_COUNTERS) {
+      if (isPlaneswalker(def) && !isCreature(def) && loyaltyOf(perm) <= 0) return true;
+      if (isBattle(def) && !isCreature(def) && defenseOf(perm) <= 0) return true;
+      if ((perm.counters[PLUS_ONE_COUNTER] ?? 0) > 0 && (perm.counters[MINUS_ONE_COUNTER] ?? 0) > 0) return true;
+    } else if ((isPlaneswalker(def) || isBattle(def)) && !isCreature(def)) {
+      // No counters at all on a walker or a battle IS zero loyalty / zero defense.
+      return true;
+    }
+    if (!isCreature(def)) continue;
+    // CR 704.5f / 704.5g, read with the aggregate that is genuinely empty here.
+    if (effectiveToughness(perm) <= 0) return true;
+    if (perm.damageMarked > 0 && (remainingToughness(perm) <= 0 || perm.markedByDeathtouch)) return true;
+  }
+  return false;
+}
+
+/** Whether any of these static abilities can SUBTRACT toughness. */
+function staticsCanShrink(statics: readonly { readonly toughness?: number }[]): boolean {
+  for (let i = 0; i < statics.length; i++) {
+    const toughness = statics[i]?.toughness;
+    if (toughness !== undefined && toughness < 0) return true;
+  }
+  return false;
+}
+
+/** The same question for the objects in a command zone (emblems). */
+function commandCanShrink(command: readonly CardInstance[]): boolean {
+  for (let i = 0; i < command.length; i++) {
+    const statics = (command[i] as CardInstance).def.statics;
+    if (statics !== undefined && staticsCanShrink(statics)) return true;
   }
   return false;
 }

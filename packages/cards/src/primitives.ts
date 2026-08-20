@@ -607,10 +607,21 @@ export const persistReturn: EffectPrimitive = (ctx) => {
     damageMarked: 0,
     markedByDeathtouch: false,
     attachedTo: null,
-    counters: { [PLUS_ONE_COUNTER]: -Math.max(minus, 0) },
+    // A REAL -1/-1 counter (CR 702.79a), not a negative +1/+1. The two read the
+    // same through `counterShift`, which is why this survived as a negative
+    // tally — but persist's own printed condition is "if it had no -1/-1
+    // counters on it", and the CR 704.5q annihilation in `internal/sba.ts` looks
+    // for a counter of this KIND. Written as a negative +1/+1 the returning
+    // creature was invisible to both.
+    counters: { [MINUS_ONE_COUNTER]: Math.max(minus, 0) },
   };
   ctx.state.battlefield.push(returned);
-  ctx.emit({ type: 'counterAdded', instanceId: returned.instanceId, kind: PLUS_ONE_COUNTER, amount: -Math.max(minus, 0) });
+  ctx.emit({
+    type: 'counterAdded',
+    instanceId: returned.instanceId,
+    kind: MINUS_ONE_COUNTER,
+    amount: Math.max(minus, 0),
+  });
   // A battlefield entry: emit the zoneChange so ETB triggers (e.g. the lifegain
   // half of persist) observe the return through the one "enters" mechanism.
   ctx.emit({ type: 'zoneChange', instanceId: returned.instanceId, from: 'graveyard', to: 'battlefield' });
@@ -1082,11 +1093,17 @@ function eachCounterTarget(ctx: EffectContext): CardInstance[] {
 
 /**
  * Put `amount` +1/+1 counters (or, when negative, that many -1/-1 counters) on
- * one permanent, annihilating the pairs CR 704.5q says must not coexist.
+ * one permanent.
  *
  * Factored out of {@link addCounters} so the single-target and the "each
- * creature" forms cannot drift apart on the one piece of rules bookkeeping that
- * is easy to forget.
+ * creature" forms cannot drift apart.
+ *
+ * ⚠️ It does NOT annihilate +1/+1 against -1/-1 any more. That is CR 704.5q, a
+ * STATE-BASED ACTION, and it now lives where the other state-based actions do
+ * (`internal/sba.ts`'s `annihilateCounters`) — so every route a counter can
+ * arrive by gets it, not just this one. Doing it here as well would be a second
+ * implementation of one rule; doing it ONLY here is what left persist's returning
+ * creature, and any future counter producer, outside the rule.
  */
 function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number): void {
   // A negative amount is a -1/-1 counter, stored as its own kind rather than as
@@ -1117,26 +1134,10 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
   // hand-built test instances (which carry their own `{}`) survived it, which is
   // why a suite full of counter tests never saw it: the pool had no card that
   // put a counter on a permanent the ENGINE created.
-  let counters: Record<string, number> = {
+  target.counters = {
     ...target.counters,
     [kind]: (target.counters[kind] ?? 0) + magnitude,
   };
-
-  // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has them removed
-  // in pairs as a state-based action. Without this the counts drift apart while
-  // the net stays right, so "remove a -1/-1 counter" later finds one that should
-  // have been annihilated turns ago.
-  const plus = counters[PLUS_ONE_COUNTER] ?? 0;
-  const minus = counters[MINUS_ONE_COUNTER] ?? 0;
-  const annihilated = Math.min(plus, minus);
-  if (annihilated > 0) {
-    counters = {
-      ...counters,
-      [PLUS_ONE_COUNTER]: plus - annihilated,
-      [MINUS_ONE_COUNTER]: minus - annihilated,
-    };
-  }
-  target.counters = counters;
   ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
 };
 

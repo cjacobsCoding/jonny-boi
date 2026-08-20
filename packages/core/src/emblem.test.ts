@@ -206,6 +206,9 @@ describe('abilities work from the command zone', () => {
     // resolve exactly as a permanent's upkeep trigger would.
     let s = state;
     let guard = 0;
+    // The choice-aware `pass` above, not a bare priority pass: a turn ends with the CR 514.1 discard
+    // question when a hand is over the maximum, and nothing else may act while
+    // it stands.
     while (guard++ < 400 && fired === 0 && !s.gameOver) {
       // A parked question outranks priority (the cleanup discard, CR 514.1), so
       // walking the turn means answering whatever is asked, not only passing.
