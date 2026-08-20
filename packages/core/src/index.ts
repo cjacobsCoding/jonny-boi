@@ -63,6 +63,7 @@ export { restrictionAllows } from './spend-restriction.js';
 // Card model seam
 export type {
   ActivatedAbility,
+  AdditionalCastCost,
   CyclingAbility,
   ActivationCost,
   EntersUntappedCondition,

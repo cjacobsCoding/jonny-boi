@@ -512,8 +512,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Ramp & sacrifice-fetch',
         detail:
-          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder).',
+          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder, Burnished Hart, the Landscape cycle).',
         witness: { kind: 'rule', id: 'search-basic-land-to-battlefield' },
+      },
+      {
+        title: 'Tutors',
+        detail:
+          'Search your library for a card and take it to your hand, onto the battlefield (tapped or not) or into your graveyard — unrestricted (Diabolic Tutor) or narrowed by card type, a type union ("an instant or sorcery card"), colour ("a blue instant card"), mana value, power or toughness. The restriction is never dropped: a printed word the filter cannot express keeps the card reported rather than compiling a tutor that fetches more than it should — or one that could never find anything at all.',
+        witness: { kind: 'rule', id: 'search-any-card' },
+      },
+      {
+        title: 'Multi-destination searches',
+        detail:
+          'Cultivate and Kodama’s Reach: "search your library for up to two basic land cards, put one onto the battlefield tapped and the other into your hand". You choose which land goes where — the order you pick them IS the routing — and a library holding only one basic still works, because "up to two" is a maximum.',
+        witness: { kind: 'rule', id: 'search-two-basics-split-destination' },
+      },
+      {
+        title: 'Additional costs to cast',
+        detail:
+          '"As an additional cost to cast this spell, sacrifice a creature" (Village Rites) or "…discard a card" (Thrill of Possibility). It is a real cost, not a rider: you choose which permanent or card pays, the sacrifice/discard happens as the spell is cast, and a spell whose cost you cannot pay is not offered and cannot be cast at all — never a free spell.',
+        witness: { kind: 'rule', id: 'additional-cast-cost' },
       },
       {
         title: 'Mill',

@@ -200,6 +200,7 @@ function cloneStackObject(o: StackObject): StackObject {
     // one — it would hit the graveyard on resolution instead of returning to
     // hand — at the very next action boundary. Same stakes, same shape.
     ...(o.boughtBack !== undefined ? { boughtBack: o.boughtBack } : {}),
+    ...(o.additionalCostPaid !== undefined ? { additionalCostPaid: o.additionalCostPaid } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
   };

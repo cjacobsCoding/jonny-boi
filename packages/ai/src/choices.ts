@@ -71,7 +71,15 @@ import type {
   SelectCardsChoice,
   SelectPlayersChoice,
 } from '@jonny-boi/core';
-import { CHOOSABLE_COLORS, defaultAnswerFor, modeById, nextUnaimedPick, opponentOf } from '@jonny-boi/core';
+import {
+  CHOOSABLE_COLORS,
+  convertedManaCost,
+  defaultAnswerFor,
+  isLand,
+  modeById,
+  nextUnaimedPick,
+  opponentOf,
+} from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
 import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
@@ -152,16 +160,51 @@ function selectionSize(choice: { min: number; max: number; valence: PendingChoic
   return choice.valence === 'gain' ? choice.max : choice.min;
 }
 
+/**
+ * THE TUTOR / COST POLICY, in one place, because a card selection is now asked by
+ * three quite different printed things and they must not each grow an opinion:
+ *
+ *  - **A LIBRARY SEARCH** (`fromZone: 'library'`, valence `'gain'`) — the pilot
+ *    may take any card in its own deck, so raw card value alone would fetch the
+ *    deck's biggest bomb on turn two and sit on it. Candidates out of casting
+ *    reach are discounted by {@link HeuristicWeights.tutorUncastablePenalty}
+ *    (see that weight for why a discount and not a ban), so the answer is "the
+ *    best card I can actually use soon", falling back to the best card outright
+ *    when nothing is reachable. A ROUTED search (Cultivate's "one onto the
+ *    battlefield and the other into your hand") is `ordered`, and this same
+ *    best-first order IS the routing: the better card takes the first printed
+ *    destination, which for every printed card of that shape is the battlefield.
+ *  - **A COST** — a mandatory additional cost's sacrifice/discard, and every
+ *    other `'loss'` selection: give up the WORST qualifying card. That is the
+ *    tail of the same one sorted list, so there is exactly one ranking in this
+ *    file and a card cannot be "best" for one question and "worst" for another.
+ *  - **A SCRY/SURVEIL look** — a per-card verdict, not a count; see below.
+ */
 function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights: HeuristicWeights): ChoiceAnswer {
   // Score every candidate, then sort BEST FIRST. `ordered` choices use exactly this
   // order (first = the position that comes up soonest — top of library, drawn
   // first), so the good card is the one we see again first.
   const context = cardValueContext(state);
-  const scored = choice.candidates.map((option, index) => ({
-    instanceId: option.instanceId,
-    index,
-    value: cardValue(findInstance(state, option.instanceId), weights, context),
-  }));
+  // The reach test is computed once, and ONLY for a genuine library SEARCH — the
+  // one selection where every candidate is a card the pilot would have to cast
+  // later. The other two library questions are deliberately excluded, because
+  // their candidates are not being acquired at all:
+  //   - a SCRY/SURVEIL look (`keepOnTop`) decides where cards already on top go;
+  //   - a REORDER (Ponder's "put them back in any order") puts every card back,
+  //     which is why its floor equals its ceiling. A search's floor is ZERO —
+  //     a search may always fail to find — and that is what tells them apart.
+  const isLibrarySearch =
+    choice.fromZone === 'library' && choice.valence === 'gain' && choice.keepOnTop !== true && choice.min === 0;
+  const reach = isLibrarySearch ? castingReach(state, choice.chooser, weights) : undefined;
+  const scored = choice.candidates.map((option, index) => {
+    const card = findInstance(state, option.instanceId);
+    const base = cardValue(card, weights, context);
+    return {
+      instanceId: option.instanceId,
+      index,
+      value: reach !== undefined && !withinCastingReach(card, reach) ? base - weights.tutorUncastablePenalty : base,
+    };
+  });
   scored.sort((a, b) => b.value - a.value || a.index - b.index);
 
   // A SCRY/SURVEIL look is not a "how many" question — it is a per-card verdict,
@@ -176,6 +219,33 @@ function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights:
   // still best-first within the picked set so an ordering lands the right way up.
   const picked = choice.valence === 'loss' ? scored.slice(scored.length - take) : scored.slice(0, take);
   return { kind: 'selectCards', instanceIds: picked.map((p) => p.instanceId) };
+}
+
+/**
+ * The mana value a pilot can plausibly pay this turn or next: the lands it
+ * controls plus {@link HeuristicWeights.tutorReachableManaLead}.
+ *
+ * Counted from LANDS rather than from the floating pool because a tutor resolves
+ * mid-turn, after the mana that paid for it is already spent — the pool is empty
+ * exactly when this question is asked, and reading it would call every card
+ * unreachable.
+ */
+function castingReach(state: GameState, who: PlayerId, weights: HeuristicWeights): number {
+  let lands = 0;
+  for (const perm of state.battlefield) {
+    if (perm.controller === who && isLand(perm.def)) lands += 1;
+  }
+  return lands + weights.tutorReachableManaLead;
+}
+
+/**
+ * Whether a searched card is one the pilot could cast within its reach. A LAND
+ * always is — playing it costs no mana — and so is a card with no printed cost.
+ */
+function withinCastingReach(card: CardInstance | undefined, reach: number): boolean {
+  if (!card) return true; // unknown: never penalised on a guess
+  if (isLand(card.def)) return true;
+  return (card.def.cost ? convertedManaCost(card.def.cost) : 0) <= reach;
 }
 
 // --- players / modes / yes-no ------------------------------------------------------

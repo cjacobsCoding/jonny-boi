@@ -187,6 +187,13 @@ export interface ClauseContribution {
    */
   readonly kicker?: import('@jonny-boi/core').ManaCost;
   /**
+   * The printed "As an additional cost to cast this spell, …" line — a MANDATORY
+   * additional cost (`CardDefinition.additionalCost`). Unlike {@link kicker} it
+   * cannot be declined, so a caster who cannot pay it cannot cast the spell at
+   * all; see the core type for why that difference earns its own field.
+   */
+  readonly additionalCost?: import('@jonny-boi/core').AdditionalCastCost;
+  /**
    * The printed "Multikicker {COST}" line — an additional cost the caster may
    * pay ANY NUMBER of times, so the cast-time question is a count rather than a
    * yes/no (`CardDefinition.multikicker`).
