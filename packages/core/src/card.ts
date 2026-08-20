@@ -17,7 +17,8 @@
 
 import type { CastZone } from './actions.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
-import { MANA_COLORS } from './mana.js';
+import { MANA_COLORS, convertedManaCost } from './mana.js';
+import type { LandPlayZone } from './actions.js';
 // Type-only, so it is erased at build time and no runtime import cycle exists
 // (`copy.ts` imports this module's `unionProtection` for real).
 import type { CopyAsEntersSpec } from './copy.js';
@@ -25,7 +26,9 @@ import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './sp
 // TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
 // and subtype readers, so a VALUE import here would close a runtime cycle. A
 // `CardFilter` is plain serializable data, so the type is all a printed cost
-// needs in order to say what qualifies (see `AdditionalCastCost`).
+// needs in order to say what qualifies (see `AdditionalCastCost`) — and the
+// MATCHER itself lives in this file (see {@link matchesCardFilter}), precisely so
+// that the enters-tapped conditions below can ask the question without one.
 import type { CardFilter } from './choices.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
@@ -65,6 +68,56 @@ export type CardType =
  * pure-combat keywords; broader-system keywords are present as flags so `cards`
  * can author them now, with engine hooks landing later.
  */
+/**
+ * The boolean-valued keys of {@link KeywordFlags} — every keyword whose whole
+ * meaning is "on or off", as a name.
+ *
+ * Derived from the interface rather than listed, so it cannot fall behind it.
+ * `internal/continuous.ts` builds its grant list against this same type (that is
+ * what makes its exhaustiveness proof a proof), and {@link BlockRestriction} uses
+ * it to name the keyword a blocker must have.
+ */
+export type BooleanKeywordName = {
+  [K in keyof KeywordFlags]-?: boolean extends NonNullable<KeywordFlags[K]> ? K : never;
+}[keyof KeywordFlags];
+
+/**
+ * A block restriction that COMPARES the attacker and the blocker, or reads the
+ * blocker's characteristics — the half of "can't be blocked by …" that no single
+ * flag can express.
+ *
+ * Every bound is judged against EFFECTIVE power/toughness (through the continuous
+ * index `canBlock` already threads), never printed: a 1/1 pumped to 3/3 by an
+ * anthem really has stopped being a legal blocker for "except by creatures with
+ * power 2 or less", and reading the printed box would let it through.
+ *
+ * An absent field is no restriction. Two restrictions merge by taking the
+ * STRICTEST of each field (see {@link KeywordFlags.blockRestriction}).
+ */
+export interface BlockRestriction {
+  /**
+   * "…except by creatures with haste" (Gingerbrute). The blocker must have at
+   * least ONE of these keywords. Named by {@link BooleanKeywordName}, so a
+   * keyword that does not exist cannot be written here.
+   */
+  readonly blockerMustHaveAnyOf?: readonly BooleanKeywordName[];
+  /** "can't be blocked by creatures with power N or greater" ⇒ `maxBlockerPower = N - 1`. */
+  readonly maxBlockerPower?: number;
+  /** "can't be blocked by creatures with power N or less" ⇒ `minBlockerPower = N + 1`. */
+  readonly minBlockerPower?: number;
+  /** "…with toughness N or greater" ⇒ `maxBlockerToughness = N - 1`. */
+  readonly maxBlockerToughness?: number;
+  /** "…with toughness N or less" ⇒ `minBlockerToughness = N + 1`. */
+  readonly minBlockerToughness?: number;
+  /**
+   * **Skulk** (CR 702.118a) — "can't be blocked by creatures with greater power".
+   * A flag rather than a number because the bound is the ATTACKER'S OWN effective
+   * power, read at declare-blockers time: a skulking creature pumped this turn is
+   * harder to block, exactly as printed.
+   */
+  readonly blockerPowerAtMostMine?: boolean;
+}
+
 export interface KeywordFlags {
   readonly flying?: boolean;
   readonly vigilance?: boolean;
@@ -117,6 +170,48 @@ export interface KeywordFlags {
    * creature carrying both is judged by the stricter one.
    */
   readonly minBlockers?: number;
+  /**
+   * **"~ must be blocked if able"** — a block REQUIREMENT (CR 509.1c), the other
+   * half of the declare-blockers rules from every flag above it.
+   *
+   * A restriction says what the defender MAY NOT do and can be judged pair by
+   * pair; a requirement says what they MUST do and can only be judged against the
+   * whole declaration, because "if able" depends on what every other creature is
+   * doing. `illegalBlockDeclaration` therefore resolves requirements and
+   * restrictions TOGETHER (CR 509.1d — satisfy the maximum possible number of
+   * requirements without violating any restriction), which is why this is not a
+   * `canBlock` check.
+   *
+   * "Must be blocked" is satisfied by ONE blocker; {@link blockedByAllAble} is
+   * the stronger printing that demands every creature that could.
+   */
+  readonly mustBeBlocked?: boolean;
+  /**
+   * **"All creatures able to block ~ do so"** — the Lure requirement. Strictly
+   * stronger than {@link mustBeBlocked}: it generates one requirement PER creature
+   * that could block, so a defender who blocks with only some of them has
+   * satisfied fewer requirements than they could and the declaration is illegal.
+   *
+   * Both flags are read by the same declaration-level solver, and a creature
+   * carrying both is judged by this one (satisfying every per-creature
+   * requirement necessarily satisfies "at least one").
+   */
+  readonly blockedByAllAble?: boolean;
+  /**
+   * A block RESTRICTION whose selector describes the BLOCKER — "except by
+   * creatures with haste" (Gingerbrute), "can't be blocked by creatures with
+   * power 2 or less", skulk's "can't be blocked by creatures with greater power".
+   *
+   * NOT a boolean flag: the payload IS the restriction, so the keyword-merge paths
+   * fold two of them by taking the STRICTEST of each bound rather than OR-ing —
+   * the only reading under which both printed restrictions hold at once, and the
+   * same argument `protectionFrom` (union) and `ward` (sum) each make.
+   *
+   * Judged per pair in `canBlock`, because it compares exactly two creatures, and
+   * against EFFECTIVE power/toughness — a creature pumped past the bound really
+   * can no longer block.
+   */
+  readonly blockRestriction?: BlockRestriction;
   /**
    * Indestructible — "damage and effects that say 'destroy' don't destroy this"
    * (CR 702.12b).
@@ -375,6 +470,69 @@ export interface CardDefinition {
    * rule has one implementation rather than a walker-only special case.
    */
   readonly legendary?: boolean;
+  /**
+   * **Changeling** (CR 702.73a) — "this card is every creature type." A
+   * characteristic-defining ability that applies in every zone, which is exactly
+   * why it is a flag on the DEFINITION and not a static ability or a continuous
+   * effect: a Universal Automaton in a graveyard, in a library or on the stack is
+   * a Goblin there too, and a battlefield-only mechanism would answer wrongly for
+   * every typal search, every "sacrifice a Zombie" cost and every graveyard
+   * count.
+   *
+   * It is honoured by {@link hasSubtype}, the one funnel every subtype question
+   * in the engine goes through, so no consumer has to know the keyword exists.
+   */
+  readonly changeling?: boolean;
+  /**
+   * **"This spell can't be countered."** A property of the CARD (Supreme Verdict,
+   * Abrupt Decay, Dovin's Veto), so it lives on the definition rather than on the
+   * stack object.
+   *
+   * It is not a targeting restriction and must not be implemented as one: an
+   * uncounterable spell is a perfectly legal target for Counterspell, which then
+   * resolves and does nothing (CR 701.5a — "counter" is the effect that fails, not
+   * the targeting). The rule is enforced at the single point where a spell is
+   * actually removed from the stack, so every counter path — the plain
+   * counterspell, "unless its controller pays", a modal counter mode and the ward
+   * trigger — inherits it without a second implementation to keep in step.
+   */
+  readonly cantBeCountered?: boolean;
+  /**
+   * **"Spells you control can't be countered"** (Chimil, the Inner Sun),
+   * **"Creature spells you control can't be countered"** (Rhythm of the Wild),
+   * **"Spells can't be countered"** (Lier, Disciple of the Drowned) — the same
+   * rule as {@link cantBeCountered}, printed on a PERMANENT that protects other
+   * cards' spells instead of its own.
+   *
+   * Not a {@link StaticAbility}: those filter permanents and contribute a
+   * P/T-and-keyword modification, and the subject here is an object on the stack.
+   * Read by `countering.ts`, whose lifetime is derived from the board on every
+   * query — so destroying the source in response really does let the counterspell
+   * through.
+   */
+  readonly spellsCantBeCountered?: import('./countering.js').UncounterableSpellsAbility;
+  /**
+   * **"You have no maximum hand size."** Reliquary Tower, Spellbook, Venser's
+   * Journal — a static ability of a permanent its controller controls, read by
+   * the cleanup step's discard (CR 514.1).
+   *
+   * A boolean rather than a number because every printing of the effect on this
+   * side removes the limit entirely; a card that RAISES the limit by N would be a
+   * different field, and one that lowers an opponent's (Jin-Gitaxias) is a
+   * different effect again — neither is approximated by this flag.
+   */
+  readonly noMaximumHandSize?: boolean;
+  /**
+   * **"You may play lands from your graveyard."** Crucible of Worlds, Ramunap
+   * Excavator, Conduit of Worlds — a static ability of a permanent that widens
+   * where its controller's land plays may come from.
+   *
+   * A list of zones rather than a boolean so "from the top of your library"
+   * (Courser of Kruphix, Oracle of Mul Daya) is the same field with a different
+   * value, instead of a second flag that the land-play path would have to ask
+   * about separately.
+   */
+  readonly playLandsFrom?: readonly LandPlayZone[];
   /**
    * Marks this definition as an EMBLEM (CR 114) — the object a planeswalker
    * ultimate leaves behind. An emblem is not a card and not a permanent: it has
@@ -1105,12 +1263,61 @@ export interface CyclingAbility {
 const SUBTYPE_SET_MEMO = new WeakMap<CardDefinition, ReadonlySet<string>>();
 
 /**
+ * The subtypes that are **not** creature types, so {@link CardDefinition.changeling}
+ * ("this card is every creature type", CR 702.73a) cannot claim them.
+ *
+ * Changeling is expressed as an EXCLUSION list rather than as the ~280-entry
+ * creature-type list, and only this direction stays correct as Magic prints new
+ * words: every set adds creature types, and a new one would be silently missing
+ * from an inclusion list — a changeling that stops being a Cephalid the day
+ * Cephalids matter. The non-creature subtype vocabulary (land / artifact /
+ * enchantment / spell types) is the half that is genuinely closed.
+ *
+ * Planeswalker types are deliberately absent: they are only ever asked about
+ * alongside the planeswalker CARD TYPE, and {@link hasSubtype} already gates the
+ * changeling answer on the card being a creature.
+ *
+ * Lower-cased, because {@link hasSubtype} folds both sides.
+ */
+const NON_CREATURE_SUBTYPES: ReadonlySet<string> = new Set([
+  // Land types (basic and nonbasic).
+  'plains', 'island', 'swamp', 'mountain', 'forest', 'wastes',
+  'desert', 'gate', 'lair', 'locus', 'mine', 'power-plant', 'sphere', 'tower',
+  "urza's", 'cave',
+  // Artifact types.
+  'equipment', 'fortification', 'vehicle', 'contraption', 'clue', 'food',
+  'treasure', 'gold', 'blood', 'powerstone', 'map', 'junk', 'incubator',
+  'bobblehead', 'attraction',
+  // Enchantment types.
+  'aura', 'cartouche', 'case', 'class', 'curse', 'rune', 'saga', 'shard',
+  'shrine', 'background', 'role',
+  // Spell types.
+  'adventure', 'arcane', 'chorus', 'lesson', 'omen', 'trap',
+]);
+
+/**
  * Whether a definition has a printed subtype, compared case-insensitively.
  *
  * A card with no subtypes answers `false` without touching the memo, so the common
  * board pays a single property check.
+ *
+ * CHANGELING (CR 702.73a) is answered here and nowhere else, because this is the
+ * single funnel every subtype question in the engine already goes through — the
+ * shared `CardFilter` (`choices.ts`), every static's `anyOfSubtypes` /
+ * `noneOfSubtypes`, fetchland searches, and the enters-tapped `controlsSubtype`
+ * condition. A card that "is every creature type" therefore becomes one for lords,
+ * for typal searches and for "non-Goblin" exclusions alike, with no consumer
+ * having to learn the keyword exists.
  */
 export function hasSubtype(def: CardDefinition, subtype: string): boolean {
+  const folded = subtype.toLowerCase();
+  // Changeling is asked BEFORE the printed list, because the whole point of the
+  // keyword is that the printed list is not the answer. It is gated on the card
+  // actually being a creature: the keyword grants creature types, and an artifact
+  // creature with changeling is still not an Equipment.
+  if (def.changeling === true && def.types.includes('creature') && !NON_CREATURE_SUBTYPES.has(folded)) {
+    return true;
+  }
   const printed = def.subtypes;
   if (!printed || printed.length === 0) return false;
   let set = SUBTYPE_SET_MEMO.get(def);
@@ -1118,7 +1325,7 @@ export function hasSubtype(def: CardDefinition, subtype: string): boolean {
     set = new Set(printed.map((s) => s.toLowerCase()));
     SUBTYPE_SET_MEMO.set(def, set);
   }
-  return set.has(subtype.toLowerCase());
+  return set.has(folded);
 }
 
 /**
@@ -1767,6 +1974,28 @@ export interface EntersUntappedCondition {
    * SUBTYPES as two basics and would otherwise be counted as one.
    */
   readonly minBasicLands?: number;
+  /**
+   * "unless you control **a legendary creature**" (Minas Tirith, Rivendell,
+   * Barad-dûr), "unless you control **a basic land**" (Ba Sing Se), "unless you
+   * control **three or more other Swamps**" (Witch's Cottage) — the GENERAL form
+   * of which the three fields above are fixed printings.
+   *
+   * Satisfied when the controller's OTHER permanents matching `filter` number at
+   * least `minimum` (default 1). It reuses the shared {@link CardFilter} rather
+   * than growing a fourth bespoke count, so a new wording of the same rule is a
+   * data edit; the older fields stay because live card data already uses them and
+   * a silent re-encoding is exactly the kind of change that flips a land's
+   * behaviour without a test noticing.
+   *
+   * Like every other condition here it counts only permanents the controller
+   * controls, and never the entering land itself (the `self` exclusion in
+   * {@link EntersTappedContext}) — which is what makes "three or more OTHER
+   * Swamps" the plain reading rather than an off-by-one.
+   */
+  readonly controlsMatching?: {
+    readonly filter: CardFilter;
+    readonly minimum?: number;
+  };
 }
 
 /**
@@ -1831,6 +2060,111 @@ export function canRevealForUntapped(
   return false;
 }
 
+/**
+ * Whether a card instance passes a filter. An absent filter matches everything.
+ *
+ * Written with explicit loops rather than `.some(...)`: static abilities
+ * (`statics.ts`) run this for every permanent on the battlefield inside the
+ * continuous-layering pass, which combat and every legality check drive, and a
+ * closure allocated per predicate per candidate showed up in the hot path.
+ *
+ * The parameter is a {@link ChoiceBearingPermanent} — a `def` plus the subtype the
+ * permanent NAMED as it entered — rather than a full `CardInstance`, which keeps
+ * two callers honest at once. Subtype matching goes through `permanentHasSubtype`,
+ * so a card that "is the chosen type in addition to its other types" is that type
+ * here; and a caller holding only a definition — the enters-tapped conditions in
+ * `card.ts`, which see the battlefield as `{ controller, def }` — is not forced to
+ * fabricate an instance to ask the same question a second way. Every other
+ * characteristic a filter reads is PRINTED (see {@link CardFilter.minPower}).
+ */
+export function matchesCardFilter(card: ChoiceBearingPermanent, filter?: CardFilter): boolean {
+  if (!filter) return true;
+  const def = card.def;
+  // The helper forms are the allocation-free, case-insensitive ones — required by
+  // the statics pass that runs this for every permanent, and by subtype matching
+  // that must treat "Mountain" and "mountain" alike.
+  if (filter.anyOfTypes !== undefined && !hasAnyType(def.types, filter.anyOfTypes)) return false;
+  if (filter.noneOfTypes !== undefined && hasAnyType(def.types, filter.noneOfTypes)) return false;
+  if (filter.anyOfSubtypes !== undefined && !hasAnySubtype(card, filter.anyOfSubtypes)) return false;
+  if (filter.noneOfSubtypes !== undefined && hasAnySubtype(card, filter.noneOfSubtypes)) return false;
+  if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
+  // Supertypes: absent on most definitions, so `=== true` rather than truthiness —
+  // `legendary: false` must match a plain creature, not be treated as "unset".
+  if (filter.legendary !== undefined && (def.legendary === true) !== filter.legendary) return false;
+  if (filter.basic !== undefined && (def.basic === true) !== filter.basic) return false;
+  // The printed words "token" / "nontoken". Same `=== true` argument as the two
+  // supertypes above: an ordinary card omits the flag entirely, so a `false`
+  // filter must match it rather than reading `undefined` as "unset".
+  if (filter.isToken !== undefined && (def.isToken === true) !== filter.isToken) return false;
+  if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
+    const mv = def.cost ? convertedManaCost(def.cost) : 0;
+    if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
+    if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
+  }
+  if (filter.minPower !== undefined || filter.maxPower !== undefined) {
+    if (!withinPrintedBox(def.power, filter.minPower, filter.maxPower)) return false;
+  }
+  if (filter.minToughness !== undefined || filter.maxToughness !== undefined) {
+    if (!withinPrintedBox(def.toughness, filter.minToughness, filter.maxToughness)) return false;
+  }
+  // Colors last: it is the only test that can touch the (memoized) pip walk, so
+  // a candidate rejected by type/subtype/name never pays for it at all.
+  if (filter.anyOfColors !== undefined && !hasAnyColor(def, filter.anyOfColors)) return false;
+  return true;
+}
+
+/**
+ * Whether a printed power/toughness box falls inside an inclusive bound.
+ *
+ * An ABSENT box (a non-creature, or a `*` P/T that is a formula rather than a
+ * number) is outside every bound — see {@link CardFilter.minPower} for why that
+ * is the printed reading and not a conservative guess.
+ */
+function withinPrintedBox(box: number | undefined, min?: number, max?: number): boolean {
+  if (box === undefined) return false;
+  if (min !== undefined && box < min) return false;
+  if (max !== undefined && box > max) return false;
+  return true;
+}
+
+/** Whether a definition is any of `wanted` colors. Allocation-free (see above). */
+function hasAnyColor(def: CardDefinition, wanted: readonly ManaColor[]): boolean {
+  const colors = colorsOfDefinition(def);
+  for (const want of wanted) {
+    for (const color of colors) {
+      if (color === want) return true;
+    }
+  }
+  return false;
+}
+
+/** Whether a type line carries any of `wanted`. Allocation-free (see above). */
+function hasAnyType(types: readonly CardType[], wanted: readonly CardType[]): boolean {
+  for (const want of wanted) {
+    for (const type of types) {
+      if (type === want) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a card carries any of `wanted` as a subtype.
+ *
+ * Instance-aware ({@link permanentHasSubtype}), not definition-only: a permanent
+ * that named a creature type and prints "this creature is the chosen type in
+ * addition to its other types" genuinely HAS that type, so a filter that read
+ * only the printed line would fail to see one Adaptive Automaton from another.
+ * For every card in a hand, library or graveyard the two readings are identical,
+ * because nothing there has named anything.
+ */
+function hasAnySubtype(card: ChoiceBearingPermanent, wanted: readonly string[]): boolean {
+  for (const want of wanted) {
+    if (permanentHasSubtype(card, want)) return true;
+  }
+  return false;
+}
+
 /** Whether the "enters untapped" condition holds on the current board. */
 function conditionMet(
   condition: EntersUntappedCondition,
@@ -1862,10 +2196,24 @@ function conditionMet(
 
   if (condition.controlsSubtype !== undefined) {
     const wanted = condition.controlsSubtype;
-    const has = others.some((permanent) =>
-      (permanent.def.subtypes ?? []).some((subtype) => wanted.includes(subtype)),
-    );
+    // Through `hasSubtype`, so a changeling counts as the wanted type here for the
+    // same reason it counts everywhere else — and so casing cannot break a
+    // checkland.
+    const has = others.some((permanent) => wanted.some((subtype) => hasSubtype(permanent.def, subtype)));
     if (!has) return false;
+  }
+
+  if (condition.controlsMatching !== undefined) {
+    const { filter, minimum } = condition.controlsMatching;
+    const needed = minimum ?? 1;
+    let found = 0;
+    for (const permanent of others) {
+      if (!matchesCardFilter(permanent, filter)) continue;
+      // Counting stops the moment the printed threshold is met: the condition is
+      // "three or MORE", so the exact total past that point changes no answer.
+      if (++found >= needed) break;
+    }
+    if (found < needed) return false;
   }
 
   return true;

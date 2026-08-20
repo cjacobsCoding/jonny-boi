@@ -264,8 +264,44 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Blocking restrictions',
         detail:
-          'Each restriction is enforced where it is expressible: "can\'t be blocked" and "~ can\'t block" per pair, while menace — and its general form "can\'t be blocked except by three or more creatures" — judges the whole block declaration, because every blocker is individually legal and only the count is not. Block REQUIREMENTS ("must be blocked if able") are not implemented, and a card printing one says so rather than playing without it.',
+          'Each restriction is enforced where it is expressible: "can\'t be blocked" and "~ can\'t block" per pair, while menace — and its general form "can\'t be blocked except by three or more creatures" — judges the whole block declaration, because every blocker is individually legal and only the count is not.',
         witness: { kind: 'keyword', word: 'menace' },
+      },
+      {
+        title: 'Block requirements — "must be blocked if able"',
+        detail:
+          'The other half of declare-blockers, and the half that needs a search rather than a check: the rules resolve requirements and restrictions TOGETHER, so a declaration must satisfy the maximum possible number of requirements without violating any restriction. A lure really does drag blockers off your other attackers, "all creatures able to block it do so" pulls every one of them, and "if able" is honest — a menacing lure facing a single creature requires nothing, because that creature could never legally block it.',
+        witness: { kind: 'rule', id: 'must-be-blocked-if-able' },
+      },
+      {
+        title: 'Blocking restrictions that compare the two creatures',
+        detail:
+          'Skulk ("can\'t be blocked by creatures with greater power"), a printed power or toughness bound, and Gingerbrute\'s "except by creatures with haste" are judged against EFFECTIVE stats — an anthem that pushes a blocker past the bound genuinely stops it blocking, and a skulking creature pumped this turn is harder to block, exactly as printed.',
+        witness: { kind: 'rule', id: 'cant-be-blocked-by-power-or-toughness' },
+      },
+      {
+        title: 'Changeling',
+        detail:
+          'A changeling is every creature type, in every zone — on the battlefield, in a graveyard, in a library. It is answered inside the one function every subtype question in the engine already goes through, so lords, typal searches and "non-Goblin" exclusions all see it without knowing the keyword exists.',
+        witness: { kind: 'oracle', text: 'Changeling', as: 'creature' },
+      },
+      {
+        title: "Spells that can't be countered",
+        detail:
+          'Enforced where a spell actually leaves the stack, never as a targeting restriction — so Counterspell may still target Supreme Verdict, resolve, and do nothing, which is what the printed cards say. Both printings work: on the spell itself, and on a permanent protecting others ("creature spells you control can\'t be countered"), whose protection ends the instant it does.',
+        witness: { kind: 'rule', id: 'this-spell-cant-be-countered' },
+      },
+      {
+        title: 'Maximum hand size, and the cards that lift it',
+        detail:
+          'The cleanup step really discards down to seven, and the active player chooses which cards to keep — frequently the most important decision of a turn. Reliquary Tower and friends remove the limit entirely.',
+        witness: { kind: 'rule', id: 'no-maximum-hand-size' },
+      },
+      {
+        title: 'Playing lands from somewhere other than your hand',
+        detail:
+          'Crucible of Worlds replays a land from your graveyard and Courser of Kruphix plays the top card of your library — still a land play, so it costs the turn\'s land drop and needs an empty stack. The permission is re-derived from the board every time, so destroying the source in response really does stop it.',
+        witness: { kind: 'rule', id: 'play-lands-from-zone' },
       },
       {
         title: 'Granted evasion',

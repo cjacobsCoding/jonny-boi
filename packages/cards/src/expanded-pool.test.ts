@@ -30,6 +30,7 @@ import {
   applyAction,
   createGame,
   DEFAULT_RULES,
+  defaultAnswerFor,
   effectivePower,
   effectiveToughness,
   generateLegalActions,
@@ -82,7 +83,26 @@ function act(state: GameState, action: GameAction, reg: Registry): GameState {
   return result.state;
 }
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState, reg: Registry): GameState {
+  const question = state.pendingChoice;
+  if (question) {
+    return act(
+      state,
+      {
+        kind: 'answerChoice',
+        player: question.chooser,
+        choiceId: question.id,
+        answer: defaultAnswerFor(question),
+      },
+      reg,
+    );
+  }
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
 }
 

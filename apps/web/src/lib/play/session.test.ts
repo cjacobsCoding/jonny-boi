@@ -13,6 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  defaultAnswerFor,
   generateLegalActions,
   LOYALTY_COUNTER,
   loyaltyOf,
@@ -297,6 +298,18 @@ describe('loyalty abilities surface as engine-driven ability options', () => {
 function autoPilotPriority(session: GameSession): GameSession {
   const me = session.priorityPlayer;
   const state = session.state;
+
+  // 0. A parked question outranks priority — the UI's ChoicePrompt is modal for
+  // exactly this reason, and a rule can ask one with no card involved (the
+  // cleanup step's discard down to maximum hand size, CR 514.1). Answer it with
+  // the engine's own default; a pilot that only ever passes would stall here and
+  // the "no dead-end" claim this test makes would be about a game it never
+  // finished.
+  const question = session.pendingChoice;
+  if (question) {
+    const r = session.answerChoice(defaultAnswerFor(question));
+    if (!r.rejected) return r.session;
+  }
 
   // 1. Play a land if we still can this turn.
   const lands = session.playableLands();

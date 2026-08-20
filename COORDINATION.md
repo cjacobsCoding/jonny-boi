@@ -125,13 +125,14 @@ throughput (games/sec) from regressing.
 | feat/as-enters-choices | worker | packages/core (NEW as-enters.ts + as-enters.test.ts; card/choices/state/statics/triggers/effects/events/engine/index, internal clone+zones+triggers-runtime), packages/cards (choice-primitives `chooseAsEnters`, compile rules/compile/types + NEW as-enters-cards.test.ts), packages/ai (choices.ts + NEW as-enters-pilot.test.ts), packages/sim (observation +1, paired-arms +1), apps/web (play/choice-view + ChoicePrompt + styles.css + play-format + replay-format + about/mechanics + 2 tests), DESIGN §3.21, COORDINATION | 🚧 PUSHED, not merged |
 | feat/tutor-and-sacrifice-templates | worker | packages/core (card.ts `AdditionalCastCost`, state.ts stack field, engine.ts cast gate + cost question + payment, index.ts export, internal/clone.ts +1 field, NEW additional-cast-cost.test.ts), packages/cards (choice-primitives searchLibrary `route`/graveyard, compile/{rules,compile,types}.ts, NEW tutors-and-additional-costs.test.ts, 1 reworded template-gaps case), packages/ai (choices.ts tutor-reach policy + weights.ts +2 entries + choices.test additions), packages/sim/src/paired-arms-config.ts (COMMENT only), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 | test/interaction-matrix | worker | **NEW files only** — `packages/cards/src/interaction/` (harness.ts + 8 pair suites + interaction-matrix.test.ts) — plus THREE product fixes: `packages/core/src/internal/continuous.ts` (new `anyContinuousModification`), `packages/core/src/protection.ts` + `targeting.ts` (fast-path gate), `packages/cards/src/effect-helpers.ts` (`movePermanentTo` calls the shared reset), `packages/core/src/index.ts` (+1 export), TESTING.md, COORDINATION.md | 🚧 PUSHED, not merged |
-| feat/replacement-effects | worker | packages/core (NEW replacement.ts + internal/replacement.ts + replacement.test.ts; card.ts `replacements`, state.ts `replacements`, events.ts +2, effects.ts `addReplacementEffect`, turn-facts.ts +1 fact, engine.ts draw+cleanup, index.ts exports, internal/{clone,combat,sba}.ts), packages/cards (primitives.ts damage/counters/draws + NEW `preventDamage`, compile/{rules,compile,types}.ts, NEW replacement-effects.test.ts), packages/ai (heuristic.ts fog intent + incoming damage, tactical.ts attacker re-pricing, weights.ts +2, effect-value.ts +1, NEW replacement-pilot.test.ts), packages/sim (observation +2, paired-arms +1), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.22, COORDINATION | 🚧 PUSHED, not merged |
+| feat/replacement-effects | worker | packages/core (NEW replacement.ts + internal/replacement.ts + replacement.test.ts; card.ts `replacements`, state.ts `replacements`, events.ts +2, effects.ts `addReplacementEffect`, turn-facts.ts +1 fact, engine.ts draw+cleanup, index.ts exports, internal/{clone,combat,sba}.ts), packages/cards (primitives.ts damage/counters/draws + NEW `preventDamage`, compile/{rules,compile,types}.ts, NEW replacement-effects.test.ts), packages/ai (heuristic.ts fog intent + incoming damage, tactical.ts attacker re-pricing, weights.ts +2, effect-value.ts +1, NEW replacement-pilot.test.ts), packages/sim (observation +2, paired-arms +1), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.29, COORDINATION | 🚧 PUSHED, not merged |
 
 | test/rules-conformance | worker | packages/core/src/conformance (NEW: manifest-types.ts, rules-manifest.ts, manifest.test.ts, cr7xx-sba-keywords-copy.test.ts + 4 salvaged cr*.test.ts and harness.ts), TESTING.md, DESIGN §3.21, COORDINATION.md. **No engine, compiler or pool change — collides with nobody.** | 🚧 PUSHED, not merged |
 
-| feat/combat-damage-and-equipment | worker | packages/core (triggers.ts `TriggerWatches`/`watches`/`TriggerSource.permanent`, internal/triggers-runtime.ts, index.ts +2 exports, NEW equipped-triggers.test.ts), packages/cards (compile/rules.ts 6 new TRIGGER_RULES + 3 new EFFECT_RULES + `optionalTriggerFrom`/`hostWatch`/payload-keyword parsing + 2 hint rewords, compile/compile.ts host-watch assembly guard, compile/attachments.test.ts 1 obsoleted case, NEW equipped-triggers.test.ts), packages/ai (heuristic.ts equip search + attack value + walker diversion, weights.ts +2 knobs, NEW equipment-pilot.test.ts), apps/web/src/lib/about/mechanics.ts (+2 witnesses, 1 reworded), DESIGN §3.22, COORDINATION. **No new effect primitive, no new GameEvent, no pool change.** | 🚧 PUSHED, not merged |
+| feat/combat-damage-and-equipment | worker | packages/core (triggers.ts `TriggerWatches`/`watches`/`TriggerSource.permanent`, internal/triggers-runtime.ts, index.ts +2 exports, NEW equipped-triggers.test.ts), packages/cards (compile/rules.ts 6 new TRIGGER_RULES + 3 new EFFECT_RULES + `optionalTriggerFrom`/`hostWatch`/payload-keyword parsing + 2 hint rewords, compile/compile.ts host-watch assembly guard, compile/attachments.test.ts 1 obsoleted case, NEW equipped-triggers.test.ts), packages/ai (heuristic.ts equip search + attack value + walker diversion, weights.ts +2 knobs, NEW equipment-pilot.test.ts), apps/web/src/lib/about/mechanics.ts (+2 witnesses, 1 reworded), DESIGN §3.29, COORDINATION. **No new effect primitive, no new GameEvent, no pool change.** | 🚧 PUSHED, not merged |
+| feat/block-requirements-and-statics | worker | packages/core (NEW block-solver.ts + countering.ts + player-statics.ts + block-requirements.test.ts + bench/block-requirement-cost.ts; card/actions/choices/config/engine/events/index, internal combat+continuous+stats+clone, conformance/rules-manifest, selfplay-lock re-pinned, 6 test helpers), packages/cards (compile rules/compile/types + effect-helpers + NEW block-and-statics.test.ts + 3 reworded tests), packages/ai (heuristic/weights + NEW block-requirements-pilot.test.ts), packages/sim (soak-config +3 classifications, observation +1), apps/web (about/mechanics +6 witnesses, play-format +1), DESIGN §3.25 | 🚧 PUSHED, not merged — **contains the fix for main's currently RED build** (soak-config) |
 
-| fix/token-characteristics | worker | packages/core (card/choices/events/index/derived, internal/zones + clone COMMENT ONLY, NEW token-clone.test.ts), packages/cards (primitives, effect-helpers, compile/rules + compile/compile, data/pool.ts + REGENERATED data/expanded-pool.ts & expansion-report & expansion-candidates, NEW token-characteristics.test.ts + 4 updated tests), packages/data-tools (src/client.ts + regenerated data/), packages/sim/src/observation.ts (+1 classification), apps/web (about/mechanics.ts + regenerated src/data/card-index.json), DESIGN 3.22 | PUSHED, not merged |
+| fix/token-characteristics | worker | packages/core (card/choices/events/index/derived, internal/zones + clone COMMENT ONLY, NEW token-clone.test.ts), packages/cards (primitives, effect-helpers, compile/rules + compile/compile, data/pool.ts + REGENERATED data/expanded-pool.ts & expansion-report & expansion-candidates, NEW token-characteristics.test.ts + 4 updated tests), packages/data-tools (src/client.ts + regenerated data/), packages/sim/src/observation.ts (+1 classification), apps/web (about/mechanics.ts + regenerated src/data/card-index.json), DESIGN 3.29 | PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -255,7 +256,7 @@ _Append dated notes here; keep them short. Newest at top._
   NEW `token-characteristics.test.ts`, plus `pool.test.ts` / `pool-mechanics.test.ts` /
   `counters-templates.test.ts` / `compile/you-may-and-triggers.test.ts`), `packages/data-tools`
   (`src/client.ts` + regenerated `data/`), `packages/sim/src/observation.ts` (one classification),
-  `apps/web` (`src/lib/about/mechanics.ts` + regenerated `src/data/card-index.json`), DESIGN §3.22,
+  `apps/web` (`src/lib/about/mechanics.ts` + regenerated `src/data/card-index.json`), DESIGN §3.29,
   COORDINATION.md.
 
 - 2026-08-20 worker: `test/interaction-matrix` 🚧 PUSHED — **the interactions between the
@@ -494,11 +495,149 @@ _Append dated notes here; keep them short. Newest at top._
   The About page's claim is carried by an `oracle` witness (real printed text that must compile
   `'complete'`), which is the strongest witness kind and needs no pool card.
 
+- 2026-08-20 worker: `feat/block-requirements-and-statics` 🚧 PUSHED — **CR 509.1c/d block
+  requirements (the half §3.17 deliberately left) + four standalone rules statics. Paired against a
+  same-box `origin/main` worktree: 524 → 533 / 2100 playable, +9, ZERO regressions** — and the same
+  +9 against every main this branch merged forward through (408→417, 485→494, 510→519, 524→533), (the two
+  playable sets were dumped and diffed, not counted). Suite **4082 passed, 0 failed**;
+  `npm run verify` 0; `npm run build` 0. DESIGN §3.25 has the full write-up.
+
+  ⚠️ **`origin/main` WAS RED AT `a6419e5`, and this branch carries the fix.** `npm run build` there
+  failed: `packages/sim/src/soak-config.ts`'s `SOAK_EVENT_WITNESS` is a mapped type over
+  `GameEvent['type']` and does not classify `replacementApplied` / `replacementExpired`, which
+  `feat/replacement-effects` added. `feat/soak` landed the same day and covered the OTHER four
+  systems. That enforced table did exactly its job — it stopped the build rather than letting two
+  events go unwatched — but the merge order left it unclassified. Both are classified here (new
+  `'replacement'` soak mechanic), along with this branch's own `counterPrevented`
+  (`'uncounterable'`). **Integrator: whoever merges next inherits the fix; anyone measuring against
+  main first has to apply it or build only `-w @jonny-boi/cards`.**
+
+  ✅ **THE SOLVER, AND WHY IT IS A SOLVER.** A block RESTRICTION says what the defender may not do and
+  two creatures are all it needs to look at. A REQUIREMENT says what they MUST do, and CR 509.1d
+  resolves the two TOGETHER: satisfy the **maximum possible number** of requirements without
+  violating any restriction — a statement about *every legal declaration*, not about this one. So
+  `internal/block-solver.ts` compares the declaration in hand against the best one available.
+  - Only the defender's creatures that could block a requirement-carrying attacker are enumerated.
+  - The state is "creatures committed to attacker A so far, **capped at the minimum A needs**" — 1
+    for almost every creature, at most a small printed count (menace 2, Pathrazer 3). A rolling DP
+    over the involved creatures gets the exact maximum.
+  - The trick that keeps the state that small: a creature assigned to an attacker that has not met
+    its minimum scores nothing YET, and the whole group scores at once when the minimum is reached.
+    That is what "able to block" means once restrictions are accounted for.
+  - **The one bound is written down**: state space `2^n` for `n` attackers that each simply require
+    a blocker, capped at `1 << 20`. Reaching it takes twenty simultaneous requirement-carrying
+    attackers, which nothing in this pool can print (nothing grants a requirement to a group; the
+    compiler is the gate). A limit nobody wrote down is a limit nobody can check.
+
+  ⚡ **IT IS INERT ON AN ORDINARY BOARD, and that is measured, not asserted.** `process.cpuUsage`,
+  five interleaved rounds, paired against `origin/main` on this box — wall clock was not used
+  (`packages/core/bench/block-requirement-cost.ts`, 4 attackers / 5 blockers):
+
+  | `illegalBlockDeclaration` | per call |
+  | --- | --- |
+  | `origin/main`, no requirement half at all | 70 ns |
+  | this branch, ordinary board | **133 ns** |
+  | this branch, one "must be blocked" on the board | 4.9 µs |
+
+  **+63 ns per call, ~16 ns per attacker**, on a call made ONCE per declare-blockers action —
+  about **+2 µs per game**. It is that cheap because the empty check rides the keyword read the
+  RESTRICTION check already had to make: one `effectiveKeywords` per attacker answers both halves of
+  CR 509.1. The first cut did that read twice and measured 265 ns; fusing the loop halved it.
+  Allocation is at parity: **582 scavenges / 30,600 actions vs 562 / 29,899** on main (0.0190 vs
+  0.0188 per action).
+
+  ⚠️ **THREE THINGS THAT WILL BITE THE NEXT PERSON.**
+  1. **The engine now has a MAXIMUM HAND SIZE (CR 514.1), and it MOVES EVERY RECORDED BASELINE.**
+     "You have no maximum hand size" could not ship as a flag because there was no limit to lift —
+     the cleanup step never discarded. It does now, down to `RulesConfig.maximumHandSize`, and the
+     active player CHOOSES which cards to keep through the same `selectCards` machinery every other
+     "choose N cards" uses. The turn waits on that answer (accepting it is what calls `passTurn`), so
+     nothing observes a hand over the limit. **The self-play behaviour lock is re-pinned**
+     (`packages/core/bench/selfplay-digests.ts`) and a byte-identical gauntlet is not available as
+     evidence for this branch — the games genuinely differ. It is a fidelity fix, not a tuning
+     choice, but it is not free and it is not silent.
+  2. **A test helper that only ever passes priority now WEDGES.** Thirteen of them did, across core,
+     cards and apps/web — including two of `feat/step-triggers`'s, which had not landed when this
+     branch started. A parked question outranks priority, so a loop that walks turns has to ANSWER
+     (`defaultAnswerFor(state.pendingChoice)`), not only pass. All of them do now, which also makes
+     them robust against the legend rule and shocklands — both of which could already have hit them.
+     Two step-trigger test FILES additionally lift the limit via a local `RULES` constant, because
+     they measure "which seat drew" by watching hands grow and the discard would erase the evidence.
+  3. **`cloneState` now always writes `pendingChoice` / `resolution`, even as `null`, and
+     `createGame` carries them in the same place.** `applyAction` is `applyActionInPlace` over a
+     clone and `selfplay-lock.test.ts` compares the two as SERIALIZED TEXT, so the paths must agree
+     on key ORDER. A conditional key diverges the moment a choice survives an action boundary — the
+     pure path re-inserts it mid-object, the in-place path appends it — and two identical states
+     stringify differently. It cost no allocation, and it closed a trap that had been waiting for the
+     first rule to park a question during self-play.
+
+  ✅ **COMPARING RESTRICTIONS are a payload, not a flag.** `KeywordFlags.blockRestriction` carries
+  "except by creatures with haste" (Gingerbrute), a power/toughness bound, and skulk's comparison
+  against the attacker's OWN power. Fourth payload keyword; merges like the other three, field by
+  field to the strictest of each. Every bound reads EFFECTIVE stats, so an anthem that pushes a
+  blocker past the bound really stops it blocking.
+
+  ✅ **THE FOUR RULES STATICS, each proven TWICE** — once that the printed line compiles, once that
+  the game plays differently. That second test is the point: a rules static is exactly the shape of
+  feature that compiles `'complete'` and then does nothing.
+  - **Changeling** is a DEFINITION flag, not a keyword flag — it applies in every zone, so a
+    Changeling Outcast in a graveyard is a Zombie there. Answered inside `hasSubtype`, the one funnel
+    every subtype question already goes through, so lords, typal searches and "non-Goblin"
+    exclusions see it for free. (It survives main's new `permanentHasSubtype`, which calls
+    `hasSubtype` first.) The non-creature subtype vocabulary is an EXCLUSION list, because that is
+    the half that is closed — every set prints new creature types.
+  - **"This spell can't be countered"** is enforced where a spell actually LEAVES THE STACK, never as
+    a targeting restriction: the wrong implementation makes the spell an illegal target and hands the
+    caster their counterspell back. One enforcement point, so the plain counterspell, "unless its
+    controller pays", every modal counter mode and the ward trigger all inherit it. The
+    permanent-side printing ("creature spells you control can't be countered") lives beside it in
+    `countering.ts` with its lifetime derived from the board.
+  - **"You may play lands from your graveyard"** is `playLandsFrom`, a LIST of zones so Courser's
+    "top of your library" is the same field. Still a land play (land drop, empty stack, main phase),
+    which is why it is a field on the existing action. Permission re-derived from the board, never
+    trusted from the action.
+  - Plus the **general enters-tapped condition**: `controlsMatching` over the shared `CardFilter`
+    subsumes "unless you control a legendary creature", "a basic land" and "three or more other
+    Swamps". `CardFilter` grew `legendary` and `basic` (printed supertypes, layer-safe, reusable).
+
+  👉 **ONE STRUCTURAL CHANGE OTHERS INHERIT: `matchesCardFilter` MOVED to `card.ts`** (re-exported
+  from `choices.ts`, so every import still works). `feat/as-enters-choices` left a comment saying a
+  VALUE import from `choices.ts` into `card.ts` would close a runtime cycle — it was right, and the
+  enters-tapped conditions needed exactly that. A `CardFilter` reads only printed characteristics
+  plus the chosen subtype, and all of those already live in `card.ts`, so the READER moved to sit
+  with them while `choices.ts` keeps the vocabulary. No cycle, no duplicate matcher.
+
+  ⛔ **DEFERRED, each with its blocker NAMED** (the compiler reports them; the unsupported hint now
+  names the SHAPE that is missing rather than claiming the whole system is):
+  - **Tetsuko Umezawa**, **Delney** — a static whose filter would have to read EFFECTIVE power or
+    toughness. `statics.ts` matches PRINTED characteristics by design; that is what keeps the
+    continuous pass single-pass with no CR 613.8 loop, and an effective-P/T filter needs a fixpoint.
+  - **Champion of Lambholt** — a restriction whose threshold is ANOTHER permanent's power.
+  - **Fighter Class** — a per-combat TARGETED requirement ("target creature blocks it this combat if
+    able"), which is combat state rather than a characteristic.
+  - **Archangel of Tithes** — a COST to block, which neither a restriction nor a requirement says.
+  - **Void Winnower**, **Odric**, and **Access Tunnel / Secret Tunnel** (still §3.17's blocker: a
+    filtered or two-target aim `TargetRestriction` cannot express).
+  - **Typal anthem nouns** — "Other Squirrels you control have menace" needs the anthem rule's noun
+    to accept a creature SUBTYPE. The compiler's subtype tables are closed on purpose (an
+    unrecognised word compiled as a subtype is a lord that buffs nothing, silently). It is the
+    natural next step for making changeling VISIBLE in play, and it is a rule-table edit, not engine
+    work — a good small pickup for whoever wants one.
+  - **"Spells you control can't be countered THIS TURN"** (Veil of Summer) — a duration on a static.
+  - **"Each opponent's maximum hand size is reduced by seven"** (Jin-Gitaxias) — the mirror of the
+    flag added here, and a different field: it lowers a limit rather than removing one.
+
+  📌 **A backlog mis-attribution worth knowing, NOT introduced here.** The blocking unsupported hint
+  matches `can't block`, and there is no token hint earlier in the table, so cards whose real gap is
+  "create a token WITH an ability body" (Song of Totentanz, Skrelv's Hive, White Sun's Twilight) are
+  filed under blocking. That is why the blocking bucket reads 19 rather than dropping to ~6. Adding
+  a token hint would re-rank the whole backlog, so it is reported rather than done.
+
 
 - 2026-08-20 worker: `feat/replacement-effects` 🚧 PUSHED — **replacement and prevention effects
   (CR 614/615/616), a layer the engine had never had.** Three template buckets that are ONE system
   underneath: counter multipliers, damage scaling, and prevention/fogs — plus draw replacement, which
-  is the same machinery watching a third event. Full write-up in DESIGN §3.22.
+  is the same machinery watching a third event. Full write-up in DESIGN §3.29.
 
   **Measured PAIRED against the same-day `origin/main` (`068be3d`), same cached corpus: 485 → 501 of
   2100 playable (23.1% → 23.9%), +16 cards.** (The same +16 against the pre-merge main this branch
@@ -1160,7 +1299,7 @@ _Append dated notes here; keep them short. Newest at top._
   system, and it is four printed layouts sharing one model.** A card may carry a second half that is
   really cast, plus the list of ZONES that half may be cast from, plus — for the two halves you earn
   rather than hold — a per-instance PERMISSION. Split (CR 709), aftermath (CR 702.127a), adventure
-  (CR 715) and the Siege reward (CR 310.4) are four configurations of exactly that. DESIGN §3.22 has
+  (CR 715) and the Siege reward (CR 310.4) are four configurations of exactly that. DESIGN §3.29 has
   the table.
 
   **Measured, cached 2100-card corpus, `--top 20`: 408 → 421 playable (19.4% → 20.0%).** Both headline

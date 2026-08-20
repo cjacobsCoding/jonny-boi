@@ -1161,6 +1161,16 @@ export const KEYWORD_RULES: KeywordRules = {
   unblockable: '509.1b',
   cantBlock: '509.1b',
   minBlockers: '509.1b',
+  // Block REQUIREMENTS are the other half of the same rule, and they index to
+  // 509.1c (the requirements themselves) rather than to 509.1b (the
+  // restrictions) — the distinction is the whole reason they need a solver: CR
+  // 509.1d resolves the two TOGETHER, maximising satisfied requirements without
+  // violating any restriction.
+  mustBeBlocked: '509.1c',
+  blockedByAllAble: '509.1c',
+  // A comparing restriction ("except by creatures with haste", a power bound,
+  // skulk) is still a restriction, so it indexes with the others.
+  blockRestriction: '509.1b',
 };
 
 /** Every step of a turn → the CR rule that defines it. Mapped over `Step`. */

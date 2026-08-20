@@ -214,6 +214,9 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // Prevented damage is as face-up as dealt damage: the swing, the shield and
   // the amount all happen on the table.
   damagePrevented: 'public',
+  // A counter that hit an uncounterable spell is as face-up as one that worked:
+  // the spell, its name and its controller are already on the stack in the open.
+  counterPrevented: 'public',
   lifeChanged: 'public',
   gainLife: 'public',
   creatureDied: 'public',

@@ -38,6 +38,7 @@ import {
   pruneCardGrantsFor,
   resetInstanceForNewZone,
   discardDestination,
+  spellCanBeCountered,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
@@ -203,6 +204,12 @@ export function keywordsParam(ctx: EffectContext): KeywordFlags {
   for (const key in src) {
     if (src[key] === true) out[key] = true;
   }
+  // The PAYLOAD keywords are not booleans, so the true-filter above drops them —
+  // which is exactly how a granted ward, a granted "except by creatures with
+  // haste", or a granted protection becomes a grant of NOTHING. Each is copied
+  // through by its own shape test, and only when it carries something the engine
+  // can act on, so a malformed param still yields an inert grant rather than a
+  // half-read one.
   const protection = src.protectionFrom;
   if (Array.isArray(protection)) {
     const qualities = protection.filter((q): q is string => typeof q === 'string');
@@ -210,7 +217,15 @@ export function keywordsParam(ctx: EffectContext): KeywordFlags {
   }
   for (const numeric of NUMERIC_KEYWORD_KEYS) {
     const value = src[numeric];
-    if (typeof value === 'number' && value > 0) out[numeric] = value;
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) out[numeric] = Math.trunc(value);
+  }
+  // The one payload that is a RECORD rather than a number or a list: a comparing
+  // block restriction ("except by creatures with haste", a power bound, skulk).
+  // It cannot join `NUMERIC_KEYWORD_KEYS` for the same reason `protectionFrom`
+  // cannot — the shape test is what tells a real payload from a stray param.
+  const blockRestriction = src.blockRestriction;
+  if (typeof blockRestriction === 'object' && blockRestriction !== null) {
+    out.blockRestriction = blockRestriction;
   }
   return out as KeywordFlags;
 }
@@ -571,6 +586,20 @@ export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | und
 export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject): void {
   const idx = ctx.state.stack.indexOf(spell);
   if (idx < 0) return;
+  // "THIS SPELL CAN'T BE COUNTERED" (CR 701.5a) is enforced HERE and nowhere else,
+  // because this is the one function every counter path funnels through. It is
+  // deliberately not a TARGETING restriction: an uncounterable spell is a legal
+  // target, and the counterspell resolves, does nothing, and is still spent —
+  // refusing the target instead would hand the caster their card back.
+  if (!spellCanBeCountered(ctx.state, spell.card.def, spell.controller)) {
+    ctx.emit({
+      type: 'counterPrevented',
+      instanceId: spell.instanceId,
+      name: spell.card.def.name,
+      controller: spell.controller,
+    });
+    return;
+  }
   ctx.state.stack.splice(idx, 1);
   const card = spell.card;
   // COUNTERED, not resolved — the distinction the reason argument exists for: a
