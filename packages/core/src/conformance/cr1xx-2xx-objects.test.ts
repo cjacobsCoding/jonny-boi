@@ -109,7 +109,7 @@ const registry = registryWith({
     for (const perm of ctx.state.battlefield) {
       if (!perm.def.types.includes('creature')) continue;
       perm.damageMarked += 2;
-      ctx.emit({ type: 'damageDealt', targetInstanceId: perm.instanceId, amount: 2 });
+      ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount: 2, combat: false });
     }
   },
 });
