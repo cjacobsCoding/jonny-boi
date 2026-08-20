@@ -171,6 +171,30 @@ const SYSTEMS: readonly System[] = [
     api: ['matchTriggers', 'conditionMatches', 'orderPendingTriggers'],
     card: (d) => (d.triggers ?? []).length > 0,
   },
+  {
+    id: 'steptriggers',
+    title: 'step triggers + the triggering player + the intervening "if"',
+    api: ['triggeringPlayerFor', 'interveningIfHolds'],
+    // NO POOL CARD - see the "a system nobody can see" test below.
+  },
+  {
+    id: 'splitcards',
+    title: 'split / aftermath / adventure / Siege (the CR 709.4 combined object)',
+    api: ['isSplitCard', 'backFaceCastZonesOf', 'playableFaceOf'],
+    // NO POOL CARD.
+  },
+  {
+    id: 'asenters',
+    title: 'as-enters choices (the value a permanent NAMES)',
+    api: ['recordChosenAsEntered', 'chosenSubtypeOf', 'chosenColorOf', 'asEntersOptions'],
+    // NO POOL CARD.
+  },
+  {
+    id: 'addcosts',
+    title: 'mandatory additional casting costs (CR 601.2h)',
+    api: ['generateLegalActions'],
+    // NO POOL CARD.
+  },
 ];
 
 /**
@@ -371,6 +395,91 @@ attachments x statics    | covered   | protection-ward-attachments + layers-coun
 attachments x triggers   | untested  | an attach/unattach trigger; the attachmentPutIntoGraveyard event exists, no trigger condition reads it
 
 statics x triggers       | untested  | a static and a trigger on the same permanent, both keyed on the same board change
+steptriggers x walkers        | elsewhere | planeswalker-play.test.ts: a loyalty ability is activated, not a step trigger; only the shared stack is common
+steptriggers x battles        | untested  | a Siege reward is a battleDefeated trigger, not a step one; no printed step trigger watches a battle
+steptriggers x legend         | n/a       | the legend rule is a state-based action with no trigger condition and no triggering player
+steptriggers x emblems        | untested  | an emblem carrying a step trigger; createEmblem accepts the list and nothing fires one from the command zone
+steptriggers x transform      | covered   | transform-and-triggers: Delver's upkeep trigger IS a step trigger, and the ACTIVE face is what still has it
+steptriggers x modal          | n/a       | a mode is chosen while announcing a spell; a step trigger has no announcement and no modes
+steptriggers x nonhand        | n/a       | a step trigger is an ability of a permanent; the graveyard cast paths are for cards
+steptriggers x protection     | untested  | a step trigger aimed at a protected permanent; the source check reads the trigger's source definition
+steptriggers x indestructible | n/a       | the keyword exempts destruction; a step trigger neither destroys nor is destroyed by one
+steptriggers x castcosts      | n/a       | an ability on the stack has no cast-time cost question
+steptriggers x altcosts       | n/a       | same: cycling/buyback/madness are routes a CARD takes to the stack
+steptriggers x library        | untested  | an upkeep scry; the trigger's own resolution would park the library question
+steptriggers x counters       | untested  | an upkeep trigger that adds a counter; the counters path is proved from a cast trigger instead
+steptriggers x cda            | untested  | an intervening if reading a star box effective power - the condition data carries a minPower floor
+steptriggers x turnfacts      | untested  | a step trigger and a turn fact both remember something about "this turn" through different vocabularies
+steptriggers x mana           | n/a       | a mana ability uses no stack (CR 605.3a), so nothing can trigger off one
+steptriggers x attachments    | untested  | an Aura printing an upkeep trigger; the trigger collector reads the AURA's definition, not the host's
+steptriggers x statics        | untested  | a permanent carrying both, keyed on the same board; the intervening "if" reads the board a static modifies
+steptriggers x triggers       | covered   | new-systems: the triggering player is read off the EVENT, so a who: any trigger can be about the other seat
+
+splitcards x walkers          | n/a       | no printed split/adventure/Siege half is a planeswalker
+splitcards x battles          | untested  | a Siege IS the split-card system's fourth layout; the reward is a free cast from exile and no printed Siege compiles yet
+splitcards x legend           | untested  | a legendary adventure creature: the rule reads the COMBINED object's name
+splitcards x emblems          | n/a       | an emblem is not a card and has no faces
+splitcards x transform        | covered   | new-systems: both print two halves and only backFaceCastable separates them (CR 712.8b)
+splitcards x modal            | untested  | two halves are two CASTS with two costs; two modes are one cast - the pair that is easiest to conflate and has no test
+splitcards x nonhand          | untested  | aftermath restricts the second half to the GRAVEYARD via backFaceCastZones; the accessor is shared with flashback's zone gate
+splitcards x protection       | untested  | a split card is two colours at once, so protection from either colour must stop the whole object
+splitcards x indestructible   | n/a       | a split card is a spell in hand or a card in a graveyard; the keyword is a battlefield exemption
+splitcards x castcosts        | untested  | an {X} on one half only; the X question must read the HALF being cast, not the combined cost
+splitcards x altcosts         | untested  | a split card with flashback or madness; the exit zone and the half being cast are two different questions
+splitcards x library          | untested  | a tutor filtered by type finding a split card - which is two types at once
+splitcards x counters         | n/a       | a split card is not a permanent, so no counter is ever on one
+splitcards x cda              | covered   | new-systems: ONE split card in a graveyard feeds TWO card types to a star box
+splitcards x turnfacts        | n/a       | a split card in hand or graveyard never left the battlefield
+splitcards x mana             | untested  | a split card's SUM cost planned by planManaPayment, which must charge the half being cast
+splitcards x attachments      | n/a       | no printed split half is an Aura or Equipment
+splitcards x statics          | untested  | an anthem filtered by mana value, over a card whose value is the SUM of two halves
+splitcards x triggers         | untested  | a cast trigger narrowed by card type, over a card that is two types at once
+splitcards x steptriggers     | n/a       | a step trigger fires off the turn machine; a split card's two halves are a casting question
+
+asenters x walkers            | n/a       | no printed planeswalker prints an "as ~ enters, choose" line
+asenters x battles            | n/a       | no printed battle prints one, and no battle compiles yet in any case
+asenters x legend             | untested  | two copies of a legendary lord that named DIFFERENT types; the rule still reads the printed name
+asenters x emblems            | n/a       | an emblem never enters the battlefield, so nothing is named as it enters
+asenters x transform          | covered   | new-systems: transforming is not a zone change, so the named value survives the flip
+asenters x modal              | n/a       | a mode is chosen while ANNOUNCING; an as-enters value is named while the permanent enters
+asenters x nonhand            | untested  | a flashed-back permanent spell naming a value; the entry path is the same, the source zone is not
+asenters x protection         | untested  | "choose a colour" plus "protection from the chosen colour"; the protection list is printed data and cannot read the choice yet
+asenters x indestructible     | n/a       | the named value is instance memory; the keyword is a destruction exemption
+asenters x castcosts          | untested  | a kicked permanent naming a value: two answers ride the same resolution and both must land on the instance
+asenters x altcosts           | untested  | a madness permanent naming a value as it enters from exile
+asenters x library            | untested  | the creature-type MENU is derived from the chooser's own cards, so a tutor changes what is offerable
+asenters x counters           | untested  | a permanent that both names a value and enters with counters; both are CR 614.1c replacements on the same entry
+asenters x cda                | n/a       | a star box is a formula over the board; the named value is a string on the instance
+asenters x turnfacts          | n/a       | naming a value is not an event a turn fact remembers
+asenters x mana               | untested  | "As ~ enters, choose a colour. {T}: Add one mana of the chosen colour" - the mana model reads the instance, and no pool land does
+asenters x attachments        | untested  | an Aura naming a value as it enters, then modifying its host by it
+asenters x statics            | covered   | new-systems: the lord's own anthem filters on the type it NAMED, so only that type is buffed
+asenters x triggers           | untested  | a cast trigger narrowed by the named type - the third consumer of the same instance field
+asenters x steptriggers       | untested  | an upkeep trigger whose body reads the value its source named
+asenters x splitcards         | n/a       | no printed split half prints an as-enters line
+
+addcosts x walkers            | untested  | a planeswalker spell with a mandatory additional cost; the legality gate is type-agnostic
+addcosts x battles            | n/a       | no battle compiles yet, and none prints an additional cost
+addcosts x legend             | n/a       | the cost is paid while casting; the legend rule is a battlefield state-based action
+addcosts x emblems            | n/a       | an emblem is never cast
+addcosts x transform          | untested  | a DFC spell with an additional cost; the cost is on the CARD, the face is the cast
+addcosts x modal              | untested  | a modal spell with a mandatory additional cost: two cast-time questions, one stack object, order matters
+addcosts x nonhand            | untested  | a flashback cast still owes the printed additional cost - the flashback cost replaces only the MANA
+addcosts x protection         | n/a       | the cost is a payment; protection is a property of the object a spell points at
+addcosts x indestructible     | covered   | new-systems: the sacrifice takes an indestructible creature, because sacrifice is not destruction
+addcosts x castcosts          | untested  | {X} and a mandatory sacrifice on one spell; both are asked while announcing and both must be charged
+addcosts x altcosts           | untested  | a madness cast that still owes a printed sacrifice; CR 601.2h applies to any casting route
+addcosts x library            | n/a       | the cost leaves the battlefield or the hand; scry and surveil touch neither
+addcosts x counters           | untested  | sacrificing a permanent that carried counters; the counters go with it and must not survive the move
+addcosts x cda                | covered   | new-systems: the sacrificed creature card grows a star box WHILE the spell is still on the stack
+addcosts x turnfacts          | covered   | new-systems: paying the sacrifice turns REVOLT on before the spell that caused it resolves
+addcosts x mana               | untested  | funding the mana half from a source with a rider while the sacrifice half is also owed
+addcosts x attachments        | untested  | sacrificing the HOST to pay a cost; the orphaned Aura should follow in the same SBA pass
+addcosts x statics            | untested  | sacrificing an anthem source to pay a cost, which shrinks the board the spell then resolves against
+addcosts x triggers           | untested  | a dies-trigger firing off the creature sacrificed to PAY for the spell that is still on the stack
+addcosts x steptriggers       | n/a       | a step trigger is an ability, not a cast, so it never owes a casting cost
+addcosts x splitcards         | untested  | an additional cost printed on one half of a split card
+addcosts x asenters           | n/a       | the cost is paid while casting; the value is named as the permanent enters, a resolution later
 `;
 
 /**
@@ -428,6 +537,21 @@ const GAPS: readonly Gap[] = [
       'the fix is a rules change inside `packages/cards/src/primitives.ts`, the most contested ' +
       'file in the repo, and it can end games earlier - which moves the recorded gauntlet ' +
       'baselines several branches pin. It belongs with whoever re-measures those.',
+  },
+  {
+    id: 'two-zone-change-funnels',
+    cr: 'CR 400.7',
+    repro: 'new-systems.test.ts',
+    what:
+      'FIXED ON THIS BRANCH, kept here as the record. There are two funnels that move a ' +
+      'permanent off the battlefield - core\'s `moveToZone` + `resetInstanceForNewZone`, and the ' +
+      'cards package\'s `movePermanentTo` (every bounce and every "put into its owner\'s ' +
+      'graveyard" primitive). The second hand-copied the reset list and had drifted by THREE ' +
+      'fields: `attachedTo`, `loyaltyActivatedTurn` and `chosenAsEntered`. So a bounced Aura came ' +
+      'back still pointing at its old host, a bounced planeswalker could not activate the turn it ' +
+      'was replayed, and a bounced "as ~ enters, choose a type" lord still lorded over the type it ' +
+      'named last time. `movePermanentTo` now CALLS the shared reset.',
+    whyNotFixedHere: 'it was fixed here - the entry stays so the drift cannot silently return.',
   },
   {
     id: 'counter-annihilation-is-not-an-sba',

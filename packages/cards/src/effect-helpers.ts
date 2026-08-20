@@ -35,6 +35,7 @@ import {
   isTargetRestriction,
   MANA_COLORS,
   pruneCardGrantsFor,
+  resetInstanceForNewZone,
   discardDestination,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
@@ -480,19 +481,19 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   if (idx < 0) return;
   ctx.state.battlefield.splice(idx, 1);
   perm.zone = to;
-  perm.tapped = false;
-  perm.damageMarked = 0;
-  perm.markedByDeathtouch = false;
-  perm.summoningSick = false;
-  perm.counters = {};
-  // CR 712.8a: a transformed DFC turns front-face-up the moment it leaves the
-  // battlefield — a bounced Aberration is a Delver in hand. Core's
-  // `resetInstanceForNewZone` does the same for the engine's own leave paths;
-  // this helper is the cards-side funnel and must agree with it.
-  if (perm.printedDef != null) {
-    perm.def = perm.printedDef;
-    perm.printedDef = null;
-  }
+  // CR 400.7 — the permanent is a NEW object in its new zone, so every scrap of
+  // battlefield-only state goes with the move: tapped, marked damage, summoning
+  // sickness, counters, what it was attached to, its once-per-turn loyalty
+  // marker, its kick count, the value it named as it entered, and which face is
+  // up (CR 712.8a — a bounced Aberration is a Delver in hand).
+  //
+  // ⚠️ Called, not re-implemented. This USED to be a hand-copied list and it had
+  // already drifted from core's by three fields, each of which is a card playing
+  // differently depending on WHICH funnel bounced it: an Aura came back still
+  // pointing at its old host, a planeswalker could not activate again after being
+  // replayed, and an "as ~ enters, choose a type" lord still lorded over the type
+  // it named last time. Two funnels, one answer.
+  resetInstanceForNewZone(perm);
   // A permanent always goes to its OWNER's zone, not its controller's. Its
   // `controller` field is left as it was: it is the last-known information an
   // after-the-fact effect reads (Path to Exile compensates the creature's

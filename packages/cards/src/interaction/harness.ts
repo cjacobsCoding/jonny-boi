@@ -34,6 +34,7 @@ import {
   type InstanceId,
   type PlayerId,
 } from '@jonny-boi/core';
+import { compileCard, type CompilableCard, type CompilableCardFace } from '../compile/index.js';
 import { buildRegistry } from '../pool.js';
 import { CARD_POOL } from '../../data/pool.js';
 import { EXPANDED_CARD_POOL } from '../../data/expanded-pool.js';
@@ -59,6 +60,54 @@ export function poolCard(name: string): CardDefinition {
 /** Whether the shipped pool prints this card (for a cell that needs a real one). */
 export function poolHas(name: string): boolean {
   return BY_NAME.has(name);
+}
+
+/**
+ * A card definition built from REAL PRINTED TEXT through the REAL compiler.
+ *
+ * Four of the newest systems (step triggers, split cards, as-enters choices,
+ * mandatory additional costs) have NO card in the shipped pool yet, so a matrix
+ * cell about them has to author the record. Authoring the *definition* would be
+ * authoring the answer; authoring the printed RECORD and putting it through
+ * `compileCard` proves the same thing the pool cards prove - that the engine
+ * plays what the card says.
+ *
+ * Throws when the compiler reports `incomplete`, naming the clause: a cell that
+ * silently tested a half-compiled card would be a test that cannot fail.
+ */
+export function compiled(record: CompilableCard): CardDefinition {
+  const result = compileCard(record);
+  if (result.status !== 'complete') {
+    throw new Error(`"${record.name}" did not compile complete: ${JSON.stringify(result.missing)}`);
+  }
+  return result.definition;
+}
+
+/** A printed-card record with this file's defaults - override what matters. */
+export function record(over: Partial<CompilableCard> & { name: string }): CompilableCard {
+  return {
+    id: `matrix:${over.name}`,
+    manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+    typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+    oracleText: '',
+    power: null,
+    toughness: null,
+    keywords: [],
+    ...over,
+  };
+}
+
+/** One printed FACE of a two-halved card, with the same defaults. */
+export function faceRecord(over: Partial<CompilableCardFace> & { name: string }): CompilableCardFace {
+  return {
+    manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 0, G: 0, C: 0, other: [] },
+    typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+    oracleText: '',
+    power: null,
+    toughness: null,
+    keywords: [],
+    ...over,
+  };
 }
 
 /** Apply an action, failing loudly if the engine rejected it. */
