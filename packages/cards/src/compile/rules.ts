@@ -2183,6 +2183,55 @@ function mayEffectsFrom(body: string, compiled: readonly EffectRef[]): readonly 
 }
 
 /**
+ * Build the OPTIONAL ("you may BODY") form of a trigger whose plain form is
+ * built by {@link triggerFrom}.
+ *
+ * A separate builder rather than a branch inside `triggerFrom`, because the two
+ * forms compile DIFFERENT TEXT: the plain rule compiles the whole body, and this
+ * one compiles only what follows "you may" and wraps it in the `mayEffects`
+ * question. Compiling the whole "you may …" string and then wrapping it would
+ * ask twice on the bodies that implement their own option.
+ *
+ * Rules built with this must be ordered AFTER their plain sibling, for the
+ * reason spelled out on `trigger-etb-you-may`: a body that implements its own
+ * "you may" (Eternal Witness's optional graveyard return) plays better on the
+ * rule that knows about it, and this is the general fallback for every other.
+ */
+function optionalTriggerFrom(
+  ctx: RuleContext,
+  condition: TriggeredAbility['condition'],
+  innerBody: string,
+  label: string,
+): ClauseContribution | null {
+  const compiled = ctx.compileTriggerBody(innerBody);
+  if (compiled === null) return null;
+  const effects = mayEffectsFrom(innerBody, compiled.effects);
+  if (effects === null || effects.length === 0) return null;
+  return {
+    triggers: [
+      {
+        condition,
+        effects,
+        label,
+        ...(compiled.targets ? { targets: compiled.targets } : {}),
+      },
+    ],
+  };
+}
+
+/**
+ * The condition an Equipment's/Aura's "**equipped/enchanted creature** …" line
+ * means: the same event, watched on the permanent this one is attached to.
+ *
+ * A helper rather than an inline object literal at each call site so the two
+ * printed families (combat damage and attacking) cannot end up with two
+ * different spellings of the same scope.
+ */
+function hostWatch(on: TriggerCondition['on']): TriggerCondition {
+  return { on, watches: 'attachedHost' };
+}
+
+/**
  * The printed step names that begin a triggered ability, mapped to the
  * {@link TriggerCondition} event each one means. Closed: a step the engine's
  * turn structure does not have must REPORT, never compile to a trigger that can
@@ -2453,6 +2502,73 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         match[1] ?? '',
         `Combat damage to a player: ${match[1] ?? ''}`,
       );
+    },
+  },
+  {
+    id: 'trigger-combat-damage-to-player-you-may',
+    description: '"Whenever ~ deals combat damage to a player, you may BODY"',
+    // AFTER the plain rule — see `optionalTriggerFrom`.
+    pattern: /^whenever ~ deals combat damage to a player, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        { on: 'combatDamageToPlayer' },
+        body,
+        `Combat damage to a player: you may ${body}`,
+      );
+    },
+  },
+  {
+    // The Equipment/Aura copy of the line above. The SAME condition with the
+    // watched object moved to the host — see core's `TriggerWatches` for why
+    // that is a scope rather than an `equippedDealsCombatDamage` event of its
+    // own. The compiler emits it for any card printing the words; the ASSEMBLY
+    // refuses it on a card with no "Equip {N}"/"Enchant …" line, because a
+    // trigger nothing can ever attach is a trigger that can never fire.
+    id: 'trigger-equipped-combat-damage-to-player',
+    description: '"Whenever equipped/enchanted creature deals combat damage to a player, BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature deals combat damage to a player, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(
+        ctx,
+        hostWatch('combatDamageToPlayer'),
+        body,
+        `Equipped creature deals combat damage to a player: ${body}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-equipped-combat-damage-to-player-you-may',
+    description: '"Whenever equipped/enchanted creature deals combat damage to a player, you may BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature deals combat damage to a player, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        hostWatch('combatDamageToPlayer'),
+        body,
+        `Equipped creature deals combat damage to a player: you may ${body}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-equipped-attacks',
+    description: '"Whenever equipped/enchanted creature attacks, BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature attacks, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(ctx, hostWatch('attacks'), body, `Equipped creature attacks: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-attacks-you-may',
+    description: '"Whenever equipped/enchanted creature attacks, you may BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature attacks, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, hostWatch('attacks'), body, `Equipped creature attacks: you may ${body}`);
     },
   },
   {
@@ -3051,20 +3167,61 @@ const EQUIP_TARGET: TargetRestriction = 'creatureYouControl';
  * not model — so a partially-understood line is reported rather than compiled into
  * a card that is missing an ability.
  */
-function parseKeywordList(text: string): Record<string, boolean> | null {
-  const words = text
-    .split(/,| and /)
-    .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
-    .filter((word) => word.length > 0);
+function parseKeywordList(text: string): KeywordFlags | null {
+  const words = joinPayloadKeywords(
+    text
+      .split(/,| and /)
+      .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
+      .filter((word) => word.length > 0),
+  );
   if (words.length === 0) return null;
-  const flags: Record<string, boolean> = {};
+  const flags: Record<string, unknown> = {};
   for (const word of words) {
     const field = KEYWORD_FLAGS[word] ?? KEYWORD_PHRASES[word];
-    if (!field) return null;
-    flags[field] = true;
+    if (field) {
+      flags[field] = true;
+      continue;
+    }
+    // The two PAYLOAD keywords — "ward {1}", "protection from black and from
+    // green" — carry a value rather than a boolean, and core already models
+    // both. They go through the same parser the printed keyword LINE uses
+    // (`parseProtectionOrWard`) so an Equipment and a creature cannot end up
+    // disagreeing about which forms are real: a quality outside the closed
+    // table ("protection from instants") still returns null and the whole
+    // line keeps reporting.
+    const payload = parseProtectionOrWard(word);
+    if (payload === null) return null;
+    Object.assign(flags, payload);
   }
-  return flags;
+  return flags as KeywordFlags;
 }
+
+/**
+ * Re-join the conjuncts of a printed protection list that the keyword split
+ * broke apart.
+ *
+ * "protection from black and from green" is ONE ability, but the conjunction
+ * that separates two keywords is the same word that separates two protection
+ * qualities — so the split yields `['protection from black', 'from green']`.
+ * Any run of "from …" fragments belongs to the protection phrase before it;
+ * putting them back is what lets {@link parseProtectionOrWard} see the whole
+ * printed line, which is the only thing that knows how to read it.
+ */
+function joinPayloadKeywords(words: readonly string[]): string[] {
+  const joined: string[] = [];
+  for (const word of words) {
+    const previous = joined[joined.length - 1];
+    if (previous !== undefined && PROTECTION_CONTINUATION.test(word) && previous.startsWith('protection from ')) {
+      joined[joined.length - 1] = `${previous} and ${word}`;
+      continue;
+    }
+    joined.push(word);
+  }
+  return joined;
+}
+
+/** A trailing "from …" fragment of a multi-quality protection line. */
+const PROTECTION_CONTINUATION = /^from /;
 
 /**
  * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
