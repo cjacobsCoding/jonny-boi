@@ -17,7 +17,7 @@ import type { CardDefinition } from './card.js';
 import { manaExtrasOf, manaModesOf, spendPurposeFor } from './card.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { addProduction, canPay, MANA_COLORS, payCost, usableMana } from './mana.js';
-import type { ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
+import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
 import { restrictionAllows } from './spend-restriction.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 
