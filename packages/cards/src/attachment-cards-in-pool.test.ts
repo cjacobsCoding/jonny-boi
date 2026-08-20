@@ -152,6 +152,9 @@ describe('each shipped attachment says what its printed line says', () => {
     ["Serra's Embrace", 2, 2, ['flying', 'vigilance']], // "+2/+2 and has flying and vigilance."
     ['Unflinching Courage', 2, 2, ['trample', 'lifelink']], // "+2/+2 and has trample and lifelink."
     ['Gift of Orzhova', 1, 1, ['flying', 'lifelink']], // "+1/+1 and has flying and lifelink."
+    // An aura on the FRONT face of a modal DFC — the land back face changes
+    // nothing about what the aura does once it is on a creature.
+    ['Glasswing Grace', 2, 2, ['flying', 'lifelink']], // "+2/+2 and has flying and lifelink."
     // Equipment
     ['Bone Saw', 1, 0, []], // "Equipped creature gets +1/+0."
     ['Bonesplitter', 2, 0, []], // "Equipped creature gets +2/+0."
@@ -170,6 +173,11 @@ describe('each shipped attachment says what its printed line says', () => {
     ['Darksteel Axe', 2, 0, []], // "Equipped creature gets +2/+0." (the Equipment itself is indestructible)
     ['Darksteel Plate', 0, 0, ['indestructible']], // "Equipped creature has indestructible."
     ['Whispersilk Cloak', 0, 0, ['unblockable', 'shroud']], // "can't be blocked and has shroud."
+    // Equipment that grants only keywords — no P/T line at all, which is the
+    // shape a "+0/+0 means it grants nothing" reading would silently blank.
+    ['Basilisk Collar', 0, 0, ['deathtouch', 'lifelink']], // "has deathtouch and lifelink."
+    ['Lightning Greaves', 0, 0, ['haste', 'shroud']], // "has haste and shroud."
+    ['Swiftfoot Boots', 0, 0, ['hexproof', 'haste']], // "has hexproof and haste."
   ];
 
   it('covers every attachment in the pool — a new card cannot slip in unread', () => {

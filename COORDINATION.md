@@ -120,9 +120,79 @@ throughput (games/sec) from regressing.
 
 | feat/as-enters-choices | worker | packages/core (NEW as-enters.ts + as-enters.test.ts; card/choices/state/statics/triggers/effects/events/engine/index, internal clone+zones+triggers-runtime), packages/cards (choice-primitives `chooseAsEnters`, compile rules/compile/types + NEW as-enters-cards.test.ts), packages/ai (choices.ts + NEW as-enters-pilot.test.ts), packages/sim (observation +1, paired-arms +1), apps/web (play/choice-view + ChoicePrompt + styles.css + play-format + replay-format + about/mechanics + 2 tests), DESIGN §3.21, COORDINATION | 🚧 PUSHED, not merged |
 | feat/tutor-and-sacrifice-templates | worker | packages/core (card.ts `AdditionalCastCost`, state.ts stack field, engine.ts cast gate + cost question + payment, index.ts export, internal/clone.ts +1 field, NEW additional-cast-cost.test.ts), packages/cards (choice-primitives searchLibrary `route`/graveyard, compile/{rules,compile,types}.ts, NEW tutors-and-additional-costs.test.ts, 1 reworded template-gaps case), packages/ai (choices.ts tutor-reach policy + weights.ts +2 entries + choices.test additions), packages/sim/src/paired-arms-config.ts (COMMENT only), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
+| feat/pool-expansion-2 | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts + data/expansion-report.json; scripts/build-expansion.ts front-face lookup; src/pool-mechanics.test.ts REWRITTEN inventory + 12 new play tests, src/pool.test.ts counts, src/expanded-pool.test.ts mana cap, src/attachment-cards-in-pool.test.ts +4 PRINTED rows), packages/data-tools (src/normalize.ts + types.ts per-face defense/loyalty + adventurer cost, src/verify.ts + index.ts `frontFaceName`, src/normalize.test.ts +5, GENERATED data/card-index.json + data/starter-cards.json), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change, NO meta deck touched.** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `feat/pool-expansion-2` 🚧 PUSHED — **the shipped pool is 357 → 515 cards, and
+  nine of the eleven blind mechanics now print a card a player can see without importing a decklist.**
+  Pool + fetch pipeline only: **no compiler rule, no engine change, and NO meta deck touched**, so
+  every recorded DESIGN §3.4a baseline is unmoved. Gauntlet seed 99 is **byte-identical** to the
+  same-box `origin/main`: 81/280, rows 12·13·17·8·9·7·15.
+
+  🔑 **THE THING TO KNOW: three of the eleven were blocked in the FETCH PATH, not by the compiler.**
+  Every sibling branch signed off with "whoever next runs the pipeline gets these free." They were
+  not free — re-running the old pipeline would have produced almost none of them.
+  1. **`/cards/collection` does NOT resolve a combined `"A // B"` name.** `{ name: 'Fire // Ice' }`
+     comes back in `not_found`; `{ name: 'Fire' }` returns the whole `Fire // Ice` record. Every
+     split and aftermath candidate had been failing to resolve, silently, for as long as the list has
+     had them. **`frontFaceName` (data-tools `verify.ts`) is now the ONE place that answer lives** —
+     the expansion fetch and the regenerated `starter-cards.json` both go through it. The starter
+     list is a list of things to ASK SCRYFALL FOR, so it carries front-face names; the index keeps
+     the card's real name and `invariants.test.ts` already matches either half.
+  2. **A Siege's printed defense is on `card_faces[0].defense`, not at the card level.**
+     `Invasion of Gobakhan` reports `defense: undefined` on the card and `'3'` on the battle face.
+     Capturing the field was not enough — every battle in Magic normalized to `null` anyway, which is
+     why "a re-fetch unblocks battles" turned out to be false. Same front-face fallback now covers
+     `loyalty` (a transforming walker prints its number on a face too). **This is the third time a
+     missing normalizer field has masqueraded as a compiler gap** (after `layout`), so: if you are
+     measuring coverage, check the normalizer is not dropping the field your detector reads.
+  3. **CR 715.2 — an ADVENTURER's mana cost is the CREATURE's, not the two halves summed.** Scryfall
+     prints `"{B} // {2}{B}"` and reports `cmc: 1`; summing it produced a cost that contradicted the
+     card's own mana value and tripped the index's pip↔mana-value invariant on all fourteen
+     adventurers at once. A SPLIT card is the opposite (CR 709.4 — the sum IS the cost, and Scryfall's
+     `cmc` agrees), so the fix is narrowed to that one layout.
+
+  ✅ **Newly visible, per mechanic (before → after):** split 0→5 · aftermath 0→3 · adventure 0→18 ·
+  modal DFCs 0→21 (the ten Pathways + eleven ZNR spell//land halves) · as-enters naming 0→6 ·
+  mandatory additional costs 0→9 (Village Rites, Thrill of Possibility, Bone Splinters…) ·
+  two-destination search 0→2 (Cultivate, Kodama's Reach) · **the mana-ability model 0→48** (ten pain
+  lands, ten filter lands, ten Talismans, ten Signets, Mox Opal, Ancient Tomb, Reflecting Pool…) ·
+  battles 0→3 (Invasion of Moag / Belenon / Dominaria) · intervening "if" 0→3 · step triggers 1→12.
+  `pool-mechanics.test.ts` gained 13 inventory entries and **12 seeded play tests** — each of those
+  mechanics is now PLAYED in a real game, not just present in the data.
+
+  ⛔ **Still no honest card, each measured by compiling every printed card carrying it:** multikicker
+  **0/19**, emblems **0/90** (the loyalty ULTIMATE is the bigger blocker — 108 unreadable loyalty
+  clauses across those 90), **equipment with a TRIGGERED ability 0/145** (plain Equipment is in the
+  pool; "whenever equipped creature deals combat damage / dies" is a trigger SUBJECT the compiler
+  cannot resolve, so the Swords, Skullclamp and Umezawa's Jitte all report), **damage prevention
+  0/123**, **replacement effects on counters 0/17 and on damage 0/32**. Those last three are ONE
+  missing layer, not three missing rules: **core cannot modify an event before it happens.** Fog,
+  Hardened Scales and Torbran are that layer, not a template.
+
+  📊 **Corpus coverage does not move: 485/2100 (23.1%) on `origin/main` and 485/2100 here**, measured
+  by swapping the normalizer back and re-running the same cached corpus. This branch adds no compiler
+  rule, and the fetch fixes do not reach the audit's population (the top-2100 modern corpus holds
+  exactly one battle, itself blocked on a "you may" template, and nine adventurers whose compile
+  status the cost fix does not change).
+
+  🃏 **Cards that would be GAUNTLET-WORTHY and were deliberately left out** (adding one moves every
+  recorded A/B verdict — a separate, measured decision, and not a pool run's to make): the ten
+  **Signets** and ten **Talismans** and the ten **pain lands** (a real mana base for all seven
+  two-colour gauntlet decks), **Cultivate / Kodama's Reach / Birds of Paradise / Sylvan Caryatid**
+  (Mono-Green Ramp's actual ramp package), **Village Rites / Thrill of Possibility** (Rakdos Goblins
+  card flow), **Corpse Knight / Marauding Blight-Priest / Kambal** (Orzhov Lifegain's drain payoff),
+  **Poison-Tip Archer / Elas il-Kor** (Golgari Midrange), **Lightning Greaves / Basilisk Collar**
+  (aggro equipment), and **Foulmire Knight / Rimrock Knight** (two-for-one adventure bodies).
+
+  ⚠️ Two stale-guard fixes fell out and are worth knowing: `expanded-pool.test.ts`'s "no mana source
+  taps for more than 2" now takes an exception list BY NAME (Gilded Lotus and Thran Dynamo genuinely
+  print three) rather than a raised ceiling, because raising the number would have retired the guard;
+  and `attachment-cards-in-pool.test.ts`'s PRINTED table gained Basilisk Collar, Lightning Greaves,
+  Swiftfoot Boots and Glasswing Grace — the first Equipment in the pool that grant keywords and no
+  P/T at all.
 
 - 2026-08-20 worker: `feat/step-trigger-templates` 🚧 PUSHED — **the "At the beginning of…" family,
   and the blocker that was sitting in front of all ~65 of its corpus cards.**

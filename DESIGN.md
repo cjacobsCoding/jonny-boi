@@ -1870,6 +1870,73 @@ character-indexed object (nothing had printed a label that long until the fetchl
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
 
+#### The second run — pool **357 → 515**, and the three FETCH-PATH bugs that were hiding most of it
+Four more engine systems shipped after the first run (the split/aftermath/adventure/Siege second face,
+the as-enters naming, the intervening "if" and the step-trigger family, mandatory additional costs and
+multi-destination searches, and the mana-ability model), and each of those branches signed off with
+"whoever next runs the pipeline gets these free." **They were not free.** Eleven systems printed ZERO
+pool cards, and three of them were blocked in the FETCH PATH rather than by the compiler — which is
+why re-running the generator on the old pipeline would have produced almost nothing.
+
+⚠️ **`/cards/collection` does NOT resolve a combined `"A // B"` name.** Posting
+`{ name: 'Fire // Ice' }` comes back in `not_found`; posting `{ name: 'Fire' }` returns the whole
+`Fire // Ice` record. Every split and aftermath candidate was failing to resolve, silently.
+`frontFaceName` (data-tools `verify.ts`) is now the one place that answer lives, and both the expansion
+fetch and the regenerated `starter-cards.json` go through it — the starter list is a list of things to
+ASK SCRYFALL FOR, so it carries front-face names while the index keeps the card's real name.
+
+⚠️ **A Siege's printed defense is on `card_faces[0].defense`, not at the card level.** §3.15 captured
+`defense` and the split-card work said a re-fetch would unblock battles; it did not, because
+`normalizeCard` read only `raw.defense` and every battle in Magic therefore normalized to `null`
+anyway. The front-face fallback the cost/type/text lines already took now covers `defense` and
+`loyalty` too. This is the same shape as the missing `layout` field that turned out to be twelve of
+the split-card branch's thirteen cards: **if you are measuring coverage, check the normalizer is not
+dropping the field your detector reads.**
+
+⚠️ **CR 715.2 — an ADVENTURER's mana cost is the creature's, not the two halves added up.** Scryfall
+prints `"{B} // {2}{B}"` at the top level for Foulmire Knight and reports `cmc: 1`; summing the string
+produced a four-pip cost that contradicted the card's own mana value and tripped the index's
+pip↔mana-value invariant on every adventurer at once. A SPLIT card is the opposite — CR 709.4 makes
+the combined object's cost the SUM and Scryfall's `cmc` agrees — so the fix is narrowed to the one
+layout where the printed top-level string is not the card's cost.
+
+**Nine of the eleven now have real cards. The count is the compiler's verdict, not a judgement:**
+
+| mechanic | before | after | representative cards |
+|---|---:|---:|---|
+| split cards (CR 709.4) | 0 | 5 | Assault // Battery, Integrity // Intervention, Road // Ruin, Spring // Mind, Start // Finish |
+| aftermath | 0 | 3 | Road // Ruin, Spring // Mind, Start // Finish |
+| adventure | 0 | 18 | Foulmire Knight, Order of Midnight, Rimrock Knight, Beanstalk Giant, Merfolk Secretkeeper… |
+| modal DFCs | 0 | 21 | the ten Pathway lands, plus Bala Ged Recovery, Jwari Disruption, Kazandu Mammoth… |
+| "as ~ enters, choose a…" | 0 | 6 | Adaptive Automaton, Patchwork Banner, Heraldic Banner, Vanquisher's Banner, Chronicle of Victory, Coldsteel Heart |
+| mandatory additional costs | 0 | 9 | Village Rites, Thrill of Possibility, Bone Splinters, Altar's Reap, Cathartic Reunion… |
+| a search with TWO destinations | 0 | 2 | Cultivate, Kodama's Reach |
+| the mana-ability model | 0 | 48 | ten pain lands, ten filter lands, ten Talismans, ten Signets, Mox Opal, Ancient Tomb, Reflecting Pool… |
+| battles (Sieges) | 0 | 3 | Invasion of Moag, Invasion of Belenon, Invasion of Dominaria |
+| the printed intervening "if" | 0 | 3 | Howling Mine, Dragonmaster Outcast, Colossal Majesty |
+| "at the beginning of…" step triggers | 1 | 12 | Underworld Dreams, Font of Mythos, Temple Bell, Kami of the Crescent Moon… |
+
+**Still no honest card, each MEASURED by compiling every printed card that carries the mechanic:**
+**multikicker** 0/19 (12 of the 19 blocked on the counters template alone); **emblems** 0/90 — and the
+loyalty ULTIMATE that would make the emblem is the bigger blocker, 108 unreadable loyalty clauses
+across those 90; **equipment with a TRIGGERED ability** 0/145 — plain Equipment is in the pool (20 of
+them attach and pump), but "whenever equipped creature deals combat damage / dies" is a trigger
+SUBJECT the compiler cannot resolve, so the Swords, Skullclamp and Umezawa's Jitte all report;
+**damage prevention** 0/123 and **replacement effects on counters / on damage** 0/17 and 0/32. Those
+last three are ONE missing layer, not three missing rules: **core has no way to modify an event before
+it happens.** Fog, Hardened Scales and Torbran are not templates, they are that layer.
+
+⚡ **Rule 7 / §3.4a: the gauntlet at seed 99 is byte-identical** — 81/280 overall and every matchup row
+equal (12 · 13 · 17 · 8 · 9 · 7 · 15), 0 draws. **No meta deck was touched**, deliberately: adding a
+card to a gauntlet deck moves every recorded A/B baseline and is a separate, measured decision.
+
+📊 **The corpus number does NOT move, and that is the honest result: 485 / 2100 (23.1%) on
+`origin/main` and 485 / 2100 on this branch**, measured on the same cached corpus by swapping the
+normalizer and re-running. This section adds no compiler rule, and the three fetch-path fixes do not
+reach the audit's population — the top-2100 modern corpus contains exactly one battle (which is
+blocked on a "you may" template regardless) and nine adventurers whose compile status the cost fix
+does not change. The width is in the SHIPPED POOL: 357 → 515 cards, 325 → 483 compiled.
+
 
 ### 3.21 The triggering player + the intervening "if" — the "At the beginning of…" family — ✅ done
 The biggest template cluster in the coverage audit (~65 corpus cards) had ONE thing standing in front
