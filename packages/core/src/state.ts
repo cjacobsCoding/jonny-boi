@@ -322,7 +322,23 @@ export interface SpellStackObject {
    * where the card goes is one answer, not a flag each exit interprets.
    */
   readonly boughtBack?: boolean;
-  readonly awaitingCastChoice?: 'modes' | 'x' | 'kicker' | 'multikicker' | 'modeTarget' | 'buyback';
+  /**
+   * Whether this spell's MANDATORY additional cost has been paid
+   * ({@link CardDefinition.additionalCost}). Absent for spells that print none.
+   *
+   * Recorded rather than inferred because the payment is a real sacrifice or
+   * discard performed once: without a marker the cast-question loop would ask
+   * again every time it re-ran, and the caster would pay twice.
+   */
+  readonly additionalCostPaid?: boolean;
+  readonly awaitingCastChoice?:
+    | 'modes'
+    | 'x'
+    | 'kicker'
+    | 'multikicker'
+    | 'modeTarget'
+    | 'buyback'
+    | 'additionalCost';
   /**
    * The zone this spell was CAST FROM. Optional, and absent means `'hand'` —
    * which keeps every state serialized before non-hand casting existed (and

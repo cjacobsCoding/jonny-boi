@@ -13,7 +13,14 @@
 
 import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
-import type { ActivatedAbility, CardDefinition, EffectRef, ManaAbility, ManaModeExtra } from './card.js';
+import type {
+  ActivatedAbility,
+  AdditionalCastCost,
+  CardDefinition,
+  EffectRef,
+  ManaAbility,
+  ManaModeExtra,
+} from './card.js';
 import {
   canRevealForUntapped,
   castTiming,
@@ -28,12 +35,14 @@ import {
 } from './card.js';
 import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame, TargetOption } from './choices.js';
 import {
+  cardOption,
   choiceOptionCount,
   cloneChoiceAnswer,
   defaultAnswerFor,
   describeChoiceAnswer,
   enumerateChoiceAnswers,
   isTrivialChoice,
+  matchesCardFilter,
   MAX_CHOICES_PER_RESOLUTION,
   normalizeChoiceRequest,
   permanentTargetOption,
@@ -1227,6 +1236,19 @@ function applyAnswerChoice(
       return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
     }
     if (
+      casting.awaitingCastChoice === 'additionalCost' &&
+      choice.kind === 'selectCards' &&
+      answer.kind === 'selectCards'
+    ) {
+      const extra = casting.card.def.additionalCost;
+      if (extra) payAdditionalCost(state, extra, choice.chooser, answer.instanceIds, emit);
+      patchSpellOnStack(state, casting.instanceId, {
+        additionalCostPaid: true,
+        awaitingCastChoice: undefined,
+      });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (
       casting.awaitingCastChoice === 'multikicker' &&
       choice.kind === 'chooseNumber' &&
       answer.kind === 'chooseNumber'
@@ -2155,6 +2177,13 @@ function applyCastSpell(
     if (targetProblem) return rejectWith(prevState, targetProblem);
   }
 
+  // The MANDATORY additional cost, judged before any mana leaves the pool: a
+  // cost that cannot be paid makes the whole cast illegal (CR 601.2h), so this
+  // must refuse rather than let the spell resolve without paying. Same helper
+  // the offer loop screens with.
+  const additionalCostProblem = unpayableAdditionalCostReason(state, castDef, action.player, card.instanceId);
+  if (additionalCostProblem) return rejectWith(prevState, additionalCostProblem);
+
   // A flashback cost may print a LIFE rider ("Flashback—{1}{U}, Pay 3 life").
   // It is a mandatory part of the cost, not a choice, so a caster who cannot pay
   // it simply cannot cast (CR 118.4) — checked before any mana leaves the pool,
@@ -2273,7 +2302,13 @@ function patchSpellOnStack(
   patch: Partial<
     Pick<
       SpellStackObject,
-      'xValue' | 'kicked' | 'kickCount' | 'modePicks' | 'boughtBack' | 'awaitingCastChoice'
+      | 'xValue'
+      | 'kicked'
+      | 'kickCount'
+      | 'modePicks'
+      | 'boughtBack'
+      | 'additionalCostPaid'
+      | 'awaitingCastChoice'
     >
   >,
 ): void {
@@ -2557,6 +2592,91 @@ function aimModePick(
  * Steps 3 and 4 — the value of X, then the optional additional costs. Split out
  * of {@link askNextCastChoice} so the modal steps read as their own pipeline.
  */
+/**
+ * The cards that could pay a spell's MANDATORY additional cost right now —
+ * permanents its caster controls for a `'sacrifice'`, cards in their hand for a
+ * `'discard'`.
+ *
+ * ONE reader, used by all three places that must agree about it: the offer loop
+ * (which must not offer an uncastable spell), the cast path (which must reject
+ * one), and the question that collects the payment. Three separate opinions
+ * about "can this be paid" is exactly how a spell becomes offerable but
+ * un-castable.
+ *
+ * The card being cast is EXCLUDED from a discard's candidates: by the time this
+ * is asked it has already left the hand for the stack, but a caller judging
+ * castability asks while it is still in hand, and a spell can never pay its own
+ * additional cost with itself (CR 601.2h — it is on the stack).
+ */
+export function additionalCostCandidates(
+  state: GameState,
+  cost: AdditionalCastCost,
+  caster: PlayerId,
+  excludeInstanceId?: InstanceId,
+): readonly CardInstance[] {
+  const source =
+    cost.kind === 'sacrifice'
+      ? state.battlefield.filter((perm) => perm.controller === caster)
+      : state.players[caster].hand;
+  const out: CardInstance[] = [];
+  for (const card of source) {
+    if (card.instanceId === excludeInstanceId) continue;
+    if (!matchesCardFilter(card, cost.filter)) continue;
+    out.push(card);
+  }
+  return out;
+}
+
+/**
+ * Why a spell's mandatory additional cost cannot be paid, or `undefined`.
+ *
+ * CR 601.2h: a cost you cannot pay makes the cast ILLEGAL — the spell is not
+ * cast at all, rather than cast without the cost. That is the entire reason
+ * this is a hard gate and not a declinable question.
+ */
+function unpayableAdditionalCostReason(
+  state: GameState,
+  def: CardDefinition,
+  caster: PlayerId,
+  excludeInstanceId?: InstanceId,
+): string | undefined {
+  const cost = def.additionalCost;
+  if (!cost) return undefined;
+  const need = cost.count ?? 1;
+  const have = additionalCostCandidates(state, cost, caster, excludeInstanceId).length;
+  return have >= need ? undefined : `you cannot pay ${def.name}'s additional cost (${cost.label})`;
+}
+
+/**
+ * Pay a mandatory additional cost with the chosen cards, as the cast-time answer
+ * is accepted.
+ *
+ * Both halves go through the SAME zone-change funnel every other sacrifice and
+ * discard uses (`moveToZone`), which is what makes a dies/leaves-the-battlefield
+ * trigger and the madness discard replacement see it — because in the rules they
+ * genuinely do see it, and because the cost is paid BEFORE the spell finishes
+ * being cast. A cost paid through a private shortcut would be a silently
+ * different card. (When a "whenever you sacrifice a permanent" trigger event is
+ * added, this path is already the one it must watch — there is no second one.)
+ */
+function payAdditionalCost(
+  state: GameState,
+  cost: AdditionalCastCost,
+  caster: PlayerId,
+  instanceIds: readonly InstanceId[],
+  emit: (e: GameEvent) => void,
+): void {
+  for (const id of instanceIds) {
+    const card =
+      cost.kind === 'sacrifice'
+        ? state.battlefield.find((perm) => perm.instanceId === id && perm.controller === caster)
+        : state.players[caster].hand.find((held) => held.instanceId === id);
+    if (!card) continue; // already gone — never a throw (rule 6)
+    moveToZone(state, card, 'graveyard', emit, card.owner);
+    resetInstanceForNewZone(card);
+  }
+}
+
 function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e: GameEvent) => void): void {
   const spell = spellOnStack(state, spellInstanceId);
   if (!spell) return;
@@ -2683,6 +2803,67 @@ function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e:
       return;
     }
     patchSpellOnStack(state, spellInstanceId, { boughtBack: false });
+  }
+
+  // THE MANDATORY ADDITIONAL COST, asked last — it is paid at CR 601.2h, after
+  // X (601.2f) and the optional additional costs have been announced, so its
+  // position in this list is the printed announcement order and not a
+  // convenience.
+  //
+  // Unlike every question above it, this one has NO decline: the cast was only
+  // legal because the cost is payable (`unpayableAdditionalCostReason`, checked
+  // at the offer and again at the cast). What is being chosen is WHICH card
+  // pays, so it is a `selectCards` with min === max, and a caster with exactly
+  // enough candidates is not stopped to collect the inevitable.
+  const afterBuyback = spellOnStack(state, spellInstanceId);
+  if (!afterBuyback) return;
+  const extra = def.additionalCost;
+  if (extra && afterBuyback.additionalCostPaid === undefined) {
+    const count = extra.count ?? 1;
+    const candidates = additionalCostCandidates(state, extra, caster);
+    if (candidates.length < count) {
+      // Only reachable from a hand-built state — the cast path refused this.
+      // Recorded as unpaid so the loop cannot spin asking again.
+      patchSpellOnStack(state, spellInstanceId, { additionalCostPaid: false, awaitingCastChoice: undefined });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'selectCards',
+        chooser: caster,
+        prompt: `${def.name}: ${extra.label}`,
+        candidates: candidates.map((card) => cardOption(card)),
+        min: count,
+        max: count,
+        // Paying a cost is a LOSS — the pilot gives up its worst qualifying
+        // card, which is the whole skill in a sacrifice outlet.
+        valence: 'loss',
+        fromZone: extra.kind === 'sacrifice' ? 'battlefield' : 'hand',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: afterBuyback.instanceId, sourceName: def.name },
+    );
+    if (choice && !isTrivialChoice(choice)) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'additionalCost' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    // Exactly one legal set of payers (or a build that cannot represent the
+    // question): pay it here, in the same order the answer would have.
+    const forced = choice
+      ? (defaultAnswerFor(choice) as { kind: 'selectCards'; instanceIds: readonly InstanceId[] }).instanceIds
+      : candidates.slice(0, count).map((card) => card.instanceId);
+    if (choice) {
+      emit({
+        type: 'choiceAutoAnswered',
+        choiceId: choice.id,
+        chooser: caster,
+        choiceKind: choice.kind,
+        answer: { kind: 'selectCards', instanceIds: forced },
+        reason: 'only one legal way to pay this additional cost',
+      });
+    }
+    payAdditionalCost(state, extra, caster, forced, emit);
+    patchSpellOnStack(state, spellInstanceId, { additionalCostPaid: true, awaitingCastChoice: undefined });
   }
 }
 
@@ -3418,6 +3599,12 @@ function pushCastOffers(
   // A modal spell with nothing it could legally announce cannot be cast — the
   // same judgement `applyCastSpell` makes, from the same helper.
   if (!modalSpellIsCastable(state, def, me)) return;
+  // A MANDATORY additional cost this board cannot pay makes the cast illegal
+  // (CR 601.2h) — so the spell is not offered at all. Same helper the cast path
+  // rejects with, so offer and accept cannot disagree. The card itself is
+  // excluded from a discard's candidates: it will be on the stack by the time
+  // the cost is paid.
+  if (unpayableAdditionalCostReason(state, def, me, card.instanceId)) return;
   // Written only for a back-face offer, so a front-face cast action stays
   // byte-for-byte the object every consumer has always seen.
   const faceField = face === 'back' ? ({ face: 'back' } as const) : undefined;
