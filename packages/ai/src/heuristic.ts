@@ -735,10 +735,16 @@ function scoredSpellGoals(
      * A FLASHBACK COST CAN PRINT A LIFE RIDER — "Flashback—{1}{B}, Pay 3 life"
      * (Crippling Fatigue). It is part of the cost, so core's
      * `generateLegalActions` does not offer the cast and `applyCastSpell`
-     * rejects it. Without this gate the pilot built the action itself, the
-     * engine refused it, and after `maxConsecutiveRejectedActions` the harness
-     * passed priority — so the pilot threw away its whole turn EXACTLY when it
-     * was at low life. Found by the full-pool soak, seed 3329123684.
+     * rejects it.
+     *
+     * Without this gate the pilot still WANTED the spell, and what that cost it
+     * was worse than a rejection: it committed the taps first, so it **tapped
+     * every land toward a cast it could never make and then passed**, floating
+     * the whole pool and throwing the turn away EXACTLY when it was at low life
+     * (measured: 5 taps, 0 casts, at 1 and 2 life against a 3-life rider). When
+     * the macro path did reach the cast, the engine refused it and the sim harness
+     * passed priority after `maxConsecutiveRejectedActions` — same lost turn,
+     * louder. Found by the full-pool soak, seed 3329123684.
      */
     const lifeCost = def.flashbackLifeCost ?? 0;
     if (lifeCost > 0 && view.players[me].life < lifeCost) continue;
