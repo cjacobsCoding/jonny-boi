@@ -70,8 +70,9 @@ import {
   modalSpecOf,
   modeCountsFor,
   targetRestrictionOf,
+  DEFAULT_TRIGGER_WATCHES,
 } from '@jonny-boi/core';
-import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
+import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
 import { boardIndex, keywordsOf, power, statTotal, toughness, toughnessLeft } from './board-stats.js';
@@ -527,8 +528,13 @@ function bestEquipPlay(
     const perm = battlefield[b] as CardInstance;
     const abilities = perm.def.activated;
     if (abilities === undefined || perm.controller !== me) continue;
-    const modifies = perm.def.attachment?.modifies;
-    if (!modifies) continue;
+    // `attachment`, not `attachment.modifies`. An Equipment whose whole printed
+    // text is a triggered ability on its HOST (Skullclamp; Sword of the Animist)
+    // has no modification at all, and gating the search on one made every such
+    // card INERT: the pilot never equipped it, so its trigger never fired, in
+    // every game ever simulated. What the card is WORTH is `scoreEquip`'s
+    // question — this loop only asks whether it is an attachment at all.
+    if (perm.def.attachment === undefined) continue;
     for (let a = 0; a < abilities.length; a++) {
       const ability = abilities[a]!;
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
@@ -541,7 +547,7 @@ function bestEquipPlay(
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null, index);
       if (!host) continue;
 
-      const score = scoreEquip(modifies, host, weights, index);
+      const score = scoreEquip(perm.def, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
       const plan = planManaPayment(view as GameState, me, mana, legalActions);
       if (!plan) continue; // cannot fund it this turn
@@ -591,28 +597,57 @@ function bestEquipHost(
 }
 
 /**
- * What moving an attachment granting `modifies` onto `host` is worth, or
- * `undefined` when there is nothing to gain.
+ * What moving the attachment `def` onto `host` is worth, or `undefined` when
+ * there is nothing to gain.
+ *
+ * THREE things an attachment can give its host, and it is worth equipping if it
+ * gives ANY of them: stats, keywords, and TRIGGERED ABILITIES that watch the
+ * host. The third is not decoration — it is the whole of Skullclamp and of
+ * Sword of the Animist, and while this score read only the first two those
+ * cards scored `undefined` and were never picked up by anyone, ever.
  *
  * Bigger bodies carry equipment better (a +2/+0 on a 4/4 attacker beats the same
  * sword on a 0/1), so the host's own power counts toward the score — which is also
  * what makes the pilot move a sword onto a better creature when one arrives.
  */
 function scoreEquip(
-  modifies: PermanentModification,
+  def: CardDefinition,
   host: CardInstance,
   weights: HeuristicWeights,
   index: ContinuousIndex,
 ): number | undefined {
-  const stats = (modifies.power ?? 0) + (modifies.toughness ?? 0);
-  const keywords = modifies.keywords ? Object.values(modifies.keywords).filter(Boolean).length : 0;
-  if (stats <= 0 && keywords === 0) return undefined;
+  const modifies = def.attachment?.modifies;
+  const stats = (modifies?.power ?? 0) + (modifies?.toughness ?? 0);
+  const keywords = modifies?.keywords ? Object.values(modifies.keywords).filter(Boolean).length : 0;
+  const hostTriggers = countHostWatchingTriggers(def);
+  if (stats <= 0 && keywords === 0 && hostTriggers === 0) return undefined;
   return (
     weights.attachBaseScore +
     weights.attachPerStat * stats +
     weights.attachPerKeyword * keywords +
+    weights.attachPerHostTrigger * hostTriggers +
     weights.castCreaturePerStat * power(host, index)
   );
+}
+
+/**
+ * How many of this card's triggered abilities fire off its HOST rather than off
+ * itself — the "whenever equipped/enchanted creature …" family.
+ *
+ * The scope is read from core's `TriggerCondition.watches`, which is the data
+ * the ENGINE matches on, so a card cannot be valued for a trigger the engine
+ * would not fire (nor the reverse). The attachment's OWN triggers ("when ~
+ * enters, …") are deliberately not counted: they are a reason to have played
+ * the card, never a reason to spend mana equipping it.
+ */
+function countHostWatchingTriggers(def: CardDefinition): number {
+  const triggers = def.triggers;
+  if (triggers === undefined) return 0;
+  let count = 0;
+  for (let i = 0; i < triggers.length; i++) {
+    if ((triggers[i] as TriggeredAbility).condition.watches === 'attachedHost') count += 1;
+  }
+  return count;
 }
 
 /**
@@ -1421,7 +1456,7 @@ function chooseAttack(
   for (const id of eligible) {
     const attacker = findInstance(view, id);
     if (!attacker) continue;
-    if (attackIsProfitable(attacker, enemyBlockers, weights, index)) chosen.push(id);
+    if (attackIsProfitable(attacker, enemyBlockers, weights, index, view)) chosen.push(id);
   }
 
   if (chosen.length === 0) {
@@ -1536,6 +1571,7 @@ function attackIsProfitable(
   enemyBlockers: readonly CardInstance[],
   weights: HeuristicWeights,
   index: ContinuousIndex,
+  view: PilotView,
 ): boolean {
   const myPower = power(attacker, index);
   const myTough = toughness(attacker, index);
@@ -1576,9 +1612,62 @@ function attackIsProfitable(
   }
 
   // No profitable block for the opponent: either they have no blocker (face
-  // damage) or blocking only loses them value. Attack for the face-damage value.
-  const faceValue = weights.faceDamageValue * myPower;
+  // damage) or blocking only loses them value. Attack for the face-damage value
+  // PLUS what connecting is worth beyond the damage — every triggered ability
+  // that fires on combat damage to a player, the attacker's own and the ones its
+  // Equipment lends it.
+  //
+  // Counted only HERE, in the branch where the attack is expected to get
+  // through. A saboteur trigger pays nothing when the attacker is blocked, so
+  // adding it to the trade branch above would be a pilot walking into removal
+  // for a benefit it is not going to collect.
+  const faceValue =
+    weights.faceDamageValue * myPower +
+    weights.attackSaboteurTriggerValue * saboteurTriggerCount(attacker, view);
   return faceValue >= weights.attackValueThreshold;
+}
+
+/**
+ * How many "whenever ~ deals combat damage to a player" abilities THIS creature
+ * would set off by connecting — the ones printed on it, plus the ones its
+ * attached Auras and Equipment watch it with.
+ *
+ * The attachments are searched from the battlefield rather than read off the
+ * creature, because the relationship only exists in one direction: an
+ * attachment knows its host (`attachedTo`), a host knows nothing about what is
+ * on it. Both halves are read from the same core data the ENGINE matches on
+ * (`TriggerCondition.on` / `.watches`), so the pilot cannot value a trigger the
+ * engine would not fire.
+ *
+ * Cost: the battlefield walk happens only for a creature that got as far as the
+ * unblocked branch of the attack evaluation, and it stops at one property read
+ * per permanent for every board with no attachment on it.
+ */
+function saboteurTriggerCount(attacker: CardInstance, view: PilotView): number {
+  let count = countCombatDamageTriggers(attacker.def.triggers, 'self');
+  const battlefield = view.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.attachedTo !== attacker.instanceId) continue;
+    count += countCombatDamageTriggers(perm.def.triggers, 'attachedHost');
+  }
+  return count;
+}
+
+/** Triggers on `combatDamageToPlayer` with the given watch scope. */
+function countCombatDamageTriggers(
+  triggers: readonly TriggeredAbility[] | undefined,
+  watches: 'self' | 'attachedHost',
+): number {
+  if (triggers === undefined) return 0;
+  let count = 0;
+  for (let i = 0; i < triggers.length; i++) {
+    const condition = (triggers[i] as TriggeredAbility).condition;
+    if (condition.on !== 'combatDamageToPlayer') continue;
+    if ((condition.watches ?? DEFAULT_TRIGGER_WATCHES) !== watches) continue;
+    count += 1;
+  }
+  return count;
 }
 
 // --- blocking ------------------------------------------------------------------
@@ -2171,7 +2260,7 @@ function collectAttackCandidates(
   const profitable: InstanceId[] = [];
   for (const id of offered.attackers) {
     const attacker = findInstance(view, id);
-    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights, index)) profitable.push(id);
+    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights, index, view)) profitable.push(id);
   }
   if (profitable.length > 0) {
     // The value-judged attack carries the same walker assignment the plain
@@ -2354,8 +2443,13 @@ function bestEquipMacro(
     const perm = battlefield[b] as CardInstance;
     const abilities = perm.def.activated;
     if (abilities === undefined || perm.controller !== me) continue;
-    const modifies = perm.def.attachment?.modifies;
-    if (!modifies) continue;
+    // `attachment`, not `attachment.modifies`. An Equipment whose whole printed
+    // text is a triggered ability on its HOST (Skullclamp; Sword of the Animist)
+    // has no modification at all, and gating the search on one made every such
+    // card INERT: the pilot never equipped it, so its trigger never fired, in
+    // every game ever simulated. What the card is WORTH is `scoreEquip`'s
+    // question — this loop only asks whether it is an attachment at all.
+    if (perm.def.attachment === undefined) continue;
     for (let a = 0; a < abilities.length; a++) {
       const ability = abilities[a]!;
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
@@ -2364,7 +2458,7 @@ function bestEquipMacro(
       hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null, index);
       if (!host) continue;
-      const score = scoreEquip(modifies, host, weights, index);
+      const score = scoreEquip(perm.def, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
       const plan = planManaPayment(view as GameState, me, mana, legalActions);
       if (!plan) continue;
