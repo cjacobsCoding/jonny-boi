@@ -44,19 +44,30 @@ export {
   formatManaCost,
   payCost,
   canPay,
+  repeatCost,
 } from './mana.js';
 
 // Card model seam
 export type {
   ActivatedAbility,
+  CyclingAbility,
   ActivationCost,
   EntersUntappedCondition,
+  RevealFromHandCondition,
   EntersTappedContext,
   CardDefinition,
   CardType,
   CastTiming,
   EffectRef,
   KeywordFlags,
+  ManaAbility,
+  ManaAbilityCost,
+  ManaAbilityRider,
+  ManaActivationCondition,
+  ManaModeExtra,
+  DerivedManaColors,
+  ModalSpec,
+  SpellMode,
 } from './card.js';
 export {
   hasType,
@@ -64,14 +75,21 @@ export {
   isLand,
   isCreature,
   isPlaneswalker,
+  isBattle,
   isAttackable,
   isPermanentType,
   isManaSource,
   manaModesOf,
+  manaExtrasOf,
   manaColorsOffered,
+  fixedManaColorsOf,
+  manaActivationConditionMet,
   bestManaYield,
   castTiming,
+  canRevealForUntapped,
   entersTapped,
+  hasCastableBackFace,
+  playableFaceOf,
 } from './card.js';
 
 /**
@@ -177,6 +195,26 @@ export {
 export type { FaceUp } from './transform.js';
 export { transformPermanent, faceUpOf, transformTargetOf } from './transform.js';
 
+/**
+ * MODAL-SPELL seam (`./modal.ts`): which modes of a "Choose one --" card may be
+ * ANNOUNCED on this board, and what each announced mode resolves into. Read by
+ * the engine at cast time, by the AI to price a mode before choosing it, and by
+ * the web UI to label the question.
+ */
+export type { ModeCounts, ModalResolution } from './modal.js';
+export {
+  modalSpecOf,
+  modalSpellIsCastable,
+  modeById,
+  modeCountsFor,
+  modeIsChoosable,
+  choosableModes,
+  nextUnaimedPick,
+  orderPicks,
+  pickTargetIsLegal,
+  picksToResolution,
+} from './modal.js';
+
 // Triggered-ability seam (DESIGN §3.9): how a CardDefinition declares triggers.
 export type {
   TriggeredAbility,
@@ -216,7 +254,10 @@ export type {
   StackObject,
   SpellStackObject,
   TriggeredStackObject,
+  ModePick,
   CombatState,
+  MadnessWindow,
+  SpellLeaveReason,
 } from './state.js';
 export {
   PLAYER_IDS,
@@ -226,8 +267,12 @@ export {
   createPlayer,
   playerZone,
   opponentOf,
+  protectorOf,
   spellLeaveDestination,
 } from './state.js';
+
+// Madness (CR 702.35): the discard replacement and the window it opens.
+export { discardDestination, declineMadness } from './madness.js';
 
 // Events
 export type { GameEvent, EventLog } from './events.js';
@@ -255,6 +300,7 @@ export type {
   ActivateAbilityAction,
   CastSpellAction,
   CastZone,
+  CycleCardAction,
   DeclareAttackersAction,
   DeclareBlockersAction,
   AnswerChoiceAction,
@@ -360,6 +406,8 @@ export {
   MINUS_ONE_COUNTER,
   LOYALTY_COUNTER,
   loyaltyOf,
+  DEFENSE_COUNTER,
+  defenseOf,
 } from './internal/stats.js';
 
 // Combat's "what was this attacker declared attacking" accessor — the walker /

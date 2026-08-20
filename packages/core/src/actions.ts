@@ -14,11 +14,27 @@ export interface PassPriorityAction {
   readonly player: PlayerId;
 }
 
+/**
+ * Which FACE of a double-faced card is being played.
+ *
+ * Only a card declaring `CardDefinition.backFaceCastable` (a MODAL DFC) accepts
+ * `'back'`; a transforming DFC's back face is never castable (CR 712.8b) and a
+ * `'back'` action naming one is rejected. Omitted means `'front'`, which keeps
+ * every action built before modal DFCs existed valid unchanged.
+ */
+export type CastFace = 'front' | 'back';
+
 /** Play a land from hand (sorcery-speed, one per turn, empty stack). */
 export interface PlayLandAction {
   readonly kind: 'playLand';
   readonly player: PlayerId;
   readonly instanceId: InstanceId;
+  /**
+   * The face to play — `'back'` plays a modal DFC's land back face (Zendikar
+   * Rising's spell//land MDFCs), which counts as the turn's land play exactly
+   * like any other land.
+   */
+  readonly face?: CastFace;
 }
 
 /** Tap a mana source for mana (adds to the controller's pool). */
@@ -46,9 +62,11 @@ export const DEFAULT_MANA_MODE = 0;
 /**
  * The zones a spell may be cast from. `'hand'` is the default everywhere it is
  * omitted; `'graveyard'` is a flashback cast (the card must declare
- * `CardDefinition.flashback`, whose cost is paid instead of the printed one).
+ * `CardDefinition.flashback`, whose cost is paid instead of the printed one);
+ * `'exile'` is a MADNESS cast (`CardDefinition.madness`, legal only while that
+ * card's madness window is open — see `state.ts`'s `MadnessWindow`).
  */
-export type CastZone = 'hand' | 'graveyard';
+export type CastZone = 'hand' | 'graveyard' | 'exile';
 
 /**
  * Cast a spell onto the stack. `targets` carries any chosen targets (instance
@@ -65,6 +83,30 @@ export interface CastSpellAction {
   readonly instanceId: InstanceId;
   readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
   readonly fromZone?: CastZone;
+  /**
+   * The face to cast — `'back'` casts a modal DFC's second face, with THAT
+   * face's cost, types, timing, targets and script. See {@link CastFace}.
+   */
+  readonly face?: CastFace;
+}
+
+/**
+ * CYCLE a card from hand: pay its cycling cost, discard it, and put the cycling
+ * ability on the stack (CR 702.29).
+ *
+ * Its own action kind rather than an `activateAbility` with a zone, because the
+ * two share nothing an implementation could reuse: `activateAbility` starts by
+ * finding a permanent on the battlefield and can pay in taps, sacrifices and
+ * loyalty, none of which a card in hand has. `abilityIndex` indexes the card's
+ * `CardDefinition.cycling` list exactly as `activateAbility` indexes
+ * `activated`, so a card printing both cycling and landcycling offers one
+ * action each and a pilot can score them separately. Omitted means the first.
+ */
+export interface CycleCardAction {
+  readonly kind: 'cycleCard';
+  readonly player: PlayerId;
+  readonly instanceId: InstanceId;
+  readonly abilityIndex?: number;
 }
 
 /**
@@ -134,6 +176,7 @@ export type GameAction =
   | PlayLandAction
   | TapForManaAction
   | CastSpellAction
+  | CycleCardAction
   | ActivateAbilityAction
   | DeclareAttackersAction
   | DeclareBlockersAction

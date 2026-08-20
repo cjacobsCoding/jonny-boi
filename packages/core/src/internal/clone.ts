@@ -75,6 +75,11 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // on its back face for the rest of the game — and losing the pair together
   // would untransform it — on the very next action's clone.
   if (inst.printedDef != null) copy.printedDef = inst.printedDef;
+  // Same conditional-copy rule again: only a permanent that entered off a
+  // KICKED spell carries this, and it is what an "for each time it was kicked"
+  // ETB trigger reads after the resolution frame is gone — drop it here and the
+  // trigger silently sees an unkicked spell one action boundary later.
+  if (inst.timesKicked !== undefined) copy.timesKicked = inst.timesKicked;
   return copy;
 }
 
@@ -139,6 +144,23 @@ function cloneStackObject(o: StackObject): StackObject {
     // what it always was.
     ...(o.xValue !== undefined ? { xValue: o.xValue } : {}),
     ...(o.kicked !== undefined ? { kicked: o.kicked } : {}),
+    ...(o.kickCount !== undefined ? { kickCount: o.kickCount } : {}),
+    // Deep-copied, not aliased: a pick's `targets` array is written into as the
+    // engine collects each chosen mode's aim, so sharing the array between a
+    // state and its clone would let one cast's aiming rewrite the other's.
+    // Dropping it entirely would resolve a modal spell with NO modes at all.
+    ...(o.modePicks !== undefined
+      ? {
+          modePicks: o.modePicks.map((pick) => ({
+            modeId: pick.modeId,
+            ...(pick.targets !== undefined ? { targets: [...pick.targets] } : {}),
+          })),
+        }
+      : {}),
+    // Dropping this one would turn a bought-back spell back into an ordinary
+    // one — it would hit the graveyard on resolution instead of returning to
+    // hand — at the very next action boundary. Same stakes, same shape.
+    ...(o.boughtBack !== undefined ? { boughtBack: o.boughtBack } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
   };
@@ -185,6 +207,13 @@ function cloneResolution(frame: ResolutionFrame): ResolutionFrame {
     ...frame,
     effects: frame.effects.map((e) => ({ ...e })),
     answers: frame.answers.map(cloneChoiceAnswer),
+    // The spread above would ALIAS this array (and every target list in it)
+    // between the state and its clone — and it is mutated in lockstep with
+    // `effects` by `enqueueEffects`, so an alias means one resolution's
+    // enqueued modes shifting another's targets. Copied two levels deep.
+    ...(frame.effectTargets
+      ? { effectTargets: frame.effectTargets.map((t) => (t === undefined ? undefined : [...t])) }
+      : {}),
     ...(frame.card ? { card: cloneInstance(frame.card) } : {}),
   };
 }
@@ -239,6 +268,10 @@ export function cloneState(state: GameState): GameState {
   // Two NUMBERS, so the turn's fact memory costs the clone no allocation at all
   // (a nested { A, B } record here measured ~3% of sim throughput). Numbers copy
   // by value, so two states can never alias each other's memory of the turn.
+  // Same conditional rule and the same stakes: dropping an open madness window
+  // would strand the exiled card — nothing could cast it and nothing would ever
+  // put it in the graveyard — on the clone made at every action boundary.
+  if (state.madnessWindow) next.madnessWindow = { ...state.madnessWindow };
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
   return next;

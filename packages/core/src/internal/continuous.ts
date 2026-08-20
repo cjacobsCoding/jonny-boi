@@ -139,10 +139,22 @@ export type ContinuousIndex = ReadonlyMap<InstanceId, AggregatedMod>;
  * This list used to stop at the ten combat keywords, which silently dropped a
  * granted hexproof/shroud/menace/unblockable/flash — the exact grants
  * `targeting.ts` documents as working. The full boolean set is here now; the
- * two non-boolean keywords (`protectionFrom`, `ward`) carry payloads and are
- * folded by their own merge rules in {@link grantInto}.
+ * three non-boolean keywords (`protectionFrom`, `ward`, `minBlockers`) carry
+ * payloads and are folded by their own merge rules in {@link grantInto}.
+ *
+ * ⚠️ ADDING A BOOLEAN FLAG TO `KeywordFlags` AND NOT TO THIS LIST used to be a
+ * silent, one-directional bug: the printed keyword worked and every GRANT of it
+ * did nothing. It ate a granted hexproof once and a granted indestructible once,
+ * found both times only because someone happened to write the test.
+ *
+ * It cannot happen a third time: {@link KEYWORD_LIST_IS_EXHAUSTIVE} below is a
+ * compile-time proof that this list and the boolean half of `KeywordFlags` are
+ * the SAME set, in both directions. Add a boolean flag and this file stops
+ * type-checking until it is listed here — the same default-deny shape the sim's
+ * `OBSERVATION_POLICY` and `paired-arms-config` use, and for the same reason: a
+ * new thing must not default into the safe-looking bucket.
  */
-const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
+const KEYWORD_KEYS = [
   'flying',
   'vigilance',
   'haste',
@@ -158,7 +170,36 @@ const KEYWORD_KEYS: readonly (keyof KeywordFlags)[] = [
   'shroud',
   'menace',
   'unblockable',
-];
+  'cantBlock',
+  'indestructible',
+] as const;
+
+/**
+ * The boolean-valued keys of `KeywordFlags`. The three payload keywords
+ * (`protectionFrom`, `ward`, `minBlockers`) are excluded BY TYPE rather than by
+ * memory: they are folded by their own merge rules in {@link grantInto}, since
+ * "set it to true" is not what granting one of them means.
+ */
+type BooleanKeywordKey = {
+  [K in keyof KeywordFlags]-?: boolean extends NonNullable<KeywordFlags[K]> ? K : never;
+}[keyof KeywordFlags];
+
+/**
+ * COMPILE-TIME PROOF that {@link KEYWORD_KEYS} is exactly the boolean keyword
+ * set — checked by `tsc` on every build, in BOTH directions:
+ *  - a boolean flag missing from the list would make grants of it do nothing;
+ *  - a listed key that is not a boolean flag would be dead weight, or a typo.
+ * Either mistake makes this initialiser fail to compile.
+ */
+type KeywordListIsExhaustive =
+  Exclude<BooleanKeywordKey, (typeof KEYWORD_KEYS)[number]> extends never
+    ? Exclude<(typeof KEYWORD_KEYS)[number], BooleanKeywordKey> extends never
+      ? true
+      : never
+    : never;
+
+/** The witness. If the two sets ever diverge, this line stops type-checking. */
+export const KEYWORD_LIST_IS_EXHAUSTIVE: KeywordListIsExhaustive = true;
 
 /**
  * The accumulator an aggregation pass folds into. Structurally an `AggregatedMod`
@@ -202,6 +243,16 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
     if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
     (agg.keywords as { ward?: number }).ward = (agg.keywords.ward ?? 0) + grant.ward;
   }
+  // `minBlockers` takes the MAXIMUM, matching `mergeKeywordGrant`: two blocking
+  // requirements are both in force, so the stricter one decides. Summing them
+  // would invent a restriction neither source printed.
+  if (typeof grant.minBlockers === 'number' && grant.minBlockers > 0) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    (agg.keywords as { minBlockers?: number }).minBlockers = Math.max(
+      agg.keywords.minBlockers ?? 0,
+      grant.minBlockers,
+    );
+  }
 }
 
 /** The empty aggregate returned for a permanent with no active modifications. */
@@ -232,6 +283,25 @@ function applyAttachment(map: Map<InstanceId, MutableMod>, attachment: CardInsta
   agg.power += mod.power ?? 0;
   agg.toughness += mod.toughness ?? 0;
   grantInto(agg, mod.keywords);
+}
+
+/**
+ * Append the objects in one zone that declare static abilities to `sources`,
+ * allocating the list only if there is something to put in it. Hoisted to module
+ * scope rather than written inline so the hot path does not re-create a closure
+ * per call.
+ */
+function collectStaticSources(
+  zone: readonly CardInstance[],
+  sources: CardInstance[] | null,
+): CardInstance[] | null {
+  let out = sources;
+  for (let i = 0; i < zone.length; i++) {
+    const object = zone[i] as CardInstance;
+    const declared = object.def.statics;
+    if (declared !== undefined && declared.length > 0) (out ??= []).push(object);
+  }
+  return out;
 }
 
 /** Get (creating if needed) the accumulator for one instance. */
@@ -270,6 +340,22 @@ export function indexContinuous(state: GameState): ContinuousIndex {
   // property read per permanent and allocates nothing.
   let characteristic: CardInstance[] | null = null;
   const permanents = state.battlefield;
+  // EMBLEMS radiate statics from the COMMAND zone (CR 114): "creatures you
+  // control get +1/+1 as long as this emblem exists" is the SAME continuous
+  // modification an anthem applies from the battlefield, differing only in where
+  // its source sits and in the fact that nothing can ever remove it. So it folds
+  // into this one pass instead of getting a layer of its own — which is also
+  // what makes an emblem's buff survive a board wipe with no special case.
+  //
+  // PERFORMANCE: read directly rather than through `for (const pid of
+  // PLAYER_IDS)`, which allocates an array iterator per call for a two-element
+  // list — and this function runs several times per action across combat, SBAs,
+  // legality and serialization. The `.length === 0` guard means a game that
+  // never made an emblem (all of them, today) pays two integer comparisons.
+  const commandA = state.players.A.command;
+  if (commandA.length > 0) sources = collectStaticSources(commandA, sources);
+  const commandB = state.players.B.command;
+  if (commandB.length > 0) sources = collectStaticSources(commandB, sources);
   for (let i = 0; i < permanents.length; i++) {
     const perm = permanents[i] as CardInstance;
     const declared = perm.def.statics;
@@ -381,6 +467,18 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
         grantInto(agg, ability.keywords);
       }
     }
+    // EMBLEMS radiate from the COMMAND zone, and this single-instance path has to
+    // agree with `indexContinuous` about that or the same board would report two
+    // different power values depending on which accessor a caller happened to
+    // reach for. (It did, once: wiring only the bulk path made an emblem's anthem
+    // real in combat and invisible to a one-off read — caught by a test before it
+    // shipped, which is the only reason this comment is not a bug report.)
+    //
+    // Same direct-read guard as the bulk path: no iterator for a two-element list.
+    const commandA = state.players.A.command;
+    if (commandA.length > 0) any = foldCommandStatics(commandA, target, agg) || any;
+    const commandB = state.players.B.command;
+    if (commandB.length > 0) any = foldCommandStatics(commandB, target, agg) || any;
   }
   // Layer 4 — until-end-of-turn effects aimed at this instance.
   for (const eff of state.continuous) {
@@ -392,6 +490,32 @@ export function aggregateFor(state: GameState, instanceId: InstanceId): Aggregat
   }
 
   return any ? agg : NO_MOD;
+}
+
+/**
+ * Fold every static a command zone's objects (emblems) radiate onto ONE target's
+ * accumulator. Returns whether anything applied. The single-instance twin of
+ * {@link collectStaticSources}.
+ */
+function foldCommandStatics(
+  zone: readonly CardInstance[],
+  target: CardInstance,
+  agg: MutableMod,
+): boolean {
+  let applied = false;
+  for (let i = 0; i < zone.length; i++) {
+    const source = zone[i] as CardInstance;
+    const declared = source.def.statics;
+    if (declared === undefined || declared.length === 0) continue;
+    for (const ability of declared) {
+      if (staticIsInert(ability) || !staticAppliesTo(ability, source, target)) continue;
+      applied = true;
+      agg.power += ability.power ?? 0;
+      agg.toughness += ability.toughness ?? 0;
+      grantInto(agg, ability.keywords);
+    }
+  }
+  return applied;
 }
 
 /**

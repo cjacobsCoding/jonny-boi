@@ -35,6 +35,7 @@ import {
   isTargetRestriction,
   MANA_COLORS,
   pruneCardGrantsFor,
+  discardDestination,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
@@ -123,6 +124,19 @@ function isKickedSwitch(value: unknown): value is KickedSwitchValue {
  * uses for a characteristic-defining P/T, so a count cannot mean two things.
  */
 export function evaluateDerived(ctx: EffectContext, value: DerivedValue): number {
+  // Every count core can answer from the BOARD is answered by core, from the one
+  // shared evaluator (so a spell's "equal to the number of X" and a `*` P/T box
+  // count the identical set). The kick count is the single exception, and it has
+  // to be: it is a fact about THIS RESOLUTION, which core's board-only evaluator
+  // has no way to see.
+  if (value.countOf === 'timesThisWasKicked') {
+    // Two readings, and both are needed. DURING the spell's own resolution the
+    // count rides the frame (`ctx.kickCount`, with a plain kicker counting as
+    // one). AFTERWARDS — an enters-the-battlefield trigger on the permanent that
+    // spell became — the frame is gone and the count lives on the instance
+    // (`timesKicked`, written as it entered).
+    return ctx.kickCount ?? (ctx.kicked === true ? 1 : (ctx.source.timesKicked ?? 0));
+  }
   return evaluateDerivedCount(ctx.state, value.countOf, ctx.controller);
 }
 
@@ -343,15 +357,24 @@ export function moveOwnedCard(
   if (index < 0) return undefined;
   const [card] = source.splice(index, 1);
   if (!card) return undefined;
-  card.zone = to;
+  // A hand → graveyard move IS a discard (CR 701.8a), and madness replaces
+  // where a discarded card goes. Asked through core's shared
+  // `discardDestination` — the same one core's own `moveToZone` funnel asks — so
+  // a discard made by an effect and a discard made as a cost cannot disagree
+  // about whether a madness card is exiled.
+  const destination: OwnedZone =
+    from === 'hand' && to === 'graveyard'
+      ? (discardDestination(ctx.state, card, ctx.emit) as OwnedZone)
+      : to;
+  card.zone = destination;
   // CR 400.7: the card is a NEW object in its new zone, so a grant made on the
   // old one (a granted flashback on a graveyard card) does not follow it. Core's
   // own `moveToZone` prunes for the same reason; this helper is the cards-side
   // funnel and must agree with it — see `card-grants.ts`.
   pruneCardGrantsFor(ctx.state, card.instanceId);
-  if (position === 'top') owner[to].unshift(card);
-  else owner[to].push(card);
-  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to });
+  if (position === 'top') owner[destination].unshift(card);
+  else owner[destination].push(card);
+  ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from, to: destination });
   return card;
 }
 
@@ -451,7 +474,8 @@ export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | und
  * Counter `spell`: take it off the stack and put its card where a countered copy
  * of it goes — the owner's graveyard normally, EXILE when it was cast via
  * flashback (CR 702.34a exiles the card any time it would leave the stack, and
- * being countered is leaving the stack). The destination is core's
+ * being countered is leaving the stack), and the graveyard even when its buyback
+ * cost was paid (CR 702.27a returns it to hand only as it resolves). The destination is core's
  * `spellLeaveDestination`, the same answer resolution uses, so countering and
  * resolving cannot disagree about where a flashback card ends up.
  *
@@ -465,7 +489,10 @@ export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject)
   if (idx < 0) return;
   ctx.state.stack.splice(idx, 1);
   const card = spell.card;
-  const to = spellLeaveDestination(spell);
+  // COUNTERED, not resolved — the distinction the reason argument exists for: a
+  // flashback card is exiled either way, but a bought-back spell returns to hand
+  // only as it RESOLVES, so a countered one belongs in the graveyard.
+  const to = spellLeaveDestination(spell, 'counter');
   card.zone = to;
   ctx.state.players[card.owner][to].push(card);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to });

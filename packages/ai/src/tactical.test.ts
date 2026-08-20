@@ -53,7 +53,7 @@ describe('tactical solver — guaranteed damage', () => {
   it('a lone attacker facing no blockers is guaranteed to connect', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [OGRE]);
-    const a = assessAttack(state, 'A');
+    const a = assessAttack(state, 'A', 'now', indexContinuous(state));
     expect(a.maxDamage).toBe(3);
     expect(a.guaranteedDamage).toBe(3);
   });
@@ -63,26 +63,26 @@ describe('tactical solver — guaranteed damage', () => {
     putOnBattlefield(state, 'A', [OGRE, OGRE, OGRE]);
     putOnBattlefield(state, 'B', [WALL]);
     // 9 power, one blocker eats the biggest 3 → 6 guaranteed.
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(6);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(6);
   });
 
   it('blockers cannot block twice — prevention is capped by the blocker count', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [BEAR, BEAR, BEAR, BEAR]);
     putOnBattlefield(state, 'B', [WALL, WALL]);
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(4);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(4);
   });
 
   it('a flier is only stopped by flying or reach', () => {
     const groundOnly = freshGame();
     putOnBattlefield(groundOnly, 'A', [FLIER]);
     putOnBattlefield(groundOnly, 'B', [OGRE, OGRE, OGRE]);
-    expect(assessAttack(groundOnly, 'A').guaranteedDamage).toBe(4);
+    expect(assessAttack(groundOnly, 'A', 'now', indexContinuous(groundOnly)).guaranteedDamage).toBe(4);
 
     const withReach = freshGame();
     putOnBattlefield(withReach, 'A', [FLIER]);
     putOnBattlefield(withReach, 'B', [REACHER]);
-    expect(assessAttack(withReach, 'A').guaranteedDamage).toBe(0);
+    expect(assessAttack(withReach, 'A', 'now', indexContinuous(withReach)).guaranteedDamage).toBe(0);
   });
 
   it('spends the scarce evasion-capable blockers on the fliers, not the ground crew', () => {
@@ -91,7 +91,7 @@ describe('tactical solver — guaranteed damage', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [FLIER, BEAR, BEAR]);
     putOnBattlefield(state, 'B', [REACHER, WALL, WALL]);
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(0);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(0);
   });
 
   it('trample spills the excess past the blocker', () => {
@@ -99,7 +99,7 @@ describe('tactical solver — guaranteed damage', () => {
     putOnBattlefield(state, 'A', [TRAMPLER]);
     putOnBattlefield(state, 'B', [WALL]);
     // 6 power, the 0/4 absorbs 4 → 2 tramples through.
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(2);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(2);
   });
 
   it('a deathtouch trampler is absorbed one point per blocker (CR 702.2c)', () => {
@@ -107,7 +107,7 @@ describe('tactical solver — guaranteed damage', () => {
     putOnBattlefield(state, 'A', [DEATHTOUCH_TRAMPLER]);
     putOnBattlefield(state, 'B', [GIANT]);
     // Deathtouch makes 1 damage lethal, so only 1 is "assigned" and 5 tramples.
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(5);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(5);
   });
 
   it('a first-striking blocker that kills the trampler stops ALL of its damage', () => {
@@ -116,7 +116,7 @@ describe('tactical solver — guaranteed damage', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [TRAMPLER]);
     putOnBattlefield(state, 'B', [FIRST_STRIKE_KILLER]);
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(0);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(0);
   });
 
   it('a first-striker that CANNOT kill the trampler does not stop it', () => {
@@ -124,14 +124,14 @@ describe('tactical solver — guaranteed damage', () => {
     putOnBattlefield(state, 'A', [TRAMPLER]);
     putOnBattlefield(state, 'B', [FIRST_STRIKE_WEAKLING]);
     // 1/1 first striker: absorbs 1, five tramples through.
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(5);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(5);
   });
 
   it('a first-striking DEATHTOUCH blocker stops a trampler at any size', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [TRAMPLER]);
     putOnBattlefield(state, 'B', [FIRST_STRIKE_DEATHTOUCH]);
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(0);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(0);
   });
 
   it('damage already marked on a blocker lowers what it can absorb from a trampler', () => {
@@ -139,7 +139,7 @@ describe('tactical solver — guaranteed damage', () => {
     putOnBattlefield(state, 'A', [TRAMPLER]);
     const [wall] = putOnBattlefield(state, 'B', [WALL]);
     (wall as CardInstance).damageMarked = 3;
-    expect(assessAttack(state, 'A').guaranteedDamage).toBe(5);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).guaranteedDamage).toBe(5);
   });
 });
 
@@ -149,7 +149,7 @@ describe('tactical solver — who may attack and who may block', () => {
     const [tapped, sick] = putOnBattlefield(state, 'A', [OGRE, OGRE, OGRE]);
     (tapped as CardInstance).tapped = true;
     (sick as CardInstance).summoningSick = true;
-    expect(assessAttack(state, 'A', 'now').attackerCount).toBe(1);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).attackerCount).toBe(1);
   });
 
   it('counts them for an attack NEXT turn — they untap and settle', () => {
@@ -157,13 +157,13 @@ describe('tactical solver — who may attack and who may block', () => {
     const [tapped, sick] = putOnBattlefield(state, 'A', [OGRE, OGRE, OGRE]);
     (tapped as CardInstance).tapped = true;
     (sick as CardInstance).summoningSick = true;
-    expect(assessAttack(state, 'A', 'next').attackerCount).toBe(3);
+    expect(assessAttack(state, 'A', 'next', indexContinuous(state)).attackerCount).toBe(3);
   });
 
   it('a creature with defender never attacks', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [DEFENDER]);
-    expect(assessAttack(state, 'A', 'next').attackerCount).toBe(0);
+    expect(assessAttack(state, 'A', 'next', indexContinuous(state)).attackerCount).toBe(0);
   });
 
   it('a tapped creature cannot block, and a summoning-sick one can', () => {
@@ -171,13 +171,13 @@ describe('tactical solver — who may attack and who may block', () => {
     putOnBattlefield(tappedDefence, 'A', [OGRE]);
     const [blocker] = putOnBattlefield(tappedDefence, 'B', [WALL]);
     (blocker as CardInstance).tapped = true;
-    expect(assessAttack(tappedDefence, 'A').guaranteedDamage).toBe(3);
+    expect(assessAttack(tappedDefence, 'A', 'now', indexContinuous(tappedDefence)).guaranteedDamage).toBe(3);
 
     const sickDefence = freshGame();
     putOnBattlefield(sickDefence, 'A', [OGRE]);
     const [sick] = putOnBattlefield(sickDefence, 'B', [WALL]);
     (sick as CardInstance).summoningSick = true;
-    expect(assessAttack(sickDefence, 'A').guaranteedDamage).toBe(0);
+    expect(assessAttack(sickDefence, 'A', 'now', indexContinuous(sickDefence)).guaranteedDamage).toBe(0);
   });
 
   it('reads the DECLARED attackers once combat has begun, so the answer does not blink out', () => {
@@ -188,7 +188,7 @@ describe('tactical solver — who may attack and who may block', () => {
     const state = freshGame();
     const attackers = putOnBattlefield(state, 'A', [OGRE, OGRE]);
     state.players.B.life = 6;
-    const before = assessAttack(state, 'A');
+    const before = assessAttack(state, 'A', 'now', indexContinuous(state));
     expect(before.lethal).toBe(true);
 
     for (const a of attackers) (a as CardInstance).tapped = true;
@@ -200,7 +200,7 @@ describe('tactical solver — who may attack and who may block', () => {
       attackersDeclared: true,
       blockersDeclared: false,
     };
-    const after = assessAttack(state, 'A');
+    const after = assessAttack(state, 'A', 'now', indexContinuous(state));
     expect(after.attackerCount).toBe(2);
     expect(after.lethal).toBe(true);
   });
@@ -212,9 +212,9 @@ describe('tactical solver — lethal', () => {
     putOnBattlefield(state, 'A', [OGRE, OGRE, OGRE, OGRE]);
     putOnBattlefield(state, 'B', [WALL]);
     state.players.B.life = 9;
-    expect(assessAttack(state, 'A').lethal).toBe(true);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).lethal).toBe(true);
     state.players.B.life = 10;
-    expect(assessAttack(state, 'A').lethal).toBe(false);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).lethal).toBe(false);
   });
 
   it('does NOT fire on raw power that a full wall of blockers stops', () => {
@@ -224,8 +224,8 @@ describe('tactical solver — lethal', () => {
     putOnBattlefield(state, 'A', [GIANT, GIANT, GIANT]);
     putOnBattlefield(state, 'B', [WALL, WALL, WALL]);
     state.players.B.life = 6;
-    expect(assessAttack(state, 'A').maxDamage).toBe(15);
-    expect(assessAttack(state, 'A').lethal).toBe(false);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).maxDamage).toBe(15);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).lethal).toBe(false);
   });
 
   it('lethalAttackers returns a set the engine actually accepts', () => {
@@ -264,7 +264,7 @@ describe('tactical solver — lethal', () => {
     const [tapped, ready] = putOnBattlefield(state, 'A', [OGRE, OGRE]);
     (tapped as CardInstance).tapped = true;
     state.players.B.life = 3;
-    const restricted = lethalAttackers(state, 'A', undefined, DEFAULT_TACTICAL_CONFIG, [
+    const restricted = lethalAttackers(state, 'A', indexContinuous(state), DEFAULT_TACTICAL_CONFIG, [
       (ready as CardInstance).instanceId,
     ]);
     expect(restricted).toEqual([(ready as CardInstance).instanceId]);
@@ -287,11 +287,11 @@ describe('tactical solver — threat and clock', () => {
     putOnBattlefield(state, 'B', [OGRE, OGRE, OGRE]);
     state.players.A.life = 5;
 
-    const held = assessPosition(state, 'A');
+    const held = assessPosition(state, 'A', indexContinuous(state));
     expect(held.threat.lethal).toBe(false);
 
     for (const c of mine) (c as CardInstance).tapped = true;
-    const tappedOut = assessPosition(state, 'A');
+    const tappedOut = assessPosition(state, 'A', indexContinuous(state));
     expect(tappedOut.threat.guaranteedDamage).toBe(9);
     expect(tappedOut.threat.lethal).toBe(true);
   });
@@ -300,7 +300,7 @@ describe('tactical solver — threat and clock', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [BEAR]);
     putOnBattlefield(state, 'B', [WALL]);
-    const a = assessAttack(state, 'A');
+    const a = assessAttack(state, 'A', 'now', indexContinuous(state));
     expect(a.guaranteedDamage).toBe(0);
     expect(a.turnsToKill).toBe(DEFAULT_TACTICAL_CONFIG.maxClockTurns);
     expect(Number.isFinite(a.turnsToKill)).toBe(true);
@@ -310,9 +310,9 @@ describe('tactical solver — threat and clock', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', [OGRE, OGRE]);
     state.players.B.life = 12;
-    expect(assessAttack(state, 'A').turnsToKill).toBe(2);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).turnsToKill).toBe(2);
     putOnBattlefield(state, 'B', [WALL]);
-    expect(assessAttack(state, 'A').turnsToKill).toBe(4);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).turnsToKill).toBe(4);
   });
 });
 
@@ -375,18 +375,18 @@ describe('tactical solver — hygiene', () => {
     const big = freshGame();
     putOnBattlefield(big, 'A', [OGRE, OGRE, OGRE, OGRE, OGRE, OGRE]);
     putOnBattlefield(big, 'B', [WALL, WALL]);
-    const bigFirst = assessAttack(big, 'A').guaranteedDamage;
+    const bigFirst = assessAttack(big, 'A', 'now', indexContinuous(big)).guaranteedDamage;
 
     const small = freshGame();
     putOnBattlefield(small, 'A', [BEAR]);
-    expect(assessAttack(small, 'A').guaranteedDamage).toBe(2);
-    expect(assessAttack(big, 'A').guaranteedDamage).toBe(bigFirst);
+    expect(assessAttack(small, 'A', 'now', indexContinuous(small)).guaranteedDamage).toBe(2);
+    expect(assessAttack(big, 'A', 'now', indexContinuous(big)).guaranteedDamage).toBe(bigFirst);
   });
 
   it('an empty board is a well-formed, non-lethal assessment', () => {
     const state = freshGame();
     state.players.B.life = 0;
-    const a = assessAttack(state, 'A');
+    const a = assessAttack(state, 'A', 'now', indexContinuous(state));
     expect(a.attackerCount).toBe(0);
     expect(a.lethal).toBe(false);
     expect(a.guaranteedDamage).toBe(0);
@@ -395,6 +395,6 @@ describe('tactical solver — hygiene', () => {
   it('grows its buffers rather than truncating a wide board', () => {
     const state = freshGame();
     putOnBattlefield(state, 'A', Array.from({ length: 30 }, () => BEAR));
-    expect(assessAttack(state, 'A').maxDamage).toBe(60);
+    expect(assessAttack(state, 'A', 'now', indexContinuous(state)).maxDamage).toBe(60);
   });
 });

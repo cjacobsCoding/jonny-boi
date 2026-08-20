@@ -6,6 +6,7 @@ import {
   draftStatus,
   emptyDraft,
   orderBadge,
+  pickCount,
   setChooseNumber,
   setConfirm,
   setPayLife,
@@ -226,7 +227,11 @@ function PlayerOptions({
   );
 }
 
-/** The modes of a modal spell — "choose two —" is `min = max = 2` over this list. */
+/**
+ * The modes of a modal spell — "choose two —" is `min = max = 2` over this list.
+ * The question is asked while the spell is being CAST, so what the human sees
+ * here is the menu of modes this board actually lets them announce.
+ */
 function ModeOptions({
   choice,
   draft,
@@ -236,20 +241,26 @@ function ModeOptions({
   draft: ChoiceDraft;
   onPick: (value: ChoiceOptionValue) => void;
 }): ReactElement {
-  const picked = new Set(draft.kind === 'chooseModes' ? draft.modeIds : []);
   return (
     <div className="choice-prompt__list">
-      {choice.modes.map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          className={`choice-option${picked.has(m.id) ? ' choice-option--selected' : ''}`}
-          aria-pressed={picked.has(m.id)}
-          onClick={() => onPick(m.id)}
-        >
-          {m.label}
-        </button>
-      ))}
+      {choice.modes.map((m) => {
+        // A repeated-modes choice can hold the SAME mode several times, and how
+        // many is part of the answer — so the count is shown, not just whether
+        // the mode is selected at all.
+        const times = pickCount(draft, m.id);
+        return (
+          <button
+            key={m.id}
+            type="button"
+            className={`choice-option${times > 0 ? ' choice-option--selected' : ''}`}
+            aria-pressed={times > 0}
+            onClick={() => onPick(m.id)}
+          >
+            {m.label}
+            {times > 1 ? ` ×${times}` : ''}
+          </button>
+        );
+      })}
     </div>
   );
 }

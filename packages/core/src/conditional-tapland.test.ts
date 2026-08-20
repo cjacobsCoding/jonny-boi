@@ -107,6 +107,105 @@ describe('entersTapped — checkland ("unless you control a Mountain or a Plains
   });
 });
 
+/** A slowland: enters tapped unless you control two or more OTHER lands. */
+const SLOWLAND: CardDefinition = {
+  id: 'slowland',
+  name: 'Deserted Beach',
+  types: ['land'],
+  entersTappedUnless: { minOtherLands: 2 },
+  producesOptions: [{ W: 1 }, { U: 1 }],
+};
+
+/** A battleland: enters tapped unless you control two or more BASIC lands. */
+const BATTLELAND: CardDefinition = {
+  id: 'battleland',
+  name: 'Prairie Stream',
+  types: ['land'],
+  entersTappedUnless: { minBasicLands: 2 },
+  producesOptions: [{ W: 1 }, { U: 1 }],
+};
+
+/** A nonbasic dual printing the same land subtypes two basics would. */
+const NONBASIC_DUAL: CardDefinition = {
+  id: 'tundra',
+  name: 'Hallowed Fountain',
+  types: ['land'],
+  subtypes: ['plains', 'island'],
+  producesOptions: [{ W: 1 }, { U: 1 }],
+};
+
+/** A basic Plains — carries the printed Basic supertype. */
+const PLAINS: CardDefinition = {
+  id: 'plains',
+  name: 'Plains',
+  types: ['land'],
+  basic: true,
+  subtypes: ['plains'],
+  produces: ['W'],
+};
+
+describe('entersTapped — slowland ("two or more other lands")', () => {
+  it('enters TAPPED on an empty board — the drawback the printed card leads with', () => {
+    expect(entersTapped(SLOWLAND, { controller: 'A', battlefield: [] })).toBe(true);
+  });
+
+  it('enters tapped one land short of the printed count', () => {
+    expect(entersTapped(SLOWLAND, { controller: 'A', battlefield: board(MOUNTAIN, 1) })).toBe(true);
+  });
+
+  it('enters UNTAPPED at exactly the printed count', () => {
+    expect(entersTapped(SLOWLAND, { controller: 'A', battlefield: board(MOUNTAIN, 2) })).toBe(false);
+  });
+
+  it('does not count itself, so it is not a turn-two untapped land', () => {
+    // Two lands in play, one of which IS the slowland: only one is "other", so
+    // it enters tapped. Counting itself would make the whole cycle a turn faster.
+    const self = { controller: 'A', def: SLOWLAND };
+    expect(
+      entersTapped(SLOWLAND, { controller: 'A', battlefield: [...board(MOUNTAIN, 1), self], self }),
+    ).toBe(true);
+  });
+
+  it("ignores the opponent's lands", () => {
+    const theirs = [
+      { controller: 'B', def: MOUNTAIN },
+      { controller: 'B', def: MOUNTAIN },
+    ];
+    expect(entersTapped(SLOWLAND, { controller: 'A', battlefield: theirs })).toBe(true);
+  });
+
+  it('counts only lands, not other permanents', () => {
+    expect(entersTapped(SLOWLAND, { controller: 'A', battlefield: board(BEAR, 5) })).toBe(true);
+  });
+});
+
+describe('entersTapped — battleland ("two or more basic lands")', () => {
+  it('enters TAPPED with no basics', () => {
+    expect(entersTapped(BATTLELAND, { controller: 'A', battlefield: [] })).toBe(true);
+  });
+
+  it('enters UNTAPPED at exactly two basics', () => {
+    expect(entersTapped(BATTLELAND, { controller: 'A', battlefield: board(PLAINS, 2) })).toBe(false);
+  });
+
+  it('counts BASIC lands only — a nonbasic dual with the same subtypes does not count', () => {
+    // The whole reason `CardDefinition.basic` exists. Two Hallowed Fountains
+    // print "Plains Island" between them; neither is basic, so a battleland
+    // played over them still enters tapped exactly as it really does.
+    expect(
+      entersTapped(BATTLELAND, { controller: 'A', battlefield: board(NONBASIC_DUAL, 2) }),
+    ).toBe(true);
+  });
+
+  it("ignores the opponent's basics", () => {
+    const theirs = [
+      { controller: 'B', def: PLAINS },
+      { controller: 'B', def: PLAINS },
+    ];
+    expect(entersTapped(BATTLELAND, { controller: 'A', battlefield: theirs })).toBe(true);
+  });
+});
+
 describe('entersTapped — the unconditional forms still hold', () => {
   it('a plain land enters untapped', () => {
     expect(entersTapped(MOUNTAIN, { controller: 'A', battlefield: [] })).toBe(false);

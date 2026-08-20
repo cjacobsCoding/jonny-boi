@@ -53,6 +53,14 @@ export interface CompilableCard {
    * different card.
    */
   readonly loyalty?: number | null;
+  /**
+   * Printed starting DEFENSE — battles only. `null`/absent for everything else,
+   * and for a battle whose record predates defense being captured. The compiler
+   * then reports the missing datum rather than inventing a number, because a
+   * battle entering at the wrong defense is a different card — the exact
+   * contract {@link CompilableCard.loyalty} already has.
+   */
+  readonly defense?: number | null;
   /** Scryfall's keyword list (e.g. `['Flying', 'Prowess']`). */
   readonly keywords: readonly string[];
   /**
@@ -132,19 +140,37 @@ export interface ClauseContribution {
    * adds exactly one mode.
    */
   readonly producesOptions?: readonly import('@jonny-boi/core').ManaProduction[];
+  /**
+   * A RICH mana ability — one that prints something beyond the colour bundle: an
+   * additional cost, a rider, an "Activate only if …", or colours derived from
+   * the board. Merged into `CardDefinition.manaAbilities`, which supersedes the
+   * two shorthands above (the assembly folds any plain bundle in as one more
+   * entry, so a pain land's "{T}: Add {C}" line and its painful line end up as
+   * two entries of one list).
+   */
+  readonly manaAbilities?: readonly import('@jonny-boi/core').ManaAbility[];
   /** Keyword flags granted to the card itself. */
   readonly keywords?: CardDefinition['keywords'];
   /** Set when the printed text says this permanent enters the battlefield tapped. */
   readonly entersTapped?: boolean;
+
   /** Set when the text gives a BOARD condition for entering untapped. */
   readonly entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   /** Set when the text charges a LIFE price to enter untapped (a shockland). */
   readonly entersTappedUnlessLifePaid?: number;
+  /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
+  readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
-   * The card's printed flashback cost (`CardDefinition.flashback`) — the plain
-   * mana-cost form only; {X}/additional-cost flashback stays reported.
+   * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
+   * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N
+   * life" rider as {@link flashbackLifeCost}, so all three printed forms of
+   * flashback compile through one rule.
    */
   readonly flashback?: import('@jonny-boi/core').ManaCost;
+  /** How many `{X}` symbols the flashback cost prints ("Flashback {X}{R}{R}"). */
+  readonly flashbackXCost?: number;
+  /** A "Pay N life" rider on the flashback cost ("Flashback—{1}{U}, Pay 3 life"). */
+  readonly flashbackLifeCost?: number;
   /** Activated abilities this clause prints ("Equip {2}"). */
   readonly activated?: readonly import('@jonny-boi/core').ActivatedAbility[];
   /**
@@ -152,6 +178,35 @@ export interface ClauseContribution {
    * asks about at cast time (`CardDefinition.kicker`).
    */
   readonly kicker?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed "Multikicker {COST}" line — an additional cost the caster may
+   * pay ANY NUMBER of times, so the cast-time question is a count rather than a
+   * yes/no (`CardDefinition.multikicker`).
+   */
+  readonly multikicker?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed modal header and its modes ("Choose one — • … • …"), chosen at
+   * cast time (`CardDefinition.modal`). A modal card's whole script lives here
+   * rather than in {@link effects}: each mode carries its own effects AND its
+   * own target restriction, because two chosen modes point at two objects.
+   */
+  readonly modal?: import('@jonny-boi/core').ModalSpec;
+  /**
+   * The printed "Cycling {2}" / "Plainscycling {2}" line — an activated ability
+   * of the card while it is in HAND (`CardDefinition.cycling`). A list because
+   * a card may print more than one, and the contributions accumulate.
+   */
+  readonly cycling?: readonly import('@jonny-boi/core').CyclingAbility[];
+  /**
+   * The printed "Buyback {3}" line — an optional additional cost that returns
+   * the spell to its caster's hand as it resolves (`CardDefinition.buyback`).
+   */
+  readonly buyback?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed "Madness {1}{U}" line — discarding the card exiles it instead,
+   * with a window to cast it for this cost (`CardDefinition.madness`).
+   */
+  readonly madness?: import('@jonny-boi/core').ManaCost;
   /**
    * A CHARACTERISTIC-DEFINING P/T this clause prints — the formula behind a `*`
    * box (Tarmogoyf). Present ⇒ the card's printed P/T is variable and the

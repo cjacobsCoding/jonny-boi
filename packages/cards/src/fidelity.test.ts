@@ -34,6 +34,7 @@ import {
   createGame,
   DEFAULT_RULES,
   generateLegalActions,
+  isTargetRestriction,
   targetRestrictionOf,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
@@ -323,6 +324,21 @@ function behaviour(definition: CardDefinition): string {
       ability.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
     ]),
     loyalty: definition.loyalty ?? null,
+    // A MODAL card's whole behaviour is its modes, not its `effects` — Cryptic
+    // Command has no top-level effects at all. Leaving them out would give such
+    // a card an EMPTY behaviour signature that matched anything, which is
+    // precisely the blind spot this audit exists to close.
+    modal: definition.modal
+      ? [
+          definition.modal.min,
+          definition.modal.max,
+          definition.modal.allowRepeats ?? false,
+          definition.modal.modes.map((mode) => [
+            mode.targets ?? null,
+            mode.effects.map((ref) => [ref.primitive, ref.params ?? {}]),
+          ]),
+        ]
+      : null,
     // A characteristic-defining P/T IS behaviour — it is what the creature's
     // size DOES at every read. Without it here, a Tarmogoyf compiled with the
     // wrong count (or the wrong offset) would pass the audit silently.
@@ -360,19 +376,25 @@ describe('pool audit — every card claimed faithful really is', () => {
   });
 
   it('every declared target restriction is a value the engine enforces', () => {
-    const RESTRICTED = ['creature', 'player', 'spell', 'playerOrPlaneswalker', 'creatureOrPlaneswalker'] as const;
+    // Asked of the ENGINE (`isTargetRestriction`), never of a list copied here:
+    // a hand-kept copy goes stale the moment core learns a new restriction, and
+    // it did — "Destroy target artifact" compiled to `targets: 'artifact'`,
+    // which core has enforced since the attachment work, and this audit called
+    // it unenforced anyway. The engine's own predicate cannot drift from the
+    // engine.
     for (const card of CARD_POOL) {
       for (const ref of card.effects ?? []) {
         const declared = ref.params?.targets;
         if (declared === undefined) continue;
         expect(
-          (RESTRICTED as readonly unknown[]).includes(declared) || declared === 'any',
+          isTargetRestriction(declared),
           `${card.name} declares targets: ${String(declared)}`,
         ).toBe(true);
       }
-      // …and if it declares one, the engine reads it back.
-      const narrow = (card.effects ?? []).some((ref) =>
-        (RESTRICTED as readonly unknown[]).includes(ref.params?.targets),
+      // …and if it declares a NARROWING one, the engine reads it back. ('any' is
+      // the default and is deliberately not reported as a restriction.)
+      const narrow = (card.effects ?? []).some(
+        (ref) => isTargetRestriction(ref.params?.targets) && ref.params?.targets !== 'any',
       );
       expect(targetRestrictionOf(card) !== undefined, card.name).toBe(narrow);
     }

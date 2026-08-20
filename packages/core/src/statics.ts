@@ -80,6 +80,19 @@ export interface StaticAffects extends CardFilter {
    * flag rather than something inferred.
    */
   readonly excludeSource?: boolean;
+  /**
+   * Set for the printed phrase "with a **+1/+1 counter** on it" — the static
+   * reaches only permanents currently carrying at least one counter of this
+   * kind ("Creatures you control with +1/+1 counters on them can't be
+   * blocked").
+   *
+   * This is the ONE non-printed characteristic a static filter may read, and it
+   * is safe for the reason the doc comment above gives: counters are instance
+   * STATE, not a characteristic any static in this model can change, so reading
+   * them creates no layer-dependency loop (CR 613.8) and the single
+   * non-iterative pass over the battlefield stays exact.
+   */
+  readonly hasCounterKind?: string;
 }
 
 /**
@@ -145,6 +158,9 @@ export function staticAppliesTo(ability: StaticAbility, source: CardInstance, ca
     if (candidate.controller !== source.controller) return false;
   } else if (scope === 'opponent') {
     if (candidate.controller === source.controller) return false;
+  }
+  if (affects.hasCounterKind !== undefined && (candidate.counters[affects.hasCounterKind] ?? 0) <= 0) {
+    return false;
   }
   return matchesCardFilter(candidate, affects);
 }

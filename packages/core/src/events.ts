@@ -38,7 +38,42 @@ export type GameEvent =
        * the replay and the inspector can say WHICH way the spell was cast —
        * absent for the ordinary from-hand cast every existing consumer knows.
        */
-      readonly fromZone?: 'graveyard';
+      readonly fromZone?: 'graveyard' | 'exile';
+    }
+  | {
+      /**
+       * A card was CYCLED from hand (CR 702.29): its cost was paid, the card was
+       * discarded, and the cycling ability went on the stack. Distinct from the
+       * `zoneChange` the discard emits, because "you cycled a card" is what the
+       * printed triggers ask about ("When you cycle this card…", "Whenever you
+       * cycle or discard another card…") and a bare hand→graveyard move cannot
+       * tell cycling apart from any other discard.
+       */
+      readonly type: 'cardCycled';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A discarded card with madness was exiled instead, and its owner now has
+       * the window to cast it for its madness cost (CR 702.35a).
+       */
+      readonly type: 'madnessWindowOpened';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * The madness window closed without a cast: the card went to the graveyard
+       * the ordinary discard would have put it in. Said explicitly so a replay
+       * can distinguish "declined" from "the window is still open".
+       */
+      readonly type: 'madnessDeclined';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
     }
   | {
       readonly type: 'stackResolved';
@@ -172,6 +207,58 @@ export type GameEvent =
       readonly instanceId: InstanceId;
       readonly name: string;
     }
+  | {
+      /**
+       * A battle's defense changed — it entered with its printed counters, or
+       * damage removed some (CR 120.3d). Its own event (not `counterAdded`) for
+       * the same reason loyalty has one: defense is the battle's life total, and
+       * a replay, the inspector and the UI all need "at what defense is it NOW",
+       * which `to` answers directly.
+       */
+      readonly type: 'defenseChanged';
+      readonly instanceId: InstanceId;
+      readonly delta: number;
+      readonly to: number;
+    }
+  | {
+      /**
+       * A battle with no defense counters was put into its owner's graveyard by
+       * a state-based action (CR 704.5x's generic outcome). Named apart from
+       * `creatureDied`/`planeswalkerDied` so a log reader can tell a defeated
+       * battle from either. The Siege reward — exile it and cast the back face —
+       * needs the castable-second-face system and is NOT modelled yet; cards
+       * printing it stay reported by the compiler, so this event never
+       * under-delivers a printed reward in a real game.
+       */
+      readonly type: 'battleDefeated';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * The legend rule was applied (CR 704.5j): `player` controlled two or more
+       * legendary permanents named `name`, chose to keep `keptInstanceId`, and
+       * the rest went to their owners' graveyards (each departure emitting its
+       * own died/zoneChange events). The choice itself arrives as the ordinary
+       * choiceAsked/choiceAnswered pair; this event is the rule's verdict.
+       */
+      readonly type: 'legendRuleApplied';
+      readonly player: PlayerId;
+      readonly name: string;
+      readonly keptInstanceId: InstanceId;
+    }
+  | {
+      /**
+       * An EMBLEM was created in `controller`'s command zone — a game object
+       * with no physical presence: not a permanent, not targetable, and nothing
+       * in the game can remove it (CR 114). Its statics and triggers work from
+       * the command zone exactly as a permanent's would from the battlefield.
+       */
+      readonly type: 'emblemCreated';
+      readonly instanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly name: string;
+    }
   | { readonly type: 'playerLost'; readonly player: PlayerId; readonly reason: string }
   | { readonly type: 'gameOver'; readonly winner: PlayerId | null }
   | { readonly type: 'actionRejected'; readonly reason: string }
@@ -195,6 +282,39 @@ export type GameEvent =
       readonly sourceInstanceId: InstanceId;
       readonly controller: PlayerId;
       readonly label: string;
+      readonly targets: ReadonlyArray<InstanceId | PlayerId>;
+    }
+  | {
+      /**
+       * A modal spell's modes were ANNOUNCED as it was cast (CR 601.2b). Public
+       * information — in paper the caster says the modes out loud before anyone
+       * may respond — so the labels are carried plainly and a replay can show
+       * what the opponent knew when they decided whether to counter.
+       *
+       * Separate from `spellCast` because they are separate moments: the spell
+       * is on the stack first, then its modes are announced, and a Cryptic
+       * Command whose modes are chosen while a response is already on the stack
+       * would be a different card.
+       */
+      readonly type: 'modesChosen';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      /** The chosen modes' printed labels, in printed order, one per pick. */
+      readonly modes: readonly string[];
+    }
+  | {
+      /**
+       * One announced mode was aimed (CR 601.2c). Its own event, rather than a
+       * list on `modesChosen`, because each mode is aimed as its own question --
+       * and because a two-mode Command aims at two different objects, which a
+       * single targets list on the cast could never express.
+       */
+      readonly type: 'modeTargetChosen';
+      readonly player: PlayerId;
+      readonly instanceId: InstanceId;
+      /** The aimed mode's printed label. */
+      readonly mode: string;
       readonly targets: ReadonlyArray<InstanceId | PlayerId>;
     }
   | {

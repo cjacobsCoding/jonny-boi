@@ -33,15 +33,13 @@
  * spell with no legal target cannot be cast. Activated abilities (including
  * planeswalker LOYALTY abilities) are real: walkers enter with printed loyalty,
  * are attackable, and die at 0. Flash is a real timing flag and a printed
- * "Flashback {cost}" casts from the graveyard for real (then exiles). What it
+ * "Flashback {cost}" casts from the graveyard for real (then exiles).
  * A characteristic-defining star P/T box is a real formula (Tarmogoyf), and the
- * engine remembers a short named list of turn-scoped facts (revolt). What it
- * still has no system for is flashback GRANTED by another card (Snapcaster) and
- * modes chosen at cast time (Cryptic Command).
- * Cards whose identity needs one of those are authored as the closest faithful
- * subset (documented per-card); their
- * vanilla body (P/T, keywords, mana production) is always correct so they play on
- * the battlefield. See `STUBBED_MECHANICS`.
+ * engine remembers a short named list of turn-scoped facts (revolt). Flashback
+ * GRANTED by another card (Snapcaster) and modes chosen at CAST time (Cryptic
+ * Command) both landed too — `STUBBED_MECHANICS` is now EMPTY, every card below
+ * plays exactly as printed, and `fidelity.test.ts` audits the whole pool with no
+ * exemptions. Keep it that way: do not add a card that would need one.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -75,11 +73,15 @@ const LAND = Object.freeze({ anyOfTypes: Object.freeze(['land']) });
  */
 export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
   // --- Basic lands (vanilla mana sources; zero custom effects) ----------------
-  { id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99', name: 'Plains', types: ['land'], produces: ['W'] },
-  { id: 'b2c6aa39-2d2a-459c-a555-fb48ba993373', name: 'Island', types: ['land'], produces: ['U'] },
-  { id: '56719f6a-1a6c-4c0a-8d21-18f7d7350b68', name: 'Swamp', types: ['land'], produces: ['B'] },
-  { id: 'a3fb7228-e76b-4e96-a40e-20b5fed75685', name: 'Mountain', types: ['land'], produces: ['R'] },
-  { id: 'b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6', name: 'Forest', types: ['land'], produces: ['G'] },
+  // `basic: true` is the printed **Basic** supertype, not decoration: the
+  // battlelands count it ("enters tapped unless you control two or more basic
+  // lands"), and land SUBTYPES cannot stand in for it — a nonbasic dual prints
+  // the same ones.
+  { id: 'bc71ebf6-2056-41f7-be35-b2e5c34afa99', name: 'Plains', types: ['land'], basic: true, subtypes: ['plains'], produces: ['W'] },
+  { id: 'b2c6aa39-2d2a-459c-a555-fb48ba993373', name: 'Island', types: ['land'], basic: true, subtypes: ['island'], produces: ['U'] },
+  { id: '56719f6a-1a6c-4c0a-8d21-18f7d7350b68', name: 'Swamp', types: ['land'], basic: true, subtypes: ['swamp'], produces: ['B'] },
+  { id: 'a3fb7228-e76b-4e96-a40e-20b5fed75685', name: 'Mountain', types: ['land'], basic: true, subtypes: ['mountain'], produces: ['R'] },
+  { id: 'b34bb2dc-c1af-4d77-b0b3-a0fb342a5fc6', name: 'Forest', types: ['land'], basic: true, subtypes: ['forest'], produces: ['G'] },
 
   // --- Mana creatures / rocks (vanilla — mana production is data, no effects) --
   {
@@ -245,42 +247,43 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Cryptic Command',
     types: ['instant'],
     cost: { generic: 1, U: 3 },
-    // "Choose two —": all four printed modes, chosen for real. A mode whose target
-    // is not legal for this cast is not offered (MTG's own rule), so a Cryptic cast
-    // with nothing to counter still plays as the best legal version of itself.
-    // Chosen modes run in PRINTED order, as MTG resolves a modal spell.
-    effects: [
-      {
-        primitive: 'modal',
-        params: {
-          count: 2,
-          modes: [
-            {
-              id: 'counter',
-              label: 'Counter target spell',
-              requires: 'targetSpell',
-              effects: [{ primitive: 'counterSpell' }],
-            },
-            {
-              id: 'bounce',
-              label: "Return target permanent to its owner's hand",
-              requires: 'targetPermanent',
-              effects: [{ primitive: 'returnToHand' }],
-            },
-            {
-              id: 'tapAll',
-              label: 'Tap all creatures your opponents control',
-              effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
-            },
-            {
-              id: 'draw',
-              label: 'Draw a card',
-              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
-            },
-          ],
+    // "Choose two —": all four printed modes, announced AT CAST (CR 601.2b) and
+    // each aimed at cast too (CR 601.2c) — which is the whole card. A Cryptic
+    // whose modes were picked on resolution would let its controller watch the
+    // opponent's response first and then decide whether to counter it; the real
+    // card commits before anybody may respond, and so does this one.
+    //
+    // A mode with no legal target is not on the menu (MTG's own rule), so a
+    // Cryptic cast with an empty stack still plays as the best legal version of
+    // itself. Chosen modes resolve in PRINTED order, each against its own target.
+    modal: {
+      min: 2,
+      max: 2,
+      modes: [
+        {
+          id: 'counter',
+          label: 'Counter target spell',
+          targets: 'spell',
+          effects: [{ primitive: 'counterSpell', params: { targets: 'spell' } }],
         },
-      },
-    ],
+        {
+          id: 'bounce',
+          label: "Return target permanent to its owner's hand",
+          targets: 'permanent',
+          effects: [{ primitive: 'returnToHand', params: { targets: 'permanent' } }],
+        },
+        {
+          id: 'tapAll',
+          label: 'Tap all creatures your opponents control',
+          effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
+        },
+        {
+          id: 'draw',
+          label: 'Draw a card',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        },
+      ],
+    },
   },
 
   // --- Ritual / ramp -----------------------------------------------------------
@@ -576,11 +579,14 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     // loyalty cost (the engine enforces one loyalty ability per walker per turn,
     // and that a minus can only be paid from loyalty actually there); she can be
     // attacked and burned ("any target" includes her), and dies at 0 loyalty to
-    // a state-based action. No legend rule is applied — the engine has none for
-    // legendary creatures either, so walkers get the same (absent) treatment.
+    // a state-based action. She is **Legendary**, and that is now load-bearing:
+    // the legend rule (CR 704.5j) is a real state-based action shared by every
+    // legendary permanent kind, so controlling a second Liliana makes her
+    // controller choose one and bury the other.
     id: '0ba134d8-ee7d-48ec-8dc6-57942b8e9261',
     name: 'Liliana of the Veil',
     types: ['planeswalker'],
+    legendary: true,
     subtypes: ['liliana'],
     cost: { generic: 1, B: 2 },
     loyalty: 3,

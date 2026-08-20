@@ -34,7 +34,14 @@ function opponent(p: PlayerId): PlayerId {
 /**
  * Bit assigned to each card type for the graveyard type-count. A fixed record
  * (not an array `indexOf`) so the per-card cost is one property read; the
- * engine's seven card types fit comfortably in one small integer.
+ * engine's card types fit comfortably in one small integer.
+ *
+ * `Record<CardType, number>` is EXHAUSTIVE on purpose: adding a card type to
+ * core makes this record fail to compile until the new type is given a bit,
+ * which is exactly what happened when battles landed. Tarmogoyf counts card
+ * types in graveyards, and a type silently missing from this table would make
+ * him quietly smaller than printed — the class of infidelity that is hardest
+ * to notice, since nothing errors and the number is merely wrong.
  */
 const CARD_TYPE_BIT: Readonly<Record<CardType, number>> = Object.freeze({
   land: 1 << 0,
@@ -44,6 +51,7 @@ const CARD_TYPE_BIT: Readonly<Record<CardType, number>> = Object.freeze({
   artifact: 1 << 4,
   enchantment: 1 << 5,
   planeswalker: 1 << 6,
+  battle: 1 << 7,
 });
 
 /** Count distinct card types among cards in BOTH graveyards (Tarmogoyf). */
@@ -128,6 +136,11 @@ export function evaluateDerivedCount(state: GameState, countOf: DerivedCountName
       return creaturesInGraveyard(state, you);
     case 'cardTypesInAllGraveyards':
       return cardTypesInAllGraveyards(state);
+    // `timesThisWasKicked` is deliberately absent: it is a fact about the
+    // RESOLUTION, not about the board, so this board-only evaluator genuinely
+    // cannot answer it and falls through to zero. The one caller that can —
+    // `intParam` in `packages/cards/effect-helpers.ts`, which holds the effect
+    // context — answers it before reaching here.
     default:
       return 0;
   }

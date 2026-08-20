@@ -56,6 +56,15 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
    * a few extra variant games in kicker decks.
    */
   'ifKicked',
+  /*
+   * `mayEffects` is the "you may" wrapper, and it is classified CONSERVATIVELY
+   * for exactly the reason `ifKicked` is: its nested clause lives in an
+   * `effects` param the decklist scan cannot see, so a "you may search your
+   * library…" would otherwise hide a library reader from the identical-game
+   * argument. Treating the wrapper as library-reading withdraws the skip for
+   * any game that resolves an optional clause — sound whatever it contains.
+   */
+  'mayEffects',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
   // Reads the whole library to choose a card.
@@ -154,6 +163,10 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'loseLife',
   'pumpUntilEndOfTurn',
   'grantKeywordUntilEndOfTurn',
+  // The mass form reads the BATTLEFIELD (which permanents a player controls now)
+  // and writes continuous effects onto them. No library is consulted, so paired
+  // arms stay comparable for exactly the reason the single-target form does.
+  'grantKeywordToYoursUntilEndOfTurn',
   'makeToken',
   'persistReturn',
   'destroyTarget',
@@ -171,7 +184,10 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   'tapTarget',
   'discardCard',
   'returnFromGraveyard',
-  'modal',
+  // NOTE: there is no `modal` primitive to classify. Modal spells are announced
+  // at CAST time (core's `ModalSpec`) and their chosen modes resolve as the
+  // ordinary primitives listed here, each classified on its own terms — which is
+  // strictly better for this table than one opaque wrapper would have been.
   'returnToHand',
   'tapPermanents',
   // Sacrifices read and write the BATTLEFIELD only: the victim's (or the pile
@@ -179,6 +195,16 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // zoneChange. No library is ever consulted, so paired arms stay comparable.
   'sacrificeChosen',
   'pileSplitSacrifice',
+  /*
+   * `createEmblem` puts a new object in the COMMAND zone built from data carried
+   * in its own params — a name plus static/trigger ABILITY records. It never
+   * reads a library, and unlike `ifKicked` it cannot come to hide one: its params
+   * hold ability descriptions (a static's filter, a trigger's condition), not
+   * nested effect refs the decklist scan would be blind to. The abilities those
+   * records describe run through the ordinary primitive path when they fire, and
+   * are classified there on their own account.
+   */
+  'createEmblem',
   /*
    * Granting flashback reads the GRAVEYARD (a public zone, and one whose
    * contents the runner already tracks exactly: every card that got there

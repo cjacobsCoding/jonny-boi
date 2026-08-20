@@ -32,7 +32,7 @@
 
 import type { CardDefinition, EffectRef } from './card.js';
 import { hasType, isCreature } from './card.js';
-import { isPlaneswalker } from './card.js';
+import { isBattle, isPlaneswalker } from './card.js';
 import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
@@ -42,9 +42,9 @@ import { protectionBlocksSource } from './protection.js';
 /**
  * What a targeted effect may point at.
  *
- * - `'any'` — MTG's "any target": a creature, a player, **or a planeswalker**
- *   (CR 115.4 — since planeswalkers exist in this engine, "any target" includes
- *   them, exactly as the printed reminder text says).
+ * - `'any'` — MTG's "any target": a creature, a player, **a planeswalker, or a
+ *   battle** (CR 115.4 — since planeswalkers and battles both exist in this
+ *   engine, "any target" includes them, exactly as the reminder text says).
  * - `'creature'` — "target creature" only. Never a player's face, never a walker.
  * - `'player'` — "target player" only. Never a creature or a planeswalker.
  * - `'spell'` — "target spell": an object on the stack. Its point is the *timing*
@@ -94,6 +94,18 @@ export type TargetRestriction =
   /** "target creature or planeswalker" — a permanent of either kind, never a face. */
   | 'creatureOrPlaneswalker'
   /**
+   * "target permanent" — ANY permanent on the battlefield: a creature, a land,
+   * an artifact, an enchantment, a planeswalker. Never a player and never a
+   * spell on the stack.
+   *
+   * Its own restriction rather than a flavour of `'any'` because the two are
+   * genuinely different sets: "any target" reaches a player's face but not a
+   * land, and this reaches a land but never a face. Cryptic Command's bounce
+   * mode is the canonical printing, and flattening it either way would play the
+   * card differently from its text.
+   */
+  | 'permanent'
+  /**
    * "target instant or sorcery card in your graveyard" — Snapcaster Mage's ETB
    * aim, and the first restriction reaching a card in a NON-battlefield zone.
    *
@@ -136,6 +148,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'creatureYouControl' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
+    value === 'permanent' ||
     value === 'instantOrSorceryInYourGraveyard'
   );
 }
@@ -237,11 +250,20 @@ export function isLegalTarget(
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
   if (!isTargetableBy(state, permanent, controller, source)) return false;
+  // "Target permanent": being on the battlefield IS the whole requirement, so
+  // the targetability check above is the only gate.
+  if (restriction === 'permanent') return true;
   if (restriction === 'artifact') return permanent.def.types.includes('artifact');
   // "Target player or planeswalker": a permanent target must be a walker.
   if (restriction === 'playerOrPlaneswalker') return isPlaneswalker(permanent.def);
-  // "Any target" and "creature or planeswalker" accept a walker permanent too.
-  if (restriction === 'any' || restriction === 'creatureOrPlaneswalker') {
+  // "Any target" reaches a creature, a player, a planeswalker OR A BATTLE
+  // (CR 115.4 as amended when battles were printed), so burn answers a Siege
+  // exactly as it answers a walker. "Creature or planeswalker" deliberately does
+  // NOT widen with it: that printed wording names two kinds, not three.
+  if (restriction === 'any') {
+    return isCreature(permanent.def) || isPlaneswalker(permanent.def) || isBattle(permanent.def);
+  }
+  if (restriction === 'creatureOrPlaneswalker') {
     return isCreature(permanent.def) || isPlaneswalker(permanent.def);
   }
   if (restriction === 'creatureYouControl') {
@@ -352,9 +374,14 @@ export function legalTargetsFor(
   if (restriction === 'any' || restriction === 'creature' || restriction === 'creatureOrPlaneswalker') {
     // "Any target" (and "creature or planeswalker") includes planeswalkers —
     // CR 115.4 — so a walker on the battlefield is a real member of this menu.
+    // "Any target" reaches BATTLES too; the narrower two-kind wording does not.
     const walkersToo = restriction !== 'creature';
+    const battlesToo = restriction === 'any';
     for (const permanent of state.battlefield) {
-      const kindOk = isCreature(permanent.def) || (walkersToo && isPlaneswalker(permanent.def));
+      const kindOk =
+        isCreature(permanent.def) ||
+        (walkersToo && isPlaneswalker(permanent.def)) ||
+        (battlesToo && isBattle(permanent.def));
       if (kindOk && isTargetableBy(state, permanent, controller, source)) {
         targets.push(permanent.instanceId);
       }
@@ -383,6 +410,11 @@ export function legalTargetsFor(
       if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source)) {
         targets.push(permanent.instanceId);
       }
+    }
+  }
+  if (restriction === 'permanent') {
+    for (const permanent of state.battlefield) {
+      if (isTargetableBy(state, permanent, controller, source)) targets.push(permanent.instanceId);
     }
   }
   return targets;
@@ -475,9 +507,11 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a player or a planeswalker';
     case 'creatureOrPlaneswalker':
       return 'a creature or a planeswalker';
+    case 'permanent':
+      return 'a permanent';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
     case 'any':
-      return 'any target (a creature, a player, or a planeswalker)';
+      return 'any target (a creature, a player, a planeswalker, or a battle)';
   }
 }

@@ -27,23 +27,31 @@
 
 import type {
   CardDefinition,
+  CardFilter,
   CardInstance,
+  CardType,
   EffectContext,
   EffectPrimitive,
+  EffectRef,
   EffectRegistry,
   PlayerId,
+  StaticAbility,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import {
+  DEFENSE_COUNTER,
   addCardGrant,
   LOYALTY_COUNTER,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
+  effectiveKeywords,
   effectivePower,
+  isBattle,
   turnFactHolds,
   isCreature,
   isLegalTarget,
+  matchesCardFilter,
   isPlaneswalker,
   type ManaCost,
   protectionPreventsDamage,
@@ -126,20 +134,47 @@ export const dealDamage: EffectPrimitive = (ctx) => {
     }
     return;
   }
+  if (isBattle(perm.def)) {
+    // Damage to a battle removes that many DEFENSE counters (CR 120.3d) — the
+    // same shape as walker loyalty just above, and what makes burn a real answer
+    // to a Siege. The 0-defense defeat is the state-based check that follows.
+    const removed = removeCountersOfKind(perm, DEFENSE_COUNTER, amount);
+    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
+    if (removed > 0) {
+      ctx.emit({
+        type: 'defenseChanged',
+        instanceId: perm.instanceId,
+        delta: -removed,
+        to: perm.counters[DEFENSE_COUNTER] ?? 0,
+      });
+    }
+    return;
+  }
   perm.damageMarked += amount;
   ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: perm.instanceId, amount, combat: false });
 };
+
+/**
+ * Remove up to `amount` counters of one kind, never below zero (CR 118.5),
+ * honoring the counters replace-don't-mutate contract. Returns how many left.
+ *
+ * ONE helper for loyalty and defense alike: they are the same arithmetic on the
+ * same record, and two copies of it is how the two would eventually disagree.
+ */
+function removeCountersOfKind(perm: CardInstance, kind: string, amount: number): number {
+  const current = perm.counters[kind] ?? 0;
+  const removed = Math.min(Math.max(amount, 0), current);
+  if (removed === 0) return 0;
+  perm.counters = { ...perm.counters, [kind]: current - removed };
+  return removed;
+}
 
 /**
  * Remove up to `amount` loyalty counters (never below zero — CR 118.5), honoring
  * the counters replace-don't-mutate contract. Returns how many actually left.
  */
 function removeLoyaltyCounters(perm: CardInstance, amount: number): number {
-  const current = perm.counters[LOYALTY_COUNTER] ?? 0;
-  const removed = Math.min(Math.max(amount, 0), current);
-  if (removed === 0) return 0;
-  perm.counters = { ...perm.counters, [LOYALTY_COUNTER]: current - removed };
-  return removed;
+  return removeCountersOfKind(perm, LOYALTY_COUNTER, amount);
 }
 
 /**
@@ -199,7 +234,16 @@ export const loseLife: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const useTarget = ctx.params.targetPlayer === true;
-  const player = useTarget ? firstPlayerTarget(ctx) ?? ctx.controller : ctx.controller;
+  // `whichPlayer: 'opponent'` is the same vocabulary `drawCards` uses, and it is
+  // what an UNTARGETED "each opponent loses 1 life" needs: a trigger body has no
+  // chosen target to read, so `targetPlayer` cannot express it. In this engine a
+  // game is always exactly two seats (`PLAYER_IDS`), so "each opponent" and "the
+  // opponent" name the same player — the printed plural has no other referent.
+  const player = useTarget
+    ? (firstPlayerTarget(ctx) ?? ctx.controller)
+    : strParam(ctx, 'whichPlayer') === 'opponent'
+      ? otherPlayer(ctx.controller)
+      : ctx.controller;
   changeLife(ctx, player, -amount);
 };
 
@@ -242,6 +286,35 @@ export const grantKeywordUntilEndOfTurn: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * `grantKeywordToYoursUntilEndOfTurn` — the MASS form of the grant above:
+ * "Creatures you control gain indestructible until end of turn" (Selfless
+ * Spirit), "Permanents you control gain hexproof and indestructible until end of
+ * turn" (Heroic Intervention).
+ *
+ * It is a separate primitive rather than a flag on the single-target one because
+ * it targets NOTHING: there is no chosen creature, no legality question, and the
+ * set it reaches is decided at RESOLUTION from the board as it then stands. That
+ * is also why it must not be modelled as a static — the grant outlives the spell
+ * that made it (until cleanup) and reaches only the permanents that were there.
+ *
+ * `params.anyOfTypes` narrows the set the way the printed noun does; omitting it
+ * is the printed word "permanents", which narrows nothing. `params.scope` is
+ * `'you'` (the default) or `'opponent'`.
+ */
+export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
+  const keywords = keywordsParam(ctx);
+  if (isEmptyKeywords(keywords)) return;
+  const types = strArrayParam(ctx, 'anyOfTypes');
+  const opponents = strParam(ctx, 'scope') === 'opponent';
+  for (const perm of ctx.state.battlefield) {
+    const theirs = perm.controller !== ctx.controller;
+    if (theirs !== opponents) continue;
+    if (types.length > 0 && !types.some((type) => perm.def.types.includes(type as CardType))) continue;
+    ctx.addContinuousEffect({ target: perm.instanceId, keywords, duration: 'endOfTurn' });
+  }
+};
+
+/**
  * `makeToken` — create `params.count` (default 1) creature tokens under the
  * controller via engine-v2's `ctx.createToken`, so the token enters the battlefield
  * properly (summoning-sick unless it has haste) and fires ETB triggers like any
@@ -265,6 +338,80 @@ export const makeToken: EffectPrimitive = (ctx) => {
   };
   for (let i = 0; i < count; i++) ctx.createToken(def);
 };
+
+/**
+ * `createEmblem` — put an EMBLEM into the controller's command zone (CR 114), the
+ * thing a planeswalker ultimate leaves behind. Everything about it is DATA from
+ * params, so there is no emblem-per-card and no magic anything:
+ *   - `name`     — what the emblem is called in the log and the UI. The printed
+ *                  wording is "an emblem with '<ability>'", so the default names
+ *                  it after the source, which is how a real emblem is referred to.
+ *   - `statics`  — static abilities it radiates ("creatures you control get
+ *                  +1/+1"), in core's `StaticAbility` shape.
+ *   - `triggers` — triggered abilities it fires ("at the beginning of your
+ *                  upkeep, …"), in core's `TriggeredAbility` shape.
+ *
+ * An emblem with NEITHER is refused rather than created: it would be an object
+ * that provably does nothing, which is exactly the "looks implemented, isn't"
+ * outcome the compiler contract exists to prevent. The compiler never emits one,
+ * so this is a guard against hand-authored data, not a live branch.
+ *
+ * Nothing here has to make the emblem unremovable — it never touches the
+ * battlefield, and every removal path in the engine reaches only there.
+ */
+export const createEmblem: EffectPrimitive = (ctx) => {
+  const statics = staticsParam(ctx);
+  const triggers = triggersParam(ctx);
+  if (statics.length === 0 && triggers.length === 0) return;
+  const name = strParam(ctx, 'name') ?? `${ctx.source.def.name} emblem`;
+  const def: CardDefinition = {
+    id: `emblem:${name}`,
+    name,
+    // An emblem has no card types at all (CR 114.1) — it is not a permanent, and
+    // an empty type line is what keeps every type-filtered effect from seeing it.
+    types: [],
+    isEmblem: true,
+    ...(statics.length > 0 ? { statics } : {}),
+    ...(triggers.length > 0 ? { triggers } : {}),
+  };
+  ctx.createEmblem(def);
+};
+
+/**
+ * The `statics` param as a `StaticAbility` list, validated shallowly: an entry
+ * must at least be an object carrying an `affects` filter, or the continuous
+ * layer would read `undefined` as "applies to everything". A malformed entry is
+ * dropped rather than thrown on (DESIGN §1 robust).
+ */
+function staticsParam(ctx: EffectContext): readonly StaticAbility[] {
+  const raw = ctx.params.statics;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is StaticAbility =>
+      typeof entry === 'object' && entry !== null && typeof (entry as { affects?: unknown }).affects === 'object',
+  );
+}
+
+/**
+ * The `triggers` param as a `TriggeredAbility` list, validated the same way: an
+ * entry must carry a condition naming an event and an effects array, or core's
+ * matcher would never fire it and the emblem would silently do nothing.
+ */
+function triggersParam(ctx: EffectContext): readonly TriggeredAbility[] {
+  const raw = ctx.params.triggers;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((entry): entry is TriggeredAbility => {
+    if (typeof entry !== 'object' || entry === null) return false;
+    const condition = (entry as { condition?: unknown }).condition;
+    const effects = (entry as { effects?: unknown }).effects;
+    return (
+      typeof condition === 'object' &&
+      condition !== null &&
+      typeof (condition as { on?: unknown }).on === 'string' &&
+      Array.isArray(effects)
+    );
+  });
+}
 
 /**
  * `persistReturn` — the death-return half of *persist* (DESIGN §3.9). Authored as a
@@ -650,6 +797,14 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * Whose creatures a group counter effect reaches when the printed text does not
+ * say. Every printed "put a counter on each creature …" template this compiler
+ * accepts either says "you control" or names a scope explicitly, so the default
+ * is the common one and is stated here rather than as a bare string literal.
+ */
+const COUNTER_SCOPE_DEFAULT = 'you';
+
+/**
  * "Put N +1/+1 counters on target creature" — a PERMANENT stat change, unlike
  * `pumpUntilEndOfTurn`, which wears off at cleanup.
  *
@@ -660,46 +815,156 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
  * unsupported instead.
  *
  * Params: `amount` (may be negative for -1/-1), `self` (counter the source
- * rather than a target — the "enters with counters on it" template).
+ * rather than a target — the "enters with counters on it" template), and the
+ * group form `each` + `scope` + `filter` ("put a +1/+1 counter on each creature
+ * you control"), which counts every matching creature instead of one target.
  */
 export const addCounters: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount === 0) return;
-  const target = boolParam(ctx, 'self', false)
-    ? selfIfCreature(ctx)
-    : (firstPermanentTarget(ctx) ?? selfIfCreature(ctx));
-  if (!target || !isCreature(target.def)) return;
 
+  // The GROUP form — "put a +1/+1 counter on **each** creature you control".
+  // One primitive rather than a second one because the printed templates differ
+  // only in WHICH creatures are counted, and that is data: a controller scope
+  // plus the shared `CardFilter` the statics layer already speaks.
+  if (boolParam(ctx, 'each', false)) {
+    for (const permanent of eachCounterTarget(ctx)) putCountersOn(ctx, permanent, amount);
+    return;
+  }
+
+  const target = boolParam(ctx, 'self', false)
+    ? enteringOrResidentSelf(ctx)
+    : (firstPermanentTarget(ctx) ?? enteringOrResidentSelf(ctx));
+  if (!target || !isCreature(target.def)) return;
+  putCountersOn(ctx, target, amount);
+};
+
+/**
+ * The source as a counter target — the permanent on the battlefield if it is
+ * already there, otherwise the card CURRENTLY RESOLVING into play.
+ *
+ * The second half is what makes "~ enters with N +1/+1 counters on it" real. It
+ * is a replacement effect (CR 614.1c): the counters are put on as the permanent
+ * enters, which in this engine means while its own spell is resolving and before
+ * `finishSpellResolution` pushes that very instance onto the battlefield. Reading
+ * only the battlefield found nothing at that moment, so every "enters with
+ * counters" card compiled `'complete'` and then entered with none — a 0/0 body
+ * (Stonecoil Serpent, Walking Ballista) died to a state-based action on arrival.
+ */
+function enteringOrResidentSelf(ctx: EffectContext): CardInstance | undefined {
+  const resident = selfIfCreature(ctx);
+  if (resident) return resident;
+  const source = ctx.source;
+  return isCreature(source.def) ? source : undefined;
+}
+
+/**
+ * The creatures a group counter effect ("each creature you control", "each
+ * artifact creature you control", "each Vampire you control") reaches.
+ *
+ * Snapshotted into a list before any counter is put on, for the same reason
+ * `dealDamageToEach` snapshots: the counters go on simultaneously, so a creature
+ * that dies to a -1/-1 counter must not change who else is counted.
+ *
+ * `scope` is the controller relation ('you' — the default — / 'opponent' /
+ * 'any'), and `filter` is the shared {@link CardFilter} vocabulary, so a
+ * qualifier the compiler cannot express in that vocabulary is never emitted at
+ * all rather than being silently widened to "every creature".
+ */
+function eachCounterTarget(ctx: EffectContext): CardInstance[] {
+  const scope = strParam(ctx, 'scope') ?? COUNTER_SCOPE_DEFAULT;
+  const filter = ctx.params.filter as CardFilter | undefined;
+  const chosen: CardInstance[] = [];
+  for (const permanent of ctx.state.battlefield) {
+    if (!isCreature(permanent.def)) continue;
+    if (scope === 'you' && permanent.controller !== ctx.controller) continue;
+    if (scope === 'opponent' && permanent.controller === ctx.controller) continue;
+    if (filter && !matchesCardFilter(permanent, filter)) continue;
+    chosen.push(permanent);
+  }
+  return chosen;
+}
+
+/**
+ * Put `amount` +1/+1 counters (or, when negative, that many -1/-1 counters) on
+ * one permanent, annihilating the pairs CR 704.5q says must not coexist.
+ *
+ * Factored out of {@link addCounters} so the single-target and the "each
+ * creature" forms cannot drift apart on the one piece of rules bookkeeping that
+ * is easy to forget.
+ */
+function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number): void {
   // A negative amount is a -1/-1 counter, stored as its own kind rather than as
   // a negative +1/+1. The arithmetic is the same either way; the difference is
   // that the counters now genuinely EXIST as the card says they do, so state can
   // be inspected ("does it have a -1/-1 counter?") and the two kinds annihilate.
   const kind = amount < 0 ? MINUS_ONE_COUNTER : PLUS_ONE_COUNTER;
   const magnitude = Math.abs(amount);
-  target.counters[kind] = (target.counters[kind] ?? 0) + magnitude;
-  ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
+  // REPLACE the record, never write into it — `CardInstance.counters` is shared
+  // and FROZEN while a permanent has no counters (`NO_COUNTERS`), so an in-place
+  // write threw "object is not extensible" for the very first counter put on any
+  // permanent that entered the battlefield through the normal cast path. Only
+  // hand-built test instances (which carry their own `{}`) survived it, which is
+  // why a suite full of counter tests never saw it: the pool had no card that
+  // put a counter on a permanent the ENGINE created.
+  let counters: Record<string, number> = {
+    ...target.counters,
+    [kind]: (target.counters[kind] ?? 0) + magnitude,
+  };
 
   // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has them removed
   // in pairs as a state-based action. Without this the counts drift apart while
   // the net stays right, so "remove a -1/-1 counter" later finds one that should
   // have been annihilated turns ago.
-  const plus = target.counters[PLUS_ONE_COUNTER] ?? 0;
-  const minus = target.counters[MINUS_ONE_COUNTER] ?? 0;
+  const plus = counters[PLUS_ONE_COUNTER] ?? 0;
+  const minus = counters[MINUS_ONE_COUNTER] ?? 0;
   const annihilated = Math.min(plus, minus);
   if (annihilated > 0) {
-    target.counters[PLUS_ONE_COUNTER] = plus - annihilated;
-    target.counters[MINUS_ONE_COUNTER] = minus - annihilated;
+    counters = {
+      ...counters,
+      [PLUS_ONE_COUNTER]: plus - annihilated,
+      [MINUS_ONE_COUNTER]: minus - annihilated,
+    };
   }
+  target.counters = counters;
+  ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
 };
 
 /**
+ * Whether this permanent shrugs off an effect that says **destroy** (CR 702.12b).
+ *
+ * Asked through the continuous layer rather than off `def.keywords`, so a GRANTED
+ * indestructible — an until-end-of-turn "creatures you control gain
+ * indestructible", an anthem-style static — saves the permanent exactly as a
+ * printed one does. Reading the printed set here is the bug that makes a
+ * fog-the-wrath trick do nothing.
+ */
+function isIndestructible(ctx: EffectContext, permanent: CardInstance): boolean {
+  return Boolean(
+    effectiveKeywords(permanent, aggregateFor(ctx.state, permanent.instanceId)).indestructible,
+  );
+}
+
+/**
  * Destroy a permanent: move it to its owner's graveyard.
+ *
+ * An INDESTRUCTIBLE permanent is not destroyed and nothing else happens to it —
+ * no zone change, and no `creatureDied`, because it did not die. This is the one
+ * place every printed "destroy" in the pool passes through (single target, board
+ * wipe, and the destroy modes of modal spells alike), which is why the exemption
+ * lives here and not in each caller.
+ *
+ * Note what this does NOT cover, deliberately: SACRIFICE is a cost rather than
+ * destruction and goes through `sacrificePermanent` untouched, exile moves the
+ * permanent by a different path, and lethal damage is a state-based action
+ * (`internal/sba.ts`) rather than an effect.
  *
  * `creatureDied` is emitted only for an actual creature — it is what death
  * triggers key off, and firing it for a destroyed artifact would make a "when a
  * creature dies" ability trigger on something that never was one.
  */
 function destroyPermanent(ctx: EffectContext, permanent: CardInstance): void {
+  if (isIndestructible(ctx, permanent)) return;
   movePermanentTo(ctx, permanent, 'graveyard');
   if (isCreature(permanent.def)) {
     ctx.emit({ type: 'creatureDied', instanceId: permanent.instanceId, name: permanent.def.name });
@@ -789,13 +1054,74 @@ export const gainControl: EffectPrimitive = (ctx) => {
  */
 export const ifKicked: EffectPrimitive = (ctx) => {
   if (ctx.kicked !== true) return;
-  const raw = ctx.params.effects;
-  if (!Array.isArray(raw)) return;
-  const refs = raw.filter(
-    (entry): entry is { primitive: string; params?: Record<string, unknown> } =>
-      typeof entry === 'object' && entry !== null && typeof (entry as { primitive?: unknown }).primitive === 'string',
-  );
+  const refs = nestedEffectRefs(ctx);
   if (refs.length > 0) ctx.enqueueEffects(refs);
+};
+
+/**
+ * The `effects` param of a wrapper primitive, filtered down to well-formed refs.
+ *
+ * Shared by {@link ifKicked} and {@link mayEffects}: both carry a nested clause
+ * in their params, and both must treat a malformed blob as "run nothing" rather
+ * than throwing — a card whose data is wrong plays as the weaker card, never as
+ * a crash and never as a stronger one.
+ */
+function nestedEffectRefs(ctx: EffectContext): readonly EffectRef[] {
+  const raw = ctx.params.effects;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is EffectRef =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      typeof (entry as { primitive?: unknown }).primitive === 'string',
+  );
+}
+
+/**
+ * `mayEffects` — the printed word **"you may"**, as one composable wrapper: ask
+ * the controller yes/no, and run the nested clause only on a yes.
+ *
+ * This is what lets "When this creature enters, you may destroy target artifact
+ * or enchantment" be the ETB trigger the rule table already knew plus one real
+ * question, instead of a new primitive per optional card (DESIGN §1 —
+ * composition over inheritance).
+ *
+ * **The choice is genuine, and that is the whole point.** Compiling a "you may"
+ * as its yes-half would be a DIFFERENT card: Reclamation Sage that must blow up
+ * your own artifact when nothing else is legal, Springbloom Druid that must
+ * sacrifice a land. Both would silently bias every A/B verdict the lab reports,
+ * which is exactly the failure the compiler contract exists to prevent. So the
+ * question is parked like any other, both answers are legal, and the sim's
+ * pilots answer it from `valence` the way they answer every other confirm.
+ *
+ * Params:
+ *   - `effects` — the nested clause's refs. They run inside THIS resolution
+ *     (`enqueueEffects`), so they see the same targets, the same `xValue`, and
+ *     may park questions of their own.
+ *   - `prompt` — what the player is asked; defaults to the printed-ish
+ *     "You may…" so a card with no prompt is still answerable.
+ *   - `valence` — the AI's steer, `'gain'` by default because an ETB "you may"
+ *     is overwhelmingly an upside the controller wants. A clause that charges
+ *     the controller something (sacrifice, discard, life) says `'loss'`. Valence
+ *     never changes legality — both answers stand whatever it says.
+ *
+ * Ask-then-mutate: the confirm is the FIRST thing this does, so a parked
+ * question re-runs it from the top with nothing to undo.
+ */
+export const mayEffects: EffectPrimitive = (ctx) => {
+  const refs = nestedEffectRefs(ctx);
+  // Nothing to offer is not a question: asking "may I do nothing?" would stop
+  // the game for an answer that cannot matter.
+  if (refs.length === 0) return;
+  const valence = strParam(ctx, 'valence') === 'loss' ? 'loss' : 'gain';
+  const yes = ctx.confirm({
+    chooser: ctx.controller,
+    prompt: strParam(ctx, 'prompt') ?? 'You may do this',
+    valence,
+  });
+  if (yes === undefined) return; // parked — nothing mutated
+  if (!yes) return; // declined, and declining is a real, complete outcome
+  ctx.enqueueEffects(refs);
 };
 
 /**
@@ -860,13 +1186,16 @@ export const ITS_MANA_COST = 'itsManaCost';
 export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   gainControl,
   ifKicked,
+  mayEffects,
   dealDamage,
   drawCards,
   gainLife,
   loseLife,
   pumpUntilEndOfTurn,
   grantKeywordUntilEndOfTurn,
+  grantKeywordToYoursUntilEndOfTurn,
   makeToken,
+  createEmblem,
   persistReturn,
   destroyTarget,
   exileTarget,

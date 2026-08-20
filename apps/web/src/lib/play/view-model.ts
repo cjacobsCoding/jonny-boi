@@ -19,8 +19,11 @@ import {
   indexContinuous,
   isCreature,
   isLand,
+  isBattle,
   isPlaneswalker,
+  defenseOf,
   loyaltyOf,
+  protectorOf,
   manaColorsOffered,
   NO_MOD,
   type CardInstance,
@@ -50,6 +53,21 @@ export interface BoardPermanent {
   readonly isPlaneswalker: boolean;
   /** Current loyalty (from the loyalty counter); 0 for non-walkers. */
   readonly loyalty: number;
+  readonly isBattle: boolean;
+  /**
+   * Current defense (from the defense counter); 0 for non-battles. A battle's
+   * defense is its life total exactly as loyalty is a walker's, so the board
+   * renders it the same way — a badge carrying the CURRENT value, never the
+   * printed one.
+   */
+  readonly defense: number;
+  /**
+   * Who PROTECTS this battle — the seat that defends it, which is its
+   * controller's opponent (CR 310.11). Carried so the board can say whose
+   * Siege a player is attacking without re-deriving the rule in the UI.
+   * `null` for everything that is not a battle.
+   */
+  readonly protector: PlayerId | null;
   readonly tapped: boolean;
   readonly summoningSick: boolean;
   readonly power: number;
@@ -137,6 +155,11 @@ function boardPermanent(state: GameState, inst: CardInstance): BoardPermanent {
     // A walker's loyalty LIVES in its counters (engine invariant), so this is the
     // authoritative current value, not the printed one.
     loyalty: isPlaneswalker(inst.def) ? loyaltyOf(inst) : 0,
+    isBattle: isBattle(inst.def),
+    // Same engine invariant as loyalty: a battle's defense LIVES in its counters,
+    // so this is the authoritative current value rather than the printed one.
+    defense: isBattle(inst.def) ? defenseOf(inst) : 0,
+    protector: isBattle(inst.def) ? protectorOf(inst) : null,
     tapped: inst.tapped,
     summoningSick: inst.summoningSick,
     power: creature ? effectivePower(inst, mod) : 0,

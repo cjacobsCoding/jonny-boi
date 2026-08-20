@@ -17,6 +17,7 @@
  * bugs; a capabilities page that lies is the worst kind).
  */
 
+import { hasCastableBackFace, modalSpecOf, playableFaceOf } from '@jonny-boi/core';
 import {
   CARD_POOL,
   CHOICE_PRIMITIVES,
@@ -50,7 +51,15 @@ export type MechanicWitness =
   | { readonly kind: 'primitive'; readonly id: string }
   | { readonly kind: 'keyword'; readonly word: string }
   | { readonly kind: 'card'; readonly name: string }
-  | { readonly kind: 'oracle'; readonly text: string; readonly as: 'creature' | 'instant' };
+  | { readonly kind: 'oracle'; readonly text: string; readonly as: 'creature' | 'instant' }
+  /**
+   * `engine` — a named capability the CORE engine exports, for a mechanic whose
+   * evidence is a rules SEAM rather than a compiler rule or a primitive. Modal
+   * double-faced cards are the case that needed it: nothing about "the back face
+   * is castable" lives in a rule table or a primitive id, so a rule/primitive
+   * witness would have been a claim about the wrong thing.
+   */
+  | { readonly kind: 'engine'; readonly api: keyof typeof CORE_ENGINE_API };
 
 /** One supported mechanic, in user-facing words, with its proof. */
 export interface SupportedMechanic {
@@ -120,6 +129,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'primitive', id: 'addCounters' },
       },
       {
+        title: 'Counters matter',
+        detail:
+          'The counters-matter family plays as printed: "put a +1/+1 counter on each creature you control" counts exactly the printed set (and refuses a phrase the filter cannot express, like "each ATTACKING creature"), creatures grow off life gain, spells cast, deaths, combat damage and other creatures entering, an {X} creature really enters with X counters on it, and a static can read "creatures you control with +1/+1 counters on them cannot be blocked".',
+        witness: { kind: 'rule', id: 'put-counters-on-each' },
+      },
+      {
         title: 'Player choices during resolution',
         detail:
           'Spells can ask questions mid-resolution — select cards or players, choose modes, confirm a "you may", search the library — and the same mechanism serves the AI, hotseat play and online play.',
@@ -137,6 +152,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'equip-cost' },
       },
       {
+        title: 'Modal mana sources',
+        detail:
+          'A source that taps for a CHOICE adds one mode per tap, picked when you tap it — a dual land’s two colours, "one mana of any color", or Gilded Lotus’s three-of-one-colour.',
+        witness: { kind: 'rule', id: 'tap-for-n-of-any-one-color' },
+      },
+      {
+        title: 'Mana abilities with a price',
+        detail:
+          'A mana ability may charge more than the tap and may do more than add mana. "{T}, Pay 1 life: Add one mana of any color" (Mana Confluence, the horizon lands) charges the life and is not offered when you cannot pay it; a filter land’s "{W/U}, {T}:" consumes its input before producing; a pain land’s "…deals 1 damage to you" is a RIDER, not a cost, so the land still works at 1 life and can kill you. None of it uses the stack (CR 605.3a), and the shared payment planner prefers the painless source when both close the same shortfall.',
+        witness: { kind: 'rule', id: 'mana-ability-with-rider' },
+      },
+      {
+        title: 'Conditional and board-derived mana',
+        detail:
+          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping. Still refused by name: "spend this mana only to…", which would need the mana POOL to carry the restriction.',
+        witness: { kind: 'rule', id: 'mana-ability-activation-restriction' },
+      },
+      {
         title: '{X} costs',
         detail:
           'Casting an {X} spell asks the caster to choose X — the range bounded by what the board can actually pay — charges it, and the resolved effect reads the chosen value (Blaze, Mind Spring). X = 0 is a legal cast.',
@@ -151,8 +184,20 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Kicker',
         detail:
-          'An affordable kicker is offered as a cast-time payment; a caster who cannot pay is never asked. The kicked half runs only when it was paid (Burst Lightning). Multikicker still reports.',
+          'An affordable kicker is offered as a cast-time payment; a caster who cannot pay is never asked. The kicked half runs only when it was paid (Burst Lightning).',
         witness: { kind: 'rule', id: 'kicker-cost' },
+      },
+      {
+        title: 'Multikicker',
+        detail:
+          'An additional cost payable any number of times: the caster is asked HOW MANY, bounded by what the board can actually fund, and charged once. "For each time it was kicked" reads the count — during the spell\'s own resolution and afterwards, from the permanent it became.',
+        witness: { kind: 'rule', id: 'multikicker-cost' },
+      },
+      {
+        title: 'Modal spells ("Choose one —")',
+        detail:
+          'Modes are announced as the spell is CAST, and each chosen mode is aimed at cast too — so the opponent decides whether to respond already knowing which halves are coming, exactly as in paper. A mode with no legal target is not on the menu; chosen modes resolve in printed order, each against its own target. "Choose one or both", "choose up to N" and "you may choose the same mode more than once" all play as printed (Cryptic Command).',
+        witness: { kind: 'card', name: 'Cryptic Command' },
       },
     ],
   },
@@ -186,8 +231,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Blocking restrictions',
         detail:
-          'Menace judges the whole block declaration (not any single pair), and "can\'t be blocked" is enforced per pair.',
+          'Each restriction is enforced where it is expressible: "can\'t be blocked" and "~ can\'t block" per pair, while menace — and its general form "can\'t be blocked except by three or more creatures" — judges the whole block declaration, because every blocker is individually legal and only the count is not. Block REQUIREMENTS ("must be blocked if able") are not implemented, and a card printing one says so rather than playing without it.',
         witness: { kind: 'keyword', word: 'menace' },
+      },
+      {
+        title: 'Granted evasion',
+        detail:
+          '"Target creature can\'t be blocked this turn" is the ordinary until-end-of-turn keyword grant, so it expires at cleanup through the same path a pump does (Rogue\'s Passage, Whirler Rogue, Enter the Enigma).',
+        witness: { kind: 'rule', id: 'grant-unblockable-until-eot' },
+      },
+      {
+        title: 'Indestructible',
+        detail:
+          'Effects that say "destroy" and lethal damage — deathtouch included — leave it alone. Nothing else does: 0 toughness still puts it into the graveyard (a different state-based action, which the keyword does not mention), a sacrifice still takes it, and exile still removes it.',
+        witness: { kind: 'keyword', word: 'indestructible' },
+      },
+      {
+        title: 'Granted indestructible, one creature or the whole team',
+        detail:
+          'Heroic Intervention\'s "permanents you control gain hexproof and indestructible until end of turn" and Darksteel Forge\'s "artifacts you control have indestructible" both reach the destroy rules — a granted keyword is not a second-class one.',
+        witness: { kind: 'primitive', id: 'grantKeywordToYoursUntilEndOfTurn' },
       },
       {
         title: 'Flash timing',
@@ -197,8 +260,32 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Flashback',
         detail:
-          'A "Flashback {cost}" instant or sorcery casts from your graveyard for that cost — honoring its normal timing — and is exiled as it leaves the stack, even when countered (CR 702.34a). Plain mana costs only; {X}/additional-cost flashback still reports.',
+          'A "Flashback {cost}" instant or sorcery casts from your graveyard for that cost — honoring its normal timing — and is exiled as it leaves the stack, even when countered (CR 702.34a). All three printed cost shapes work: plain mana, "Flashback {X}{R}{R}" (the X is asked and charged at cast), and "Flashback—{1}{U}, Pay 3 life". A non-life rider (a discard, a sacrifice) still reports.',
         witness: { kind: 'rule', id: 'flashback-cost' },
+      },
+      {
+        title: 'Cycling',
+        detail:
+          'A "Cycling {cost}" card is an activated ability of a card in your HAND: pay the cost, discard the card as part of it, draw a card. Instant speed, so a cycling land turns into a card on an opponent turn. The discard is a COST, which is what lets it feed madness and a "whenever you cycle or discard" trigger. An {X} cycling cost still reports.',
+        witness: { kind: 'rule', id: 'cycling-cost' },
+      },
+      {
+        title: 'Typecycling and landcycling',
+        detail:
+          'The same mechanism with a different reward: "Plainscycling {2}" / "Landcycling {2}" search your library for a card of that type instead of drawing. Only words the card filter can genuinely select compile — the five basic land types and the generic "land"; anything else reports rather than fetching approximately the right card.',
+        witness: { kind: 'rule', id: 'typecycling-cost' },
+      },
+      {
+        title: 'Buyback',
+        detail:
+          'An optional additional cost asked at cast time, exactly like a kicker. Pay it and the card returns to your HAND as it resolves instead of going to the graveyard (CR 702.27a) — and only as it resolves: a bought-back spell that is countered goes to the graveyard like any other. Both answers come from the one helper that also decides where a flashback card goes, so the two can never disagree.',
+        witness: { kind: 'rule', id: 'buyback-cost' },
+      },
+      {
+        title: 'Madness',
+        detail:
+          'Discarding a madness card exiles it instead, and you may then cast it for its madness cost — from either discard funnel (a cost, or an effect), ignoring the timing printed on the card, with mana abilities still legal so you can pay. Passing declines and puts it in the graveyard the discard would have used. A madness cost printed in words ("Madness—Pay six {C}") still reports.',
+        witness: { kind: 'rule', id: 'madness-cost' },
       },
       {
         title: 'Granted flashback (Snapcaster Mage)',
@@ -244,14 +331,50 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Lands that enter tapped',
         detail:
-          'Unconditional taplands, plus the conditional cycles: "unless you control two or fewer other lands" (fastlands) and "unless you control a <basic type>" (checklands).',
+          'Unconditional taplands, plus every conditional cycle: "unless you control two or fewer other lands" (fastlands), "unless you control a <basic type>" (checklands), "unless you control two or more other lands" (slowlands) and "unless you control two or more basic lands" (battlelands, which count the printed Basic supertype, so a nonbasic dual does not qualify).',
         witness: { kind: 'rule', id: 'enters-tapped-unless-few-lands' },
+      },
+      {
+        title: 'Lands that ask a question as they enter',
+        detail:
+          'A shockland asks "pay 2 life?" and a reveal-land asks "show a Plains or Island card from your hand?" — both at land-play time, both real questions with two legal answers, and both defaulting to the printed "if you don\'t" (tapped) on any path that cannot ask. A controller with nothing to reveal is not asked at all.',
+        witness: { kind: 'rule', id: 'enters-tapped-unless-revealed' },
+      },
+      {
+        title: 'Optional triggers ("you may")',
+        detail:
+          'The printed "you may" is a genuine yes/no asked as the ability resolves, and declining is a complete outcome — never auto-answered to make a card compile, because a forced yes is a different card. Reclamation-Sage-style entries, the Mage cycle\'s tutors and Farhaven Elf all play both ways.',
+        witness: { kind: 'primitive', id: 'mayEffects' },
+      },
+      {
+        title: 'Step-beginning triggers',
+        detail:
+          'Upkeep, draw step, first main phase and end step all carry triggers ("At the beginning of your end step, untap all lands you control"). "Each player\'s <step>" still reports: the engine cannot yet aim a body at the player whose step it is, and firing it for the source\'s controller would be a different card.',
+        witness: { kind: 'rule', id: 'trigger-step-begins' },
+      },
+      {
+        title: 'Board-watching triggers',
+        detail:
+          '"Whenever a creature you control [with power 3 or greater] enters/dies" watches the battlefield through the same card filter every other chooser reads, so the printed restriction is honoured rather than dropped. Ajani\'s Welcome, Elemental Bond, Grave Pact and Dictate of Erebos all play.',
+        witness: { kind: 'rule', id: 'trigger-permanent-enters-or-dies' },
+      },
+      {
+        title: 'Filtered library tutors',
+        detail:
+          'A search to hand may be narrowed by card type, printed subtype, mana value or printed power/toughness ("an artifact card with mana value 1 or less", "a creature card with toughness 2 or less"). A restriction the filter cannot express reports instead — a tutor that ignored its bound would fetch the best card in the deck.',
+        witness: { kind: 'rule', id: 'search-to-hand-by-filter' },
       },
       {
         title: 'Transforming double-faced cards',
         detail:
           'Innistrad-style DFCs play both faces: the front casts, a transform instruction flips the permanent to its back face (Delver of Secrets reveals for its 3/2 flyer), counters/damage/Auras persist across the flip (CR 712), and a bounced or killed DFC turns front-face-up again.',
         witness: { kind: 'primitive', id: 'transformRevealTop' },
+      },
+      {
+        title: 'Modal double-faced cards',
+        detail:
+          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield. Split and adventure cards still report — they are two halves of one object, not two faces.',
+        witness: { kind: 'engine', api: 'hasCastableBackFace' },
       },
       {
         title: 'Gaining control of a permanent',
@@ -269,6 +392,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail:
           'Walkers enter at printed loyalty; +N/−N abilities are sorcery-speed, once per walker per turn; creatures attack them, "any target" burns them, and 0 loyalty is death by state-based action. Liliana of the Veil plays all three abilities as printed.',
         witness: { kind: 'card', name: 'Liliana of the Veil' },
+      },
+      {
+        title: 'Battles (Sieges)',
+        detail:
+          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. ⚠️ Printed Sieges still import as unplayable: their reward is casting the back face, which needs the modal double-faced system.",
+        witness: { kind: 'primitive', id: 'createEmblem' },
+      },
+      {
+        title: 'The legend rule',
+        detail:
+          "Controlling two or more legendary permanents with the same name makes YOU choose which to keep — not the game, and not your opponent — with the rest going to their owners' graveyards as a state-based action. One shared rule covering legendary creatures, planeswalkers and battles alike, applied per player: you and your opponent may each hold your own copy quite legally.",
+        witness: { kind: 'card', name: 'Liliana of the Veil' },
+      },
+      {
+        title: 'Emblems',
+        detail:
+          "A planeswalker ultimate's emblem lives in the command zone with its statics and triggers fully live from there — and nothing in the game can remove it, because no removal path reaches outside the battlefield. It survives a board wipe and keeps buffing whatever arrives afterwards.",
+        witness: { kind: 'rule', id: 'emblem-with-ability' },
       },
     ],
   },
@@ -422,6 +563,20 @@ export function mechanicsSummary(): MechanicsSummary {
   };
 }
 
+/**
+ * The core rules seams an `engine` witness may name. A named map rather than a
+ * free string, so a claim can only cite a capability that is really imported —
+ * a deleted seam becomes a compile error here, not a silently-passing witness.
+ */
+const CORE_ENGINE_API = {
+  /** A card declares a second, CASTABLE face (a modal DFC). */
+  hasCastableBackFace,
+  /** Which face a cast/play action names. */
+  playableFaceOf,
+  /** A card's printed modal header + modes. */
+  modalSpecOf,
+} as const;
+
 /** A minimal real-shaped card wrapped around a witness's Oracle text. */
 function witnessCard(text: string, as: 'creature' | 'instant'): CompilableCard {
   return {
@@ -457,5 +612,7 @@ export function resolveWitness(witness: MechanicWitness): boolean {
       return CARD_POOL.some((card) => card.name === witness.name);
     case 'oracle':
       return compileCard(witnessCard(witness.text, witness.as)).status === 'complete';
+    case 'engine':
+      return typeof CORE_ENGINE_API[witness.api] === 'function';
   }
 }

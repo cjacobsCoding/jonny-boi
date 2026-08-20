@@ -17,7 +17,7 @@
  */
 
 import type { GameEvent } from '../events.js';
-import type { GameState, InstanceId } from '../state.js';
+import type { CardInstance, GameState, InstanceId } from '../state.js';
 import { recordTurnFacts } from '../turn-facts.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
 import { matchTriggers, orderPendingTriggers } from '../triggers.js';
@@ -63,6 +63,30 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   // event was one array plus one `TriggerSource` per triggerful permanent, several
   // times per action, for a scan that almost never matches anything.
   let snapshot: TriggerSource[] | null = null;
+  /**
+   * How many objects were in the two command zones the last time they were
+   * walked. `-1` forces the first pass. See `rememberSources` for why a size
+   * comparison is a sufficient staleness check for emblems specifically.
+   */
+  let lastCommandCount = -1;
+
+  /** Fold one command zone's triggerful objects into the known-source set. */
+  const rememberCommandZone = (command: readonly CardInstance[]): void => {
+    for (let i = 0; i < command.length; i++) {
+      const object = command[i] as CardInstance;
+      const triggers = object.def.triggers;
+      if (triggers === undefined || triggers.length === 0) continue;
+      const known = seenSources?.get(object.instanceId);
+      if (known !== undefined && known.controller === object.controller && known.triggers === triggers) continue;
+      (seenSources ??= new Map()).set(object.instanceId, {
+        instanceId: object.instanceId,
+        controller: object.controller,
+        name: object.def.name,
+        triggers,
+      });
+      snapshot = null;
+    }
+  };
 
   /**
    * Fold the currently-on-battlefield triggerful permanents into the known set.
@@ -75,6 +99,34 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
    * existing key would not move it and we no longer re-set at all.
    */
   const rememberSources = (): void => {
+    // EMBLEMS trigger from the COMMAND zone (CR 114) — "at the beginning of your
+    // upkeep…" printed on an emblem fires exactly as it would on a permanent,
+    // and keeps firing for the rest of the game because nothing can remove the
+    // emblem. They fold into the SAME known-source set rather than being scanned
+    // separately, so the APNAP ordering, the label, the stack push and the
+    // resolution are all one path with no emblem special case.
+    //
+    // ⚠️ PERFORMANCE, and it is not a micro-detail: this function runs on EVERY
+    // emitted event — hundreds of thousands per sim — so anything done here is
+    // done on the engine's hottest path. Two things keep it free:
+    //
+    //  1. the command zones are read DIRECTLY rather than through
+    //     `for (const pid of PLAYER_IDS)`, because that loop allocates an array
+    //     iterator per event for a two-element list;
+    //  2. the contents are only walked when the zone's SIZE has changed. An
+    //     emblem can never leave (that is the whole point of the object) and its
+    //     abilities come from an immutable definition, so an unchanged count
+    //     means an unchanged set — unlike the battlefield below, where a
+    //     permanent's controller can change or its face can swap under a stable
+    //     count.
+    const commandA = state.players.A.command;
+    const commandB = state.players.B.command;
+    const commandCount = commandA.length + commandB.length;
+    if (commandCount !== lastCommandCount) {
+      lastCommandCount = commandCount;
+      rememberCommandZone(commandA);
+      rememberCommandZone(commandB);
+    }
     const battlefield = state.battlefield;
     for (let i = 0; i < battlefield.length; i++) {
       const inst = battlefield[i] as (typeof battlefield)[number];
@@ -106,6 +158,29 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   };
   rememberSources();
 
+  /**
+   * Find the permanent a zone change is ABOUT — what the board-watching triggers
+   * ("whenever a creature you control enters/dies") read.
+   *
+   * Searched battlefield-first and then every player's graveyard, because the
+   * two events those triggers watch leave the card in exactly those places by
+   * the time the event is emitted: an entry has already landed on the
+   * battlefield, and a death has already landed in a graveyard. A card found in
+   * neither yields `undefined`, and `subjectMatches` treats that as no match —
+   * a trigger never fires on a permanent nobody can identify.
+   */
+  const resolveSubject = (instanceId: InstanceId) => {
+    for (const perm of state.battlefield) {
+      if (perm.instanceId === instanceId) return { controller: perm.controller, card: perm };
+    }
+    for (const player of Object.values(state.players)) {
+      for (const card of player.graveyard) {
+        if (card.instanceId === instanceId) return { controller: card.controller, card };
+      }
+    }
+    return undefined;
+  };
+
   const emit = (event: GameEvent): void => {
     baseEmit(event);
     // Fold the event into the turn's fact memory (revolt / morbid / lifegain).
@@ -121,7 +196,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // an empty source list always returns nothing.
     if (seenSources === null) return;
     snapshot ??= [...seenSources.values()];
-    const matched = matchTriggers(snapshot, event);
+    const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
     if (queue === null) queue = [];
     for (const m of matched) queue.push(m);

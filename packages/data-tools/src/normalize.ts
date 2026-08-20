@@ -70,6 +70,9 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
     // Planeswalkers: printed starting loyalty. `parseStat` already returns null
     // for a non-numeric box ("X"), which is exactly "variable - not compilable".
     loyalty: parseStat(raw.loyalty),
+    // Battles: printed starting defense. Same parse and the same meaning for a
+    // non-numeric box as loyalty's — "variable, not compilable".
+    defense: parseStat(raw.defense),
     colors: raw.colors ?? frontFace?.colors ?? [],
     colorIdentity: raw.color_identity ?? [],
     keywords: raw.keywords ?? [],

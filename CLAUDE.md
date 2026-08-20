@@ -64,7 +64,7 @@ npm run build        # build all packages + the web app
 npm test             # run the full workspace test suite (Vitest)
 npm run dev          # launch the web PWA locally (Vite)
 npm run sim -- ...    # headless gauntlet/A-B sim from the CLI
-npm run verify       # OFFLINE pre-push gate: lint + generated-data check + full tests
+npm run verify       # OFFLINE pre-push gate: lint + generated-data check + BUILD (type-check) + full tests
 ```
 
 > `npm run verify` at the **root** is offline and safe in CI. Do not confuse it with

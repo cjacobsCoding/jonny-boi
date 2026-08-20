@@ -11,8 +11,8 @@ import { PLAYER_IDS } from './state.js';
 import { poolTotal } from './mana.js';
 import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
-import { isCreature, isPlaneswalker } from './card.js';
-import { loyaltyOf } from './internal/stats.js';
+import { isBattle, isCreature, isPlaneswalker } from './card.js';
+import { defenseOf, loyaltyOf } from './internal/stats.js';
 
 /** A plain, JSON-safe snapshot of the game (no methods, no class instances). */
 export interface SerializedState {
@@ -55,6 +55,11 @@ export interface SerializedState {
      * other board serializes byte-for-byte as it always did.
      */
     readonly loyalty?: number;
+    /**
+     * A battle's current defense. Present only for battles, so every other board
+     * serializes byte-for-byte as it always did.
+     */
+    readonly defense?: number;
   }>;
   /**
    * The question the game is currently waiting on, if any — so the debug
@@ -111,6 +116,7 @@ export function serializeState(state: GameState): SerializedState {
         damageMarked: c.damageMarked,
         ...(c.attachedTo != null ? { attachedTo: c.attachedTo } : {}),
         ...(isPlaneswalker(c.def) ? { loyalty: loyaltyOf(c) } : {}),
+        ...(isBattle(c.def) ? { defense: defenseOf(c) } : {}),
       };
     }),
     ...(state.pendingChoice ? { pendingChoice: serializePendingChoice(state.pendingChoice) } : {}),
@@ -147,7 +153,13 @@ export function dumpState(state: GameState): string {
     lines.push('  battlefield:');
     for (const b of s.battlefield) {
       const pt =
-        b.power !== undefined ? ` ${b.power}/${b.toughness}` : b.loyalty !== undefined ? ` [${b.loyalty} loyalty]` : '';
+        b.power !== undefined
+          ? ` ${b.power}/${b.toughness}`
+          : b.loyalty !== undefined
+            ? ` [${b.loyalty} loyalty]`
+            : b.defense !== undefined
+              ? ` [${b.defense} defense]`
+              : '';
       const flags = [b.tapped ? 'T' : '', b.summoningSick ? 'SS' : '', b.damageMarked ? `dmg${b.damageMarked}` : '']
         .filter(Boolean)
         .join(',');

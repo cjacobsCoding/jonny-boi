@@ -34,7 +34,11 @@
     },
     {
       "role": "colourless / utility lands",
-      "names": ["Radiant Fountain", "Wastes", "Rupture Spire"]
+      "names": [
+        "Radiant Fountain",
+        "Wastes",
+        "Rupture Spire"
+      ]
     },
     {
       "role": "ramp — mana creatures and rocks",
@@ -296,6 +300,323 @@
         "Grafted Wargear",
         "Skullclamp",
         "Whispersilk Cloak"
+      ]
+    },
+    {
+      "role": "card selection — scry and surveil, the two mechanics a curated pool cannot show without a card that prints them",
+      "names": [
+        "Preordain",
+        "Serum Visions",
+        "Consider",
+        "Anticipate",
+        "Impulse",
+        "Augury Owl",
+        "Sinister Sabotage",
+        "Notion Rain",
+        "Otherworldly Gaze",
+        "Omen of the Sea",
+        "Temple of Deceit",
+        "Temple of Silence",
+        "Temple of Triumph",
+        "Temple of Malice",
+        "Temple of Abandon",
+        "Temple of Mystery",
+        "Temple of Plenty",
+        "Temple of Malady",
+        "Temple of Epiphany",
+        "Castle Vantress",
+        "Zhalfirin Void",
+        "Elegant Parlor",
+        "Undercity Sewers",
+        "Raucous Theater",
+        "Underground Mortuary",
+        "Commercial District",
+        "Hedge Maze",
+        "Lush Portico",
+        "Meticulous Archive",
+        "Shadowy Backstreet",
+        "Thundering Falls"
+      ]
+    },
+    {
+      "role": "mill — the library as a resource",
+      "names": [
+        "Tome Scour",
+        "Mind Sculpt",
+        "Thought Scour",
+        "Glimpse the Unthinkable",
+        "Dreadwaters",
+        "Increasing Confusion",
+        "Maddening Cacophony"
+      ]
+    },
+    {
+      "role": "flashback — printed casting from the graveyard",
+      "names": [
+        "Think Twice",
+        "Firebolt",
+        "Deep Analysis",
+        "Chainer's Edict",
+        "Lingering Souls",
+        "Silent Departure",
+        "Faithless Looting",
+        "Ancient Grudge",
+        "Flame Jab",
+        "Dread Return",
+        "Feeling of Dread",
+        "Mystic Retrieval",
+        "Artful Dodge",
+        "Cackling Counterpart",
+        "Momentary Blink",
+        "Strike It Rich"
+      ]
+    },
+    {
+      "role": "{X} — the cost chosen and paid at cast time",
+      "names": [
+        "Blaze",
+        "Mind Spring",
+        "Condescend",
+        "Fireball",
+        "Sphinx's Revelation",
+        "Blue Sun's Zenith",
+        "Stroke of Genius",
+        "Kaervek's Torch",
+        "Endless One",
+        "Walking Ballista",
+        "Rolling Thunder",
+        "Crater's Claws",
+        "Banefire",
+        "Death Denied"
+      ]
+    },
+    {
+      "role": "kicker and multikicker — the optional additional cost",
+      "names": [
+        "Burst Lightning",
+        "Into the Roil",
+        "Firebending Lesson",
+        "Saproling Migration",
+        "Tear Asunder",
+        "Vines of Vastwood",
+        "Goblin Bushwhacker",
+        "Everflowing Chalice",
+        "Wolfbriar Elemental",
+        "Rite of Replication",
+        "Deathforge Shaman",
+        "Enclave Elite",
+        "Nirkana Cutthroat",
+        "Skitter Eel",
+        "Aether Figment"
+      ]
+    },
+    {
+      "role": "planeswalkers beyond Liliana — loyalty abilities and the emblem an ultimate makes",
+      "names": [
+        "Jace Beleren",
+        "Liliana Vess",
+        "Chandra, Pyromaster",
+        "Chandra, Torch of Defiance",
+        "Garruk Wildspeaker",
+        "Ajani Goldmane",
+        "Elspeth, Knight-Errant",
+        "Koth of the Hammer",
+        "Sorin, Solemn Visitor",
+        "Nissa, Voice of Zendikar",
+        "Vraska, Golgari Queen",
+        "Domri Rade",
+        "Gideon Jura",
+        "Jace, the Mind Sculptor",
+        "Ob Nixilis Reignited",
+        "Arlinn, Voice of the Pack",
+        "Tibalt, the Fiend-Blooded",
+        "Sarkhan the Mad",
+        "Nicol Bolas, Planeswalker",
+        "Ajani Steadfast"
+      ]
+    },
+    {
+      "role": "protection and ward — the two printed defences the targeting system now enforces",
+      "names": [
+        "White Knight",
+        "Black Knight",
+        "Silver Knight",
+        "Paladin en-Vec",
+        "Mirran Crusader",
+        "Auriok Champion",
+        "Tomakul Honor Guard",
+        "Waterfall Aerialist",
+        "Rimeshield Frost Giant",
+        "Punk Frogs",
+        "Progenitus",
+        "Spectrum Sentinel"
+      ]
+    },
+    {
+      "role": "modal double-faced cards and battles — the two newest card kinds the engine models",
+      "names": [
+        "Bala Ged Recovery",
+        "Jwari Disruption",
+        "Kazandu Mammoth",
+        "Sejiri Shelter",
+        "Kabira Takedown",
+        "Shatterskull Smashing",
+        "Agadeem's Awakening",
+        "Malakir Rebirth",
+        "Khalni Ambush",
+        "Song-Mad Treachery",
+        "Invasion of Gobakhan",
+        "Invasion of Zendikar",
+        "Invasion of Ikoria",
+        "Invasion of Kaldheim",
+        "Invasion of Tarkir"
+      ]
+    },
+    {
+      "role": "transforming double-faced cards beyond Delver of Secrets",
+      "names": [
+        "Thraben Sentry",
+        "Village Ironsmith",
+        "Civilized Scholar",
+        "Ludevic's Test Subject",
+        "Screeching Bat",
+        "Chalice of Life"
+      ]
+    },
+    {
+      "role": "modal spells — “Choose one” announced at cast (the charm cycle is the cheapest honest test of it)",
+      "names": [
+        "Abrade",
+        "Crosis's Charm",
+        "Dromar's Charm",
+        "Darigaaz's Charm",
+        "Umezawa's Charm",
+        "Midnight Charm",
+        "Winterflame",
+        "Tyrant's Scorn",
+        "Applied Biomancy",
+        "Subtle Strike",
+        "Artful Takedown",
+        "Grim Discovery",
+        "Aid the Fallen",
+        "Invoke the Firemind"
+      ]
+    },
+    {
+      "role": "more {X} — spread across colours so an {X} deck is buildable",
+      "names": [
+        "Clash of Wills",
+        "Volcanic Geyser",
+        "Death Grasp",
+        "Heat Ray",
+        "Overrule",
+        "Devil's Play"
+      ]
+    },
+    {
+      "role": "+1/+1 counters on real cards — the counter system had exactly one card (Kitchen Finks' persist)",
+      "names": [
+        "Sprite Dragon",
+        "Electrostatic Infantry",
+        "Patchwork Automaton",
+        "Tempest Angler",
+        "Faithful Watchdog",
+        "Myr Scrapling",
+        "Ruins Recluse",
+        "Unspeakable Symbol"
+      ]
+    },
+    {
+      "role": "more flashback — enough for a graveyard-value deck, including the {X} flashback cost",
+      "names": [
+        "Reckless Charge",
+        "Call of the Herd",
+        "Roar of the Wurm",
+        "Deep Reconnaissance",
+        "Moan of the Unhallowed",
+        "Chatter of the Squirrel",
+        "Dream Twist",
+        "Bump in the Night",
+        "Crippling Fatigue",
+        "Scour All Possibilities",
+        "Sacred Fire",
+        "Thrill of the Hunt",
+        "Geistflame",
+        "Morgue Theft"
+      ]
+    },
+    {
+      "role": "the second planeswalker, and the kicker cards the compiler can actually build",
+      "names": [
+        "Samut, Tyrant Smasher",
+        "Scout the Wilderness",
+        "Hurloon Battle Hymn",
+        "Tolarian Geyser"
+      ]
+    },
+    {
+      "role": "more ward and protection bodies, for colour spread",
+      "names": [
+        "Archive Dragon",
+        "Toadstool Admirer",
+        "Harmonious Grovestrider",
+        "Blood Knight",
+        "Nightwind Glider",
+        "Voice of Law"
+      ]
+    },
+    {
+      "role": "indestructible — the exemption from destruction and lethal damage, now that core models it",
+      "names": [
+        "Darksteel Citadel",
+        "Darksteel Plate",
+        "Darksteel Ingot",
+        "Darksteel Myr",
+        "Darksteel Pendant",
+        "Darksteel Sentinel",
+        "Zetalpa, Primal Dawn",
+        "Seraph of the Suns",
+        "Razortide Bridge",
+        "Silverbluff Bridge",
+        "Rustvale Bridge",
+        "Mistvault Bridge",
+        "Goldmire Bridge",
+        "Drossforge Bridge",
+        "Darkmoss Bridge",
+        "Tanglepool Bridge",
+        "Slagwoods Bridge",
+        "Thornglint Bridge"
+      ]
+    },
+    {
+      "role": "alternative and additional costs — cycling, madness and buyback, now that core charges them",
+      "names": [
+        "Forgotten Cave",
+        "Barren Moor",
+        "Tranquil Thicket",
+        "Lonely Sandbar",
+        "Secluded Steppe",
+        "Sheltered Thicket",
+        "Canyon Slough",
+        "Irrigated Farmland",
+        "Fetid Pools",
+        "Scattered Groves",
+        "Desert of the Fervent",
+        "Desert of the True",
+        "Fiery Temper",
+        "Reckless Wurm",
+        "Arrogant Wurm",
+        "Just the Wind",
+        "Obsessive Search",
+        "Alchemist's Greeting",
+        "Incorrigible Youths",
+        "Capsize",
+        "Whispers of the Muse",
+        "Shattering Pulse",
+        "Disturbed Burial",
+        "Seething Anger",
+        "Elvish Fury",
+        "Evincar's Justice"
       ]
     }
   ]

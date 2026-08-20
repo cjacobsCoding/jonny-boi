@@ -172,6 +172,23 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    */
   cardsLookedAt: 'public',
   abilityActivated: 'public',
+  /*
+   * CYCLING is public as printed, and the name it carries is not a leak: the
+   * card is discarded face-up as part of the cost, so it is in a public zone —
+   * and already named by the `zoneChange` into the graveyard — before anyone
+   * sees the ability resolve. What was DRAWN off it stays hidden, because that
+   * arrives as an ordinary `drawCard`, redacted by the rule above.
+   */
+  cardCycled: 'public',
+  /*
+   * Both halves of madness are equally face-up. A discarded madness card is
+   * exiled in front of the table (exile is a public zone, and the move emits its
+   * own public `zoneChange`), and declining is a decision made out loud — the
+   * card visibly goes to the graveyard. Neither event carries anything the
+   * discarding player still knows privately.
+   */
+  madnessWindowOpened: 'public',
+  madnessDeclined: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',
   attackersDeclared: 'public',
@@ -187,6 +204,18 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // like a creature dying or a counter landing.
   loyaltyChanged: 'public',
   planeswalkerDied: 'public',
+  // A battle's defense and its defeat are face-up battlefield facts, exactly as
+  // a walker's loyalty and death are — the counters sit on the card where the
+  // whole table can count them.
+  defenseChanged: 'public',
+  battleDefeated: 'public',
+  // The legend rule happens in the open: everyone sees which copy stayed and
+  // which went to a graveyard. The CHOICE that produced it is redacted by the
+  // choice events above, exactly as every other choice is.
+  legendRuleApplied: 'public',
+  // An emblem is created face-up in the command zone with its ability read out,
+  // and nothing can ever remove it — there is no part of it anyone could hide.
+  emblemCreated: 'public',
   playerLost: 'public',
   gameOver: 'public',
   // Reveals that a pilot proposed something illegal — a pilot-quality signal, not
@@ -198,6 +227,15 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // what the ability was pointed at, and everyone sees one leave the stack for
   // want of a target.
   triggerTargetsChosen: 'public',
+  /*
+   * A modal spell's announced modes and their aims are PUBLIC by the rules: in
+   * paper the caster declares them out loud as the spell is cast, before anyone
+   * decides whether to respond. Knowing which half of a Cryptic Command is
+   * coming is precisely what the opponent is entitled to, so these are the
+   * event objects themselves — no allocation, nothing redacted.
+   */
+  modesChosen: 'public',
+  modeTargetChosen: 'public',
   triggerRemovedFromStack: 'public',
   triggeredAbilityResolved: 'public',
   continuousEffectAdded: 'public',

@@ -32,20 +32,29 @@
  * keeps a seeded sim reproducible.
  */
 
-import type { CardInstance, EffectRef, GameState, InstanceId, ManaCost, PlayerId } from '@jonny-boi/core';
+import type {
+  CardInstance,
+  EffectRef,
+  GameState,
+  InstanceId,
+  ManaCost,
+  PlayerId,
+  TargetRestriction,
+} from '@jonny-boi/core';
 import {
   canAffordManaCost,
   convertedManaCost,
-  effectivePower,
-  effectiveToughness,
   isCreature,
   MANA_COLORS,
+  legalTargetsFor,
   matchesCardFilter,
+  modalSpecOf,
   opponentOf,
-  remainingToughness,
 } from '@jonny-boi/core';
 import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
+import type { ContinuousIndex } from './board-stats.js';
+import { keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -63,6 +72,13 @@ export interface EffectValueContext {
   readonly weights: HeuristicWeights;
   /** Board context for `cardValue`, precomputed once per decision. */
   readonly cards: CardValueContext;
+  /**
+   * The board's continuous aggregate, precomputed once per decision alongside
+   * `cards`. Every P/T this module prices is read through it, so an anthem, an
+   * Equipment or a `*` P/T box is worth what it actually is — a removal spell
+   * pointed at an anthem-boosted creature is priced at the creature's real size.
+   */
+  readonly index: ContinuousIndex;
 }
 
 /** The total value of running a list of effect refs, in order. */
@@ -184,8 +200,22 @@ function firstTargetSpell(ctx: EffectValueContext) {
  * the main-phase pilot uses to pick a removal target, so "kill the biggest threat"
  * means one thing across the whole pilot.
  */
-function removalValue(perm: CardInstance, weights: HeuristicWeights): number {
-  return weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(perm);
+function removalValue(perm: CardInstance, weights: HeuristicWeights, index: ContinuousIndex): number {
+  return weights.removalBaseScore + weights.removalPerPowerOfTarget * effPower(perm, index);
+}
+
+/**
+ * Whether this permanent shrugs off an effect that says "destroy".
+ *
+ * Read through the continuous layer rather than off `def.keywords`, so a granted
+ * indestructible — the whole point of Heroic Intervention — is seen. A mode
+ * chooser that reads the printed set picks "destroy their board" into a board it
+ * cannot touch. The decision's index is reused rather than `aggregateFor` being
+ * called per permanent: that helper is a whole battlefield pass, and this runs
+ * once per creature on the board for a sweeper mode.
+ */
+function isIndestructible(ctx: EffectValueContext, perm: CardInstance): boolean {
+  return Boolean(keywordsOf(perm, ctx.index).indestructible);
 }
 
 /** The mana value of a permanent's printed card (a token has none). */
@@ -263,18 +293,26 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     againstTarget(ctx, (perm) => {
       const weights = ctx.weights;
       const redeploy = weights.modeBouncePerManaValue * permanentManaValue(perm);
-      const pressure = isCreature(perm.def) ? weights.removalPerPowerOfTarget * effectivePower(perm) : 0;
+      const pressure = isCreature(perm.def) ? weights.removalPerPowerOfTarget * effPower(perm, ctx.index) : 0;
       return weights.modeBounceBaseScore + redeploy + pressure;
     }),
 
-  /** Same shape as a bounce, but the card is gone for good. */
-  destroyTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
-  exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights)),
+  /**
+   * Same shape as a bounce, but the card is gone for good — UNLESS the thing it
+   * points at is indestructible, in which case the mode does literally nothing
+   * (CR 702.12b) and must score as the blank it is. Exile has no such exemption,
+   * which is exactly why the two are not one entry.
+   */
+  destroyTarget: (_params, ctx) =>
+    againstTarget(ctx, (perm) =>
+      isIndestructible(ctx, perm) ? 0 : removalValue(perm, ctx.weights, ctx.index),
+    ),
+  exileTarget: (_params, ctx) => againstTarget(ctx, (perm) => removalValue(perm, ctx.weights, ctx.index)),
 
   /** Tapping one permanent is a fraction of tapping a board; price it per power. */
   tapTarget: (_params, ctx) =>
     againstTarget(ctx, (perm) =>
-      perm.tapped ? 0 : ctx.weights.modeTapPerPowerValue * Math.max(effectivePower(perm), 1),
+      perm.tapped ? 0 : ctx.weights.modeTapPerPowerValue * Math.max(effPower(perm, ctx.index), 1),
     ),
 
   /**
@@ -287,7 +325,10 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     let net = 0;
     for (const perm of ctx.state.battlefield) {
       if (!isCreature(perm.def)) continue;
-      const stats = effectivePower(perm) + effectiveToughness(perm);
+      // A wipe neither clears their indestructible creatures nor costs us ours,
+      // so neither side of the trade includes them.
+      if (isIndestructible(ctx, perm)) continue;
+      const stats = statTotal(perm, ctx.index);
       net += perm.controller === ctx.player ? -stats * weights.ownCreatureLossPerStat : stats * weights.killEnemyPerStat;
     }
     return net * weights.removalPerPowerOfTarget;
@@ -311,7 +352,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       if (perm.tapped) continue;
       const types: readonly string[] = perm.def.types;
       if (!wanted.some((t) => types.includes(t))) continue;
-      const weight = weights.modeTapPerPowerValue * Math.max(effectivePower(perm), 1);
+      const weight = weights.modeTapPerPowerValue * Math.max(effPower(perm, ctx.index), 1);
       value += perm.controller === ctx.player ? -weight : weight;
     }
     return value;
@@ -349,8 +390,8 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       return amount >= ctx.state.players[playerTarget].life ? weights.lethalBurnScore : weights.burnFaceBaseScore;
     }
     return againstTarget(ctx, (perm) =>
-      remainingToughness(perm) <= amount
-        ? removalValue(perm, weights)
+      toughnessLeft(perm, ctx.index) <= amount
+        ? removalValue(perm, weights, ctx.index)
         : weights.removalPerPowerOfTarget * amount,
     );
   },
@@ -396,7 +437,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     for (const perm of ctx.state.battlefield) {
       if (perm.controller !== victim) continue;
       if (!matchesCardFilter(perm, filterParamOf(params))) continue;
-      const value = removalValue(perm, ctx.weights);
+      const value = removalValue(perm, ctx.weights, ctx.index);
       if (worst === undefined || value < worst) worst = value;
     }
     if (worst === undefined) return 0;
@@ -416,7 +457,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     for (const perm of ctx.state.battlefield) {
       if (perm.controller !== victim) continue;
       any = true;
-      total += removalValue(perm, ctx.weights);
+      total += removalValue(perm, ctx.weights, ctx.index);
     }
     if (!any) return 0;
     const half = total / 2;
@@ -505,8 +546,8 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
       // Shrink-removal: worth a kill when it is lethal, a fraction when it only
       // trims, and a mistake pointed at our own board.
       if (perm.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
-      return -toughness >= remainingToughness(perm)
-        ? removalValue(perm, ctx.weights)
+      return -toughness >= toughnessLeft(perm, ctx.index)
+        ? removalValue(perm, ctx.weights, ctx.index)
         : ctx.weights.modePumpPerStatValue * -toughness;
     }
     if (perm.controller !== ctx.player) return -ctx.weights.modeSelfHarmPenalty;
@@ -560,50 +601,65 @@ function bestCardIn(cards: readonly CardInstance[], ctx: EffectValueContext): nu
 
 // --- modal-spell mode lookup --------------------------------------------------------
 
-/** A mode as the card AUTHORED it: an id and the effects choosing it runs. */
+/** A mode as the card AUTHORED it: its id, its effects, and what it may aim at. */
 export interface ModeEffects {
   readonly id: string;
   readonly effects: readonly EffectRef[];
+  /** What choosing this mode will then be asked to target, when it targets. */
+  readonly targets?: TargetRestriction;
 }
 
 /**
  * Recover the effects behind each offered mode id.
  *
- * The pending choice carries only `{ id, label }`, so the meaning has to come from
- * the card's own data. The authoritative source is the SUSPENDED RESOLUTION: the
- * effect ref it stopped on is the `modal` ref itself, complete with its `modes`
- * param, and its `targets` are the ones this cast locked in. Falling back to the
- * source card's printed effects covers a state that arrived without a frame (a
- * hand-built test position, a replay), and returning an empty map — never a throw —
- * covers a card this build cannot read, which simply degrades mode choice to
- * printed order.
+ * The pending choice carries only `{ id, label }` — deliberately, since a choice
+ * must be renderable by a UI that knows no rules — so the meaning comes from the
+ * card's own data: `CardDefinition.modal`, read off the card that asked.
+ *
+ * The question is raised while the spell is being CAST, so the card is on the
+ * STACK, not the battlefield; `findInstance` searches every zone, and a card
+ * this build cannot read yields an empty list rather than a throw, which simply
+ * degrades mode choice to printed order.
  */
 export function modeEffectsFor(state: GameState, sourceInstanceId: InstanceId): readonly ModeEffects[] {
-  const frame = state.resolution;
-  const running = frame ? frame.effects[frame.next] : undefined;
-  const fromFrame = running ? readModes(running) : undefined;
-  if (fromFrame && fromFrame.length > 0) return fromFrame;
-
-  const source = findInstance(state, sourceInstanceId);
-  for (const ref of source?.def.effects ?? []) {
-    const modes = readModes(ref);
-    if (modes && modes.length > 0) return modes;
-  }
-  return [];
+  // The STACK first, and that is not an optimisation: a modal spell's modes are
+  // chosen while it is being cast, so the card is on the stack and NOWHERE else
+  // — and `findInstance` (built for board/hand/graveyard questions) does not
+  // look there. Searching only through it returned an empty mode list, which
+  // silently degraded every mode choice to printed order.
+  const onStack = state.stack.find((o) => o.kind === 'spell' && o.instanceId === sourceInstanceId);
+  const source = (onStack?.kind === 'spell' ? onStack.card : undefined) ?? findInstance(state, sourceInstanceId);
+  const spec = source ? modalSpecOf(source.def) : undefined;
+  if (!spec) return [];
+  return spec.modes.map((mode) => ({
+    id: mode.id,
+    effects: mode.effects,
+    ...(mode.targets !== undefined ? { targets: mode.targets } : {}),
+  }));
 }
 
-/** Read a `modal` ref's `modes` param, keeping only well-formed entries. */
-function readModes(ref: EffectRef): readonly ModeEffects[] | undefined {
-  const raw = ref.params?.modes;
-  if (!Array.isArray(raw)) return undefined;
-  const out: ModeEffects[] = [];
-  for (const entry of raw) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const mode = entry as { id?: unknown; effects?: unknown };
-    if (typeof mode.id !== 'string') continue;
-    out.push({ id: mode.id, effects: Array.isArray(mode.effects) ? (mode.effects as EffectRef[]) : [] });
+/**
+ * What one mode is worth on this board, aimed as well as it could be.
+ *
+ * A targeting mode is priced by its BEST legal target rather than by an
+ * unaimed guess, because the aim is the mode: "counter target spell" is a
+ * blank with nothing worth countering and premium removal with something. This
+ * is also what stops the pilot countering ITS OWN spell — a Cryptic Command is
+ * on the stack while its modes are chosen, so it is a legal counter target, and
+ * `counterSpell`'s scorer prices aiming there as the mistake it is.
+ */
+export function valueOfMode(mode: ModeEffects, ctx: EffectValueContext): number {
+  if (mode.targets === undefined) return valueOfEffects(mode.effects, ctx);
+  const candidates = legalTargetsFor(ctx.state, mode.targets, ctx.player);
+  let best: number | undefined;
+  for (const ref of candidates) {
+    const value = valueOfEffects(mode.effects, { ...ctx, targets: [ref] });
+    if (best === undefined || value > best) best = value;
   }
-  return out;
+  // No legal target at all: the mode would not have been offered, but a caller
+  // scoring a card in hand can ask about one, and a mode that cannot happen is
+  // worth nothing.
+  return best ?? 0;
 }
 
 /** Build the value context for a resolution that is currently asking a question. */
@@ -613,5 +669,5 @@ export function resolutionValueContext(
   weights: HeuristicWeights,
   cards: CardValueContext,
 ): EffectValueContext {
-  return { state, player, targets: state.resolution?.targets ?? [], weights, cards };
+  return { state, player, targets: state.resolution?.targets ?? [], weights, cards, index: cards.index };
 }

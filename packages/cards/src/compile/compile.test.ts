@@ -189,28 +189,44 @@ describe('compileCard — honesty about what the engine cannot do', () => {
   });
 
   it('partitions a mixed list into playable and blocked', () => {
-    // The blocked half has to be a card that is STILL genuinely unimplementable,
-    // and that list keeps shrinking: Liliana compiles (planeswalkers), Tarmogoyf
-    // compiles (the star P/T box), and Snapcaster compiles (graveyard targeting
-    // plus grants on a non-battlefield card). What is left is Cryptic Command,
-    // whose MODES are chosen at cast — core picks targets with no mode declared.
-    // When modal casting lands, this test needs the next honestly-blocked card;
-    // if none remains, it should assert an empty blocked half instead.
+    // THE BLOCKED HALF IS NO LONGER A POOL CARD, and that is the news: the last
+    // one was Cryptic Command, whose modes are now announced at cast (CR
+    // 601.2b/c), so every hand-authored card compiles from its printed text.
+    // Liliana compiles (planeswalkers), Tarmogoyf compiles (the star P/T box),
+    // Snapcaster compiles (graveyard targeting plus grants on a non-battlefield
+    // card).
+    //
+    // The partition still has to be PROVEN to separate, though — a test whose
+    // blocked half is empty by construction would pass even if `compileCards`
+    // stopped blocking anything at all. So the blocked half is a SPLIT card,
+    // which is honestly unimplementable: two castable halves on one object, with
+    // no second face to swap to (see `SECOND_CASTABLE_FACE_GAP`).
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
     const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);
     const snapcaster = scryfallFor(CARD_POOL.find((c) => c.name === 'Snapcaster Mage')!);
     const cryptic = scryfallFor(CARD_POOL.find((c) => c.name === 'Cryptic Command')!);
+    const split: CompilableCard = {
+      id: 'split-fire-ice',
+      name: 'Fire // Ice',
+      manaCost: { generic: 0, W: 0, U: 0, B: 0, R: 1, G: 0, C: 0, other: [] },
+      typeLine: { supertypes: [], types: ['Instant'], subtypes: [] },
+      oracleText: 'Fire deals 2 damage divided as you choose among one or two targets.',
+      power: null,
+      toughness: null,
+      keywords: [],
+    };
 
-    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic]);
+    const { playable, blocked } = compileCards([bolt, liliana, goyf, snapcaster, cryptic, split]);
 
     expect(playable.map((card) => card.name)).toEqual([
       'Lightning Bolt',
       'Liliana of the Veil',
       'Tarmogoyf',
       'Snapcaster Mage',
+      'Cryptic Command',
     ]);
-    expect(blocked.map((entry) => entry.card.name)).toEqual(['Cryptic Command']);
+    expect(blocked.map((entry) => entry.card.name)).toEqual(['Fire // Ice']);
     expect(blocked[0]!.missing.length).toBeGreaterThan(0);
   });
 });
@@ -562,7 +578,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
     ]);
   });
 
-  it('reports multikicker rather than flattening it into a single kick', () => {
+  it('compiles multikicker as a COUNT, never flattened into a single kick', () => {
     const result = compileCard(
       makeCard({
         name: 'Multi Thing',
@@ -575,11 +591,11 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
+    expect(result.status, `missing: ${JSON.stringify(result.missing)}`).toBe('complete');
+    // `multikicker`, NOT `kicker`: the two ask different questions (a count vs a
+    // yes/no), and compiling one as the other would cap the card at one kick.
+    expect(result.definition.multikicker).toEqual({ R: 1 });
     expect(result.definition.kicker).toBeUndefined();
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'multikicker (an additional cost paid any number of times)',
-    );
   });
 
   it('compiles a colour/colour hybrid cost the mana system can pay', () => {
@@ -605,11 +621,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
   });
 
   it('reports an unmodelled keyword rather than dropping the ability', () => {
-    // Menace was the example here, then ward — both are implemented now (ward
-    // compiles to the engine-enforced pay-or-counter trigger). Indestructible
-    // is the current stand-in: the engine's destruction and lethal-damage SBAs
-    // have no such exemption. The point of the test is unchanged — an ability
-    // we cannot model must be REPORTED, never silently dropped.
+    // Menace was the example here, then ward, then indestructible — all three
+    // are implemented now (indestructible exempts destruction and lethal damage
+    // in the state-based actions, and nothing else). SKULK is the current
+    // stand-in: "can't be blocked by creatures with greater power" is a per-pair
+    // restriction whose comparison the engine does not make. The point of the
+    // test is unchanged — an ability we cannot model must be REPORTED, never
+    // silently dropped.
     const result = compileCard(
       makeCard({
         name: 'Sneaky Beast',
@@ -617,13 +635,13 @@ describe('compileCard — templated cards outside the curated pool', () => {
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
-        oracleText: 'Indestructible',
-        keywords: ['Indestructible'],
+        oracleText: 'Skulk',
+        keywords: ['Skulk'],
       }),
     );
 
     expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /indestructible/i.test(gap.text))).toBe(true);
+    expect(result.missing.some((gap) => /skulk/i.test(gap.text))).toBe(true);
   });
 
   it('compiles menace, which IS modelled now', () => {
@@ -703,7 +721,7 @@ describe('compileCard — templated cards outside the curated pool', () => {
     ]);
   });
 
-  it('still reports a mana ability whose colours depend on the board', () => {
+  it('compiles a mana ability whose colours depend on the board', () => {
     const result = compileCard(
       makeCard({
         name: 'Board-Dependent Land',
@@ -712,10 +730,24 @@ describe('compileCard — templated cards outside the curated pool', () => {
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(
-      'a mana-ability template the compiler does not recognize yet',
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    // The derivation is recorded, NOT the answer: which colours are actually
+    // available is asked of the live board every time the ability is offered, so
+    // no board's answer is ever frozen onto this shared definition.
+    // (mana-templates.test.ts pins the whole partition.)
+    expect(result.definition.manaAbilities).toEqual([{ derivedColors: 'landsYouControl' }]);
+  });
+
+  it('still reports a mana colour derived from an object the engine does not have', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Command Tower',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: "{T}: Add one mana of any color in your commander's color identity.",
+      }),
     );
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.map((gap) => gap.missingEngineSystem).join(' | ')).toContain('commander');
   });
 
   it('compiles a self-pumping cast trigger (the printed prowess template)', () => {

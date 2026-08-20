@@ -10,6 +10,7 @@ import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from '..
 import { NO_COUNTERS, playerZone, PLAYER_IDS } from '../state.js';
 import type { GameEvent } from '../events.js';
 import { pruneCardGrantsFor } from '../card-grants.js';
+import { discardDestination } from '../madness.js';
 
 /**
  * Find a battlefield permanent by id, or undefined.
@@ -105,20 +106,27 @@ export function moveToZone(
   toPlayer?: PlayerId,
 ): void {
   const from = inst.zone;
+  // A hand → graveyard move IS a discard (CR 701.8a), and madness replaces the
+  // destination of a discard. Asked through the shared `discardDestination` so
+  // this funnel and the cards package's `moveOwnedCard` cannot disagree about
+  // where a discarded madness card ends up.
+  const destination = from === 'hand' && to === 'graveyard' ? discardDestination(state, inst, emit) : to;
   removeFromCurrentZone(state, inst);
-  inst.zone = to;
+  inst.zone = destination;
   // CR 400.7: a card that changes zones is a new object, and a grant made on
   // the old object (a granted flashback on a graveyard card) does not follow
   // it. One property read when no grant exists — see card-grants.ts.
   pruneCardGrantsFor(state, inst.instanceId);
-  if (to === 'battlefield') {
+  if (destination === 'battlefield') {
     state.battlefield.push(inst);
   } else {
-    const holder = state.players[toPlayer ?? inst.owner];
-    const arr = playerZone(holder, to);
+    // A madness-diverted card goes to its OWNER's exile, never to a `toPlayer`
+    // the caller named for the graveyard it no longer reaches.
+    const holder = state.players[destination === to ? (toPlayer ?? inst.owner) : inst.owner];
+    const arr = playerZone(holder, destination);
     if (arr) arr.push(inst);
   }
-  emit({ type: 'zoneChange', instanceId: inst.instanceId, from, to });
+  emit({ type: 'zoneChange', instanceId: inst.instanceId, from, to: destination });
 }
 
 /**
@@ -145,6 +153,11 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // bounced and replayed in one turn may activate again — the once-per-turn
   // marker does not survive the move. Same shape-guard as `attachedTo`.
   if (inst.loyaltyActivatedTurn !== undefined) delete inst.loyaltyActivatedTurn;
+  // How the SPELL was kicked is a fact about that announcement, and CR 400.7
+  // makes a permanent leaving the battlefield a new object — so a bounced-and-
+  // recast creature is kicked (or not) by its own new cast, never by its last
+  // one. Same shape-guard as `attachedTo`.
+  if (inst.timesKicked !== undefined) delete inst.timesKicked;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that

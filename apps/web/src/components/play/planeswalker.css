@@ -16,3 +16,21 @@
   border-radius: var(--radius-sm);
   padding: 0 4px;
 }
+
+/*
+ * A battle's DEFENSE badge — the same footer treatment as loyalty above,
+ * because defense is a battle's life total exactly as loyalty is a walker's.
+ * Deliberately a DIFFERENT colour token from the loyalty badge: on a crowded
+ * board the two badges sit in the same slot, and a player has to be able to
+ * tell "3 loyalty" from "3 defense" without reading the glyph.
+ */
+.perm__defense {
+  align-self: flex-start;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-bg);
+  background: var(--color-warning, var(--color-accent));
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}

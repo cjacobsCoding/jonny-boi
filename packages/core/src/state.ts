@@ -14,6 +14,7 @@
  */
 
 import type { CardDefinition } from './card.js';
+import { isBattle } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
@@ -33,6 +34,28 @@ export const PLAYER_IDS: readonly PlayerId[] = ['A', 'B'];
  */
 export function opponentOf(player: PlayerId): PlayerId {
   return player === 'A' ? 'B' : 'A';
+}
+
+/**
+ * The player who DEFENDS an attackable permanent — i.e. the seat that must be
+ * the defending player for an attack on it to be legal, and the seat whose
+ * creatures may block those attackers.
+ *
+ *  - A **planeswalker** is defended by its controller (you attack an OPPONENT's
+ *    walker).
+ *  - A **battle** is defended by its PROTECTOR (CR 310.11): the opponent of its
+ *    controller. With two players the printed "choose its protector" has exactly
+ *    one legal answer, so it is derived rather than stored — which is also what
+ *    keeps it correct if control of the battle ever changes (the protector is
+ *    always re-read as the current controller's opponent, CR 310.11c's
+ *    redesignation collapsing to the same single choice).
+ *
+ * The consequence worth spelling out: a battle's controller attacks their OWN
+ * battle (its protector is the defending player on their turn), which is the
+ * printed play pattern of every Siege.
+ */
+export function protectorOf(inst: { readonly def: CardDefinition; readonly controller: PlayerId }): PlayerId {
+  return isBattle(inst.def) ? opponentOf(inst.controller) : inst.controller;
 }
 
 /** Opaque per-object id assigned to every card instance and stack object. */
@@ -144,6 +167,19 @@ export interface CardInstance {
    * present. Anyone adding a field here must also edit `internal/clone.ts`.
    */
   loyaltyActivatedTurn?: number;
+  /**
+   * How many times this permanent's spell was kicked as it was cast — written
+   * when a kicked (or multikicked) PERMANENT spell resolves to the battlefield,
+   * so an enters-the-battlefield trigger ("create a token for each time it was
+   * kicked") can still read the count after the resolution frame is gone. A
+   * single kicker records 1. Cleared when the permanent leaves the battlefield
+   * (a re-cast is a new announcement).
+   *
+   * OPTIONAL and written only on the kicked entry, for the same object-shape/
+   * throughput reason as {@link attachedTo}. Anyone adding a field here must
+   * also edit `internal/clone.ts`.
+   */
+  timesKicked?: number;
 }
 
 /**
@@ -205,6 +241,30 @@ export const STEP_ORDER: readonly Step[] = [
 export const MAIN_STEPS: readonly Step[] = ['precombatMain', 'postcombatMain'];
 
 /**
+ * ONE announced mode of a modal spell — which mode was chosen, and what that
+ * mode was aimed at.
+ *
+ * Modes and their targets are both chosen as the spell is CAST (CR 601.2b/c),
+ * so a pick is finished data by the time the spell can resolve. Its own
+ * `targets` list is what makes "Choose two — • Counter target spell • Return
+ * target permanent to its owner's hand" possible at all: the two chosen modes
+ * point at DIFFERENT objects, which one `SpellStackObject.targets` list cannot
+ * express.
+ *
+ * One entry per PICK, not per mode: a spell that lets you choose the same mode
+ * more than once records it once per time it was chosen, each with its own aim.
+ */
+export interface ModePick {
+  /** The chosen `SpellMode.id`. */
+  readonly modeId: string;
+  /**
+   * What this mode points at — one target, or empty for a target-free mode.
+   * Absent (rather than empty) while the engine is still asking for it.
+   */
+  readonly targets?: ReadonlyArray<InstanceId | PlayerId>;
+}
+
+/**
  * A spell (or permanent) on the stack: a card instance moving through the stack.
  * Carries the resolving instance and resolves to a zone. Resolution is LIFO.
  */
@@ -233,14 +293,36 @@ export interface SpellStackObject {
   /** Whether the kicker was paid. Absent for spells with no kicker / unanswered. */
   readonly kicked?: boolean;
   /**
-   * Set while this spell sits on the stack with a CAST-TIME question still
-   * unanswered — "choose X", "pay the kicker?". Like a trigger's
-   * `awaitingTargets`, the waiting lives ON the stack object so "is a cast still
-   * being finished?" is answered by the stack itself; it is cleared the instant
-   * the answer is recorded. Anyone adding a stack-object field must also copy it
-   * in `internal/clone.ts` (field-by-field cloning drops unknown fields).
+   * How many times the MULTIKICKER was paid, recorded once the caster has
+   * answered (and the mana has been charged). Absent while unanswered and for
+   * spells without multikicker; any positive count also sets {@link kicked}.
    */
-  readonly awaitingCastChoice?: 'x' | 'kicker';
+  readonly kickCount?: number;
+  /**
+   * The MODES chosen for a modal spell, in PRINTED order, one entry per pick
+   * (a repeated mode appears once per time it was chosen). Each pick's
+   * `targets` is recorded as its cast-time aim is answered; a pick whose
+   * `targets` is still absent is the one the engine is currently asking about.
+   * Absent entirely until the mode question is answered, and for non-modal
+   * spells. Public information, exactly as announced modes are in paper.
+   */
+  readonly modePicks?: readonly ModePick[];
+  /**
+   * Set while this spell sits on the stack with a CAST-TIME question still
+   * unanswered — "choose your modes", "choose X", "pay the kicker?", "aim this
+   * mode". Like a trigger's `awaitingTargets`, the waiting lives ON the stack
+   * object so "is a cast still being finished?" is answered by the stack
+   * itself; it is cleared the instant the answer is recorded. Anyone adding a
+   * stack-object field must also copy it in `internal/clone.ts` (field-by-field
+   * cloning drops unknown fields).
+   */
+  /**
+   * Whether the BUYBACK cost was paid (CR 702.27a). Absent for spells with no
+   * buyback / unanswered. Read only through {@link spellLeaveDestination} —
+   * where the card goes is one answer, not a flag each exit interprets.
+   */
+  readonly boughtBack?: boolean;
+  readonly awaitingCastChoice?: 'modes' | 'x' | 'kicker' | 'multikicker' | 'modeTarget' | 'buyback';
   /**
    * The zone this spell was CAST FROM. Optional, and absent means `'hand'` —
    * which keeps every state serialized before non-hand casting existed (and
@@ -252,8 +334,15 @@ export interface SpellStackObject {
    * goes to the graveyard. Every exit from the stack (resolution, countering)
    * reads it through {@link spellLeaveDestination}.
    */
-  readonly castFrom?: 'hand' | 'graveyard';
+  readonly castFrom?: 'hand' | 'graveyard' | 'exile';
 }
+
+/**
+ * Why a spell is leaving the stack. The destination differs between the two —
+ * that difference IS buyback — so every exit says which one it is rather than
+ * letting the default decide for it.
+ */
+export type SpellLeaveReason = 'resolve' | 'counter';
 
 /**
  * Where a spell's CARD goes when it leaves the stack WITHOUT resolving to the
@@ -263,8 +352,38 @@ export interface SpellStackObject {
  * COUNTERED (CR 702.34a: "…if it would leave the stack, exile it instead") —
  * countering is precisely a way of leaving the stack.
  */
-export function spellLeaveDestination(spell: SpellStackObject): 'graveyard' | 'exile' {
-  return spell.castFrom === 'graveyard' ? 'exile' : 'graveyard';
+export function spellLeaveDestination(
+  spell: SpellStackObject,
+  reason: SpellLeaveReason,
+): 'graveyard' | 'exile' | 'hand' {
+  // Flashback first: exiling a card cast from the graveyard applies however it
+  // leaves the stack, so it outranks everything else here.
+  if (spell.castFrom === 'graveyard') return 'exile';
+  // Buyback returns the card to its owner's HAND — but only as it RESOLVES
+  // (CR 702.27a). A bought-back spell that is countered goes to the graveyard
+  // like any other countered spell; a caller that forgets the distinction
+  // cannot express it, because the reason is a required argument.
+  if (reason === 'resolve' && spell.boughtBack === true) return 'hand';
+  return 'graveyard';
+}
+
+/**
+ * A MADNESS WINDOW: a discarded card sitting in exile whose owner may still
+ * cast it for its madness cost (CR 702.35a), or decline.
+ *
+ * Modelled as state rather than as a triggered ability on the stack because the
+ * window is a *cast opportunity*, not an effect: what it needs is for one
+ * player to be handed priority with exactly two legal actions — cast that card
+ * from exile, or pass, which declines and drops it into the graveyard where the
+ * ordinary discard would have put it. Both of those are things the existing
+ * action seam already expresses, so every consumer (the pilots, the hotseat UI,
+ * the online server) needs no new transport to play a madness card.
+ */
+export interface MadnessWindow {
+  /** The exiled card that may still be cast. */
+  readonly instanceId: InstanceId;
+  /** Whose window it is — the discarding player, who alone may act on it. */
+  readonly controller: PlayerId;
 }
 
 /**
@@ -395,6 +514,17 @@ export interface GameState {
    * lets the spell finish resolving after the answer. Set only while suspended.
    */
   resolution?: ResolutionFrame | null;
+  /**
+   * An open MADNESS window (see {@link MadnessWindow}) — a card discarded to
+   * exile whose owner has not yet cast it or declined.
+   *
+   * Optional and normally absent, exactly like `pendingChoice`: a state
+   * serialized (or hand-built in a test) before madness existed stays valid, and
+   * a game containing no madness card never touches the field. While it is set,
+   * the ONLY legal actions are its controller casting that card from exile or
+   * passing priority to decline.
+   */
+  madnessWindow?: MadnessWindow | null;
   /**
    * What has happened SO FAR THIS TURN, for the printed cards that ask — revolt
    * ("a permanent you controlled left the battlefield this turn"), morbid, and

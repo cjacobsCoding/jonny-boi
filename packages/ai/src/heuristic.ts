@@ -54,24 +54,28 @@ import type {
 import {
   castTiming,
   convertedManaCost,
-  effectivePower,
-  effectiveToughness,
   isCreature,
   isLand,
   flashbackCostOf,
   isLegalTarget,
+  isBattle,
   isPlaneswalker,
+  protectorOf,
   legalTargetsFor,
+  defenseOf,
   loyaltyOf,
   MANA_COLORS,
   planManaPayment,
-  remainingToughness,
   restrictionOfEffects,
+  modalSpecOf,
+  modeCountsFor,
   targetRestrictionOf,
 } from '@jonny-boi/core';
 import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
-import { valueOfEffects } from './effect-value.js';
+import type { ContinuousIndex } from './board-stats.js';
+import { boardIndex, keywordsOf, power, statTotal, toughness, toughnessLeft } from './board-stats.js';
+import { valueOfEffects, valueOfMode } from './effect-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -134,7 +138,7 @@ type SpellIntent =
        */
       readonly amountIsX?: boolean;
     }
-  | { readonly kind: 'destroyCreature' }
+  | { readonly kind: 'destroyCreature'; readonly exiles: boolean }
   | { readonly kind: 'shrink'; readonly toughness: number }
   | { readonly kind: 'pump'; readonly power: number; readonly toughness: number }
   | { readonly kind: 'counter' }
@@ -156,6 +160,13 @@ type SpellIntent =
       /** False when the modification makes its host WORSE — i.e. it is removal. */
       readonly helpful: boolean;
     }
+  /**
+   * A MODAL spell ("Choose two — …"). Its value is not any one thing it does:
+   * it is the best set of modes this board lets it announce, which changes turn
+   * to turn. Recognised from `def.modal`, which is CORE data (like `attachment`)
+   * rather than a primitive id, so no rename can silently blank it.
+   */
+  | { readonly kind: 'modal' }
   | { readonly kind: 'other' };
 
 /** Build the heuristic pilot with the given (tunable) weights. */
@@ -207,19 +218,78 @@ function decide(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
   const onlyPass = everyActionIsPass(legalActions);
   if (onlyPass) return emit(ctx, legalActions[0] as GameAction, 'nothing useful — passing');
 
+  // A MADNESS window: a card of ours has been discarded to exile and the game is
+  // waiting to hear whether we cast it. It preempts the priority window the same
+  // way a pending choice does — those are the only actions the engine will
+  // accept — so it is answered here rather than left to the spell scorer, which
+  // reads the HAND and would never see the exiled card at all.
+  const madness = view.madnessWindow;
+  if (madness && madness.controller === me) {
+    const play = decideMadness(ctx, weights);
+    if (play) return play;
+  }
+  // ONE continuous index per decision, threaded into everything below. Built here
+  // rather than per permanent because it is O(battlefield) and every stat read in
+  // this decision wants the same answer — see `board-stats.ts` for what reading
+  // without it cost (a Tarmogoyf evaluated as 0/0 and every anthem invisible).
+  //
+  // Built AFTER the three early returns above on purpose: answering a parked
+  // question and "the only legal move is passing" are between them a large share
+  // of all decisions in a real game, and none of them reads a creature's stats, so
+  // an index built at the top of the function would be pure cost on every one.
+  const index = boardIndex(view);
+
   // Combat declarations are their own decision shape.
   if (view.step === 'declareAttackers' && me === view.activePlayer) {
-    const attack = chooseAttack(ctx, weights);
+    const attack = chooseAttack(ctx, weights, index);
     if (attack) return attack;
   }
   if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
-    const block = chooseBlock(ctx, weights);
+    const block = chooseBlock(ctx, weights, index);
     if (block) return block;
   }
 
   // Otherwise: a priority window. Plan the best spell goal and act toward it,
   // or play a land, or pass.
-  return choosePriorityAction(ctx, weights);
+  return choosePriorityAction(ctx, weights, index);
+}
+
+/**
+ * What to do about an open madness window: cast the exiled card, tap toward
+ * being able to, or decline.
+ *
+ * The judgement is one-sided and that is not laziness — it is the shape of the
+ * mechanic. The card has ALREADY been discarded: declining does not keep it, it
+ * puts it in the graveyard. So the only thing being weighed is the madness cost
+ * against a card that is otherwise simply lost, and casting is right whenever
+ * the mana can be produced at all. The engine offers the cast only when the pool
+ * already covers the cost, so the tap-toward step is what makes this reachable
+ * from a board of untapped lands.
+ */
+function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  const cast = legalActions.find(
+    (a): a is Extract<GameAction, { kind: 'castSpell' }> => a.kind === 'castSpell' && a.fromZone === 'exile',
+  );
+  if (cast) {
+    const name = findInstance(view, cast.instanceId)?.def.name ?? 'the discarded card';
+    return emit(ctx, cast, ctx.trace ? `cast ${name} for its madness cost` : NO_REASON, weights.genericSpellScore);
+  }
+  const window = view.madnessWindow;
+  const exiled = window ? view.players[me].exile.find((c) => c.instanceId === window.instanceId) : undefined;
+  const cost = exiled?.def.madness;
+  if (cost) {
+    const plan = planManaPayment(view as GameState, me, cost, legalActions);
+    const next = plan?.[0];
+    if (next) {
+      const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
+      return emit(ctx, tap, ctx.trace ? `tapping toward ${exiled!.def.name}'s madness cost` : NO_REASON);
+    }
+  }
+  // Cannot pay: passing is the decline, and it is the only way to unblock the
+  // game — leaving the window open would stall it forever.
+  return emit(ctx, passAction(view), ctx.trace ? 'cannot pay the madness cost — declining' : NO_REASON);
 }
 
 // --- priority-window play (lands, mana, spells) --------------------------------
@@ -243,22 +313,28 @@ interface SpellGoal {
   readonly fromZone?: 'graveyard';
 }
 
-function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): GameAction {
+function choosePriorityAction(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): GameAction {
   const { view, legalActions } = ctx;
 
   // An activated ability that fixes mana (a fetchland) is checked before
   // anything else: it costs no card from hand, and leaving it unused is the same
   // mistake as leaving a land in hand — the deck simply never does what it was
   // built to do.
-  const ability = bestAbility(ctx, weights);
+  const ability = bestAbility(ctx, weights, index);
   if (ability) return ability;
 
   const canPlayLand = anyActionOfKind(legalActions, 'playLand');
-  const bestSpell = bestSpellGoal(ctx, weights);
+  // Cycling competes with the plays below on the same scale — see `bestCycle`.
+  const cycle = bestCycle(ctx, weights);
+  const bestSpell = bestSpellGoal(ctx, weights, index);
   // Equipping is a real play competing with the others, not a reflex — see
   // `bestEquipPlay`. It is offered only at sorcery speed by the engine, so it can
   // only turn up in a window where a land or a spell is also possible.
-  const equip = bestEquipPlay(ctx, weights);
+  const equip = bestEquipPlay(ctx, weights, index);
 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
@@ -271,8 +347,9 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
   const landScore = canPlayLand ? weights.playLandScore : -Infinity;
   const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
   const equipScore = equip ? equip.score : -Infinity;
+  const cycleScore = cycle ? cycle.score : -Infinity;
 
-  if (landScore >= spellScore && landScore >= equipScore && canPlayLand) {
+  if (landScore >= spellScore && landScore >= equipScore && landScore >= cycleScore && canPlayLand) {
     const landAction = bestLandDrop(view, legalActions, weights);
     if (landAction) {
       const why = ctx.trace ? describeLandDrop(view, landAction, legalActions, weights) : NO_REASON;
@@ -284,8 +361,12 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
     return emit(ctx, equip.action, ctx.trace ? equip.label : NO_REASON, equipScore);
   }
 
-  if (bestSpell && bestSpell.goal.score > weights.passScore) {
+  if (bestSpell && bestSpell.goal.score > weights.passScore && spellScore >= cycleScore) {
     return pursueSpell(ctx, bestSpell);
+  }
+
+  if (cycle && cycleScore > weights.passScore) {
+    return pursueCycle(ctx, cycle);
   }
 
   // Nothing worth doing with our mana → pass.
@@ -308,7 +389,11 @@ function choosePriorityAction(ctx: DecisionContext, weights: HeuristicWeights): 
  * unused until they can be scored honestly, which is visible and safe rather
  * than confidently wrong.
  */
-function bestAbility(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+function bestAbility(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): GameAction | undefined {
   const { view, legalActions } = ctx;
   for (const action of legalActions) {
     if (action.kind !== 'activateAbility') continue;
@@ -318,7 +403,7 @@ function bestAbility(ctx: DecisionContext, weights: HeuristicWeights): GameActio
     if (!fetchesALand(ability)) continue;
     return emit(ctx, action, ctx.trace ? `activate ${ability.label}` : NO_REASON, weights.playLandScore);
   }
-  return bestLoyaltyActivation(ctx, weights);
+  return bestLoyaltyActivation(ctx, weights, index);
 }
 
 /**
@@ -337,7 +422,11 @@ function bestAbility(ctx: DecisionContext, weights: HeuristicWeights): GameActio
  * card knowledge. The best positive-scoring activation wins; minus abilities pay
  * for their counters through their effect value or don't happen.
  */
-function bestLoyaltyActivation(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+function bestLoyaltyActivation(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): GameAction | undefined {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
   let best: { action: GameAction; score: number; label: string } | undefined;
@@ -348,13 +437,14 @@ function bestLoyaltyActivation(ctx: DecisionContext, weights: HeuristicWeights):
     const ability = source?.def.activated?.[action.abilityIndex];
     const loyalty = ability?.cost.loyalty;
     if (!ability || loyalty === undefined) continue;
-    cards ??= cardValueContext(view as GameState);
+    cards ??= cardValueContext(view as GameState, index);
     const effectValue = valueOfEffects(ability.effects, {
       state: view as GameState,
       player: me,
       targets: action.targets ?? [],
       weights,
       cards,
+      index,
     });
     const score = weights.loyaltyAbilityBaseScore + weights.loyaltyPerCounter * loyalty + effectValue;
     if (score <= weights.passScore) continue;
@@ -413,6 +503,7 @@ const FETCH_MEMO = new WeakMap<{ readonly effects: readonly EffectRef[] }, boole
 function bestEquipPlay(
   ctx: DecisionContext,
   weights: HeuristicWeights,
+  index: ContinuousIndex,
 ): { readonly action: GameAction; readonly score: number; readonly label: string } | undefined {
   const { view, legalActions } = ctx;
   const me = view.priorityPlayer;
@@ -438,8 +529,8 @@ function bestEquipPlay(
     if (abilities === undefined || perm.controller !== me) continue;
     const modifies = perm.def.attachment?.modifies;
     if (!modifies) continue;
-    for (let index = 0; index < abilities.length; index++) {
-      const ability = abilities[index]!;
+    for (let a = 0; a < abilities.length; a++) {
+      const ability = abilities[a]!;
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
       const mana = ability.cost.mana;
       // A cost with a non-mana component is not the plain Equip this understands;
@@ -447,10 +538,10 @@ function bestEquipPlay(
       if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
 
       hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
-      const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
+      const host = bestEquipHost(view, hosts, perm.attachedTo ?? null, index);
       if (!host) continue;
 
-      const score = scoreEquip(modifies, host, weights);
+      const score = scoreEquip(modifies, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
       const plan = planManaPayment(view as GameState, me, mana, legalActions);
       if (!plan) continue; // cannot fund it this turn
@@ -461,7 +552,7 @@ function bestEquipPlay(
               kind: 'activateAbility',
               player: me,
               instanceId: perm.instanceId,
-              abilityIndex: index,
+              abilityIndex: a,
               targets: [host.instanceId],
             };
       best = {
@@ -487,13 +578,14 @@ function bestEquipHost(
   view: PilotView,
   offered: readonly (InstanceId | PlayerId)[],
   currentHost: InstanceId | null,
+  index: ContinuousIndex,
 ): CardInstance | undefined {
   let best: CardInstance | undefined;
   for (const id of offered) {
     if (typeof id !== 'number' || id === currentHost) continue;
     const candidate = findInstance(view, id);
     if (!candidate || !isCreature(candidate.def)) continue;
-    if (!best || effectivePower(candidate) > effectivePower(best)) best = candidate;
+    if (!best || power(candidate, index) > power(best, index)) best = candidate;
   }
   return best;
 }
@@ -510,6 +602,7 @@ function scoreEquip(
   modifies: PermanentModification,
   host: CardInstance,
   weights: HeuristicWeights,
+  index: ContinuousIndex,
 ): number | undefined {
   const stats = (modifies.power ?? 0) + (modifies.toughness ?? 0);
   const keywords = modifies.keywords ? Object.values(modifies.keywords).filter(Boolean).length : 0;
@@ -518,7 +611,7 @@ function scoreEquip(
     weights.attachBaseScore +
     weights.attachPerStat * stats +
     weights.attachPerKeyword * keywords +
-    weights.castCreaturePerStat * effectivePower(host)
+    weights.castCreaturePerStat * power(host, index)
   );
 }
 
@@ -540,8 +633,12 @@ interface FundedGoal {
  *
  * Returns undefined if nothing is worth casting or nothing is payable.
  */
-function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedGoal | undefined {
-  const scored = scoredSpellGoals(ctx.view, weights, ctx.trace !== undefined);
+function bestSpellGoal(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): FundedGoal | undefined {
+  const scored = scoredSpellGoals(ctx.view, weights, ctx.trace !== undefined, index);
   // Best-first, but only a goal we can genuinely fund. Planning is the expensive
   // step, so it runs on ranked candidates and stops at the first payable one.
   const me = ctx.view.priorityPlayer;
@@ -559,7 +656,12 @@ function bestSpellGoal(ctx: DecisionContext, weights: HeuristicWeights): FundedG
  * plans only until it finds one payable goal (cheapest possible), while the search
  * policy ({@link policyCandidates}) plans every goal so it can search them all.
  */
-function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: boolean): SpellGoal[] {
+function scoredSpellGoals(
+  view: PilotView,
+  weights: HeuristicWeights,
+  explain: boolean,
+  index: ContinuousIndex,
+): SpellGoal[] {
   const me = view.priorityPlayer;
   const opp = otherPlayer(me);
   const hand = view.players[me].hand;
@@ -600,13 +702,13 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
       intent = { ...intent, amount: projected };
     }
     oppCreatures ??= creaturesControlledBy(view, opp);
-    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain);
+    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
     // A spell that prints a target restriction is only a goal if we can point it
     // somewhere legal. This runs on EVERY goal, not just the ones the scorer
     // understands, so a restricted card the scorer classifies as 'other' (and
     // would therefore cast with no target at all) still gets a legal target
     // instead of being rejected by the engine and retried forever.
-    const legal = goal ? withLegalTargets(view, opp, goal) : undefined;
+    const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
     if (legal) scored.push(legal);
   }
 
@@ -631,8 +733,8 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
 
     const intent = classifySpell(def);
     oppCreatures ??= creaturesControlledBy(view, opp);
-    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain);
-    const legal = goal ? withLegalTargets(view, opp, goal) : undefined;
+    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
+    const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
     if (legal) {
       scored.push({
         ...legal,
@@ -660,7 +762,16 @@ function scoredSpellGoals(view: PilotView, weights: HeuristicWeights, explain: b
  * the same action on the next pass — a live-lock. It is also simply better play:
  * a burn spell that cannot hit players should never be scored as reach.
  */
-function withLegalTargets(view: PilotView, opp: PlayerId, goal: SpellGoal): SpellGoal | undefined {
+function withLegalTargets(
+  view: PilotView,
+  opp: PlayerId,
+  goal: SpellGoal,
+  index: ContinuousIndex,
+): SpellGoal | undefined {
+  // A MODAL spell is aimed per mode at cast time, never as a whole card, and
+  // the engine rejects a modal cast that carries a target — so the goal keeps
+  // the empty target list `scoreSpell` gave it.
+  if (modalSpecOf(goal.card.def)) return goal.targets.length === 0 ? goal : { ...goal, targets: [] };
   const restriction = targetRestrictionOf(goal.card.def);
   if (restriction === undefined) return goal; // unrestricted — the scorer's choice stands
   const state = view as GameState;
@@ -671,7 +782,7 @@ function withLegalTargets(view: PilotView, opp: PlayerId, goal: SpellGoal): Spel
     if (!isLegalTarget(state, restriction, target, goal.card.controller, goal.card.def)) continue;
     return goal.targets.length === 1 ? goal : { ...goal, targets: [target] };
   }
-  const fallback = defaultLegalTarget(view, opp, restriction, goal.card.def);
+  const fallback = defaultLegalTarget(view, opp, restriction, index, goal.card.def);
   return fallback === undefined ? undefined : { ...goal, targets: [fallback] };
 }
 
@@ -685,6 +796,7 @@ function defaultLegalTarget(
   view: PilotView,
   opp: PlayerId,
   restriction: TargetRestriction,
+  index: ContinuousIndex,
   source?: CardDefinition,
 ): InstanceId | PlayerId | undefined {
   if (restriction === 'player' || restriction === 'playerOrPlaneswalker') return opp;
@@ -699,7 +811,7 @@ function defaultLegalTarget(
   const legal = creaturesControlledBy(view, opp).filter((creature) =>
     isLegalTarget(state, probe, creature.instanceId, undefined, source),
   );
-  const biggest = biggestThreat(legal);
+  const biggest = biggestThreat(legal, index);
   if (biggest) return biggest.instanceId;
   if (restriction === 'creatureOrPlaneswalker') {
     return walkersControlledBy(view, opp)[0]?.instanceId;
@@ -720,6 +832,7 @@ function scoreSpell(
   intent: SpellIntent,
   weights: HeuristicWeights,
   explain: boolean,
+  index: ContinuousIndex,
 ): SpellGoal | undefined {
   const cost = card.def.cost ?? {};
 
@@ -742,9 +855,11 @@ function scoreSpell(
       // only allowed a face burn when no creature was killable at all.
       // (Scanned in place: the old `filter(...)` built a throwaway array per
       // candidate spell, and `biggestThreat` only ever wanted the maximum.)
-      const target = intent.canTargetCreature ? biggestThreatWithin(oppCreatures, intent.amount) : undefined;
+      const target = intent.canTargetCreature
+        ? biggestThreatWithin(oppCreatures, intent.amount, index)
+        : undefined;
       const killScore = target
-        ? weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target)
+        ? weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index)
         : -Infinity;
       const faceScore = intent.canTargetPlayer ? faceBurnScore(life, intent.amount, weights) : -Infinity;
       // A walker the burn can FINISH is removal too — priced per loyalty plus the
@@ -780,32 +895,40 @@ function scoreSpell(
           cost,
           targets: [target.instanceId],
           reason: explain
-          ? `burn removal — kill ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`
+          ? `burn removal — kill ${target.def.name} (${power(target, index)}/${toughness(target, index)})`
           : NO_REASON,
         };
       }
       return undefined;
     }
     case 'destroyCreature': {
-      const target = biggestThreat(oppCreatures);
+      // An effect that says DESTROY does nothing at all to an indestructible
+      // creature (CR 702.12b), so pointing removal at one is a wasted card. The
+      // pilot looks past it for the biggest thing it CAN kill, and holds the
+      // spell if the board is nothing but indestructible creatures. Exile-based
+      // removal has no such exemption and keeps the whole list.
+      const reachable = intent.exiles
+        ? oppCreatures
+        : oppCreatures.filter((c) => !isIndestructible(c, index));
+      const target = biggestThreat(reachable, index);
       if (!target) return undefined; // no target → don't waste removal
       return {
-        score: weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target),
+        score: weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index),
         card,
         cost,
         targets: [target.instanceId],
         reason: explain
-          ? `removal — destroy ${target.def.name} (${effectivePower(target)}/${effectiveToughness(target)})`
+          ? `removal — destroy ${target.def.name} (${power(target, index)}/${toughness(target, index)})`
           : NO_REASON,
       };
     }
     case 'shrink': {
       // Shrink-removal kills exactly what its toughness reduction can finish off,
       // so it is scored and targeted like burn: the biggest thing it can kill.
-      const target = biggestThreatWithin(oppCreatures, intent.toughness);
+      const target = biggestThreatWithin(oppCreatures, intent.toughness, index);
       if (!target) return undefined; // it would shrink something that survives — hold it
       return {
-        score: weights.removalBaseScore + weights.removalPerPowerOfTarget * effectivePower(target),
+        score: weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index),
         card,
         cost,
         targets: [target.instanceId],
@@ -816,7 +939,13 @@ function scoreSpell(
       const target = counterTarget(view, otherPlayer(opp));
       if (!target) return undefined; // nothing on the stack worth answering — hold it
       return {
-        score: weights.removalBaseScore + cardValue(target.card, weights, cardValueContext(view as GameState)),
+        // Built here rather than per decision because a counterspell with something
+        // worth countering on the stack is rare, and this is the only branch that
+        // needs the card-value ruler. The decision's index is reused, so it costs
+        // the land count and nothing else.
+        score:
+          weights.removalBaseScore +
+          cardValue(target.card, weights, cardValueContext(view as GameState, index)),
         card,
         cost,
         targets: [target.instanceId],
@@ -824,7 +953,7 @@ function scoreSpell(
       };
     }
     case 'sweeper': {
-      const net = sweeperValue(view, otherPlayer(opp), weights);
+      const net = sweeperValue(view, otherPlayer(opp), weights, index);
       if (net <= 0) return undefined; // our own board would pay for it — hold it
       return { score: net, card, cost, targets: [], reason: explain ? `sweep the board (net ${net})` : NO_REASON };
     }
@@ -839,7 +968,7 @@ function scoreSpell(
       };
     }
     case 'pump': {
-      const play = bestPumpPlay(view, otherPlayer(opp), opp, intent, weights, explain);
+      const play = bestPumpPlay(view, otherPlayer(opp), opp, intent, weights, explain, index);
       if (!play) return undefined; // no combat use right now — hold the trick
       return { score: play.score, card, cost, targets: [play.target], reason: play.reason };
     }
@@ -849,7 +978,7 @@ function scoreSpell(
       // enter attached to nothing and (for an Aura) die on the spot.
       const me = otherPlayer(opp);
       const hosts = intent.helpful ? creaturesControlledBy(view, me) : oppCreatures;
-      const host = biggestThreat(hosts);
+      const host = biggestThreat(hosts, index);
       if (!host) return undefined;
       return {
         score: attachmentScore(intent, weights),
@@ -859,6 +988,45 @@ function scoreSpell(
         reason: explain
           ? `${intent.helpful ? 'suit up' : 'shrink'} ${host.def.name} with ${card.def.name}`
           : NO_REASON,
+      };
+    }
+    case 'modal': {
+      // Priced as the sum of the best modes it could announce RIGHT NOW, each
+      // aimed as well as it could be — the same `valueOfMode` ruler the pilot
+      // will use a moment later when it actually answers the mode question, so
+      // "worth casting" and "which modes" cannot disagree.
+      //
+      // TARGETS ARE DELIBERATELY EMPTY: a modal spell names no whole-card
+      // target (its aims are per mode, asked at cast), and the engine rejects a
+      // modal cast that carries one.
+      const me = otherPlayer(opp);
+      const counts = modeCountsFor(view as GameState, card.def, me);
+      if (!counts || counts.max <= 0) return undefined; // nothing announceable
+      const cards = cardValueContext(view as GameState);
+      const context = {
+        state: view as GameState,
+        player: me,
+        targets: [] as readonly (InstanceId | PlayerId)[],
+        weights,
+        cards,
+        index: cards.index,
+      };
+      const values = counts.choosable
+        .map((mode) =>
+          valueOfMode(
+            { id: mode.id, effects: mode.effects, ...(mode.targets !== undefined ? { targets: mode.targets } : {}) },
+            context,
+          ),
+        )
+        .sort((a, b) => b - a);
+      const take = Math.max(counts.min, Math.min(counts.max, values.filter((v) => v > 0).length));
+      const score = values.slice(0, take).reduce((sum, v) => sum + v, 0);
+      return {
+        score,
+        card,
+        cost,
+        targets: [],
+        reason: explain ? `cast ${card.def.name} (${take} mode(s))` : NO_REASON,
       };
     }
     case 'other':
@@ -932,11 +1100,20 @@ function counterTarget(view: PilotView, me: PlayerId) {
  * nothing to sweep — or one that costs us more than it costs them — scores zero or
  * less and is held, instead of being fired into an empty board for value nobody got.
  */
-function sweeperValue(view: PilotView, me: PlayerId, weights: HeuristicWeights): number {
+function sweeperValue(
+  view: PilotView,
+  me: PlayerId,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): number {
   let net = 0;
   for (const perm of view.battlefield) {
     if (!isCreature(perm.def)) continue;
-    const stats = effectivePower(perm as CardInstance) + effectiveToughness(perm as CardInstance);
+    // A wipe neither kills their indestructible creatures nor costs us ours, so
+    // neither belongs in the trade. Counting them makes the pilot cast a Wrath
+    // into a board it cannot actually clear.
+    if (isIndestructible(perm as CardInstance, index)) continue;
+    const stats = statTotal(perm as CardInstance, index);
     net += perm.controller === me ? -stats * weights.ownCreatureLossPerStat : stats * weights.killEnemyPerStat;
   }
   return net * weights.removalPerPowerOfTarget;
@@ -970,6 +1147,7 @@ function bestPumpPlay(
   intent: Extract<SpellIntent, { kind: 'pump' }>,
   weights: HeuristicWeights,
   explain: boolean,
+  index: ContinuousIndex,
 ): PumpPlay | undefined {
   const combat = view.combat;
   if (!combat) return undefined;
@@ -1009,7 +1187,7 @@ function bestPumpPlay(
   if (iAmAttacking) {
     for (let i = 0; i < engagements.length; i++) {
       const e = engagements[i] as { own: CardInstance; enemies: CardInstance[] };
-      if (e.enemies.length === 0) unblockedDamage += effectivePower(e.own);
+      if (e.enemies.length === 0) unblockedDamage += power(e.own, index);
     }
   }
 
@@ -1039,32 +1217,32 @@ function bestPumpPlay(
     }
 
     // In a fight: does the pump flip either outcome?
-    const ownToughLeft = remainingToughness(own);
-    const ownPower = effectivePower(own);
+    const ownToughLeft = toughnessLeft(own, index);
+    const ownPower = power(own, index);
     let incoming = 0;
-    for (let i = 0; i < enemies.length; i++) incoming += effectivePower(enemies[i] as CardInstance);
+    for (let i = 0; i < enemies.length; i++) incoming += power(enemies[i] as CardInstance, index);
 
     const diesNow = incoming >= ownToughLeft;
     const survivesWithPump = incoming < ownToughLeft + intent.toughness;
     // The biggest enemy we could newly kill with the power boost.
     let newlyKilled: CardInstance | undefined;
     for (const enemy of enemies) {
-      const need = remainingToughness(enemy);
+      const need = toughnessLeft(enemy, index);
       if (ownPower >= need) continue; // already killing it — the pump adds nothing here
       if (ownPower + intent.power < need) continue; // still can't kill it
-      if (!newlyKilled || effectivePower(enemy) > effectivePower(newlyKilled)) newlyKilled = enemy;
+      if (!newlyKilled || power(enemy, index) > power(newlyKilled, index)) newlyKilled = enemy;
     }
 
     let score = 0;
     let saves = false;
     if (diesNow && survivesWithPump) {
-      score += weights.pumpSaveCreatureScore + weights.ownCreatureLossPerStat * (ownPower + effectiveToughness(own));
+      score += weights.pumpSaveCreatureScore + weights.ownCreatureLossPerStat * (ownPower + toughness(own, index));
       saves = true;
     }
     if (newlyKilled) {
       score +=
         weights.pumpWinFightScore +
-        weights.killEnemyPerStat * (effectivePower(newlyKilled) + effectiveToughness(newlyKilled));
+        weights.killEnemyPerStat * statTotal(newlyKilled, index);
     }
     if (score > 0 && (!best || score > best.score)) {
       best = {
@@ -1085,6 +1263,103 @@ function bestPumpPlay(
  * pilot stops tapping the moment the cost is covered — no more floating a fifth
  * mana for a four-mana turn.
  */
+/** A cycling play the pilot wants to make: which card, how it is funded, why. */
+interface CycleGoal {
+  readonly action: Extract<GameAction, { kind: 'cycleCard' }>;
+  readonly plan: readonly ManaTapPlan[];
+  readonly score: number;
+  readonly reason: string;
+}
+
+/**
+ * The best CYCLING play right now, or `undefined`.
+ *
+ * Cycling exists to fix the two hands that lose games — the flooded one and the
+ * one with nothing to do — so the policy is exactly those two cases and nothing
+ * card-specific:
+ *
+ *  1. **Flooded.** We already control `floodedLandCount` lands, so another land
+ *     in hand is worth less than an unknown card. Cycling it away is close to
+ *     free, and this is the case that makes cycling lands worth playing at all.
+ *  2. **The turn is ending with mana unspent.** Mana empties at end of step
+ *     whatever we do, so converting it into a card costs nothing — scored barely
+ *     above passing, so it never outbids a real play.
+ *
+ * Funding goes through the SAME `planManaPayment` every spell goal uses, which
+ * matters more than it looks: the engine only OFFERS `cycleCard` once the pool
+ * already covers the cost, so a pilot that did not plan its taps would never see
+ * the action and cycling would be inert on a board of untapped lands.
+ */
+function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal | undefined {
+  const { view } = ctx;
+  const me = view.priorityPlayer;
+  const hand = view.players[me].hand;
+  // CHEAPEST QUESTION FIRST, and it is not a micro-optimisation: this function
+  // runs on every priority decision of every game in a 700-game gauntlet, and
+  // almost no deck holds a cycling card at all. One property read per hand card
+  // answers "is there anything to consider?" before anything walks the
+  // battlefield — an unconditional board walk here measured on the sim's hot
+  // path for a policy that then found nothing to do.
+  let anyCycling = false;
+  for (const card of hand) {
+    const abilities = card.def.cycling;
+    if (abilities && abilities.length > 0) {
+      anyCycling = true;
+      break;
+    }
+  }
+  if (!anyCycling) return undefined;
+  let landsInPlay = 0;
+  for (const perm of view.battlefield) {
+    if (perm.controller === me && isLand(perm.def)) landsInPlay += 1;
+  }
+  const flooded = landsInPlay >= weights.floodedLandCount;
+  // "The turn is ending" is read off the step rather than guessed from the
+  // absence of other plays: at the end step nothing else will use this mana.
+  const turnEnding = view.step === 'end';
+
+  let best: CycleGoal | undefined;
+  for (const card of hand) {
+    const abilities = card.def.cycling;
+    if (!abilities || abilities.length === 0) continue;
+    for (let index = 0; index < abilities.length; index++) {
+      const ability = abilities[index]!;
+      const surplusLand = flooded && isLand(card.def);
+      const score = surplusLand
+        ? weights.cycleFloodedScore
+        : turnEnding
+          ? weights.cycleIdleScore
+          : -Infinity;
+      if (score <= weights.passScore) continue;
+      if (best && score <= best.score) continue;
+      const plan = planManaPayment(view as GameState, me, ability.cost, ctx.legalActions);
+      if (!plan) continue;
+      best = {
+        action: { kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index },
+        plan,
+        score,
+        reason: ctx.trace
+          ? `${ability.label} ${card.def.name}${surplusLand ? ` (flooded at ${landsInPlay} lands)` : ' (mana would go unused)'}`
+          : NO_REASON,
+      };
+    }
+  }
+  return best;
+}
+
+/** Take the next step toward a cycling play: tap for it, or cycle. */
+function pursueCycle(ctx: DecisionContext, goal: CycleGoal): GameAction {
+  const next = goal.plan[0];
+  if (!next) return emit(ctx, goal.action, goal.reason, goal.score);
+  const tap: GameAction = {
+    kind: 'tapForMana',
+    player: ctx.view.priorityPlayer,
+    instanceId: next.instanceId,
+    mode: next.mode,
+  };
+  return emit(ctx, tap, goal.reason, goal.score);
+}
+
 function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
   const { view } = ctx;
   const me = view.priorityPlayer;
@@ -1125,7 +1400,11 @@ function describeProduction(production: ManaProduction): string {
  * wins/breaks even on the likely trade. Returns a (possibly empty) narrowed
  * `declareAttackers` the engine validates.
  */
-function chooseAttack(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+function chooseAttack(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): GameAction | undefined {
   const { view, legalActions } = ctx;
   const me = view.activePlayer;
   const opp = otherPlayer(me);
@@ -1142,14 +1421,14 @@ function chooseAttack(ctx: DecisionContext, weights: HeuristicWeights): GameActi
   for (const id of eligible) {
     const attacker = findInstance(view, id);
     if (!attacker) continue;
-    if (attackIsProfitable(attacker, enemyBlockers, weights)) chosen.push(id);
+    if (attackIsProfitable(attacker, enemyBlockers, weights, index)) chosen.push(id);
   }
 
   if (chosen.length === 0) {
     // Nothing profitable to attack with → declare no attackers (pass the step).
     return emit(ctx, passAction(view), 'no profitable attack — holding back', weights.passScore);
   }
-  const attackTargets = planWalkerAttack(view, opp, chosen, weights);
+  const attackTargets = planWalkerAttack(view, opp, chosen, weights, index);
   const action: GameAction = {
     kind: 'declareAttackers',
     player: me,
@@ -1183,42 +1462,67 @@ function planWalkerAttack(
   opp: PlayerId,
   chosen: readonly InstanceId[],
   weights: HeuristicWeights,
+  index: ContinuousIndex,
 ): Record<InstanceId, InstanceId | PlayerId> | undefined {
+  // Both kinds of attackable object are considered TOGETHER against one budget of
+  // power, because they compete for the same attackers: a walker the defender
+  // controls, and a battle the defender PROTECTS (which is normally one this
+  // pilot's own side cast). Whichever is worth more and is actually finishable
+  // gets the diversion; ties go to the walker, which is the recurring threat.
   const walkers = walkersControlledBy(view, opp);
-  if (walkers.length === 0) return undefined;
+  const battles = battlesProtectedBy(view, opp);
+  if (walkers.length === 0 && battles.length === 0) return undefined;
 
   const attackers = chosen
     .map((id) => findInstance(view, id))
     .filter((c): c is CardInstance => c !== undefined);
   let totalPower = 0;
-  for (const attacker of attackers) totalPower += effectivePower(attacker);
-  // Lethal to the player → the walker can be dealt with after the handshake.
+  for (const attacker of attackers) totalPower += power(attacker, index);
+  // Lethal to the player → nothing is diverted. Winning now beats any object.
   if (totalPower >= view.players[opp].life) return undefined;
 
-  // The best walker the whole attack could finish.
+  // The best object the whole attack could FINISH, priced by kind. Chip damage is
+  // never bought for either kind: an unfinishable target trades real face damage
+  // for a discount the opponent controls, and on a battle it buys literally
+  // nothing, since the reward only pays on the last counter.
   let target: CardInstance | undefined;
+  let targetNeed = 0;
+  let targetWorth = 0;
   for (const walker of walkers) {
     const loyalty = loyaltyOf(walker);
     if (loyalty <= 0 || loyalty > totalPower) continue;
-    if (!target || loyalty > loyaltyOf(target)) target = walker;
+    const worth = weights.walkerThreatPerLoyalty * loyalty + weights.walkerKillBonus;
+    if (target === undefined || worth > targetWorth) {
+      target = walker;
+      targetNeed = loyalty;
+      targetWorth = worth;
+    }
+  }
+  for (const battle of battles) {
+    const defense = defenseOf(battle);
+    if (defense <= 0 || defense > totalPower) continue;
+    const worth = weights.battleThreatPerDefense * defense + weights.battleDefeatBonus;
+    // Strictly greater, so a walker of equal worth keeps the diversion.
+    if (target === undefined || worth > targetWorth) {
+      target = battle;
+      targetNeed = defense;
+      targetWorth = worth;
+    }
   }
   if (!target) return undefined;
-  // Only divert when killing it is actually worth more than the face damage the
-  // diverted power gives up (walkers usually are, via the per-loyalty pricing).
-  const loyalty = loyaltyOf(target);
-  const walkerWorth = weights.walkerThreatPerLoyalty * loyalty + weights.walkerKillBonus;
-  if (walkerWorth < weights.faceDamageValue * loyalty) return undefined;
+  // Only divert when the object is worth more than the face damage given up.
+  if (targetWorth < weights.faceDamageValue * targetNeed) return undefined;
 
-  // Fewest attackers: biggest first until the loyalty is covered.
-  const byPowerDesc = [...attackers].sort((a, b) => effectivePower(b) - effectivePower(a));
+  // Fewest attackers: biggest first until the need is covered.
+  const byPowerDesc = [...attackers].sort((a, b) => power(b, index) - power(a, index));
   const assigned: Record<InstanceId, InstanceId | PlayerId> = {};
   let covered = 0;
   for (const attacker of byPowerDesc) {
-    if (covered >= loyalty) break;
+    if (covered >= targetNeed) break;
     assigned[attacker.instanceId] = target.instanceId;
-    covered += effectivePower(attacker);
+    covered += power(attacker, index);
   }
-  return covered >= loyalty ? assigned : undefined;
+  return covered >= targetNeed ? assigned : undefined;
 }
 
 /**
@@ -1231,20 +1535,21 @@ function attackIsProfitable(
   attacker: CardInstance,
   enemyBlockers: readonly CardInstance[],
   weights: HeuristicWeights,
+  index: ContinuousIndex,
 ): boolean {
-  const myPower = effectivePower(attacker);
-  const myTough = effectiveToughness(attacker);
+  const myPower = power(attacker, index);
+  const myTough = toughness(attacker, index);
   if (myPower <= 0) return false; // a 0-power attacker accomplishes nothing
 
   // The opponent will block if a blocker kills us and the trade favours them.
   // Find the blocker that would profitably kill us; if one exists, weigh the trade.
   let bestEnemyValue = -Infinity; // value to the OPPONENT of their best block
-  let blockerExists = false;
+  let eligibleBlockers = 0;
   for (const b of enemyBlockers) {
-    if (!canBlockByEvasion(attacker, b)) continue;
-    blockerExists = true;
-    const bPower = effectivePower(b);
-    const bTough = effectiveToughness(b);
+    if (!canBlockByEvasion(attacker, b, index)) continue;
+    eligibleBlockers += 1;
+    const bPower = power(b, index);
+    const bTough = toughness(b, index);
     const attackerDies = bPower >= myTough;
     const blockerDies = myPower >= bTough;
     // Value to the opponent: they gain by killing our creature, lose by losing theirs.
@@ -1253,6 +1558,13 @@ function attackIsProfitable(
       (blockerDies ? weights.ownCreatureLossPerStat * (bPower + bTough) : 0);
     if (enemyValue > bestEnemyValue) bestEnemyValue = enemyValue;
   }
+
+  // Our attacker's own blocking requirement decides how many of those eligible
+  // blockers the defender actually needs: menace (or "except by N or more") means
+  // a single blocker is not a legal block at all, so a lone potential blocker is
+  // no deterrent and this attack is really unopposed.
+  const blockersNeeded = needsMultipleBlockers(attacker) ? MENACE_BLOCKERS_NEEDED : 1;
+  const blockerExists = eligibleBlockers >= blockersNeeded;
 
   // If the opponent has a block that's good for them (positive value) AND it kills
   // our attacker, attacking loses value — hold back unless we'd trade up.
@@ -1277,7 +1589,11 @@ function attackIsProfitable(
  * block when the trade is at least break-even. Returns a constructed
  * `declareBlockers` the engine validates.
  */
-function chooseBlock(ctx: DecisionContext, weights: HeuristicWeights): GameAction | undefined {
+function chooseBlock(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): GameAction | undefined {
   const { view } = ctx;
   const me = defendingPlayer(view);
   const combat = view.combat;
@@ -1289,7 +1605,7 @@ function chooseBlock(ctx: DecisionContext, weights: HeuristicWeights): GameActio
   if (Object.keys(combat.blocks).length > 0) return undefined;
 
   const myLife = view.players[me].life;
-  const incomingDamage = totalIncomingDamage(view, combat.attackers);
+  const incomingDamage = totalIncomingDamage(view, combat.attackers, index);
   const facingLethal = incomingDamage >= myLife;
   const desperate = facingLethal || myLife <= weights.desperateLifeThreshold;
 
@@ -1302,10 +1618,10 @@ function chooseBlock(ctx: DecisionContext, weights: HeuristicWeights): GameActio
   const attackers = [...combat.attackers]
     .map((id) => findInstance(view, id))
     .filter((c): c is CardInstance => c !== undefined)
-    .sort((a, b) => effectivePower(b) - effectivePower(a));
+    .sort((a, b) => power(b, index) - power(a, index));
 
   for (const attacker of attackers) {
-    const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights);
+    const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights, index);
     if (blocker) {
       blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
       used.add(blocker.instanceId);
@@ -1337,17 +1653,23 @@ function pickBlocker(
   used: Set<InstanceId>,
   desperate: boolean,
   weights: HeuristicWeights,
+  index: ContinuousIndex,
 ): CardInstance | undefined {
-  const aPower = effectivePower(attacker);
-  const aTough = effectiveToughness(attacker);
+  // A creature that can only be blocked by two or more is one this pilot cannot
+  // block at all: it assigns a single blocker per attacker, and a lone blocker on
+  // a menacing attacker makes the WHOLE declaration illegal - so every other
+  // block in the same action is lost with it.
+  if (needsMultipleBlockers(attacker)) return undefined;
+  const aPower = power(attacker, index);
+  const aTough = toughness(attacker, index);
 
   let best: CardInstance | undefined;
   let bestValue = -Infinity;
   for (const b of blockers) {
     if (used.has(b.instanceId)) continue;
-    if (!canBlockByEvasion(attacker, b)) continue;
-    const bPower = effectivePower(b);
-    const bTough = effectiveToughness(b);
+    if (!canBlockByEvasion(attacker, b, index)) continue;
+    const bPower = power(b, index);
+    const bTough = toughness(b, index);
     const blockerDies = aPower >= bTough;
     const attackerDies = bPower >= aTough;
     // Trade value to US: gain by killing the attacker, lose by losing our blocker.
@@ -1387,6 +1709,9 @@ function classifySpell(def: CardDefinition): SpellIntent {
 }
 
 function computeSpellIntent(def: CardDefinition): SpellIntent {
+  // Checked FIRST: a modal card's whole script is its modes, so the primitive
+  // scan below would find nothing at all and score Cryptic Command as a blank.
+  if (modalSpecOf(def)) return { kind: 'modal' };
   // Checked before the creature branch so a creature Aura (bestow-style) is still
   // read as an attachment, and before the primitive scan because an attachment's
   // value is in its declared modification, not in the ref that attaches it.
@@ -1435,7 +1760,11 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
       };
     }
     if (ref.primitive === PRIMITIVE.destroyTarget || ref.primitive === PRIMITIVE.exileTarget) {
-      return { kind: 'destroyCreature' };
+      // DESTROY and EXILE are the same play against almost every creature and
+      // opposite plays against an indestructible one, so the two cannot share an
+      // intent without the pilot "killing" a creature that shrugs it off. The
+      // flag is what the targeting below reads.
+      return { kind: 'destroyCreature', exiles: ref.primitive === PRIMITIVE.exileTarget };
     }
     if (ref.primitive === PRIMITIVE.counterSpell || ref.primitive === PRIMITIVE.counterUnlessPaid) {
       return { kind: 'counter' };
@@ -1462,14 +1791,53 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
 // the identical bound and that one is the leaf of the two, so keeping it here would
 // have meant two copies of a number that must agree.
 
+/*
+ * The three battlefield selectors below are indexed loops rather than `filter`,
+ * for the same reason as the action predicates further down: each `filter` takes a
+ * fresh closure, and these run several times per decision on the pilot that is
+ * also MCTS's rollout policy. They return exactly what the `filter` returned.
+ */
+
 /** Creatures a player controls on the battlefield. */
 function creaturesControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
-  return view.battlefield.filter((c) => c.controller === player && isCreature(c.def)) as CardInstance[];
+  const battlefield = view.battlefield;
+  const out: CardInstance[] = [];
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.controller === player && isCreature(perm.def)) out.push(perm);
+  }
+  return out;
 }
 
 /** Planeswalkers a player controls on the battlefield. */
 function walkersControlledBy(view: PilotView, player: PlayerId): CardInstance[] {
-  return view.battlefield.filter((c) => c.controller === player && isPlaneswalker(c.def)) as CardInstance[];
+  const battlefield = view.battlefield;
+  const out: CardInstance[] = [];
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.controller === player && isPlaneswalker(perm.def)) out.push(perm);
+  }
+  return out;
+}
+
+/**
+ * Battles the given player PROTECTS — deliberately not the ones they control,
+ * and getting that backwards is the one way to build an attack the engine will
+ * reject.
+ *
+ * A battle is defended by its controller's OPPONENT (`protectorOf`, CR 310.11),
+ * so the battles a pilot may attack are the ones the DEFENDING player protects —
+ * in practice its own Sieges. That is the printed play pattern: you cast it, your
+ * opponent is made its protector, and you attack it to collect the reward.
+ */
+function battlesProtectedBy(view: PilotView, player: PlayerId): CardInstance[] {
+  const battlefield = view.battlefield;
+  const out: CardInstance[] = [];
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (isBattle(perm.def) && protectorOf(perm) === player) out.push(perm);
+  }
+  return out;
 }
 
 /**
@@ -1494,67 +1862,134 @@ function biggestKillableWalker(
 /**
  * The biggest threat among creatures whose REMAINING toughness this much damage
  * (or toughness reduction) would finish off — the same answer as
- * `biggestThreat(creatures.filter(c => remainingToughness(c) <= amount))`, without
+ * `biggestThreat(creatures.filter((c) => toughnessLeft(c, index) <= amount))`, without
  * the throwaway array. Removal and burn each ask this once per candidate spell per
  * decision, and a decision happens ~20,000 times inside one MCTS look-ahead.
  */
 function biggestThreatWithin(
   creatures: readonly CardInstance[],
   amount: number,
+  index: ContinuousIndex,
 ): CardInstance | undefined {
   let best: CardInstance | undefined;
   for (const c of creatures) {
-    if (remainingToughness(c) > amount) continue;
+    if (toughnessLeft(c, index) > amount) continue;
     if (!best) {
       best = c;
       continue;
     }
-    const cp = effectivePower(c);
-    const bp = effectivePower(best);
-    if (cp > bp || (cp === bp && effectiveToughness(c) > effectiveToughness(best))) best = c;
+    const cp = power(c, index);
+    const bp = power(best, index);
+    if (cp > bp || (cp === bp && toughness(c, index) > toughness(best, index))) best = c;
   }
   return best;
 }
 
 /** The biggest threat among creatures: highest power, then toughness. */
-function biggestThreat(creatures: readonly CardInstance[]): CardInstance | undefined {
+function biggestThreat(
+  creatures: readonly CardInstance[],
+  index: ContinuousIndex,
+): CardInstance | undefined {
   let best: CardInstance | undefined;
   for (const c of creatures) {
     if (!best) {
       best = c;
       continue;
     }
-    const cp = effectivePower(c);
-    const bp = effectivePower(best);
-    if (cp > bp || (cp === bp && effectiveToughness(c) > effectiveToughness(best))) best = c;
+    const cp = power(c, index);
+    const bp = power(best, index);
+    if (cp > bp || (cp === bp && toughness(c, index) > toughness(best, index))) best = c;
   }
   return best;
 }
 
 /** Total unblocked-if-unblocked damage the listed attackers represent. */
-function totalIncomingDamage(view: PilotView, attackerIds: readonly InstanceId[]): number {
+function totalIncomingDamage(
+  view: PilotView,
+  attackerIds: readonly InstanceId[],
+  index: ContinuousIndex,
+): number {
   let total = 0;
   for (const id of attackerIds) {
     const a = findInstance(view, id);
-    if (a) total += effectivePower(a);
+    if (a) total += power(a, index);
   }
   return total;
 }
 
 /**
- * Whether `blocker` could legally block `attacker` by evasion (flying needs
- * flying/reach). Mirrors core's combat rule so the pilot only proposes legal
- * blocks. (Tapped-ness is filtered by callers.)
+ * Whether this permanent shrugs off an effect that says "destroy".
+ *
+ * Read through the continuous layer, not off `def.keywords`: an opponent who has
+ * just cast Heroic Intervention has an indestructible board with nothing printed
+ * on it, and a pilot that reads the printed set walks its removal straight into
+ * that. The DECISION's index is passed in rather than rebuilt per permanent —
+ * `aggregateFor` is a whole battlefield pass, and this runs once per candidate
+ * creature per removal spell.
  */
-function canBlockByEvasion(attacker: CardInstance, blocker: CardInstance): boolean {
-  const ak = attacker.def.keywords ?? {};
-  const bk = blocker.def.keywords ?? {};
+function isIndestructible(perm: CardInstance, index: ContinuousIndex): boolean {
+  return Boolean(keywordsOf(perm, index).indestructible);
+}
+
+/**
+ * Whether `blocker` could legally block `attacker` PER PAIR. Mirrors core's
+ * `canBlock` so the pilot only proposes declarations the engine will accept.
+ *
+ * ⚠️ It is deliberately the per-pair half only. Menace and "can't be blocked
+ * except by N or more creatures" constrain the whole DECLARATION, and this pilot
+ * assigns at most one blocker per attacker — so those are handled by
+ * {@link needsMultipleBlockers} refusing to block such an attacker at all,
+ * rather than by a pair test that cannot see the count.
+ *
+ * Keywords are read EFFECTIVE, not printed: flying granted by an Aura or an
+ * until-end-of-turn effect is flying, and a pilot that read only the printed box
+ * proposed blocks the engine then rejected — the rules path and the AI path
+ * answering one question two ways. (This doc-comment previously said the opposite,
+ * and said it for the same reason the rest of the file did: nothing passed an
+ * index. See `board-stats.ts`.)
+ */
+function canBlockByEvasion(
+  attacker: CardInstance,
+  blocker: CardInstance,
+  index: ContinuousIndex,
+): boolean {
+  const ak = keywordsOf(attacker, index);
+  const bk = keywordsOf(blocker, index);
+  // The blocker's own restriction disqualifies it whatever it would block.
+  if (bk.cantBlock) return false;
+  if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
   return true;
 }
 
+/**
+ * The smallest blocking requirement any printing of the rule states - menace's
+ * "two or more". Used as the count a defender needs before such an attacker is
+ * genuinely opposed.
+ */
+const MENACE_BLOCKERS_NEEDED = 2;
+
+/**
+ * Whether this attacker prints a blocking requirement of two or more creatures
+ * (menace, or the general "except by N or more"). This pilot never assigns more
+ * than one blocker to an attacker, so proposing ANY block on such a creature is
+ * proposing an illegal declaration - the engine rejects the whole thing, and the
+ * pilot loses every other block in it as well.
+ */
+function needsMultipleBlockers(attacker: CardInstance): boolean {
+  const ak = attacker.def.keywords ?? {};
+  return Boolean(ak.menace) || (ak.minBlockers ?? 0) > 1;
+}
+
 function findInstance(view: PilotView, id: InstanceId): CardInstance | undefined {
-  return view.battlefield.find((c) => c.instanceId === id) as CardInstance | undefined;
+  // Indexed, closure-free: this is the single most-called helper in the file (every
+  // attacker, blocker, tap plan and offered ability resolves an id through it).
+  const battlefield = view.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.instanceId === id) return perm;
+  }
+  return undefined;
 }
 
 // --- small utilities -----------------------------------------------------------
@@ -1667,10 +2102,15 @@ export function policyCandidates(
   legalActions: readonly GameAction[],
   weights: HeuristicWeights = DEFAULT_HEURISTIC_WEIGHTS,
   explain = false,
+  providedIndex?: ContinuousIndex,
 ): PolicyCandidate[] {
   const out: PolicyCandidate[] = [];
   const me = view.priorityPlayer;
   const state = view as GameState;
+  // A caller that already built the index for this position hands it in (the
+  // search does, once per node); anyone else gets one built here. It is never
+  // omitted — that is the whole defect this parameter exists to close.
+  const index = providedIndex ?? boardIndex(state);
 
   // A parked question is not a strategic decision — it is the only thing the game
   // will accept, and the heuristic answers it on its own terms. Level 0 of the
@@ -1681,11 +2121,11 @@ export function policyCandidates(
   }
 
   if (view.step === 'declareAttackers' && me === view.activePlayer) {
-    collectAttackCandidates(view, legalActions, weights, explain, out);
+    collectAttackCandidates(view, legalActions, weights, explain, index, out);
   } else if (view.step === 'declareBlockers' && me === defendingPlayer(view)) {
-    collectBlockCandidates(view, weights, explain, out);
+    collectBlockCandidates(view, weights, explain, index, out);
   } else {
-    collectPriorityCandidates(view, legalActions, weights, explain, out);
+    collectPriorityCandidates(view, legalActions, weights, explain, index, out);
   }
 
   // Passing is ALWAYS on the menu. "Hold interaction / do nothing this window" is
@@ -1717,6 +2157,7 @@ function collectAttackCandidates(
   legalActions: readonly GameAction[],
   weights: HeuristicWeights,
   explain: boolean,
+  index: ContinuousIndex,
   out: PolicyCandidate[],
 ): void {
   const offered = legalActions.find((a) => a.kind === 'declareAttackers') as
@@ -1730,13 +2171,13 @@ function collectAttackCandidates(
   const profitable: InstanceId[] = [];
   for (const id of offered.attackers) {
     const attacker = findInstance(view, id);
-    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights)) profitable.push(id);
+    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights, index)) profitable.push(id);
   }
   if (profitable.length > 0) {
     // The value-judged attack carries the same walker assignment the plain
     // heuristic would make, so the search's preferred line can actually kill a
     // planeswalker rather than walkers being reachable only outside search.
-    const walkerPlan = planWalkerAttack(view, opp, profitable, weights);
+    const walkerPlan = planWalkerAttack(view, opp, profitable, weights, index);
     out.push({
       plies: [
         {
@@ -1776,6 +2217,7 @@ function collectBlockCandidates(
   view: PilotView,
   weights: HeuristicWeights,
   explain: boolean,
+  index: ContinuousIndex,
   out: PolicyCandidate[],
 ): void {
   const me = defendingPlayer(view);
@@ -1784,13 +2226,13 @@ function collectBlockCandidates(
   if (Object.keys(combat.blocks).length > 0) return; // already declared
 
   const myLife = view.players[me].life;
-  const incoming = totalIncomingDamage(view, combat.attackers);
+  const incoming = totalIncomingDamage(view, combat.attackers, index);
   const desperate = incoming >= myLife || myLife <= weights.desperateLifeThreshold;
   const available = creaturesControlledBy(view, me).filter((c) => !c.tapped);
   const attackers = [...combat.attackers]
     .map((id) => findInstance(view, id))
     .filter((c): c is CardInstance => c !== undefined)
-    .sort((a, b) => effectivePower(b) - effectivePower(a));
+    .sort((a, b) => power(b, index) - power(a, index));
 
   // Both the value-judged block and the survival block, when they differ: under
   // pressure "chump to live" and "only trade profitably" are genuinely different
@@ -1799,7 +2241,7 @@ function collectBlockCandidates(
     const used = new Set<InstanceId>();
     const blocks: { blocker: InstanceId; attacker: InstanceId }[] = [];
     for (const attacker of attackers) {
-      const blocker = pickBlocker(attacker, available, used, mode, weights);
+      const blocker = pickBlocker(attacker, available, used, mode, weights, index);
       if (blocker) {
         blocks.push({ blocker: blocker.instanceId, attacker: attacker.instanceId });
         used.add(blocker.instanceId);
@@ -1823,6 +2265,7 @@ function collectPriorityCandidates(
   legalActions: readonly GameAction[],
   weights: HeuristicWeights,
   explain: boolean,
+  index: ContinuousIndex,
   out: PolicyCandidate[],
 ): void {
   const me = view.priorityPlayer;
@@ -1863,7 +2306,7 @@ function collectPriorityCandidates(
   }
 
   // THE ATOMIC CASTS. Every legal, scored spell, each bundled with its funding.
-  for (const goal of scoredSpellGoals(view, weights, explain)) {
+  for (const goal of scoredSpellGoals(view, weights, explain, index)) {
     const plan = planManaPayment(state, me, goal.cost, legalActions);
     if (!plan) continue; // cannot be funded from this board — not an option at all
     const plies: GameAction[] = [];
@@ -1881,7 +2324,7 @@ function collectPriorityCandidates(
   // Equipping, funded the same way (it is an activated ability with a mana cost,
   // so the engine will not offer it until the pool already pays — see the note on
   // `bestEquipPlay`, which is why this plans rather than reads the offered list).
-  const equip = bestEquipMacro(view, legalActions, weights, explain);
+  const equip = bestEquipMacro(view, legalActions, weights, explain, index);
   if (equip) out.push(equip);
 }
 
@@ -1895,6 +2338,7 @@ function bestEquipMacro(
   legalActions: readonly GameAction[],
   weights: HeuristicWeights,
   explain: boolean,
+  index: ContinuousIndex,
 ): PolicyCandidate | undefined {
   const me = view.priorityPlayer;
   const sorcerySpeedOpen =
@@ -1912,15 +2356,15 @@ function bestEquipMacro(
     if (abilities === undefined || perm.controller !== me) continue;
     const modifies = perm.def.attachment?.modifies;
     if (!modifies) continue;
-    for (let index = 0; index < abilities.length; index++) {
-      const ability = abilities[index]!;
+    for (let a = 0; a < abilities.length; a++) {
+      const ability = abilities[a]!;
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
       const mana = ability.cost.mana;
       if (!mana || ability.cost.tap || ability.cost.sacrificeSelf || ability.cost.life) continue;
       hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
-      const host = bestEquipHost(view, hosts, perm.attachedTo ?? null);
+      const host = bestEquipHost(view, hosts, perm.attachedTo ?? null, index);
       if (!host) continue;
-      const score = scoreEquip(modifies, host, weights);
+      const score = scoreEquip(modifies, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
       const plan = planManaPayment(view as GameState, me, mana, legalActions);
       if (!plan) continue;
@@ -1930,7 +2374,7 @@ function bestEquipMacro(
         kind: 'activateAbility',
         player: me,
         instanceId: perm.instanceId,
-        abilityIndex: index,
+        abilityIndex: a,
         targets: [host.instanceId],
       });
       best = { plies, score, label: explain ? `${ability.label} onto ${host.def.name}` : NO_REASON };

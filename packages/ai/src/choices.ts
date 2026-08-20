@@ -45,6 +45,9 @@
 import type {
   ChoiceAnswer,
   ChooseModesChoice,
+  EffectRef,
+  InstanceId,
+  StackObject,
   ChooseNumberChoice,
   ConfirmChoice,
   GameAction,
@@ -57,9 +60,9 @@ import type {
   SelectCardsChoice,
   SelectPlayersChoice,
 } from '@jonny-boi/core';
-import { defaultAnswerFor, opponentOf } from '@jonny-boi/core';
+import { defaultAnswerFor, modeById, nextUnaimedPick, opponentOf } from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
-import { modeEffectsFor, resolutionValueContext, valueOfEffects } from './effect-value.js';
+import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -203,16 +206,36 @@ function answerSelectPlayers(choice: SelectPlayersChoice): ChoiceAnswer {
  * printed-order behaviour rather than to anything illegal.
  */
 function answerChooseModes(state: GameState, choice: ChooseModesChoice, weights: HeuristicWeights): ChoiceAnswer {
-  const byId = new Map(modeEffectsFor(state, choice.sourceInstanceId).map((m) => [m.id, m.effects]));
-  const context = resolutionValueContext(state, choice.chooser, weights, cardValueContext(state));
-  const scored = choice.modes.map((mode, index) => ({
-    id: mode.id,
-    index,
-    value: valueOfEffects(byId.get(mode.id) ?? [], context),
-  }));
+  const byId = new Map(modeEffectsFor(state, choice.sourceInstanceId).map((m) => [m.id, m]));
+  const context = castValueContext(state, choice.chooser, weights);
+  const scored = choice.modes.map((mode, index) => {
+    const authored = byId.get(mode.id);
+    return {
+      id: mode.id,
+      index,
+      // Priced AIMED — a targeting mode is worth what its best legal target is
+      // worth, which is what stops the pilot choosing "counter target spell"
+      // when the only spell on the stack is its own (see `valueOfMode`).
+      value: authored ? valueOfMode(authored, context) : NO_MODE_VALUE,
+    };
+  });
   // Best first (worst first on a loss), printed order breaking every tie.
   const worstFirst = choice.valence === 'loss';
   scored.sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value) || a.index - b.index);
+
+  if (choice.allowRepeats) {
+    // With repeats, "the best set" is simply the best mode taken as often as
+    // allowed — there is no diminishing return in the value model, so mixing
+    // could only lower the total. Still bounded below by `min`.
+    const best = scored[worstFirst ? 0 : 0];
+    const take = worstFirst
+      ? choice.min
+      : Math.max(choice.min, best && best.value > NO_MODE_VALUE ? choice.max : choice.min);
+    return {
+      kind: 'chooseModes',
+      modeIds: new Array<string>(take).fill(best?.id ?? (choice.modes[0]?.id ?? '')),
+    };
+  }
 
   const take = worstFirst
     ? choice.min
@@ -221,6 +244,29 @@ function answerChooseModes(state: GameState, choice: ChooseModesChoice, weights:
   // it keeps the answer readable in the event log.
   const picked = scored.slice(0, take).sort((a, b) => a.index - b.index);
   return { kind: 'chooseModes', modeIds: picked.map((m) => m.id) };
+}
+
+/**
+ * The value context for a question asked while a spell is being CAST.
+ *
+ * `resolutionValueContext` reads `state.resolution.targets`, and there is no
+ * resolution here — the spell is still being announced. Passing an empty target
+ * list is not a shortcut but the truth: nothing has been aimed yet, and every
+ * scorer that cares supplies its own candidate target.
+ */
+function castValueContext(state: GameState, player: PlayerId, weights: HeuristicWeights) {
+  // `cardValueContext` already built the board's continuous aggregate; the effect
+  // scorer reads P/T through that same one rather than through a second — or, as
+  // it did before `board-stats.ts`, through none at all.
+  const cards = cardValueContext(state);
+  return {
+    state,
+    player,
+    targets: [] as readonly (InstanceId | PlayerId)[],
+    weights,
+    cards,
+    index: cards.index,
+  };
 }
 
 /**
@@ -244,12 +290,25 @@ function answerSelectTargets(
   choice: SelectTargetsChoice,
   weights: HeuristicWeights,
 ): ChoiceAnswer {
+  // TWO things park a `selectTargets` question, and they are aimed by different
+  // data. A spell being CAST is aiming one announced MODE (its effects are on
+  // the card, indexed by which pick is still unaimed); a trigger going on the
+  // stack is aiming its own ability. Checked in that order because a modal cast
+  // can be sitting on the stack while nothing is triggering, and the pilot must
+  // price the mode it is actually being asked about.
+  const casting = state.stack.find(
+    (object): object is Extract<typeof object, { kind: 'spell' }> =>
+      object.kind === 'spell' && object.awaitingCastChoice === 'modeTarget',
+  );
+  const castingEffects = castingModeEffects(casting);
   const aiming = state.stack.find(
     (object): object is Extract<typeof object, { kind: 'trigger' }> =>
       object.kind === 'trigger' && object.awaitingTargets !== undefined,
   );
-  const effects = aiming?.effects ?? [];
-  const base = resolutionValueContext(state, choice.chooser, weights, cardValueContext(state));
+  const effects = castingEffects ?? aiming?.effects ?? [];
+  const base = casting
+    ? castValueContext(state, choice.chooser, weights)
+    : resolutionValueContext(state, choice.chooser, weights, cardValueContext(state));
   const scored = choice.candidates.map((candidate, index) => ({
     ref: candidate.ref,
     index,
@@ -261,6 +320,26 @@ function answerSelectTargets(
   const worstFirst = choice.valence === 'loss';
   scored.sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value) || a.index - b.index);
   return { kind: 'selectTargets', targets: scored.slice(0, choice.max).map((s) => s.ref) };
+}
+
+/**
+ * The effects of the announced mode a casting spell is currently aiming, or
+ * `undefined` when that is not what is being asked.
+ *
+ * The pick being aimed is found by core's own `nextUnaimedPick` — the very rule
+ * the engine raised the question by — so the pilot cannot price one mode while
+ * answering for another (which is exactly what would happen on a spell that
+ * chose the same targeting mode twice).
+ */
+function castingModeEffects(
+  casting: Extract<StackObject, { kind: 'spell' }> | undefined,
+): readonly EffectRef[] | undefined {
+  if (!casting) return undefined;
+  const picks = casting.modePicks ?? [];
+  const index = nextUnaimedPick(casting.card.def, picks);
+  if (index < 0) return undefined;
+  const pick = picks[index];
+  return pick ? modeById(casting.card.def, pick.modeId)?.effects : undefined;
 }
 
 /** The value of a mode that does nothing at all — the bar a mode must clear. */
