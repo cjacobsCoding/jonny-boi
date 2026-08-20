@@ -16,8 +16,12 @@
  */
 
 import type { CastZone } from './actions.js';
-import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
+import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
+// Type-only, so it is erased at build time and no runtime import cycle exists
+// (`copy.ts` imports this module's `unionProtection` for real).
+import type { CopyAsEntersSpec } from './copy.js';
+import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
 // TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
 // and subtype readers, so a VALUE import here would close a runtime cycle. A
 // `CardFilter` is plain serializable data, so the type is all a printed cost
@@ -34,17 +38,26 @@ export type CardType =
   | 'enchantment'
   | 'planeswalker'
   | 'battle'
-  // KINDRED (formerly Tribal, CR 308): a card type that carries CREATURE TYPES
-  // onto a noncreature card - "Kindred Enchantment - Faerie" (Bitterblossom) is
-  // a Faerie without being a creature, so a typal anthem over "Faeries you
-  // control" reaches it. The subtypes do that work on their own; the type is
-  // here because it is a distinct CARD TYPE and something counts those (a
-  // Tarmogoyf reading card types among graveyards), so leaving it out would
-  // make that count quietly one short.
-  //
-  // It confers nothing else: `isPermanentType` deliberately does NOT list it,
-  // because a Kindred card is a permanent (or not) by its OTHER type, exactly as
-  // the rules say.
+  /**
+   * **Kindred** (CR 308, the type formerly printed as "Tribal") — a card type
+   * that ALWAYS appears alongside another one ("Kindred Sorcery", "Kindred
+   * Enchantment - Faerie"), and whose entire rules content is that the card's
+   * subtypes are CREATURE types even though the card is not a creature.
+   *
+   * That is why it is a real member of this union rather than a word the
+   * compiler quietly drops. Two things in this engine read it, and both would
+   * be wrong without it:
+   *   - `subtypes` on a Kindred card are creature types, so a tribal static
+   *     ("Faeries you control get +1/+1") and a subtype filter select it
+   *     exactly as the printed card does — which they already do, because
+   *     subtypes are one list here;
+   *   - a card type in a GRAVEYARD is a card type: Tarmogoyf counts Kindred,
+   *     so it needs a bit in `CARD_TYPE_BIT` (`derived.ts`) like every other.
+   *
+   * What it deliberately does NOT do is make the card a permanent: a Kindred
+   * Instant is an instant and nothing else, so `isPermanentType` ignores it and
+   * the card's OTHER type decides everything about how it is played.
+   */
   | 'kindred';
 
 /**
@@ -516,6 +529,25 @@ export interface CardDefinition {
    */
   readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
   /**
+   * "**You may have ~ enter as a copy of** any creature on the battlefield"
+   * (Clone, Phantasmal Image, Spark Double, Sakashima, Vesuva) — the as-enters
+   * COPY replacement (CR 614.1c + CR 706.9), declared as data.
+   *
+   * It sits here beside `entersTapped*` and {@link asEntersChoice} because it is
+   * the same family of thing: a replacement applied AS the permanent enters,
+   * which every entry path must ask about rather than only the ones that happen
+   * to run a resolution script. The engine asks it in `resolveTopOfStack` (a
+   * permanent spell — before a single effect runs, so the COPIED card decides
+   * summoning sickness, starting loyalty and starting defense) and in
+   * `applyPlayLand` (a land — once, ahead of the entry ladder, because it
+   * decides WHICH LAND that ladder is then asking its naming/reveal/life
+   * questions about).
+   *
+   * The copy itself is applied in LAYER 1 by swapping the instance's `def`; see
+   * `copy.ts` for the layering argument and the copiable-values rule.
+   */
+  readonly copyAsEnters?: CopyAsEntersSpec;
+  /**
    * "**As ~ enters, choose a** creature type / a color / a player / a card type"
    * — the replacement-effect naming made as the permanent enters (CR 614.1c).
    *
@@ -681,6 +713,22 @@ export interface CardDefinition {
    * bookkeeping. Omit for cards with none (the overwhelming majority).
    */
   readonly statics?: readonly import('./statics.js').StaticAbility[];
+  /**
+   * REPLACEMENT and PREVENTION abilities (CR 614/615): "If one or more +1/+1
+   * counters would be put on a creature you control, that many **plus one** are
+   * put on it instead", "If a source you control would deal damage …, it deals
+   * **double** that damage instead", "Prevent all combat damage that would be
+   * dealt to attacking creatures you control".
+   *
+   * Data, like {@link statics}, and with the same DERIVED lifetime: live for
+   * exactly as long as this permanent is on the battlefield, because the layer
+   * re-reads `state.battlefield` rather than storing anything. See
+   * `replacement.ts` for the vocabulary and `internal/replacement.ts` for the one
+   * seam damage, counters and draws all consult. Omit for cards with none, which
+   * is nearly every card — the absent field is what keeps the damage and counter
+   * hot paths free.
+   */
+  readonly replacements?: readonly import('./replacement.js').ReplacementAbility[];
   /**
    * The SECOND FACE of a transforming double-faced card (Innistrad-style), as a
    * complete nested definition — everything a face can print: name, types, P/T,
@@ -1308,8 +1356,79 @@ export interface ManaAbility {
   readonly rider?: ManaAbilityRider;
   /** "Activate only if …". */
   readonly restriction?: ManaActivationCondition;
+  /**
+   * "Spend this mana only to cast a creature spell" — a restriction carried by
+   * the MANA this ability produces, not by the source (see spend-restriction.ts).
+   *
+   * It is the one entry in this interface that outlives the activation: the other
+   * four are answered while the permanent is being tapped, and this one is
+   * answered later, by the pool, when the mana is spent.
+   */
+  readonly spendRestriction?: ManaSpendRestriction;
   /** Human-readable text for logs and the inspector. */
   readonly label?: string;
+}
+
+/**
+ * The spend-restriction descriptor of a definition — what a restricted mana asks
+ * about the spell it is being offered to pay for.
+ *
+ * Memoized per definition and per kind. Definitions are immutable and shared, so
+ * this is computed once per printed card for the whole process; a payment on a
+ * board that holds restricted mana therefore costs a WeakMap lookup rather than
+ * an allocation, and a payment on any other board never calls this at all.
+ */
+const SPEND_PURPOSE_MEMO = new WeakMap<
+  CardDefinition,
+  { cast?: ManaSpendPurpose; activate?: ManaSpendPurpose }
+>();
+
+export function spendPurposeFor(def: CardDefinition, kind: ManaSpendKind): ManaSpendPurpose {
+  let entry = SPEND_PURPOSE_MEMO.get(def);
+  if (!entry) {
+    entry = {};
+    SPEND_PURPOSE_MEMO.set(def, entry);
+  }
+  const memoized = entry[kind];
+  if (memoized) return memoized;
+  const built: ManaSpendPurpose = Object.freeze({
+    kind,
+    // Lowercased once, here, rather than on every clause comparison. `CardType`
+    // is already lowercase; `subtypes` is printed in title case.
+    types: def.types as readonly string[],
+    subtypes: Object.freeze((def.subtypes ?? []).map((subtype) => subtype.toLowerCase())),
+    legendary: def.legendary === true,
+    colors: colorsOfDefinition(def),
+  });
+  entry[kind] = built;
+  return built;
+}
+
+/**
+ * The purpose to hand {@link canPay}/{@link payCost}, **or `undefined` when the
+ * pool holds no restricted mana at all**.
+ *
+ * ⚠️ THE `undefined` RETURN IS THE POINT, exactly as it is for `manaExtrasOf`.
+ * Payment feasibility is asked for every card in hand on every decision, and on
+ * essentially every board there is nothing to restrict; the whole system must
+ * therefore cost that board one property read on the pool. Call sites read
+ * better for it too: the purpose is named at the place that knows what is being
+ * paid for, and costs nothing where there is nothing to pay for it with.
+ *
+ * ⛔ **DO NOT USE THIS FOR `planManaPayment`.** It asks the pool as it is NOW, and
+ * a planner is called before the mana exists — the restricted mana it is about to
+ * create is exactly what the plan is for. Gating on the live pool made the
+ * planner refuse to tap Ancient Ziggurat at all, because there was no purpose to
+ * check the restriction it was creating against, and the pilot then read a
+ * castable creature as uncastable. The planner takes the DEFINITION and resolves
+ * the purpose itself, lazily; see `mana-plan.ts`.
+ */
+export function spendPurposeIfRestricted(
+  pool: ManaPool,
+  def: CardDefinition,
+  kind: ManaSpendKind,
+): ManaSpendPurpose | undefined {
+  return pool.restricted === undefined ? undefined : spendPurposeFor(def, kind);
 }
 
 /**

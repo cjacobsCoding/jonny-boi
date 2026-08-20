@@ -85,6 +85,16 @@ export type GameEvent =
       readonly player: PlayerId;
       readonly color: ManaColor;
       readonly amount: number;
+      /**
+       * The printed SPEND RESTRICTION this mana carries, if any — "only to cast a
+       * creature spell". Absent for ordinary mana, which is nearly all of it.
+       *
+       * The LABEL rather than the predicate: the event log and the observation
+       * feed want words, and the machine-readable restriction already lives on
+       * the pool, which is where every payment reads it. Two copies of a
+       * predicate is two things that can disagree.
+       */
+      readonly spendRestriction?: string;
     }
   | { readonly type: 'manaPoolEmptied'; readonly player: PlayerId }
   | {
@@ -183,6 +193,43 @@ export type GameEvent =
       readonly target: InstanceId | PlayerId;
       readonly amount: number;
       readonly combat: boolean;
+    }
+  | {
+      /**
+       * A REPLACEMENT effect changed an event before it happened (CR 614) — a
+       * damage doubler, a counter multiplier, a prevention shield eating part of
+       * a hit. Its own event for exactly the reason `damagePrevented` has one: a
+       * replay or the inspector must be able to show WHY four counters went onto
+       * a creature the card said to put one on, and "it just happened" is
+       * indistinguishable from a bug.
+       *
+       * `from`/`to` are the quantity before and after THIS one effect, so a
+       * chain of two doublers reads as two events with matching seams rather
+       * than one lossy summary — which is also what makes the CR 616.1 ordering
+       * decision auditable from the log alone.
+       */
+      readonly type: 'replacementApplied';
+      /** The permanent (or resolving spell) the replacement effect comes from. */
+      readonly source: InstanceId;
+      /** Which event family was replaced. */
+      readonly event: 'damage' | 'counters' | 'draw';
+      readonly from: number;
+      readonly to: number;
+      /** How much of `from` this effect PREVENTED (0 for a pure multiplier). */
+      readonly prevented: number;
+      /** The printed line, when the card carried one. Never read by the rules. */
+      readonly label?: string;
+    }
+  | {
+      /**
+       * A floating replacement/prevention effect wore off in cleanup — the fog
+       * that guarded this turn's combat, or an unspent shield. Mirrors
+       * `continuousEffectExpired`, so the two lifetimes read the same way in a
+       * log.
+       */
+      readonly type: 'replacementExpired';
+      readonly id: number;
+      readonly source: InstanceId;
     }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
@@ -451,6 +498,27 @@ export type GameEvent =
       readonly fromName: string;
       readonly toName: string;
       readonly faceUp: 'front' | 'back';
+    }
+  | {
+      /**
+       * A permanent ENTERED AS A COPY of another object (CR 706, layer 1) —
+       * the printed "you may have ~ enter as a copy of …" replacement. Like
+       * `transformed` this is deliberately NOT a `zoneChange`: the copy is
+       * applied as the permanent enters, and the entry itself is announced by
+       * its own `zoneChange`.
+       *
+       * Fully public. Every field names something a spectator watching the
+       * table sees: which permanent became a copy, the card it printed as, the
+       * card it now is, and which visible object it was copied from.
+       */
+      readonly type: 'becameCopy';
+      readonly instanceId: InstanceId;
+      /** The name printed on the copying card itself ("Clone"). */
+      readonly ownName: string;
+      /** The name it now has — the copied card, after any "except …" tail. */
+      readonly copiedName: string;
+      /** The object it was copied from. */
+      readonly copiedInstanceId: InstanceId;
     }
   | {
       // A token permanent was created on the battlefield.

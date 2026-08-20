@@ -79,6 +79,15 @@ const ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['enchant', 'equip']);
  * table does NOT match (a derived or conditional count, "look at the top N …")
  * produces no such primitive, so that card still reports honestly.
  */
+/**
+ * Scryfall's keyword names for a damage-SCALING replacement ability. They are
+ * modelled by the rule table (`replacement-damage-scaled`) as
+ * `CardDefinition.replacements` data rather than as a keyword flag, so the sweep
+ * must not report them a second time — see the guard's own comment for why it is
+ * keyed on the compiled outcome rather than on the word.
+ */
+const SCALING_KEYWORDS: ReadonlySet<string> = new Set(['double', 'triple']);
+
 const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
@@ -126,9 +135,12 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
   enchantment: 'enchantment',
   planeswalker: 'planeswalker',
   battle: 'battle',
-  // CR 308. It carries the creature types printed after the dash onto a
-  // noncreature card, and those subtypes are already emitted alongside it, so a
-  // "Faeries you control" anthem sees a Kindred Enchantment exactly as printed.
+  // Kindred (CR 308, printed as "Tribal" before 2024) — a real card type with a
+  // real, small meaning: it never appears alone, and it makes the card's
+  // subtypes CREATURE types without making the card a creature. Mapped rather
+  // than reported because core models exactly that (see `CardType`), so a
+  // Kindred Sorcery is a sorcery with Eldrazi among its subtypes, which is what
+  // the printed card is.
   kindred: 'kindred',
 });
 
@@ -151,6 +163,15 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
  * says so per card rather than letting a type-level "supported" imply it.
  */
 export const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({});
+
+/**
+ * A Kindred card ALWAYS prints a second card type (CR 308.1), and the second
+ * one is what decides how the card is played. A record that somehow carried
+ * `Kindred` alone would therefore be malformed rather than unsupported — it is
+ * reported through the generic "a card type the engine can represent" check
+ * below rather than being given a system-shaped excuse.
+ */
+const KINDRED_TYPE = 'kindred';
 
 /** Basic land subtypes → the mana they tap for. */
 const LAND_SUBTYPE_MANA: Readonly<Record<string, ManaColor>> = Object.freeze({
@@ -273,11 +294,14 @@ interface Assembly {
   readonly manaAbilities: import('@jonny-boi/core').ManaAbility[];
   readonly activated: ActivatedAbility[];
   readonly statics: import('@jonny-boi/core').StaticAbility[];
+  /** Printed replacement/prevention abilities (core's CR 614/615 layer). */
+  readonly replacements: import('@jonny-boi/core').ReplacementAbility[];
   keywords: KeywordFlags;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
   entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
+  copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
   /** The printed "As ~ enters, choose a…" naming, once some line prints it. */
   asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
   /** "~ is the chosen type in addition to its other types". */
@@ -342,11 +366,13 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   }
   if (contribution.activated) assembly.activated.push(...contribution.activated);
   if (contribution.statics) assembly.statics.push(...contribution.statics);
+  if (contribution.replacements) assembly.replacements.push(...contribution.replacements);
   if (contribution.entersTapped) assembly.entersTapped = true;
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
+  if (contribution.copyAsEnters !== undefined) assembly.copyAsEnters = contribution.copyAsEnters;
   if (contribution.entersTappedUnlessRevealed !== undefined) {
     assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
   }
@@ -404,6 +430,11 @@ function assembleAttachment(assembly: Assembly): AttachmentSpec | undefined {
     ...assembly.attachesAs,
     ...(assembly.attachmentModifies ? { modifies: assembly.attachmentModifies } : {}),
   };
+}
+
+/** Whether an ability watches the permanent its source is ATTACHED TO. */
+function watchesTheHost(ability: TriggeredAbility): boolean {
+  return ability.condition.watches === 'attachedHost';
 }
 
 /**
@@ -753,6 +784,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     manaAbilities: [],
     activated: [],
     statics: [],
+    replacements: [],
     keywords: {},
     cycling: [],
     entersTapped: false,
@@ -789,7 +821,11 @@ export function compileCard(card: CompilableCard): CompileResult {
       });
     }
   }
-  if (types.length === 0) {
+  // A Kindred card that prints NOTHING else is not a card this engine (or the
+  // rules) can play: CR 308.1 requires a second card type, and the second one is
+  // what decides the zone, the timing and the stack behaviour. Reported rather
+  // than played as a typeless object.
+  if (types.length === 0 || (types.length === 1 && types[0] === KINDRED_TYPE)) {
     assembly.missing.push({
       text: `${card.typeLine.types.join(' ') || '(no type line)'}`,
       missingEngineSystem: 'a card type the engine can represent',
@@ -1040,6 +1076,17 @@ export function compileCard(card: CompilableCard): CompileResult {
     // own `missing` entry — which is why this is keyed on the list, not on the
     // keyword's presence.
     if (isCyclingKeyword(word) && assembly.cycling.length > 0) continue;
+    // "Double" / "Triple" are Scryfall's keyword names for a DAMAGE-SCALING
+    // REPLACEMENT ability ("it deals double that damage instead" — Gratuitous
+    // Violence, Fiery Emancipation, Torbran's family). The printed line has
+    // already compiled into `assembly.replacements`, and the keyword being
+    // listed again is not a second, unmodelled ability. Same evidence-based
+    // contract as the scry/mill guard above: the skip is keyed on a compiled
+    // replacement that actually SCALES, so a card whose line the rule table did
+    // not match compiles none and still reports through its own `missing` entry.
+    if (SCALING_KEYWORDS.has(word) && assembly.replacements.some((r) => r.outcome.times !== undefined)) {
+      continue;
+    }
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
@@ -1065,6 +1112,18 @@ export function compileCard(card: CompilableCard): CompileResult {
   if (attachment === undefined && assembly.attachmentModifies !== undefined) {
     assembly.missing.push({
       text: 'enchanted/equipped creature gets …',
+      missingEngineSystem: 'auras and equipment attachment (no "Enchant …" or "Equip {N}" line to attach it)',
+    });
+  }
+  // The same argument, for the OTHER thing an attachment line can print. A
+  // trigger that watches "equipped creature" fires on the permanent this one is
+  // attached to — so on a card with no "Equip {N}"/"Enchant …" line it is
+  // attached to nothing, forever, and can never fire. Reported for the same
+  // reason a lone modification is: a permanent that sits there doing nothing is
+  // the "looks implemented, isn't" failure this compiler exists to prevent.
+  if (attachment === undefined && assembly.triggers.some(watchesTheHost)) {
+    assembly.missing.push({
+      text: 'whenever enchanted/equipped creature …',
       missingEngineSystem: 'auras and equipment attachment (no "Enchant …" or "Equip {N}" line to attach it)',
     });
   }
@@ -1150,6 +1209,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.entersTappedUnless ? { entersTappedUnless: assembly.entersTappedUnless } : {}),
+    ...(assembly.copyAsEnters !== undefined ? { copyAsEnters: assembly.copyAsEnters } : {}),
     ...(assembly.entersTappedUnlessRevealed !== undefined
       ? { entersTappedUnlessRevealed: assembly.entersTappedUnlessRevealed }
       : {}),
@@ -1182,6 +1242,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
     ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
     ...(assembly.statics.length > 0 ? { statics: assembly.statics } : {}),
+    ...(assembly.replacements.length > 0 ? { replacements: assembly.replacements } : {}),
     ...(attachment ? { attachment } : {}),
   };
 

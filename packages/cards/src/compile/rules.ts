@@ -15,17 +15,24 @@
  */
 
 import type {
+  CardFilter,
   CardType,
   ChosenValueSubject,
+  CopyAsEntersSpec,
+  CopyExceptions,
   EffectRef,
   KeywordFlags,
   ManaActivationCondition,
   ManaColor,
   ManaCost,
   ManaProduction,
+  ManaSpendClause,
+  ManaSpendRestriction,
   ProtectionQuality,
+  ReplacementApplies,
   SpellMode,
   StaticAbility,
+  StaticControllerScope,
   TargetRestriction,
   InterveningIf,
   TriggerCondition,
@@ -968,6 +975,100 @@ function manaSymbols(text: string): readonly ManaColor[] | null {
   return colors;
 }
 
+
+/**
+ * REPLACEMENT AND PREVENTION EFFECTS (core's CR 614/615 layer) — the printed
+ * vocabulary, as data tables, shared by the four rules that read it.
+ *
+ * The whole family is "if <EVENT> would happen, <MODIFIED EVENT> happens
+ * instead", and only three things vary between printed cards: WHOSE source,
+ * WHOSE recipient, and WHAT the modification is. Each is a closed table, so a
+ * wording outside them reports rather than being widened into a different card —
+ * Torbran's "an opponent or a permanent an opponent controls" and Fiery
+ * Emancipation's "a permanent or player" are two different cards, and the table
+ * is what keeps them that way.
+ */
+
+/** The printed phrase naming WHOSE source a damage replacement watches. */
+const REPLACEMENT_SOURCE_SCOPES: Readonly<Record<string, StaticControllerScope>> = Object.freeze({
+  'a source you control': 'you',
+  'a source an opponent controls': 'opponent',
+  'a source': 'any',
+  'a creature you control': 'you',
+});
+
+/** The printed source phrases that also narrow the source by TYPE. */
+const REPLACEMENT_SOURCE_TYPES: Readonly<Record<string, CardType | null>> = Object.freeze({
+  'a source you control': null,
+  'a source an opponent controls': null,
+  'a source': null,
+  'a creature you control': 'creature',
+});
+
+/**
+ * The printed phrase naming WHO/WHAT a replacement's event happens to.
+ * `kind: 'player'` is the tail that says a permanent can never be the recipient
+ * ("…would deal damage to an opponent" — Solphim's clause is about players).
+ */
+const REPLACEMENT_RECIPIENTS: Readonly<
+  Record<string, { readonly controller: StaticControllerScope; readonly kind?: 'player' | 'permanent' }>
+> = Object.freeze({
+  'a permanent or player': { controller: 'any' },
+  'an opponent or a permanent an opponent controls': { controller: 'opponent' },
+  'you or a permanent you control': { controller: 'you' },
+  'an opponent': { controller: 'opponent', kind: 'player' },
+  'a creature you control': { controller: 'you', kind: 'permanent' },
+});
+
+/** The alternation of every recipient phrase, longest first so none is truncated. */
+const REPLACEMENT_RECIPIENT_TOKEN = `(${Object.keys(REPLACEMENT_RECIPIENTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/** The alternation of every source phrase, longest first so none is truncated. */
+const REPLACEMENT_SOURCE_TOKEN = `(${Object.keys(REPLACEMENT_SOURCE_SCOPES)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * The printed multiplier words. "That much damage plus N" is captured
+ * separately, because adding and scaling are different arithmetic and folding
+ * them onto one field would make Torbran and Gratuitous Violence the same card.
+ */
+const REPLACEMENT_MULTIPLIERS: Readonly<Record<string, number>> = Object.freeze({
+  double: 2,
+  triple: 3,
+  twice: 2,
+  'three times': 3,
+});
+
+
+/**
+ * The printed NOUN PHRASE a counter replacement watches, mapped to the filter
+ * that selects it. `null` means "no filter at all", which is what "a permanent
+ * you control" says — inventing a `'permanent'` type word would match nothing.
+ */
+const REPLACEMENT_COUNTER_SUBJECTS: Readonly<Record<string, CardFilter | null>> = Object.freeze({
+  'a creature': { anyOfTypes: ['creature'] },
+  'a permanent': null,
+  'an artifact or creature': { anyOfTypes: ['artifact', 'creature'] },
+});
+
+/** The alternation of the multiplier words, longest first. */
+const REPLACEMENT_MULTIPLIER_TOKEN = `(${Object.keys(REPLACEMENT_MULTIPLIERS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * Whether the card being compiled can carry a printed replacement ability at
+ * all. Only a PERMANENT radiates one; an instant or sorcery printing the same
+ * shape is a one-shot that creates a floating effect instead (the fog rules in
+ * EFFECT_RULES), and compiling it as a static would make a Fog permanent.
+ */
+function cardIsPermanent(ctx: RuleContext): boolean {
+  return ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+}
+
 // --- effect rules ---------------------------------------------------------------
 // Matched against a spell's resolution clause AND against a trigger's body (the
 // same templates mean the same thing in both places — one mechanism, DESIGN §1.3).
@@ -1012,6 +1113,47 @@ function modeLabel(body: string, cardName: string): string {
 
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
+    /**
+     * THE FOG. "Prevent all combat damage that would be dealt this turn" (Fog,
+     * Darkness, Holy Day, Dawn Charm's first mode), and its relatives "Prevent
+     * all damage that would be dealt to you this turn" (Riot Control) and
+     * "Prevent all combat damage that would be dealt to you this turn".
+     *
+     * A ONE-SHOT: the spell registers a floating prevention effect that expires
+     * in cleanup. The same sentence WITHOUT "this turn", printed on a permanent,
+     * is a static instead (`replacement-prevent-all-static`) — the tail is what
+     * separates a Fog from a Dolmen Gate, and getting it wrong in either
+     * direction is a different card.
+     */
+    id: 'prevent-all-damage-this-turn',
+    description:
+      '"Prevent all [combat] damage that would be dealt [to you] this turn" (Fog, Darkness, Riot Control)',
+    pattern:
+      /^prevent all (combat |noncombat )?damage that would be dealt(?: to (you|creatures you control|attacking creatures you control))? this turn$/,
+    build(match) {
+      const combatWord = match[1]?.trim();
+      const who = match[2];
+      return {
+        effects: [
+          {
+            primitive: 'preventDamage',
+            params: {
+              ...(combatWord === 'combat' ? { combat: true } : {}),
+              ...(combatWord === 'noncombat' ? { combat: false } : {}),
+              ...(who === undefined ? {} : { scope: 'you' }),
+              ...(who === 'you' ? { recipientKind: 'player' } : {}),
+              ...(who === 'creatures you control' || who === 'attacking creatures you control'
+                ? { recipientKind: 'permanent' }
+                : {}),
+              ...(who === 'attacking creatures you control' ? { attacking: true } : {}),
+              label: match[0],
+            },
+          },
+        ],
+      };
+    },
+  },
+  {
     id: 'damage-any-target',
     description:
       '"~ deals N damage to any target / target creature / target player [or planeswalker]" — the printed target phrase becomes the effect\'s `targets` restriction',
@@ -1043,6 +1185,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects(
         { primitive: 'dealDamage', params: damageParams(damage, restriction) },
         { primitive: 'gainLife', params: { amount: life } },
+      );
+    },
+  },
+  {
+    id: 'damage-then-draw',
+    description: '"~ deals N damage to any target and you draw M cards" (Sword of Fire and Ice)',
+    // The same compound as `damage-then-gain-life`, with the other half of the
+    // pair of things a saboteur trigger most often bolts onto its damage. One
+    // rule per printed compound rather than a general "clause and clause"
+    // splitter, because the two halves may not each be independently targetable
+    // and a generic splitter would quietly aim both at the same object.
+    pattern: new RegExp(
+      `^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}(?:\\.|,)? and you draw ${COUNT_TOKEN} cards?$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const damage = parseCount(match[1]);
+      const restriction = damageRestriction(match[2] ?? '');
+      const cards = parseCount(match[3]);
+      if (damage === null || cards === null || restriction === null) return null;
+      return effects(
+        { primitive: 'dealDamage', params: damageParams(damage, restriction) },
+        { primitive: 'drawCards', params: { count: cards } },
       );
     },
   },
@@ -1472,6 +1637,19 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build() {
       return effects({ primitive: 'destroyTarget', params: { targets: ARTIFACT_TARGET } });
+    },
+  },
+  {
+    id: 'destroy-target-permanent',
+    description: '"Destroy target permanent"',
+    // The unrestricted form (Argentum Armor's attack trigger, Vindicate's body).
+    // It aims at core's `'permanent'` restriction rather than widening the
+    // creature one, because a card that can only ever be pointed at creatures is
+    // a strictly narrower card than the one printed.
+    pattern: /^destroy target permanent$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'destroyTarget', params: { targets: PERMANENT_TARGET } });
     },
   },
   {
@@ -2309,6 +2487,47 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'draw-then-discard',
+    description: '"Draw N cards. If you do, discard a card" (Mask of Memory)',
+    // "If you do" is the printed acknowledgement that the whole clause hangs off
+    // an OPTION — it is the body of a "you may", and that option is all-or-
+    // nothing, so taking it means both halves happen. Outside a "you may" the
+    // phrase is vacuous (the draw always happens), which is the same effects in
+    // the same order, so one rule serves both printings.
+    pattern: new RegExp(`^draw ${COUNT_TOKEN} cards?\\. if you do, discard ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const drawn = parseCount(match[1]);
+      const discarded = parseCount(match[2]);
+      if (drawn === null || discarded === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count: drawn } },
+        // "discard a card" naming no player is the CONTROLLER's own discard,
+        // chosen by them — `discardCard`'s default victim is the TARGETED player,
+        // which this clause does not have.
+        {
+          primitive: 'discardCard',
+          params: { who: 'controller', ...(discarded === 1 ? {} : { count: discarded }) },
+        },
+      );
+    },
+  },
+  {
+    id: 'each-opponent-loses-life',
+    description: '"Each opponent loses N life"',
+    // The half of the rule above without the lifegain — the body a saboteur
+    // trigger most often prints. UNTARGETED on purpose: "each opponent" names
+    // nobody, so it must not compile to the `target opponent` form, which a
+    // pilot could aim (and which would refuse to go on the stack with no legal
+    // target). `whichPlayer` is what `loseLife` reads for the untargeted case.
+    pattern: new RegExp(`^each opponent loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      return amount === null
+        ? null
+        : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
+    },
+  },
+  {
     id: 'gain-life-and-draw',
     description: '"You gain N life and draw a card" (Moldervine Reclamation\'s death trigger)',
     // The compound the sentence splitter cannot split: one printed sentence
@@ -2832,6 +3051,55 @@ function mayEffectsFrom(body: string, compiled: readonly EffectRef[]): readonly 
 }
 
 /**
+ * Build the OPTIONAL ("you may BODY") form of a trigger whose plain form is
+ * built by {@link triggerFrom}.
+ *
+ * A separate builder rather than a branch inside `triggerFrom`, because the two
+ * forms compile DIFFERENT TEXT: the plain rule compiles the whole body, and this
+ * one compiles only what follows "you may" and wraps it in the `mayEffects`
+ * question. Compiling the whole "you may …" string and then wrapping it would
+ * ask twice on the bodies that implement their own option.
+ *
+ * Rules built with this must be ordered AFTER their plain sibling, for the
+ * reason spelled out on `trigger-etb-you-may`: a body that implements its own
+ * "you may" (Eternal Witness's optional graveyard return) plays better on the
+ * rule that knows about it, and this is the general fallback for every other.
+ */
+function optionalTriggerFrom(
+  ctx: RuleContext,
+  condition: TriggeredAbility['condition'],
+  innerBody: string,
+  label: string,
+): ClauseContribution | null {
+  const compiled = ctx.compileTriggerBody(innerBody);
+  if (compiled === null) return null;
+  const effects = mayEffectsFrom(innerBody, compiled.effects);
+  if (effects === null || effects.length === 0) return null;
+  return {
+    triggers: [
+      {
+        condition,
+        effects,
+        label,
+        ...(compiled.targets ? { targets: compiled.targets } : {}),
+      },
+    ],
+  };
+}
+
+/**
+ * The condition an Equipment's/Aura's "**equipped/enchanted creature** …" line
+ * means: the same event, watched on the permanent this one is attached to.
+ *
+ * A helper rather than an inline object literal at each call site so the two
+ * printed families (combat damage and attacking) cannot end up with two
+ * different spellings of the same scope.
+ */
+function hostWatch(on: TriggerCondition['on']): TriggerCondition {
+  return { on, watches: 'attachedHost' };
+}
+
+/**
  * The printed step names that begin a triggered ability, mapped to the
  * {@link TriggerCondition} event each one means. Closed: a step the engine's
  * turn structure does not have must REPORT, never compile to a trigger that can
@@ -3271,6 +3539,98 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-combat-damage-to-player-you-may',
+    description: '"Whenever ~ deals combat damage to a player, you may BODY"',
+    // AFTER the plain rule — see `optionalTriggerFrom`.
+    pattern: /^whenever ~ deals combat damage to a player, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        { on: 'combatDamageToPlayer' },
+        body,
+        `Combat damage to a player: you may ${body}`,
+      );
+    },
+  },
+  {
+    // The Equipment/Aura copy of the line above. The SAME condition with the
+    // watched object moved to the host — see core's `TriggerWatches` for why
+    // that is a scope rather than an `equippedDealsCombatDamage` event of its
+    // own. The compiler emits it for any card printing the words; the ASSEMBLY
+    // refuses it on a card with no "Equip {N}"/"Enchant …" line, because a
+    // trigger nothing can ever attach is a trigger that can never fire.
+    id: 'trigger-equipped-combat-damage-to-player',
+    description: '"Whenever equipped/enchanted creature deals combat damage to a player, BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature deals combat damage to a player, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(
+        ctx,
+        hostWatch('combatDamageToPlayer'),
+        body,
+        `Equipped creature deals combat damage to a player: ${body}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-equipped-combat-damage-to-player-you-may',
+    description: '"Whenever equipped/enchanted creature deals combat damage to a player, you may BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature deals combat damage to a player, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        hostWatch('combatDamageToPlayer'),
+        body,
+        `Equipped creature deals combat damage to a player: you may ${body}`,
+      );
+    },
+  },
+  {
+    // The third printed shape of the same scope — Skullclamp's whole card, and
+    // the second half of every "protective" Aura. It fires as printed BECAUSE
+    // the state-based actions settle attachments and deaths in that order: a
+    // pass emits `creatureDied` while the host is still on the battlefield and
+    // the Equipment still attached, and only the NEXT pass unattaches it. Core's
+    // `equipped-triggers.test.ts` pins that ordering, because reversing it would
+    // make this rule compile a trigger that silently never fires.
+    id: 'trigger-equipped-dies',
+    description: '"When/whenever equipped/enchanted creature dies, BODY"',
+    pattern: /^(?:when|whenever) (?:equipped|enchanted) creature dies, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(ctx, hostWatch('dies'), body, `Equipped creature dies: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-dies-you-may',
+    description: '"When/whenever equipped/enchanted creature dies, you may BODY"',
+    pattern: /^(?:when|whenever) (?:equipped|enchanted) creature dies, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, hostWatch('dies'), body, `Equipped creature dies: you may ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-attacks',
+    description: '"Whenever equipped/enchanted creature attacks, BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature attacks, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(ctx, hostWatch('attacks'), body, `Equipped creature attacks: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-attacks-you-may',
+    description: '"Whenever equipped/enchanted creature attacks, you may BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature attacks, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, hostWatch('attacks'), body, `Equipped creature attacks: you may ${body}`);
+    },
+  },
+  {
     // "Whenever a player casts a spell" / "Whenever an opponent casts a spell" —
     // the same cast trigger with a different `who`, which core has always had.
     // Only the printed shapes were missing, so Managorger Hydra and Sunscorch
@@ -3306,6 +3666,266 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 
 /** Card-level static properties printed as their own ability line. */
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    /**
+     * "If one or more +1/+1 counters would be put on a creature you control,
+     * THAT MANY PLUS ONE / TWICE THAT MANY are put on it instead" — Hardened
+     * Scales, Conclave Mentor, Corpsejack Menace, Branching Evolution, Ozolith,
+     * Kami of Whispered Hopes; and the effect-first wording Doubling Season
+     * prints ("If an effect would put one or more counters on a permanent you
+     * control, it puts twice that many of those counters on that permanent
+     * instead").
+     *
+     * The COUNTER KIND is captured, not assumed: a card that says "+1/+1
+     * counters" must not multiply a -1/-1 counter, and the two wordings that say
+     * "one or more COUNTERS" (Winding Constrictor, Doubling Season) really do
+     * mean every kind. Core's layer takes the kind and matches on it.
+     */
+    id: 'replacement-counters-multiplied',
+    description:
+      '"If one or more [+1/+1] counters would be put on a creature/permanent you control, that many plus N / twice that many are put on it instead" (Hardened Scales, Corpsejack Menace, Doubling Season)',
+    pattern: new RegExp(
+      `^if (?:one or more (\\+1/\\+1 )?counters would be put on|an effect would put one or more (\\+1/\\+1 )?counters on) ` +
+        `(a creature|a permanent|an artifact or creature) you control, ` +
+        `(?:it puts )?(?:that many plus ${COUNT_TOKEN}|${REPLACEMENT_MULTIPLIER_TOKEN} that many) ` +
+        `(?:\\+1/\\+1 counters|of each of those kinds of counters|of those counters|counters) ` +
+        `(?:are put on |on )?(?:it|that creature|that permanent|that artifact or creature)(?: instead)?$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const kindPrinted = match[1] ?? match[2];
+      const nounPhrase = match[3] ?? '';
+      const plus = match[4] === undefined ? undefined : parseCount(match[4]);
+      // A "plus X" with no fixed value is not a number this layer can add.
+      if (match[4] !== undefined && plus === null) return null;
+      const times = match[5] === undefined ? undefined : REPLACEMENT_MULTIPLIERS[match[5]];
+      if (match[5] !== undefined && times === undefined) return null;
+      if (plus === undefined && times === undefined) return null;
+      const recipientFilter = REPLACEMENT_COUNTER_SUBJECTS[nounPhrase];
+      if (recipientFilter === undefined) return null;
+      return {
+        replacements: [
+          {
+            event: 'counters',
+            applies: {
+              recipientController: 'you',
+              ...(recipientFilter === null ? {} : { recipientFilter }),
+              // The printed "+1/+1" narrows the watched kind; its absence really
+              // does mean every kind (Doubling Season, Winding Constrictor).
+              ...(kindPrinted !== undefined ? { counterKind: PLUS_ONE_COUNTER } : {}),
+            },
+            outcome: {
+              ...(plus !== null && plus !== undefined ? { plus } : {}),
+              ...(times !== undefined ? { times } : {}),
+            },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
+     * "If a [red] source you control would deal [noncombat] damage to RECIPIENT,
+     * it deals DOUBLE that damage / that much damage PLUS N instead" — Torbran,
+     * Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+     * Tyrant, Dictate of the Twin Gods, Gisela's first clause.
+     *
+     * Both halves of the source phrase are captured because both are real: a
+     * COLOUR word ("a red source") narrows it through the same `anyOfColors`
+     * filter protection reads, and "a creature you control" narrows it by type.
+     * "A source" with no controller tail is the symmetric card and is NOT
+     * quietly read as "yours".
+     */
+    id: 'replacement-damage-scaled',
+    description:
+      '"If a [red] source you control would deal [noncombat] damage to X, it deals double/triple that damage / that much damage plus N instead" (Torbran, Gratuitous Violence, Fiery Emancipation)',
+    pattern: new RegExp(
+      `^if (?:a (${Object.keys(COLOR_WORDS).join('|')}) source(?: you control)?|${REPLACEMENT_SOURCE_TOKEN}) ` +
+        `would deal (noncombat |combat )?damage to ${REPLACEMENT_RECIPIENT_TOKEN}, ` +
+        `(?:it|that source) deals (?:${REPLACEMENT_MULTIPLIER_TOKEN} that damage|that much damage plus ${COUNT_TOKEN})` +
+        `(?: to (?:that permanent or player|that player or permanent|that player|that permanent|it))? instead$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const colorWord = match[1];
+      const sourcePhrase = match[2];
+      const combatWord = match[3]?.trim();
+      const recipientPhrase = match[4] ?? '';
+      const multiplierWord = match[5];
+      const plusToken = match[6];
+
+      // A colour phrase always prints "you control" on the cards that use it;
+      // the plain-source table covers the rest. Exactly one of the two matched.
+      const sourceController: StaticControllerScope =
+        colorWord !== undefined ? 'you' : REPLACEMENT_SOURCE_SCOPES[sourcePhrase ?? ''] ?? 'any';
+      const sourceType =
+        sourcePhrase === undefined ? null : REPLACEMENT_SOURCE_TYPES[sourcePhrase] ?? null;
+      const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
+      if (colorWord !== undefined && color === undefined) return null;
+
+      const recipient = REPLACEMENT_RECIPIENTS[recipientPhrase];
+      if (recipient === undefined) return null;
+
+      const times = multiplierWord === undefined ? undefined : REPLACEMENT_MULTIPLIERS[multiplierWord];
+      if (multiplierWord !== undefined && times === undefined) return null;
+      const plus = plusToken === undefined ? undefined : parseCount(plusToken);
+      if (plusToken !== undefined && plus === null) return null;
+
+      const sourceFilter =
+        color !== undefined || sourceType !== null
+          ? {
+              ...(sourceType !== null ? { anyOfTypes: [sourceType] } : {}),
+              ...(color !== undefined ? { anyOfColors: [color as never] } : {}),
+            }
+          : undefined;
+
+      return {
+        replacements: [
+          {
+            event: 'damage',
+            applies: {
+              ...(sourceController === 'any' ? {} : { sourceController }),
+              ...(sourceFilter !== undefined ? { sourceFilter } : {}),
+              ...(combatWord === 'noncombat' ? { combat: false } : {}),
+              ...(combatWord === 'combat' ? { combat: true } : {}),
+              ...(recipient.controller === 'any' ? {} : { recipientController: recipient.controller }),
+              ...(recipient.kind !== undefined ? { recipientKind: recipient.kind } : {}),
+            },
+            outcome: {
+              ...(times !== undefined ? { times } : {}),
+              ...(plus !== null && plus !== undefined ? { plus } : {}),
+            },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
+     * "If a source would deal damage to you or a permanent you control, PREVENT
+     * HALF that damage, rounded up" — Gisela's second clause. Its own rule
+     * rather than a mode of the one above because halving is prevention, not
+     * scaling: it produces a `damagePrevented` amount the log has to report, and
+     * the rounding direction is printed and must not be guessed.
+     */
+    id: 'replacement-damage-prevent-half',
+    description: '"If a source would deal damage to X, prevent half that damage, rounded up" (Gisela)',
+    pattern: new RegExp(
+      `^if ${REPLACEMENT_SOURCE_TOKEN} would deal (noncombat |combat )?damage to ${REPLACEMENT_RECIPIENT_TOKEN}, ` +
+        `prevent half that damage, rounded up$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const sourceController = REPLACEMENT_SOURCE_SCOPES[match[1] ?? ''] ?? 'any';
+      const sourceType = REPLACEMENT_SOURCE_TYPES[match[1] ?? ''] ?? null;
+      const combatWord = match[2]?.trim();
+      const recipient = REPLACEMENT_RECIPIENTS[match[3] ?? ''];
+      if (recipient === undefined) return null;
+      return {
+        replacements: [
+          {
+            event: 'damage',
+            applies: {
+              ...(sourceController === 'any' ? {} : { sourceController }),
+              ...(sourceType !== null ? { sourceFilter: { anyOfTypes: [sourceType] } } : {}),
+              ...(combatWord === 'noncombat' ? { combat: false } : {}),
+              ...(combatWord === 'combat' ? { combat: true } : {}),
+              ...(recipient.controller === 'any' ? {} : { recipientController: recipient.controller }),
+              ...(recipient.kind !== undefined ? { recipientKind: recipient.kind } : {}),
+            },
+            outcome: { preventHalfRoundedUp: true },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
+     * "Prevent all [combat|noncombat] damage that would be dealt to [ATTACKING |
+     * OTHER] creatures you control / to you" printed on a PERMANENT — Dolmen
+     * Gate, Iroas, Crystal Barricade.
+     *
+     * The identical sentence on an INSTANT ends "this turn" and is a one-shot
+     * (the fog rule in EFFECT_RULES). The two are kept apart by that tail and by
+     * the permanent check, because compiling a Fog as a static would make it
+     * prevent damage for the rest of the game.
+     */
+    id: 'replacement-prevent-all-static',
+    description:
+      '"Prevent all [combat] damage that would be dealt to [attacking|other] creatures you control / to you" on a permanent (Dolmen Gate, Iroas)',
+    pattern:
+      /^prevent all (combat |noncombat )?damage that would be dealt to (attacking creatures you control|other creatures you control|creatures you control|you)$/,
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const combatWord = match[1]?.trim();
+      const who = match[2] ?? '';
+      const applies: ReplacementApplies = {
+        ...(combatWord === 'combat' ? { combat: true } : {}),
+        ...(combatWord === 'noncombat' ? { combat: false } : {}),
+        recipientController: 'you',
+        ...(who === 'you'
+          ? { recipientKind: 'player' as const }
+          : {
+              recipientKind: 'permanent' as const,
+              recipientFilter: { anyOfTypes: ['creature' as CardType] },
+              ...(who === 'attacking creatures you control' ? { recipientAttacking: true } : {}),
+              ...(who === 'other creatures you control' ? { excludeSource: true } : {}),
+            }),
+      };
+      return { replacements: [{ event: 'damage', applies, outcome: { preventAll: true }, label: match[0] }] };
+    },
+  },
+  {
+    /**
+     * "If you would draw a card [except the first one you draw in each of your
+     * draw steps], draw two cards instead" (Teferi's Ageless Insight,
+     * Alhammarret's Archive) and "…while your library has no cards in it, you
+     * WIN THE GAME instead" (Laboratory Maniac).
+     *
+     * The printed exception is implemented EXACTLY, not approximated: core
+     * records the `drewInOwnDrawStep` turn fact as the draw-step draw happens,
+     * so the second and every later draw in that step really is replaced.
+     */
+    id: 'replacement-draw',
+    description:
+      '"If you would draw a card [except the first one each draw step], draw two cards instead" / "…while your library has no cards in it, you win the game instead"',
+    pattern: new RegExp(
+      `^if you would draw a card(?: (except the first one you draw in each of your draw steps|while your library has no cards in it))?, ` +
+        `(?:draw ${COUNT_TOKEN} cards instead|you win the game instead)$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const clause = match[1];
+      const winsGame = match[2] === undefined;
+      // "Draw two cards instead" is a MULTIPLIER of the one-card draw it
+      // replaces, so anything below two would be a card that draws fewer than it
+      // printed — refused rather than compiled.
+      const drawCount = winsGame ? 0 : parseCount(match[2]);
+      if (!winsGame && (drawCount === null || drawCount < 2)) return null;
+      // "You win the game instead" is only buildable when the condition gating
+      // it is one core can read; an unconditional form is not a printed card.
+      if (winsGame && clause !== 'while your library has no cards in it') return null;
+      return {
+        replacements: [
+          {
+            event: 'draw',
+            applies: {
+              recipientController: 'you',
+              ...(clause === 'except the first one you draw in each of your draw steps'
+                ? { exceptFirstDrawEachDrawStep: true }
+                : {}),
+              ...(clause === 'while your library has no cards in it' ? { requiresEmptyLibrary: true } : {}),
+            },
+            outcome: winsGame ? { winGame: true } : { times: drawCount as number },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'multikicker-cost',
     description:
@@ -3568,6 +4188,18 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const cost = parseManaSymbols(match[1] ?? '');
       if (!cost) return null;
       return { madness: cost };
+    },
+  },
+  {
+    id: 'copy-as-enters',
+    description:
+      '"You may have ~ enter [tapped] as a copy of <selector>[, except <clauses>]" (Clone, Sculpting Steel, Spark Double, Vesuva, Echoing Deeps) - CR 706',
+    // Placed above `enters-tapped` because Vesuva's line contains the word
+    // "tapped" and this rule owns the whole clause, tapped-ness included.
+    pattern: /^you may have ~ enter( tapped)? as a copy of (.+?)(?:, except (.+))?$/,
+    build(match, ctx) {
+      const spec = buildCopyAsEnters(match[2] ?? '', match[3], match[1] !== undefined, ctx);
+      return spec === null ? null : { copyAsEnters: spec };
     },
   },
   {
@@ -4020,20 +4652,61 @@ const EQUIP_TARGET: TargetRestriction = 'creatureYouControl';
  * not model — so a partially-understood line is reported rather than compiled into
  * a card that is missing an ability.
  */
-function parseKeywordList(text: string): Record<string, boolean> | null {
-  const words = text
-    .split(/,| and /)
-    .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
-    .filter((word) => word.length > 0);
+function parseKeywordList(text: string): KeywordFlags | null {
+  const words = joinPayloadKeywords(
+    text
+      .split(/,| and /)
+      .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
+      .filter((word) => word.length > 0),
+  );
   if (words.length === 0) return null;
-  const flags: Record<string, boolean> = {};
+  const flags: Record<string, unknown> = {};
   for (const word of words) {
     const field = KEYWORD_FLAGS[word] ?? KEYWORD_PHRASES[word];
-    if (!field) return null;
-    flags[field] = true;
+    if (field) {
+      flags[field] = true;
+      continue;
+    }
+    // The two PAYLOAD keywords — "ward {1}", "protection from black and from
+    // green" — carry a value rather than a boolean, and core already models
+    // both. They go through the same parser the printed keyword LINE uses
+    // (`parseProtectionOrWard`) so an Equipment and a creature cannot end up
+    // disagreeing about which forms are real: a quality outside the closed
+    // table ("protection from instants") still returns null and the whole
+    // line keeps reporting.
+    const payload = parseProtectionOrWard(word);
+    if (payload === null) return null;
+    Object.assign(flags, payload);
   }
-  return flags;
+  return flags as KeywordFlags;
 }
+
+/**
+ * Re-join the conjuncts of a printed protection list that the keyword split
+ * broke apart.
+ *
+ * "protection from black and from green" is ONE ability, but the conjunction
+ * that separates two keywords is the same word that separates two protection
+ * qualities — so the split yields `['protection from black', 'from green']`.
+ * Any run of "from …" fragments belongs to the protection phrase before it;
+ * putting them back is what lets {@link parseProtectionOrWard} see the whole
+ * printed line, which is the only thing that knows how to read it.
+ */
+function joinPayloadKeywords(words: readonly string[]): string[] {
+  const joined: string[] = [];
+  for (const word of words) {
+    const previous = joined[joined.length - 1];
+    if (previous !== undefined && PROTECTION_CONTINUATION.test(word) && previous.startsWith('protection from ')) {
+      joined[joined.length - 1] = `${previous} and ${word}`;
+      continue;
+    }
+    joined.push(word);
+  }
+  return joined;
+}
+
+/** A trailing "from …" fragment of a multi-quality protection line. */
+const PROTECTION_CONTINUATION = /^from /;
 
 /**
  * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
@@ -4053,6 +4726,208 @@ const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   "can't be blocked": 'unblockable',
   "can't block": 'cantBlock',
 });
+
+/**
+ * ---------------------------------------------------------------------------
+ * COPY EFFECTS — "You may have ~ enter as a copy of …" (CR 706)
+ * ---------------------------------------------------------------------------
+ *
+ * Two CLOSED tables and two parsers, for the same reason every other closed
+ * table in this file exists: a copy card's whole identity is *what it may copy*
+ * and *how the copy differs*, so a selector or an "except" clause the compiler
+ * only half-read would produce a card that is not the printed one. Anything
+ * outside these tables makes the rule return `null`, and the card reports.
+ */
+
+/**
+ * The printed nouns a copy clause may select, mapped to the `CardFilter` each
+ * one means. `{}` (an empty filter) is "any permanent", which is exactly what an
+ * absent filter is — spelled out rather than omitted so the table reads as a
+ * complete list of what is understood.
+ */
+const COPY_SELECTOR_FILTERS: Readonly<Record<string, CardFilter>> = Object.freeze({
+  creature: { anyOfTypes: ['creature'] },
+  artifact: { anyOfTypes: ['artifact'] },
+  enchantment: { anyOfTypes: ['enchantment'] },
+  planeswalker: { anyOfTypes: ['planeswalker'] },
+  land: { anyOfTypes: ['land'] },
+  permanent: {},
+  'nonland permanent': { noneOfTypes: ['land'] },
+  'artifact or creature': { anyOfTypes: ['artifact', 'creature'] },
+  'artifact or enchantment': { anyOfTypes: ['artifact', 'enchantment'] },
+  'creature or planeswalker': { anyOfTypes: ['creature', 'planeswalker'] },
+});
+
+/** The card-type words a copy "except" clause may add to the copied types. */
+const COPY_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  artifact: 'artifact',
+  creature: 'creature',
+  enchantment: 'enchantment',
+  land: 'land',
+  planeswalker: 'planeswalker',
+});
+
+/**
+ * Parse the "of …" half of a copy clause: WHICH objects, WHOSE, and WHERE.
+ *
+ * Understood shapes, and nothing else:
+ *   "any creature on the battlefield"   → any, battlefield
+ *   "a creature you control"            → yours, battlefield
+ *   "any land card in a graveyard"      → any, graveyard   (Echoing Deeps)
+ *
+ * Returns `null` for every other wording — notably Mockingbird's "…with mana
+ * value less than or equal to the amount of mana spent to cast ~", which needs a
+ * fact (how much mana was spent) nothing records, and "target land", which is a
+ * targeted ability rather than an as-enters choice.
+ */
+function parseCopySelector(text: string): Partial<Pick<CopyAsEntersSpec, 'filter' | 'from' | 'whose'>> | null {
+  const trimmed = text.trim();
+  const graveyard = trimmed.match(/^any ([a-z ]+?) card in a graveyard$/);
+  if (graveyard) {
+    const filter = COPY_SELECTOR_FILTERS[graveyard[1] ?? ''];
+    return filter === undefined ? null : { filter, from: 'graveyard' };
+  }
+  const battlefield = trimmed.match(/^any ([a-z ]+?) on the battlefield$/);
+  if (battlefield) {
+    const filter = COPY_SELECTOR_FILTERS[battlefield[1] ?? ''];
+    return filter === undefined ? null : { filter };
+  }
+  const yours = trimmed.match(/^an? ([a-z ]+?) you control$/);
+  if (yours) {
+    const filter = COPY_SELECTOR_FILTERS[yours[1] ?? ''];
+    return filter === undefined ? null : { filter, whose: 'you' };
+  }
+  return null;
+}
+
+/**
+ * Split the printed "except …" tail into its clauses.
+ *
+ * Real cards join them with ", " and a final ", and " / " and " (Spark Double
+ * prints three, Sakashima three, Phantasmal Image two). Splitting on both
+ * separators is safe because every clause the table below accepts is a fixed
+ * short phrase containing neither — and a clause that DOES contain one (a quoted
+ * granted ability, which always carries commas inside its quotes) simply fails
+ * to match any entry, which reports the whole card. That is the right outcome
+ * for it anyway.
+ */
+function splitExceptClauses(text: string): string[] {
+  return text
+    .split(/,\s*and\s+|,\s*|\s+and\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/**
+ * Read one "except …" clause into a {@link CopyExceptions} patch, or `null` when
+ * the compiler does not understand it.
+ *
+ * A CLOSED table of printed phrasings, and it must be closed for the reason this
+ * whole file exists: "except it has 'When this creature becomes the target of a
+ * spell or ability, sacrifice it'" (Phantasmal Image) grants a TRIGGERED ABILITY
+ * on a condition the engine has no event for, and a copy missing that drawback
+ * would be strictly better than the printed card.
+ */
+function parseCopyException(clause: string, ctx: RuleContext): CopyExceptions | null {
+  // "it's an Illusion in addition to its other types" / "it's an artifact …".
+  // One printed word may be a card TYPE or a creature SUBTYPE, and a card may
+  // print two subtypes at once ("it's a Shapeshifter Rogue in addition…").
+  const addition = clause.match(/^it'?s (?:an?|the) ([a-z' ]+?) in addition to its other types$/);
+  if (addition) {
+    const words = (addition[1] ?? '').split(' ').filter((w) => w.length > 0);
+    if (words.length === 0) return null;
+    if (words.length === 1 && words[0] === 'legendary') return { legendary: true };
+    const types: CardType[] = [];
+    const subtypes: string[] = [];
+    for (const word of words) {
+      const asType = COPY_TYPE_WORDS[word];
+      if (asType !== undefined) {
+        types.push(asType);
+      } else {
+        // Anything else is a creature SUBTYPE — which is what these clauses
+        // print (Bird, Illusion, Cave, Shapeshifter, Rogue). Subtypes are free
+        // text in this engine and compared case-insensitively, so the word is
+        // carried verbatim rather than checked against a list that could not be
+        // complete.
+        subtypes.push(word.charAt(0).toUpperCase() + word.slice(1));
+      }
+    }
+    return {
+      ...(types.length > 0 ? { addTypes: types } : {}),
+      ...(subtypes.length > 0 ? { addSubtypes: subtypes } : {}),
+    };
+  }
+  // "it's legendary" — the supertype form, which the branch above deliberately
+  // does not swallow (a supertype is not "another type").
+  if (/^it'?s legendary(?: in addition to its other types)?$/.test(clause)) return { legendary: true };
+  // "it isn't legendary" (Spark Double).
+  if (/^it isn'?t legendary$/.test(clause)) return { legendary: false };
+  // "its name is ~" — the copy keeps the copying card's own printed name
+  // (Sakashima the Impostor, Chameleon's "his name is …").
+  if (/^(?:its|his|her|their) name is ~$/.test(clause)) return { name: ctx.card.name };
+  // "it has flying" — only words that are real engine keyword flags.
+  const keyword = clause.match(/^it has ([a-z' ]+)$/);
+  if (keyword) {
+    const flag = KEYWORD_FLAGS[(keyword[1] ?? '').trim()];
+    return flag === undefined ? null : { addKeywords: { [flag]: true } as KeywordFlags };
+  }
+  // "it enters with an additional +1/+1 counter on it if it's a creature".
+  if (/^it enters with an additional \+1\/\+1 counter on it if it'?s a creature$/.test(clause)) {
+    return { extraCounters: { [PLUS_ONE_COUNTER]: 1 } };
+  }
+  // "it enters with an additional loyalty counter on it if it's a planeswalker".
+  if (/^it enters with an additional loyalty counter on it if it'?s a planeswalker$/.test(clause)) {
+    return { extraLoyalty: 1 };
+  }
+  return null;
+}
+
+/** Merge one parsed exception patch into the accumulating tail. */
+function mergeCopyExceptions(base: CopyExceptions, patch: CopyExceptions): CopyExceptions {
+  return {
+    ...base,
+    ...patch,
+    ...(base.addTypes || patch.addTypes ? { addTypes: [...(base.addTypes ?? []), ...(patch.addTypes ?? [])] } : {}),
+    ...(base.addSubtypes || patch.addSubtypes
+      ? { addSubtypes: [...(base.addSubtypes ?? []), ...(patch.addSubtypes ?? [])] }
+      : {}),
+    ...(base.addKeywords || patch.addKeywords
+      ? { addKeywords: { ...base.addKeywords, ...patch.addKeywords } }
+      : {}),
+    ...(base.extraCounters || patch.extraCounters
+      ? { extraCounters: { ...base.extraCounters, ...patch.extraCounters } }
+      : {}),
+  };
+}
+
+/**
+ * Build the whole `copyAsEnters` spec from a matched copy clause, or `null` when
+ * any part of it is not fully understood.
+ *
+ * `tapped` is the printed word in "you may have ~ enter **tapped** as a copy of
+ * any land on the battlefield" (Vesuva). It is carried as an EXCEPTION rather
+ * than as the card's own `entersTapped`, because the copied land replaces this
+ * card's characteristics entirely — the copying card's printed word has to
+ * survive that replacement or Vesuva enters untapped.
+ */
+function buildCopyAsEnters(
+  selectorText: string,
+  exceptText: string | undefined,
+  tapped: boolean,
+  ctx: RuleContext,
+): CopyAsEntersSpec | null {
+  const selector = parseCopySelector(selectorText);
+  if (selector === null) return null;
+  let except: CopyExceptions = tapped ? { entersTapped: true } : {};
+  if (exceptText !== undefined && exceptText.trim().length > 0) {
+    for (const clause of splitExceptClauses(exceptText)) {
+      const patch = parseCopyException(clause, ctx);
+      if (patch === null) return null;
+      except = mergeCopyExceptions(except, patch);
+    }
+  }
+  return { ...selector, ...(Object.keys(except).length > 0 ? { except } : {}) };
+}
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
@@ -4195,6 +5070,195 @@ function parseManaActivationCondition(text: string): ManaActivationCondition | n
 
 /** The five basic land types, lowercased — the only subtypes a Verge/Maze names. */
 const BASIC_LAND_SUBTYPES: readonly string[] = ['plains', 'island', 'swamp', 'mountain', 'forest'];
+
+// --- SPEND RESTRICTIONS on produced mana ------------------------------------
+//
+// "Spend this mana only to cast a creature spell" (Ancient Ziggurat), "…only to
+// cast artifact spells or activate abilities of artifacts" (Power Depot). The
+// restriction is carried by the MANA rather than by the source, which is why it
+// compiles to `ManaAbility.spendRestriction` and is honoured by the POOL — see
+// core's spend-restriction.ts.
+//
+// The parser below REFUSES anything it does not fully understand, because both
+// directions of error print a different card: a restriction the engine drops
+// makes Ancient Ziggurat a strictly better land, and one the engine invents makes
+// it strictly worse. Cavern of Souls' "of the chosen type" is the live refusal —
+// it needs a per-INSTANCE remembered creature type, which is the separate
+// "As ~ enters, choose a creature type" template, and there is no honest way to
+// compile it without one.
+
+/**
+ * Whether this card prints "As ~ enters, choose a creature type" — the naming
+ * that gives "…of the chosen type" something to refer to.
+ *
+ * Read off the card's own Oracle text for the same reason `cardHasXCost` reads
+ * the printed cost: a rule runs while the assembly is still being built, so the
+ * compiled `asEntersChoice` may not exist yet when this line is reached.
+ */
+function cardNamesACreatureTypeAsItEnters(ctx: RuleContext): boolean {
+  return /enters, choose a creature type/i.test(ctx.card.oracleText);
+}
+
+/** The printed head nouns a "cast …" restriction ends on. */
+const SPEND_HEAD_NOUNS: readonly string[] = ['spell', 'spells', 'source', 'sources'];
+
+/** Type words a spend restriction may name, singular and plural, to `CardType`. */
+const SPEND_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  creature: 'creature',
+  creatures: 'creature',
+  artifact: 'artifact',
+  artifacts: 'artifact',
+  enchantment: 'enchantment',
+  enchantments: 'enchantment',
+  instant: 'instant',
+  instants: 'instant',
+  sorcery: 'sorcery',
+  sorceries: 'sorcery',
+  land: 'land',
+  lands: 'land',
+  planeswalker: 'planeswalker',
+  planeswalkers: 'planeswalker',
+  battle: 'battle',
+  battles: 'battle',
+});
+
+/**
+ * Parse the OBJECT half of one restriction clause — "a creature spell",
+ * "colorless eldrazi spells", "artifacts", "a dragon creature spell".
+ *
+ * Token-driven rather than one regex, because the printed parts stack
+ * independently (article, "colorless", "legendary", a colour, a subtype, a type,
+ * a head noun) and a regex making each of them optional is exactly how a pattern
+ * quietly matches a wording it does not implement. EVERY token must be
+ * recognised; one that is not returns `null` and the card reports.
+ *
+ * `requireHead` is true for "cast …", which always ends in "spell(s)". The
+ * "activate abilities of …" form names its objects bare ("of artifacts"), so it
+ * does not.
+ */
+function parseSpendObject(
+  spec: string,
+  purpose: 'cast' | 'activate',
+  requireHead: boolean,
+): ManaSpendClause | null {
+  const tokens = spec
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) return null;
+  if (tokens[0] === 'a' || tokens[0] === 'an') tokens.shift();
+  // "…of the chosen type" trails the head noun ("a creature spell OF THE CHOSEN
+  // TYPE"), so it comes off first — otherwise the head-noun test looks at "type"
+  // and the whole clause is refused. The flag it sets is a DECLARATION; the value
+  // is substituted when the mana is made (core's `resolveSpendRestriction`).
+  let subtypeChosenBySource = false;
+  if (tokens.slice(-4).join(' ') === 'of the chosen type') {
+    tokens.length -= 4;
+    subtypeChosenBySource = true;
+  }
+  if (SPEND_HEAD_NOUNS.includes(tokens[tokens.length - 1] ?? '')) tokens.pop();
+  else if (requireHead) return null;
+
+  const types: CardType[] = [];
+  const colors: ManaColor[] = [];
+  const subtypes: string[] = [];
+  let colorless = false;
+  let legendary = false;
+  for (const token of tokens) {
+    if (token === 'colorless') {
+      colorless = true;
+      continue;
+    }
+    if (token === 'legendary') {
+      legendary = true;
+      continue;
+    }
+    const color = COLOR_WORDS[token];
+    if (color) {
+      colors.push(color);
+      continue;
+    }
+    const type = SPEND_TYPE_WORDS[token];
+    if (type) {
+      types.push(type);
+      continue;
+    }
+    // Anything left must be a printed SUBTYPE ("dragon", "eldrazi", "angel",
+    // "omen"), and there may be only one — "of the chosen type" and every other
+    // unread wording leaves several unrecognised words here and is refused.
+    //
+    // A PLURAL subtype is refused too: subtypes match the printed word, so
+    // "dragons" would match nothing, and mana that can never be spent is as wrong
+    // as mana that can be spent on anything. Refusing only ever declines a card;
+    // it cannot mis-compile one.
+    if (subtypes.length > 0 || !/^[a-z][a-z'-]*$/.test(token) || token.endsWith('s')) return null;
+    subtypes.push(token);
+  }
+  if (
+    types.length === 0 &&
+    subtypes.length === 0 &&
+    colors.length === 0 &&
+    !colorless &&
+    !legendary &&
+    !subtypeChosenBySource
+  ) {
+    // "…only to cast a spell" restricts nothing this engine can check. No printed
+    // card says it, and refusing stops the rule from becoming a way to compile
+    // mana whose restriction is silently vacuous.
+    return null;
+  }
+  const clause: {
+    purpose: 'cast' | 'activate';
+    types?: readonly CardType[];
+    subtypes?: readonly string[];
+    colors?: readonly ManaColor[];
+    colorless?: boolean;
+    legendary?: boolean;
+    subtypeChosenBySource?: boolean;
+  } = { purpose };
+  if (types.length > 0) clause.types = types;
+  if (subtypes.length > 0) clause.subtypes = subtypes;
+  if (colors.length > 0) clause.colors = colors;
+  if (colorless) clause.colorless = true;
+  if (legendary) clause.legendary = true;
+  if (subtypeChosenBySource) clause.subtypeChosenBySource = true;
+  return clause as ManaSpendClause;
+}
+
+/**
+ * Parse the whole "spend this mana only to …" tail into a restriction.
+ *
+ * The printed "or" is a DISJUNCTION over clauses, and a later alternative may
+ * omit the verb ("cast a Dragon spell **or an Omen spell**"), so the previous
+ * alternative's verb carries forward — which is how the sentence reads in English
+ * and what keeps Maelstrom of the Spirit Dragon from being read as "cast a Dragon
+ * spell or activate an Omen".
+ */
+function parseManaSpendRestriction(text: string): ManaSpendRestriction | null {
+  const parts = text.trim().split(' or ');
+  const allow: ManaSpendClause[] = [];
+  let verb: 'cast' | 'activate' | null = null;
+  for (const part of parts) {
+    const trimmed = part.trim();
+    const activate = trimmed.match(/^activate (?:abilities|an ability) of (.+)$/);
+    if (activate) {
+      verb = 'activate';
+      const clause = parseSpendObject(activate[1] ?? '', 'activate', false);
+      if (!clause) return null;
+      allow.push(clause);
+      continue;
+    }
+    const cast = trimmed.match(/^cast (.+)$/);
+    if (cast) verb = 'cast';
+    // A leading alternative with no verb at all is not a printed form; refusing
+    // keeps the carry-forward from inventing a reading.
+    if (verb === null) return null;
+    const clause = parseSpendObject(cast ? (cast[1] ?? '') : trimmed, verb, verb === 'cast');
+    if (!clause) return null;
+    allow.push(clause);
+  }
+  return allow.length > 0 ? { label: `only to ${text.trim()}`, allow } : null;
+}
 
 /**
  * A printed cost run that MAY contain colour/colour hybrid symbols — the filter
@@ -4409,13 +5473,46 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       };
     },
   },
+  {
+    // A SPEND RESTRICTION on the mana this ability makes: Ancient Ziggurat,
+    // Somberwald Sage, Eldrazi Temple, Giada, Power Depot. The restriction rides
+    // the MANA into the pool rather than decorating the source, which is why it
+    // is the one entry in the mana model that outlives the tap — see core's
+    // spend-restriction.ts.
+    //
+    // The "add" half is the ordinary payload parser, so every production shape
+    // the other rules read ("one mana of any color", "three mana of any one
+    // color", a printed run) is available here with no second grammar.
+    id: 'mana-ability-spend-restriction',
+    description: '"{T}: Add one mana of any color. Spend this mana only to cast a creature spell"',
+    pattern: /^\{t\}: add (.+?)\. spend this mana only to (.+)$/,
+    build(match, ctx) {
+      const produces = parseManaPayload(match[1] ?? '');
+      const spendRestriction = parseManaSpendRestriction(match[2] ?? '');
+      if (!produces || !spendRestriction) return null;
+      // "…of the chosen type" only means something on a card that ACTUALLY names
+      // a creature type as it enters. Compiling it on a card that does not would
+      // print a land whose mana can never be spent — strictly worse than the real
+      // one, and just as much a lie as one whose mana pays for anything. The
+      // clause is checked against the card's own printed text rather than against
+      // the assembly, because rules run before the assembly is complete and a
+      // land's naming line may compile after this one.
+      if (
+        spendRestriction.allow.some((clause) => clause.subtypeChosenBySource === true) &&
+        !cardNamesACreatureTypeAsItEnters(ctx)
+      ) {
+        return null;
+      }
+      return { manaAbilities: [{ produces, spendRestriction }] };
+    },
+  },
   // NOTE: there is still deliberately NO rule for a mana ability whose colours
   // come from somewhere the engine cannot read — "add one mana of any color in
-  // your commander's color identity" (no commander here, and never will be, see
-  // the completion plan §5) or "of any type that land produced". Nor is there one
-  // for a SPEND RESTRICTION ("spend this mana only to cast creature spells"),
-  // which needs the mana POOL to carry the restriction, not the source. Those
-  // fall through to `missing` (see UNSUPPORTED_HINTS).
+  // your commander's color identity" (there is no commander here and no format
+  // that has one, see the completion plan §5) or "of any type that land
+  // produced" (a REMEMBERED permanent, which is a triggered ability watching a
+  // tap, not a mana ability at all). Those fall through to `missing` (see
+  // UNSUPPORTED_HINTS), each named for what it actually needs.
 ]);
 
 /**
@@ -4514,9 +5611,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   // hints below no longer claim those systems are missing — that would send the
   // next contributor to rebuild something that exists. What reaches them is a
   // WORDING the rule table has no entry for yet, inside a shape the engine can
-  // already express, with two exceptions that are still genuinely engine work and
-  // say so: the SPEND RESTRICTION (the pool would have to carry it) and a cost
-  // component the model has no field for (tapping another permanent).
+  // already express. The SPEND RESTRICTION has since joined them — the pool
+  // carries it now — leaving one cost component the model genuinely has no field
+  // for (tapping another permanent), which says so.
   //
   // Order matters: the first matching hint wins, so these sit above the generic
   // mana hint.
@@ -4550,25 +5647,52 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'an ADDITIONAL-COST wording on a mana ability the compiler does not recognize yet (life and mana costs themselves are implemented)',
   },
   {
-    // Cavern of Souls, Delighted Halfling, Somberwald Sage. STILL A SYSTEM: the
-    // restriction belongs to the MANA, not to the source, so the pool would have
-    // to carry it and every payment path would have to honour it. Nothing about
-    // `manaAbilities` helps — a restricted mana is indistinguishable from an
-    // unrestricted one the moment it lands in the pool.
+    // Delighted Halfling and Cavern of Souls print a spend restriction AND make
+    // the spell uncounterable. Counterspells are real in this engine, so that
+    // second clause is NOT vacuous — it is a live rules effect with no seam, and
+    // it must not be silently dropped just because the mana half now compiles.
+    pattern: /spend this mana only to .*can'?t be countered/,
+    missingEngineSystem:
+      'a spell that CANNOT BE COUNTERED (the spend restriction itself is implemented; countering has no "uncounterable" flag yet)',
+  },
+  {
+    // "...of the chosen type" on a card that never NAMES one. Both halves ship —
+    // the spend restriction (core's spend-restriction.ts) and the as-entered
+    // naming (core's as-enters.ts) — so what lands here is a card whose
+    // restriction refers to a choice its own text does not make. Compiling it
+    // would print a land whose mana can never be spent, which is as much a lie
+    // as one whose mana pays for anything. Order matters: above the generic form.
+    pattern: /spend this mana only to .*of the chosen type/,
+    missingEngineSystem:
+      'a SPEND-RESTRICTION wording the compiler cannot read yet — it names "the chosen type" but the card never chooses one (both restricted mana and the as-entered naming are implemented)',
+  },
+  {
     pattern: /spend this mana only to/,
     missingEngineSystem:
-      'a SPEND RESTRICTION on produced mana (the mana pool records colour, not what each mana may pay for)',
+      'a SPEND-RESTRICTION wording the compiler cannot read yet (restricted mana itself is implemented — the pool carries the restriction)',
   },
   {
     // "…that a land you control could produce" and "…that a land an opponent
     // controls could produce" are read off the live board. What lands here is a
-    // derivation from something this engine does not have at all — a COMMANDER's
-    // colour identity (§5 of the completion plan rules those out for good), or a
-    // remembered "that land".
+    // derivation from an object this engine does not have.
+    //
+    // Split in two ON PURPOSE, because the two halves are not the same work and
+    // reporting them together hid that: a COMMANDER's colour identity needs a
+    // format this engine does not implement and will not fake (completion plan
+    // §5 — Command Tower, Arcane Signet), while "any type that land produced"
+    // needs a TRIGGERED ABILITY that watches a permanent being tapped for mana
+    // and copies what it made (Mirari's Wake, Zendikar Resurgent, Vorinclex,
+    // Kinnan, Extraplanar Lens, Incubation Druid). The second is ordinary engine
+    // work; the first is a decision.
+    pattern: /add one mana of any (?:color|type) in your commander'?s color identity/,
+    missingEngineSystem:
+      "a mana colour derived from a COMMANDER'S COLOR IDENTITY (this engine has no commander and no format that has one; a fake one would corrupt every verdict touching these cards)",
+  },
+  {
     pattern:
       /add one mana of any (?:color|type) (?:in|that)|of any type that (?:land|permanent) produced/,
     missingEngineSystem:
-      'a mana colour derived from an object this engine has no concept of (a commander, or a remembered permanent)',
+      'a mana-DOUBLING trigger that copies what a permanent was just tapped for ("whenever you tap a land for mana, add one mana of any type that land produced" — needs a tapped-for-mana trigger and a remembered production)',
   },
   {
     pattern: /add one mana of any color|add \{[wubrgc]\} or \{[wubrgc]\}|add one mana of any/,
@@ -4622,6 +5746,66 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // since half a modal spell is not a modal spell.
     pattern: /^choose (?:one|two|three|four|five|up to)\b|^choose one or both\b/,
     missingEngineSystem: 'a modal template the compiler does not recognize yet',
+  },
+  // --- COPY EFFECTS: the SYSTEM is shipped; what lands here is a residual -----
+  //
+  // Core applies a copy in LAYER 1 (`CardDefinition.copyAsEnters`, `copy.ts`)
+  // and the compiler builds the whole clause including its "except" tail. So
+  // none of the three hints below claims copying is missing — that would send
+  // the next contributor to rebuild something that exists. Each names the ONE
+  // part of a specific card the compiler still cannot read. They sit above the
+  // generic "you may / choose" hint, which would otherwise swallow all three.
+  {
+    // Mockingbird. The selector is a mana-value bound against "the amount of
+    // mana spent to cast ~", and nothing records that number: the engine
+    // charges a cost and forgets what was spent, so an X-costed copier cannot
+    // know its own bound. A different fact, not a different template.
+    pattern: /as a copy of .*the amount of mana spent to cast/,
+    missingEngineSystem:
+      'a copy whose legal targets depend on THE AMOUNT OF MANA SPENT to cast it (copy effects themselves are implemented — nothing records how much mana paid for a spell)',
+  },
+  {
+    // Phantasmal Image and Sakashima the Impostor. Both print an "except … and
+    // it has "<ability>" tail that GRANTS an ability to the copy — a
+    // triggered ability on "becomes the target of a spell or ability" (an event
+    // the engine does not raise for data triggers) and an activated ability
+    // with a delayed "at the beginning of the next end step" return. Granting
+    // the ability is the missing half, not the copying.
+    pattern: /as a copy of .*, except .*\bit has "/,
+    missingEngineSystem:
+      'a copy that GRANTS AN ABILITY printed in quotes (copy effects and their "except" tail are implemented — an ability granted as text is not)',
+  },
+  {
+    // COPYING A SPELL ON THE STACK (Reverberate, Narset's Reversal, Fork) and
+    // TOKEN COPIES (Rite of Replication, Twinflame, Kiki-Jiki) are a DIFFERENT
+    // system from the as-enters copy this branch shipped, and reported by name
+    // rather than half-built. What each needs, precisely:
+    //
+    //  - a stack object that is NOT A CARD. A copy of a spell ceases to exist as
+    //    it resolves (CR 707.10); `SpellStackObject.resolvesTo` can only send a
+    //    spell to the battlefield, a graveyard, exile or a hand, and a copy that
+    //    took any of those exits would leave a phantom card in a zone that
+    //    Tarmogoyf, delirium and flashback all count.
+    //  - a "you may choose NEW TARGETS for the copy" moment. Aiming happens at
+    //    cast time or as a trigger goes on the stack; nothing aims an object the
+    //    engine itself just created.
+    //  - the copy carrying the original's X, kicks and chosen modes (CR 706.10),
+    //    which live on the stack object being copied.
+    //
+    // A TOKEN copy needs the first of those plus a token whose definition is
+    // another permanent's copiable values -- reachable, but a token is created by
+    // `createToken` from authored data today, never from a board object.
+    pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery)\b|token that'?s a copy|tokens that are copies/,
+    missingEngineSystem:
+      'COPYING A SPELL ON THE STACK, or creating a TOKEN COPY of a permanent (as-enters copies are implemented; a copy that is not a card needs a stack object that ceases to exist as it resolves, and an aiming moment for "you may choose new targets for the copy")',
+  },
+  {
+    // Everything else in the family: a selector or an "except" clause outside
+    // the compiler's closed tables (`COPY_SELECTOR_FILTERS`,
+    // `parseCopyException`). A rule-table entry, not engine work.
+    pattern: /\bas a copy of\b|\bbecomes a copy of\b|\bcopy of (?:target|another target)\b/,
+    missingEngineSystem:
+      'a COPY template the compiler does not recognize yet (as-enters copies are implemented — this selector or "except" clause is outside the closed tables, or the copy is applied by an activated ability rather than as the permanent enters)',
   },
   {
     // NAMING a value as a permanent enters IS implemented now — the choice, the
@@ -4725,9 +5909,20 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // Attachment IS implemented now (core's `attachments.ts` + the
     // `enchant-permanent` / `attachment-modification` / `equip-cost` rules), so
     // this hint no longer claims the whole system is missing — that would send the
-    // next agent to build something that exists. What still lands here is a
-    // template: "Enchant player", "Equip only to a Human", bestow, reconfigure,
-    // and anything that moves an attachment other than a plain Equip.
+    // next agent to build something that exists.
+    //
+    // Nor is the attachment's TRIGGERED half missing any more: "Whenever
+    // equipped/enchanted creature deals combat damage to a player, BODY" and
+    // "… attacks, BODY" compile, scoped to the host by core's
+    // `TriggerCondition.watches` — so a card of that shape reports on its BODY,
+    // not on the trigger. Its static half now carries the payload keywords too
+    // ("gets +2/+2 and has protection from black and from green", "ward {1}").
+    //
+    // What still lands here is a template that changes HOW a thing attaches:
+    // "Enchant player", a narrowed equip ("Equip legendary creature {3}",
+    // "Equip only to a Human", an equip whose cost scales), a second attach
+    // ability ("{B}{B}: Attach ~ to target creature you control"), bestow,
+    // reconfigure, living weapon, and "whenever ~ becomes unattached".
     pattern: /\bequip\b|\battach\b|\benchant\b/,
     missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
   },
@@ -4817,10 +6012,16 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
     // COMPILE now (source-aware targeting: all four protection halves plus the
-    // ward pay-or-counter trigger are engine-enforced). What still lands here
-    // is a TEMPLATE outside the closed tables: a ward cost that is not plain
-    // generic mana ("Ward-Pay 3 life", "Ward {X}"), or a protection quality
-    // with no engine meaning ("protection from Demons", "from instants").
+    // ward pay-or-counter trigger are engine-enforced), and so does the GRANTED
+    // form on an attachment — "Equipped creature gets +2/+2 and has protection
+    // from black and from green", "gets +1/+0 and has haste and ward {1}" —
+    // which reads the same closed tables through `parseProtectionOrWard`.
+    // What still lands here is a TEMPLATE outside those tables: a ward cost
+    // that is not plain generic mana ("Ward—Pay 3 life", "Ward {X}"), a
+    // protection quality with no engine meaning ("protection from Demons",
+    // "from instants and from sorceries" — Sword of Wealth and Power), or
+    // "hexproof from <quality>", which is protection's shape with only the
+    // targeting half.
     pattern: /\bward\b|\bprotection from\b/,
     missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },
@@ -4886,6 +6087,66 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an {X} or derived-value template the compiler does not recognize yet',
   },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'an activated-ability template the compiler does not recognize yet' },
+  // --- replacement & prevention: the LAYER SHIPPED, so these name the residual ---
+  //
+  // Core now has a real CR 614/615 layer (`packages/core/src/replacement.ts`) that
+  // damage, counters and draws all consult, and STATIC_RULES compiles the four
+  // families that change a QUANTITY or prevent an event. So these hints do not
+  // claim the system is missing — that would send the next contributor to rebuild
+  // something that exists. What they name is the residual: a replacement whose
+  // OUTCOME is a different kind of thing (a different zone, different objects, a
+  // whole substituted action), which is genuinely a different vocabulary.
+  //
+  // Order matters: the first matching hint wins, so these sit above the generic
+  // ones below.
+  {
+    // "…twice that many of those TOKENS are created instead" (Doubling Season,
+    // Parallel Lives, Anointed Procession). The layer scales a NUMBER; creating
+    // extra objects is a different outcome, and token creation is not one of the
+    // three events the layer watches.
+    pattern: /would (?:create|be created).*\binstead\b|creates? (?:twice|three times) that many/,
+    missingEngineSystem:
+      'a TOKEN-count replacement (the CR 614 layer scales damage, counters and draws; creating extra objects is a different outcome)',
+  },
+  {
+    // "If a card would be put into a graveyard from anywhere, exile it instead"
+    // (Rest in Peace, Dauthi Voidwalker, Liesa) — a ZONE-CHANGE replacement.
+    pattern: /would (?:die|be put into (?:a|an|its owner's|an opponent's) graveyard).*\binstead\b/,
+    missingEngineSystem:
+      'a ZONE-CHANGE replacement ("if it would die, exile it instead" — the CR 614 layer changes quantities, not destinations)',
+  },
+  {
+    // "prevent that damage AND …" (Vigor, The Mindskinner, Deflecting Palm) — the
+    // prevention itself is implemented; what is missing is a RIDER that fires on
+    // how much was prevented.
+    pattern: /prevent (?:that|the next|all) [^.]*\b(?:and|\.)\s*(?:put|~|each|you|that)/,
+    missingEngineSystem:
+      'a prevention RIDER ("prevent that damage AND put a +1/+1 counter on it for each 1 prevented") — prevention itself is implemented',
+  },
+  {
+    // "The next time a SOURCE OF YOUR CHOICE would deal damage…" (Deflecting
+    // Palm) — a shield bound to a source the player names, which nothing asks.
+    pattern: /a source of your choice/,
+    missingEngineSystem:
+      'a prevention shield bound to a SOURCE OF YOUR CHOICE (choosing a source is a question nothing asks)',
+  },
+  {
+    // "If you would GAIN LIFE, you gain twice that much instead" (Alhammarret's
+    // Archive, Rhox Faithmender) and "if an opponent would LOSE LIFE…"
+    // (Bloodletter of Aclazotz). One more event kind on the same layer, not a
+    // new system — named honestly so whoever adds it knows the size of the job.
+    pattern: /if (?:you|an opponent|a player) would (?:gain|lose) life/,
+    missingEngineSystem:
+      'a LIFE-CHANGE event on the replacement layer (the layer watches damage, counters and draws; life gain/loss is one more event kind)',
+  },
+  {
+    // "instead that player skips that draw and you draw a card" (Notion Thief),
+    // "you may instead choose land or nonland and reveal…" (Abundance). The draw
+    // event is watched; substituting a whole different ACTION for it is not.
+    pattern: /would draw a card.*\binstead\b/,
+    missingEngineSystem:
+      'a draw replacement whose result is a different ACTION (skip-and-redirect, reveal-until — the layer scales a draw, it does not substitute one)',
+  },
   // --- below here: patterns that only refine the DEFAULT explanation. Nothing
   // above changes; these exist so "this card didn't compile" names a buildable
   // engine feature instead of shrugging. They are ordered specific → general,

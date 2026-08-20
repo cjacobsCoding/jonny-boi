@@ -39,6 +39,7 @@ import type {
   StackView,
   VisibleHandCard,
 } from '../play/view-model.js';
+import { poolColorCounts, poolRestrictionLabels } from '../play/view-model.js';
 
 /** The opposite seat. */
 function otherSeat(p: PlayerId): PlayerId {
@@ -107,7 +108,8 @@ function seatView(
     // seats, so listing the cards here reveals nothing the table can't see.
     graveyard: visibleHand(player.graveyard),
     exileCount: player.exile.length,
-    manaPool: { ...player.manaPool },
+    manaPool: poolColorCounts(player.manaPool),
+    restrictedMana: poolRestrictionLabels(player.manaPool),
     hasLost: player.hasLost,
     permanents,
   };

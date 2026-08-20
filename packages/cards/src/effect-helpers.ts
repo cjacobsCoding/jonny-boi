@@ -36,6 +36,7 @@ import {
   isTargetRestriction,
   MANA_COLORS,
   pruneCardGrantsFor,
+  resetInstanceForNewZone,
   discardDestination,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
@@ -181,19 +182,45 @@ export function strArrayParam(ctx: EffectContext, key: string): readonly string[
 
 /**
  * Read a `keywords` param (a `KeywordFlags`-shaped object, e.g. `{ trample: true }`)
- * keeping only the boolean-true flags. A missing/ill-typed param yields an empty
- * grant (safe no-op).
+ * into the flags a grant may set. A missing/ill-typed param yields an empty grant
+ * (safe no-op).
+ *
+ * ⚠️ THE THREE PAYLOAD KEYWORDS ARE NOT BOOLEANS, and dropping them here is
+ * silent. `protectionFrom` is a list of qualities, `ward` and `minBlockers` are
+ * numbers — so a filter of `=== true` threw all three away and turned "target
+ * creature gains protection from red until end of turn" into a spell that
+ * compiled `'complete'` and did NOTHING at resolution. (The rule's test asserted
+ * the compiled EFFECT REFS and never played the card, which is why it stayed
+ * green.) Each is copied here with the same validity check `grantInto` in core's
+ * continuous layer applies when it merges them, so the two cannot disagree about
+ * what a real grant looks like.
  */
 export function keywordsParam(ctx: EffectContext): KeywordFlags {
   const v = ctx.params.keywords;
   if (typeof v !== 'object' || v === null) return {};
   const src = v as Record<string, unknown>;
-  const out: Record<string, boolean> = {};
+  const out: Record<string, unknown> = {};
   for (const key in src) {
     if (src[key] === true) out[key] = true;
   }
+  const protection = src.protectionFrom;
+  if (Array.isArray(protection)) {
+    const qualities = protection.filter((q): q is string => typeof q === 'string');
+    if (qualities.length > 0) out.protectionFrom = qualities;
+  }
+  for (const numeric of NUMERIC_KEYWORD_KEYS) {
+    const value = src[numeric];
+    if (typeof value === 'number' && value > 0) out[numeric] = value;
+  }
   return out as KeywordFlags;
 }
+
+/**
+ * The keyword flags whose value is a positive NUMBER rather than a boolean.
+ * A table so adding one is a data edit here rather than another `if` above —
+ * and so the omission that made this function drop them cannot recur silently.
+ */
+const NUMERIC_KEYWORD_KEYS: readonly string[] = Object.freeze(['ward', 'minBlockers']);
 
 /**
  * Read a `ManaCost`-shaped param (`{ generic: 3 }`, `{ generic: 1, U: 1 }`) — the
@@ -481,19 +508,19 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   if (idx < 0) return;
   ctx.state.battlefield.splice(idx, 1);
   perm.zone = to;
-  perm.tapped = false;
-  perm.damageMarked = 0;
-  perm.markedByDeathtouch = false;
-  perm.summoningSick = false;
-  perm.counters = {};
-  // CR 712.8a: a transformed DFC turns front-face-up the moment it leaves the
-  // battlefield — a bounced Aberration is a Delver in hand. Core's
-  // `resetInstanceForNewZone` does the same for the engine's own leave paths;
-  // this helper is the cards-side funnel and must agree with it.
-  if (perm.printedDef != null) {
-    perm.def = perm.printedDef;
-    perm.printedDef = null;
-  }
+  // CR 400.7 — the permanent is a NEW object in its new zone, so every scrap of
+  // battlefield-only state goes with the move: tapped, marked damage, summoning
+  // sickness, counters, what it was attached to, its once-per-turn loyalty
+  // marker, its kick count, the value it named as it entered, and which face is
+  // up (CR 712.8a — a bounced Aberration is a Delver in hand).
+  //
+  // ⚠️ Called, not re-implemented. This USED to be a hand-copied list and it had
+  // already drifted from core's by three fields, each of which is a card playing
+  // differently depending on WHICH funnel bounced it: an Aura came back still
+  // pointing at its old host, a planeswalker could not activate again after being
+  // replayed, and an "as ~ enters, choose a type" lord still lorded over the type
+  // it named last time. Two funnels, one answer.
+  resetInstanceForNewZone(perm);
   // A permanent always goes to its OWNER's zone, not its controller's. Its
   // `controller` field is left as it was: it is the last-known information an
   // after-the-fact effect reads (Path to Exile compensates the creature's

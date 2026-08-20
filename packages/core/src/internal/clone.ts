@@ -20,6 +20,7 @@ import type { ContinuousEffect } from './continuous.js';
 import { NO_COUNTERS, PLAYER_IDS } from '../state.js';
 import type { PendingChoice, ResolutionFrame } from '../choices.js';
 import type { CardGrant } from '../card-grants.js';
+import type { FloatingReplacement } from './replacement.js';
 import { cloneChoiceAnswer } from '../choices.js';
 
 /**
@@ -75,6 +76,14 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // on its back face for the rest of the game — and losing the pair together
   // would untransform it — on the very next action's clone.
   if (inst.printedDef != null) copy.printedDef = inst.printedDef;
+  // Same conditional-copy rule, with the sharpest stakes of the lot — the exact
+  // bug the transform branch hit with `printedDef`, one layer down. `def` may be
+  // a COPY effect's result (CR 706, layer 1) and `uncopiedDef` is the only
+  // record of what the card really is. Drop it here and a Clone silently
+  // REVERTS to its own printed 0/0 body at the very next action boundary: the
+  // copy looks right for exactly one action and then stops being the creature it
+  // copied, mid-combat, with no event saying so.
+  if (inst.uncopiedDef != null) copy.uncopiedDef = inst.uncopiedDef;
   // Same conditional-copy rule again: only a permanent that entered off a
   // KICKED spell carries this, and it is what an "for each time it was kicked"
   // ETB trigger reads after the resolution frame is gone — drop it here and the
@@ -111,7 +120,28 @@ function cloneInstances(list: readonly CardInstance[]): CardInstance[] {
  * allocate-and-store instead of a generic property copy.
  */
 function clonePool(pool: ManaPool): ManaPool {
-  return { W: pool.W, U: pool.U, B: pool.B, R: pool.R, G: pool.G, C: pool.C };
+  // ⚠️ THE SPEND RESTRICTIONS TRAVEL WITH THE POOL. A clone that dropped them
+  // would hand the next action a pool whose Ancient Ziggurat mana had silently
+  // become able to pay for anything — a strictly better card, produced by a
+  // field-by-field copy that merely forgot one field. Asserted in `clone.test.ts`.
+  //
+  // The ARRAY is copied by reference and its parcels are shared, which is safe
+  // because parcels are immutable: every path that spends restricted mana
+  // (`payCost`) builds new parcels in a new array rather than editing one. A deep
+  // copy here would allocate on the per-action clone, the largest allocation site
+  // in the sim, to defend against a mutation nothing performs.
+  if (pool.restricted === undefined) {
+    return { W: pool.W, U: pool.U, B: pool.B, R: pool.R, G: pool.G, C: pool.C };
+  }
+  return {
+    W: pool.W,
+    U: pool.U,
+    B: pool.B,
+    R: pool.R,
+    G: pool.G,
+    C: pool.C,
+    restricted: pool.restricted,
+  };
 }
 
 function clonePlayer(p: PlayerState): PlayerState {
@@ -193,6 +223,10 @@ function cloneStackObject(o: StackObject): StackObject {
     ...(o.additionalCostPaid !== undefined ? { additionalCostPaid: o.additionalCostPaid } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
+    // Dropping this one would re-ask the as-enters COPY question every time the
+    // resolution is re-entered — and a DECLINE leaves nothing on the instance to
+    // notice, so the spell would never finish resolving. Same shape, same rule.
+    ...(o.copyAsEntersDecided !== undefined ? { copyAsEntersDecided: o.copyAsEntersDecided } : {}),
   };
 }
 
@@ -301,6 +335,15 @@ export function cloneState(state: GameState): GameState {
   // Same conditional rule and the same stakes: dropping an open madness window
   // would strand the exiled card — nothing could cast it and nothing would ever
   // put it in the graveyard — on the clone made at every action boundary.
+  // Same conditional rule and the same stakes: a dropped fog would let combat
+  // damage through on the very next action's clone, and a dropped SHIELD would
+  // silently un-spend itself (the `remaining` count lives on this record). The
+  // records are copied one by one rather than shared, because `remaining` is
+  // written as a shield is consumed — an aliased array would let one state spend
+  // the other's shield.
+  if (state.replacements !== undefined && state.replacements.length > 0) {
+    next.replacements = state.replacements.map(cloneFloatingReplacement);
+  }
   if (state.madnessWindow) next.madnessWindow = { ...state.madnessWindow };
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
@@ -310,4 +353,12 @@ export function cloneState(state: GameState): GameState {
 /** Copy one card grant, breaking aliasing on its cost object. */
 function cloneCardGrant(grant: CardGrant): CardGrant {
   return grant.flashback !== undefined ? { ...grant, flashback: { ...grant.flashback } } : { ...grant };
+}
+
+/**
+ * Copy one floating replacement/prevention effect. Spread-copied rather than
+ * shared for the reason the call site gives: `remaining` is mutable state.
+ */
+function cloneFloatingReplacement(record: FloatingReplacement): FloatingReplacement {
+  return { ...record };
 }

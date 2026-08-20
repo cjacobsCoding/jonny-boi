@@ -8,7 +8,7 @@
  * runtime or pinned by a test that fails when the world changes underneath it.
  */
 
-import type { PlayerId } from '@jonny-boi/core';
+import type { CardDefinition, PlayerId } from '@jonny-boi/core';
 import { HYBRID_PILOT_ID, MCTS_PILOT_ID } from '@jonny-boi/ai';
 
 /**
@@ -166,6 +166,38 @@ export const OPPONENT_LIBRARY_TARGET = 'opponent';
 export const CONTROL_CHANGING_PRIMITIVES: ReadonlySet<string> = new Set<string>();
 
 /**
+ * Definition fields that let a permanent run abilities **that are not on its own
+ * decklist row** — and so break the runner's map from an instance id back to the
+ * card it was minted from.
+ *
+ * `peekCouldReadHeroLibrary` answers "could this source have read the hero's
+ * library?" by looking the source's instance id up in the pre-shuffle decklist
+ * and scanning THAT card's effect refs. A COPY effect (CR 706) makes that scan
+ * read the wrong card: a Clone whose `def` is now somebody's Temple has an ETB
+ * scry that its own decklist row does not print, so the scan would answer "no
+ * library read" for an ability that just read one. The verdict would be wrong,
+ * and confidently so.
+ *
+ * The runner therefore withdraws the identical-game skip entirely for any game
+ * whose decks contain such a card. Coarse on purpose: this is the same
+ * conservative call `ifKicked` and `mayEffects` get, for the same reason — an
+ * effect the scan cannot SEE must never default into the safe-looking bucket.
+ * It costs a few extra variant games in decks that actually play a Clone.
+ *
+ * A list rather than a boolean so the next field of this shape (a "becomes a
+ * copy" activated ability, a text-changing effect) is added here instead of
+ * being discovered by a wrong number.
+ */
+export const ABILITY_ACQUIRING_DEFINITION_FIELDS: readonly (keyof CardDefinition)[] = Object.freeze([
+  'copyAsEnters',
+]);
+
+/** Whether a card can end up running abilities its decklist row does not print. */
+export function acquiresForeignAbilities(def: CardDefinition): boolean {
+  return ABILITY_ACQUIRING_DEFINITION_FIELDS.some((field) => def[field] !== undefined);
+}
+
+/**
  * Primitives that provably cannot read a library, and so leave the identical-game
  * argument intact. Listed explicitly (rather than "everything not above") so the
  * classification test can prove the two sets together cover the whole registry.
@@ -197,6 +229,13 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Attaching an Aura/Equipment reads only the battlefield permanent it targets.
   'attachToTarget',
   'dealDamageToEach',
+  /*
+   * `preventDamage` registers a floating prevention effect (a fog) and touches
+   * nothing else — no library is read, and the effect it creates is consulted
+   * only by the damage layer, which reads the battlefield and a life total.
+   * Paired arms stay comparable for exactly the reason `dealDamage` does.
+   */
+  'preventDamage',
   'addCounters',
   'gainLife',
   'loseLife',
