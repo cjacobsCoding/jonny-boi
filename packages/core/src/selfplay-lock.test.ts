@@ -32,30 +32,30 @@ import type { GameState } from './state.js';
  * seed | winner | over/cut | turns | actions | events | eventLogHash | finalStateHash
  */
 const GOLDEN: readonly string[] = [
-  '1|A|over|27|721|1522|5873a621|3f91f184',
-  '2|B|over|22|592|1209|55519a3a|c8c8968d',
-  '3|B|over|26|736|1532|c4cadb62|fb2764b5',
-  '4|B|over|22|595|1278|d9aec3dc|f2a8f7d4',
-  '5|A|over|29|781|1602|7757ff9c|bc35057e',
-  '6|B|over|20|532|1093|aa179243|3ebe2f30',
-  '7|A|over|25|703|1468|017657ea|315bce07',
-  '8|A|over|27|776|1648|5d3b1fe4|cb1eb3b1',
-  '9|A|over|15|404|848|fcc1b5f8|b0386eb2',
-  '10|B|over|40|1150|2439|32ed3510|771811a2',
-  '11|A|over|29|813|1737|41f45450|e775e845',
-  '12|A|over|29|815|1724|f3cc4d04|20f8ac3e',
-  '13|B|over|24|629|1281|fc06a8d6|607ba56e',
-  '14|A|over|33|894|1867|f048a618|fed9f738',
-  '15|A|over|37|1050|2235|76a03a17|aac3a513',
-  '16|B|over|32|901|1908|27fd0796|d11c67ea',
-  '17|B|over|36|968|1994|7e8f4888|c69e14fe',
-  '18|A|over|27|752|1547|80d3dca3|51421a4d',
-  '19|A|over|23|636|1358|32038a9e|8db96ab1',
-  '20|A|over|27|746|1545|74482552|a6261580',
-  '21|A|over|25|659|1371|2774a54e|b0d53bea',
-  '22|A|over|31|864|1808|935b4b07|7713f1e9',
-  '23|B|over|24|678|1427|89452967|13032bce',
-  '24|A|over|25|697|1478|5355c256|c119841d',
+  '1|A|over|33|902|1871|bb4aa170|339507b6',
+  '2|A|over|27|756|1620|b937a0a6|f495342b',
+  '3|B|over|38|1140|2425|3330ccec|db7cc0fc',
+  '4|B|over|26|719|1542|d1a2b239|0c8192ff',
+  '5|A|over|21|561|1153|5caed723|901c6e23',
+  '6|B|over|24|642|1346|20903e7d|c5a35b05',
+  '7|A|over|27|778|1645|add38f1e|e24a6688',
+  '8|A|over|23|650|1369|585ac15d|c0deaba8',
+  '9|A|over|19|512|1077|e104dce3|84b06ae3',
+  '10|A|over|43|1243|2657|c7c88704|2a0ff2fa',
+  '11|B|over|32|892|1902|412c5386|32049998',
+  '12|B|over|30|849|1799|f592043d|40a3b377',
+  '13|B|over|26|696|1410|ab858d16|b13f0c8e',
+  '14|B|over|32|874|1850|7ad6571e|0b625e1b',
+  '15|B|over|24|654|1381|c939905e|8c7fae94',
+  '16|B|over|20|541|1123|2feb88a6|9e5bcab3',
+  '17|B|over|34|907|1897|42fdaab8|b84fbe72',
+  '18|A|over|23|620|1276|fac7ede4|2c427f5b',
+  '19|A|over|23|631|1353|206abbec|95a7910a',
+  '20|B|over|26|714|1474|3dd66dfd|38d75fea',
+  '21|B|over|30|826|1743|1d2a2d24|04950240',
+  '22|A|over|37|1065|2262|7add57d2|581c1745',
+  '23|B|over|24|678|1414|b210221c|eb8fb2fd',
+  '24|A|over|27|753|1602|beb914c0|d8f48334',
 ];
 
 describe('self-play behaviour lock', () => {
@@ -82,6 +82,21 @@ describe('self-play behaviour lock', () => {
  * would pass the digest test above (which only ever looks forward) and break this
  * one, so both are needed.
  */
+/**
+ * `JSON.stringify` with object keys sorted at every level — a canonical form
+ * that still compares every value byte for byte, but does not care which order
+ * two equivalent objects happened to gain their properties in.
+ */
+function sortedJson(value: unknown): string {
+  return JSON.stringify(value, (_key, held: unknown) => {
+    if (held === null || typeof held !== 'object' || Array.isArray(held)) return held;
+    const source = held as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) out[key] = source[key];
+    return out;
+  });
+}
+
 describe('applyAction purity', () => {
   const decks = selfPlayDecks();
 
@@ -129,7 +144,16 @@ describe('applyAction purity', () => {
       const pureResult = applyAction(pure, action);
       const inPlaceResult = applyActionInPlace(inPlace, action);
       expect(JSON.stringify(inPlaceResult.events)).toEqual(JSON.stringify(pureResult.events));
-      expect(JSON.stringify(inPlaceResult.state)).toEqual(JSON.stringify(pureResult.state));
+      // The STATE is compared with keys sorted, and only the state. Every
+      // optional field on `GameState` — `pendingChoice`, `resolution`,
+      // `cardGrants`, `madnessWindow` — is absent until something needs it, so
+      // the in-place path (which writes into an object it has held since the
+      // game began) appends the key at the END, while the pure path gets it in
+      // `cloneState`'s canonical position. That is a difference in JavaScript
+      // insertion order, not in the game: the same fields hold the same values.
+      // Sorting is what keeps this assertion about the engine. The EVENTS above
+      // stay byte-compared, because their order genuinely is the behaviour.
+      expect(sortedJson(inPlaceResult.state)).toEqual(sortedJson(pureResult.state));
       pure = pureResult.state;
       inPlace = inPlaceResult.state;
     }

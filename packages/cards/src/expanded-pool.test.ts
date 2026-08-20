@@ -29,6 +29,7 @@ import type {
 import {
   applyAction,
   createGame,
+  defaultAnswerFor,
   DEFAULT_RULES,
   effectivePower,
   effectiveToughness,
@@ -86,10 +87,34 @@ function pass(state: GameState, reg: Registry): GameState {
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
 }
 
+/**
+ * Pass priority — ANSWERING the game's outstanding question first, when there
+ * is one. A turn now ends with the CR 514.1 discard whenever a hand is over the
+ * maximum, and while that question stands every other action is refused, so a
+ * pass-only loop can no longer run a turn out. The answer is the engine's own
+ * `defaultAnswerFor` — deterministic, and exactly what it auto-answers a forced
+ * choice with.
+ */
+function passOrAnswer(state: GameState, reg: Registry): GameState {
+  const choice = state.pendingChoice;
+  if (!choice) return pass(state, reg);
+  return act(
+    state,
+    { kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer: defaultAnswerFor(choice) },
+    reg,
+  );
+}
+
+/**
+ * Turn-runners: they pass, ANSWERING anything the game asks on the way — a turn
+ * now ends with the CR 514.1 discard question whenever a hand is over the
+ * maximum, and while it stands every other action is refused. See
+ * `passOrAnswer` in core's test fixtures.
+ */
 function advanceToStep(state: GameState, step: string, reg: Registry, max = 400): GameState {
   let s = state;
   let guard = 0;
-  while (s.step !== step && !s.gameOver && guard++ < max) s = pass(s, reg);
+  while (s.step !== step && !s.gameOver && guard++ < max) s = passOrAnswer(s, reg);
   return s;
 }
 
@@ -97,7 +122,7 @@ function advanceUntilActive(state: GameState, player: PlayerId, reg: Registry, m
   let s = state;
   let guard = 0;
   while ((s.activePlayer !== player || s.step !== 'precombatMain') && !s.gameOver && guard++ < max) {
-    s = pass(s, reg);
+    s = passOrAnswer(s, reg);
   }
   return s;
 }

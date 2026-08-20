@@ -275,8 +275,20 @@ export function cloneState(state: GameState): GameState {
   // `cond ? {...} : {}` allocated the empty object BOTH times, on every clone,
   // purely to add no properties. Key order is unchanged (these still land last),
   // which matters because a serialized state is compared field-for-field.
-  if (state.pendingChoice) next.pendingChoice = clonePendingChoice(state.pendingChoice);
-  if (state.resolution) next.resolution = cloneResolution(state.resolution);
+  //
+  // Tested for `!== undefined` rather than for truthiness, so a state that has
+  // ANSWERED a question (`pendingChoice === null`) clones as one that has
+  // answered a question, not as one that was never asked. Both mean "no choice"
+  // to every reader, but they are different OBJECT SHAPES — and
+  // `applyActionInPlace` never clones, so a clone that normalised `null` away
+  // made the two engine paths disagree byte-for-byte on a state neither had
+  // played differently. Same one comparison per clone as before.
+  if (state.pendingChoice !== undefined) {
+    next.pendingChoice = state.pendingChoice ? clonePendingChoice(state.pendingChoice) : null;
+  }
+  if (state.resolution !== undefined) {
+    next.resolution = state.resolution ? cloneResolution(state.resolution) : null;
+  }
   // Same conditional rule as the two above, and the same stakes as any dropped
   // field: forgetting this line would silently strip an active "gains flashback
   // until end of turn" grant at the very next action boundary. Only paid for
@@ -290,7 +302,12 @@ export function cloneState(state: GameState): GameState {
   // Same conditional rule and the same stakes: dropping an open madness window
   // would strand the exiled card — nothing could cast it and nothing would ever
   // put it in the graveyard — on the clone made at every action boundary.
-  if (state.madnessWindow) next.madnessWindow = { ...state.madnessWindow };
+  // Same `!== undefined` rule and the same reason as the two choice fields above:
+  // a window that was DECLINED (`null`) is a different shape from one that never
+  // opened, and only one of the two engine paths ever re-clones.
+  if (state.madnessWindow !== undefined) {
+    next.madnessWindow = state.madnessWindow ? { ...state.madnessWindow } : null;
+  }
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
   return next;

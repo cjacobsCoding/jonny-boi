@@ -24,9 +24,10 @@ import type {
   CardInstance,
   GameEvent,
   GameState,
+  PendingChoice,
   PlayerId,
 } from '@jonny-boi/core';
-import { applyAction, createGame, DEFAULT_RULES, generateLegalActions } from '@jonny-boi/core';
+import { applyAction, createGame, defaultAnswerFor, DEFAULT_RULES, generateLegalActions } from '@jonny-boi/core';
 import { CARD_POOL } from '../data/pool.js';
 import { buildRegistry } from './pool.js';
 import { compileCard } from './compile/index.js';
@@ -258,9 +259,26 @@ function playThroughUpkeep(
   // Pass until the reveal question is parked (it is asked when the upkeep
   // trigger RESOLVES, at A's next upkeep). The cap is generous but hard: a
   // wedged game fails the test rather than hanging the suite.
+  //
+  // The CR 514.1 cleanup discard is answered and stepped over on the way: a
+  // turn now ends by asking the active player to discard down to their maximum
+  // hand size, and that is not the question this harness is hunting for. It is
+  // told apart by its own marker rather than by its shape, because 'a card
+  // selection from a hand' describes both of them.
   let guard = 0;
-  while (!state.pendingChoice && guard++ < 400) {
-    drive({ kind: 'passPriority', player: state.priorityPlayer });
+  while (guard++ < 400) {
+    const parked = state.pendingChoice;
+    if (parked && parked.context !== 'cleanupDiscard') break;
+    drive(
+      parked
+        ? {
+            kind: 'answerChoice',
+            player: parked.chooser,
+            choiceId: parked.id,
+            answer: defaultAnswerFor(parked),
+          }
+        : { kind: 'passPriority', player: state.priorityPlayer },
+    );
   }
   expect(state.pendingChoice, 'the reveal question was never asked').toBeTruthy();
   const choice = state.pendingChoice!;
@@ -399,11 +417,23 @@ describe('Delver of Secrets plays exactly as printed', () => {
     // cards the run will draw and none for the reveal to look at.
     setLibrary(state, 'A', []);
     let guard = 0;
-    while (!state.gameOver && guard++ < 60 && !state.pendingChoice) {
-      state = applyAction(state, { kind: 'passPriority', player: state.priorityPlayer }, DEFAULT_RULES, registry).state;
+    let asked: PendingChoice | null = null;
+    while (!state.gameOver && guard++ < 60 && asked === null) {
+      const parked = state.pendingChoice;
+      // The CR 514.1 cleanup discard is a question the TURN asks, not the
+      // trigger; it is answered and stepped over so this test still measures
+      // what it says it measures.
+      if (parked && parked.context !== 'cleanupDiscard') {
+        asked = parked;
+        break;
+      }
+      const action = parked
+        ? { kind: 'answerChoice' as const, player: parked.chooser, choiceId: parked.id, answer: defaultAnswerFor(parked) }
+        : { kind: 'passPriority' as const, player: state.priorityPlayer };
+      state = applyAction(state, action, DEFAULT_RULES, registry).state;
     }
     // The game ended by decking (empty library) or ran on — either way, the
     // trigger never parked an unanswerable question.
-    expect(state.pendingChoice ?? null).toBeNull();
+    expect(asked).toBeNull();
   });
 });

@@ -13,6 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  defaultAnswerFor,
   generateLegalActions,
   LOYALTY_COUNTER,
   loyaltyOf,
@@ -297,6 +298,17 @@ describe('loyalty abilities surface as engine-driven ability options', () => {
 function autoPilotPriority(session: GameSession): GameSession {
   const me = session.priorityPlayer;
   const state = session.state;
+
+  // 0. Answer whatever the game is waiting on. A turn now ends by asking the
+  // active player to discard down to their maximum hand size (CR 514.1), and
+  // while any question stands the engine refuses every other action — so a
+  // driver that only ever plays and passes would stall here rather than finish
+  // the game. `defaultAnswerFor` is the engine's own first legal answer.
+  const parked = session.pendingChoice;
+  if (parked) {
+    const answered = session.answerChoice(defaultAnswerFor(parked));
+    if (!answered.rejected) return answered.session;
+  }
 
   // 1. Play a land if we still can this turn.
   const lands = session.playableLands();
