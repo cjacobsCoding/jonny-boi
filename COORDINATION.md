@@ -132,8 +132,87 @@ throughput (games/sec) from regressing.
 | feat/combat-damage-and-equipment | worker | packages/core (triggers.ts `TriggerWatches`/`watches`/`TriggerSource.permanent`, internal/triggers-runtime.ts, index.ts +2 exports, NEW equipped-triggers.test.ts), packages/cards (compile/rules.ts 6 new TRIGGER_RULES + 3 new EFFECT_RULES + `optionalTriggerFrom`/`hostWatch`/payload-keyword parsing + 2 hint rewords, compile/compile.ts host-watch assembly guard, compile/attachments.test.ts 1 obsoleted case, NEW equipped-triggers.test.ts), packages/ai (heuristic.ts equip search + attack value + walker diversion, weights.ts +2 knobs, NEW equipment-pilot.test.ts), apps/web/src/lib/about/mechanics.ts (+2 witnesses, 1 reworded), DESIGN §3.22, COORDINATION. **No new effect primitive, no new GameEvent, no pool change.** | 🚧 PUSHED, not merged |
 | feat/block-requirements-and-statics | worker | packages/core (NEW block-solver.ts + countering.ts + player-statics.ts + block-requirements.test.ts + bench/block-requirement-cost.ts; card/actions/choices/config/engine/events/index, internal combat+continuous+stats+clone, conformance/rules-manifest, selfplay-lock re-pinned, 6 test helpers), packages/cards (compile rules/compile/types + effect-helpers + NEW block-and-statics.test.ts + 3 reworded tests), packages/ai (heuristic/weights + NEW block-requirements-pilot.test.ts), packages/sim (soak-config +3 classifications, observation +1), apps/web (about/mechanics +6 witnesses, play-format +1), DESIGN §3.25 | 🚧 PUSHED, not merged — **contains the fix for main's currently RED build** (soak-config) |
 
+| fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+
+- 2026-08-20 worker: `fix/max-hand-size-and-sba` 🚧 PUSHED — **CR 704.3 at the priority boundary,
+  CR 704.5q as a real state-based action, a REVIEW of the CR 514.1 that landed while I was building
+  it, and the baseline measurement nobody had published yet.**
+
+  📊 **THE NUMBER, ISOLATED RATHER THAN ESTIMATED. CR 514.1 cost Mono-Red Aggro exactly ONE game in
+  280 on seed 99: 81/280 (28.9%) → 80/280 (28.6%).** Every matchup row is identical except **Golgari
+  Midrange, 8/40 → 7/40** — the one grindy midrange deck, which is exactly where a hand-size limit
+  should bite. It was isolated by flipping `RulesConfig.maximumHandSize` between 7 and 999 in the
+  SAME build on the SAME seed, which is only possible because the rule is a named config value and
+  not a literal; the rule-OFF arm reproduces the previously recorded 81/280 exactly, so everything
+  else that landed in between left seed 99 alone. **80/280 is the recorded baseline from here on**
+  (DESIGN §3.4a now says so, and §3.29 has the table). It moved because the engine got MORE correct.
+
+  🔴 **A HIDDEN-INFORMATION LEAK IN THE LANDED CR 514.1, please do not re-introduce it.** The
+  discard question set `sourceInstanceId: hand[0].instanceId` — a real instance id "for the
+  inspector and the wire format". `choiceAsked` carries that field **unredacted** into every pilot's
+  observation feed (`packages/sim/src/observation.ts`), and instance ids are minted sequentially
+  from the pre-shuffle library (`paired-arms-config.ts` pins that), so it published a read on the
+  discarding player's decklist. ⚠️ **The protocol's own leak scan cannot catch this class:**
+  `collectInstanceIds` only collects values under keys named `instanceId`, so anything called
+  `sourceInstanceId`, `targetInstanceId` or `keptInstanceId` walks straight past it. Fixed with
+  `NO_ASKING_OBJECT` (a named sentinel in `choices.ts`) — **use that for any question a GAME RULE
+  asks**, never a card that happens to be lying around.
+
+  ⚠️ **CR 514.3a was half-implemented and now is not.** The landed version kept the turn open for a
+  madness window (right) and then ended the turn (wrong): the rule says **another cleanup step
+  begins**. It is now re-entrant and needs no new state field — reaching the turn machine's step
+  advance *while the step is still cleanup* can only mean a priority window was opened during it. It
+  had NO test until the sabotage pass said so; it does now.
+
+  ⚡ **RULE 7, AND THE TRAP THIS BOX SETS.** The CR 704.3 check goes on the hottest loop the sim has
+  — a 280-game gauntlet passes priority **125,753 times**. My first cross-build gauntlet
+  comparisons read **1.02× to 1.41×** for a change that allocates nothing; that was the box, not the
+  code, and I nearly redesigned around it. What the three real measurements say: **scavenge counts
+  587/584 vs 588/583** (inside `scavenge-probe.ts`'s ±2 floor — it allocates nothing), **paired CPU
+  with BOTH ENGINES IN ONE PROCESS, 9 interleaved rounds, min-of-N: 2157 ms vs 2156 ms = 1.0005×**,
+  and a direct bench (`packages/core/bench/sba-gate-cost.ts`) at **~30 ns per permanent**. 👉 **Two
+  builds in one process beats two checkouts** — import a patched copy of `packages/core/src` and
+  alternate the arms; compare the self-play digests first so the workload is proved identical.
+
+  🔑 **The gate is affordable because of ONE piece of reasoning, and it is worth reusing:**
+  `PermanentModification` is **purely additive** (the rules manifest proves it at compile time), so
+  a modifier that can only ADD toughness cannot kill a creature — it can only keep one alive. A
+  board whose modifiers are all positive can therefore be judged on printed base plus counters. Only
+  a SHRINKING modifier sends the board to the full check. Pass rate **6.3% → 0.1%** of those 125,753
+  passes. ⚠️ If anyone ever adds a value-SETTING modification, that reasoning dies with the
+  manifest's proof — the two go together.
+
+  🧮 **CR 704.5q WAS reachable, contrary to the register.** PERSIST returns a creature carrying a
+  `-1/-1` counter without going near `addCounters`, and it wrote a **negative `+1/+1` tally** — so
+  nothing could ask "does it have a -1/-1 counter on it?", which is persist's own printed condition.
+  The rule now lives in the SBA pass and the primitive no longer does it at all (one implementation
+  of one rule); persist writes a real `-1/-1` counter.
+
+  ⛔ **CR 704.5b (a spell-driven draw from an empty library does not lose the game) is DEFERRED by
+  decision.** It ends games earlier and moves the gauntlet baselines again; measuring it in the same
+  branch as CR 514.1 would give one number attributable to neither. It stays registered as
+  `spell-draw-decking` and now has a matrix cell citing it. Whoever takes it should isolate it the
+  same way and re-publish the baseline.
+
+  🧪 **Sabotage-checked: 11 breaks, 11 caught, 0 escapes.** The one that first came back GREEN was
+  the useful result (CR 514.3a, above). The conformance manifest moves **402, 514 and 704 from gap
+  to covered** (6 gaps → 4: 613, 615, 616, 707), the interaction matrix's `cda x turnfacts` cell
+  moves gap → covered, and its GAP register learned a `closedBy` field so a closed entry can stay as
+  the record without being counted as outstanding.
+
+  🧹 Converged on `origin/main`'s idiom rather than adding a second one: main made each test file's
+  local `pass` choice-aware, so my shared `passOrAnswer` helper is gone. Same for the clone's
+  optional-key handling — main always writes the key, which is the better fix, so my `sortedJson`
+  workaround in `selfplay-lock.test.ts` is gone too.
+
+  ⚠️ **Timing note for whoever merges:** this branch merged `origin/main` at `b5752b2`. It touches
+  `engine.ts`, `internal/sba.ts` and `internal/clone.ts`, so it conflicts with anything else in
+  those files — but everything it adds to the cleanup step is layered ON TOP of main's
+  implementation, not a second copy of it.
 
 - 2026-08-20 worker: `test/interaction-matrix` 🚧 PUSHED — **the interactions between the
   shipped systems are now an executable matrix, and finding three real defects took nine

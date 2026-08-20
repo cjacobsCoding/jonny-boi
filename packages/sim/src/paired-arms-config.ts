@@ -39,6 +39,15 @@ export const HERO_FIRST_INSTANCE_ID = 1;
  * are absent on purpose: a draw is reported by a `drawCard` event carrying the
  * exact instance id, which the runner already tracks precisely.
  *
+ * ⚠️ THE CR 514.1 CLEANUP DISCARD IS NOT A PRIMITIVE AND DOES NOT BELONG HERE,
+ * and it is worth saying so rather than leaving a reader to notice the absence.
+ * It is a turn-based action the engine performs, and the question it asks reads
+ * the HAND alone — the same hand in both arms while the identical-game claim
+ * still holds, because that claim is precisely "the swapped card was never
+ * drawn". The moment it IS drawn the runner has already withdrawn the claim, so
+ * a discard decision cannot make the two arms diverge behind its back. (It does
+ * change what the arms play, in both of them equally — see DESIGN §3.4a.)
+ *
  * `paired-arms.test.ts` asserts that EVERY primitive the card pool registers is
  * classified either here or in {@link LIBRARY_SAFE_PRIMITIVES}. A new primitive
  * therefore breaks the build until someone decides which side it belongs on — the

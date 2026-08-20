@@ -36,7 +36,6 @@ import { buildRegistry } from '../pool.js';
 import {
   act,
   boardAtMain,
-  castCard,
   castOffer,
   fund,
   isOnBattlefield,

@@ -25,7 +25,6 @@ import type {
   GameAction,
   GameEvent,
   GameState,
-  PendingChoice,
   PlayerId,
 } from '@jonny-boi/core';
 import {
