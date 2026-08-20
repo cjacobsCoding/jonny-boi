@@ -333,11 +333,33 @@ export function maskStateForSpectator(state: GameState): MaskedGameView {
  * A pattern match on the NAME (say, "ends in `InstanceId`") was the other
  * candidate and is strictly weaker: it would still miss `source`, `target`,
  * `targets`, `attackers`, `blocks` and `ref`, which is most of combat and all of
- * targeting.
+ * targeting. It is kept as a BACKSTOP below, for id fields declared outside core
+ * where nothing forces a classification — never as the mechanism.
  *
  * Exported because it is the assertion the masking chokepoint has to be provable
  * with, and every consumer that ships a new view field needs the same check.
  */
+/**
+ * The BACKSTOP: any key whose name ends in `instanceId` / `instanceIds`,
+ * whatever the prefix and whatever the case.
+ *
+ * Core's table is the primary mechanism and it is the strong one — it is checked
+ * by the compiler and by a scan of core's own source. But it can only speak for
+ * `@jonny-boi/core`, and ids are declared outside it too (`swappedInstanceIds` in
+ * the sim, `knownInstanceIds` in a pilot's belief state), where nothing forces a
+ * classification. This catches the conventionally-named ones for free.
+ *
+ * It is a backstop and not the mechanism, because on its own it would still miss
+ * `source`, `target`, `targets`, `attackers`, `blocks` and `ref` — most of combat
+ * and all of targeting. Anything that matters belongs in core's table.
+ */
+const INSTANCE_ID_KEY_SUFFIX = /instanceids?$/i;
+
+/** Whether a value found under `key` is an instance id. */
+function keyNamesACard(key: string): boolean {
+  return INSTANCE_ID_FIELD_NAMES.has(key) || INSTANCE_ID_KEY_SUFFIX.test(key);
+}
+
 export function collectInstanceIds(value: unknown): Set<number> {
   const found = new Set<number>();
   const seen = new Set<object>();
@@ -353,7 +375,7 @@ export function collectInstanceIds(value: unknown): Set<number> {
       return;
     }
     for (const [key, child] of Object.entries(node)) {
-      if (INSTANCE_ID_FIELD_NAMES.has(key)) {
+      if (keyNamesACard(key)) {
         add(child);
         // An id field can hold one id, a LIST of them, or a MAP KEYED BY them
         // (`attackTargets` is attacker-id → attacked object; `blocks` is
