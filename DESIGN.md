@@ -1269,7 +1269,7 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   over the object being paid for (purpose, types, subtypes, colour/colourless, legendary) — so no
   card has a branch, and "cast artifact spells **or** activate abilities of artifacts" is two
   clauses rather than a Power Depot case.
-  **Measured on the cached 2100-card corpus against the matched `origin/main` (068be3d): 485 → 491
+  **Measured on the cached 2100-card corpus against the matched `origin/main` (a6419e5): 510 → 516
   playable, +6 cards, 0 regressions, and the 15-card "spend restriction" gap is gone** — dissolved
   into six newly playable cards (Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the
   Spirit Dragon, Unclaimed Territory, Secluded Courtyard) and three precisely-named residuals, each

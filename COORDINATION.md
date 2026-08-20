@@ -152,7 +152,9 @@ _Append dated notes here; keep them short. Newest at top._
   this is the answer to it.
 
   **Measured on the cached 2100-card corpus, same command, against the MATCHED `origin/main`
-  (068be3d, both worktrees rebuilt): 485 → 491 playable, +6, 0 regressions.** The six: Ancient
+  (a6419e5, both worktrees rebuilt): 510 → 516 playable, +6, 0 regressions.** (The same +6 measured
+  485 → 491 against the previous base a few merges earlier — the delta is the branch's, not the
+  base's.) The six: Ancient
   Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the Spirit Dragon, **Unclaimed Territory
   and Secluded Courtyard**. The 15-card "spend restriction" gap is GONE, and what remains of it is
   three residuals that are each a different system and now say so. Whoever re-runs the audit will
@@ -205,12 +207,14 @@ _Append dated notes here; keep them short. Newest at top._
   directions: it casts a creature off a lone Ziggurat, and it does NOT tap that Ziggurat toward a
   burn spell (the failure there is not "it passes" — it is tapping out and being rejected).
 
-  📊 **PERFORMANCE, re-measured after the merge against a separate `origin/main` (068be3d)
-  worktree on this box, never wall clock.** Gauntlet `Mono-Red Aggro --games 40 --seed 99` is
-  **81/280 on both, every matchup row equal**. Self-play scavenge counts over 40 seeded games:
-  **577/563 (branch) vs 576/561 (main)**, with an identical 29,899 actions both sides — the same
-  games, the same garbage. Paired `process.cpuUsage` user time, 8 alternating pairs: ratio **0.880 at
-  the min, 1.000 at the median, 0.972 at the mean** — parity.
+  📊 **PERFORMANCE, re-measured after each merge against a separate `origin/main` worktree on
+  this box, never wall clock.** Against the final base (a6419e5): gauntlet
+  `Mono-Red Aggro --games 40 --seed 99` is **81/280 on both, every matchup row equal**; self-play
+  scavenge counts over 40 seeded games are **578/562 (branch) vs 577/564 (main)** with an identical
+  **29,899 actions** both sides — the same games, the same garbage; paired `process.cpuUsage` user
+  time over 6 alternating pairs is **0.999 at the min, 1.028 at the median, 1.006 at the mean**.
+  Against the previous base (068be3d) the same three gates read 81/280, 577/563 vs 576/561, and
+  0.880 / 1.000 / 0.972 over 8 pairs. Parity on both, measured twice.
   ⚠️ **The brief for this branch quoted the gauntlet gate as 79/280.** That figure is
   `feat/mana-ability-model`'s, measured on ITS base; `origin/main` reads **81/280** on this box, and
   has done across every base I measured. Measure your own base before treating a number in a brief
