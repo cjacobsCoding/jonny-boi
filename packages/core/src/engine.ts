@@ -1316,6 +1316,42 @@ function applyActionToDraft(
   // the stack and hand the active player priority over them. Rejections return a
   // fresh clone of prevState, so `result.state !== state`; we only flush our draft.
   if (result.state === state && !wasRejected(result.events)) {
+    /*
+     * CR 704.3 — THE PRIORITY BOUNDARY, for every action rather than for one of
+     * them.
+     *
+     * State-based actions are checked "whenever a player would get priority",
+     * and only THEN are triggered abilities put on the stack. In this engine a
+     * player receives priority at the end of essentially every action, not only
+     * when somebody passes — so a check installed inside `onPassPriority` alone
+     * covers exactly one of the doors into that moment.
+     *
+     * That is not a hypothetical gap. Paying a spell's mandatory additional cost
+     * (CR 601.2h) sacrifices a permanent and hands the floor straight back to the
+     * caster through `finishCastChoice`, which passed priority to nobody and so
+     * ran no check: a creature that the sacrificed Equipment was the only thing
+     * keeping alive stayed on the battlefield at toughness 0 — for five turns, in
+     * the soak game that found this (seed 4222011655; `soak.test.ts` pins it).
+     * Every mutation site that hands priority back without routing through a pass
+     * is the same shape, and enumerating them is how this bug was written in the
+     * first place. So the check goes where the ACTION ends, which is the one
+     * place every door leads to.
+     *
+     * Ordering is the rule's, not a convenience: SBAs run BEFORE `collector.flush()`
+     * puts triggers on the stack, so a death this check causes queues its
+     * dies-trigger into the same flush (Blood Artist's own ability is exactly
+     * that shape) rather than being stranded in a collector nobody drains again.
+     *
+     * The three guards are "is anybody actually receiving priority": a decided
+     * game hands out none, and a parked question or a suspended resolution means
+     * a spell is still resolving (CR 608.2) — the case `soak.ts` documents at
+     * length, where a creature genuinely does sit dead on the battlefield until
+     * the question is answered. `stateBasedActionsPossible` is the same cheap
+     * gate the pass boundary uses; see its note for the direction it may err in.
+     */
+    if (!state.gameOver && !state.pendingChoice && !state.resolution && stateBasedActionsPossible(state)) {
+      checkStateBasedActions(state, emit);
+    }
     // A suspended resolution keeps the floor: a trigger that fired mid-resolution
     // goes on the stack and waits its turn, but the chooser must still answer first.
     if (collector.flush() > 0 && !state.gameOver && !state.pendingChoice) {
