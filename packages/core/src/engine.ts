@@ -1401,8 +1401,30 @@ function applyPlayLand(
   if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
-  const card = instanceIn(player.hand, action.instanceId);
-  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  // Nearly every land play comes from the hand; the one that does not is an
+  // ADVENTURER card whose primary half is a land, waiting in exile with the
+  // permission its own adventure left behind ("You may play the land later from
+  // exile"). Validated the same way the cast path validates a cast from exile,
+  // by the same accessor, so neither can be tricked into playing a card that
+  // was merely exiled.
+  const fromZone = action.fromZone ?? 'hand';
+  if (fromZone !== 'hand' && fromZone !== 'exile') {
+    return rejectWith(prevState, 'a land can only be played from your hand or from exile');
+  }
+  const card =
+    fromZone === 'exile'
+      ? instanceIn(player.exile, action.instanceId)
+      : instanceIn(player.hand, action.instanceId);
+  if (!card) {
+    return rejectWith(prevState, fromZone === 'exile' ? 'that card is not in exile' : 'that card is not in your hand');
+  }
+  const permission = fromZone === 'exile' ? castPermissionFor(state, card) : undefined;
+  if (fromZone === 'exile') {
+    if (permission === undefined) return rejectWith(prevState, 'that card has no permission to be played from exile');
+    if ((action.face ?? 'front') !== permission.face) {
+      return rejectWith(prevState, 'that face of this card may not be played from exile');
+    }
+  }
   // Same CR 712.8b guard as casting: a transforming DFC's back face is never
   // playable from hand.
   if (card.def.isBackFace === true) {
@@ -3288,8 +3310,33 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
       // A modal DFC whose SECOND face is a land offers that land play too — the
       // spell//land MDFCs are exactly the card whose value is being able to
       // choose. Both halves are offered when both are playable.
-      if (hasCastableBackFace(card.def) && isLand(card.def.backFace as CardDefinition)) {
+      if (
+        hasCastableBackFace(card.def) &&
+        backFaceCastZonesOf(card.def).includes('hand') &&
+        isLand(card.def.backFace as CardDefinition)
+      ) {
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, face: 'back' });
+      }
+    }
+    // The LAND half of an adventurer card, waiting in exile with permission
+    // (CR 715.3d, "you may play the land later from exile"). Behind the same
+    // empty check as every other card-grant consumer, so a game with nothing
+    // exiled under permission walks no exile zone here either.
+    if (hasCardGrants(state)) {
+      const exile = player.exile;
+      for (let e = 0; e < exile.length; e++) {
+        const card = exile[e] as CardInstance;
+        const permission = castPermissionFor(state, card);
+        if (permission === undefined) continue;
+        const playDef = playableFaceOf(card.def, permission.face);
+        if (playDef === undefined || !isLand(playDef)) continue;
+        actions.push({
+          kind: 'playLand',
+          player: me,
+          instanceId: card.instanceId,
+          ...(permission.face === 'back' ? { face: 'back' as const } : {}),
+          fromZone: 'exile',
+        });
       }
     }
   }
