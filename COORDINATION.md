@@ -123,7 +123,7 @@ _Append dated notes here; keep them short. Newest at top._
 - 2026-08-19 worker: `feat/tutor-and-sacrifice-templates` 🚧 PUSHED — **the tutor family is closed for
   every destination the search primitive can reach, and a spell can now print a cost you must pay to
   cast it.** Measured offline against the same cached 2100-card corpus, same-day `origin/main`
-  baseline: **408 → 446 playable (19.4% → 21.2%), +38 cards.** Suite 3676 → 3735 passed, 0 failed.
+  baseline: **408 → 446 playable (19.4% → 21.2%), +38 cards.** Suite 3676 → 3700 passed, 0 failed (192 files).
   Gauntlet seed 99 over 700 games is **byte-identical** to the same-box `origin/main` (297/700, every
   matchup row equal) — the exactness proof rule 7 wants, since wall time on this box is worthless.
 
