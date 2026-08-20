@@ -57,10 +57,21 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
   // back to the front face so the primary record stays meaningful.
   const frontFace = raw.card_faces?.[0];
 
+  /**
+   * CR 715.2 — an ADVENTURER card is the creature in every zone but the stack,
+   * so its mana cost is the creature's. Scryfall still prints the combined
+   * `"{B} // {2}{B}"` at the top level, which `parseManaCost` sums into a cost
+   * the card never has and which contradicts Scryfall's own `cmc` (1, not 4).
+   * A split card is the opposite — CR 709.4 makes the combined object's cost
+   * the SUM, and Scryfall's `cmc` agrees — so this is narrowed to the one
+   * layout where the top-level string is not the card's cost.
+   */
+  const costSource = raw.layout === 'adventure' ? frontFace?.mana_cost : raw.mana_cost;
+
   return {
     id: pickId(raw),
     name: raw.name,
-    manaCost: parseManaCost(raw.mana_cost ?? frontFace?.mana_cost),
+    manaCost: parseManaCost(costSource ?? frontFace?.mana_cost),
     cmc: typeof raw.cmc === 'number' ? raw.cmc : 0,
     typeLine: parseTypeLine(raw.type_line ?? frontFace?.type_line),
     rawTypeLine: raw.type_line ?? frontFace?.type_line ?? '',

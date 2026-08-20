@@ -125,6 +125,40 @@ describe('normalizeCard — a printed number that lives on the FACE', () => {
     expect(walker.loyalty).toBe(4);
   });
 
+  it('gives an ADVENTURER the creature cost, not the two halves added up', () => {
+    // Scryfall prints `"{B} // {2}{B}"` at the top level for Foulmire Knight and
+    // reports cmc 1. Summing the string produced a 4-pip cost that contradicted
+    // the card's own mana value and tripped the index invariant.
+    const adventurer = normalizeCard({
+      name: 'Foulmire Knight // Profane Insight',
+      layout: 'adventure',
+      mana_cost: '{B} // {2}{B}',
+      cmc: 1,
+      card_faces: [
+        { name: 'Foulmire Knight', type_line: 'Creature — Zombie Knight', mana_cost: '{B}' },
+        { name: 'Profane Insight', type_line: 'Instant — Adventure', mana_cost: '{2}{B}' },
+      ],
+    } as RawScryfallCard);
+    expect(adventurer.manaCost.B).toBe(1);
+    expect(adventurer.manaCost.generic).toBe(0);
+  });
+
+  it('gives a SPLIT card the CR 709.4 combined cost, which is the sum', () => {
+    const split = normalizeCard({
+      name: 'Assault // Battery',
+      layout: 'split',
+      mana_cost: '{R} // {3}{G}',
+      cmc: 5,
+      card_faces: [
+        { name: 'Assault', type_line: 'Sorcery', mana_cost: '{R}' },
+        { name: 'Battery', type_line: 'Sorcery', mana_cost: '{3}{G}' },
+      ],
+    } as RawScryfallCard);
+    expect(split.manaCost.R).toBe(1);
+    expect(split.manaCost.G).toBe(1);
+    expect(split.manaCost.generic).toBe(3);
+  });
+
   it('still prefers the top-level number when the card prints one', () => {
     const walker = normalizeCard({
       name: 'Liliana of the Veil',

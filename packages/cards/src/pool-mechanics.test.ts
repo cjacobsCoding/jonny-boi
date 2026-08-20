@@ -35,8 +35,12 @@ import {
   applyAction,
   createGame,
   DEFAULT_RULES,
+  defenseOf,
+  effectivePower,
   generateLegalActions,
+  indexContinuous,
   isLegalTarget,
+  manaModesOf,
 } from '@jonny-boi/core';
 import { buildRegistry } from './pool.js';
 import { CARD_POOL } from '../data/pool.js';
@@ -80,7 +84,80 @@ const REPRESENTED: ReadonlyArray<{
   { mechanic: 'cycling (an alternative cost)', present: (c) => (c as { cycling?: unknown }).cycling !== undefined },
   { mechanic: 'madness', present: (c) => (c as { madness?: unknown }).madness !== undefined },
   { mechanic: 'buyback', present: (c) => (c as { buyback?: unknown }).buyback !== undefined },
+  // --- the second castable face: four printed layouts, one model (DESIGN §3.21) ---
+  // Each predicate has to EXCLUDE its siblings, because all four hang a second
+  // half off `backFace` and only the surrounding fields say which layout it is.
+  {
+    mechanic: 'split cards (the CR 709.4 combined object)',
+    present: (c) => (c as { frontFace?: unknown }).frontFace !== undefined,
+  },
+  {
+    mechanic: 'aftermath (the back half cast only from the graveyard)',
+    present: (c) => (castZonesOf(c) ?? []).includes('graveyard'),
+  },
+  {
+    mechanic: 'adventure (the creature earned back out of exile)',
+    present: (c) => (c as { backFace?: { adventure?: boolean } }).backFace?.adventure === true,
+  },
+  { mechanic: 'modal double-faced cards', present: isModalDfcDefinition },
+  // --- the rest of the eleven this pool run was dispatched to light up ---------
+  {
+    mechanic: '"as ~ enters, choose a…" (a value named on entry)',
+    present: (c) => (c as { asEntersChoice?: unknown }).asEntersChoice !== undefined,
+  },
+  {
+    mechanic: 'a mandatory additional cost (CR 601.2h)',
+    present: (c) => (c as { additionalCost?: unknown }).additionalCost !== undefined,
+  },
+  {
+    mechanic: 'a search with two DESTINATIONS',
+    present: (_c, t) => /"route":\s*\[[^\]]*\},\s*\{/.test(t),
+  },
+  {
+    mechanic: 'the mana-ability model (a printed cost, rider or restriction)',
+    present: (c) => (c as { manaAbilities?: unknown }).manaAbilities !== undefined,
+  },
+  { mechanic: 'a mana ability with a RIDER (the pain lands)', present: (_c, t) => t.includes('"rider"') },
+  { mechanic: 'battles (a Siege, with its printed defense)', present: (c) => c.types.includes('battle') },
+  {
+    mechanic: 'the printed intervening "if" (CR 603.4)',
+    present: (_c, t) => t.includes('"intervening"'),
+  },
+  {
+    mechanic: '"at the beginning of…" step triggers',
+    present: (_c, t) => /"on":"(upkeep|drawStep|endStep|beginCombat|precombatMain|postcombatMain)"/.test(t),
+  },
+  {
+    mechanic: 'equipment (an Equip cost that attaches)',
+    present: (c) => ((c as { subtypes?: readonly string[] }).subtypes ?? []).includes('equipment'),
+  },
 ];
+
+/** The zones a card's back half may be cast from, when it names any. */
+function castZonesOf(card: CardDefinition): readonly string[] | undefined {
+  return (card as { backFaceCastZones?: readonly string[] }).backFaceCastZones;
+}
+
+/**
+ * A modal DFC, told apart from its three sibling layouts by what it does NOT
+ * carry: no `frontFace` (that is a split card's combined object), no adventure
+ * flag on the back half, and no cast-zone list (an aftermath half is graveyard
+ * only and a Siege's reward is cast from exile). What is left is CR 712 — two
+ * faces of one card, either one played from hand for its own cost.
+ */
+function isModalDfcDefinition(card: CardDefinition): boolean {
+  const c = card as {
+    backFace?: { adventure?: boolean };
+    backFaceCastable?: boolean;
+    frontFace?: unknown;
+  };
+  return (
+    c.backFaceCastable === true &&
+    c.frontFace === undefined &&
+    c.backFace?.adventure !== true &&
+    castZonesOf(card) === undefined
+  );
+}
 
 /**
  * Shipped systems with NO pool card, and WHY. Every one of these was probed
@@ -92,19 +169,23 @@ const REPRESENTED: ReadonlyArray<{
 const UNREPRESENTABLE: ReadonlyArray<{ readonly mechanic: string; readonly why: string }> = [
   {
     mechanic: 'multikicker',
-    why: 'every printed multikicker card spends the kick COUNT (a +1/+1 counter, a token, damage "for each time it was kicked"), and the derived-count templates for those clauses do not exist. 0 of 19 compile.',
+    why: 'every printed multikicker card spends the kick COUNT (a +1/+1 counter, a token, damage "for each time it was kicked"), and the derived-count templates for those clauses do not exist. 0 of 19 compile (re-measured 2026-08-20: 12 of the 19 are blocked on the counters template alone).',
   },
   {
     mechanic: 'emblems',
-    why: 'the emblem rule compiles the wrapper, but no printed emblem BODY does — they are all triggered abilities on an emblem, which is its own template family. 0 of 90 compile.',
+    why: 'the emblem rule compiles the wrapper, but no printed emblem BODY does — they are all triggered abilities on an emblem, which is its own template family. 0 of 90 compile (re-measured 2026-08-20: the loyalty ULTIMATE that makes the emblem is itself the bigger blocker, 108 unreadable loyalty clauses across the 90).',
   },
   {
-    mechanic: 'modal double-faced cards',
-    why: 'both faces must compile, and every MDFC pairs a spell with a land whose "enters tapped unless you pay 3 life" clause has no template. 0 of 100 compile.',
+    mechanic: 'equipment with a TRIGGERED ability',
+    why: 'plain Equipment is in the pool (20 of them attach and pump), but the Swords, Skullclamp and the living weapons all hang a trigger off the equipped creature, and "whenever equipped creature deals combat damage / dies / becomes equipped" is a trigger SUBJECT the compiler cannot resolve. Measured 2026-08-20 over every printed Equipment carrying such a line: 0 of 145 compile.',
   },
   {
-    mechanic: 'battles',
-    why: 'the Siege cast path SHIPPED (the reward is a free cast from exile once the battle is defeated), but the committed card index predates both the printed-defense capture and the per-face data a Siege is compiled from, so a re-fetch is what unblocks these. 0 of 36 compile.',
+    mechanic: 'damage prevention (the Fog family)',
+    why: 'nothing in core can prevent damage — there is no replacement/prevention layer at all, only the damage that is dealt. Measured 2026-08-20 over every printed card reading "prevent all combat damage": 0 of 123 compile, 109 of them on the plain rules table.',
+  },
+  {
+    mechanic: 'replacement effects on counters and on damage',
+    why: '"if one or more +1/+1 counters would be put on…" (Hardened Scales, Doubling Season) and "if a source would deal damage…" (Torbran) are the same missing layer as prevention: an effect that MODIFIES an event before it happens, where the engine only has effects that happen. Measured 2026-08-20: 0 of 17 and 0 of 32 compile.',
   },
 ];
 
@@ -122,8 +203,11 @@ describe('pool mechanic coverage — a feature nobody can see is not shipped', (
     const probes: Record<string, (t: string, c: CardDefinition) => boolean> = {
       multikicker: (_t, c) => (c as { multikicker?: unknown }).multikicker !== undefined,
       emblems: (t) => t.includes('"emblem"'),
-      'modal double-faced cards': (_t, c) => (c as { backFaceCastable?: boolean }).backFaceCastable === true,
-      battles: (_t, c) => c.types.includes('battle'),
+      'equipment with a TRIGGERED ability': (_t, c) =>
+        ((c as { subtypes?: readonly string[] }).subtypes ?? []).includes('equipment') &&
+        ((c as { triggers?: readonly unknown[] }).triggers ?? []).length > 0,
+      'damage prevention (the Fog family)': (t) => t.includes('preventDamage'),
+      'replacement effects on counters and on damage': (t) => t.includes('"replacement"'),
     };
     for (const { mechanic, why } of UNREPRESENTABLE) {
       expect(why.length, `${mechanic} needs a reason`).toBeGreaterThan(40);
@@ -259,6 +343,17 @@ const SEEDS = {
   ward: 209,
   counters: 210,
   walker: 211,
+  split: 212,
+  aftermath: 213,
+  adventure: 214,
+  modalDfc: 215,
+  asEnters: 216,
+  additionalCost: 217,
+  multiDestination: 218,
+  painLand: 219,
+  battle: 220,
+  interveningIf: 221,
+  equipment: 222,
 } as const;
 
 describe('the pool PLAYS every mechanic it claims', () => {
@@ -451,6 +546,289 @@ describe('the pool PLAYS every mechanic it claims', () => {
     s = settle(s, reg, [{ kind: 'selectCards', instanceIds: [] }]);
     expect(s.battlefield.find((c) => c.instanceId === id)?.counters['loyalty']).toBe(4);
   });
+
+  // --- the eleven mechanics this pool run put in front of a player -------------
+
+  it('split cards — the card in hand is BOTH halves, and each is cast for its own cost', () => {
+    const { s: opened, reg } = openGame(SEEDS.split);
+    let s = opened;
+    const card = getByName('Assault // Battery');
+    // CR 709.4: the object in every zone but the stack is the COMBINED card —
+    // both names and the SUM of the two costs. Neither half's cost is the card's,
+    // which is exactly why modelling a split card as its left half would have
+    // silently mis-answered every "mana value 3 or less" clause in the game.
+    expect(card.name).toBe('Assault // Battery');
+    expect(card.cost).toEqual({ generic: 3, R: 1, G: 1 });
+
+    const leftId = giveHand(s, 'A', card);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: leftId, targets: ['B'] }, reg);
+    s = settle(s, reg);
+    expect(s.players.B.life).toBe(18); // Assault, {R}: 2 damage to any target
+
+    floodMana(s);
+    const creaturesBefore = s.battlefield.filter(
+      (c) => c.controller === 'A' && c.def.types.includes('creature'),
+    ).length;
+    const rightId = giveHand(s, 'A', card);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: rightId, face: 'back' }, reg);
+    s = settle(s, reg);
+    const creatures = s.battlefield.filter(
+      (c) => c.controller === 'A' && c.def.types.includes('creature'),
+    );
+    expect(creatures).toHaveLength(creaturesBefore + 1); // Battery, {3}{G}: a 3/3
+    expect(creatures.at(-1)?.def.power).toBe(3);
+  });
+
+  it('aftermath — Mind is castable ONLY from the graveyard, and exiles itself after', () => {
+    const { s: opened, reg } = openGame(SEEDS.aftermath);
+    let s = opened;
+    const id = giveHand(s, 'A', getByName('Spring // Mind'));
+
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: id }, reg);
+    s = settle(s, reg);
+    expect(s.players.A.graveyard.some((c) => c.instanceId === id)).toBe(true);
+
+    floodMana(s);
+    const offers = generateLegalActions(s, DEFAULT_RULES).filter(
+      (a): a is Extract<GameAction, { kind: 'castSpell' }> =>
+        a.kind === 'castSpell' && a.instanceId === id,
+    );
+    // The whole of aftermath: one offer, from the graveyard, of the BACK half.
+    expect(offers).toHaveLength(1);
+    expect(offers[0]!.fromZone).toBe('graveyard');
+    expect(offers[0]!.face).toBe('back');
+
+    const handBefore = s.players.A.hand.length;
+    s = act(s, offers[0]!, reg);
+    s = settle(s, reg);
+    expect(s.players.A.hand.length).toBe(handBefore + 2); // Mind: draw two cards
+    // "Then exile it" — an aftermath half is used once and never again.
+    expect(s.players.A.exile.some((c) => c.instanceId === id)).toBe(true);
+    expect(s.players.A.graveyard.some((c) => c.instanceId === id)).toBe(false);
+  });
+
+  it('adventure — the spell is cast from hand and the CREATURE comes back out of exile', () => {
+    const { s: opened, reg } = openGame(SEEDS.adventure);
+    let s = opened;
+    const id = giveHand(s, 'A', getByName('Foulmire Knight'));
+
+    // Profane Insight, {2}{B}: "Draw a card. You lose 1 life."
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: id, face: 'back' }, reg);
+    s = settle(s, reg);
+    expect(s.players.A.life).toBe(19);
+    // The card is EXILED rather than binned — that is what buys the second cast.
+    expect(s.players.A.exile.some((c) => c.instanceId === id)).toBe(true);
+    expect(s.players.A.graveyard.some((c) => c.instanceId === id)).toBe(false);
+
+    floodMana(s);
+    const offer = generateLegalActions(s, DEFAULT_RULES).find(
+      (a) => a.kind === 'castSpell' && a.instanceId === id,
+    );
+    expect(offer, 'the creature half is not offered from exile').toBeDefined();
+    s = act(s, offer!, reg);
+    s = settle(s, reg);
+    expect(s.battlefield.find((c) => c.instanceId === id)?.def.name).toBe('Foulmire Knight');
+  });
+
+  it('modal DFCs — a Pathway offers both faces, and the face you played is the one that taps', () => {
+    const { s: opened, reg } = openGame(SEEDS.modalDfc);
+    let s = opened;
+    const id = giveHand(s, 'A', getByName('Barkchannel Pathway'));
+
+    const plays = generateLegalActions(s, DEFAULT_RULES).filter(
+      (a): a is Extract<GameAction, { kind: 'playLand' }> =>
+        a.kind === 'playLand' && a.instanceId === id,
+    );
+    expect(plays.some((p) => p.face === undefined), 'front face not offered').toBe(true);
+    expect(plays.some((p) => p.face === 'back'), 'back face not offered').toBe(true);
+
+    s = act(s, { kind: 'playLand', player: 'A', instanceId: id, face: 'back' }, reg);
+    s.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+    s = act(s, { kind: 'tapForMana', player: 'A', instanceId: id }, reg);
+
+    // Tidechannel Pathway adds {U}. The {G} the FRONT face would have made is
+    // gone for good — that is the whole cost of the choice.
+    expect(s.players.A.manaPool.U).toBe(1);
+    expect(s.players.A.manaPool.G).toBe(0);
+  });
+
+  it('as-enters — Adaptive Automaton names a creature type, and the anthem reaches only it', () => {
+    const { s: opened, reg } = openGame(SEEDS.asEnters);
+    let s = opened;
+    const goblinId = place(
+      s,
+      { id: 'gob', name: 'Goblin', types: ['creature'], subtypes: ['goblin'], power: 2, toughness: 1 },
+      'A',
+    );
+    const bearId = place(
+      s,
+      { id: 'bear', name: 'Bear', types: ['creature'], subtypes: ['bear'], power: 2, toughness: 2 },
+      'A',
+    );
+    const id = giveHand(s, 'A', getByName('Adaptive Automaton'));
+
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: id }, reg);
+    // The naming is asked DURING the resolution, before the permanent lands.
+    s = settle(s, reg, [{ kind: 'chooseValue', value: 'goblin' }]);
+
+    expect(s.battlefield.find((c) => c.instanceId === id)?.chosenAsEntered).toBe('goblin');
+    const mods = indexContinuous(s);
+    const powerOf = (instanceId: number): number => {
+      const perm = s.battlefield.find((c) => c.instanceId === instanceId)!;
+      return effectivePower(perm, mods.get(perm.instanceId));
+    };
+    expect(powerOf(goblinId)).toBe(3); // named
+    expect(powerOf(bearId)).toBe(2); // not named — a naming nothing reads is a half-card
+  });
+
+  it('a mandatory additional cost — Village Rites is not OFFERED with an empty board', () => {
+    const { s: opened, reg } = openGame(SEEDS.additionalCost);
+    let s = opened;
+    const id = giveHand(s, 'A', getByName('Village Rites'));
+    const offered = (state: GameState): boolean =>
+      generateLegalActions(state, DEFAULT_RULES).some(
+        (a) => a.kind === 'castSpell' && a.instanceId === id,
+      );
+
+    // CR 601.2h: an unpayable additional cost makes the cast ILLEGAL, not
+    // declinable. A spell that is offerable and un-castable is the bug this
+    // shape exists to prevent.
+    expect(offered(s)).toBe(false);
+
+    const bearId = place(
+      s,
+      { id: 'bear', name: 'Bear', types: ['creature'], power: 2, toughness: 2 },
+      'A',
+    );
+    expect(offered(s)).toBe(true);
+
+    const handBefore = s.players.A.hand.length;
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: id }, reg);
+    s = settle(s, reg, [{ kind: 'selectCards', instanceIds: [bearId] }]);
+
+    expect(s.battlefield.some((c) => c.instanceId === bearId)).toBe(false); // sacrificed
+    expect(s.players.A.hand.length).toBe(handBefore - 1 + 2); // Rites left, two drawn
+  });
+
+  it('a search with two destinations — Cultivate puts one basic in play TAPPED and one in hand', () => {
+    const { s: opened, reg } = openGame(SEEDS.multiDestination);
+    let s = opened;
+    const id = giveHand(s, 'A', getByName('Cultivate'));
+    const landsOf = (state: GameState): number =>
+      state.battlefield.filter((c) => c.controller === 'A' && c.def.types.includes('land')).length;
+    const landsBefore = landsOf(s);
+    const handBefore = s.players.A.hand.length;
+    const picks = s.players.A.library.slice(0, 2).map((c) => c.instanceId);
+
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: id }, reg);
+    s = settle(s, reg, [{ kind: 'selectCards', instanceIds: picks }]);
+
+    // ONE search, TWO destinations — the thing a single-destination search
+    // cannot express, and the reason `route` is a list.
+    expect(landsOf(s)).toBe(landsBefore + 1);
+    expect(s.players.A.hand.length).toBe(handBefore - 1 + 1); // Cultivate out, a basic in
+    const fetched = s.battlefield.find((c) => picks.includes(c.instanceId));
+    expect(fetched?.tapped, 'the battlefield half of the search enters TAPPED').toBe(true);
+    expect(s.players.A.hand.some((c) => picks.includes(c.instanceId))).toBe(true);
+  });
+
+  it('the mana-ability model — Adarkar Wastes taps free for {C}, or for a colour and 1 damage', () => {
+    const wastes = getByName('Adarkar Wastes');
+    const modes = manaModesOf(wastes);
+    const colourless = modes.findIndex((m) => m.C === 1);
+    const white = modes.findIndex((m) => m.W === 1);
+    expect(colourless).toBeGreaterThanOrEqual(0);
+    expect(white).toBeGreaterThanOrEqual(0);
+
+    /** Tap the land for one mode in a fresh game, and report what it cost. */
+    const tap = (mode: number): { pool: number; life: number } => {
+      const { s: fresh, reg } = openGame(SEEDS.painLand);
+      let s = fresh;
+      const id = place(s, wastes, 'A');
+      s.players.A.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 0, C: 0 };
+      s = act(s, { kind: 'tapForMana', player: 'A', instanceId: id, mode }, reg);
+      const pool = s.players.A.manaPool;
+      return {
+        pool: pool.W + pool.U + pool.B + pool.R + pool.G + pool.C,
+        life: s.players.A.life,
+      };
+    };
+
+    // The damage is a RIDER, not a cost: the mana still arrives, and the land is
+    // usable at 1 life. Modelling it as a cost would make a pain land unusable
+    // exactly when a player most wants to use it.
+    expect(tap(colourless)).toEqual({ pool: 1, life: 20 });
+    expect(tap(white)).toEqual({ pool: 1, life: 19 });
+  });
+
+  it('battles — a Siege enters on its PRINTED defense, and its own trigger fires', () => {
+    const { s: opened, reg } = openGame(SEEDS.battle);
+    let s = opened;
+    const moag = getByName('Invasion of Moag');
+    // The printed number comes from the card RECORD, and Scryfall keeps a
+    // Siege's defense on the battle FACE — reading only the top level gave every
+    // battle in the game a null defense and kept them all out of the pool.
+    expect((scryfallById.get(moag.id) as { defense?: number }).defense).toBe(5);
+
+    const bearId = place(
+      s,
+      { id: 'bear', name: 'Bear', types: ['creature'], power: 2, toughness: 2 },
+      'A',
+    );
+    const id = giveHand(s, 'A', moag);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: id }, reg);
+    s = settle(s, reg);
+
+    const battle = s.battlefield.find((c) => c.instanceId === id);
+    expect(battle?.def.types).toContain('battle');
+    expect(defenseOf(battle!)).toBe(5);
+    expect(s.battlefield.find((c) => c.instanceId === bearId)?.counters['+1/+1']).toBe(1);
+  });
+
+  it('the intervening "if" — Howling Mine gives the extra card untapped, and nothing tapped', () => {
+    /** B's hand size after B's one and only draw step, with the Mine as given. */
+    const handAfterOpponentsDrawStep = (tapped: boolean): number => {
+      const { s: fresh, reg } = openGame(SEEDS.interveningIf);
+      let s = fresh;
+      const mineId = place(s, getByName('Howling Mine'), 'A');
+      s.battlefield.find((c) => c.instanceId === mineId)!.tapped = tapped;
+      let guard = 0;
+      while (!(s.activePlayer === 'B' && s.step === 'precombatMain') && !s.gameOver && guard++ < 400) {
+        s = s.pendingChoice
+          ? act(s, generateLegalActions(s).find((a) => a.kind === 'answerChoice')!, reg)
+          : pass(s, reg);
+      }
+      return s.players.B.hand.length;
+    };
+
+    // CR 603.4 checks the printed "if" as the trigger would go on the stack. A
+    // tapped Mine does not trigger AT ALL — it is not a trigger that resolves
+    // into nothing, and the difference is exactly one card.
+    expect(handAfterOpponentsDrawStep(false)).toBe(handAfterOpponentsDrawStep(true) + 1);
+  });
+
+  it('equipment — Bonesplitter attaches for its Equip cost and the creature swings bigger', () => {
+    const { s: opened, reg } = openGame(SEEDS.equipment);
+    let s = opened;
+    const bearId = place(
+      s,
+      { id: 'bear', name: 'Bear', types: ['creature'], power: 2, toughness: 2 },
+      'A',
+    );
+    const axeId = place(s, getByName('Bonesplitter'), 'A');
+    expect(effectivePower(s.battlefield.find((c) => c.instanceId === bearId)!)).toBe(2);
+
+    s = act(
+      s,
+      { kind: 'activateAbility', player: 'A', instanceId: axeId, abilityIndex: 0, targets: [bearId] },
+      reg,
+    );
+    s = settle(s, reg);
+
+    const bear = s.battlefield.find((c) => c.instanceId === bearId)!;
+    expect(effectivePower(bear, indexContinuous(s).get(bear.instanceId))).toBe(4);
+    expect(s.battlefield.find((c) => c.instanceId === axeId)?.attachedTo).toBe(bearId);
+  });
 });
 
 describe('every pool card compiles complete from its printed text', () => {
@@ -463,6 +841,6 @@ describe('every pool card compiles complete from its printed text', () => {
       return record ? compileCard(record as never).status !== 'complete' : false;
     });
     expect(incomplete.map((c) => c.name)).toEqual([]);
-    expect(CARD_POOL.length).toBeGreaterThanOrEqual(357);
+    expect(CARD_POOL.length).toBeGreaterThanOrEqual(515);
   });
 });

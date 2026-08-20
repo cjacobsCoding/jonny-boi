@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T10:37:18.761Z",
+  "generatedAt": "2026-08-20T10:45:39.708Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
   "requested": 515,
   "unresolved": [],
@@ -2512,12 +2512,12 @@
       "id": "22c75ad5-237c-4dbd-bbc4-3058a3db408f",
       "name": "Beanstalk Giant // Fertile Footsteps",
       "manaCost": {
-        "generic": 8,
+        "generic": 6,
         "W": 0,
         "U": 0,
         "B": 0,
         "R": 0,
-        "G": 2,
+        "G": 1,
         "C": 0,
         "other": []
       },
@@ -2755,7 +2755,7 @@
       "manaCost": {
         "generic": 2,
         "W": 0,
-        "U": 2,
+        "U": 1,
         "B": 0,
         "R": 0,
         "G": 0,
@@ -9501,7 +9501,7 @@
         "W": 0,
         "U": 0,
         "B": 0,
-        "R": 2,
+        "R": 1,
         "G": 0,
         "C": 0,
         "other": []
@@ -10079,8 +10079,8 @@
       "id": "04fbb7aa-0dd4-4ac6-837d-822227fb6356",
       "name": "Faerie Guidemother // Gift of the Fae",
       "manaCost": {
-        "generic": 1,
-        "W": 2,
+        "generic": 0,
+        "W": 1,
         "U": 0,
         "B": 0,
         "R": 0,
@@ -11506,10 +11506,10 @@
       "id": "10c0f814-e302-49ff-aded-1b8d8424fd60",
       "name": "Foulmire Knight // Profane Insight",
       "manaCost": {
-        "generic": 2,
+        "generic": 0,
         "W": 0,
         "U": 0,
-        "B": 2,
+        "B": 1,
         "R": 0,
         "G": 0,
         "C": 0,
@@ -11633,7 +11633,7 @@
         "W": 0,
         "U": 1,
         "B": 0,
-        "R": 1,
+        "R": 0,
         "G": 0,
         "C": 0,
         "other": []
@@ -11814,12 +11814,12 @@
       "id": "496c9633-ff17-48df-9b24-1d8cbfd06126",
       "name": "Garenbrig Carver // Shield's Might",
       "manaCost": {
-        "generic": 4,
+        "generic": 3,
         "W": 0,
         "U": 0,
         "B": 0,
         "R": 0,
-        "G": 2,
+        "G": 1,
         "C": 0,
         "other": []
       },
@@ -17333,8 +17333,8 @@
       "id": "c8f6cc1f-b7e4-470d-8d48-ef848d7c1116",
       "name": "Lonesome Unicorn // Rider in Need",
       "manaCost": {
-        "generic": 6,
-        "W": 2,
+        "generic": 4,
+        "W": 1,
         "U": 0,
         "B": 0,
         "R": 0,
@@ -18156,7 +18156,7 @@
       "manaCost": {
         "generic": 0,
         "W": 0,
-        "U": 2,
+        "U": 1,
         "B": 0,
         "R": 0,
         "G": 0,
@@ -18803,11 +18803,11 @@
       "id": "df555f60-2164-49dc-be67-00aca9eb0d45",
       "name": "Minecart Daredevil // Ride the Rails",
       "manaCost": {
-        "generic": 3,
+        "generic": 2,
         "W": 0,
         "U": 0,
         "B": 0,
-        "R": 2,
+        "R": 1,
         "G": 0,
         "C": 0,
         "other": []
@@ -20077,9 +20077,9 @@
       "id": "396b088d-f9af-4ee1-843f-dbe1633f9cc8",
       "name": "Obyra's Attendants // Desperate Parry",
       "manaCost": {
-        "generic": 5,
+        "generic": 4,
         "W": 0,
-        "U": 2,
+        "U": 1,
         "B": 0,
         "R": 0,
         "G": 0,
@@ -20321,10 +20321,10 @@
       "id": "2db17cfc-0947-407f-bd53-d64a48eec314",
       "name": "Order of Midnight // Alter Fate",
       "manaCost": {
-        "generic": 2,
+        "generic": 1,
         "W": 0,
         "U": 0,
-        "B": 2,
+        "B": 1,
         "R": 0,
         "G": 0,
         "C": 0,
@@ -22507,7 +22507,7 @@
         "W": 0,
         "U": 0,
         "B": 0,
-        "R": 2,
+        "R": 1,
         "G": 0,
         "C": 0,
         "other": []
@@ -25853,11 +25853,11 @@
       "id": "fc75cfec-e1f6-4cb5-8a3c-2f7b2c39c03f",
       "name": "Smaug, the Great Calamity // Spew Flame",
       "manaCost": {
-        "generic": 9,
+        "generic": 5,
         "W": 0,
         "U": 0,
         "B": 0,
-        "R": 3,
+        "R": 2,
         "G": 0,
         "C": 0,
         "other": []
@@ -30208,10 +30208,10 @@
       "id": "ca8535f2-1f96-4836-bd32-5e952f9bee72",
       "name": "Topaz Dragon // Entropic Cloud",
       "manaCost": {
-        "generic": 5,
+        "generic": 4,
         "W": 0,
         "U": 0,
-        "B": 3,
+        "B": 2,
         "R": 0,
         "G": 0,
         "C": 0,
@@ -30618,12 +30618,12 @@
       "id": "09193c40-538c-4154-a671-076eece35e54",
       "name": "Tuinvale Treefolk // Oaken Boon",
       "manaCost": {
-        "generic": 8,
+        "generic": 5,
         "W": 0,
         "U": 0,
         "B": 0,
         "R": 0,
-        "G": 2,
+        "G": 1,
         "C": 0,
         "other": []
       },
@@ -30796,11 +30796,11 @@
       "id": "0f222f3d-f02b-42b9-aedf-fb7ed92d4889",
       "name": "Two-Headed Hunter // Twice the Rage",
       "manaCost": {
-        "generic": 5,
+        "generic": 4,
         "W": 0,
         "U": 0,
         "B": 0,
-        "R": 2,
+        "R": 1,
         "G": 0,
         "C": 0,
         "other": []
@@ -33559,9 +33559,9 @@
       "id": "fff28b30-9903-4a0a-a723-31216abd457d",
       "name": "Young Blue Dragon // Sand Augury",
       "manaCost": {
-        "generic": 5,
+        "generic": 4,
         "W": 0,
-        "U": 2,
+        "U": 1,
         "B": 0,
         "R": 0,
         "G": 0,
