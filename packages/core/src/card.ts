@@ -17,6 +17,9 @@
 
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
+// Type-only, so it is erased at build time and no runtime import cycle exists
+// (`copy.ts` imports this module's `unionProtection` for real).
+import type { CopyAsEntersSpec } from './copy.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
 export type CardType =
@@ -447,6 +450,23 @@ export interface CardDefinition {
    * tapped or untapped — is the whole of it, and it is exact.
    */
   readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
+  /**
+   * "**You may have ~ enter as a copy of** any creature on the battlefield"
+   * (Clone, Phantasmal Image, Spark Double, Sakashima, Vesuva) — the as-enters
+   * COPY replacement (CR 614.1c + CR 706.9), declared as data.
+   *
+   * It sits here beside `entersTapped*` because it is the same family of thing:
+   * a replacement applied AS the permanent enters, which every entry path must
+   * ask about rather than only the ones that happen to run a resolution script.
+   * The engine asks it in `resolveTopOfStack` (a permanent spell) and in
+   * `applyPlayLand` (a land), both before the permanent is on the battlefield,
+   * so the copied card's own `entersTapped`, summoning sickness, starting
+   * loyalty and starting defense are what the permanent enters with.
+   *
+   * The copy itself is applied in LAYER 1 by swapping the instance's `def`; see
+   * `copy.ts` for the layering argument and the copiable-values rule.
+   */
+  readonly copyAsEnters?: CopyAsEntersSpec;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**

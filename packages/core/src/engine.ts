@@ -116,6 +116,7 @@ import {
   tapAttackers,
 } from './internal/combat.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
+import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
 
 /**
@@ -529,6 +530,23 @@ function resolveTopOfStack(
 
   const card = top.card;
 
+  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 706), asked before anything else
+  // happens to this spell — before `stackResolved`, before a single effect runs,
+  // and above all before the permanent is on the battlefield, because the copied
+  // card is what decides its `entersTapped`, its summoning sickness, its
+  // starting loyalty and its starting defense.
+  //
+  // The stack object goes straight BACK on the stack while the question stands:
+  // nothing has been emitted and nothing has been mutated, so re-entering here
+  // after the answer resolves the spell exactly once. `copyAsEntersDecided`
+  // is what makes the second entry skip the question rather than re-ask it — a
+  // DECLINE has to stick, and "did they already choose?" cannot be read off the
+  // instance (declining leaves no trace on it, which is the whole point).
+  if (top.resolvesTo === 'battlefield' && top.copyAsEntersDecided !== true && askCopyAsEnters(state, card, emit)) {
+    state.stack.push(top);
+    return;
+  }
+
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
 
   // Where the card goes when it is done: the battlefield for a permanent, and
@@ -752,6 +770,23 @@ function finishSpellResolution(
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
     // zoneChange so a replay folds "entered, then at loyalty N" in order.
     applyEnteringLoyalty(card, emit);
+    // "…except it enters with an ADDITIONAL loyalty counter on it if it's a
+    // planeswalker" (Spark Double). Added after the printed number rather than
+    // folded into it, because that is what the card says and because the
+    // printed number is the copied walker's, not this card's. `+1/+1` counters
+    // from the same "except" tail were applied with the copy itself — loyalty
+    // is different only because a walker ENTERS with it (CR 306.5b) and the
+    // helper above sets the record wholesale.
+    const bonusLoyalty = extraLoyaltyForCopy(card, card.def.copyAsEnters);
+    if (bonusLoyalty > 0) {
+      addLoyalty(card, bonusLoyalty);
+      emit({
+        type: 'loyaltyChanged',
+        instanceId: card.instanceId,
+        delta: bonusLoyalty,
+        to: loyaltyOf(card),
+      });
+    }
     // A battle enters with its printed defense counters (CR 310.4) by the same
     // rule and through the same kind of shared helper, so no entry path can
     // disagree with another about the number a permanent arrives carrying.
@@ -1064,7 +1099,7 @@ function dispatchAction(
   }
   switch (action.kind) {
     case 'answerChoice':
-      return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
+      return applyAnswerChoice(state, prevState, action, config, effectRegistry, emit, events);
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
       // Passing with a madness window open DECLINES it (CR 702.35a): the card
@@ -1126,6 +1161,7 @@ function applyAnswerChoice(
   state: GameState,
   prevState: GameState,
   action: Extract<GameAction, { kind: 'answerChoice' }>,
+  config: RulesConfig,
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
   events: GameEvent[],
@@ -1274,6 +1310,47 @@ function applyAnswerChoice(
     return { state, events };
   }
 
+  // AN AS-ENTERS COPY answer (CR 614.1c + CR 706) belongs to the ENTRY PATH that
+  // raised it, not to a resolution. Routed by its own `context` marker for the
+  // same reason the legend rule is: "no frame behind it" also describes the
+  // shockland question below. Two entry paths raised it and each is finished
+  // here, because in both cases the permanent is NOT yet on the battlefield —
+  // which is precisely what makes the copied card decide how it enters.
+  if (choice.context === 'copyAsEnters' && answer.kind === 'selectCards') {
+    const chosen = answer.instanceIds;
+    // WHICH entry path raised it is read off where the copying card IS, not off
+    // a second state field: a permanent spell waiting to resolve is on the
+    // stack, and a land mid-play is still in its owner's hand. Instance ids are
+    // unique, so the two cases can never both match.
+    const waiting = spellOnStack(state, choice.sourceInstanceId);
+    if (waiting) {
+      // `resolveTopOfStack` put the stack object back untouched, so recording
+      // the decision and resolving again finishes the spell exactly once.
+      applyCopyAsEntersAnswer(state, waiting.card, chosen, emit);
+      patchSpellOnStack(state, waiting.instanceId, { copyAsEntersDecided: true });
+      resolveTopOfStack(state, config, registry, emit);
+      if (!state.pendingChoice && !state.gameOver) {
+        state.priorityPlayer = state.activePlayer;
+        state.consecutivePasses = 0;
+      }
+      return { state, events };
+    }
+    // A LAND being played: nothing of the land play has happened yet — it has
+    // not entered, no land drop has been counted and no landfall has fired — so
+    // the copy is applied to a card still in hand and the play then runs in
+    // full, with the COPIED land deciding whether it enters tapped.
+    const land = instanceIn(state.players[choice.chooser].hand, choice.sourceInstanceId);
+    if (land) {
+      applyCopyAsEntersAnswer(state, land, chosen, emit);
+      return completeLandPlay(state, land, choice.chooser, config, emit, events);
+    }
+    // Neither — the spell was countered, or the state was hand-built. Nothing
+    // entered, so there is nothing to undo; the game simply continues.
+    state.priorityPlayer = state.activePlayer;
+    state.consecutivePasses = 0;
+    return { state, events };
+  }
+
   // A TARGETING answer belongs to the stack, not to a resolution: it names what a
   // triggered ability points at, chosen as the ability went on the stack. Nothing
   // is resumed — the aim is recorded, and any trigger still waiting behind it asks
@@ -1392,12 +1469,41 @@ function applyPlayLand(
     card.def = playDef;
   }
 
-  moveToZone(state, card, 'battlefield', emit, action.player);
-  card.controller = action.player;
+  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 706) — Vesuva, Echoing Deeps.
+  // Asked BEFORE the land enters, unlike the shockland/reveal-land questions
+  // below, and the difference is not cosmetic: those two only decide whether an
+  // already-entered land is tapped, while this one decides WHICH LAND ENTERS.
+  // A landfall/ETB trigger, `entersTapped`, and every other consequence of the
+  // entry must see the copied card, so the copy has to be settled first.
+  if (askCopyAsEnters(state, card, emit)) return { state, events };
+  return completeLandPlay(state, card, action.player, config, emit, events);
+}
+
+/**
+ * Everything a land play does once WHICH LAND is settled: put it onto the
+ * battlefield, work out whether it enters tapped (including the two questions
+ * that can still change that answer), count the land drop, and say so.
+ *
+ * Split out of {@link applyPlayLand} because the as-enters copy question parks
+ * in the middle of a land play and `applyAnswerChoice` has to finish the play
+ * afterwards — one function so the copied and uncopied paths cannot drift.
+ */
+function completeLandPlay(
+  state: GameState,
+  card: CardInstance,
+  playerId: PlayerId,
+  _config: RulesConfig,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  const player = state.players[playerId];
+
+  moveToZone(state, card, 'battlefield', emit, playerId);
+  card.controller = playerId;
   // `moveToZone` has already put the land on the battlefield, so `self` excludes
   // it from its own "other lands you control" count.
   card.tapped = entersTapped(card.def, {
-    controller: action.player,
+    controller: playerId,
     battlefield: state.battlefield,
     self: card,
   });
@@ -1418,7 +1524,7 @@ function applyPlayLand(
   const revealCondition = card.def.entersTappedUnlessRevealed;
   if (
     revealCondition !== undefined &&
-    canRevealForUntapped(revealCondition, state.players[action.player].hand)
+    canRevealForUntapped(revealCondition, state.players[playerId].hand)
   ) {
     // Entered tapped above; the tapped event is deferred until the answer, so a
     // replay never shows the land flickering tapped -> untapped.
@@ -1426,7 +1532,7 @@ function applyPlayLand(
     const choice = normalizeChoiceRequest(
       {
         kind: 'confirm',
-        chooser: action.player,
+        chooser: playerId,
         prompt: `Reveal ${describeRevealTypes(revealCondition.anyOfSubtypes)} from your hand, or ${card.def.name} enters tapped`,
         // Showing a card costs nothing and unlocks an untapped land, so a pilot
         // with nothing better to go on should take it.
@@ -1451,13 +1557,13 @@ function applyPlayLand(
       });
     }
     player.landsPlayedThisTurn += 1;
-    emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
+    emit({ type: 'landPlayed', player: playerId, instanceId: card.instanceId });
     state.consecutivePasses = 0;
     return { state, events };
   }
 
   const shockCost = card.def.entersTappedUnlessLifePaid;
-  if (shockCost !== undefined && canAffordLifeCost(state, action.player, shockCost)) {
+  if (shockCost !== undefined && canAffordLifeCost(state, playerId, shockCost)) {
     // Entered tapped above, but the tapped event is deferred until the answer —
     // emitted only if the decline confirms it, so a replay never shows a land
     // flickering tapped→untapped.
@@ -1465,7 +1571,7 @@ function applyPlayLand(
     const choice = normalizeChoiceRequest(
       {
         kind: 'payLife',
-        chooser: action.player,
+        chooser: playerId,
         prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
         amount: shockCost,
         affordable: true,
@@ -1493,7 +1599,7 @@ function applyPlayLand(
     emit({ type: 'tapped', instanceId: card.instanceId });
   }
   player.landsPlayedThisTurn += 1;
-  emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
+  emit({ type: 'landPlayed', player: playerId, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
   state.consecutivePasses = 0;
   return { state, events };
@@ -2273,7 +2379,13 @@ function patchSpellOnStack(
   patch: Partial<
     Pick<
       SpellStackObject,
-      'xValue' | 'kicked' | 'kickCount' | 'modePicks' | 'boughtBack' | 'awaitingCastChoice'
+      | 'xValue'
+      | 'kicked'
+      | 'kickCount'
+      | 'modePicks'
+      | 'boughtBack'
+      | 'awaitingCastChoice'
+      | 'copyAsEntersDecided'
     >
   >,
 ): void {

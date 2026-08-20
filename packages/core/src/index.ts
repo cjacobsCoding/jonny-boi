@@ -196,6 +196,29 @@ export type { FaceUp } from './transform.js';
 export { transformPermanent, faceUpOf, transformTargetOf } from './transform.js';
 
 /**
+ * COPY-EFFECT seam (`./copy.ts`) -- CR 706, the bottom of the layer system.
+ * "You may have ~ enter as a copy of any creature on the battlefield" is
+ * declared as data (`CardDefinition.copyAsEnters`) and applied by swapping the
+ * instance's `def` in LAYER 1, so counters (7d), anthems (7c) and until-EOT
+ * pumps all apply on top of the copied characteristics with no second code
+ * path. `copiableDefOf` is the single answer to "what would copying this give
+ * you" (CR 706.2 -- the printed front face, never the pumped board state), and
+ * `copyResultDef` is its pure preview, used by the AI to rank copy targets.
+ */
+export type { CopyAsEntersSpec, CopyExceptions, CopySourceZone } from './copy.js';
+export {
+  applyCopyAsEnters,
+  applyCopyAsEntersAnswer,
+  applyCopyExceptions,
+  askCopyAsEnters,
+  copiableDefOf,
+  copyCandidates,
+  copyResultDef,
+  extraLoyaltyForCopy,
+  isCopy,
+} from './copy.js';
+
+/**
  * MODAL-SPELL seam (`./modal.ts`): which modes of a "Choose one --" card may be
  * ANNOUNCED on this board, and what each announced mode resolves into. Read by
  * the engine at cast time, by the AI to price a mode before choosing it, and by

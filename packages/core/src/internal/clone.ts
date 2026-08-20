@@ -75,6 +75,14 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // on its back face for the rest of the game — and losing the pair together
   // would untransform it — on the very next action's clone.
   if (inst.printedDef != null) copy.printedDef = inst.printedDef;
+  // Same conditional-copy rule, with the sharpest stakes of the lot — the exact
+  // bug the transform branch hit with `printedDef`, one layer down. `def` may be
+  // a COPY effect's result (CR 706, layer 1) and `uncopiedDef` is the only
+  // record of what the card really is. Drop it here and a Clone silently
+  // REVERTS to its own printed 0/0 body at the very next action boundary: the
+  // copy looks right for exactly one action and then stops being the creature it
+  // copied, mid-combat, with no event saying so.
+  if (inst.uncopiedDef != null) copy.uncopiedDef = inst.uncopiedDef;
   // Same conditional-copy rule again: only a permanent that entered off a
   // KICKED spell carries this, and it is what an "for each time it was kicked"
   // ETB trigger reads after the resolution frame is gone — drop it here and the
@@ -163,6 +171,10 @@ function cloneStackObject(o: StackObject): StackObject {
     ...(o.boughtBack !== undefined ? { boughtBack: o.boughtBack } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
+    // Dropping this one would re-ask the as-enters COPY question every time the
+    // resolution is re-entered — and a DECLINE leaves nothing on the instance to
+    // notice, so the spell would never finish resolving. Same shape, same rule.
+    ...(o.copyAsEntersDecided !== undefined ? { copyAsEntersDecided: o.copyAsEntersDecided } : {}),
   };
 }
 

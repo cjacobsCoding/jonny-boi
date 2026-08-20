@@ -488,8 +488,16 @@ interface PendingChoiceBase {
    * resolution frame behind it; `applyAnswerChoice` routes the answer by this
    * marker instead of guessing from the absence of a frame. Absent for every
    * ordinary choice, so all existing states and tests read unchanged.
+   *
+   * `'copyAsEnters'` marks the as-enters COPY question (CR 614.1c + CR 706 —
+   * "you may have ~ enter as a copy of any creature on the battlefield"), raised
+   * by the ENTRY PATH (a permanent spell about to resolve, a land being played)
+   * before the permanent is on the battlefield, again with no resolution frame
+   * behind it. It is routed by this marker for exactly the reason the legend
+   * rule is: "there is no frame" also describes the shockland question, and the
+   * three must never be confused.
    */
-  readonly context?: 'legendRule';
+  readonly context?: 'legendRule' | 'copyAsEnters';
 }
 
 export interface SelectCardsChoice extends PendingChoiceBase {
