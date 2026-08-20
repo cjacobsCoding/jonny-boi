@@ -129,6 +129,12 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'primitive', id: 'addCounters' },
       },
       {
+        title: 'Counters matter',
+        detail:
+          'The counters-matter family plays as printed: "put a +1/+1 counter on each creature you control" counts exactly the printed set (and refuses a phrase the filter cannot express, like "each ATTACKING creature"), creatures grow off life gain, spells cast, deaths, combat damage and other creatures entering, an {X} creature really enters with X counters on it, and a static can read "creatures you control with +1/+1 counters on them cannot be blocked".',
+        witness: { kind: 'rule', id: 'put-counters-on-each' },
+      },
+      {
         title: 'Player choices during resolution',
         detail:
           'Spells can ask questions mid-resolution — select cards or players, choose modes, confirm a "you may", search the library — and the same mechanism serves the AI, hotseat play and online play.',
@@ -148,8 +154,20 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Modal mana sources',
         detail:
-          'A source that taps for a CHOICE adds one mode per tap, picked when you tap it — a dual land’s two colours, "one mana of any color", or Gilded Lotus’s three-of-one-colour. A mana ability that also costs life or mana, carries a rider ("…deals 1 damage to you"), or is gated on the board ("Activate only if…") is still refused by name: those need the mana model itself to grow.',
+          'A source that taps for a CHOICE adds one mode per tap, picked when you tap it — a dual land’s two colours, "one mana of any color", or Gilded Lotus’s three-of-one-colour.',
         witness: { kind: 'rule', id: 'tap-for-n-of-any-one-color' },
+      },
+      {
+        title: 'Mana abilities with a price',
+        detail:
+          'A mana ability may charge more than the tap and may do more than add mana. "{T}, Pay 1 life: Add one mana of any color" (Mana Confluence, the horizon lands) charges the life and is not offered when you cannot pay it; a filter land’s "{W/U}, {T}:" consumes its input before producing; a pain land’s "…deals 1 damage to you" is a RIDER, not a cost, so the land still works at 1 life and can kill you. None of it uses the stack (CR 605.3a), and the shared payment planner prefers the painless source when both close the same shortfall.',
+        witness: { kind: 'rule', id: 'mana-ability-with-rider' },
+      },
+      {
+        title: 'Conditional and board-derived mana',
+        detail:
+          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping. Still refused by name: "spend this mana only to…", which would need the mana POOL to carry the restriction.',
+        witness: { kind: 'rule', id: 'mana-ability-activation-restriction' },
       },
       {
         title: '{X} costs',
@@ -244,6 +262,30 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail:
           'A "Flashback {cost}" instant or sorcery casts from your graveyard for that cost — honoring its normal timing — and is exiled as it leaves the stack, even when countered (CR 702.34a). All three printed cost shapes work: plain mana, "Flashback {X}{R}{R}" (the X is asked and charged at cast), and "Flashback—{1}{U}, Pay 3 life". A non-life rider (a discard, a sacrifice) still reports.',
         witness: { kind: 'rule', id: 'flashback-cost' },
+      },
+      {
+        title: 'Cycling',
+        detail:
+          'A "Cycling {cost}" card is an activated ability of a card in your HAND: pay the cost, discard the card as part of it, draw a card. Instant speed, so a cycling land turns into a card on an opponent turn. The discard is a COST, which is what lets it feed madness and a "whenever you cycle or discard" trigger. An {X} cycling cost still reports.',
+        witness: { kind: 'rule', id: 'cycling-cost' },
+      },
+      {
+        title: 'Typecycling and landcycling',
+        detail:
+          'The same mechanism with a different reward: "Plainscycling {2}" / "Landcycling {2}" search your library for a card of that type instead of drawing. Only words the card filter can genuinely select compile — the five basic land types and the generic "land"; anything else reports rather than fetching approximately the right card.',
+        witness: { kind: 'rule', id: 'typecycling-cost' },
+      },
+      {
+        title: 'Buyback',
+        detail:
+          'An optional additional cost asked at cast time, exactly like a kicker. Pay it and the card returns to your HAND as it resolves instead of going to the graveyard (CR 702.27a) — and only as it resolves: a bought-back spell that is countered goes to the graveyard like any other. Both answers come from the one helper that also decides where a flashback card goes, so the two can never disagree.',
+        witness: { kind: 'rule', id: 'buyback-cost' },
+      },
+      {
+        title: 'Madness',
+        detail:
+          'Discarding a madness card exiles it instead, and you may then cast it for its madness cost — from either discard funnel (a cost, or an effect), ignoring the timing printed on the card, with mana abilities still legal so you can pay. Passing declines and puts it in the graveyard the discard would have used. A madness cost printed in words ("Madness—Pay six {C}") still reports.',
+        witness: { kind: 'rule', id: 'madness-cost' },
       },
       {
         title: 'Granted flashback (Snapcaster Mage)',

@@ -276,6 +276,16 @@ formulaic, repeat across cycles, and every deck plays 24 of them.
 > no machinery behind them. Extending the mana model is instead the single highest
 > card-per-hour ENGINE item on the board, ahead of alternative casting costs (20 sole).
 >
+> **✅ SHIPPED on `feat/mana-ability-model` (2026-08-19): four of these five are now real.**
+> Core carries `CardDefinition.manaAbilities` — a per-ability additional cost, rider, activation
+> restriction and board-derived colours. **Re-measured offline against this same cached corpus,
+> PAIRED against the same-day `main`: 328 → 384 playable (15.6% → 18.3%), +56 cards** — the largest single-branch move the census has
+> recorded, and comfortably ahead of alternative casting costs. The **spend restriction** (4 sole)
+> is NOT shipped and is the one that is genuinely a different system: it colours the MANA rather
+> than the source, so `ManaPool` would have to carry it and every payment path honour it. Two
+> smaller residuals also still report by name: a cost that taps another permanent (Springleaf Drum)
+> and a colour derived from a commander's identity (refused for good, §5).
+>
 > The same caution applies to §4's wave 1 ("Land templates: mana-ability (24) +
 > enters-tapped (8) families, ≈305 playable"). The enters-tapped half is real template
 > work; the mana-ability half is the engine work above.

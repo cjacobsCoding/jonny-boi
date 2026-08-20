@@ -379,6 +379,20 @@ export interface CardDefinition {
    */
   readonly producesOptions?: readonly import('./mana.js').ManaProduction[];
   /**
+   * The FULL mana-ability form: a list of separately-printed mana abilities,
+   * each with its own additional cost, rider, activation restriction and
+   * (optionally) board-derived colours. See {@link ManaAbility}.
+   *
+   * Supersedes {@link produces}/{@link producesOptions} completely: those two are
+   * the shorthand for "one ability, whose whole cost is the tap, with nothing
+   * else printed", and a definition that declares `manaAbilities` has its mode
+   * list built solely from this (the compiler folds a plain bundle in as one more
+   * entry). Keeping the forms mutually exclusive is what lets {@link manaModesOf}
+   * stay a single memoized answer instead of two lists a consumer could read
+   * only half of.
+   */
+  readonly manaAbilities?: readonly ManaAbility[];
+  /**
    * When true this permanent arrives on the battlefield already tapped, exactly
    * as printed ("~ enters tapped"). It is the defining drawback of the common
    * dual lands, so without it those lands would play a full turn faster than
@@ -471,6 +485,59 @@ export interface CardDefinition {
    * alongside {@link flashback}.
    */
   readonly flashbackLifeCost?: number;
+  /**
+   * CYCLING — "{cost}, Discard this card: Draw a card" (CR 702.29), plus the
+   * TYPECYCLING/LANDCYCLING variants whose effect is a library search instead of
+   * a draw. A list because a card may print more than one cycling ability, and
+   * because the `cycleCard` action indexes it exactly as `activateAbility`
+   * indexes {@link activated} — so *which* cycling ability is part of the
+   * action and a pilot can enumerate and score each one.
+   *
+   * It is NOT in {@link activated}, and that is the whole point: an activated
+   * ability there is activated from the BATTLEFIELD by a permanent, while
+   * cycling is activated from HAND by a card that is not a permanent at all
+   * (every cycling land in the corpus cycles while it is still a card in hand).
+   * Folding the two would mean teaching every battlefield-shaped check —
+   * summoning sickness, tap costs, `findOnBattlefield` — about a zone it has
+   * never had to consider.
+   *
+   * The DISCARD is a cost, not an effect, which is why madness (below) and any
+   * "whenever you cycle or discard" trigger see it: it goes through the same
+   * discard funnel every other discard does.
+   */
+  readonly cycling?: readonly CyclingAbility[];
+  /**
+   * BUYBACK — "You may pay an additional {cost} as you cast this spell. If you
+   * do, put this card into your hand as it resolves." (CR 702.27). The value is
+   * that additional cost.
+   *
+   * The decision is a cast-time question exactly like {@link kicker} (the same
+   * `payMana` the engine charges as it accepts the answer), and the answer rides
+   * the stack object as `boughtBack`. Where the card GOES is then one shared
+   * answer — `spellLeaveDestination` in state.ts — which is what makes buyback
+   * agree with flashback rather than being a second opinion about the exit from
+   * the stack. Note the asymmetry the rules require and that helper encodes: a
+   * bought-back spell returns to hand only when it RESOLVES; countered, it is
+   * put into the graveyard like any other countered spell.
+   */
+  readonly buyback?: ManaCost;
+  /**
+   * MADNESS — "If you discard this card, exile it instead of putting it into
+   * your graveyard. When you do, you may cast it for its madness cost" (CR
+   * 702.35). The value is that cost.
+   *
+   * Two halves, both engine-enforced from this one field:
+   *  - **The exile**: the discard funnel (`discardDestination` in state.ts)
+   *    diverts the card to exile and opens a MADNESS WINDOW on the game state.
+   *  - **The cast**: while that window stands, its owner may cast the card with
+   *    `fromZone: 'exile'`, paying THIS cost instead of `cost`; passing priority
+   *    declines, and the card falls into the graveyard where an ordinary discard
+   *    would have put it.
+   *
+   * Only the plain mana-cost form is modelled; a madness cost printed in words
+   * ("Madness—Pay six {C}") or with a non-mana component stays reported.
+   */
+  readonly madness?: ManaCost;
   /**
    * Triggered abilities (DESIGN §3.9), as data: each is a condition (what event
    * sets it off) + an effect-ref list run when it resolves. Opaque to most of core
@@ -737,6 +804,28 @@ export interface ActivatedAbility {
 }
 
 /**
+ * One printed CYCLING ability: what it costs and what cycling it does.
+ *
+ * The cost is mana only — the other half of every printed cycling cost is
+ * "Discard this card", which is not data because it is the same for every
+ * cycling ability in the game and the engine performs it (see
+ * `CardDefinition.cycling`).
+ *
+ * `effects` is what the ability puts on the stack, as ordinary effect refs, so
+ * plain cycling ("Draw a card") and typecycling/landcycling ("Search your
+ * library for a Plains card…") are the SAME mechanism with different data —
+ * exactly one code path, and no primitive that exists only for cycling.
+ */
+export interface CyclingAbility {
+  /** The mana cost paid to cycle (the discard is performed by the engine). */
+  readonly cost: ManaCost;
+  /** What the cycling ability does on resolution — a draw, or a search. */
+  readonly effects: readonly EffectRef[];
+  /** Human-readable text for the log, the inspector, and the replay viewer. */
+  readonly label: string;
+}
+
+/**
  * Memo of a definition's subtypes, lower-cased into a set for O(1) case-insensitive
  * lookup. Same argument as the mana memos below: definitions are immutable and
  * shared across every instance, and subtype matching runs inside the continuous
@@ -808,6 +897,161 @@ export function isAttackable(def: CardDefinition): boolean {
   return isPlaneswalker(def) || isBattle(def);
 }
 
+// ---------------------------------------------------------------------------
+// THE MANA-ABILITY MODEL
+//
+// A mana ability is NOT an activated ability (CR 605.1a): it does not use the
+// stack, nobody may respond to it, and it is offered during payment planning
+// rather than with priority. That is why it cannot simply be folded into
+// `ActivatedAbility` — an "activated ability that adds mana" would be
+// respondable, which is a rules bug, and would arrive at the payment planner one
+// stack resolution too late to fund anything.
+//
+// What a printed mana ability can carry beyond the colour bundle, and which this
+// model therefore has to represent:
+//   - an ADDITIONAL COST beyond the tap  ("{T}, Pay 1 life:", the filter lands'
+//     "{R/W}, {T}:")
+//   - a RIDER effect                     (every pain land, the Talisman cycle)
+//   - an ACTIVATION RESTRICTION          (the Verge cycle, Nimbus Maze, Mox Opal)
+//   - COLOURS DERIVED FROM THE BOARD     (Reflecting Pool, Exotic Orchard)
+// ---------------------------------------------------------------------------
+
+/**
+ * What activating a mana ability costs BEYOND tapping the permanent.
+ *
+ * The `{T}` symbol is not represented here because every mana ability this
+ * engine models prints it; a hypothetical mana ability without a tap would be a
+ * repeatable free source, which no modelled card is.
+ */
+export interface ManaAbilityCost {
+  /**
+   * "Pay N life" — Mana Confluence, the horizon lands, Ancient Tomb's rider is
+   * NOT this (that is a {@link ManaAbilityRider}: it happens on resolution and
+   * is not a cost you may decline).
+   *
+   * Payable only while the controller's life is at least N (CR 118.4 — life pays
+   * down to zero, never past), which is exactly the rule
+   * `ActivationCost.life` already obeys.
+   */
+  readonly life?: number;
+  /**
+   * A mana component — the filter lands' "{R/W}, {T}: Add {R}{R}, {R}{W}, or
+   * {W}{W}". Paid from the controller's FLOATING pool, exactly as
+   * `ActivationCost.mana` is: the engine offers the activation only once the
+   * input mana is actually floating, so a filter land is reached by tapping its
+   * funding source first. See `pushManaTapActions` for why that is the same
+   * gate every other mana-costed activation in this engine uses.
+   */
+  readonly mana?: ManaCost;
+}
+
+/**
+ * An effect that happens as part of the mana ability's own resolution — the
+ * second printed sentence of a pain land ("~ deals 1 damage to you") or a
+ * Talisman ("~ deals 1 damage to you").
+ *
+ * A rider is NOT optional and NOT a cost: it happens after the mana is added,
+ * and a controller who cannot "afford" it still takes it. That is why it is a
+ * separate field from {@link ManaAbilityCost} rather than a negative life cost —
+ * modelling a pain land's damage as a cost would wrongly make the land
+ * unusable at 1 life, when in paper it is usable and lethal.
+ */
+export interface ManaAbilityRider {
+  /**
+   * "~ deals N damage to you" — damage to the ability's controller, from the
+   * source permanent. Damage, not life loss: the distinction is real (prevention
+   * and damage-triggered abilities see one and not the other), and the engine
+   * routes it through the same player-damage path combat and burn use.
+   */
+  readonly damageToController?: number;
+}
+
+/**
+ * "Activate only if …" — a board condition that must hold for a mana ability to
+ * be activatable at all (CR 602.5a).
+ *
+ * Every field present must hold (they AND together); a field listing several
+ * options is satisfied by ANY of them ("a Mountain **or** a Plains").
+ *
+ * Deliberately its own shape rather than reusing {@link EntersUntappedCondition}:
+ * that one answers a question asked once, as a permanent enters, and its
+ * vocabulary (`maxOtherLands`) is about the land drop. This one is asked on every
+ * legal-action pass and needs colour and type-count vocabulary the entry
+ * condition has no use for. Two questions, two shapes — merging them would make
+ * one of the two carry fields that can never fire.
+ */
+export interface ManaActivationCondition {
+  /** "if you control an Island" / "a Mountain or a Plains" — any listed subtype. */
+  readonly controlsSubtype?: readonly string[];
+  /** "if you control a red permanent" — any permanent of any listed colour. */
+  readonly controlsColor?: readonly ManaColor[];
+  /** Metalcraft: "if you control three or more artifacts". */
+  readonly controlsTypeAtLeast?: { readonly type: CardType; readonly count: number };
+}
+
+/**
+ * Where a mana ability's COLOURS come from when they are not printed.
+ *
+ * "Add one mana of any color that a land you control could produce" (Reflecting
+ * Pool) / "…that a land an opponent controls could produce" (Exotic Orchard,
+ * Fellwar Stone). The answer is a function of the board and is therefore
+ * computed per query — never cached on the definition, which would freeze one
+ * board's answer into a shared immutable object.
+ */
+export type DerivedManaColors = 'landsYouControl' | 'landsOpponentsControl';
+
+/** One printed mana ability. */
+export interface ManaAbility {
+  /**
+   * The modes this ability offers — one activation adds exactly ONE of them,
+   * chosen by the controller. A fixed bundle is the single-entry case.
+   *
+   * Omitted exactly when {@link derivedColors} is set; the two are alternatives.
+   */
+  readonly produces?: readonly ManaProduction[];
+  /** Present ⇒ the modes are one mana of each colour the board makes available. */
+  readonly derivedColors?: DerivedManaColors;
+  /**
+   * Whether the derivation includes COLOURLESS. Oracle draws the line with one
+   * word: Reflecting Pool adds "one mana of any **type** that a land you control
+   * could produce" and can therefore make {C}; Exotic Orchard and Fellwar Stone
+   * say "any **color**" and cannot. Ignoring the distinction would hand every
+   * Orchard a colourless mode off a Wastes.
+   */
+  readonly derivedIncludesColorless?: boolean;
+  /** Cost beyond the tap, if the card prints one. */
+  readonly cost?: ManaAbilityCost;
+  /** An effect that is part of this ability's resolution ("deals 1 damage to you"). */
+  readonly rider?: ManaAbilityRider;
+  /** "Activate only if …". */
+  readonly restriction?: ManaActivationCondition;
+  /** Human-readable text for logs and the inspector. */
+  readonly label?: string;
+}
+
+/**
+ * The per-MODE facts a rich mana ability adds, parallel to {@link manaModesOf}.
+ *
+ * Flat and index-aligned with the mode list because `TapForManaAction.mode`
+ * indexes that list, and a second indexing scheme would be one more thing for an
+ * offer path and an apply path to disagree about.
+ */
+export interface ManaModeExtra {
+  readonly ability: ManaAbility;
+  /** For a derived-colour mode: which colour this mode would add. */
+  readonly derivedColor?: ManaColor;
+}
+
+/**
+ * The colours a derived mana ability enumerates modes for, in canonical order.
+ *
+ * ALWAYS all six, including colourless, even for a "any color" ability that can
+ * never make {C}: the mode list is the index space of `TapForManaAction.mode` and
+ * must not change shape with the wording any more than it changes with the board.
+ * The colourless mode of a colour-only ability is simply never available.
+ */
+const DERIVED_COLOR_ORDER: readonly ManaColor[] = MANA_COLORS;
+
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */
 const NO_MANA_MODES: readonly ManaProduction[] = Object.freeze([]);
 
@@ -835,6 +1079,8 @@ const MANA_MODE_MEMO = new WeakMap<CardDefinition, readonly ManaProduction[]>();
  * answer in the codebase.
  */
 export function manaModesOf(def: CardDefinition): readonly ManaProduction[] {
+  // The rich form supersedes both shorthands (see `CardDefinition.manaAbilities`).
+  if (def.manaAbilities && def.manaAbilities.length > 0) return flattenManaAbilities(def).modes;
   if (def.producesOptions && def.producesOptions.length > 0) return def.producesOptions;
   const bundle = def.produces;
   if (!bundle || bundle.length === 0) return NO_MANA_MODES;
@@ -845,6 +1091,130 @@ export function manaModesOf(def: CardDefinition): readonly ManaProduction[] {
   const modes: readonly ManaProduction[] = Object.freeze([single as ManaProduction]);
   MANA_MODE_MEMO.set(def, modes);
   return modes;
+}
+
+/**
+ * The per-mode extras of a definition, index-aligned with {@link manaModesOf} —
+ * or **`undefined` when this source prints nothing beyond the tap**.
+ *
+ * ⚠️ THE `undefined` RETURN IS THE POINT, not a convenience. `planManaPayment`
+ * is the hottest function in the engine profile and the overwhelming majority of
+ * real boards contain no source with a cost, a rider or a restriction. Every
+ * caller therefore checks this once per source and takes a branch that does no
+ * further work at all, so the model growing costs the common board exactly one
+ * property read on an immutable definition — no allocation, no per-mode loop, no
+ * per-query object. Do not "simplify" this into an array of `undefined`s.
+ */
+export function manaExtrasOf(def: CardDefinition): readonly ManaModeExtra[] | undefined {
+  if (!def.manaAbilities || def.manaAbilities.length === 0) return undefined;
+  return flattenManaAbilities(def).extras;
+}
+
+/** Memo for the flattened rich form — same immutability argument as the mode memo. */
+const MANA_ABILITY_MEMO = new WeakMap<
+  CardDefinition,
+  { readonly modes: readonly ManaProduction[]; readonly extras: readonly ManaModeExtra[] }
+>();
+
+/**
+ * Flatten `manaAbilities` into one mode list plus its parallel extras.
+ *
+ * A DERIVED ability always contributes exactly five modes (one per colour), on
+ * the board or off it. Enumerating the superset rather than only the colours the
+ * current board offers is deliberate: `TapForManaAction.mode` is an index into
+ * this list, and a list whose LENGTH moved with the board would make the same
+ * action number mean different colours to the action generator, the payment
+ * planner and the apply path. Availability is a separate question, asked per
+ * offer against the live board (`manaOfferBlockedReason` in engine.ts).
+ */
+function flattenManaAbilities(def: CardDefinition): {
+  readonly modes: readonly ManaProduction[];
+  readonly extras: readonly ManaModeExtra[];
+} {
+  const memoized = MANA_ABILITY_MEMO.get(def);
+  if (memoized) return memoized;
+  const modes: ManaProduction[] = [];
+  const extras: ManaModeExtra[] = [];
+  for (const ability of def.manaAbilities ?? []) {
+    if (ability.derivedColors) {
+      for (const color of DERIVED_COLOR_ORDER) {
+        modes.push(Object.freeze({ [color]: 1 }) as ManaProduction);
+        extras.push(Object.freeze({ ability, derivedColor: color }));
+      }
+      continue;
+    }
+    for (const production of ability.produces ?? []) {
+      modes.push(production);
+      extras.push(Object.freeze({ ability }));
+    }
+  }
+  const flattened = Object.freeze({
+    modes: Object.freeze(modes) as readonly ManaProduction[],
+    extras: Object.freeze(extras) as readonly ManaModeExtra[],
+  });
+  MANA_ABILITY_MEMO.set(def, flattened);
+  return flattened;
+}
+
+/**
+ * The colours this source could contribute to ANOTHER source's derived-colour
+ * ability ("any color that a land you control could produce").
+ *
+ * Deliberately excludes derived modes. Two Reflecting Pools do not see each
+ * other: the rules answer is that a derived ability reads what the other
+ * permanents *could* produce, and a permanent whose own production is defined by
+ * that same question contributes nothing rather than looping. Excluding it here
+ * is both the faithful answer and what makes the derivation terminate.
+ */
+export function fixedManaColorsOf(def: CardDefinition): readonly ManaColor[] {
+  const extras = manaExtrasOf(def);
+  const modes = manaModesOf(def);
+  const out: ManaColor[] = [];
+  for (let i = 0; i < modes.length; i++) {
+    if (extras?.[i]?.derivedColor !== undefined) continue;
+    const mode = modes[i] as ManaProduction;
+    for (const color of MANA_COLORS) {
+      if ((mode[color] ?? 0) > 0 && !out.includes(color)) out.push(color);
+    }
+  }
+  return out;
+}
+
+/** Whether an "Activate only if …" condition holds for `controller` on this board. */
+export function manaActivationConditionMet(
+  condition: ManaActivationCondition,
+  context: EntersTappedContext,
+): boolean {
+  const { controlsSubtype, controlsColor, controlsTypeAtLeast } = condition;
+  let colorFound = controlsColor === undefined;
+  let subtypeFound = controlsSubtype === undefined;
+  let typeCount = 0;
+  for (const permanent of context.battlefield) {
+    if (permanent.controller !== context.controller) continue;
+    if (!subtypeFound && controlsSubtype !== undefined) {
+      for (const subtype of controlsSubtype) {
+        if (hasSubtype(permanent.def, subtype)) {
+          subtypeFound = true;
+          break;
+        }
+      }
+    }
+    if (!colorFound && controlsColor !== undefined) {
+      const colors = colorsOfDefinition(permanent.def);
+      for (const color of controlsColor) {
+        if (colors.includes(color)) {
+          colorFound = true;
+          break;
+        }
+      }
+    }
+    if (controlsTypeAtLeast !== undefined && hasType(permanent.def, controlsTypeAtLeast.type)) {
+      typeCount += 1;
+    }
+  }
+  if (!subtypeFound || !colorFound) return false;
+  if (controlsTypeAtLeast !== undefined && typeCount < controlsTypeAtLeast.count) return false;
+  return true;
 }
 
 /** Whether tapping this permanent for mana is a thing it can do at all. */

@@ -111,6 +111,12 @@ const BARE_KEY = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 function serializeValue(value: unknown, indent: string): string {
   const inline = inlineValue(value);
   if (indent.length + inline.length <= MAX_EMITTED_LINE_WIDTH) return inline;
+  // A PRIMITIVE has no inner structure to break across lines, so an over-long
+  // one stays on its line. Without this it fell through to the object branch and
+  // `Object.entries` walked a long STRING character by character, emitting a
+  // label as `{ '0': 'S', '1': 'a', ... }` — data that no longer type-checks.
+  // Nothing printed a label over 100 characters until the fetchlands compiled.
+  if (value === null || typeof value !== 'object') return inline;
 
   const inner = `${indent}  `;
   if (Array.isArray(value)) {

@@ -172,6 +172,23 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    */
   cardsLookedAt: 'public',
   abilityActivated: 'public',
+  /*
+   * CYCLING is public as printed, and the name it carries is not a leak: the
+   * card is discarded face-up as part of the cost, so it is in a public zone —
+   * and already named by the `zoneChange` into the graveyard — before anyone
+   * sees the ability resolve. What was DRAWN off it stays hidden, because that
+   * arrives as an ordinary `drawCard`, redacted by the rule above.
+   */
+  cardCycled: 'public',
+  /*
+   * Both halves of madness are equally face-up. A discarded madness card is
+   * exiled in front of the table (exile is a public zone, and the move emits its
+   * own public `zoneChange`), and declining is a decision made out loud — the
+   * card visibly goes to the graveyard. Neither event carries anything the
+   * discarding player still knows privately.
+   */
+  madnessWindowOpened: 'public',
+  madnessDeclined: 'public',
   effectApplied: 'public',
   effectUnsupported: 'public',
   attackersDeclared: 'public',

@@ -13,13 +13,16 @@
 
 import type { GameAction } from './actions.js';
 import { DEFAULT_MANA_MODE } from './actions.js';
-import type { ActivatedAbility, CardDefinition, EffectRef } from './card.js';
+import type { ActivatedAbility, CardDefinition, EffectRef, ManaAbility, ManaModeExtra } from './card.js';
 import {
   canRevealForUntapped,
   castTiming,
+  fixedManaColorsOf,
   hasCastableBackFace,
   isLand,
   isPermanentType,
+  manaActivationConditionMet,
+  manaExtrasOf,
   manaModesOf,
   playableFaceOf,
 } from './card.js';
@@ -42,7 +45,7 @@ import type { ChoiceChannel, EffectRegistry } from './effects.js';
 import { applyEffectRef, createEffectRegistry, shuffleLibraryInState } from './effects.js';
 import type { GameEvent } from './events.js';
 import { createRng, shuffle } from './rng.js';
-import type { ManaCost, ManaProduction } from './mana.js';
+import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { repeatCost } from './mana.js';
 import {
   addProduction,
@@ -72,6 +75,7 @@ import {
   NO_COUNTERS,
   PLAYER_IDS,
   protectorOf,
+  spellLeaveDestination,
   STEP_ORDER,
 } from './state.js';
 import type { TargetRestriction } from './targeting.js';
@@ -95,6 +99,7 @@ import {
   picksToResolution,
 } from './modal.js';
 import { expireCardGrants, flashbackCostOf, pruneCardGrantsFor } from './card-grants.js';
+import { declineMadness } from './madness.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts } from './turn-facts.js';
@@ -526,6 +531,13 @@ function resolveTopOfStack(
 
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
 
+  // Where the card goes when it is done: the battlefield for a permanent, and
+  // otherwise the ONE answer `spellLeaveDestination` gives — graveyard, exile
+  // for a flashback cast, or back to hand for a bought-back spell. Computed
+  // once here so the fast path, the resolution frame, and countering all read
+  // the same function rather than three opinions.
+  const leaveTo: 'battlefield' | 'graveyard' | 'exile' | 'hand' =
+    top.resolvesTo === 'battlefield' ? 'battlefield' : spellLeaveDestination(top, 'resolve');
   // A MODAL spell's script IS its announced modes: printed order, each mode's
   // effects carrying that mode's OWN chosen target (a mode whose target has
   // since become illegal simply does not happen, while its siblings still do —
@@ -538,7 +550,7 @@ function resolveTopOfStack(
   // anybody anything, so it skips the resolution frame entirely and pays nothing
   // for the choice machinery.
   if (!effects || effects.length === 0) {
-    finishSpellResolution(state, card, top.resolvesTo, emit, top);
+    finishSpellResolution(state, card, leaveTo, emit, top);
     checkStateBasedActions(state, emit);
     return;
   }
@@ -554,7 +566,7 @@ function resolveTopOfStack(
       answers: [],
       askCount: 0,
       card,
-      resolvesTo: top.resolvesTo,
+      resolvesTo: leaveTo,
       // Cast-time choices ride the frame from here on: the resolution outlives
       // the stack object, and "deals X damage" is read during (and after) it.
       ...(top.xValue !== undefined ? { xValue: top.xValue } : {}),
@@ -711,7 +723,7 @@ interface KickRecord {
 function finishSpellResolution(
   state: GameState,
   card: CardInstance,
-  resolvesTo: 'battlefield' | 'graveyard' | 'exile',
+  resolvesTo: 'battlefield' | 'graveyard' | 'exile' | 'hand',
   emit: (e: GameEvent) => void,
   kick?: KickRecord,
 ): void {
@@ -753,7 +765,9 @@ function finishSpellResolution(
   }
   // Spell → graveyard, or → exile for a flashback cast (CR 702.34a: a spell
   // cast from the graveyard is exiled instead of being put anywhere else as it
-  // leaves the stack). Same move either way; only the destination differs.
+  // leaves the stack), or → its owner's HAND when its buyback cost was paid
+  // (CR 702.27a). Same move every time; only the destination differs, and it was
+  // decided by `spellLeaveDestination` before this was called.
   card.zone = resolvesTo;
   state.players[card.owner][resolvesTo].push(card);
   resetInstanceForNewZone(card);
@@ -993,6 +1007,15 @@ function applyActionToDraft(
       // before priority, and with no resolution in progress to park a question in.
       aimPendingTriggers(state, emit);
     }
+    // A madness window opened by this action (a discard, anywhere — a cost, a
+    // spell's effect, an opponent's Thoughtseize) hands the floor to the player
+    // who may cast the exiled card. Nothing else may act until they do or
+    // decline, which `dispatchAction` enforces; this is what makes the window a
+    // window rather than a flag nobody is ever asked about.
+    if (state.madnessWindow && !state.pendingChoice && !state.gameOver) {
+      state.priorityPlayer = state.madnessWindow.controller;
+      state.consecutivePasses = 0;
+    }
   }
   return result;
 }
@@ -1015,11 +1038,43 @@ function dispatchAction(
   if (state.pendingChoice && action.kind !== 'answerChoice') {
     return rejectWith(prevState, 'a choice is awaiting an answer');
   }
+  // An open MADNESS window freezes the game the same way, and for the same
+  // reason: a card sits in exile waiting to be cast or declined, and letting
+  // anybody act around it would leave it stranded there forever. Answering a
+  // parked question is always allowed — the window can open in the middle of a
+  // suspended resolution (a discard effect that asks), and that resolution must
+  // still be able to finish.
+  if (state.madnessWindow && action.kind !== 'answerChoice') {
+    const window = state.madnessWindow;
+    const isMadnessCast =
+      action.kind === 'castSpell' &&
+      action.fromZone === 'exile' &&
+      action.instanceId === window.instanceId &&
+      action.player === window.controller;
+    const isDecline = action.kind === 'passPriority' && action.player === window.controller;
+    // Mana abilities stay legal, because a cast needs paying for: the madness
+    // cast happens while the window's controller holds priority, and CR 605.3a
+    // lets a mana ability be activated whenever a player is casting a spell.
+    // Without this the window is a trap — a pilot with untapped lands and an
+    // empty pool could never fund the cast it is being offered.
+    const isFunding = action.kind === 'tapForMana' && action.player === window.controller;
+    if (!isMadnessCast && !isDecline && !isFunding) {
+      return rejectWith(prevState, 'a madness window is awaiting its controller');
+    }
+  }
   switch (action.kind) {
     case 'answerChoice':
       return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+      // Passing with a madness window open DECLINES it (CR 702.35a): the card
+      // falls into the graveyard the discard would have put it in. It is a pass
+      // in name only — no priority actually changes hands and no step advances,
+      // because what the player declined to do was cast a spell, not act.
+      if (state.madnessWindow) {
+        declineMadness(state, emit);
+        return { state, events };
+      }
       onPassPriority(state, config, effectRegistry, emit);
       return { state, events };
     }
@@ -1029,6 +1084,8 @@ function dispatchAction(
       return applyTapForMana(state, prevState, action, emit, events);
     case 'castSpell':
       return applyCastSpell(state, prevState, action, config, emit, events);
+    case 'cycleCard':
+      return applyCycleCard(state, prevState, action, emit, events);
     case 'activateAbility':
       return applyActivateAbility(state, prevState, action, config, emit, events);
     case 'declareAttackers':
@@ -1154,6 +1211,13 @@ function applyAnswerChoice(
         value = 0;
       }
       patchSpellOnStack(state, casting.instanceId, { xValue: value, awaitingCastChoice: undefined });
+      return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
+    }
+    if (casting.awaitingCastChoice === 'buyback' && choice.kind === 'payMana' && answer.kind === 'payMana') {
+      // The mana was already spent by the shared payMana block above; a payment
+      // the board could not honour arrives here as a decline, and the spell
+      // simply resolves to the graveyard like any other.
+      patchSpellOnStack(state, casting.instanceId, { boughtBack: answer.pay, awaitingCastChoice: undefined });
       return finishCastChoice(state, casting.instanceId, choice.chooser, emit, events);
     }
     if (casting.awaitingCastChoice === 'kicker' && choice.kind === 'payMana' && answer.kind === 'payMana') {
@@ -1692,10 +1756,103 @@ function pushManaTapActions(state: GameState, player: PlayerId, out: GameAction[
       manaCont ??= indexContinuous(state);
       if (!canActivateManaAbility(perm, manaCont)) continue;
     }
+    // The rich mana model (costs / riders / restrictions / derived colours) is
+    // read ONCE per source. The `manaAbilities` test is inlined rather than left
+    // to `manaExtrasOf` so the ordinary board — where no source has one — pays a
+    // single property read on an immutable definition and never a call, on the
+    // engine's hottest loop.
+    const extras = perm.def.manaAbilities === undefined ? undefined : manaExtrasOf(perm.def);
     for (let mode = 0; mode < modes.length; mode++) {
+      if (extras !== undefined && manaModeBlockedReason(state, perm, extras[mode]) !== undefined) {
+        continue;
+      }
       out.push({ kind: 'tapForMana', player, instanceId: perm.instanceId, mode });
     }
   }
+}
+
+/**
+ * Why `perm`'s mana mode cannot be activated right now, or `undefined` when it
+ * can. ONE answer, asked by the offer path and by the apply path, so a mode the
+ * menu shows is a mode the engine will accept — an unmet "Activate only if …" has
+ * to make the source *invisible* to the payment planner, not merely refuse after
+ * the planner has already counted on it.
+ *
+ * The mana half of an additional cost is checked against the FLOATING pool, which
+ * is exactly the gate `unpayableActivationReason` puts on an activated ability's
+ * mana cost. A filter land is therefore offered once its input mana is actually
+ * floating; the funding source is tapped first, which is how the activation
+ * happens in paper too (CR 605.3a lets you activate mana abilities while paying,
+ * and here that is simply the previous action).
+ */
+function manaModeBlockedReason(
+  state: GameState,
+  perm: CardInstance,
+  extra: ManaModeExtra | undefined,
+): string | undefined {
+  if (!extra) return undefined;
+  const { ability, derivedColor } = extra;
+  const player = state.players[perm.controller];
+  if (
+    ability.restriction &&
+    !manaActivationConditionMet(ability.restriction, {
+      controller: perm.controller,
+      battlefield: state.battlefield,
+    })
+  ) {
+    return `${perm.def.name}'s ability cannot be activated right now`;
+  }
+  if (derivedColor !== undefined) {
+    // "any color" never reaches {C}, whatever the board offers (see
+    // `ManaAbility.derivedIncludesColorless`).
+    if (derivedColor === 'C' && ability.derivedIncludesColorless !== true) {
+      return `${perm.def.name} cannot make colorless mana`;
+    }
+    if (!derivedManaColors(state, perm, ability).has(derivedColor)) {
+      return `no land makes {${derivedColor}} for ${perm.def.name} to copy`;
+    }
+  }
+  const cost = ability.cost;
+  if (cost) {
+    // CR 118.4: life pays down to zero and no further.
+    if (cost.life !== undefined && cost.life > 0 && player.life < cost.life) {
+      return 'you do not have enough life to pay that cost';
+    }
+    if (cost.mana && !canPay(player.manaPool, cost.mana)) {
+      return `insufficient mana to activate ${perm.def.name}`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The colours a board-derived mana ability may currently produce.
+ *
+ * Recomputed per query and never cached on the definition: the answer is a
+ * function of the battlefield, so a cached one would be a different card's answer
+ * the moment a land entered. Only sources that actually print a derived ability
+ * ever reach here, and there are a handful of those in the whole format, so the
+ * per-query set costs nothing a real board notices.
+ *
+ * The source permanent is excluded from its own derivation, and
+ * `fixedManaColorsOf` excludes every OTHER derived source too — so a pair of
+ * Reflecting Pools reads each other as producing nothing rather than looping.
+ */
+function derivedManaColors(
+  state: GameState,
+  source: CardInstance,
+  ability: ManaAbility,
+): ReadonlySet<ManaColor> {
+  const wantOpponents = ability.derivedColors === 'landsOpponentsControl';
+  const colors = new Set<ManaColor>();
+  for (const perm of state.battlefield) {
+    if (perm === source) continue;
+    const mine = perm.controller === source.controller;
+    if (wantOpponents ? mine : !mine) continue;
+    if (!isLand(perm.def)) continue;
+    for (const color of fixedManaColorsOf(perm.def)) colors.add(color);
+  }
+  return colors;
 }
 
 /**
@@ -1832,7 +1989,59 @@ function applyTapForMana(
   const production = modes[mode];
   if (!production) return rejectWith(prevState, `${source.def.name} has no mana mode ${mode}`);
 
+  // Everything a RICH mana ability prints beyond the colour bundle. `undefined`
+  // for every plain land and rock, so the ordinary tap is untouched by all of it.
+  const extra = manaExtrasOf(source.def)?.[mode];
+  if (extra) {
+    // Same single answer the offer path used, so a mode the menu showed is a mode
+    // this accepts — and one it hid is refused here too, even if a hostile client
+    // sends it anyway.
+    const blocked = manaModeBlockedReason(state, source, extra);
+    if (blocked) return rejectWith(prevState, blocked);
+    const player = state.players[action.player];
+    const cost = extra.ability.cost;
+    if (cost?.mana) {
+      // Paid BEFORE the production is added, which is what makes a filter land a
+      // filter rather than a free two mana: the input leaves the pool, then the
+      // output arrives.
+      const paid = payCost(player.manaPool, cost.mana);
+      if (!paid.ok) return rejectWith(prevState, paid.reason);
+      player.manaPool = paid.pool;
+      emit({ type: 'manaCostPaid', player: action.player, cost: { ...cost.mana } });
+    }
+    if (cost?.life !== undefined && cost.life > 0) {
+      player.life -= cost.life;
+      emit({ type: 'lifeChanged', player: action.player, delta: -cost.life, to: player.life });
+    }
+  }
+
   tapPermanentForMana(state, source, action.player, production, emit);
+
+  // The RIDER runs as part of the ability's own resolution, AFTER the mana is
+  // added — a pain land's damage is not a cost you may decline, and it is damage
+  // rather than life loss, so it goes through the same player-damage shape combat
+  // and burn use. It happens even when it is lethal; the SBA pass that follows
+  // this action is what ends the game, exactly as in paper.
+  const damage = extra?.ability.rider?.damageToController ?? 0;
+  if (damage > 0) {
+    const player = state.players[action.player];
+    player.life -= damage;
+    emit({
+      type: 'damageDealt',
+      source: source.instanceId,
+      target: action.player,
+      amount: damage,
+      combat: false,
+    });
+    emit({ type: 'lifeChanged', player: action.player, delta: -damage, to: player.life });
+  }
+  // Paying life or taking a rider's damage can reach zero, and that is legal —
+  // the player's call, not the engine's to forbid (CR 118.4). Settling it needs
+  // the SBA pass, exactly as the shockland payment does: a tap that kills you
+  // must end the game here rather than leaving a corpse holding priority. Run
+  // only when something actually changed a life total, so the ordinary tap —
+  // by far the most frequent action in the game — pays nothing for it.
+  if (damage > 0 || (extra?.ability.cost?.life ?? 0) > 0) checkStateBasedActions(state, emit);
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
 }
@@ -1856,12 +2065,29 @@ function applyCastSpell(
   const card =
     fromZone === 'graveyard'
       ? instanceIn(player.graveyard, action.instanceId)
-      : instanceIn(player.hand, action.instanceId);
+      : fromZone === 'exile'
+        ? instanceIn(player.exile, action.instanceId)
+        : instanceIn(player.hand, action.instanceId);
   if (!card) {
     return rejectWith(
       prevState,
-      fromZone === 'graveyard' ? 'that card is not in your graveyard' : 'that card is not in your hand',
+      fromZone === 'graveyard'
+        ? 'that card is not in your graveyard'
+        : fromZone === 'exile'
+          ? 'that card is not in exile'
+          : 'that card is not in your hand',
     );
+  }
+  // A cast from EXILE is a madness cast, and it is legal only for the one card
+  // whose madness window is open — checked here, so a pilot or a hostile client
+  // cannot cast an arbitrary exiled card by naming the zone.
+  const madnessCost = fromZone === 'exile' ? card.def.madness : undefined;
+  if (fromZone === 'exile') {
+    const window = state.madnessWindow;
+    if (!window || window.instanceId !== card.instanceId || window.controller !== action.player) {
+      return rejectWith(prevState, 'that card has no open madness window');
+    }
+    if (madnessCost === undefined) return rejectWith(prevState, 'that card has no madness cost');
   }
   // CR 712.8b: the back face of a transforming DFC can never be cast. A card in
   // hand is front-face-up by construction, so this is defensive — but a state
@@ -1894,7 +2120,11 @@ function applyCastSpell(
   const timing = castTiming(castDef);
   const sorcerySpeedOk =
     action.player === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
-  if (timing === 'sorcery' && !sorcerySpeedOk) {
+  // A MADNESS cast happens inside its own window (CR 702.35a) — the card is cast
+  // as the madness trigger resolves, so the spell's own timing restriction does
+  // not apply and a sorcery really is cast on an opponent's turn. Every other
+  // cast is timed exactly as before.
+  if (timing === 'sorcery' && !sorcerySpeedOk && fromZone !== 'exile') {
     return rejectWith(prevState, 'this spell can only be cast at sorcery speed (your main phase, empty stack)');
   }
 
@@ -1937,7 +2167,8 @@ function applyCastSpell(
   // Pay the mana cost from the floating pool. A flashback cast pays the
   // FLASHBACK cost, not the printed one — that substitution is the whole of
   // what "cast it for its flashback cost" means at this seam.
-  const cost = fromZone === 'graveyard' ? flashbackCost : castDef.cost;
+  const cost =
+    fromZone === 'graveyard' ? flashbackCost : fromZone === 'exile' ? madnessCost : castDef.cost;
   if (cost) {
     if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
     const result = payCost(player.manaPool, cost);
@@ -1949,7 +2180,13 @@ function applyCastSpell(
   if (flashbackLife > 0) payLifeCost(state, action.player, flashbackLife, emit);
 
   // Move the card to the stack, out of whichever zone it was cast from.
-  removeFromZoneArray(fromZone === 'graveyard' ? player.graveyard : player.hand, card.instanceId);
+  removeFromZoneArray(
+    fromZone === 'graveyard' ? player.graveyard : fromZone === 'exile' ? player.exile : player.hand,
+    card.instanceId,
+  );
+  // The madness window is CONSUMED by the cast: the card has left exile, so
+  // nothing may decline it afterwards.
+  if (fromZone === 'exile') state.madnessWindow = null;
   card.zone = 'stack';
   // The card just changed zones, so any grant on it stops applying (CR 400.7).
   // Nothing is lost by dropping it here: the granted cost has already been paid,
@@ -1981,7 +2218,7 @@ function applyCastSpell(
     controller: action.player,
     resolvesTo,
     targets: action.targets ?? [],
-    ...(fromZone === 'graveyard' ? { castFrom: 'graveyard' as const } : {}),
+    ...(fromZone === 'hand' ? {} : { castFrom: fromZone }),
   };
   state.stack.push(stackObject);
   emit({
@@ -1990,7 +2227,7 @@ function applyCastSpell(
     instanceId: card.instanceId,
     name: castDef.name,
     castTypes: [...castDef.types],
-    ...(fromZone === 'graveyard' ? { fromZone: 'graveyard' as const } : {}),
+    ...(fromZone === 'hand' ? {} : { fromZone }),
   });
   // Ward (CR 702.21): targeting an opponent's warded permanent triggers the
   // "counter unless you pay" ability, stacked ABOVE the spell so it resolves
@@ -2034,7 +2271,10 @@ function patchSpellOnStack(
   state: GameState,
   instanceId: InstanceId,
   patch: Partial<
-    Pick<SpellStackObject, 'xValue' | 'kicked' | 'kickCount' | 'modePicks' | 'awaitingCastChoice'>
+    Pick<
+      SpellStackObject,
+      'xValue' | 'kicked' | 'kickCount' | 'modePicks' | 'boughtBack' | 'awaitingCastChoice'
+    >
   >,
 ): void {
   const index = state.stack.findIndex((object) => object.kind === 'spell' && object.instanceId === instanceId);
@@ -2414,6 +2654,36 @@ function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e:
     }
     patchSpellOnStack(state, spellInstanceId, { kickCount: 0 });
   }
+
+  // BUYBACK is the same shape as the plain kicker — an optional additional cost
+  // asked once, charged by the engine as the answer is accepted — and differs
+  // only in what the answer means later: not a branch inside the spell's script,
+  // but where the card goes as it resolves (`spellLeaveDestination`).
+  const afterKick = spellOnStack(state, spellInstanceId);
+  if (!afterKick) return;
+  if (def.buyback && afterKick.boughtBack === undefined) {
+    if (!canAffordManaCost(state, caster, def.buyback)) {
+      patchSpellOnStack(state, spellInstanceId, { boughtBack: false });
+      return;
+    }
+    const choice = normalizeChoiceRequest(
+      {
+        kind: 'payMana',
+        chooser: caster,
+        prompt: `Pay the buyback ${formatManaCost(def.buyback)} to return ${def.name} to your hand?`,
+        cost: def.buyback,
+        affordable: true,
+        valence: 'gain',
+      },
+      { id: state.nextInstanceId++, sourceInstanceId: afterKick.instanceId, sourceName: def.name },
+    );
+    if (choice) {
+      patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'buyback' });
+      parkCastChoice(state, choice, emit);
+      return;
+    }
+    patchSpellOnStack(state, spellInstanceId, { boughtBack: false });
+  }
 }
 
 /**
@@ -2452,6 +2722,72 @@ function parkCastChoice(state: GameState, choice: PendingChoice, emit: (e: GameE
     sourceInstanceId: choice.sourceInstanceId,
     optionCount: choiceOptionCount(choice),
   });
+}
+
+/**
+ * CYCLE a card from hand (CR 702.29): pay the cycling cost, discard the card as
+ * the rest of that cost, and put the cycling ability on the stack.
+ *
+ * Order follows rule 602.2 exactly as `applyActivateAbility` does — validate
+ * everything, then pay the WHOLE cost, then put the ability on the stack — and
+ * the order matters here more than usual, because the discard is a COST. Being
+ * a cost is what makes cycling a madness card exile it (the discard funnel sees
+ * an ordinary discard), what makes "whenever you cycle or discard" triggers
+ * fire, and what makes the card already gone from hand while the drawn card
+ * arrives. Countering the cycling ability would not put the card back.
+ *
+ * Cycling is instant-speed: it is an activated ability with no timing
+ * restriction printed on it, so it is legal whenever its controller has
+ * priority — including on an opponent's turn, which is most of what makes a
+ * cycling land better than a tapland.
+ */
+function applyCycleCard(
+  state: GameState,
+  prevState: GameState,
+  action: Extract<GameAction, { kind: 'cycleCard' }>,
+  emit: (e: GameEvent) => void,
+  events: GameEvent[],
+): EngineResult {
+  if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
+  const player = state.players[action.player];
+  const card = instanceIn(player.hand, action.instanceId);
+  if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  const index = action.abilityIndex ?? 0;
+  const ability = card.def.cycling?.[index];
+  if (!ability) return rejectWith(prevState, 'that card has no such cycling ability');
+  if (!canPay(player.manaPool, ability.cost)) return rejectWith(prevState, 'insufficient mana to cycle this card');
+  const paid = payCost(player.manaPool, ability.cost);
+  if (!paid.ok) return rejectWith(prevState, paid.reason);
+  player.manaPool = paid.pool;
+
+  // The discard half of the cost, through the SAME funnel every other discard
+  // uses — which is why a cycled madness card is exiled rather than buried.
+  moveToZone(state, card, 'graveyard', emit, card.owner);
+  resetInstanceForNewZone(card);
+  emit({ type: 'cardCycled', player: action.player, instanceId: card.instanceId, name: card.def.name });
+
+  const abilityStackId = state.nextInstanceId++;
+  state.stack.push({
+    kind: 'trigger',
+    instanceId: abilityStackId,
+    sourceInstanceId: card.instanceId,
+    controller: action.player,
+    effects: ability.effects,
+    // Cycling abilities target nothing: every printed one draws a card or
+    // searches a library, both of which act on their controller alone.
+    targets: [],
+    label: ability.label,
+  });
+  emit({
+    type: 'abilityActivated',
+    player: action.player,
+    instanceId: card.instanceId,
+    label: ability.label,
+  });
+  // The cycling player retains priority, as with casting a spell.
+  state.priorityPlayer = action.player;
+  state.consecutivePasses = 0;
+  return { state, events };
 }
 
 /**
@@ -2799,6 +3135,49 @@ function applyDeclareBlockers(
  * Enumerate the legal actions for the current priority-holder. The AI seam: an AI
  * picks one of these against a read-only view. Always includes `passPriority`.
  */
+
+/**
+ * The two moves an open madness window offers its controller: cast the exiled
+ * card for its madness cost (once per legal target, exactly as the hand and
+ * graveyard loops do), or pass to decline.
+ *
+ * Pass is listed FIRST and unconditionally — an unaffordable madness cost must
+ * still leave a way out, or the window would deadlock the game.
+ */
+function madnessActionsFor(state: GameState): GameAction[] {
+  const window = state.madnessWindow;
+  if (!window) return [];
+  const me = window.controller;
+  const player = state.players[me];
+  const actions: GameAction[] = [{ kind: 'passPriority', player: me }];
+  // Mana sources first: the cast below is only offered once the pool already
+  // covers the madness cost, so a board of untapped lands has to be able to
+  // produce before the offer can appear at all.
+  pushManaTapActions(state, me, actions);
+  const card = instanceIn(player.exile, window.instanceId);
+  const cost = card?.def.madness;
+  if (!card || cost === undefined || !canPay(player.manaPool, cost)) return actions;
+  const restriction = targetRestrictionOf(card.def);
+  if (restriction === undefined) {
+    actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'exile' });
+    return actions;
+  }
+  for (const target of legalTargetsFor(state, restriction, me, card.def)) {
+    actions.push({
+      kind: 'castSpell',
+      player: me,
+      instanceId: card.instanceId,
+      targets: [target],
+      fromZone: 'exile',
+    });
+  }
+  return actions;
+}
+
+/**
+ * Enumerate the legal actions for the current priority-holder. The AI seam: an AI
+ * picks one of these against a read-only view. Always includes `passPriority`.
+ */
 export function generateLegalActions(state: GameState, config: RulesConfig = DEFAULT_RULES): readonly GameAction[] {
   if (state.gameOver) return [];
   // A parked question preempts the whole game: the only legal action is its
@@ -2806,6 +3185,12 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   // consumer — the sim loop, MCTS, the hotseat UI and the server already ask for
   // legal actions and apply one, so they answer questions with no change at all.
   if (state.pendingChoice) return choiceActionsFor(state.pendingChoice);
+  // An open MADNESS window preempts the game the same way, with exactly two
+  // moves: cast the exiled card for its madness cost, or pass, which declines
+  // and drops it into the graveyard. Enumerated here rather than left to a
+  // consumer's imagination, so every seat — a pilot, the hotseat UI, the online
+  // client — plays madness by picking from the menu it already reads.
+  if (state.madnessWindow) return madnessActionsFor(state);
   const me = state.priorityPlayer;
   const player = state.players[me];
   const actions: GameAction[] = [];
@@ -2911,6 +3296,21 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         targets: [target],
         fromZone: 'graveyard',
       });
+    }
+  }
+
+  // Cycle a card in hand (CR 702.29). Instant speed — cycling prints no timing
+  // restriction — so the only gate is affording the cycling cost, which mirrors
+  // the pool-funds-it gate every other offer above uses. Offered once per
+  // printed cycling ability, so a card with both cycling and landcycling is two
+  // distinct, separately scoreable actions.
+  for (let h = 0; h < player.hand.length; h++) {
+    const card = player.hand[h] as CardInstance;
+    const cycling = card.def.cycling;
+    if (!cycling || cycling.length === 0) continue;
+    for (let index = 0; index < cycling.length; index++) {
+      if (!canPay(player.manaPool, cycling[index]!.cost)) continue;
+      actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index });
     }
   }
 

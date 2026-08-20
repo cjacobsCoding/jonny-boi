@@ -37,13 +37,28 @@ import type { TargetRestriction } from './targeting.js';
  *   - `drawStep`       : the beginning of a player's draw step.
  *   - `precombatMain`  : the beginning of a player's first main phase.
  *   - `endStep`        : the beginning of a player's end step.
+ *   - `beginCombat`    : the beginning of combat on a player's turn.
+ *   - `gainLife`       : a player gained life ("whenever you gain life").
+ *   - `combatDamageToPlayer` : this permanent dealt COMBAT damage to a player.
+ *   - `permanentEnters`: ANOTHER permanent entered the battlefield — "whenever a
+ *                        creature you control enters", landfall, constellation.
+ *   - `permanentDies`  : a permanent died (battlefield → graveyard) — "whenever a
+ *                        creature you control dies", "whenever ~ or another
+ *                        creature dies". Distinct from `dies`, which is this
+ *                        permanent's own death: a card that fired on every death
+ *                        when it should fire on one is a very different card.
  *
- * The last three are the same shape as `upkeep` — "at the beginning of your X" —
- * and are scoped by `who` the same way, so "at the beginning of EACH player's
- * draw step" is `{ on: 'drawStep', who: 'any' }`. They exist as separate events
- * rather than one event with a step field because the compiler names the printed
- * step, and a mis-typed step name should be a type error, not a trigger that
- * silently never fires.
+ * The four step triggers are the same shape as `upkeep` — "at the beginning of
+ * your X" — and are scoped by `who` the same way, so "at the beginning of EACH
+ * player's draw step" is `{ on: 'drawStep', who: 'any' }`. They exist as separate
+ * events rather than one event with a step field because the compiler names the
+ * printed step, and a mis-typed step name should be a type error, not a trigger
+ * that silently never fires.
+ *
+ * `permanentEnters` and `permanentDies` are the two BOARD-WATCHING events, and
+ * they share one filter shape: `who` (whose permanent) + `permanentFilter` (a
+ * `CardFilter` over its printed characteristics) + `excludeSelf` (the printed
+ * word "another").
  */
 export type TriggerEvent =
   | 'etb'
@@ -55,10 +70,16 @@ export type TriggerEvent =
   | 'drawStep'
   | 'precombatMain'
   | 'endStep'
+  | 'beginCombat'
+  | 'gainLife'
+  | 'combatDamageToPlayer'
   | 'permanentEnters'
   | 'permanentDies';
 
-/** Whose action a relational trigger (cast/upkeep) cares about. */
+/**
+ * Whose action a relational trigger (cast / a step / life gain) cares about.
+ * Read against the SOURCE's controller, never against the active player.
+ */
 export type TriggerWho = 'you' | 'opponent' | 'any';
 
 /**
@@ -88,7 +109,7 @@ export interface TriggerCondition {
   /**
    * For `permanentEnters`/`permanentDies`: which permanents count — "whenever a
    * **creature** you control enters", "a creature you control **with power 3 or
-   * greater**".
+   * greater**", "another **green** creature".
    *
    * A `CardFilter`, the same value every other filtered thing in the engine
    * reads, so the printed restriction is expressed once and cannot mean two
@@ -96,6 +117,14 @@ export interface TriggerCondition {
    * card actually says — the compiler always supplies at least a type.
    */
   readonly permanentFilter?: CardFilter;
+  /**
+   * For `permanentEnters`/`permanentDies`: the printed word "**another**" — the
+   * source's own arrival or death does not set it off. A distinct flag rather
+   * than something inferred, for the same reason `StaticAffects.excludeSource`
+   * is one: getting it backwards is silent and changes what the card does on the
+   * turn it lands.
+   */
+  readonly excludeSelf?: boolean;
 }
 
 /**
@@ -182,6 +211,7 @@ export function conditionMatches(
     }
     case 'permanentEnters': {
       if (event.type !== 'zoneChange' || event.to !== 'battlefield') return false;
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
       return subjectMatches(condition, subject, sourceController);
     }
     case 'permanentDies': {
@@ -190,16 +220,36 @@ export function conditionMatches(
       if (event.type !== 'zoneChange' || event.from !== 'battlefield' || event.to !== 'graveyard') {
         return false;
       }
+      if (condition.excludeSelf === true && event.instanceId === sourceInstanceId) return false;
       return subjectMatches(condition, subject, sourceController);
     }
     case 'upkeep':
     case 'drawStep':
     case 'precombatMain':
-    case 'endStep': {
+    case 'endStep':
+    case 'beginCombat': {
       if (event.type !== 'stepBegin') return false;
       if (event.step !== STEP_FOR_TRIGGER[condition.on]) return false;
       return whoMatches(condition.who, event.activePlayer, sourceController);
     }
+    case 'gainLife': {
+      // "Whenever you gain life". Keyed on the `gainLife` event rather than on
+      // `lifeChanged`, because the latter also fires for life LOST and for the
+      // bookkeeping of a life-set effect — a lifegain trigger that fired on
+      // damage would be a different card.
+      if (event.type !== 'gainLife') return false;
+      return whoMatches(condition.who, event.player, sourceController);
+    }
+    case 'combatDamageToPlayer':
+      // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
+      // the string test is what distinguishes "to a player" from "to a
+      // creature or planeswalker" without a second event field.
+      return (
+        event.type === 'damageDealt' &&
+        event.combat &&
+        event.source === sourceInstanceId &&
+        typeof event.target === 'string'
+      );
     default:
       // Unknown condition kind → never matches (safe no-op).
       return false;
@@ -216,6 +266,10 @@ const STEP_FOR_TRIGGER: Readonly<Record<string, Step>> = Object.freeze({
   drawStep: 'draw',
   precombatMain: 'precombatMain',
   endStep: 'end',
+  // "At the beginning of combat on your turn" prints a different phrase from the
+  // others, but it is the same shape and the same scoping, so it belongs in the
+  // same table rather than in a case of its own.
+  beginCombat: 'beginCombat',
 });
 
 /**

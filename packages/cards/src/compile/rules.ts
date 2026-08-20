@@ -18,7 +18,9 @@ import type {
   CardType,
   EffectRef,
   KeywordFlags,
+  ManaActivationCondition,
   ManaColor,
+  ManaCost,
   ManaProduction,
   ProtectionQuality,
   SpellMode,
@@ -27,11 +29,33 @@ import type {
   TriggerCondition,
   TriggeredAbility,
 } from '@jonny-boi/core';
-import { DEFAULT_TARGET_RESTRICTION } from '@jonny-boi/core';
+import { DEFAULT_TARGET_RESTRICTION, PLUS_ONE_COUNTER, formatManaCost, MANA_COLORS } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
 import { COUNT_TOKEN, normalizeClause, parseCount, parseManaSymbols, splitCostSymbols } from './text.js';
 import { BASIC_LAND_NAMES } from '../../data/pool.js';
 import { ITS_MANA_COST } from '../primitives.js';
+
+/**
+ * The CYCLING words whose search this engine can express, and the filter each
+ * one means. A closed table on purpose: typecycling is only implementable when
+ * the printed word names something `CardFilter` can select, and every entry here
+ * is a printed LAND type (or the generic "land"), which is what the corpus's
+ * typecycling cards actually print. A word outside it — a creature-type cycling
+ * ("Slivercycling"), a "Wizardcycling" — has no entry, so its clause reports
+ * instead of searching for approximately the right card.
+ */
+const TYPECYCLING_FILTERS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> =
+  Object.freeze({
+    plains: { anyOfSubtypes: ['plains'] },
+    island: { anyOfSubtypes: ['island'] },
+    swamp: { anyOfSubtypes: ['swamp'] },
+    mountain: { anyOfSubtypes: ['mountain'] },
+    forest: { anyOfSubtypes: ['forest'] },
+    land: { anyOfTypes: ['land'] },
+  });
+
+/** The regex alternation of the cycling words above. */
+const TYPECYCLING_TOKEN = Object.keys(TYPECYCLING_FILTERS).join('|');
 
 /** Mana symbols as they appear in normalized (lowercased) Oracle text. */
 const MANA_SYMBOL_TO_COLOR: Readonly<Record<string, ManaColor>> = Object.freeze({
@@ -120,6 +144,7 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
  * better than the printed card.
  */
 const CREATURE_TARGET: TargetRestriction = 'creature';
+/** "target creature you control" — never widened to any creature on the table. */
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 const PLAYER_TARGET: TargetRestriction = 'player';
@@ -131,6 +156,68 @@ const PERMANENT_TARGET: TargetRestriction = 'permanent';
  * it against the acting player's own graveyard; see `targeting.ts`.
  */
 const GRAVEYARD_SPELL_TARGET: TargetRestriction = 'instantOrSorceryInYourGraveyard';
+
+
+/**
+ * The controller scope + {@link CardFilter} a printed "each …" group phrase names,
+ * or `null` when the phrase says something the filter vocabulary cannot express.
+ *
+ * This is the whole reason a group counter rule is safe: "put a +1/+1 counter on
+ * each **attacking** creature you control" and "on each creature you control"
+ * differ by one word and by a lot of power, so a phrase that is not exactly
+ * reproducible must reject the line rather than widen to "every creature".
+ *
+ * A SUBTYPE qualifier ("each Vampire you control") is accepted only when the card
+ * being compiled prints that subtype itself — the typal-lord shape. That keeps
+ * the compiler from inventing a creature type out of an arbitrary capitalized
+ * word it cannot verify: a card naming a type it does not share stays reported.
+ */
+function groupCreatureScope(
+  phrase: string,
+  ctx: RuleContext,
+): { scope: string; filter: Record<string, unknown> } | null {
+  let text = phrase.trim();
+  let scope = GROUP_SCOPE_ANY;
+  for (const [suffix, named] of Object.entries(GROUP_SCOPE_SUFFIXES)) {
+    if (!text.endsWith(suffix)) continue;
+    text = text.slice(0, -suffix.length).trim();
+    scope = named;
+    break;
+  }
+
+  const filter: Record<string, unknown> = {};
+  // An optional colour word, exactly as the anthem rule reads one.
+  const colorMatch = /^([a-z]+) (.+)$/.exec(text);
+  if (colorMatch && COLOR_WORDS[colorMatch[1] ?? '']) {
+    filter.anyOfColors = [COLOR_WORDS[colorMatch[1] ?? ''] as string];
+    text = colorMatch[2] ?? '';
+  }
+  // An optional card-type adjective ("artifact creature"). The group primitive
+  // already requires a creature, so this narrows rather than widens.
+  const typeMatch = /^([a-z]+) creature$/.exec(text);
+  if (typeMatch) {
+    const type = SPELL_TYPE_WORDS[typeMatch[1] ?? ''];
+    if (!type || type === 'creature') return null;
+    filter.anyOfTypes = [type];
+    text = 'creature';
+  }
+  if (text === 'creature') return { scope, filter };
+
+  // A typal qualifier — accepted only when the compiling card prints it.
+  const printed = ctx.card.typeLine.subtypes.find((sub) => sub.toLowerCase() === text);
+  if (printed === undefined) return null;
+  filter.anyOfSubtypes = [printed];
+  return { scope, filter };
+}
+
+/** The printed tails that name whose permanents a group phrase reaches. */
+const GROUP_SCOPE_SUFFIXES: Readonly<Record<string, string>> = Object.freeze({
+  ' you control': 'you',
+  ' your opponents control': 'opponent',
+  ' an opponent controls': 'opponent',
+});
+/** No controller tail printed ⇒ everybody's, as "each creature" means. */
+const GROUP_SCOPE_ANY = 'any';
 
 /**
  * Every printed modal header, as the COUNT RANGE it means.
@@ -260,8 +347,13 @@ const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.free
   land: 'land',
 });
 
-/** Colour words Oracle uses in removal restrictions, mapped to color letters. */
-const COLOR_WORDS: Readonly<Record<string, string>> = Object.freeze({
+/**
+ * Colour words Oracle uses, mapped to colour letters — in removal restrictions
+ * ("destroy target red creature") and in a mana ability's activation restriction
+ * ("Activate only if you control a red permanent"). Typed as `ManaColor` rather
+ * than `string` so a caller that needs a real colour does not have to assert one.
+ */
+const COLOR_WORDS: Readonly<Record<string, ManaColor>> = Object.freeze({
   white: 'W',
   blue: 'U',
   black: 'B',
@@ -982,6 +1074,64 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // "…on target creature YOU CONTROL" (Snakeskin Veil). Its own rule rather
+    // than a widened one: `'creature'` would let a pilot grow the opponent's
+    // board, which is a card playing differently from its printed text.
+    id: 'put-counters-on-target-you-control',
+    description: '"Put N +1/+1 counters on target creature you control"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature you control$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (amount === null) return null;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, targets: CREATURE_YOU_CONTROL_TARGET },
+      });
+    },
+  },
+  {
+    /**
+     * The whole two-sentence combat trick as ONE rule — "Put a +1/+1 counter on
+     * target creature you control. **It** gains hexproof until end of turn."
+     * (Snakeskin Veil).
+     *
+     * One rule rather than a rule per sentence, because "it" means *the creature
+     * the sentence before targeted*. A standalone "it gains …" rule would be
+     * aimed independently wherever the compiler met it — in a triggered ability
+     * core would aim it at any creature on the table — so the two sentences are
+     * only trustworthy while they are matched together, with a single target
+     * shared by both effects.
+     */
+    id: 'put-counters-then-grant-keyword',
+    description:
+      '"Put N +1/+1 counters on target creature [you control]. It gains KEYWORD[, KEYWORD, and KEYWORD] until end of turn"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) \\+1/\\+1 counters? on target creature( you control)?\\. ` +
+        `it gains (.+) until end of turn$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const amount = match[1] === undefined ? 1 : parseCount(match[1]);
+      // A LIST of keywords ("reach, trample, hexproof, and indestructible" —
+      // Gaea's Gift, reachable now that `indestructible` is a real flag), read
+      // by the same parser the anthem rule uses: it rejects the whole line on
+      // any word the engine does not model, so a PARTIAL grant — a card playing
+      // weaker than printed — is never emitted.
+      const keywords = parseKeywordList(match[3] ?? '');
+      if (amount === null || keywords === null) return null;
+      const restriction = match[2] ? CREATURE_YOU_CONTROL_TARGET : CREATURE_TARGET;
+      return effects(
+        { primitive: 'addCounters', params: { amount, targets: restriction } },
+        // The grant deliberately carries NO target of its own: it reads the
+        // target already chosen for the spell, which is what "it" means.
+        { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords } },
+      );
+    },
+  },
+  {
     // The same template with -1/-1 counters. Now that the stat layer reads that
     // kind in its own right, this is a faithful compile rather than an
     // approximation stored as a negative +1/+1.
@@ -1011,6 +1161,55 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = match[1] === undefined ? 1 : parseCount(match[1]);
       if (amount === null) return null;
       return effects({ primitive: 'addCounters', params: { amount, self: true } });
+    },
+  },
+  {
+    /**
+     * A CONJUNCTION whose second half is a plain "you …" effect — "put a +1/+1
+     * counter on ~ **and you gain 1 life**" (Sunscorch Regent).
+     *
+     * Deliberately narrow. Only a second half beginning "you " or "draw " is
+     * joined, because such a half is self-contained: it speaks about the
+     * controller, not about whatever the first half touched, so running the two
+     * in order is exactly what the printed sentence says. A conjunction like "…and it gains
+     * flying" refers BACK to the first half's object, and joining those would be
+     * the kind of guess this table exists to refuse — so it stays reported.
+     *
+     * Both halves are compiled TARGET-FREE, which is what makes the composition
+     * safe in a triggered ability as well as in a spell: a half needing a chosen
+     * target is rejected rather than compiled into a silent no-op.
+     */
+    id: 'effect-and-you-effect',
+    description: '"EFFECT and you EFFECT" (two independent halves in one sentence)',
+    pattern: /^(.+?) and ((?:you|draw) .+)$/,
+    build(match, ctx) {
+      const first = ctx.compileEffectClause(match[1] ?? '', { targetFree: true });
+      if (first === null || first.length === 0) return null;
+      const second = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
+      if (second === null || second.length === 0) return null;
+      return { effects: [...first, ...second] };
+    },
+  },
+  {
+    // The GROUP form — "put a +1/+1 counter on EACH creature you control".
+    // Gavony Township, Steel Overseer and Cathars' Crusade all print it, and it
+    // is the same `addCounters` primitive with a scope + filter instead of a
+    // target, so the counters are the same real counters the stat layer reads.
+    id: 'put-counters-on-each',
+    description: '"Put N +1/-1 counters on each CREATURE-GROUP"',
+    pattern: new RegExp(
+      `^put (?:a|${COUNT_TOKEN}) (\\+1/\\+1|-1/-1) counters? on each (.+)$`,
+    ),
+    build(match, ctx) {
+      const magnitude = match[1] === undefined ? 1 : parseCount(match[1]);
+      if (magnitude === null) return null;
+      const group = groupCreatureScope(match[3] ?? '', ctx);
+      if (group === null) return null;
+      const amount = match[2] === '-1/-1' ? -magnitude : magnitude;
+      return effects({
+        primitive: 'addCounters',
+        params: { amount, each: true, scope: group.scope, filter: group.filter },
+      });
     },
   },
   {
@@ -2135,27 +2334,47 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'trigger-permanent-enters-or-dies',
     description:
-      '"Whenever a creature you control [with power N or greater] enters/dies, BODY" (Ajani\'s Welcome, Elemental Bond, Grave Pact)',
-    // Both halves of the same family: a board-watching trigger scoped by WHOSE
-    // permanent it is and narrowed by a printed `CardFilter`. The filter is the
-    // fidelity: a trigger that dropped "with power 3 or greater" would fire off
-    // every token, which is a strictly better card.
+      '"Whenever [another] [COLOR] TYPE [you control / an opponent controls] [with power N or greater] enters/dies, BODY" — incl. landfall, constellation, and "~ or another creature dies"',
+    // The whole board-watching family in ONE rule, because it is one concept:
+    // an arrival or a death, scoped by WHOSE permanent it is and narrowed by a
+    // printed `CardFilter`. Two rules for it is how the engine ended up with two
+    // names for the same event in the first place.
     //
-    // "ANOTHER creature you control" deliberately does NOT match. The engine has
-    // no self-exclusion on these conditions, and a source that triggered off its
-    // own entry when the card says "another" is a different card, so those lines
-    // keep reporting.
+    // Every part is optional except the type word, and each optional part is a
+    // real fidelity knob:
+    //   - "another"  → `excludeSelf`; a source that triggered off its own entry
+    //                  when the card says "another" is a different card.
+    //   - the colour word and the "with power N or greater" bound → the filter;
+    //                  dropping either fires off permanents the card ignores.
+    //   - an ABSENT controller tail → `who: 'any'`, which is what "whenever
+    //                  another creature enters" (Soul Warden) means. Reading the
+    //                  absent tail as "you control" halves the arrivals it sees.
+    // The ability words landfall and constellation are the same trigger with a
+    // name printed in front of it (CR 207.2c).
     pattern: new RegExp(
-      `^whenever an? (${Object.keys(SPELL_TYPE_WORDS).join('|')}) (you control|an opponent controls)(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))? (enters|dies), (.+)$`,
+      `^(?:landfall — |constellation — )?whenever ` +
+        `(?:(~ or another) creature|(another )?(?:an? )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?([a-z]+)` +
+        `( you control| an opponent controls| your opponents control)?)` +
+        `(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))? (enters|dies), (.+)$`,
     ),
     build(match, ctx) {
-      const type = SPELL_TYPE_WORDS[match[1] ?? ''];
-      if (!type) return null;
-      const who = match[2] === 'you control' ? 'you' : 'opponent';
-      const filter = searchFilterFrom(match[1] ?? '', match[3], match[4], match[5]);
+      // "~ or another creature dies" (Cordial Vampire) says EVERY creature's
+      // death, this permanent's own included — so no scope and no self-exclusion.
+      const selfOrAnother = match[1] !== undefined;
+      const noun = selfOrAnother ? 'creature' : (match[4] ?? '');
+      const filter = searchFilterFrom(noun, match[6], match[7], match[8]);
       if (filter === null) return null;
-      const event = match[6] === 'enters' ? 'permanentEnters' : 'permanentDies';
-      const body = match[7] ?? '';
+      const colorWord = match[3]?.trim();
+      if (colorWord !== undefined) {
+        const color = COLOR_WORDS[colorWord];
+        if (color === undefined) return null;
+        filter.anyOfColors = [color];
+      }
+      const tail = (match[5] ?? '').trim();
+      const who = selfOrAnother || tail === '' ? 'any' : tail === 'you control' ? 'you' : 'opponent';
+      const another = !selfOrAnother && (match[2] ?? '').trim() === 'another';
+      const event = match[9] === 'enters' ? 'permanentEnters' : 'permanentDies';
+      const body = match[10] ?? '';
       const optional = body.startsWith('you may ');
       const inner = optional ? body.slice('you may '.length) : body;
       const compiled = ctx.compileTriggerBody(inner);
@@ -2165,9 +2384,14 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       return {
         triggers: [
           {
-            condition: { on: event, who, permanentFilter: filter },
+            condition: {
+              on: event,
+              who,
+              permanentFilter: filter,
+              ...(another ? { excludeSelf: true } : {}),
+            },
             effects: effectRefs,
-            label: `${match[1]} ${match[6]}: ${body}`,
+            label: `${another ? 'another ' : ''}${noun} (${who}) ${match[9]}: ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
           },
         ],
@@ -2188,6 +2412,75 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
           condition,
           effects: body,
           label: `Cast ${describeSpellFilter(condition)}: ${match[2] ?? ''}`,
+        })),
+      };
+    },
+  },
+  {
+    id: 'trigger-begin-combat',
+    description: '"At the beginning of combat on your turn, BODY"',
+    pattern: /^at the beginning of combat on your turn, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'beginCombat', who: 'you' },
+        match[1] ?? '',
+        `Begin combat: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-gain-life',
+    description: '"Whenever you gain life, BODY"',
+    pattern: /^whenever you gain life, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'gainLife', who: 'you' },
+        match[1] ?? '',
+        `Gain life: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-combat-damage-to-player',
+    description: '"Whenever ~ deals combat damage to a player, BODY"',
+    pattern: /^whenever ~ deals combat damage to a player, (.+)$/,
+    build(match, ctx) {
+      return triggerFrom(
+        ctx,
+        { on: 'combatDamageToPlayer' },
+        match[1] ?? '',
+        `Combat damage to a player: ${match[1] ?? ''}`,
+      );
+    },
+  },
+  {
+    // "Whenever a player casts a spell" / "Whenever an opponent casts a spell" —
+    // the same cast trigger with a different `who`, which core has always had.
+    // Only the printed shapes were missing, so Managorger Hydra and Sunscorch
+    // Regent reported despite the machinery being complete.
+    id: 'trigger-cast-spell-by',
+    description: '"Whenever a player/an opponent casts a(n) [TYPE] spell, BODY"',
+    pattern: /^whenever (a player|an opponent) casts an? (?:([a-z ]+?) )?spell, (.+)$/,
+    build(match, ctx) {
+      const who = match[1] === 'an opponent' ? 'opponent' : 'any';
+      const restriction = match[2];
+      // With no type word the trigger watches every spell; with one, it reuses
+      // the same filter table the "whenever you cast" rule does — and rejects a
+      // phrase that table does not know rather than dropping the restriction.
+      const conditions: readonly TriggerCondition[] =
+        restriction === undefined
+          ? [{ on: 'castSpell', who }]
+          : (spellFiltersFor(restriction)?.map((condition) => ({ ...condition, who })) ?? []);
+      if (conditions.length === 0) return null;
+      const body = ctx.compileEffectClause(match[3] ?? '', { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return {
+        triggers: conditions.map((condition) => ({
+          condition,
+          effects: body,
+          label: `${match[1] === 'an opponent' ? 'Opponent casts' : 'Any player casts'} ${describeSpellFilter(condition)}: ${match[3] ?? ''}`,
         })),
       };
     },
@@ -2238,6 +2531,19 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       if (amount === null) return null;
       // The permanent's own ETB script counters itself.
       return { effects: [{ primitive: 'addCounters', params: { amount, self: true } }] };
+    },
+  },
+  {
+    // "~ enters with X +1/+1 counters on it" (Stonecoil Serpent). Gated on the
+    // card actually printing {X} in its cost, exactly like every other X rule:
+    // an X defined by a "where X is …" clause is a different number, and
+    // reading it as the cast-time X would size the creature wrongly.
+    id: 'enters-with-x-counters',
+    description: '"~ enters with X +1/+1 counters on it"',
+    pattern: /^~ enters(?: the battlefield)? with x \+1\/\+1 counters on it\.?$/,
+    build(_match, ctx) {
+      if (!cardHasXCost(ctx)) return null;
+      return { effects: [{ primitive: 'addCounters', params: { amount: CHOSEN_X_PARAM, self: true } }] };
     },
   },
   {
@@ -2310,6 +2616,95 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         ...(xCount > 0 ? { flashbackXCost: xCount } : {}),
         ...(life !== undefined && life > 0 ? { flashbackLifeCost: life } : {}),
       };
+    },
+  },
+  {
+    id: 'cycling-cost',
+    description: '"Cycling {2}" — pay the cost, discard this card, draw a card',
+    // A whole ability line: the keyword followed by nothing but mana symbols.
+    // "Cycling {X}{1}{U}" (Shark Typhoon) deliberately does NOT compile — an
+    // {X} in an ACTIVATION cost has no answer-and-charge seam the way an {X} in
+    // a casting cost does, and cycling for less than printed would be strictly
+    // better than the real card. It falls through to the hint instead.
+    pattern: /^cycling ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null; // {X}/Phyrexian/hybrid — report, don't approximate
+      return {
+        cycling: [
+          {
+            cost,
+            effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            label: `Cycling ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'typecycling-cost',
+    description:
+      '"Plainscycling {2}" / "Landcycling {2}" — pay, discard, search for a card of that type',
+    // TYPECYCLING and LANDCYCLING are cycling with a different reward, which is
+    // why they are the same rule and the same engine mechanism: the ability's
+    // effects are a library search instead of a draw. The searchable words are a
+    // CLOSED table (the five basic land types plus the generic "land"), because
+    // each one has to name something `CardFilter` can actually select — a
+    // creature-type cycling word the filter cannot express must report, not
+    // search for the wrong thing.
+    pattern: new RegExp(`^(${TYPECYCLING_TOKEN})cycling ((?:\\{[^}]+\\})+)$`),
+    build(match) {
+      const word = (match[1] ?? '').toLowerCase();
+      const cost = parseManaSymbols(match[2] ?? '');
+      if (!cost) return null;
+      const filter = TYPECYCLING_FILTERS[word];
+      if (!filter) return null;
+      const printed = `${word.charAt(0).toUpperCase()}${word.slice(1)}cycling`;
+      return {
+        cycling: [
+          {
+            cost,
+            effects: [
+              {
+                primitive: 'searchLibrary',
+                // Destination hand, count 1, and the search may always fail to
+                // find — which `searchLibrary` already models with a floor of
+                // zero, exactly as the printed "search … then shuffle" allows.
+                params: { who: 'controller', count: 1, destination: 'hand', filter },
+              },
+            ],
+            label: `${printed} ${formatManaCost(cost)}`,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'buyback-cost',
+    description: '"Buyback {3}" — an optional additional cost that returns the spell to hand',
+    pattern: /^buyback ((?:\{[^}]+\})+)$/,
+    build(match, ctx) {
+      // Buyback is printed only on instants and sorceries; "put this card into
+      // your hand as it resolves" means nothing for a permanent spell, so
+      // anything else reaching here reports rather than compiling a dead field.
+      const types = ctx.card.typeLine.types.map((t) => t.toLowerCase());
+      if (!types.includes('instant') && !types.includes('sorcery')) return null;
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { buyback: cost };
+    },
+  },
+  {
+    id: 'madness-cost',
+    description: '"Madness {1}{U}" — discard it to exile, then you may cast it for this cost',
+    // The em-dash form ("Madness—Pay six {C}") deliberately does not match: its
+    // cost is printed in words, and reading a number out of it would be guessing
+    // at what the card costs.
+    pattern: /^madness ((?:\{[^}]+\})+)$/,
+    build(match) {
+      const cost = parseManaSymbols(match[1] ?? '');
+      if (!cost) return null;
+      return { madness: cost };
     },
   },
   {
@@ -2507,6 +2902,47 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       return { statics: [ability] };
     },
   },
+  {
+    /**
+     * A static whose reach depends on COUNTERS — "Creatures you control with
+     * +1/+1 counters on them can't be blocked" (Herald of Secret Streams),
+     * "Each creature you control with a +1/+1 counter on it has trample"
+     * (Duskshell Crawler).
+     *
+     * Counters are instance state, not a characteristic any static can change,
+     * so the filter reads them without the layer-dependency loop that keeps
+     * every other non-printed characteristic out of `StaticAffects`.
+     */
+    id: 'static-counters-grant',
+    description: `"Creatures you control with +1/+1 counters on them have KEYWORD / can't be blocked"`,
+    pattern: new RegExp(
+      `^(?:each creature|creatures) you control with (?:a |one or more )?\\+1/\\+1 counters?` +
+        `(?: on (?:it|them))? (?:(?:has|have) ${KEYWORD_TOKEN}|can'?t be blocked)$`,
+    ),
+    build(match, ctx) {
+      // Only a permanent radiates a static; an instant printing this shape would
+      // be a one-shot effect this rule does not implement.
+      const isPermanent = ctx.card.typeLine.types.every(
+        (type) => !/^(instant|sorcery)$/i.test(type),
+      );
+      if (!isPermanent) return null;
+      const keywords = match[1] === undefined ? { unblockable: true } : keywordFlag(match[1]);
+      if (keywords === null) return null;
+      return {
+        statics: [
+          {
+            affects: {
+              anyOfTypes: ['creature'],
+              controller: 'you',
+              hasCounterKind: PLUS_ONE_COUNTER,
+            },
+            keywords,
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
   // --- attachments: Auras and Equipment (one system, two printed forms) --------
   //
   // The three rules below are the whole of "auras and equipment" at the compiler
@@ -2670,6 +3106,164 @@ function productionFromColors(colors: readonly ManaColor[]): ManaProduction {
 /** Split an "or"-list of mana runs ("{w}, {u}, or {b}") into its alternatives. */
 const MANA_ALTERNATIVE_SEPARATOR = /,? or |, /;
 
+
+/**
+ * ABILITY WORDS (CR 207.2c) as they are PRINTED — the italicized label in front
+ * of a line, which has no rules meaning of its own. Listed once and read twice:
+ * {@link ABILITY_WORDS} skips them in the keyword sweep, and
+ * {@link ABILITY_WORD_PREFIX} lets a rule match the line the label sits on
+ * (Mox Opal's "Metalcraft — {T}: Add one mana of any color").
+ */
+const ABILITY_WORD_LIST: readonly string[] = [
+  'revolt',
+  'morbid',
+  'delirium',
+  'threshold',
+  'metalcraft',
+  // Landfall and constellation label the permanent-enters trigger line that
+  // `trigger-permanent-enters-or-dies` compiles. Leaving them out would report a
+  // keyword one line after implementing the ability it labels — the sweep guard's
+  // own rule: a keyword is skipped only when the line it labels actually compiled.
+  // They live in this LIST rather than only in the exported set so the ability-word
+  // regex prefix below sees them too; one list, one definition.
+  'landfall',
+  'constellation',
+];
+
+/** An optional printed ability-word label, for patterns that must see past one. */
+const ABILITY_WORD_PREFIX = `(?:(?:${ABILITY_WORD_LIST.join('|')})\\s*[\\u2014\\u2013-]\\s*)?`;
+
+// --- the rich mana-ability shapes -------------------------------------------
+//
+// Everything below builds `CardDefinition.manaAbilities`: a mana ability that
+// prints more than a colour bundle. Core's model carries the four things a real
+// card adds — an additional cost, a rider, an "Activate only if …", and colours
+// read off the board — and each rule here transcribes exactly one of them.
+//
+// They are separate rules rather than one mega-pattern because the printed forms
+// combine independently and a single pattern would have to make every part
+// optional, which is how a rule quietly matches a wording it does not implement.
+
+/** The "add …" payload of a mana ability, as the modes ONE activation offers. */
+function parseManaPayload(payload: string): readonly ManaProduction[] | null {
+  const text = payload.trim();
+  // "one mana of any color" — five modes of one.
+  if (/^one mana of any color$/.test(text)) {
+    return ANY_COLOR.map((color) => productionFromColors([color]));
+  }
+  // "three mana of any one color" — five modes of three. "one color" is what
+  // makes it a choice of MODE; a card adding three mana of any colorS would be a
+  // different ability, so the printed word is required.
+  const multiple = text.match(new RegExp(`^${COUNT_TOKEN} mana of any one color$`));
+  if (multiple) {
+    const count = parseCount(multiple[1]);
+    if (count === null || count < 1) return null;
+    return ANY_COLOR.map((color) =>
+      productionFromColors(Array.from({ length: count }, () => color)),
+    );
+  }
+  // A printed list of symbol runs: "{W}", "{C}{C}", "{W} or {U}",
+  // "{W}{W}, {W}{U}, or {U}{U}" (the filter lands).
+  if (!/^[{}wubrgc,or\s]+$/.test(text)) return null;
+  const alternatives = text.split(MANA_ALTERNATIVE_SEPARATOR);
+  const modes: ManaProduction[] = [];
+  for (const alternative of alternatives) {
+    const colors = manaSymbols(alternative);
+    if (colors === null) return null;
+    modes.push(productionFromColors(colors));
+  }
+  return modes.length > 0 ? modes : null;
+}
+
+/** Card types an "Activate only if you control N or more …" clause may count. */
+const COUNTABLE_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  artifacts: 'artifact',
+  creatures: 'creature',
+  enchantments: 'enchantment',
+  lands: 'land',
+});
+
+/**
+ * Parse the condition half of "Activate only if you control …".
+ *
+ * Returns `null` for any wording not fully understood, so the clause reports
+ * rather than compiling into a restriction that is not the printed one — a mana
+ * source that is available when it should not be is a strictly better card.
+ */
+function parseManaActivationCondition(text: string): ManaActivationCondition | null {
+  const condition = text.trim();
+  // "a red permanent" / "a white or blue permanent".
+  const colored = condition.match(/^an? ([a-z]+(?: or [a-z]+)*) permanent$/);
+  if (colored) {
+    const colors: ManaColor[] = [];
+    for (const word of (colored[1] ?? '').split(' or ')) {
+      const color = COLOR_WORDS[word];
+      if (!color) return null;
+      colors.push(color);
+    }
+    return { controlsColor: colors };
+  }
+  // Metalcraft and friends: "three or more artifacts".
+  const counted = condition.match(new RegExp(`^${COUNT_TOKEN} or more ([a-z]+)$`));
+  if (counted) {
+    const count = parseCount(counted[1]);
+    const type = COUNTABLE_TYPE_WORDS[counted[2] ?? ''];
+    if (count === null || count < 1 || !type) return null;
+    return { controlsTypeAtLeast: { type, count } };
+  }
+  // "an Island" / "a Mountain or a Plains" — a land subtype the type line prints.
+  const subtyped = condition.match(/^an? ([a-z]+)(?: or an? ([a-z]+))?$/);
+  if (subtyped) {
+    const wanted = [subtyped[1], subtyped[2]].filter((word): word is string => Boolean(word));
+    // Only the five basic land types are safe to read as a subtype here: any
+    // other noun ("a creature", "an opponent") is a different question entirely.
+    if (wanted.every((word) => BASIC_LAND_SUBTYPES.includes(word))) {
+      return { controlsSubtype: wanted };
+    }
+  }
+  return null;
+}
+
+/** The five basic land types, lowercased — the only subtypes a Verge/Maze names. */
+const BASIC_LAND_SUBTYPES: readonly string[] = ['plains', 'island', 'swamp', 'mountain', 'forest'];
+
+/**
+ * A printed cost run that MAY contain colour/colour hybrid symbols — the filter
+ * lands' "{W/U}". `parseManaSymbols` deliberately refuses a hybrid because most
+ * callers cannot pay one; `ManaCost.hybrid` can, and a filter land's whole
+ * identity is that its input is either of two colours.
+ *
+ * Returns `null` for anything else (Phyrexian, {X}, a snow symbol), so an
+ * unmodelled cost never compiles as something cheaper than printed.
+ */
+function parseCostWithHybrids(text: string): ManaCost | null {
+  const cost: Record<string, unknown> = {};
+  const hybrid: ManaColor[][] = [];
+  const symbols = splitCostSymbols(text);
+  if (symbols.length === 0) return null;
+  for (const symbol of symbols) {
+    if (/^\d+$/.test(symbol)) {
+      cost.generic = ((cost.generic as number | undefined) ?? 0) + Number.parseInt(symbol, 10);
+      continue;
+    }
+    if ((MANA_COLORS as readonly string[]).includes(symbol)) {
+      cost[symbol] = ((cost[symbol] as number | undefined) ?? 0) + 1;
+      continue;
+    }
+    const halves = symbol.split('/');
+    if (
+      halves.length === 2 &&
+      halves.every((half) => (MANA_COLORS as readonly string[]).includes(half) && half !== 'C')
+    ) {
+      hybrid.push(halves as ManaColor[]);
+      continue;
+    }
+    return null;
+  }
+  if (hybrid.length > 0) cost.hybrid = hybrid;
+  return Object.keys(cost).length > 0 ? (cost as ManaCost) : null;
+}
+
 export const MANA_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'tap-for-mana',
@@ -2731,11 +3325,105 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       return { producesOptions: ANY_COLOR.map((color) => productionFromColors([color])) };
     },
   },
-  // NOTE: there is still deliberately NO rule for a mana ability whose colors are
-  // not a fixed printed list — "add one mana of any color that a land you control
-  // could produce", "add one mana of the chosen type". Those need the choice to be
-  // constrained by board state at activation time, which the engine cannot do, so
-  // they fall through to `missing` (see UNSUPPORTED_HINTS).
+  {
+    // A RIDER: the ability's own resolution does something besides adding mana.
+    // Every pain land and Ancient Tomb — "{T}: Add {R} or {W}. ~ deals 1 damage
+    // to you." The damage is NOT a cost (it cannot be declined and the land is
+    // still usable at 1 life), which is why it compiles to `rider` rather than to
+    // a life cost.
+    id: 'mana-ability-with-rider',
+    description: '"{T}: Add {R} or {W}. ~ deals 1 damage to you" (the pain lands)',
+    pattern: new RegExp(
+      `^\\{t\\}: add (.+)\\. (?:~|it) deals ${COUNT_TOKEN} damage to you$`,
+    ),
+    build(match) {
+      const produces = parseManaPayload(match[1] ?? '');
+      const amount = parseCount(match[2]);
+      if (!produces || amount === null || amount < 1) return null;
+      return { manaAbilities: [{ produces, rider: { damageToController: amount } }] };
+    },
+  },
+  {
+    // An ACTIVATION RESTRICTION: the Verge cycle ("Activate only if you control a
+    // red permanent"), Nimbus Maze ("… an Island"), Mox Opal ("… three or more
+    // artifacts"). The restriction is checked when the ability is OFFERED, so an
+    // unmet one makes the source invisible to the payment planner rather than
+    // refusing after it has been counted on.
+    id: 'mana-ability-activation-restriction',
+    description: '"{T}: Add {R}. Activate only if you control a red permanent" (the Verge cycle)',
+    pattern: new RegExp(
+      `^${ABILITY_WORD_PREFIX}\\{t\\}: add (.+)\\. activate only if you control (.+)$`,
+    ),
+    build(match) {
+      const produces = parseManaPayload(match[1] ?? '');
+      const restriction = parseManaActivationCondition(match[2] ?? '');
+      if (!produces || !restriction) return null;
+      return { manaAbilities: [{ produces, restriction }] };
+    },
+  },
+  {
+    // An ADDITIONAL COST, life half: Mana Confluence, the horizon lands, the
+    // Talisman cycle. Charged on activation and gated on having the life
+    // (CR 118.4), exactly as an activated ability's "Pay N life" is.
+    id: 'mana-ability-life-cost',
+    description: '"{T}, Pay 1 life: Add {W} or {B}" (Mana Confluence, the horizon lands)',
+    pattern: new RegExp(`^\\{t\\}, pay ${COUNT_TOKEN} life: add (.+)$`),
+    build(match) {
+      const life = parseCount(match[1]);
+      const produces = parseManaPayload(match[2] ?? '');
+      if (!produces || life === null || life < 1) return null;
+      return { manaAbilities: [{ produces, cost: { life } }] };
+    },
+  },
+  {
+    // An ADDITIONAL COST, mana half: the filter lands' "{W/U}, {T}: Add {W}{W},
+    // {W}{U}, or {U}{U}". The input is a HYBRID symbol, which is why the cost is
+    // parsed by `parseCostWithHybrids` rather than the usual symbol reader.
+    id: 'mana-ability-mana-cost',
+    description: '"{W/U}, {T}: Add {W}{W}, {W}{U}, or {U}{U}" (the filter lands)',
+    pattern: /^((?:\{[^}]+\})+), \{t\}: add (.+)$/,
+    build(match) {
+      const mana = parseCostWithHybrids(match[1] ?? '');
+      const produces = parseManaPayload(match[2] ?? '');
+      if (!mana || !produces) return null;
+      return { manaAbilities: [{ produces, cost: { mana } }] };
+    },
+  },
+  {
+    // COLOURS DERIVED FROM THE BOARD: Reflecting Pool, Exotic Orchard, Fellwar
+    // Stone. The mode list is the five colours either way — which colours are
+    // actually AVAILABLE is asked of the live board every time the ability is
+    // offered, so the answer is never frozen onto the shared definition.
+    id: 'mana-ability-derived-colors',
+    description: '"{T}: Add one mana of any color that a land you control could produce"',
+    pattern:
+      /^\{t\}: add one mana of any (color|type) that a land (you control|an opponent controls) could produce$/,
+    build(match) {
+      const whose = match[2];
+      const derivedColors =
+        whose === 'you control'
+          ? ('landsYouControl' as const)
+          : whose === 'an opponent controls'
+            ? ('landsOpponentsControl' as const)
+            : null;
+      if (!derivedColors) return null;
+      // "any TYPE" reaches colourless; "any COLOR" does not (Reflecting Pool vs
+      // Exotic Orchard). One printed word, two different cards.
+      const derivedIncludesColorless = match[1] === 'type';
+      return {
+        manaAbilities: [
+          derivedIncludesColorless ? { derivedColors, derivedIncludesColorless } : { derivedColors },
+        ],
+      };
+    },
+  },
+  // NOTE: there is still deliberately NO rule for a mana ability whose colours
+  // come from somewhere the engine cannot read — "add one mana of any color in
+  // your commander's color identity" (no commander here, and never will be, see
+  // the completion plan §5) or "of any type that land produced". Nor is there one
+  // for a SPEND RESTRICTION ("spend this mana only to cast creature spells"),
+  // which needs the mana POOL to carry the restriction, not the source. Those
+  // fall through to `missing` (see UNSUPPORTED_HINTS).
 ]);
 
 /**
@@ -2785,13 +3473,7 @@ export const VACUOUS_CLAUSES: readonly RegExp[] = Object.freeze([
  * did not, its text (which contains the word) is in `missing`, and the card
  * keeps reporting.
  */
-export const ABILITY_WORDS: ReadonlySet<string> = new Set([
-  'revolt',
-  'morbid',
-  'delirium',
-  'threshold',
-  'metalcraft',
-]);
+export const ABILITY_WORDS: ReadonlySet<string> = new Set(ABILITY_WORD_LIST);
 
 /** True when a clause is vacuously satisfied and can safely be skipped. */
 export function isVacuousClause(clause: string): boolean {
@@ -2832,59 +3514,69 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   readonly pattern: RegExp;
   readonly missingEngineSystem: string;
 }> = Object.freeze([
-  // --- mana abilities the ENGINE cannot express, named as engine work ---------
+  // --- mana abilities: four shapes SHIPPED, one still engine work -------------
   //
-  // These five sit above the generic mana hint on purpose. Core models a mana
-  // source as `produces`/`producesOptions`: a LIST OF MODES a tap adds, with no
-  // stack, no cost beyond the tap, no rider, and no condition (`CardDefinition`,
-  // `pushManaTapActions`, `applyTapForMana`). Every wording below needs the mana
-  // model itself to grow, so calling it "a template the compiler does not
-  // recognize yet" sends the next contributor to write a rule-table entry against
-  // machinery that is not there — and prices days of engine work as a line of
-  // data. The audit classifies a gap as a SYSTEM exactly when its name avoids the
-  // catch-all phrase, so naming these honestly is also what makes the ranked
-  // backlog price them correctly.
+  // Core's mana model now carries a per-ability additional cost, rider,
+  // activation restriction and board-derived colours
+  // (`CardDefinition.manaAbilities`), and MANA_RULES compiles all four. So the
+  // hints below no longer claim those systems are missing — that would send the
+  // next contributor to rebuild something that exists. What reaches them is a
+  // WORDING the rule table has no entry for yet, inside a shape the engine can
+  // already express, with two exceptions that are still genuinely engine work and
+  // say so: the SPEND RESTRICTION (the pool would have to carry it) and a cost
+  // component the model has no field for (tapping another permanent).
+  //
+  // Order matters: the first matching hint wins, so these sit above the generic
+  // mana hint.
   {
-    // Pain lands and the Talisman cycle: "{T}: Add {U} or {B}. ~ deals 1 damage
-    // to you." The damage is part of the mana ability's own resolution, and a
-    // mana MODE is a colour bundle with nowhere to hang an effect.
+    // "{T}: Add {U} or {B}. ~ deals 1 damage to you" compiles. What lands here is
+    // a rider with different wording, or one whose "add" half no rule reads.
     pattern: /: add .*\. (?:~|this (?:land|artifact|permanent|creature)) deals \d+ damage to you/,
     missingEngineSystem:
-      'a mana ability with a RIDER effect (core mana modes are colour bundles — tapping cannot also deal damage)',
+      'a mana-ability RIDER wording the compiler does not recognize yet (riders themselves are implemented — see CardDefinition.manaAbilities)',
   },
   {
-    // The Verge cycle and Nimbus Maze: "{T}: Add {R}. Activate only if you
-    // control a Swamp or a Mountain." Mana abilities are offered straight off
-    // `producesOptions`, which carries no condition to check.
+    // Subtypes, permanent colours and "N or more <type>" thresholds are read.
+    // Anything else ("only during your turn", "only if an opponent lost life")
+    // needs a new condition, not a new system.
     pattern: /: add .*\. activate only /,
     missingEngineSystem:
-      'an ACTIVATION RESTRICTION on a mana ability (core offers every mana mode unconditionally)',
+      'an "Activate only if…" CONDITION the compiler cannot read yet (mana-ability restrictions themselves are implemented)',
   },
   {
-    // A cost with two or more components before ": add" — "{T}, Pay 1 life:",
-    // "{1}, {T}:", "{R/W}, {T}:" (the filter lands), "{T}, Tap an untapped
-    // creature you control:". Core's only mana-ability cost is the tap itself.
+    // "Pay N life" and a printed mana run (including a hybrid one) are charged.
+    // "Tap an untapped creature you control" is a component the cost model has no
+    // field for AND a choice of which creature — genuinely missing, not a wording.
+    pattern: /^[^:]*,\s*tap an? [^:]*: add /,
+    missingEngineSystem:
+      'a mana-ability cost that TAPS ANOTHER PERMANENT (the cost model carries life and mana, and choosing which permanent to tap is a question nothing asks)',
+  },
+  {
+    // Any other multi-component cost before ": add".
     pattern: /^[^:]*,[^:]*: add /,
     missingEngineSystem:
-      'an ADDITIONAL COST on a mana ability (core mana sources pay only the tap — no life, no mana, no extra tap)',
+      'an ADDITIONAL-COST wording on a mana ability the compiler does not recognize yet (life and mana costs themselves are implemented)',
   },
   {
-    // Cavern of Souls, Delighted Halfling, Somberwald Sage. The mana pool records
-    // colours, not what each mana may legally pay for, so a restricted mana is
-    // indistinguishable from an unrestricted one the moment it lands in the pool.
+    // Cavern of Souls, Delighted Halfling, Somberwald Sage. STILL A SYSTEM: the
+    // restriction belongs to the MANA, not to the source, so the pool would have
+    // to carry it and every payment path would have to honour it. Nothing about
+    // `manaAbilities` helps — a restricted mana is indistinguishable from an
+    // unrestricted one the moment it lands in the pool.
     pattern: /spend this mana only to/,
     missingEngineSystem:
       'a SPEND RESTRICTION on produced mana (the mana pool records colour, not what each mana may pay for)',
   },
   {
-    // Exotic Orchard, Reflecting Pool, Fellwar Stone — and the commander-identity
-    // cards §5 of the completion plan rules out for good. The mode list is fixed
-    // when the card is compiled; these choose their colours from the board (or
-    // from an object this engine does not have) at activation time.
+    // "…that a land you control could produce" and "…that a land an opponent
+    // controls could produce" are read off the live board. What lands here is a
+    // derivation from something this engine does not have at all — a COMMANDER's
+    // colour identity (§5 of the completion plan rules those out for good), or a
+    // remembered "that land".
     pattern:
       /add one mana of any (?:color|type) (?:in|that)|of any type that (?:land|permanent) produced/,
     missingEngineSystem:
-      'mana COLOURS DERIVED FROM BOARD STATE at activation time (core fixes a source’s mode list at compile time)',
+      'a mana colour derived from an object this engine has no concept of (a commander, or a remembered permanent)',
   },
   {
     pattern: /add one mana of any color|add \{[wubrgc]\} or \{[wubrgc]\}|add one mana of any/,
@@ -3021,7 +3713,25 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     pattern: /\bsacrifice\b/,
     missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
   },
-  { pattern: /\bcounters? on\b|\b\+1\/\+1 counter/, missingEngineSystem: 'a counters template the compiler does not recognize yet' },
+  {
+    // COUNTERS ARE NOT A MISSING SYSTEM. `CardInstance.counters` exists, the
+    // stat pipeline reads +1/+1 and -1/-1 at CR 613.3 layer 7d, `addCounters`
+    // puts them on one creature or on a whole filtered group, a static can read
+    // "with a +1/+1 counter on it", and the trigger vocabulary now covers ETB,
+    // attacks, `permanentEnters`/`permanentDies` (with a controller scope, a
+    // `CardFilter` and the printed word "another"), life gain, combat damage to
+    // a player, begin-combat and the step-beginning triggers. What lands here
+    // is a counters TEMPLATE with no rule — and, named so nobody re-builds
+    // finished work: phasing, DOUBLING counters, proliferate
+    // (needs a chooser over every permanent and player with a counter), counter
+    // kinds the stat layer does not read (charge/quest/time/growth/keyword
+    // counters), "each ATTACKING creature", "NONTOKEN" filters (instances carry
+    // no token flag), once-per-turn trigger limiters, granting a triggered
+    // ability until end of turn, and removing a counter as an activation cost
+    // (`ActivationCost` has no counter component).
+    pattern: /\bcounters? on\b|\b\+1\/\+1 counter/,
+    missingEngineSystem: 'a counters template the compiler does not recognize yet',
+  },
   {
     // TARGETING a card in a graveyard is a real system now
     // ('instantOrSorceryInYourGraveyard' in core's targeting.ts), as is a
@@ -3102,11 +3812,19 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a kicker template the compiler does not recognize yet',
   },
   {
-    // Cycling/buyback/madness are still real gaps: they cast (or discard) from
-    // moments and zones the engine does not model, which is not the cast-time
-    // cost question kicker and {X} now go through.
+    // Cycling, buyback and madness are all REAL MECHANICS now — cycling is an
+    // activated ability from HAND (`CardDefinition.cycling` + the `cycleCard`
+    // action, with typecycling/landcycling the same mechanism searching instead
+    // of drawing), buyback is a cast-time payMana whose answer decides where the
+    // card goes (`spellLeaveDestination`), and madness replaces the discard and
+    // opens a cast-from-exile window. What still lands here is a FORM none of
+    // the three can pay or express: an {X} in a cycling cost (Shark Typhoon), a
+    // madness cost printed in words ("Madness—Pay six {C}"), a cycling word
+    // naming something `CardFilter` cannot select, or a "when you cycle this
+    // card" body the effect table cannot build.
     pattern: /\bcycling\b|\bbuyback\b|\bmadness\b/,
-    missingEngineSystem: 'alternative casting costs and cost-bearing discards (cycling, buyback, madness)',
+    missingEngineSystem:
+      'a cycling/buyback/madness template the compiler does not recognize yet (the plain mana-cost forms are supported; an {X} cycling cost, a madness cost printed in words, and a cycling word with no expressible filter are not)',
   },
   {
     // Characteristic-defining P/T IS a system now (CR 613.3 layer 7a: a `*` box

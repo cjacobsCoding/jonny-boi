@@ -33,15 +33,13 @@
  * spell with no legal target cannot be cast. Activated abilities (including
  * planeswalker LOYALTY abilities) are real: walkers enter with printed loyalty,
  * are attackable, and die at 0. Flash is a real timing flag and a printed
- * "Flashback {cost}" casts from the graveyard for real (then exiles). What it
+ * "Flashback {cost}" casts from the graveyard for real (then exiles).
  * A characteristic-defining star P/T box is a real formula (Tarmogoyf), and the
- * engine remembers a short named list of turn-scoped facts (revolt). What it
- * still has no system for is flashback GRANTED by another card (Snapcaster) and
- * modes chosen at cast time (Cryptic Command).
- * Cards whose identity needs one of those are authored as the closest faithful
- * subset (documented per-card); their
- * vanilla body (P/T, keywords, mana production) is always correct so they play on
- * the battlefield. See `STUBBED_MECHANICS`.
+ * engine remembers a short named list of turn-scoped facts (revolt). Flashback
+ * GRANTED by another card (Snapcaster) and modes chosen at CAST time (Cryptic
+ * Command) both landed too — `STUBBED_MECHANICS` is now EMPTY, every card below
+ * plays exactly as printed, and `fidelity.test.ts` audits the whole pool with no
+ * exemptions. Keep it that way: do not add a card that would need one.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';

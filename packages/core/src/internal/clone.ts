@@ -157,6 +157,10 @@ function cloneStackObject(o: StackObject): StackObject {
           })),
         }
       : {}),
+    // Dropping this one would turn a bought-back spell back into an ordinary
+    // one — it would hit the graveyard on resolution instead of returning to
+    // hand — at the very next action boundary. Same stakes, same shape.
+    ...(o.boughtBack !== undefined ? { boughtBack: o.boughtBack } : {}),
     ...(o.awaitingCastChoice !== undefined ? { awaitingCastChoice: o.awaitingCastChoice } : {}),
     ...(o.castFrom !== undefined ? { castFrom: o.castFrom } : {}),
   };
@@ -264,6 +268,10 @@ export function cloneState(state: GameState): GameState {
   // Two NUMBERS, so the turn's fact memory costs the clone no allocation at all
   // (a nested { A, B } record here measured ~3% of sim throughput). Numbers copy
   // by value, so two states can never alias each other's memory of the turn.
+  // Same conditional rule and the same stakes: dropping an open madness window
+  // would strand the exiled card — nothing could cast it and nothing would ever
+  // put it in the graveyard — on the clone made at every action boundary.
+  if (state.madnessWindow) next.madnessWindow = { ...state.madnessWindow };
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
   return next;

@@ -44,14 +44,9 @@
  */
 
 import type { CardInstance, GameState, PlayerId } from '@jonny-boi/core';
-import {
-  bestManaYield,
-  effectivePower,
-  effectiveToughness,
-  isCreature,
-  isLand,
-  MANA_COLORS,
-} from '@jonny-boi/core';
+import { bestManaYield, isCreature, isLand, MANA_COLORS } from '@jonny-boi/core';
+import type { ContinuousIndex } from './board-stats.js';
+import { boardIndex, power as effPower, statTotal } from './board-stats.js';
 import type { PolicyCandidate } from './heuristic.js';
 import { policyCandidates } from './heuristic.js';
 import type { PilotView } from './pilot.js';
@@ -302,13 +297,18 @@ export function evaluatePosition(
   let theirUntapped = 0;
   let myPower = 0;
 
+  // ONE index for the whole evaluation, built before the battlefield pass and
+  // handed to the tactical solver below. This function used to read printed P/T,
+  // so every anthem, Aura, Equipment and `*` P/T box was invisible to the search's
+  // leaf evaluation — see `board-stats.ts`.
+  const index = boardIndex(state);
   const battlefield = state.battlefield;
   for (let i = 0; i < battlefield.length; i++) {
     const perm = battlefield[i] as CardInstance;
     const mine = perm.controller === player;
     if (isCreature(perm.def)) {
-      const power = effectivePower(perm);
-      const stats = power + effectiveToughness(perm);
+      const power = effPower(perm, index);
+      const stats = statTotal(perm, index);
       if (mine) {
         myStats += stats;
         myCreatures++;
@@ -349,7 +349,7 @@ export function evaluatePosition(
     weights.cardAdvantageWeight * (me.hand.length - them.hand.length) +
     weights.manaDevelopmentWeight * (mySources - theirSources) +
     weights.untappedManaWeight * (myUntapped + floating - theirUntapped) +
-    tacticalPoints(state, player, weights, myPower, them.life);
+    tacticalPoints(state, player, weights, myPower, them.life, index);
 
   return 1 / (1 + Math.exp(-points / weights.scale));
 }
@@ -367,12 +367,13 @@ export function evaluatePosition(
  * still pays for the feature measures nothing useful — and a default that pays for
  * a feature it has switched off is a rule-7 regression for nothing.
  *
- * ## No continuous index, deliberately
- * `assessPosition` is called with no `ContinuousIndex`, so it reads base + counters
- * — consistent with every other term in this file, and with the heuristic's own
- * combat judgement. Building the index allocates a `Map` per call, and this runs
- * once per simulation on a 160-simulation budget. The *decision* path, where an
- * answer is acted on rather than scored, builds the real index (see `hybrid.ts`).
+ * ## The continuous index, which this used to skip
+ * `assessPosition` is handed the index `evaluateState` already built for its own
+ * battlefield pass. It previously ran with none — the leaf evaluator solved combat
+ * on printed numbers while the decision path solved it on real ones, so the search
+ * scored positions its own pilot would have judged differently. Sharing the one
+ * index costs nothing: it is built once per evaluation either way, and a board with
+ * no anthem, attachment or pump gets core's shared empty map with no allocation.
  */
 function tacticalPoints(
   state: GameState,
@@ -380,6 +381,7 @@ function tacticalPoints(
   weights: EvaluationWeights,
   untappedAttackPower: number,
   opponentLife: number,
+  index: ContinuousIndex,
 ): number {
   const wantsSolver =
     weights.useTacticalLethal ||
@@ -391,7 +393,7 @@ function tacticalPoints(
     return untappedAttackPower > 0 && untappedAttackPower >= opponentLife ? weights.lethalThreatWeight : 0;
   }
 
-  const { offence, threat } = assessPosition(state, player);
+  const { offence, threat } = assessPosition(state, player, index);
   let points = 0;
   if (weights.useTacticalLethal) {
     if (offence.lethal) points += weights.lethalThreatWeight;
