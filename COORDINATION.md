@@ -107,6 +107,7 @@ throughput (games/sec) from regressing.
 
 | feat/mana-ability-model | worker | packages/core (card.ts mana model + engine.ts offer/apply + mana-plan.ts + index.ts + NEW mana-ability-model.test.ts), packages/cards (compile/rules.ts MANA_RULES +5 & UNSUPPORTED_HINTS reworded, compile/compile.ts + types.ts assembly, mana-templates.test.ts rewritten, 2 compile.test.ts cases), packages/ai (NEW mana-ability-pilot.test.ts only), apps/web/src/lib/about/mechanics.ts (+2 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 | fix/keyword-sweep-and-mana-templates | worker | packages/cards (compile/compile.ts keyword-sweep guard, compile/rules.ts 1 new MANA_RULES entry + 5 new UNSUPPORTED_HINTS above the mana hint, compile/scry-surveil.test.ts additions, NEW compile/mana-templates.test.ts), apps/web/src/lib/about/mechanics.ts (+1 witness), DESIGN §3.11, docs/plans/mechanic-completion-plan.md, COORDINATION.md. **No engine change.** | 🚧 PUSHED, not merged |
+| feat/mana-spend-restrictions | worker | packages/core (NEW spend-restriction.ts + spend-restriction.test.ts + clone.test.ts; mana.ts, mana-plan.ts, card.ts, engine.ts, events.ts, serialize.ts, index.ts, internal/clone.ts), packages/cards (compile/rules.ts + NEW compile/spend-restriction.test.ts + mana-templates.test.ts rewording; primitives.ts one guard), packages/ai (heuristic.ts + land-sequencing.ts call sites; NEW spend-restriction-pilot.test.ts), packages/sim/src/observation.ts (comment only), packages/protocol/src/index.ts (comment only), apps/web (lib/play/{session,view-model}.ts, lib/online/{auto-tap,board-adapter}.ts, lib/replay-build.ts, components/play/SeatPanel.tsx, styles.css, lib/about/mechanics.ts), DESIGN §3.21, COORDINATION | 🚧 PUSHED, not merged |
 | docs/mechanic-census | worker | **DOCS + GENERATED DATA ONLY** — docs/plans/mechanic-completion-plan.md (new), UNSUPPORTED-BACKLOG.md (regenerated from a live fetch), UNSUPPORTED-MECHANICS.md (pointers + audit usage), packages/cards/scripts/coverage-audit.mjs (`--top`/`--json`/`--save-corpus` + per-gap `kind`), COORDINATION.md. **No engine, compiler, or pool change** — collides with nobody. | 🚧 PUSHED, not merged |
 | feat/modal-casting | worker | packages/core (NEW modal.ts + modal-casting.test.ts; card/state/actions/choices/effects/mana/targeting/engine/index, internal clone+zones, derived), packages/cards (compile rules/compile/types/text + effect-helpers + choice-primitives (modal primitive REMOVED) + index + data/pool Cryptic + 6 tests), packages/ai (choices/effect-value/heuristic + tests), packages/sim (observation +2 events, paired-arms note, pilot-choices test), apps/web (choice-view/ChoicePrompt/AboutView/mechanics + online legal-actions + play/session + 3 tests), DESIGN §3.16, COORDINATION | 🚧 PUSHED, not merged |
 | feat/you-may-and-trigger-templates | worker | packages/core (card.ts `basic`/`entersTappedUnlessRevealed`/`canRevealForUntapped`, choices.ts CardFilter P/T bounds, triggers.ts +5 TriggerEvents + `TriggerSubject`, internal/triggers-runtime.ts subject resolver, engine.ts reveal-land question + its answer branch, index.ts +2 exports, conditional-tapland.test.ts), packages/cards (primitives `mayEffects` + loseLife `whichPlayer`, choice-primitives tapPermanents untap/excludeTypes, compile/{rules,compile,types}.ts + NEW compile/you-may-and-triggers.test.ts, data/pool.ts basics only), packages/sim (paired-arms-config classification only), apps/web/src/lib/about/mechanics.ts (+6 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
@@ -118,6 +119,96 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `feat/mana-spend-restrictions` 🚧 PUSHED — **the fifth mana shape is real:
+  the POOL carries the spend restriction.** `feat/mana-ability-model` shipped four shapes and
+  reported this one by name with an analysis of why it was different; that analysis was right, and
+  this is the answer to it.
+
+  **Measured on the cached 2100-card corpus, same command, against this branch's `origin/main`
+  (1dd5b90): 408 → 412 playable.** Small, and the number is not the point: the 15-card "spend
+  restriction" gap is GONE, dissolved into four newly playable cards (Ancient Ziggurat, Somberwald
+  Sage, Eldrazi Temple, Maelstrom of the Spirit Dragon) and four residuals that are each a different
+  system and now say so. Whoever re-runs the audit will see the mana family shrink — that is the fix.
+
+  ⚡ **THE POOL REPRESENTATION, and why it is totals-inclusive.** `ManaPool` is now
+  `Record<ManaColor, number> & { restricted?: readonly RestrictedMana[] }`, where `pool[color]` stays
+  the TOTAL with restricted mana INCLUDED and the parcels record which slice is not freely
+  spendable. Everything that asks "how much mana is floating" — `poolTotal`, the seat panel, the
+  replay format, the end-of-step empty — is asking about QUANTITY, and a restriction does not change
+  quantity. Only LEGALITY changes, and every legality question already funnels through
+  `canPay`/`payCost`. **`restricted` is ABSENT (not an empty array) on every ordinary pool**, and all
+  three of `canPay`, `payCost` and `planManaPayment` short-circuit on that `undefined` before doing
+  anything else — same discipline as `manaExtrasOf`. Do not normalise it.
+
+  🧮 **IT IS NOT A MATCHING PROBLEM, and that is the whole design.** One `payCost` call funds ONE
+  thing, so every pip in it shares the same purpose and each mana is either usable for the whole
+  payment or for none of it. Hide what the purpose may not touch, run the existing algorithm on
+  what is left. Linear in the parcel count, no search, and the same algorithm — so no second opinion
+  about hybrid symbols or generic pips. A restriction is DATA (a disjunction of clauses over
+  purpose/types/subtypes/colour/legendary), never a per-card branch.
+
+  ⚠️ **THE BUG THAT WILL BITE THE NEXT PERSON, because it bit me and the pilot tests caught it.**
+  `spendPurposeIfRestricted(pool, def, kind)` asks the pool AS IT IS NOW, and that is correct for
+  `canPay`/`payCost` — but WRONG for `planManaPayment`, which runs before the mana exists. Gating on
+  the live (empty) pool gave the planner no purpose to check the restriction it was about to create
+  against, so it refused to tap Ancient Ziggurat at all and the pilot read a castable creature as
+  uncastable. **The planner therefore takes the card DEFINITION plus a kind and resolves the purpose
+  LAZILY**, at the two places that actually read it. An ordinary board pays two unread arguments.
+
+  🧠 **THE AI SPENDS IT FIRST.** Restricted mana is the least flexible resource on the board, and
+  the planner's existing "least flexible source first" tie-break could not see that — `flexibility`
+  counts COLOURS, and Ancient Ziggurat offers five, so it ranked LAST. A `restrictedRank` term joins
+  the same ordering, below `pain` (least-flexible must never outrank does-not-kill-me).
+  `packages/ai/src/spend-restriction-pilot.test.ts` drives the real heuristic pilot through both
+  directions: it casts a creature off a lone Ziggurat, and it does NOT tap that Ziggurat toward a
+  burn spell (the failure there is not "it passes" — it is tapping out and being rejected).
+
+  📊 **PERFORMANCE, measured against a separate `origin/main` worktree on this box, never wall
+  clock.** Gauntlet `Mono-Red Aggro --games 40 --seed 99` is **81/280 on both, every matchup row
+  equal**. Self-play scavenge counts over 40 seeded games: **577/563 (branch) vs 578/563 (main)**,
+  with an identical 29,899 actions both sides — the same games, the same garbage. Paired
+  `process.cpuUsage` user time, 15 alternating runs: ratio **0.953 at the min, 1.014 at the median,
+  0.990 at the mean** — parity.
+  ⚠️ **The brief for this branch quoted the gauntlet gate as 79/280.** That figure is
+  `feat/mana-ability-model`'s, measured on ITS base; `origin/main` at 1dd5b90 reads **81/280** on this
+  box. Measure your own base before treating a number in a brief as a gate.
+
+  ⚠️ **A trap for anyone adding a field to a state object.** `serializeState` is hashed by
+  `selfplay-lock.test.ts` to prove a refactor did not change the game. Adding `manaRestricted`
+  unconditionally moved all 24 golden STATE digests while the event-log digests stayed
+  byte-identical — a false alarm that reads exactly like a rules regression, in the one test whose
+  job is to tell them apart. The field is now OMITTED when zero, and the goldens are untouched.
+  (Also fixed in passing: `primitives.addMana` tested `sym in pool`, which would have been true for
+  the new `restricted` key.)
+
+  ⛔ **THE COMMANDER IS REFUSED, DELIBERATELY, and the family it was lumped with is not one family.**
+  The audit reported 8 cards as "a colour derived from an object this engine has no concept of (a
+  commander, or a remembered permanent)". Those are two different jobs and the shared name hid it.
+  Split, and both now report accurately:
+    - **2 cards** (Command Tower, Arcane Signet) need a **commander's colour identity** — a
+      commander, a command zone holding one, and a format that has both. None exist here. A fake
+      commander would silently set those cards' output in every game the lab plays, corrupting the
+      A/B verdicts they appear in. I also did NOT build the general seam ("colours derived from a
+      named object the engine tracks"): with one hypothetical consumer it is a guess at an
+      interface, and the other six cards turned out not to need it at all.
+    - **6 cards** (Mirari's Wake, Zendikar Resurgent, Vorinclex, Kinnan, Extraplanar Lens,
+      Incubation Druid) need **a triggered ability that watches a permanent being tapped for mana
+      and copies what it produced**. That is ordinary engine work anyone can pick up, and it was
+      invisible while it shared a name with a format decision.
+
+  📌 **KNOWN REACH LIMIT, pinned in the planner's comments rather than left to be rediscovered:**
+  a plan will not chain a restricted source into ANOTHER source's mana cost (Power Depot's "activate
+  abilities of artifacts" mana paying an artifact filter land). Same shape as the filter-land reach
+  limit already recorded in DESIGN, and it can only ever decline a payment — never make an illegal
+  one.
+
+  📦 **POOL FOLLOW-UP for whoever runs the expansion generator next:** Ancient Ziggurat,
+  Somberwald Sage, Eldrazi Temple and Maelstrom of the Spirit Dragon now compile `'complete'` and
+  should be picked up by `feat/pool-expansion`'s candidate regeneration. I deliberately did not touch
+  `packages/cards/data/expansion-candidates.json` or the generated pool — that branch owns them.
+  The About page's claim is carried by an `oracle` witness (real printed text that must compile
+  `'complete'`), which is the strongest witness kind and needs no pool card.
 
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine

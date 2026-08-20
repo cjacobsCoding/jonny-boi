@@ -1260,6 +1260,64 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
     taps close the same shortfall, and refuses to plan a payment that kills its own controller.
   **Measured PAIRED against the same cached corpus on the same day's `main`: 328 → 384 of 2100
   (15.6% → 18.3%), +56 cards.** (Against the 229 baseline the brief was written from, the same +56.)
+- ✅ **§3.21 — *the fifth mana shape: a SPEND RESTRICTION on produced mana*.** The other four shapes
+  decorate the SOURCE; this one colours the MANA, and that is the whole of why it needed a different
+  design. `ManaPool` was `Record<ManaColor, number>`, so a restricted mana became indistinguishable
+  from an unrestricted one the moment it landed in the pool. **The pool carries it now**, and
+  `canPay`, `payCost`, the payment planner, the event log, the debug snapshot, the masked protocol
+  view and the AI all honour it. `ManaAbility.spendRestriction` is DATA — a disjunction of clauses
+  over the object being paid for (purpose, types, subtypes, colour/colourless, legendary) — so no
+  card has a branch, and "cast artifact spells **or** activate abilities of artifacts" is two
+  clauses rather than a Power Depot case.
+  **Measured on the cached 2100-card corpus against this branch's `origin/main`: 408 → 412 playable,
+  and the 15-card "spend restriction" gap is gone** — dissolved into four newly playable cards
+  (Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the Spirit Dragon) and four
+  precisely-named residuals, each of which is a different system.
+  Five properties make it faithful rather than approximately right:
+  - **It is a SUBTRACTION, not a matching problem.** One `payCost` call funds ONE thing, so every
+    pip in it shares the same purpose and each mana is either usable for the whole payment or for
+    none of it. Hide what this purpose may not touch, run the existing algorithm on the rest: linear
+    in the number of restricted parcels, no search, and — because it is the same algorithm — no
+    second opinion about what a hybrid symbol or a generic pip costs.
+  - **`purpose === undefined` means NO.** A caller that asks "can this pool pay {2}{G}?" without
+    saying what for cannot be told yes about restricted mana. A forgotten purpose therefore produces
+    a PESSIMISTIC answer (a cast the engine could have offered), never an ILLEGAL one — which is the
+    failure that would poison a verdict. It is also why a "unless its controller pays {3}" tax
+    cannot be paid with Ancient Ziggurat mana, correctly and with no special case.
+  - **Mana you cannot spend is still mana.** `pool[color]` stays the TOTAL, restricted included, so
+    `poolTotal`, the seat panel, the replay format and the end-of-step empty are unchanged and still
+    true — a restriction changes legality, not quantity. Restricted mana that can never be spent
+    drains at end of step with its `manaPoolEmptied` event, and never earlier.
+  - **The hot path pays one property read.** `restricted` is ABSENT on every pool in a game with no
+    restricted source, and `canPay` / `payCost` / the planner each short-circuit on that `undefined`
+    before doing anything else. The planner takes the card DEFINITION and resolves the purpose
+    LAZILY — gating it on the live pool was a real bug caught by the pilot tests, because at
+    planning time the pool is empty and the restricted mana does not exist yet, so the planner
+    refused to tap Ancient Ziggurat at all and a castable creature read as uncastable.
+  - **Restricted mana is spent FIRST.** It is the least flexible resource on the board, and the
+    planner's existing "least flexible source first" ordering could not see it (Ancient Ziggurat
+    offers five colours, so `flexibility` ranked it LAST). A `restrictedRank` term joins that same
+    ordering — below `pain`, because "least flexible" must never outrank "does not kill me" — and
+    `payCost` drains restricted parcels first within a colour and prefers colours holding them when
+    paying the generic portion.
+  **A restriction on public mana is PUBLIC.** Mana in a pool is open information in this engine
+  (`sim/observation.ts`), and the restriction was printed on a permanent every seat can read, so it
+  travels on the `manaAdded` event and in the masked protocol view. Redacting it would be the worse
+  error: an opponent watching mana float off an Ancient Ziggurat and unable to see the restriction
+  would read the board as represented interaction that is not there.
+  📌 **KNOWN REACH LIMIT, pinned in the planner's comments:** a plan will not chain a restricted
+  source into ANOTHER source's mana cost (Power Depot's "activate abilities of artifacts" mana
+  paying for an artifact filter land). Same shape as the filter-land reach limit already recorded
+  above, and it can only ever decline a payment, never make an illegal one.
+  ⛔ **NOT shipped, and reported by name rather than faked: the COMMANDER.** "Add one mana of any
+  color in your commander's color identity" (Command Tower, Arcane Signet) needs a commander, a
+  command zone holding one, and a format that has both. This engine has none of them, and a fake
+  commander — any seat's "best" card, or a colour identity guessed from the decklist — would
+  silently set those two cards' output in every game the lab plays, corrupting exactly the A/B
+  verdicts they appear in. The general seam it would need ("colours derived from a named object the
+  engine tracks") is deliberately NOT built either: with one hypothetical consumer it would be a
+  guess at an interface, and the six cards previously grouped with it turned out to need something
+  else entirely (a tapped-for-mana trigger), which is now reported under its own name.
 
 Still open, roughly by how often they block a real decklist:
 - *aiming a trigger body at the player whose step or turn it is* ("At the beginning of each player's
@@ -1267,17 +1325,20 @@ Still open, roughly by how often they block a real decklist:
   Font of Mythos). The trigger itself is expressible (`who: 'any'`); what is missing is the
   triggering player riding the resolution the way `xValue` and `kicked` do, so a body can say "that
   player" rather than "the controller",
-- ***a SPEND RESTRICTION on produced mana* — the fifth mana shape, and the one that is genuinely a
-  different system** (4 sole-blocked, 15 blocks: Cavern of Souls, Delighted Halfling). The other
-  four decorate the SOURCE; this one colours the MANA. `ManaPool` is `Record<ManaColor, number>` —
-  a restricted mana is indistinguishable from an unrestricted one the moment it lands in the pool —
-  so the pool would have to carry the restriction and every payment path (`payCost`, `canPay`, the
-  planner's dense buffers, serialization, the AI's mana math) would have to honour it. Reported by
-  name, not approximated.
 - *two smaller mana gaps that are cost/vocabulary rather than system*: a mana-ability cost that
   **taps another permanent** (Springleaf Drum — a third cost component AND a choice of which
-  permanent, which nothing asks), and a colour derived from an object this engine does not have (a
-  commander's identity, refused for good — see the completion plan §5).
+  permanent, which nothing asks), and a spend restriction naming a creature type **chosen as the
+  permanent enters** (Cavern of Souls, Secluded Courtyard, Unclaimed Territory — the restriction
+  itself works now; what is missing is a per-INSTANCE remembered choice).
+- *a spell that **cannot be countered*** ("…and that spell can't be countered" — Cavern of Souls and
+  Delighted Halfling print it after a spend restriction, and 15 more print it on the spell itself).
+  Counterspells are real in this engine, so the clause is not vacuous and is never dropped.
+- *the two colour-derivation families this engine has no object for*, now reported separately
+  because they are not the same work: a **commander's colour identity** (Command Tower, Arcane
+  Signet) needs a format this engine does not implement and will not fake — see §3.21 — while
+  **"add one mana of any type that land produced"** (Mirari's Wake, Zendikar Resurgent, Vorinclex,
+  Kinnan, Extraplanar Lens, Incubation Druid) is an ordinary triggered ability watching a permanent
+  being tapped for mana, and is engine work somebody can simply do.
 - *the payment planner cannot CHAIN into a filter land inside one plan.* The mana half of a mana
   ability's cost is gated on the FLOATING pool, exactly as `unpayableActivationReason` gates every
   other activated ability, so a filter land is offered once its input is floating and not before —
