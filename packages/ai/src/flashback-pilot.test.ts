@@ -97,4 +97,82 @@ describe('heuristic pilot vs flashback', () => {
     expect(result.events.some((e) => e.type === 'actionRejected')).toBe(false);
     expect(result.events.some((e) => e.type === 'spellCast' && e.fromZone === 'graveyard')).toBe(true);
   });
+
+  /*
+   * A FLASHBACK COST CAN PRINT A LIFE RIDER, and the pilot could not see it.
+   *
+   * "Flashback—{1}{B}, Pay 3 life" (Crippling Fatigue) is a COST: core does not
+   * offer the cast when the caster cannot pay it, and `applyCastSpell` rejects
+   * it. The pilot builds its own flashback candidates and only checked MANA, so
+   * below the life threshold it still wanted the spell — and the damage it did
+   * was worse than a rejection. It **tapped every land toward a cast it could
+   * never make and then passed**, floating the whole pool and wasting the turn,
+   * at exactly the moment it was about to die. (Measured: at 1 and 2 life it
+   * taps five Mountains and casts nothing; at 3 it casts.) That is the very
+   * misplay `packages/sim/src/pilot-quality.test.ts` exists to forbid, one card
+   * type over. Found by the full-pool soak (`@jonny-boi/sim`'s `soak.ts`) at
+   * seed 3329123684, where the engine's rejection made it visible.
+   */
+  const LIFE_RIDER_COST = 3;
+  const PAY_LIFE_BOLT: CardDefinition = {
+    ...FLASHBACK_BOLT,
+    id: 'fb-bolt-life',
+    name: 'Flash Bolt (pay life)',
+    flashbackLifeCost: LIFE_RIDER_COST,
+  };
+
+  function withLife(life: number): GameState {
+    const state = flashbackPosition();
+    const card = state.players.A.graveyard[0] as CardInstance;
+    (card as { def: CardDefinition }).def = PAY_LIFE_BOLT;
+    state.players.A.life = life;
+    return state;
+  }
+
+  /** Play up to `plies` of the pilot's own choices; return every action taken. */
+  function drive(state: GameState, plies = 12): { actions: GameAction[]; rejected: boolean } {
+    const reg = createTestRegistry();
+    const pilot = createHeuristicPilot();
+    const actions: GameAction[] = [];
+    let s = state;
+    let rejected = false;
+    for (let ply = 0; ply < plies && !s.gameOver; ply++) {
+      const action = pilot.chooseAction({
+        view: s,
+        legalActions: generateLegalActions(s),
+        rng: createRng(99),
+      });
+      actions.push(action);
+      const result = applyAction(s, action, undefined, reg);
+      if (result.events.some((e) => e.type === 'actionRejected')) rejected = true;
+      s = result.state;
+    }
+    return { actions, rejected };
+  }
+
+  for (const life of [LIFE_RIDER_COST - 1, LIFE_RIDER_COST - 2]) {
+    it(`at ${life} life it neither casts NOR taps toward a cast costing ${LIFE_RIDER_COST} life`, () => {
+      const { actions, rejected } = drive(withLife(life));
+      expect(rejected, 'the engine refused an action the pilot built itself').toBe(false);
+      expect(
+        actions.some((a) => a.kind === 'castSpell' && a.fromZone === 'graveyard'),
+        'proposed a flashback cast it could not pay for',
+      ).toBe(false);
+      // The expensive half: tapping toward an impossible cast floats the whole
+      // pool and throws the turn away, which no rejection would have revealed.
+      expect(
+        actions.filter((a) => a.kind === 'tapForMana').length,
+        'tapped mana toward a flashback cast it can never make',
+      ).toBe(0);
+    });
+  }
+
+  it('still takes the same cast when the life IS there, to the last point (the control)', () => {
+    const { actions, rejected } = drive(withLife(LIFE_RIDER_COST));
+    expect(rejected).toBe(false);
+    expect(
+      actions.some((a) => a.kind === 'castSpell' && a.fromZone === 'graveyard'),
+      'the life gate is too strict — it refuses a cast the player can afford',
+    ).toBe(true);
+  });
 });

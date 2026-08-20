@@ -181,8 +181,18 @@ export function strArrayParam(ctx: EffectContext, key: string): readonly string[
 
 /**
  * Read a `keywords` param (a `KeywordFlags`-shaped object, e.g. `{ trample: true }`)
- * keeping only the boolean-true flags. A missing/ill-typed param yields an empty
- * grant (safe no-op).
+ * into the flags a grant may set. A missing/ill-typed param yields an empty grant
+ * (safe no-op).
+ *
+ * ⚠️ THE THREE PAYLOAD KEYWORDS ARE NOT BOOLEANS, and dropping them here is
+ * silent. `protectionFrom` is a list of qualities, `ward` and `minBlockers` are
+ * numbers — so a filter of `=== true` threw all three away and turned "target
+ * creature gains protection from red until end of turn" into a spell that
+ * compiled `'complete'` and did NOTHING at resolution. (The rule's test asserted
+ * the compiled EFFECT REFS and never played the card, which is why it stayed
+ * green.) Each is copied here with the same validity check `grantInto` in core's
+ * continuous layer applies when it merges them, so the two cannot disagree about
+ * what a real grant looks like.
  */
 export function keywordsParam(ctx: EffectContext): KeywordFlags {
   const v = ctx.params.keywords;
@@ -193,24 +203,37 @@ export function keywordsParam(ctx: EffectContext): KeywordFlags {
     if (src[key] === true) out[key] = true;
   }
   // The PAYLOAD keywords are not booleans, so the true-filter above drops them —
-  // which is exactly how a granted "except by creatures with haste" would become a
-  // grant of nothing. Each is copied through by its own shape test, and only when
-  // it carries something the engine can act on, so a malformed param still yields
-  // an inert grant rather than a half-read restriction.
-  const ward = src.ward;
-  if (typeof ward === 'number' && Number.isFinite(ward) && ward > 0) out.ward = Math.trunc(ward);
-  const minBlockers = src.minBlockers;
-  if (typeof minBlockers === 'number' && Number.isFinite(minBlockers) && minBlockers > 0) {
-    out.minBlockers = Math.trunc(minBlockers);
+  // which is exactly how a granted ward, a granted "except by creatures with
+  // haste", or a granted protection becomes a grant of NOTHING. Each is copied
+  // through by its own shape test, and only when it carries something the engine
+  // can act on, so a malformed param still yields an inert grant rather than a
+  // half-read one.
+  const protection = src.protectionFrom;
+  if (Array.isArray(protection)) {
+    const qualities = protection.filter((q): q is string => typeof q === 'string');
+    if (qualities.length > 0) out.protectionFrom = qualities;
   }
-  const protectionFrom = src.protectionFrom;
-  if (Array.isArray(protectionFrom) && protectionFrom.length > 0) out.protectionFrom = protectionFrom;
+  for (const numeric of NUMERIC_KEYWORD_KEYS) {
+    const value = src[numeric];
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) out[numeric] = Math.trunc(value);
+  }
+  // The one payload that is a RECORD rather than a number or a list: a comparing
+  // block restriction ("except by creatures with haste", a power bound, skulk).
+  // It cannot join `NUMERIC_KEYWORD_KEYS` for the same reason `protectionFrom`
+  // cannot — the shape test is what tells a real payload from a stray param.
   const blockRestriction = src.blockRestriction;
   if (typeof blockRestriction === 'object' && blockRestriction !== null) {
     out.blockRestriction = blockRestriction;
   }
   return out as KeywordFlags;
 }
+
+/**
+ * The keyword flags whose value is a positive NUMBER rather than a boolean.
+ * A table so adding one is a data edit here rather than another `if` above —
+ * and so the omission that made this function drop them cannot recur silently.
+ */
+const NUMERIC_KEYWORD_KEYS: readonly string[] = Object.freeze(['ward', 'minBlockers']);
 
 /**
  * Read a `ManaCost`-shaped param (`{ generic: 3 }`, `{ generic: 1, U: 1 }`) — the

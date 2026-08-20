@@ -56,7 +56,7 @@
  * can therefore never reach a state where nobody can move.
  */
 
-import type { CardDefinition, CardType, EffectRef } from './card.js';
+import type { CardType, EffectRef } from './card.js';
 import { matchesCardFilter } from './card.js';
 import type { ManaColor, ManaCost } from './mana.js';
 import type { TargetRestriction } from './targeting.js';

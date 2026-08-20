@@ -248,8 +248,12 @@ describe('the compiler still refuses what it cannot do faithfully', () => {
     expect(result.missing.map((m) => m.text)).toContain('Equip Human {1}');
   });
 
-  it('reports an Aura whose printed grant we cannot model', () => {
-    const result = compileCard(
+  it('grants the PAYLOAD keywords an attachment prints', () => {
+    // Ward and protection carry a value rather than a boolean, and core models
+    // both — so an attachment printing one compiles it rather than reporting.
+    // (This case USED to be the refusal below; the refusal now needs a quality
+    // core genuinely has no check for, which is what the next test uses.)
+    const warded = compileCard(
       card({
         name: 'Test Ward Aura',
         cost: { W: 1 },
@@ -257,6 +261,45 @@ describe('the compiler still refuses what it cannot do faithfully', () => {
         subtypes: ['Aura'],
         keywords: ['Enchant'],
         oracleText: 'Enchant creature\nEnchanted creature has ward {2}.',
+      }),
+    );
+    expect(warded.status).toBe('complete');
+    expect(warded.definition.attachment?.modifies).toEqual({
+      power: 0,
+      toughness: 0,
+      keywords: { ward: 2 },
+    });
+
+    const sword = compileCard(
+      card({
+        name: 'Test Protective Sword',
+        cost: { generic: 3 },
+        types: ['Artifact'],
+        subtypes: ['Equipment'],
+        keywords: ['Equip'],
+        oracleText:
+          'Equipped creature gets +2/+2 and has protection from black and from green.\nEquip {2}',
+      }),
+    );
+    expect(sword.status).toBe('complete');
+    expect(sword.definition.attachment?.modifies).toEqual({
+      power: 2,
+      toughness: 2,
+      keywords: { protectionFrom: ['black', 'green'] },
+    });
+  });
+
+  it('reports an Aura whose printed grant we cannot model', () => {
+    // A protection QUALITY outside the closed table: core has no check for "a
+    // Demon", so granting it would protect from the wrong set of things.
+    const result = compileCard(
+      card({
+        name: 'Test Demon Ward',
+        cost: { W: 1 },
+        types: ['Enchantment'],
+        subtypes: ['Aura'],
+        keywords: ['Enchant'],
+        oracleText: 'Enchant creature\nEnchanted creature has protection from Demons.',
       }),
     );
     expect(result.status).toBe('incomplete');

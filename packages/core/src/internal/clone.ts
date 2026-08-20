@@ -20,6 +20,7 @@ import type { ContinuousEffect } from './continuous.js';
 import { NO_COUNTERS, PLAYER_IDS } from '../state.js';
 import type { PendingChoice, ResolutionFrame } from '../choices.js';
 import type { CardGrant } from '../card-grants.js';
+import type { FloatingReplacement } from './replacement.js';
 import { cloneChoiceAnswer } from '../choices.js';
 
 /**
@@ -300,6 +301,15 @@ export function cloneState(state: GameState): GameState {
   // Same conditional rule and the same stakes: dropping an open madness window
   // would strand the exiled card — nothing could cast it and nothing would ever
   // put it in the graveyard — on the clone made at every action boundary.
+  // Same conditional rule and the same stakes: a dropped fog would let combat
+  // damage through on the very next action's clone, and a dropped SHIELD would
+  // silently un-spend itself (the `remaining` count lives on this record). The
+  // records are copied one by one rather than shared, because `remaining` is
+  // written as a shield is consumed — an aliased array would let one state spend
+  // the other's shield.
+  if (state.replacements !== undefined && state.replacements.length > 0) {
+    next.replacements = state.replacements.map(cloneFloatingReplacement);
+  }
   if (state.madnessWindow) next.madnessWindow = { ...state.madnessWindow };
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
@@ -309,4 +319,12 @@ export function cloneState(state: GameState): GameState {
 /** Copy one card grant, breaking aliasing on its cost object. */
 function cloneCardGrant(grant: CardGrant): CardGrant {
   return grant.flashback !== undefined ? { ...grant, flashback: { ...grant.flashback } } : { ...grant };
+}
+
+/**
+ * Copy one floating replacement/prevention effect. Spread-copied rather than
+ * shared for the reason the call site gives: `remaining` is mutable state.
+ */
+function cloneFloatingReplacement(record: FloatingReplacement): FloatingReplacement {
+  return { ...record };
 }

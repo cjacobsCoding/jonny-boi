@@ -778,6 +778,22 @@ export interface CardDefinition {
    */
   readonly statics?: readonly import('./statics.js').StaticAbility[];
   /**
+   * REPLACEMENT and PREVENTION abilities (CR 614/615): "If one or more +1/+1
+   * counters would be put on a creature you control, that many **plus one** are
+   * put on it instead", "If a source you control would deal damage …, it deals
+   * **double** that damage instead", "Prevent all combat damage that would be
+   * dealt to attacking creatures you control".
+   *
+   * Data, like {@link statics}, and with the same DERIVED lifetime: live for
+   * exactly as long as this permanent is on the battlefield, because the layer
+   * re-reads `state.battlefield` rather than storing anything. See
+   * `replacement.ts` for the vocabulary and `internal/replacement.ts` for the one
+   * seam damage, counters and draws all consult. Omit for cards with none, which
+   * is nearly every card — the absent field is what keeps the damage and counter
+   * hot paths free.
+   */
+  readonly replacements?: readonly import('./replacement.js').ReplacementAbility[];
+  /**
    * The SECOND FACE of a transforming double-faced card (Innistrad-style), as a
    * complete nested definition — everything a face can print: name, types, P/T,
    * keywords, triggers, statics, the lot.

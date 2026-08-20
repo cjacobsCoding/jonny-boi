@@ -235,6 +235,16 @@ export interface ClauseContribution {
    */
   readonly statics?: readonly import('@jonny-boi/core').StaticAbility[];
   /**
+   * REPLACEMENT / PREVENTION abilities this clause prints ("If one or more +1/+1
+   * counters would be put on a creature you control, that many plus one are put
+   * on it instead", "Prevent all combat damage that would be dealt to attacking
+   * creatures you control") — core's replacement layer, live for as long as the
+   * source is on the battlefield. The ONE-SHOT forms (a fog) are `effects`
+   * instead, because those are a spell doing something, not a permanent being
+   * something.
+   */
+  readonly replacements?: readonly import('@jonny-boi/core').ReplacementAbility[];
+  /**
    * The half of an attachment that says WHAT it attaches to and what happens when
    * it isn't legally attached — the printed "Enchant creature" / "Equip {N}" line.
    */
