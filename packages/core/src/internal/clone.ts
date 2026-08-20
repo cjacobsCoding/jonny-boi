@@ -93,7 +93,28 @@ function cloneInstances(list: readonly CardInstance[]): CardInstance[] {
  * allocate-and-store instead of a generic property copy.
  */
 function clonePool(pool: ManaPool): ManaPool {
-  return { W: pool.W, U: pool.U, B: pool.B, R: pool.R, G: pool.G, C: pool.C };
+  // ⚠️ THE SPEND RESTRICTIONS TRAVEL WITH THE POOL. A clone that dropped them
+  // would hand the next action a pool whose Ancient Ziggurat mana had silently
+  // become able to pay for anything — a strictly better card, produced by a
+  // field-by-field copy that merely forgot one field. Asserted in `clone.test.ts`.
+  //
+  // The ARRAY is copied by reference and its parcels are shared, which is safe
+  // because parcels are immutable: every path that spends restricted mana
+  // (`payCost`) builds new parcels in a new array rather than editing one. A deep
+  // copy here would allocate on the per-action clone, the largest allocation site
+  // in the sim, to defend against a mutation nothing performs.
+  if (pool.restricted === undefined) {
+    return { W: pool.W, U: pool.U, B: pool.B, R: pool.R, G: pool.G, C: pool.C };
+  }
+  return {
+    W: pool.W,
+    U: pool.U,
+    B: pool.B,
+    R: pool.R,
+    G: pool.G,
+    C: pool.C,
+    restricted: pool.restricted,
+  };
 }
 
 function clonePlayer(p: PlayerState): PlayerState {

@@ -45,7 +45,20 @@ export {
   payCost,
   canPay,
   repeatCost,
+  usableMana,
+  restrictedTotal,
 } from './mana.js';
+
+// SPEND RESTRICTIONS on produced mana ("Spend this mana only to cast a creature
+// spell"). The POOL carries them, not the source — see spend-restriction.ts.
+export type {
+  ManaSpendClause,
+  ManaSpendKind,
+  ManaSpendPurpose,
+  ManaSpendRestriction,
+  RestrictedMana,
+} from './spend-restriction.js';
+export { restrictionAllows } from './spend-restriction.js';
 
 // Card model seam
 export type {
@@ -81,6 +94,8 @@ export {
   isManaSource,
   manaModesOf,
   manaExtrasOf,
+  spendPurposeFor,
+  spendPurposeIfRestricted,
   manaColorsOffered,
   fixedManaColorsOf,
   manaActivationConditionMet,

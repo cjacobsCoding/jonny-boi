@@ -85,6 +85,16 @@ export type GameEvent =
       readonly player: PlayerId;
       readonly color: ManaColor;
       readonly amount: number;
+      /**
+       * The printed SPEND RESTRICTION this mana carries, if any — "only to cast a
+       * creature spell". Absent for ordinary mana, which is nearly all of it.
+       *
+       * The LABEL rather than the predicate: the event log and the observation
+       * feed want words, and the machine-readable restriction already lives on
+       * the pool, which is where every payment reads it. Two copies of a
+       * predicate is two things that can disagree.
+       */
+      readonly spendRestriction?: string;
     }
   | { readonly type: 'manaPoolEmptied'; readonly player: PlayerId }
   | {
