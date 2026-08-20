@@ -6,12 +6,13 @@
  *
  * ```bash
  * JB_SOAK_GAMES=2000 npx vitest run packages/sim/src/soak-deep.test.ts
- * npm run sim -- soak --games 2000 --seed 20548      # the same run from the CLI
+ * npm run sim -- soak --games 2000                 # the same run from the CLI
+ *                                                  # (needs `npm run build` first)
  * ```
  *
- * Everything the fast tier asserts, this asserts at scale — plus the two checks
- * that are too expensive to run on every game (a full cloning-vs-in-place replay,
- * and the observation-leak scan), which sample here.
+ * Everything the fast tier asserts, this asserts at scale. The two sampled
+ * checks — a full cloning-vs-in-place replay, and the observation-leak scan —
+ * run on a stride in BOTH tiers, so here they simply land on far more games.
  *
  * ⚠️ **It is sized in GAMES and reports CPU, never wall clock.** Ten agents share
  * this box and the same build has measured 39–87 games/sec inside an hour; a

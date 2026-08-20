@@ -114,7 +114,7 @@ the same game. The soak builds decks that do, from the whole pool, seeded.
 npm test                                                   # the FAST tier runs here, always
 
 JB_SOAK_GAMES=2000 npx vitest run packages/sim/src/soak-deep.test.ts     # the DEEP tier
-npm run sim -- soak --games 2000 --seed 20548                            # the same run, from the CLI
+npm run sim -- soak --games 2000                                         # the same run, from the CLI
 ```
 
 > On a loaded box the Vitest worker pool sometimes times out fetching a module before any test runs
