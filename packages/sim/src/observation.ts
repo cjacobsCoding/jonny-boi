@@ -25,15 +25,84 @@
  *     events cannot be waved through as printed even by a determined typo — the
  *     `'public'` branch of their policy type evaluates to `never`.
  *
- * Neither of those is the whole guarantee: `observation.test.ts` plays real games
- * and scans every delivered observation with `@jonny-boi/protocol`'s
- * `collectInstanceIds` against the cards actually sitting in hands and libraries.
- * The types stop the classes of mistake a type can stop; the scan is what proves
- * it on the game the engine really played.
+ * Neither of those is the whole guarantee: {@link createObservationLeakScanner}
+ * plays real games and checks every delivered observation against the cards
+ * actually sitting in hands and libraries. The types stop the classes of mistake
+ * a type can stop; the scan is what proves it on the game the engine really
+ * played.
+ *
+ * ## ⚠️ WHAT THE GUARANTEE ACTUALLY PROMISES — read this before changing a policy
+ *
+ * The tempting one-liner is "no observation ever names a card that is in a hidden
+ * zone". **That is not true, it has never been true, and stating it would be a
+ * worse failure than the leak it is trying to describe** — because it is
+ * unfalsifiable-looking and quietly wrong, so the next reader trusts it.
+ *
+ * The promise is:
+ *
+ * > **An observation names a card only if that card is on PUBLIC DISPLAY at the
+ * > instant the observation is produced.**
+ *
+ * Equivalently, and this is the form the scan checks: *the feed never reveals the
+ * identity of a card the table has not seen.* It may say that a card everybody
+ * watched is now somewhere hidden; it may never say what an unseen card is.
+ *
+ * Three consequences that look like leaks and are not:
+ *
+ *  - **A buyback spell resolves back into its owner's hand** (Capsize, Elvish
+ *    Fury). `stackResolved` fires while the object is still ON THE STACK — a
+ *    public zone (CR 405.1), which the whole table watched it reach when it was
+ *    cast (CR 601.2a) — and the move to hand is a *separate* `zoneChange`, which
+ *    the policy above anonymises because its destination is hidden. So the id in
+ *    `stackResolved` was public when it was published, and a spectator at a paper
+ *    table knows exactly which card went back to that hand. Dropping it would
+ *    leave a pilot knowing LESS than a spectator, which is the opposite failure:
+ *    it corrupts the "what did they just cast, what mana is represented" reasoning
+ *    the whole feed exists to support (`superhuman-ai-program.md` §35–37).
+ *  - **A card the table watched leave a public zone.** A creature dies (public,
+ *    named), then Gravedigger returns it to a hand. It is in a hidden zone now,
+ *    but its identity was public before, and the move that hid it was itself
+ *    anonymised.
+ *  - **A bought-back spell named by a LATER public event.** Elvish Fury resolves
+ *    back into its owner's hand, and at cleanup the pump it left behind expires
+ *    as `continuousEffectExpired{ sourceInstanceId: <the Elvish Fury> }`. That
+ *    fires many actions later, with the card genuinely sitting in a hand — and it
+ *    still tells a pilot nothing, because the whole table watched that card be
+ *    cast. (This one is live: it is what the widened scan found first.)
+ *
+ * So the scan does not ask "is this card hidden right now", nor even "was it
+ * hidden before the window as well as after" — that second rule is a one-window
+ * approximation, and the Elvish Fury above walks straight through it. It tracks
+ * the ids that have **never once been on public display** and reports only those.
+ * An id leaves that set the first time it is seen anywhere but a hand or a
+ * library.
+ *
+ * There is deliberately **no exemption list** — no "…except `stackResolved`,
+ * which is allowed to name a bought-back spell". One was written, and measuring
+ * it showed it never fired: a spell is on the STACK, which is not a hidden zone,
+ * for at least one whole decision between being cast and resolving, so the rule
+ * above has already recorded it as seen by the time anything names it in a hand.
+ * An exemption that never fires is worse than none — it reads like the thing
+ * keeping the scan honest while asserting nothing.
+ *
+ * That is more permissive than "hidden before and after", and the difference is
+ * exactly the cards the table has already seen. It is not more permissive about
+ * the thing that matters: an id that has only ever sat in a hand or a library —
+ * every card whose identity would read the opponent's decklist — is still
+ * reported the instant anything names it. The CR 514.1 cleanup-discard leak that
+ * started all this is caught by this rule unchanged, and there is a test that
+ * reintroduces it and watches this scan fail.
+ *
+ * ## And "which cards does this name?" is not a key-name guess
+ * The scan asks core's {@link instanceIdsNamedBy}, which is driven by a mapped
+ * type over every field of every `GameEvent` (`packages/core/src/instance-ids.ts`).
+ * It used to collect keys named exactly `instanceId`, which is how a
+ * `choiceAsked.sourceInstanceId` aimed at a card in a player's HAND travelled to
+ * every pilot with this file's tests green.
  */
 
 import type { GameEvent, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
-import { PLAYER_IDS } from '@jonny-boi/core';
+import { instanceIdsNamedBy, PLAYER_IDS } from '@jonny-boi/core';
 import type { GameObserver, Observation } from '@jonny-boi/ai';
 import { isPublicZone } from '@jonny-boi/ai';
 
@@ -380,6 +449,113 @@ export function hiddenInstanceIds(state: GameState): Set<InstanceId> {
     for (const card of player.library) hidden.add(card.instanceId);
   }
   return hidden;
+}
+
+// ---------------------------------------------------------------------------
+// THE LEAK SCAN. One implementation, used by `observation.test.ts` and by the
+// full-pool soak — because two copies of an anti-cheat check is two checks that
+// can disagree, and the weaker one is the one that will be believed.
+// ---------------------------------------------------------------------------
+
+/** Field names an observation must never carry, whatever the event, at any depth. */
+export const FORBIDDEN_OBSERVATION_KEYS: readonly string[] = ['seed', 'prompt', 'answer', 'summary'];
+
+/** Every key present anywhere in a value — the deep half of the forbidden-field check. */
+function collectKeys(value: unknown, into: Set<string>, seen: Set<object>): Set<string> {
+  if (value === null || typeof value !== 'object') return into;
+  if (seen.has(value)) return into;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const item of value) collectKeys(item, into, seen);
+    return into;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    into.add(key);
+    collectKeys(child, into, seen);
+  }
+  return into;
+}
+
+/**
+ * Buffers observations and reports the ones that named a card nobody had seen.
+ *
+ * ⚠️ **THE TIMING IS THE WHOLE TEST, and it is easy to get backwards.**
+ * "Is this card hidden?" must be asked of the state the action LANDED IN, not the
+ * one it started from. A land played from hand is named by `landPlayed` and by a
+ * `zoneChange` into the battlefield — both entirely public — and it was in a hand
+ * a microsecond earlier, so scanning against the PRE-action state reports every
+ * land drop in the game as a leak. (It did, the first time this was written.) The
+ * equal and opposite mistake is scanning at the END of the game: a creature
+ * bounced to hand later would retro-actively turn an honest `spellCast` into one.
+ *
+ * So observations are buffered as they arrive and flushed at the next decision,
+ * whose view is exactly the post-action state — and an id counts as a leak only
+ * if it was ALSO hidden before that window (see the guarantee at the top of this
+ * file). The tail (the final action of a game, after which nobody is asked to
+ * decide) is flushed against the last state seen, which is the closest truth
+ * available and cannot mask a leak a later state would have revealed.
+ */
+export interface ObservationLeakScanner {
+  /** Buffer one delivered observation. */
+  observe(observation: Observation): void;
+  /**
+   * Check everything buffered against `state` — the state the last action landed
+   * in — and start a new window. `null` means "no state available" (the tail of a
+   * game), which scans against nothing hidden rather than against stale truth.
+   */
+  flush(state: GameState | null): void;
+  /** How many observations have been scanned. A green run must have looked at something. */
+  readonly scanned: number;
+}
+
+export function createObservationLeakScanner(report: (detail: string) => void): ObservationLeakScanner {
+  const pending: Observation[] = [];
+  /*
+   * THE IDS THE TABLE HAS NEVER SEEN — the forbidden set, and the whole of the
+   * guarantee's memory.
+   *
+   * `null` until the first flush, when it is seeded with everything sitting in a
+   * hand or a library. From then on it only ever SHRINKS: an id that is not in a
+   * hidden zone at some flush has been on display, and an id an emission-public
+   * observation names as its subject was on the stack when it was named. Once a
+   * card has been seen, naming it again reveals nothing — see the guarantee at
+   * the top of this file for why that is the honest rule and "is it hidden now"
+   * is not.
+   */
+  let neverSeen: Set<InstanceId> | null = null;
+  let scanned = 0;
+  return {
+    get scanned() {
+      return scanned;
+    },
+    observe(observation) {
+      pending.push(observation);
+    },
+    flush(state) {
+      const hidden = state ? hiddenInstanceIds(state) : new Set<InstanceId>();
+      if (neverSeen === null) neverSeen = new Set(hidden);
+      // Anything no longer hidden has been on display since the last flush —
+      // including the card just cast out of the hand, which is what stops every
+      // land drop and every spell in the game reading as a leak.
+      else for (const id of neverSeen) if (!hidden.has(id)) neverSeen.delete(id);
+
+      for (const observation of pending) {
+        scanned++;
+        const keys = collectKeys(observation, new Set<string>(), new Set<object>());
+        for (const key of FORBIDDEN_OBSERVATION_KEYS) {
+          if (keys.has(key)) report(`observation ${observation.type} carries a forbidden field "${key}"`);
+        }
+        // Driven by core's field table, so `sourceInstanceId`, `attackTargets`'
+        // KEYS and an answer's `instanceIds` are as visible as `instanceId`.
+        for (const id of instanceIdsNamedBy(observation)) {
+          if (neverSeen.has(id)) {
+            report(`observation ${observation.type} names #${id}, a card the table has never seen`);
+          }
+        }
+      }
+      pending.length = 0;
+    },
+  };
 }
 
 /**

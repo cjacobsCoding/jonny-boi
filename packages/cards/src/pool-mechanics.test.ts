@@ -141,7 +141,7 @@ const REPRESENTED: ReadonlyArray<{
     mechanic: 'replacement effects (CR 614/615 — counter and damage multipliers)',
     present: (c) => (c as { replacements?: readonly unknown[] }).replacements !== undefined,
   },
-  // --- §3.30: the two copies that are NOT CARDS -----------------------------
+  // --- §3.31: the two copies that are NOT CARDS -----------------------------
   // Deliberately separate from the as-enters copy above, which the pool has had
   // since §3.24: a Clone proves nothing about a Reverberate. The predicates name
   // the PRIMITIVE, which is what the compiler emits and what the soak witnesses.

@@ -1024,7 +1024,7 @@
       ]
     },
     {
-      "role": "copies that are not cards (DESIGN §3.30) — a copy of a SPELL on the stack and a TOKEN COPY of a permanent. The blocked names are kept deliberately: they are the coverage probe for what the family still needs (a delayed triggered ability, an ABILITY on the stack, a token that enters tapped, \"copy THAT spell\").",
+      "role": "copies that are not cards (DESIGN §3.31) — a copy of a SPELL on the stack and a TOKEN COPY of a permanent. The blocked names are kept deliberately: they are the coverage probe for what the family still needs (a delayed triggered ability, an ABILITY on the stack, a token that enters tapped, \"copy THAT spell\").",
       "names": [
         "Reverberate",
         "Fork",

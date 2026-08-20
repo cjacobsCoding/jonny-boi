@@ -17,7 +17,13 @@
 
 import { describe, expect, it } from 'vitest';
 import type { CardDefinition, GameEvent, GameState, InstanceId, PlayerId } from './index.js';
-import { applyAction, createEffectRegistry, createGame, spellLeaveDestination } from './index.js';
+import {
+  applyAction,
+  createEffectRegistry,
+  createGame,
+  instanceIdsNamedBy,
+  spellLeaveDestination,
+} from './index.js';
 import {
   makeSpellCopy,
   spellCopyAimAt,
@@ -454,5 +460,40 @@ describe('driven through the real pipeline: the copy resolves and leaves NOTHING
     // The copy really RESOLVED rather than being quietly dropped: the bolt was
     // dealt twice, so the 2/2 is dead.
     expect(after.battlefield.some((c) => c.instanceId === victim.instanceId)).toBe(false);
+  });
+});
+
+describe('the copy events name their objects to the leak scanner', () => {
+  /*
+   * `EVENT_ID_FIELDS` is a per-EVENT table, and its own source scan checks only
+   * that a FIELD NAME is classified as an id somewhere — so `spellCopied` could
+   * be declared all-'none' and that scan would still pass, because `instanceId`
+   * and `copiedInstanceId` are classified by `becameCopy` and `tokenCreated`.
+   * These two cases are what make this branch’s entries load-bearing: they ask
+   * the real reader, per event, for the ids it must be able to see.
+   */
+  it('spellCopied names BOTH the copy and the spell it was made from', () => {
+    expect(
+      instanceIdsNamedBy({
+        type: 'spellCopied',
+        instanceId: 41,
+        copiedInstanceId: 42,
+        controller: 'A',
+        name: 'Test Bolt',
+      }),
+    ).toEqual(new Set([41, 42]));
+  });
+
+  it('tokenCopyCreated names the token and the permanent it copied', () => {
+    expect(
+      instanceIdsNamedBy({
+        type: 'tokenCopyCreated',
+        instanceId: 51,
+        copiedInstanceId: 52,
+        controller: 'B',
+        name: 'Test Bear',
+      }),
+    ).toEqual(new Set([51, 52]));
+    expect(instanceIdsNamedBy({ type: 'spellCopyCeasedToExist', instanceId: 61, name: 'x' })).toEqual(new Set([61]));
   });
 });
