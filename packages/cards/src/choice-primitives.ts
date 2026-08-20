@@ -327,8 +327,11 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
   });
   if (!chosen) return; // parked
 
-  const stepFor = (index: number): SearchStep =>
-    route ? (route[index] as SearchStep) : { destination: plainDestination(ctx), tapped: boolParam(ctx, 'tapped', false) };
+  // The single-destination form is ONE step reused for every found card, so both
+  // shapes are read through the same accessor and there is no second opinion
+  // about where a card goes or whether it arrives tapped.
+  const plainStep: SearchStep = { destination: plainDestination(ctx), tapped: boolParam(ctx, 'tapped', false) };
+  const stepFor = (index: number): SearchStep => (route ? (route[index] as SearchStep) : plainStep);
 
   // A fetched SHOCKLAND asks its "you may pay 2 life" here, mid-resolution,
   // BEFORE anything moves (the ask-first contract): the engine has already
@@ -337,20 +340,18 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
   const shockPaid = new Map<InstanceId, boolean>();
   for (let index = 0; index < chosen.length; index++) {
     if (stepFor(index).destination !== 'battlefield') continue;
-    {
-      const id = chosen[index] as InstanceId;
-      const found = ctx.state.players[who].library.find((c) => c.instanceId === id);
-      const shockCost = found?.def.entersTappedUnlessLifePaid;
-      if (shockCost === undefined) continue;
-      const paid = ctx.payLifeOrDecline({
-        chooser: who,
-        amount: shockCost,
-        prompt: `Pay ${shockCost} life, or ${found!.def.name} enters tapped`,
-        valence: 'neutral',
-      });
-      if (paid === undefined) return; // parked — nothing has moved yet
-      shockPaid.set(id, paid);
-    }
+    const id = chosen[index] as InstanceId;
+    const found = ctx.state.players[who].library.find((c) => c.instanceId === id);
+    const shockCost = found?.def.entersTappedUnlessLifePaid;
+    if (found === undefined || shockCost === undefined) continue;
+    const paid = ctx.payLifeOrDecline({
+      chooser: who,
+      amount: shockCost,
+      prompt: `Pay ${shockCost} life, or ${found.def.name} enters tapped`,
+      valence: 'neutral',
+    });
+    if (paid === undefined) return; // parked — nothing has moved yet
+    shockPaid.set(id, paid);
   }
 
   for (let index = 0; index < chosen.length; index++) {
