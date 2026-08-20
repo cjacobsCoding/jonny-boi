@@ -616,7 +616,9 @@ export class GameSession {
             a.instanceId === card.instanceId &&
             a.face === 'back',
         );
-        const withTap = this.canAffordWithTaps(player, halfCost);
+        // The BACK FACE is the spell being cast, so it is the object any
+        // restricted mana is asked about.
+        const withTap = this.canAffordWithTaps(player, halfCost, half, 'cast');
         if (nowCastable || withTap) {
           options.push({
             instanceId: card.instanceId,
@@ -719,7 +721,7 @@ export class GameSession {
       const nowCastable = legal.some(
         (a) => a.kind === 'castSpell' && a.fromZone === 'exile' && a.instanceId === card.instanceId,
       );
-      const withTap = this.canAffordWithTaps(player, cost);
+      const withTap = this.canAffordWithTaps(player, cost, castDef, 'cast');
       if (!nowCastable && !withTap) continue;
       options.push({
         instanceId: card.instanceId,
