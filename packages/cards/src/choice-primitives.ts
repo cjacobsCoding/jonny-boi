@@ -108,6 +108,12 @@ function playerParam(ctx: EffectContext, key: string, fallback: string): PlayerI
       return firstPlayerTarget(ctx) ?? otherPlayer(ctx.controller);
     case 'targetController':
       return firstTargetInstance(ctx)?.controller;
+    case 'triggering':
+      // The player the TRIGGER's event was about — the printed "that player".
+      // Same word, same meaning as `playersForParam`'s `'triggering'`; the two
+      // vocabularies overlap deliberately so one printed phrase compiles to one
+      // param value whichever kind of primitive reads it.
+      return ctx.triggeringPlayer ?? ctx.controller;
     default:
       return ctx.controller;
   }
@@ -145,6 +151,61 @@ export const putFromHandOnTop: EffectPrimitive = (ctx) => {
   for (let i = chosen.length - 1; i >= 0; i--) {
     const id = chosen[i] as InstanceId;
     moveOwnedCard(ctx, who, id, 'hand', 'library', 'top');
+  }
+};
+
+/**
+ * `handToBottomThenDraw` — a player puts **the cards in their hand** on the
+ * bottom of their library **in any order**, then draws that many cards
+ * (Teferi's Puzzle Box).
+ *
+ * `params.who` picks the player through the shared vocabulary above, so
+ * `'triggering'` is the printed "that player" of an "at the beginning of each
+ * player's draw step" trigger.
+ *
+ * Three things this gets exactly right rather than nearly right:
+ *  - **"that many"** is the hand size AT THE MOMENT the cards leave, so an
+ *    empty hand draws nothing and a seven-card hand draws seven. Counted before
+ *    the move, never re-read after it.
+ *  - **the order is the player's**, and it is asked as one ordered selection of
+ *    the whole hand — first-chosen goes deepest, since the cards are bottomed in
+ *    the chosen order. Skipped entirely for a hand of fewer than two cards,
+ *    where there is no order to choose and a question would be an empty prompt.
+ *  - **valence `'loss'`**: the hand is being given up. The pilot answering is
+ *    not choosing WHETHER, only the order, but the valence is what tells it
+ *    these are cards leaving rather than cards arriving.
+ */
+export const handToBottomThenDraw: EffectPrimitive = (ctx) => {
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const hand = ctx.state.players[who].hand;
+  const handSize = hand.length;
+  if (handSize === 0) return;
+  let order: readonly InstanceId[];
+  if (handSize === 1) {
+    order = [hand[0]!.instanceId];
+  } else {
+    const chosen = ctx.chooseCards({
+      chooser: who,
+      prompt: 'Put the cards in your hand on the bottom of your library, in any order',
+      candidates: collectCardOptions(ctx.state, 'hand', { controller: who }),
+      min: handSize,
+      max: handSize,
+      ordered: true,
+      valence: 'loss',
+      fromZone: 'hand',
+    });
+    if (!chosen) return; // parked — nothing mutated, this ref will be re-run
+    order = chosen;
+  }
+  for (const id of order) moveOwnedCard(ctx, who, id, 'hand', 'library', 'bottom');
+  const library = ctx.state.players[who].library;
+  for (let i = 0; i < handSize; i++) {
+    const top = library.shift();
+    if (!top) break; // decked — core's SBA answers for it, this never fabricates a loss
+    top.zone = 'hand';
+    ctx.state.players[who].hand.push(top);
+    ctx.emit({ type: 'drawCard', player: who, instanceId: top.instanceId });
   }
 };
 
@@ -952,6 +1013,7 @@ export const pileSplitSacrifice: EffectPrimitive = (ctx) => {
 
 export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   putFromHandOnTop,
+  handToBottomThenDraw,
   reorderTopOfLibrary,
   mayShuffleLibrary,
   searchLibrary,

@@ -223,6 +223,13 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   actionRejected: 'public',
   counterAdded: 'public',
   triggerPutOnStack: 'public',
+  /*
+   * A trigger removed from the stack because its intervening "if" lapsed. Public
+   * for the same reason the push is: everyone watched the ability go on the
+   * stack and everyone watched it do nothing, and its payload names only the
+   * source, its controller and the printed label — all of it already on the table.
+   */
+  triggerFizzled: 'public',
   // Both halves of aiming a trigger happen face-up on the table: everyone sees
   // what the ability was pointed at, and everyone sees one leave the stack for
   // want of a target.

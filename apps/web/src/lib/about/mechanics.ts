@@ -347,10 +347,22 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'primitive', id: 'mayEffects' },
       },
       {
-        title: 'Step-beginning triggers',
+        title: 'Step-beginning triggers, in every printed scope',
         detail:
-          'Upkeep, draw step, first main phase and end step all carry triggers ("At the beginning of your end step, untap all lands you control"). "Each player\'s <step>" still reports: the engine cannot yet aim a body at the player whose step it is, and firing it for the source\'s controller would be a different card.',
+          'Upkeep, draw step, first main phase, end step and combat all carry triggers, and so do the shared forms — "each player\'s", "each opponent\'s" and the bare "each". The player whose step it is rides the ability into its resolution, so a body can say "that player": Howling Mine, Kami of the Crescent Moon, Dictate of Kruphix, Font of Mythos and Teferi\'s Puzzle Box all draw for the RIGHT seat instead of for their controller.',
         witness: { kind: 'rule', id: 'trigger-step-begins' },
+      },
+      {
+        title: 'The intervening "if"',
+        detail:
+          'A trigger\'s printed condition ("…, if this artifact is untapped, …", "…, if you control six or more lands, …") is checked at BOTH moments the rules require: a false condition stops the ability going on the stack at all, and one that lapses before it resolves removes it doing nothing. A power bound reads EFFECTIVE power, so counters and anthems count. A condition the compiler cannot read makes its card report — never a body compiled as though the condition were not printed.',
+        witness: { kind: 'oracle', text: 'At the beginning of your upkeep, if you control six or more lands, create a 5/5 red Dragon creature token with flying.', as: 'creature' },
+      },
+      {
+        title: '"That player" / "each player" bodies',
+        detail:
+          'A trigger body can happen to somebody other than its controller through one shared vocabulary — "each player draws a card and loses 1 life" (Stormfist Crusader), "each opponent loses 1 life", and the "that player" forms a scoped trigger points at. "Whenever a player draws a card" watches every draw in the game, which is what makes Spiteful Visions and Scrawling Crawler real cards.',
+        witness: { kind: 'rule', id: 'trigger-draws-card' },
       },
       {
         title: 'Board-watching triggers',

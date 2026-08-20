@@ -1299,6 +1299,12 @@ Still open, roughly by how often they block a real decklist:
   *damage divided among targets* ("deals X damage divided as you choose among any number of
   targets" — needs a division the targeting layer cannot express: one spell, several targets, each
   with its own share).
+- ✅ *the "At the beginning of…" family* — **§3.21**. The audit's biggest template cluster, and its
+  blocker was an engine seam rather than a rule table: a trigger's resolution did not carry the
+  player its event was about, so every printed "that player" had nothing to point at and every
+  "each player's / each opponent's" scope reported. `EffectContext.triggeringPlayer` closes it, and
+  the printed **intervening "if"** (CR 603.4, checked at both of the moments the rules check it)
+  landed with it. 408 → 428 playable. What still reports is named in §3.21.
 - ✅ *counters-matter templates* — the census (docs/plans/mechanic-completion-plan.md §3c) measured
   **117 counters templates blocking 153 cards while the counters machinery was already complete**:
   `CardInstance.counters`, the layer-7d stat pipeline, and the `addCounters` primitive all worked;
@@ -1809,6 +1815,84 @@ Two more defects surfaced doing it — the generator serialized any string too l
 character-indexed object (nothing had printed a label that long until the fetchlands compiled), and
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
+
+
+### 3.21 The triggering player + the intervening "if" — the "At the beginning of…" family — ✅ done
+The biggest template cluster in the coverage audit (~65 corpus cards) had ONE thing standing in front
+of it, and it was not a template: **a trigger's resolution did not know which player set it off.**
+
+`who: 'any'` fires an ability on both players' turns, but the ability resolves under its SOURCE's
+controller — so "at the beginning of **each player's** draw step, **that player** draws an additional
+card" would have drawn for Howling Mine's own controller on every turn, which is a strictly different
+(and strictly better) card. The compiler was right to refuse it, and `trigger-step-begins` carried an
+explicit `if (who !== 'you') return null;` saying so.
+
+**The fix follows the seam cast-time choices already use, rather than inventing one.** A chosen `{X}`
+rides `SpellStackObject → ResolutionFrame → EffectContext` so "deals X damage" can read it after the
+spell has left the stack. The triggering player now rides exactly the same three hops:
+
+    matchTriggers → PendingTrigger.triggeringPlayer      (answered from the EVENT, not the source)
+                  → TriggeredStackObject.triggeringPlayer (survives the clone at every action boundary)
+                  → ResolutionFrame.triggeringPlayer      (the resolution outlives the stack object)
+                  → EffectContext.triggeringPlayer        (what a body's "that player" reads)
+
+`triggeringPlayerFor` is the single place the answer is decided — the active player for a step, the
+drawer for a draw, the life-gainer for a life gain, the caster for a cast, the permanent's controller
+for an arrival or a death, and `undefined` for the events that are about no player at all. It is
+called only for triggers that actually FIRED, so the per-event scan pays nothing for it.
+
+`packages/cards` reads it through **one shared "whichPlayer" vocabulary** (`playersForParam`):
+`'controller'` · `'opponent'` · `'targetPlayer'` · `'triggering'` · `'each'` (both seats, active player
+first — APNAP, fixed here so the effect is reproducible from a seed rather than dependent on which
+seat the source sits in). `drawCards`, `loseLife` and `dealDamage` all
+speak it, so "each player", "that player" and "each opponent" mean one thing each wherever printed.
+
+**The printed intervening "if" landed with it** (`packages/core/src/intervening.ts`), because half the
+family prints one. It is part of the trigger CONDITION, not the body, because CR 603.4 checks it
+**twice**: a false condition stops the ability reaching the stack at all (nobody may respond to it),
+and one that has lapsed by resolution removes it doing nothing (`triggerFizzled`). Compiling it as an
+`if` wrapper inside the effects would have implemented only the second check. Two condition kinds
+ship — `sourceUntapped` (Howling Mine) and `controlCount` (a `CardFilter` plus a count bound, `max: 0`
+being the printed word "no") — and a `minPower` bound is read as **EFFECTIVE** power, since counters
+and anthems are what make a creature "power 4 or greater" on the board in front of the player. A
+condition outside that closed vocabulary makes its card REPORT: `splitInterveningIf` distinguishes "no
+clause" from "a clause I cannot read", and Felidar Sovereign's "if you have 40 or more life, you win
+the game" must never become "you win the game".
+
+**Also shipped:** the `drawsCard` trigger event ("whenever a player / an opponent draws a card"), the
+scope table grew `each opponent's` and the bare `each`, `combat` joined the step table, and the
+redundant `trigger-upkeep` rule was deleted — `trigger-step-begins` subsumes it and also handles the
+"you may" wrapper and the intervening "if", which `trigger-upkeep` silently could not.
+
+📊 **Measured on the cached 2100-card corpus, same file, before and after: 408 → 428 playable
+(19.4% → 20.4%), +20 cards, 0 regressions.** The twenty: Howling Mine, Kami of the Crescent Moon,
+Dictate of Kruphix, Font of Mythos, Teferi's Puzzle Box, Spiteful Visions, Scrawling Crawler,
+Stormfist Crusader, Dragonmaster Outcast, Colossal Majesty, Underworld Dreams, Fate Unraveler,
+Temple Bell, Mikokoro Center of the Sea, Forced Fruition, Corpse Knight, Kambal Consul of Allocation,
+Marauding Blight-Priest, Poison-Tip Archer, Elas il-Kor. Ten of them were never in the audit's
+"At the beginning of…" buckets at all — the draw watcher and the "each player draws" body reach them.
+
+⚡ **Rule 7:** the gauntlet at seed 99 is byte-identical to the same-box `origin/main`, and the added
+work is off the hot path by construction — `triggeringPlayerFor` runs only for a trigger that matched,
+the intervening check only for a condition that exists, and both new stack-object fields are copied
+CONDITIONALLY in `internal/clone.ts` so an ordinary trigger clones byte-for-byte as it always did.
+
+⛔ **Reported by name rather than approximated** (each is a different system, not a missing rule):
+"you win / you lose the game"; a DELAYED trigger ("at the beginning of your NEXT upkeep" — Pact of
+Negation); blink (exile then return — Conjurer's Closet, Soulherder, Thassa, Teleportation Circle,
+Y'shtola); token COPIES of a permanent (Extravagant Replication, Mechanized Production); the city's
+blessing / ascend; amass; discover; the Ring; "no maximum hand size"; a spell-cost increase or
+decrease static (God-Pharaoh's Statue, The Immortal Sun); "players can't activate loyalty abilities";
+DOUBLING power and toughness (Unnatural Growth, Zopandrel); "life lost this turn" (Wound Reflection);
+and a count derived from a REVEALED card's mana value (Dark Confidant, Twilight Prophet).
+
+⚠️ **One pre-existing infidelity this work ran into and did NOT fix, named so it is not rediscovered:
+a created token has no COLOUR.** `makeToken` builds a `CardDefinition` with no cost, and
+`colorsOfDefinition` derives colour from cost pips — so "a 1/1 **black** Faerie Rogue token" and "a
+5/5 **red** Dragon token" both enter colourless, invisible to a "black creatures you control" anthem
+or a protection-from-red. It predates this branch (every token card in the pool has it) and closing it
+needs a `colors` field on `CardDefinition` plus the colour reader honouring it — a small system, and
+one that belongs to whoever owns `makeToken`, not to a trigger branch.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

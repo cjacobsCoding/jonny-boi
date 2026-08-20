@@ -223,8 +223,19 @@ export type {
   TriggerWho,
   PendingTrigger,
   TriggerSource,
+  TriggerSubject,
 } from './triggers.js';
-export { conditionMatches, matchTriggers, orderPendingTriggers } from './triggers.js';
+export {
+  conditionMatches,
+  matchTriggers,
+  orderPendingTriggers,
+  triggeringPlayerFor,
+} from './triggers.js';
+
+// The printed intervening "if" (CR 603.4) — declared as trigger-condition DATA
+// and evaluated by one shared reader at both of the moments the rules check it.
+export type { InterveningIf } from './intervening.js';
+export { interveningIfHolds } from './intervening.js';
 
 // Continuous-effects seam (DESIGN §3.9): the ONE layering path. `indexContinuous`
 // aggregates both lifetimes — "until end of turn" P/T buffs / keyword grants AND the

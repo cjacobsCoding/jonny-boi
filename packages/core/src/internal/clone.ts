@@ -126,6 +126,17 @@ function cloneStackObject(o: StackObject): StackObject {
       // trigger's "still needs aiming" marker on the clone `applyAction` makes at
       // every action boundary, silently resolving it at nothing.
       ...(o.awaitingTargets !== undefined ? { awaitingTargets: o.awaitingTargets } : {}),
+      // Same field-by-field stakes as `awaitingTargets`: dropping this would
+      // lose the TRIGGERING PLAYER at the very next action boundary, and every
+      // "that player draws a card" body would silently fall back to the source's
+      // controller — Howling Mine drawing its own controller a card on both
+      // turns. `clone.test.ts` pins it.
+      ...(o.triggeringPlayer !== undefined ? { triggeringPlayer: o.triggeringPlayer } : {}),
+      // Shared by reference on purpose: an `InterveningIf` is frozen compile-time
+      // data hanging off an immutable `CardDefinition`, exactly like `effects`'
+      // primitive ids — nothing mutates it. Dropping it would let a trigger whose
+      // condition had lapsed resolve anyway.
+      ...(o.intervening !== undefined ? { intervening: o.intervening } : {}),
     };
   }
   return {

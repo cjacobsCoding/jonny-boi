@@ -272,6 +272,23 @@ export type GameEvent =
     }
   | {
       /**
+       * A triggered ability was removed from the stack WITHOUT resolving,
+       * because its printed intervening "if" had stopped being true by the time
+       * it would have resolved (CR 603.4's second check).
+       *
+       * A distinct event rather than silence: the ability really did go on the
+       * stack and really was responded to, so a log that showed the push and
+       * then nothing would read as an engine bug. Public — every player watched
+       * it happen.
+       */
+      readonly type: 'triggerFizzled';
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly label: string;
+      readonly reason: string;
+    }
+  | {
+      /**
        * A triggered ability chose what it points at, as it went on the stack
        * (CR 603.3d). Separate from `triggerPutOnStack` because they are separate
        * moments — the ability is on the stack first, then aimed — and a replay

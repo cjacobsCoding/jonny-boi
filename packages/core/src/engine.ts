@@ -39,6 +39,7 @@ import {
   permanentTargetOption,
   validateChoiceAnswer,
 } from './choices.js';
+import { interveningIfHolds } from './intervening.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
@@ -592,6 +593,21 @@ function resolveTriggeredAbility(
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
 ): void {
+  // CR 603.4's SECOND check: a trigger whose intervening "if" has stopped
+  // holding is removed from the stack and does nothing. Checked here, before any
+  // effect runs, against the same evaluator the collector used when the ability
+  // triggered — one condition, one reader, no way for the two to disagree.
+  if (!interveningIfHolds(state, obj.intervening, obj.sourceInstanceId, obj.controller, obj.triggeringPlayer)) {
+    emit({
+      type: 'triggerFizzled',
+      sourceInstanceId: obj.sourceInstanceId,
+      controller: obj.controller,
+      label: obj.label,
+      reason: 'its intervening "if" condition is no longer true',
+    });
+    checkStateBasedActions(state, emit);
+    return;
+  }
   runResolution(
     state,
     {
@@ -604,6 +620,10 @@ function resolveTriggeredAbility(
       askCount: 0,
       sourceInstanceId: obj.sourceInstanceId,
       label: obj.label,
+      // The triggering player rides the frame from here on, for the same reason
+      // a cast's chosen X does: the resolution outlives the stack object, and
+      // "that player draws an additional card" is read during it.
+      ...(obj.triggeringPlayer !== undefined ? { triggeringPlayer: obj.triggeringPlayer } : {}),
     },
     registry,
     emit,
@@ -672,6 +692,7 @@ function runResolution(
         xValue: frame.xValue,
         kicked: frame.kicked,
         kickCount: frame.kickCount,
+        triggeringPlayer: frame.triggeringPlayer,
       },
       emit,
       refTargets,

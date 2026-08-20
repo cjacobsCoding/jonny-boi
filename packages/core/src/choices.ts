@@ -1283,4 +1283,11 @@ export interface ResolutionFrame {
   /** The ability's source permanent + label (trigger frames only). */
   sourceInstanceId?: InstanceId;
   label?: string;
+  /**
+   * The player the trigger's event was about — carried off the stack object for
+   * the same reason as {@link xValue}: the resolution outlives the stack object,
+   * and "that player draws an additional card" is read during it. Absent for
+   * spells and for triggers whose event names no player.
+   */
+  triggeringPlayer?: PlayerId;
 }
