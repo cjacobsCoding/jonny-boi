@@ -115,6 +115,7 @@ throughput (games/sec) from regressing.
 | feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
+| test/full-pool-soak | worker | packages/sim (NEW soak.ts + soak-config.ts + soak-decks.ts + soak.test.ts + soak-deep.test.ts; cli.ts `soak` command; index.ts exports), packages/ai (heuristic.ts — 4 small hunks + 1 import; indestructible-blocking-pilot.test.ts +3 cases; flashback-pilot.test.ts +3 cases), packages/core (engine.ts — ONE `checkStateBasedActions` call in `applyCastSpell`; flashback.test.ts +3 cases; sba.test.ts +1 case), DESIGN §3.24, TESTING.md, COORDINATION. **No pool change, no meta-deck change, no compiler rule.** The two core edits are both state-based-action passes in `applyCastSpell`; they emit nothing unless something actually dies, and no gauntlet deck contains a card that can make one fire (measured — see the note below), so every recorded baseline is unmoved. | 🚧 PUSHED, not merged |
 | feat/step-trigger-templates | worker | packages/core (NEW intervening.ts + step-triggers.test.ts; triggers/state/choices/effects/events/engine/index + internal triggers-runtime & clone), packages/cards (compile/rules.ts, primitives, choice-primitives, effect-helpers, index + NEW compile/step-trigger-templates.test.ts + 2 flipped tests), packages/sim (paired-arms-config +1, observation +1), apps/web/src/lib/about/mechanics.ts (3 witnesses), DESIGN §3.21 | 🚧 PUSHED, not merged |
 | feat/split-cards | worker | packages/core (card.ts/card-grants.ts/actions.ts/state.ts/engine.ts + internal/sba.ts + index.ts + NEW split-cards.test.ts + 1 test literal in alternative-costs.test.ts), packages/cards (compile/compile.ts + compile/index.ts + index.ts + NEW compile/split-cards.test.ts + 3 stale test claims + 1 pool-mechanics reason), packages/data-tools (normalize.ts + types.ts - `layout` capture), packages/ai (heuristic.ts + NEW split-cards-pilot.test.ts), apps/web (lib/play/session.ts, components/play/PlayBoard.tsx, lib/about/mechanics.ts + NEW lib/play/split-cards-session.test.ts), DESIGN §3.21 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 
@@ -305,6 +306,164 @@ _Append dated notes here; keep them short. Newest at top._
   `test/interaction-matrix` (pairwise system interactions): this is the INDEX, one named rule per
   test, and where an existing per-feature suite already affirms a rule properly the manifest CITES
   it rather than copying it (40 of the 147 sections).
+- 2026-08-20 worker: `test/full-pool-soak` 🚧 PUSHED — **a soak harness that plays the WHOLE
+  357-card pool against itself and asserts invariants, plus the defects it found.** Twelve systems
+  shipped in three days and every one was tested in isolation by the agent that built it; the eight
+  gauntlet decks never put a walker, an Equipment, a protection creature, a modal spell and a
+  flashback spell in one game. `packages/sim/src/soak*.ts` builds randomised-but-legal decks from the
+  whole pool that do. DESIGN §3.24 and TESTING.md have the full write-up.
+
+  ⚠️ **Numbering note for the integrator: `origin/main` currently has THREE sections numbered
+  §3.21** (step-triggers, split-cards, as-enters) — they were merged without renumbering. I took
+  §3.24 for the soak rather than unilaterally renumbering three other agents' sections, since their
+  in-flight COORDINATION rows all point at "§3.21". They want to become §3.21/§3.22/§3.23.
+
+  **Run it:** the FAST tier is in `npm test` already (≈104 games, every invariant on every decision,
+  every pool mechanic required to FIRE). Deep: `npm run sim -- soak --games 2000`, or
+  `JB_SOAK_GAMES=2000 npx vitest run packages/sim/src/soak-deep.test.ts`. Every failure prints the
+  seed AND both decklists.
+
+  ✅ **FOUR REAL DEFECTS, ALL FIXED HERE. Two are in `packages/ai/src/heuristic.ts` and two are in
+  `packages/core/src/engine.ts`, so read this if you own either file.**
+
+  **(0) CORE — state-based actions did not run when a spell was CAST, only when one RESOLVED.**
+  The caster receives priority the instant a spell is announced, which is an SBA check point
+  (CR 704.3) — and it matters because **casting MOVES A CARD BETWEEN ZONES, and
+  characteristic-defining P/T reads zones.** A flashback cast takes the last instant out of a
+  graveyard, every Tarmogoyf on the board loses a point of toughness, and one already shrunk by a
+  Weakness (-2/-1) is at 0 and must die. The engine instead handed priority back to a player looking
+  at a creature that should already be in a graveyard — targetable, spendable, blockable. Found at
+  turn 8 of soak seed 1727114651: **once in 5,064 games and 3.2 million actions**, which is the whole
+  argument for a soak. One guarded `checkStateBasedActions` at the end of `applyCastSpell` (skipped
+  while a cast-time CHOICE stands — the announcement is not finished then, CR 601.2, and the answer
+  path runs the pass itself). It emits nothing when nothing dies, so **no event log and no paired-arm
+  comparison moves.** New `describe` in `packages/core/src/sba.test.ts`; it fails without the fix.
+
+  **(1) CORE — paying a flashback LIFE cost did not end the game.** `applyCastSpell` charges
+  "Flashback—{1}{B}, Pay 3 life" (Crippling Fatigue) and then never ran the state-based-action pass,
+  so a caster who paid itself to exactly 0 **kept holding priority and casting spells**. The soak found
+  one at turn 20 of seed 3856639351 — once in 4,000 games, which is why nothing else has seen it.
+  Paying yourself to 0 is legal (CR 118.4); staying in the game afterwards is not (CR 704.3 / 704.5a).
+  The fix is **one `checkStateBasedActions` call**, and it is the THIRD copy of a rule the same file
+  already applies twice: `applyTapForMana` does it for a pain land's rider, and the shockland pay-life
+  choice does it too. Three new cases in `packages/core/src/flashback.test.ts`; the one that matters
+  fails without the fix. **My engine.ts diff is a single guarded call — keep BOTH sides on conflict.**
+
+  **(2) AI — the pilot tapped every land toward a flashback cast it could never make.** Its flashback
+  candidate loop checked MANA and not the life rider, so at 1 or 2 life it tapped five Mountains
+  toward a cast core would never offer, then passed — floating the whole pool and throwing the turn
+  away **at exactly the moment it was about to die**. That is the misplay
+  `packages/sim/src/pilot-quality.test.ts` exists to forbid, one card type over; the engine's rejection
+  only made it visible, the waste happened either way. Measured 5 taps / 0 casts at 1 and 2 life. Four
+  cases in `flashback-pilot.test.ts`, two of which fail without the fix. Seed 3329123684.
+
+  **(3) AI — the pilot proposed blocks the rules forbid.**
+  `canBlockByEvasion` mirrored core's `canBlock` **minus its protection clause**
+  (CR 702.16e): a white creature kept being assigned to block a Black Knight. One illegal pair
+  invalidates the WHOLE `declareBlockers` action — so the engine refused the declaration, the harness
+  passed priority after `maxConsecutiveRejectedActions`, and **the defender took the entire attack
+  unblocked, every combat of the game.** Same function, one clause over: `needsMultipleBlockers` read
+  `attacker.def.keywords` bare, so a GRANTED menace was invisible while the rules path read the
+  granted set — the identical shape `fix/ai-sees-continuous-effects` closed elsewhere, which
+  `bare-stats.test.ts` cannot catch because it guards core ACCESSOR calls, not `.def.keywords` reads.
+  Both fixed; three regression cases added to `indestructible-blocking-pilot.test.ts`, and all three
+  fail without the fix with the engine's own message ("Wall of Omens cannot block Black Knight",
+  soak seed 1948110550). My edit is 3 small hunks + 1 import — **keep BOTH sides on conflict.**
+
+  📏 **ALL FOUR FIXES ARE BASELINE-NEUTRAL, AND I RAN THE PAIRED GAUNTLET TO PROVE IT** — not a
+  deck scan, the actual numbers, on the MERGED tree, with my four hunks in and then reverted:
+
+  | run | with the fixes | with them reverted |
+  |---|---|---|
+  | Mono-Red Aggro, 40 games/deck, seed 99 | 81/280, cells 12/13/17/8/9/7/15 | **identical** |
+  | Mono-Red Aggro, 200 games/deck, seed 4242 | 432/1400, cells 63/88/91/58/34/33/65 | **identical** |
+
+  Byte-identical, cell for cell. The 200-game figure also matches DESIGN §3.4f's recorded
+  **432/1400** exactly. (Seed 99 reads 81/280 where §3.4a records 79/280 — that drift is the 54
+  sibling commits I merged, not this branch: it is present in BOTH columns above.)
+
+  📏 **And the mechanism, for anyone who wants to re-check without running 1,680 games.** I scanned all
+  eight gauntlet decks in `packages/sim/data/decks` for every card each fix can possibly touch:
+  **zero protection creatures, zero menace / `minBlockers` creatures, zero flashback-life-cost cards,
+  zero characteristic-defining-P/T cards and zero flashback cards at all, across every one of them.**
+  None of the four code paths can fire in a gauntlet or A/B game, so every recorded win rate in
+  DESIGN §3.4a/§3.4e/§3.4f is untouched by this branch. (Re-run the check by scanning
+  `loadDeck(deck, pool).library` for `protectionFrom`, `"menace"`, `flashbackLifeCost`,
+  `characteristicPT` and `flashback`.) The full suite is green with all four in.
+
+  🔁 **AFTER MERGING `origin/main` (54 commits: step-triggers, split cards, as-enters choices,
+  tutor/additional-cost templates), two things happened that are worth more than the merge itself.**
+
+  **(a) THE MANIFEST EARNED ITS KEEP ON DAY ONE.** `SOAK_EVENT_WITNESS` is a mapped type over
+  `GameEvent['type']`, so the merge made `soak-config.ts` **stop compiling** until somebody classified
+  the two new events — `chosenAsEnters` and `triggerFizzled`. Nobody had to remember to come back and
+  widen the soak; the build asked. They now witness as-enters choices and CR 603.4's SECOND
+  intervening-"if" check, which is the half an `if` inside the effects could never implement.
+
+  **(b) ⚠️ ALL FOUR NEWLY-MERGED SYSTEMS ARE UNREACHABLE FROM THE SHIPPED POOL.** Measured on the
+  merged tree: the pool is **still 357 cards**, and it prints **0 split/adventure/aftermath cards, 0
+  modal DFCs (`backFaceCastable`), 0 as-enters choices (`asEntersChoice`), 0 mandatory additional
+  costs (`additionalCost`), 0 intervening-"if" triggers and 0 multi-destination searches (`route`).**
+  The compiler got wider (408 → 446 playable on the cached corpus, per those branches' own notes) and
+  **the generated pool was never regenerated**, so a player using the app as shipped cannot see any of
+  it. That is exactly the failure DESIGN §3.20 exists to prevent, now true for four more systems —
+  and it is a POOL regeneration (`packages/cards/scripts/build-expansion.ts`), not engine work. The
+  soak already watches all five mechanics and reports them as "not in the pool (not required)" **out
+  loud**; the day one card appears, the run starts FAILING without an occurrence.
+
+  ⚠️ **DEFECTS REPORTED, NOT FIXED — each belongs to somebody else's file.**
+  1. **The rich mana-ability model has ZERO cards in the shipped pool.** `CardDefinition.manaAbilities`
+     (tap cost / rider / activation restriction / board-derived colours) matches **0 of 357** pool
+     cards — measured, not guessed. The system is real and tested; nothing a player can see prints
+     it. That is the inert-feature rule, and the fix is a POOL regeneration (pain lands, filter lands,
+     Reflecting Pool) by whoever owns `packages/cards/data`, not an engine change. The soak already
+     watches for it and will require an occurrence the moment one card appears.
+  2. **There is no maximum hand size.** `RulesConfig` has no `maxHandSize` and the cleanup step
+     performs no discard (CR 514.1), so a hand grows without bound. This is a CORE rules gap, it moves
+     every recorded win-rate baseline in DESIGN §3.4a, and it also removes the natural discard outlet
+     madness needs — so it is a decision for the integrator, not a patch from me.
+  3. **The redaction guarantee is narrower than `observation.test.ts` claims.** A BUYBACK spell
+     (Capsize, Elvish Fury) returns itself to its owner's HAND as it resolves, so the public
+     `stackResolved` observation names an instance that is now in a hidden zone — which the existing
+     scan's rule ("no observation ever names a card in a hand or library") calls a leak. It is not one
+     (a spectator watched that exact card go back), but the RULE as written is false, and
+     `observation.test.ts` passes only because none of its three curated matchups plays a buyback card.
+     **Adding one to `SCANNED_MATCHUPS` would fail it.** The soak exempts exactly the `stackResolved`
+     subject and nothing else; whoever owns the observation seam should decide whether the stated rule
+     or the test should change. Seed 539293510.
+  4. Minor, and I deliberately did not touch it because several branches edit that copy: **the shared
+     `FIDELITY_CAVEAT`** (`packages/sim/src/config.ts`, mirrored in `apps/web/src/lib/lab-config.ts`
+     and duplicated in `cli.ts`'s usage) still tells the user that "flashback GRANTED by another card"
+     and "modes chosen at cast time" are unimplemented. Both shipped. The soak fires
+     `graveyard-grant` in 10 games and `modal-cast` in 28, so this is measured, not inferred.
+
+  🧪 **AND TWO FALSE ALARMS I WROTE MYSELF, because they are this repo's recorded failure shape
+  and the next person will hit them.** (a) Asserting state-based actions on a MID-RESOLUTION state
+  reports Magma Jet ("2 damage, then scry 2") as leaving a dead creature on the battlefield — it does,
+  legally, until the scry is answered (CR 704.3 / 608.2). `rules-audit.test.ts` documents that
+  discipline in its own doc-comment and does **not** implement it; it survives only because its
+  curated decks never line the case up. (b) A redaction scan must ask the state the action LANDED in:
+  scanning the pre-action state reports every land drop in the game as a hidden-zone leak. Both traps
+  are pinned as comments beside the code that avoids them in `soak.ts`.
+
+  📊 **The runs, so the numbers mean something.**
+  - **Fast tier** (in `npm test`): 104 games, 2,210 turns, 64,657 actions, **0 violations**, 0
+    timeouts, ~17 s CPU, ~20 s of suite time. All 32 mechanics the pool prints fired.
+  - **Deep tier**, after the first three fixes: **5,064 games, 106,099 turns, 3,203,620 actions,
+    498 s CPU**, 2,520 / 2,490 / 54 (a 1.1% turn-cap draw rate), **zero action-cap games**, and
+    exactly ONE violation — defect (0) above, which this branch then fixed.
+  - **Deep tier again, on the MERGED tree, with all four fixes in: 4,064 games, 85,250 turns,
+    2,576,720 actions, 426 s CPU, 2,038 / 1,981 / 45 (1.1% turn-cap draws), zero action-cap games,
+    and ZERO violations.** All 32 mechanics the pool prints fired.
+  - Eight inventory mechanics are **not required because the pool prints none of them** —
+    `battle-defense`, `emblem`, `mana-ability-extras`, and the four that arrived in this merge
+    (`second-castable-face`, `as-enters-choice`, `additional-cast-cost`, `intervening-if`,
+    `tutor-route`). The soak names them in every report rather than passing quietly.
+  - The rarest mechanics that DID fire, so "it ran" is not doing the work here: madness 7 games,
+    damage-prevention 22, legend-rule 33, transform-dfc 98, control-change 101.
+  - Gate on the merged tree: `npm run verify` **exit 0 — 3,836 passed, 5 skipped, 0 failed**
+    (the 5 skipped are the deep tier, which is env-gated).
+
 - 2026-08-20 worker: `feat/step-trigger-templates` 🚧 PUSHED — **the "At the beginning of…" family,
   and the blocker that was sitting in front of all ~65 of its corpus cards.**
 

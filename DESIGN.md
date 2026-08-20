@@ -1870,7 +1870,6 @@ character-indexed object (nothing had printed a label that long until the fetchl
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
 
-
 ### 3.21 The triggering player + the intervening "if" — the "At the beginning of…" family — ✅ done
 The biggest template cluster in the coverage audit (~65 corpus cards) had ONE thing standing in front
 of it, and it was not a template: **a trigger's resolution did not know which player set it off.**
@@ -2293,6 +2292,100 @@ cannot see the mechanic. Closing that is a DATA edit on the §3.20 path (add the
 `expansion-candidates.json`, re-run `build-expansion.ts`, re-fetch data-tools, regenerate the web card
 index) — it needs the network and it rewrites three generated files, so it is deliberately left to
 whoever next runs that pipeline rather than done from this branch.
+### 3.24 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
+Twelve engine systems shipped in three days (§3.13–§3.20) and the pool went 191 → 357 cards. Every one
+of them was tested **in isolation by the agent that built it**, and almost none were ever tested
+together. The gauntlet decks in `packages/sim/data/decks` are eight curated archetypes: they exercise a
+fraction of the pool and essentially none of the collisions. No test in the repo had ever put a
+planeswalker, an Equipment, a protection creature, a modal spell and a flashback spell in one game.
+
+The soak does. `packages/sim/src/soak*.ts` plays thousands of seeded games with **randomised-but-legal**
+decks drawn from the whole pool, deliberately mixing mechanic families, and asserts INVARIANTS — not
+"it finished", which is the exact check this repo has been burned by (a combat-declaration bug once made
+games unable to END while the whole suite stayed green).
+
+**Three things it does that the existing suites do not.**
+1. **Invariants on every settled state** (`SOAK_INVARIANTS`): every action a pilot submits is legal;
+   the engine never REJECTS an action it offered; no game reaches the action cap; no stack object
+   survives a turn; state-based actions leave no dead creature, 0-loyalty walker or 0-defense battle;
+   an instance is in exactly one zone; no card in a hidden zone leaks into an observation;
+   `applyActionInPlace` stays bit-identical to `applyAction`; and no pool card resolves an
+   `effectUnsupported` no-op.
+2. **Occurrence, not coverage.** `SOAK_MECHANICS` is an inventory and the run **fails when a mechanic
+   the pool prints never fires** — the sim-side twin of `pool-mechanics.test.ts`, which fails when a
+   mechanic loses its last card. Between them, "shipped but unreachable" has nowhere to hide. Witnesses
+   are labelled `action` / `event` / `state` so a weaker claim reads as a weaker claim.
+3. **A NEW ENGINE EVENT BREAKS THE BUILD.** `SOAK_EVENT_WITNESS` is a mapped type over
+   `GameEvent['type']` (the `OBSERVATION_POLICY` idiom), so the next system to ship cannot go untested
+   by simply not being thought of.
+
+**Two tiers.** The FAST tier (`soak.test.ts`) runs in the ordinary suite every time — one anchored
+matchup per mechanic plus a block of mixed games, every invariant on every decision: **104 games,
+2,210 turns, 64,657 actions, ~17 s CPU.** The DEEP tier (`soak-deep.test.ts`, `JB_SOAK_GAMES=N`, or
+`npm run sim -- soak --games N`) plays thousands — the run that found the last defect was **5,064
+games, 106,099 turns, 3,203,620 actions, 498 s CPU**, with a 1.1% turn-cap draw rate and zero
+action-cap games. Both tiers are sized in GAMES and report CPU: wall clock on this box is worthless
+(the same build has measured 39–87 games/sec inside an hour).
+
+**What it found.** Four real defects, fixed here, and three reported. Two of the four are
+state-based-action gaps in `applyCastSpell`, and neither is reachable by any gauntlet deck — which
+is precisely why nothing before this had seen them.
+- ✅ **FIXED (core) — state-based actions did not run when a spell was CAST, only when one
+  RESOLVED.** The caster receives priority the instant a spell is announced, which is an SBA check
+  point (CR 704.3) — and casting MOVES A CARD BETWEEN ZONES, which characteristic-defining P/T reads.
+  A flashback cast takes the last instant out of a graveyard, every Tarmogoyf loses a point of
+  toughness, and one already shrunk by a Weakness is at 0 and must die; the engine handed priority
+  back to a player looking at a creature that should already be in a graveyard. Turn 8 of seed
+  1727114651 — **once in 5,064 games and 3.2 million actions.**
+- ✅ **FIXED (core) — paying a flashback LIFE cost did not end the game.** `applyCastSpell` charges
+  "Flashback—{1}{B}, Pay 3 life" and never ran the state-based-action pass, so a caster who paid
+  itself to exactly 0 kept holding priority and casting spells (turn 20 of seed 3856639351 — once in
+  4,000 games). Paying yourself to 0 is legal (CR 118.4); surviving it is not (CR 704.3 / 704.5a). One
+  `checkStateBasedActions` call — the third copy of a rule `applyTapForMana` and the shockland
+  pay-life choice already apply.
+- ✅ **FIXED (AI) — the pilot tapped five lands toward a flashback cast it could never make.** Its
+  candidate loop checked mana and not the life rider, so below the threshold it committed the taps,
+  found no cast, and passed — floating the whole pool and wasting the turn at exactly the moment it
+  was about to die. Seed 3329123684.
+- ✅ **FIXED (AI) — the pilot proposed blocks the rules forbid.** `canBlockByEvasion` in
+  `packages/ai/src/heuristic.ts` mirrored core's `canBlock` **minus its protection clause**
+  (CR 702.16e), so a white creature kept being assigned to block a Black Knight. One illegal pair
+  invalidates the WHOLE `declareBlockers` action, so the engine refused it and the harness passed
+  priority after three rejections — **the defender took the entire attack unblocked, every combat.**
+  Nothing isolated could see it: the protection tests never asked a pilot to block, and the pilot tests
+  never put a protection creature on the other side. `needsMultipleBlockers` was reading `def.keywords`
+  bare in the same function, so a GRANTED menace was invisible too. Both fixed; both regression tests
+  fail without the fix, with the engine's own message.
+- ⚠️ **REPORTED — the rich mana-ability model has no card in the pool.** §3.11's `manaAbilities`
+  (a tap cost, a rider, an activation restriction, board-derived colours) is matched by **0 of 357**
+  pool cards, so nothing a player can see exercises it. That is rule 10's inert feature; it needs a
+  pool regeneration, not an engine change.
+- ⚠️ **REPORTED — the redaction guarantee is narrower than it reads.** A buyback spell returns
+  itself to its owner's HAND as it resolves, so the public `stackResolved` observation names an
+  instance now in a hidden zone. Not an exploitable leak (the table watched that card go back), but
+  "no observation ever names a card in a hand or library" is false as stated, and
+  `observation.test.ts` passes only because none of its curated matchups plays a buyback card.
+- ⚠️ **REPORTED — no maximum hand size.** `RulesConfig` has no `maxHandSize` and the cleanup step
+  performs no discard (CR 514.1), so hands grow without bound. Adding it would move every recorded
+  win-rate baseline in §3.4a, so it is a decision, not a patch.
+
+**What the merge with the four 2026-08-20 branches showed.** Two things, and the second is a finding
+in its own right. First, **the event manifest earned its keep immediately**: `chosenAsEnters` and
+`triggerFizzled` were new `GameEvent` members, so `soak-config.ts` stopped compiling until they were
+classified — nobody had to remember to widen the soak, the build asked. Second, and worse:
+**all four systems are unreachable from the shipped pool.** Measured on the merged tree, the pool is
+still 357 cards and prints 0 split/adventure/aftermath cards, 0 modal DFCs, 0 as-enters choices, 0
+mandatory additional costs, 0 intervening-"if" triggers and 0 multi-destination searches. The compiler
+got wider and the generated pool was never regenerated — §3.20's failure, four systems later. The soak
+watches all five and says "not in the pool (not required)" out loud, and will start failing without an
+occurrence the day one card appears.
+
+**And two false alarms worth writing down, because both are the harness's own recorded failure shape.**
+Asserting state-based actions on a state that is MID-RESOLUTION reports Magma Jet ("2 damage, then
+scry 2") as leaving a dead creature on the battlefield — it does, legally, until the scry is answered
+(CR 704.3 / 608.2). And scanning an observation against the state the action STARTED from reports every
+land drop in the game as a hidden-zone leak. `soak.ts` carries both traps as comments beside the code
+that avoids them.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

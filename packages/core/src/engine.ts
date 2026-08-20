@@ -2438,7 +2438,24 @@ function applyCastSpell(
   }
   // The life half of the flashback cost, charged alongside the mana. Everything
   // above is validated, so this cannot half-pay.
-  if (flashbackLife > 0) payLifeCost(state, action.player, flashbackLife, emit);
+  if (flashbackLife > 0) {
+    payLifeCost(state, action.player, flashbackLife, emit);
+    /*
+     * PAYING A COST CAN KILL YOU, AND THAT HAS TO END THE GAME HERE.
+     *
+     * "Flashback—{1}{B}, Pay 3 life" at exactly 3 life is a legal thing to do
+     * (CR 118.4 — the engine does not forbid it), and the caster then receives
+     * priority, which is when state-based actions are checked (CR 704.3) and a
+     * player at 0 or less life loses (CR 704.5a). Without this the game carried
+     * on with a corpse holding priority: the soak found a player sitting at 0
+     * life, casting spells, on turn 20 of seed 3856639351.
+     *
+     * The two sibling payment paths already do exactly this — `applyTapForMana`
+     * for a pain land's rider and the shockland's pay-life choice — so this is
+     * the third copy of one rule, not a new one.
+     */
+    checkStateBasedActions(state, emit);
+  }
 
   // Move the card to the stack, out of whichever zone it was cast from.
   removeFromZoneArray(
@@ -2511,6 +2528,26 @@ function applyCastSpell(
   // one-mode menu) is never asked — the forced answer is recorded and the game
   // does not stop.
   askNextCastChoice(state, card.instanceId, emit);
+  /*
+   * STATE-BASED ACTIONS AFTER THE ANNOUNCEMENT (CR 704.3). The caster receives
+   * priority the instant the spell is announced, and that is a check point —
+   * so casting is not exempt just because nothing has resolved yet.
+   *
+   * It matters because CASTING MOVES A CARD BETWEEN ZONES, and characteristic-
+   * defining P/T reads zones: a flashback cast takes the last instant out of a
+   * graveyard, every Tarmogoyf on the board loses a point of toughness, and one
+   * wearing a Weakness (-2/-1) is at 0 and must die. Without this the game
+   * handed priority to a player looking at a creature that should already be in
+   * a graveyard — they could respond by targeting it, and its controller could
+   * still spend it. Found by the full-pool soak (`@jonny-boi/sim`'s `soak.ts`)
+   * at turn 8 of seed 1727114651, once in ~5,000 games and 3.2 million actions.
+   *
+   * Skipped while a CAST-TIME CHOICE stands, because then the announcement is
+   * not finished and nobody has priority yet (CR 601.2) — the answer path runs
+   * the pass itself. The check is a no-op on an ordinary board, and emits
+   * nothing when nothing dies, so no event log or paired-arm comparison moves.
+   */
+  if (!state.pendingChoice) checkStateBasedActions(state, emit);
   return { state, events };
 }
 
