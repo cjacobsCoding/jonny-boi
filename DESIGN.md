@@ -2145,6 +2145,81 @@ missing you-may template:
 - **fear** (Cover of Darkness) — an evasion keyword the engine does not model;
 - **Multiversal Passage's "this land is the chosen type"** — a type-changing effect that would have to
   grant the named basic land type's mana ability.
+### 3.24 Copy effects — layer 1, beneath everything — ✅ done
+The engine had never had a copy effect, and an earlier branch was told to skip clones for exactly that
+reason. `You may have ~ enter as a copy of any creature on the battlefield` now plays as printed.
+
+**The mechanism is one swap, and it is the transform system's.** A copy is applied by swapping
+`CardInstance.def` — every characteristic read in the codebase already routes through it (combat's
+P/T, targeting's types, the trigger collector's ability list, mana production, the AI's evaluation,
+the renderer's art), so the swap IS the routing and there is no second code path anywhere.
+`CardInstance.uncopiedDef` is the way back, restored by `resetInstanceForNewZone` when the permanent
+leaves (CR 400.7 — a bounced Clone is a Clone in hand). It is a **separate field from `printedDef`**
+and not redundant with it: `printedDef` answers "which FACE is up", `uncopiedDef` answers "which CARD
+is this really", and a copy of a DFC that then transforms needs both answers at once.
+
+**LAYER 1 IS THE WHOLE FEATURE (CR 613.2).** A copy is applied beneath everything, so counters (7d),
+anthems (7c), Auras and until-end-of-turn pumps all apply **on top of** the copied characteristics —
+which falls out for free, because those layers are computed from `inst.def` plus the instance's own
+state. And **you copy the printed card (CR 706.2)**: a 1/1 wearing three +1/+1 counters is copied as a
+**1/1**, a transformed permanent is copied by its **front face**, and a permanent that is itself a copy
+is copied by what it copies — and an ADVENTURER on the battlefield is copied as its creature half,
+which needs no special case because the cast path already put that half in `def` (CR 715.2).
+`copiableDefOf` is the single answer to that question and every path asks it. `copy.test.ts` pins all of it, including a copier that keeps its own counters and its own pump.
+
+**It is an as-enters REPLACEMENT, and it joins the existing one.** `CardDefinition.copyAsEnters` sits
+beside `asEntersChoice` (§3.23's CR 614.1c naming) and the `entersTapped*` family because it is the
+same kind of thing, and it deliberately reuses §3.23's machinery rather than growing a rival:
+`'copyAsEnters'` is a second `PendingChoice.context`, and the answer applies to
+`appliesToInstanceId` exactly as a naming's does.
+
+For a **permanent spell** the engine raises it in `resolveTopOfStack`, before `stackResolved` and
+before a single effect runs — the stack object goes straight back on the stack untouched while the
+question stands, and `SpellStackObject.copyAsEntersDecided` is what makes a DECLINE stick (a decline
+leaves no trace on the instance, so without the marker the resolution would re-ask forever). Asking
+there is what lets the COPIED card decide summoning sickness, starting loyalty and starting defense.
+
+For a **land**, `applyPlayLand` asks it **once, ahead of §3.23's `raiseLandEntryChoice` ladder**,
+and it is not another rung of that ladder for a precise reason: it does not answer a question about
+this land, it decides *which land the ladder is then asking about* — a Vesuva that copies Cavern of
+Souls owes Cavern's naming, one that copies a Temple owes nothing. Asking from the single call site
+also means it can never be re-asked. The answer re-reads `entersTapped` off the copied card (nothing
+can observe the intermediate value: the `tapped` event is deferred to the end of the ladder, and
+answering is the only legal action while a question stands) and then hands control back to the
+ladder.
+
+**Compiler: two closed tables, and a card outside them reports.** `copy-as-enters` owns the whole
+printed clause including its tapped-ness and its "except …" tail — an added card type or creature
+subtype, a kept name, legendary on or off, Spark Double's extra +1/+1 and loyalty counters, Vesuva's
+"enters tapped". **Measured PAIRED against the same-day `origin/main` on the cached
+2100-card corpus: 485 → 493 playable, nothing lost** — Sculpting Steel, Mirrormade, Copy Enchantment,
+Clever Impersonator, Spark Double, Vesuva, Echoing Deeps (which copies a land card in a **graveyard**)
+and Glasspool Mimic, whose copy clause sits on a modal-DFC face and so needed §3.22's work too.
+Throughput is at parity, measured rather than assumed: 562 vs 562 scavenges over 40 identical seeded
+self-play games (29,899 actions, byte-identical in both arms).
+
+**The AI has a policy, and it needed one.** The generic `selectCards` path prices candidates with
+`cardValue`, which reads EFFECTIVE stats — so a pilot would copy the 1/1 wearing three counters over
+the printed 4/4 beside it and end up a 1/1. `copyTargetValue` prices what the copy WOULD BE from
+PRINTED characteristics (body, abilities, keywords, mana source), and the decline bar is the copier's
+own printed body scored the same way — usually zero, because a Clone's own body is a 0/0 that dies to a
+state-based action on arrival. Proven against the real heuristic pilot in real games.
+
+**`Kindred` (CR 308) became a real card type.** Its entire rules content is that the card's subtypes
+are creature types without the card being a creature, and that it counts as a card type in a graveyard
+(Tarmogoyf) — so it is a member of `CardType`, has a bit in `CARD_TYPE_BIT`, and `TYPES_WITHOUT_SYSTEM`
+stays honestly empty. A record whose ONLY type is Kindred still reports: CR 308.1 requires a second.
+
+**Reported by name, not half-built:** copying a SPELL on the stack (Reverberate, Narset's Reversal) and
+TOKEN copies (Rite of Replication, Kiki-Jiki) need a stack object that is **not a card** and ceases to
+exist as it resolves (CR 707.10 — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of
+them would leave a phantom card in a zone that delirium, flashback and Tarmogoyf all count), plus an
+aiming moment for "you may choose new targets for the copy" and the copy carrying the original's X and
+modes (CR 706.10). Also reported: a copy that GRANTS an ability printed in quotes (Phantasmal Image's
+"becomes the target" sacrifice, Sakashima's delayed return), a copy bounded by **the amount of mana
+spent** to cast it (Mockingbird — nothing records that number), and "becomes a copy" applied by an
+activated ability rather than as the permanent enters (Mirage Mirror, Thespian's Stage).
+
 
 ### 3.24 Replacement and prevention effects — a layer the engine never had — ✅ done
 CR 614/615/616. A replacement effect never goes on the stack and never "happens": it watches for an

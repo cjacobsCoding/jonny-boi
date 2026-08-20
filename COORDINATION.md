@@ -94,6 +94,8 @@ throughput (games/sec) from regressing.
 | fix/online-playability | DESKTOP-90PJPM4 | apps/web/src/lib/online (auto-pass, why-disabled, drag-to-play, useDragToPlay, online-config + tests), components/online/OnlineBoard.tsx, components/play/PlayCard.tsx, styles.css (drag/drop-zone rules, appended), apps/server land-playability.test.ts, COORDINATION.md | ✅ MERGED |
 | feat/double-faced-cards | worker | packages/core (card/state/events/engine guards + NEW transform.ts, internal/zones+clone+triggers-runtime, NEW transform.test.ts), packages/cards (choice-primitives transformRevealTop, effect-helpers face-revert, compile types/compile/rules/index, data/pool.ts Delver, src/index.ts STUBBED_MECHANICS, NEW transform-play.test.ts), packages/sim (paired-arms-config +1 classification; fidelity copy in config/cli/swap), apps/web (lib/cards.ts back-face records + NEW cards.test.ts, lib/about/mechanics.ts + test), DESIGN §3.13 | 🚧 PUSHED, not merged |
 
+| feat/copy-effects | worker | packages/core (NEW copy.ts + copy.test.ts; card/state/choices/events/engine/derived/index, internal clone+zones), packages/cards (compile rules +1 rule & 4 hints & parser block, compile/compile.ts, compile/types.ts, NEW compile/copy-effects.test.ts, fidelity.test.ts 1 line), packages/ai (choices/weights/index + NEW copy-target-pilot.test.ts), packages/sim (observation +1, paired-arms-config + paired-arms + its test), apps/web (about/mechanics +2 witnesses, play/choice-view +1 branch, lib/cards.ts +1 branch), DESIGN §3.24, COORDINATION | 🚧 PUSHED, not merged |
+
 | feat/nonhand-casting | worker | packages/core (card/actions/state/events/choices/engine/index + internal/clone + test-fixtures + new flashback.test.ts), packages/cards (effect-helpers, compile types/rules/compile, index.ts STUBBED reword, data/pool.ts comments only, new flashback.test.ts), packages/ai (heuristic.ts + new flashback-pilot.test.ts), packages/sim (config/cli/swap + data/decks/uw-control — FIDELITY wording only), apps/web/src/lib/about/mechanics.ts, DESIGN §3.11, UNSUPPORTED-MECHANICS.md | 🚧 PUSHED, not merged |
 | feat/cast-cost-modification | worker | packages/core (card/choices/state/effects/engine/index + internal/clone + new cast-cost.test.ts), packages/cards (effect-helpers/primitives/index; compile types+compile+rules + compile.test; new cast-cost-cards.test.ts), packages/ai (choices + heuristic + choices.test), packages/sim (paired-arms-config classification only), apps/web (play/choice-view + ChoicePrompt + choice tests, about/mechanics.ts), DESIGN §3.11, UNSUPPORTED-BACKLOG.md (regenerated) | 🚧 PUSHED, not merged |
 
@@ -578,6 +580,123 @@ _Append dated notes here; keep them short. Newest at top._
   `attackSaboteurTriggerValue`; flatten the walker-diversion tie-break — and **all nine produced at
   least one RED test**. Nothing was survived silently. The harness is in the branch's history only
   (a throwaway script), but the mutations are one-liners if you want to re-run them.
+- 2026-08-20 worker: `feat/copy-effects` 🚧 PUSHED — **the engine has copy effects now, and they are
+  applied in LAYER 1.** An earlier branch was told to skip clones for exactly this reason.
+
+  **Measured PAIRED against the same-day `origin/main` (068be3d) in a second worktree on this box,
+  same cached 2100-card corpus: 485 → 493 playable (+8), and NOTHING lost.** The eight, by name:
+  Sculpting Steel, Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva, Echoing
+  Deeps, and **Glasspool Mimic** — which needed BOTH this branch and `feat/split-adventure` (its
+  copy clause is on a modal-DFC face). Suite **3853 passed / 0 failed** after merging that main;
+  `npm run verify` exit 0; `npm run build` exit 0.
+
+  ⚡ **Throughput: parity, and paid for rather than assumed.** Allocation over 40 identical seeded
+  self-play games (29,899 actions, byte-identical in both arms): **562 vs 562** and **561 vs 562**
+  scavenges. ⚠️ The FIRST paired run read 581 vs 835 and was pure noise — two repeats settled it.
+  Paired best-of-5 CPU across three pairs: 1.02× / 1.07× / 0.75×, i.e. the CPU number on this box
+  is not usable either; the scavenge count is. The hot path is untouched by construction:
+  `askCopyAsEnters` returns on one `undefined` property read for every card that is not a copier,
+  and `uncopiedDef` is copied conditionally.
+
+  ✅ **`CardDefinition.copyAsEnters` + `CardInstance.uncopiedDef`** — "You may have ~ enter as a copy
+  of any creature on the battlefield", including the printed "except …" tail (an added card type or
+  creature subtype, a kept name, legendary on or off, Spark Double's extra +1/+1 and loyalty counters,
+  Vesuva's "enters tapped"). Newly playable: **Sculpting Steel, Mirrormade, Copy Enchantment, Clever
+  Impersonator, Spark Double, Vesuva, Echoing Deeps** (which copies a land card in a **graveyard**).
+
+  ⚠️ **THE FOUR THINGS THAT ARE EASY TO GET WRONG HERE, and what this branch did instead.**
+  1. **A copy is LAYER 1 (CR 613.2), beneath everything.** Counters (7d), anthems (7c), Auras and
+     until-EOT pumps all apply ON TOP of the copied characteristics. That falls out for free from
+     swapping `inst.def` — those layers are computed from `def` plus the instance's own state — but
+     only if you swap `def` instead of snapshotting stats somewhere. A copy that snapshotted the board
+     is a different card, silently.
+  2. **You copy the PRINTED card (CR 706.2), not the board.** A 1/1 wearing three +1/+1 counters is
+     copied as a **1/1**; a TRANSFORMED permanent is copied by its **front face**; a permanent that is
+     itself a copy is copied by what it copies. `copiableDefOf` is the single answer and every path
+     asks it — including the AI's ranking, which is where it is easiest to forget.
+  3. **`uncopiedDef` is NOT `printedDef`, and merging them is a bug waiting.** `printedDef` answers
+     "which FACE is up"; `uncopiedDef` answers "which CARD is this really". A copy of a transforming
+     DFC that then transforms needs both at once, and one field can only answer one.
+  4. **USE the as-enters seam, do not grow a rival.** `feat/as-enters-choices` landed while this was
+     in flight, so the copy is a second `PendingChoice.context` beside `'asEnters'`, applying to the
+     same `appliesToInstanceId`. A permanent SPELL is asked in `resolveTopOfStack` before
+     `stackResolved` and before any effect runs, so the COPIED card decides summoning sickness,
+     loyalty and defense. A LAND is asked ONCE from `applyPlayLand`, ahead of `raiseLandEntryChoice`
+     rather than as another rung of it — the copy decides WHICH LAND that ladder is asking about (a
+     Vesuva copying Cavern of Souls owes Cavern's naming), and a single ask site is also what stops
+     it being re-asked, since a decline leaves no trace to guard on. The answer re-reads
+     `entersTapped` off the copied card before the deferred `tapped` event fires.
+
+  ⚠️ **`internal/clone.ts` bit exactly as advertised, one layer below the transform branch's
+  `printedDef`.** `uncopiedDef` is copied conditionally there; without it a Clone silently REVERTS to
+  its own printed 0/0 at the very next action boundary — right for one action, then not, mid-combat,
+  with no event saying so. `SpellStackObject.copyAsEntersDecided` is on the same list: a DECLINE
+  leaves no trace on the instance, so without it the resolution re-asks forever. Both pinned by tests
+  that take TWO action boundaries, because one is not enough to see it.
+
+  ⚠️ **`paired-arms`'s identical-game skip is now WITHDRAWN for any deck containing a copier**, and
+  this is a real unsoundness that was found, not a precaution. `peekCouldReadHeroLibrary` maps an
+  instance id back to its pre-shuffle DECKLIST ROW and scans that card's effect refs — but a Clone's
+  abilities are the COPIED card's, so a copied library-reading ETB would be invisible and the verdict
+  wrong-and-confident. New `ABILITY_ACQUIRING_DEFINITION_FIELDS` names the shape; add the next field
+  of it (a "becomes a copy" ability, a text-changing effect) there.
+
+  📌 **`becameCopy` is a new public event** (OBSERVATION_POLICY classified — a copy is chosen on the
+  table, and a graveyard is a public zone). **`copyAsEnters` also joined `fidelity.test.ts`'s
+  behaviour signature**, the same blind spot `modal` and `characteristicPT` were added to close.
+
+  🧠 **THE AI IS NOT INERT, AND IT DOES NOT RANK BY THE BOARD.** The generic `selectCards` path prices
+  candidates with `cardValue`, which reads EFFECTIVE stats — a pilot using it copies the 1/1 wearing
+  three counters over the printed 4/4 beside it and ends up a 1/1. `copyTargetValue` prices what the
+  copy WOULD BE from PRINTED characteristics (body, abilities, keywords, mana source); the decline bar
+  is the copier's own printed body scored the same way, which is usually zero because a Clone's own
+  body is a 0/0 that dies on arrival. `copy-target-pilot.test.ts` drives the real heuristic pilot
+  through all three claims, including the printed-4/4-vs-pumped-1/1 board.
+
+  ✅ **`Kindred` (CR 308) is a real card type now, so `TYPES_WITHOUT_SYSTEM` stays honestly empty.**
+  Its whole rules content is that the card's subtypes are creature types without the card being a
+  creature — and that it counts as a card type in a GRAVEYARD, which is why `CARD_TYPE_BIT` (the
+  exhaustive record Tarmogoyf reads) had to gain a bit. A record whose only type is Kindred still
+  reports: CR 308.1 requires a second type, and the second one decides everything.
+
+  🚫 **Reported by name, not faked.** **Copying a SPELL on the stack** (Reverberate, Narset's Reversal,
+  Fork) and **TOKEN copies** (Rite of Replication, Kiki-Jiki, Twinflame) need three things this branch
+  did not build: a stack object that is **not a card** and ceases to exist as it resolves (CR 707.10 —
+  `SpellStackObject.resolvesTo` offers only battlefield/graveyard/exile/hand, and any of them leaves a
+  phantom card in a zone that delirium, flashback and Tarmogoyf all count); an aiming moment for "you
+  may choose new targets for the copy" (aiming happens at cast time or as a trigger goes on the stack,
+  never for an object the engine itself just created); and the copy carrying the original's X, kicks
+  and chosen modes (CR 706.10). Also reported, each with its own hint: a copy that **grants an ability
+  printed in quotes** (Phantasmal Image's "becomes the target" sacrifice — the engine raises no such
+  event for a data trigger; Sakashima's delayed end-step return), a copy bounded by **the amount of
+  mana spent** to cast it (Mockingbird — nothing records that number), and "becomes a copy" applied by
+  an **activated ability** rather than as the permanent enters (Mirage Mirror, Thespian's Stage).
+
+  📌 **THE HINTS MOVED.** `UNSUPPORTED_HINTS` no longer lets the generic "a you may / choose template"
+  hint claim copying is missing; four new hints sit above it and each names its real residual. Anyone
+  re-running the coverage audit will see the copy family split accordingly — that is the fix.
+
+  🚧 **Two things I could NOT do offline, both with named blockers.**
+  1. **No curated-pool clone.** `fidelity.test.ts` joins every pool card to
+     `packages/data-tools/data/card-index.json`, which is a LIVE-FETCH artifact (`npm run verify -w
+     @jonny-boi/data-tools`, network) and holds 357 cards, none of them a copier. Adding Clever
+     Impersonator to the pool needs that fetch. Until then the seven cards are reachable through deck
+     IMPORT, which is how most of the corpus reaches the app.
+  2. ~~Glasspool Mimic still reports~~ — **RESOLVED BY THE MERGE, and worth knowing as a pattern.**
+     Its copy clause compiled here from the start, but the card is a modal DFC and the record's
+     `layout` was not reaching `isModalDfc`, so it fell through to `SECOND_CASTABLE_FACE_GAP`.
+     `feat/split-adventure` landing on main closed that half. The card needed BOTH branches and
+     neither could have delivered it alone — so a coverage audit run on one branch under-counts a
+     card whose two gaps are owned by two workers.
+
+  Files owned: `packages/core` (NEW `copy.ts` + `copy.test.ts`; `card.ts`, `state.ts`, `choices.ts`,
+  `events.ts`, `engine.ts`, `derived.ts`, `index.ts`, `internal/clone.ts`, `internal/zones.ts`),
+  `packages/cards` (`compile/rules.ts` +1 rule & 4 hints & the parser block, `compile/compile.ts`,
+  `compile/types.ts`, NEW `compile/copy-effects.test.ts`, `fidelity.test.ts` one line),
+  `packages/ai` (`choices.ts`, `weights.ts`, `index.ts`, NEW `copy-target-pilot.test.ts`),
+  `packages/sim` (`observation.ts` +1, `paired-arms-config.ts`, `paired-arms.ts`,
+  `paired-arms.test.ts`), `apps/web` (`lib/about/mechanics.ts` +2 witnesses, `lib/play/choice-view.ts`
+  +1 branch, `lib/cards.ts` +1 branch), DESIGN §3.21, COORDINATION.
 - 2026-08-20 worker: `feat/step-trigger-templates` 🚧 PUSHED — **the "At the beginning of…" family,
   and the blocker that was sitting in front of all ~65 of its corpus cards.**
 

@@ -490,6 +490,27 @@ export type GameEvent =
       readonly faceUp: 'front' | 'back';
     }
   | {
+      /**
+       * A permanent ENTERED AS A COPY of another object (CR 706, layer 1) —
+       * the printed "you may have ~ enter as a copy of …" replacement. Like
+       * `transformed` this is deliberately NOT a `zoneChange`: the copy is
+       * applied as the permanent enters, and the entry itself is announced by
+       * its own `zoneChange`.
+       *
+       * Fully public. Every field names something a spectator watching the
+       * table sees: which permanent became a copy, the card it printed as, the
+       * card it now is, and which visible object it was copied from.
+       */
+      readonly type: 'becameCopy';
+      readonly instanceId: InstanceId;
+      /** The name printed on the copying card itself ("Clone"). */
+      readonly ownName: string;
+      /** The name it now has — the copied card, after any "except …" tail. */
+      readonly copiedName: string;
+      /** The object it was copied from. */
+      readonly copiedInstanceId: InstanceId;
+    }
+  | {
       // A token permanent was created on the battlefield.
       readonly type: 'tokenCreated';
       readonly instanceId: InstanceId;

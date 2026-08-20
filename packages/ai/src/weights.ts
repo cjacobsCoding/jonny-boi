@@ -259,6 +259,23 @@ export interface HeuristicWeights {
    */
   readonly scryKeepValueThreshold: number;
 
+  // --- choosing a COPY TARGET (CR 706) --------------------------------------
+  //
+  // A dedicated ruler, and it has to be: `cardValue` prices a card by what it
+  // is worth IN HAND (cost as a proxy) and reads EFFECTIVE stats off the board.
+  // Neither is the question here. "Which permanent should I BE?" is about
+  // PRINTED, copiable values (CR 706.2 - counters and anthems do not come
+  // along) and about what the permanent does once it is in play. These four
+  // weights price exactly that, and nothing else, so the policy is one short
+  // function a reader can check against the board.
+  /** Worth per point of PRINTED (power + toughness) on a copy target. */
+  readonly copyTargetPerStatValue: number;
+  /** Worth of one printed ability (a trigger, an activated ability, a static). */
+  readonly copyTargetAbilityValue: number;
+  /** Worth of one printed keyword (flying, deathtouch, trample, ...). */
+  readonly copyTargetKeywordValue: number;
+  /** Worth of being a MANA SOURCE at all - what a copied land is mostly for. */
+  readonly copyTargetManaSourceValue: number;
   /**
    * TUTORING — how far BEYOND the mana it can currently produce a pilot will
    * still reach when a library search lets it pick any card in the deck.
@@ -481,6 +498,15 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // strict sort key ahead of raw power without ever making a fetch impossible.
   tutorReachableManaLead: 1,
   tutorUncastablePenalty: 100,
+
+  // Copy targets. Stats dominate (a 4/4 scores 16), then abilities (an ETB
+  // trigger is worth about a point of power each way), then keywords, then the
+  // bare fact of tapping for mana - which is what separates a copied Temple
+  // from a copied Wastes without letting a Wastes outrank a real creature.
+  copyTargetPerStatValue: 2,
+  copyTargetAbilityValue: 4,
+  copyTargetKeywordValue: 2,
+  copyTargetManaSourceValue: 3,
 
   // scoring effects (modal-spell modes) — the ordering these produce is
   //   lethal > counter/kill their best thing > draw a card > bounce a real threat

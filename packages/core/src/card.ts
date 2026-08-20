@@ -18,6 +18,9 @@
 import type { CastZone } from './actions.js';
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
+// Type-only, so it is erased at build time and no runtime import cycle exists
+// (`copy.ts` imports this module's `unionProtection` for real).
+import type { CopyAsEntersSpec } from './copy.js';
 // TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
 // and subtype readers, so a VALUE import here would close a runtime cycle. A
 // `CardFilter` is plain serializable data, so the type is all a printed cost
@@ -33,7 +36,28 @@ export type CardType =
   | 'artifact'
   | 'enchantment'
   | 'planeswalker'
-  | 'battle';
+  | 'battle'
+  /**
+   * **Kindred** (CR 308, the type formerly printed as "Tribal") — a card type
+   * that ALWAYS appears alongside another one ("Kindred Sorcery", "Kindred
+   * Enchantment - Faerie"), and whose entire rules content is that the card's
+   * subtypes are CREATURE types even though the card is not a creature.
+   *
+   * That is why it is a real member of this union rather than a word the
+   * compiler quietly drops. Two things in this engine read it, and both would
+   * be wrong without it:
+   *   - `subtypes` on a Kindred card are creature types, so a tribal static
+   *     ("Faeries you control get +1/+1") and a subtype filter select it
+   *     exactly as the printed card does — which they already do, because
+   *     subtypes are one list here;
+   *   - a card type in a GRAVEYARD is a card type: Tarmogoyf counts Kindred,
+   *     so it needs a bit in `CARD_TYPE_BIT` (`derived.ts`) like every other.
+   *
+   * What it deliberately does NOT do is make the card a permanent: a Kindred
+   * Instant is an instant and nothing else, so `isPermanentType` ignores it and
+   * the card's OTHER type decides everything about how it is played.
+   */
+  | 'kindred';
 
 /**
  * Keyword ability flags the combat/turn systems read as data. Core implements the
@@ -453,6 +477,25 @@ export interface CardDefinition {
    * tapped or untapped — is the whole of it, and it is exact.
    */
   readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
+  /**
+   * "**You may have ~ enter as a copy of** any creature on the battlefield"
+   * (Clone, Phantasmal Image, Spark Double, Sakashima, Vesuva) — the as-enters
+   * COPY replacement (CR 614.1c + CR 706.9), declared as data.
+   *
+   * It sits here beside `entersTapped*` and {@link asEntersChoice} because it is
+   * the same family of thing: a replacement applied AS the permanent enters,
+   * which every entry path must ask about rather than only the ones that happen
+   * to run a resolution script. The engine asks it in `resolveTopOfStack` (a
+   * permanent spell — before a single effect runs, so the COPIED card decides
+   * summoning sickness, starting loyalty and starting defense) and in
+   * `applyPlayLand` (a land — once, ahead of the entry ladder, because it
+   * decides WHICH LAND that ladder is then asking its naming/reveal/life
+   * questions about).
+   *
+   * The copy itself is applied in LAYER 1 by swapping the instance's `def`; see
+   * `copy.ts` for the layering argument and the copiable-values rule.
+   */
+  readonly copyAsEnters?: CopyAsEntersSpec;
   /**
    * "**As ~ enters, choose a** creature type / a color / a player / a card type"
    * — the replacement-effect naming made as the permanent enters (CR 614.1c).

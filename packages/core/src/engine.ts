@@ -137,6 +137,7 @@ import {
   tapAttackers,
 } from './internal/combat.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
+import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
 
 /**
@@ -593,6 +594,23 @@ function resolveTopOfStack(
 
   const card = top.card;
 
+  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 706), asked before anything else
+  // happens to this spell — before `stackResolved`, before a single effect runs,
+  // and above all before the permanent is on the battlefield, because the copied
+  // card is what decides its `entersTapped`, its summoning sickness, its
+  // starting loyalty and its starting defense.
+  //
+  // The stack object goes straight BACK on the stack while the question stands:
+  // nothing has been emitted and nothing has been mutated, so re-entering here
+  // after the answer resolves the spell exactly once. `copyAsEntersDecided`
+  // is what makes the second entry skip the question rather than re-ask it — a
+  // DECLINE has to stick, and "did they already choose?" cannot be read off the
+  // instance (declining leaves no trace on it, which is the whole point).
+  if (top.resolvesTo === 'battlefield' && top.copyAsEntersDecided !== true && askCopyAsEnters(state, card, emit)) {
+    state.stack.push(top);
+    return;
+  }
+
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
 
   // Where the card goes when it is done: the battlefield for a permanent, and
@@ -836,6 +854,23 @@ function finishSpellResolution(
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
     // zoneChange so a replay folds "entered, then at loyalty N" in order.
     applyEnteringLoyalty(card, emit);
+    // "…except it enters with an ADDITIONAL loyalty counter on it if it's a
+    // planeswalker" (Spark Double). Added after the printed number rather than
+    // folded into it, because that is what the card says and because the
+    // printed number is the copied walker's, not this card's. `+1/+1` counters
+    // from the same "except" tail were applied with the copy itself — loyalty
+    // is different only because a walker ENTERS with it (CR 306.5b) and the
+    // helper above sets the record wholesale.
+    const bonusLoyalty = extraLoyaltyForCopy(card, card.def.copyAsEnters);
+    if (bonusLoyalty > 0) {
+      addLoyalty(card, bonusLoyalty);
+      emit({
+        type: 'loyaltyChanged',
+        instanceId: card.instanceId,
+        delta: bonusLoyalty,
+        to: loyaltyOf(card),
+      });
+    }
     // A battle enters with its printed defense counters (CR 310.4) by the same
     // rule and through the same kind of shared helper, so no entry path can
     // disagree with another about the number a permanent arrives carrying.
@@ -1170,7 +1205,7 @@ function dispatchAction(
   }
   switch (action.kind) {
     case 'answerChoice':
-      return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
+      return applyAnswerChoice(state, prevState, action, config, effectRegistry, emit, events);
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
       // Passing with a madness window open DECLINES it (CR 702.35a): the card
@@ -1232,6 +1267,7 @@ function applyAnswerChoice(
   state: GameState,
   prevState: GameState,
   action: Extract<GameAction, { kind: 'answerChoice' }>,
+  config: RulesConfig,
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
   events: GameEvent[],
@@ -1427,6 +1463,70 @@ function applyAnswerChoice(
     return { state, events };
   }
 
+  // AN AS-ENTERS COPY answer (CR 614.1c + CR 706) belongs to the ENTRY PATH that
+  // raised it, not to a resolution. Routed by its own `context` marker for the
+  // same reason the legend rule is: "no frame behind it" also describes the
+  // shockland question below. Two entry paths raised it and each is finished
+  // here, because in both cases the permanent is NOT yet on the battlefield —
+  // which is precisely what makes the copied card decide how it enters.
+  if (choice.context === 'copyAsEnters' && answer.kind === 'selectCards') {
+    const chosen = answer.instanceIds;
+    // WHICH entry path raised it is read off where the copying card IS, not off
+    // a second state field: a permanent spell waiting to resolve is on the
+    // stack, and a land mid-play is still in its owner's hand. Instance ids are
+    // unique, so the two cases can never both match.
+    const waiting = spellOnStack(state, choice.sourceInstanceId);
+    if (waiting) {
+      // `resolveTopOfStack` put the stack object back untouched, so recording
+      // the decision and resolving again finishes the spell exactly once.
+      applyCopyAsEntersAnswer(state, waiting.card, chosen, emit);
+      patchSpellOnStack(state, waiting.instanceId, { copyAsEntersDecided: true });
+      resolveTopOfStack(state, config, registry, emit);
+      if (!state.pendingChoice && !state.gameOver) {
+        state.priorityPlayer = state.activePlayer;
+        state.consecutivePasses = 0;
+      }
+      return { state, events };
+    }
+    // A LAND being played. It is already on the battlefield (the entry model
+    // every land question uses — the shockland's, the reveal-land's and the
+    // naming's alike), so the copy is applied in place and then the entry ladder
+    // picks up where the copy left off: a copied land owes the COPIED card's
+    // naming, reveal and life questions, never this card's.
+    const land = findOnBattlefield(state, choice.appliesToInstanceId ?? choice.sourceInstanceId);
+    if (land) {
+      applyCopyAsEntersAnswer(state, land, chosen, emit);
+      // `entersTapped` was read off the UNCOPIED land, and the copy replaced the
+      // card it was read from — so it is re-read here, before anything can
+      // observe it. Nothing can: the `tapped` event is deferred to the end of
+      // the ladder, and answering is the only legal action while a question
+      // stands.
+      land.tapped = entersTapped(land.def, {
+        controller: land.controller,
+        battlefield: state.battlefield,
+        self: land,
+      });
+      raiseLandEntryChoice(state, land, choice.chooser, emit);
+      checkStateBasedActions(state, emit);
+      // Aim a landfall trigger only once the land has finished asking — the
+      // entry questions are all replacement effects that happen AS it enters
+      // (CR 614.1c), and `aimPendingTriggers` would park a question of its own
+      // over the ladder's next one.
+      if (!state.pendingChoice) aimPendingTriggers(state, emit);
+      if (!state.pendingChoice && !state.gameOver) {
+        // The land play never surrendered priority, so its player keeps the floor.
+        state.priorityPlayer = choice.chooser;
+        state.consecutivePasses = 0;
+      }
+      return { state, events };
+    }
+    // Neither — the spell was countered, or the state was hand-built. Nothing
+    // entered, so there is nothing to undo; the game simply continues.
+    state.priorityPlayer = state.activePlayer;
+    state.consecutivePasses = 0;
+    return { state, events };
+  }
+
   // A TARGETING answer belongs to the stack, not to a resolution: it names what a
   // triggered ability points at, chosen as the ability went on the stack. Nothing
   // is resumed — the aim is recorded, and any trigger still waiting behind it asks
@@ -1578,7 +1678,21 @@ function applyPlayLand(
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
-  raiseLandEntryChoice(state, card, action.player, emit);
+  // THE AS-ENTERS COPY (CR 706 - Vesuva, Echoing Deeps) is asked HERE, once,
+  // ahead of the entry ladder rather than as another rung of it. It is not a
+  // rung because it does not answer a question ABOUT this land -- it decides
+  // WHICH LAND the ladder is then asking about: a Vesuva that copies Cavern of
+  // Souls owes Cavern's naming, and one that copies a Temple owes nothing.
+  // Asking it from the single call site also means it can never be re-asked,
+  // which matters because a DECLINE leaves no trace on the permanent (the ladder
+  // is a step function, called again after every answer, and each of its rungs
+  // needs a recorded answer to stop asking).
+  //
+  // The copy's answer picks the ladder up again (`applyAnswerChoice`); with no
+  // copy question to ask, the ladder starts immediately.
+  if (!askCopyAsEnters(state, card, emit)) {
+    raiseLandEntryChoice(state, card, action.player, emit);
+  }
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
@@ -2579,6 +2693,7 @@ function patchSpellOnStack(
       | 'boughtBack'
       | 'additionalCostPaid'
       | 'awaitingCastChoice'
+      | 'copyAsEntersDecided'
     >
   >,
 ): void {
