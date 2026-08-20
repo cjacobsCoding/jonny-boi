@@ -105,6 +105,12 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return {
         text: `${r.name(event.instanceId)} gets ${event.amount} ${event.kind} counter${event.amount === 1 ? '' : 's'}.`,
       };
+    case 'chosenAsEnters':
+      // NAMED OUT LOUD, unlike a choice answer. The value a permanent names as it
+      // enters is announced at the table (CR 614.1c) and stays readable on the
+      // card, so the log says it — the redaction two cases below is about a
+      // chooser's private ANSWER, which this is not.
+      return { text: `${event.name} names ${event.described}.`, tone: 'trigger' };
     case 'playerLost':
       return { text: `${r.playerName(event.player)} loses — ${event.reason}.`, tone: 'death' };
     case 'gameOver':

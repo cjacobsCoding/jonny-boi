@@ -296,6 +296,56 @@ export function instanceAnywhere(state: GameState, id: InstanceId): CardInstance
   return undefined;
 }
 
+/**
+ * The ONE vocabulary for "which player does this happen to", shared by every
+ * primitive that can happen to somebody other than its controller.
+ *
+ * One table rather than a `whichPlayer` string parsed separately in each
+ * primitive, because the words have to mean the same thing everywhere: Stormfist
+ * Crusader's single printed sentence ("each player draws a card and loses 1
+ * life") compiles to a draw and a life loss that MUST agree on who "each player"
+ * is, and Howling Mine's "that player" must mean the same in a draw as it would
+ * in a damage clause.
+ *
+ *   `'controller'`  (the default, and what an absent param means) — you.
+ *   `'opponent'`    — the other seat. In a two-seat game this is also what the
+ *                     printed plural "each opponent" names; there is no other
+ *                     referent.
+ *   `'targetPlayer'`— the chosen player target, falling back to the controller
+ *                     the way every other target-reading param does.
+ *   `'triggering'`  — the player the TRIGGER's event was about (`that player`,
+ *                     `them`). This is the field that does not otherwise survive
+ *                     into a resolution: an "each player's draw step" ability
+ *                     resolves under its source's controller on both turns, so
+ *                     reading `ctx.controller` here is the Howling-Mine bug.
+ *                     Falls back to the controller when the resolution carries
+ *                     no triggering player (a spell, a self-ETB trigger).
+ *   `'each'`        — BOTH seats, ACTIVE PLAYER FIRST. APNAP is the order the
+ *                     rules sequence anything that happens to each player in
+ *                     turn, and fixing it here is what makes "each player draws
+ *                     a card" reproducible from a seed rather than dependent on
+ *                     which seat the source happens to sit in.
+ *
+ * An unrecognised word resolves to the controller alone — the same safe
+ * degradation every other param has. The compiler never emits one.
+ */
+export function playersForParam(ctx: EffectContext, whichPlayer: string | undefined): readonly PlayerId[] {
+  switch (whichPlayer) {
+    case 'opponent':
+      return [otherPlayer(ctx.controller)];
+    case 'targetPlayer':
+      return [firstPlayerTarget(ctx) ?? ctx.controller];
+    case 'triggering':
+      return [ctx.triggeringPlayer ?? ctx.controller];
+    case 'each': {
+      const active = ctx.state.activePlayer;
+      return [active, otherPlayer(active)];
+    }
+    default:
+      return [ctx.controller];
+  }
+}
+
 /** The first player target among `ctx.targets`, if any. */
 export function firstPlayerTarget(ctx: EffectContext): PlayerId | undefined {
   for (const t of ctx.targets) if (isPlayerTarget(t)) return t;

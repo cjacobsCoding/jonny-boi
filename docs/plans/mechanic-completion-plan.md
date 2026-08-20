@@ -142,6 +142,17 @@ metric**; `blocks` tells you how much of the format touches the mechanic.
 \* Rows 9 and 16 are the keyword-sweep bug from §2, not real systems. The audit reports
 them as systems because the sweep names them that way.
 
+> **✅ ROW 6 CLOSED on `feat/as-enters-choices` (2026-08-20)** — `As ~ enters, choose a…`
+> is a real system now, not a template: a `chooseValue` choice kind, the answer
+> REMEMBERED on the permanent (`CardInstance.chosenAsEntered`), and four readers that
+> consume it (an anthem, the permanent's own type line, a mana ability and a cast
+> trigger). Its `sole` of 0 was honest — every one of those 27 cards prints a second
+> line that reads the value back, which is why the readers had to ship with the naming.
+> **Re-measured offline against the cached corpus: 408 → 414 playable.** What still
+> blocks the rest is listed in DESIGN §3.21 by clause, and those lines now report as
+> `a "the chosen …" READER the compiler does not recognize yet` rather than as a
+> you-may template — the value IS stored; what is missing is the sentence that reads it.
+
 Two rows deserve calling out. **Row 12** — `{T}: Add {U} or {R}` — is one rule-table
 entry that alone unblocks **20 cards** (the dual-mana lands), the best
 cards-per-hour ratio in the whole census. **Row 3**, the `//` type, has a `sole` of 0:

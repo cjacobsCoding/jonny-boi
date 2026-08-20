@@ -52,9 +52,14 @@ import type {
   PlayerId,
 } from '@jonny-boi/core';
 import {
+  backFaceCastZonesOf,
+  castPermissionFor,
   castTiming,
   convertedManaCost,
   forcedBlockAssignment,
+  hasCardGrants,
+  hasCastableBackFace,
+  playableFaceOf,
   isCreature,
   isLand,
   flashbackCostOf,
@@ -307,11 +312,52 @@ interface SpellGoal {
   readonly targets: readonly (InstanceId | PlayerId)[];
   readonly reason: string;
   /**
-   * Set when this goal casts the card out of the GRAVEYARD (flashback) — the
-   * cast action must then carry `fromZone: 'graveyard'` and `cost` is the
-   * card's flashback cost, not its printed one.
+   * Set when this goal casts the card out of a zone other than the hand — the
+   * GRAVEYARD (flashback, or an aftermath half) or EXILE (an adventurer's
+   * creature half, a defeated Siege's reward). The cast action must then carry
+   * the same `fromZone`, and `cost` is whatever that path pays rather than the
+   * printed cost.
    */
-  readonly fromZone?: 'graveyard';
+  readonly fromZone?: 'graveyard' | 'exile';
+  /**
+   * Set when this goal casts the SECOND HALF of a two-halved card — a split
+   * card's right half, an aftermath half, an adventure. The cast action must
+   * name the face or the engine casts the other one.
+   */
+  readonly face?: 'back';
+}
+
+/**
+ * One castable HALF of a card in hand, as the scorer wants it: a card instance
+ * whose `def` IS the half, so every downstream reader — the scorer, the target
+ * legality check, the mana planner — sees the half's own cost, types, script
+ * and target restriction with no second code path.
+ *
+ * A card with no second half yields exactly itself and allocates nothing, which
+ * is every card in every deck the sim plays today; the synthetic instance is
+ * built only for the cards that actually print two halves.
+ */
+interface CastableHalf {
+  readonly card: CardInstance;
+  readonly face?: 'back';
+}
+
+/**
+ * The halves of a card in hand the pilot may consider casting.
+ *
+ * Reads exactly the accessors core's offer loop reads, so the pilot cannot come
+ * to a different conclusion about which halves exist than the engine will: a
+ * SPLIT card's own definition is not castable and its left half is what
+ * `playableFaceOf` hands back; an AFTERMATH right half is castable only from
+ * the graveyard and so is not offered here at all.
+ */
+function castableHalvesInHand(card: CardInstance): readonly CastableHalf[] {
+  const def = card.def;
+  const second = hasCastableBackFace(def) && backFaceCastZonesOf(def).includes('hand');
+  if (def.frontFace === undefined && !second) return [{ card }];
+  const halves: CastableHalf[] = [{ card: { ...card, def: playableFaceOf(def, 'front') as CardDefinition } }];
+  if (second) halves.push({ card: { ...card, def: def.backFace as CardDefinition }, face: 'back' });
+  return halves;
 }
 
 function choosePriorityAction(
@@ -682,35 +728,42 @@ function scoredSpellGoals(
   let oppCreatures: readonly CardInstance[] | undefined;
 
   const scored: SpellGoal[] = [];
-  for (const card of hand) {
-    const def = card.def;
-    if (isLand(def)) continue;
-    const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
-    if (!timingOk) continue;
-    const cost = def.cost ?? {};
-    // Cheap upper-bound prefilter; `planManaTaps` below is the real test.
-    if (convertedManaCost(cost) > availableMana) continue;
+  for (const handCard of hand) {
+    // A two-halved card is scored HALF BY HALF: a pilot that only ever looked at
+    // `card.def` would score a split card's combined object (which has no script
+    // and a cost equal to both halves) and would never cast an adventure at all,
+    // making the whole layout inert in exactly the decks that bought it.
+    for (const half of castableHalvesInHand(handCard)) {
+      const card = half.card;
+      const def = card.def;
+      if (isLand(def)) continue;
+      const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
+      if (!timingOk) continue;
+      const cost = def.cost ?? {};
+      // Cheap upper-bound prefilter; `planManaTaps` below is the real test.
+      if (convertedManaCost(cost) > availableMana) continue;
 
-    let intent = classifySpell(def);
-    // An X spell's damage is whatever this board can fund: project X as the
-    // mana left after the base cost, so Blaze is scored as the burn it would
-    // actually be cast for. The engine will offer exactly this ceiling at cast
-    // time and the choice answerer takes the maximum, so score and play agree.
-    if (intent.kind === 'damage' && intent.amountIsX) {
-      const perX = Math.max(def.xCost ?? 1, 1);
-      const projected = Math.floor((availableMana - convertedManaCost(cost)) / perX);
-      if (projected <= 0) continue; // an X of zero is a cast with no payload — hold it
-      intent = { ...intent, amount: projected };
-    }
-    oppCreatures ??= creaturesControlledBy(view, opp);
-    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
-    // A spell that prints a target restriction is only a goal if we can point it
-    // somewhere legal. This runs on EVERY goal, not just the ones the scorer
-    // understands, so a restricted card the scorer classifies as 'other' (and
-    // would therefore cast with no target at all) still gets a legal target
-    // instead of being rejected by the engine and retried forever.
-    const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
-    if (legal) scored.push(legal);
+      let intent = classifySpell(def);
+      // An X spell's damage is whatever this board can fund: project X as the
+      // mana left after the base cost, so Blaze is scored as the burn it would
+      // actually be cast for. The engine will offer exactly this ceiling at cast
+      // time and the choice answerer takes the maximum, so score and play agree.
+      if (intent.kind === 'damage' && intent.amountIsX) {
+        const perX = Math.max(def.xCost ?? 1, 1);
+        const projected = Math.floor((availableMana - convertedManaCost(cost)) / perX);
+        if (projected <= 0) continue; // an X of zero is a cast with no payload — hold it
+        intent = { ...intent, amount: projected };
+      }
+      oppCreatures ??= creaturesControlledBy(view, opp);
+      const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
+      // A spell that prints a target restriction is only a goal if we can point it
+      // somewhere legal. This runs on EVERY goal, not just the ones the scorer
+      // understands, so a restricted card the scorer classifies as 'other' (and
+      // would therefore cast with no target at all) still gets a legal target
+      // instead of being rejected by the engine and retried forever.
+      const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
+      if (legal) scored.push(half.face === undefined ? legal : { ...legal, face: half.face });
+      }
   }
 
   // Flashback casts out of OUR graveyard — the same scoring, targeting and
@@ -721,6 +774,30 @@ function scoredSpellGoals(
   // in. (A card in the graveyard costs no card from hand, so the same score
   // reads as at least as attractive — free spells win ties naturally.)
   for (const card of view.players[me].graveyard) {
+    // AFTERMATH first: a right half printed "cast this spell only from your
+    // graveyard" is a real cast for its own printed cost, and is the one
+    // graveyard cast that is not a flashback.
+    if (hasCastableBackFace(card.def) && backFaceCastZonesOf(card.def).includes('graveyard')) {
+      const half = { ...card, def: card.def.backFace as CardDefinition };
+      const cost = half.def.cost ?? {};
+      if (
+        (castTiming(half.def) === 'instant' || sorcerySpeedOpen) &&
+        convertedManaCost(cost) <= availableMana
+      ) {
+        oppCreatures ??= creaturesControlledBy(view, opp);
+        const goal = scoreSpell(view, opp, oppCreatures, half, classifySpell(half.def), weights, explain, index);
+        const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
+        if (legal) {
+          scored.push({
+            ...legal,
+            cost,
+            fromZone: 'graveyard',
+            face: 'back',
+            reason: explain ? `aftermath — ${legal.reason}` : NO_REASON,
+          });
+        }
+      }
+    }
     const def = card.def;
     // Printed OR granted (Snapcaster). Read through core's one accessor, the
     // same one `generateLegalActions` and `applyCastSpell` use — a pilot that
@@ -743,6 +820,37 @@ function scoredSpellGoals(
         fromZone: 'graveyard',
         reason: explain ? `flashback — ${legal.reason}` : NO_REASON,
       });
+    }
+  }
+
+  // Casts out of EXILE the card has explicit permission for — an adventurer's
+  // creature half waiting after its adventure resolved (CR 715.3d), or a
+  // defeated Siege's reward (CR 310.4). Without this loop the whole adventure
+  // layout is inert to the pilot: it would cast Stomp and then never take the
+  // Giant, which is strictly worse than not owning the card. Behind the same
+  // empty check every other card-grant reader starts with.
+  if (hasCardGrants(view as GameState)) {
+    for (const card of view.players[me].exile) {
+      const permission = castPermissionFor(view as GameState, card);
+      if (permission === undefined) continue;
+      const castDef = playableFaceOf(card.def, permission.face);
+      if (castDef === undefined || isLand(castDef)) continue;
+      if (castTiming(castDef) !== 'instant' && !sorcerySpeedOpen) continue;
+      const cost = permission.free ? {} : (castDef.cost ?? {});
+      if (convertedManaCost(cost) > availableMana) continue;
+      const half = castDef === card.def ? card : { ...card, def: castDef };
+      oppCreatures ??= creaturesControlledBy(view, opp);
+      const goal = scoreSpell(view, opp, oppCreatures, half, classifySpell(castDef), weights, explain, index);
+      const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
+      if (legal) {
+        scored.push({
+          ...legal,
+          cost,
+          fromZone: 'exile',
+          ...(permission.face === 'back' ? { face: 'back' as const } : {}),
+          reason: explain ? `from exile — ${legal.reason}` : NO_REASON,
+        });
+      }
     }
   }
 
@@ -1375,8 +1483,11 @@ function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
       player: me,
       instanceId: goal.card.instanceId,
       targets: goal.targets.length > 0 ? goal.targets : undefined,
-      // A flashback goal must say so, or the engine looks for the card in hand.
+      // A flashback / aftermath / from-exile goal must say so, or the engine
+      // looks for the card in hand; a second-half goal must name its face, or
+      // the engine casts the other one.
       fromZone: goal.fromZone,
+      face: goal.face,
     };
     return emit(ctx, cast, goal.reason, goal.score);
   }

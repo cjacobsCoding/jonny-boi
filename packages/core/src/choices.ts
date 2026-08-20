@@ -41,6 +41,11 @@
  *   - {@link ChooseNumberChoice} — an integer in `[min, max]` ("choose a value
  *     for X" at cast time), with the range computed by the ENGINE from what the
  *     chooser can actually pay.
+ *   - {@link ChooseValueChoice}  — NAME a value: a colour, a creature type, a
+ *     card type, a player ("As ~ enters, choose a creature type"). Not a
+ *     `chooseModes`, because nothing runs when it is answered — the answer is
+ *     REMEMBERED on the permanent (`CardInstance.chosenAsEntered`) and read for
+ *     as long as it is on the battlefield.
  * Library search is `selectCards` over library candidates plus the shuffle that
  * follows (`EffectContext.shuffleLibrary`), not a kind of its own.
  *
@@ -52,10 +57,10 @@
  */
 
 import type { CardDefinition, CardType, EffectRef } from './card.js';
-import { colorsOfDefinition, hasSubtype } from './card.js';
+import { matchesCardFilter } from './card.js';
 import type { ManaColor, ManaCost } from './mana.js';
 import type { TargetRestriction } from './targeting.js';
-import { convertedManaCost, formatManaCost } from './mana.js';
+import { formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
 
@@ -134,94 +139,16 @@ export interface CardFilter {
 }
 
 /**
- * Whether a card instance passes a filter. An absent filter matches everything.
+ * Whether a card passes a {@link CardFilter}.
  *
- * Written with explicit loops rather than `.some(...)`: static abilities
- * (`statics.ts`) run this for every permanent on the battlefield inside the
- * continuous-layering pass, which combat and every legality check drive, and a
- * closure allocated per predicate per candidate showed up in the hot path.
- *
- * The parameter is anything carrying a `def` rather than a full `CardInstance`,
- * because every characteristic a filter reads is PRINTED (see
- * {@link CardFilter.minPower}) and a caller with only a definition in hand — the
- * enters-tapped conditions in `card.ts`, which see the battlefield as
- * `{ controller, def }` — must not be forced to fabricate an instance to ask the
- * same question a second way.
+ * RE-EXPORTED, not defined here. A `CardFilter` reads only PRINTED characteristics
+ * plus the subtype a permanent named as it entered, and every one of those lives in
+ * `card.ts` — so the matcher lives there too, and this module keeps the vocabulary
+ * (the interface) while `card.ts` keeps the reader. That is what lets the
+ * enters-tapped conditions in `card.ts` ask the same question without a VALUE
+ * import back into this file, which would close a runtime cycle.
  */
-export function matchesCardFilter(card: { readonly def: CardDefinition }, filter?: CardFilter): boolean {
-  if (!filter) return true;
-  const def = card.def;
-  // The helper forms are the allocation-free, case-insensitive ones — required by
-  // the statics pass that runs this for every permanent, and by subtype matching
-  // that must treat "Mountain" and "mountain" alike.
-  if (filter.anyOfTypes !== undefined && !hasAnyType(def.types, filter.anyOfTypes)) return false;
-  if (filter.noneOfTypes !== undefined && hasAnyType(def.types, filter.noneOfTypes)) return false;
-  if (filter.anyOfSubtypes !== undefined && !hasAnySubtype(def, filter.anyOfSubtypes)) return false;
-  if (filter.noneOfSubtypes !== undefined && hasAnySubtype(def, filter.noneOfSubtypes)) return false;
-  if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
-  // Supertypes: absent on most definitions, so `=== true` rather than truthiness —
-  // `legendary: false` must match a plain creature, not be treated as "unset".
-  if (filter.legendary !== undefined && (def.legendary === true) !== filter.legendary) return false;
-  if (filter.basic !== undefined && (def.basic === true) !== filter.basic) return false;
-  if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
-    const mv = def.cost ? convertedManaCost(def.cost) : 0;
-    if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
-    if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
-  }
-  if (filter.minPower !== undefined || filter.maxPower !== undefined) {
-    if (!withinPrintedBox(def.power, filter.minPower, filter.maxPower)) return false;
-  }
-  if (filter.minToughness !== undefined || filter.maxToughness !== undefined) {
-    if (!withinPrintedBox(def.toughness, filter.minToughness, filter.maxToughness)) return false;
-  }
-  // Colors last: it is the only test that can touch the (memoized) pip walk, so
-  // a candidate rejected by type/subtype/name never pays for it at all.
-  if (filter.anyOfColors !== undefined && !hasAnyColor(def, filter.anyOfColors)) return false;
-  return true;
-}
-
-/**
- * Whether a printed power/toughness box falls inside an inclusive bound.
- *
- * An ABSENT box (a non-creature, or a `*` P/T that is a formula rather than a
- * number) is outside every bound — see {@link CardFilter.minPower} for why that
- * is the printed reading and not a conservative guess.
- */
-function withinPrintedBox(box: number | undefined, min?: number, max?: number): boolean {
-  if (box === undefined) return false;
-  if (min !== undefined && box < min) return false;
-  if (max !== undefined && box > max) return false;
-  return true;
-}
-
-/** Whether a definition is any of `wanted` colors. Allocation-free (see above). */
-function hasAnyColor(def: CardInstance['def'], wanted: readonly ManaColor[]): boolean {
-  const colors = colorsOfDefinition(def);
-  for (const want of wanted) {
-    for (const color of colors) {
-      if (color === want) return true;
-    }
-  }
-  return false;
-}
-
-/** Whether a type line carries any of `wanted`. Allocation-free (see above). */
-function hasAnyType(types: readonly CardType[], wanted: readonly CardType[]): boolean {
-  for (const want of wanted) {
-    for (const type of types) {
-      if (type === want) return true;
-    }
-  }
-  return false;
-}
-
-/** Whether a definition carries any of `wanted` as a printed subtype. */
-function hasAnySubtype(def: CardInstance['def'], wanted: readonly string[]): boolean {
-  for (const want of wanted) {
-    if (hasSubtype(def, want)) return true;
-  }
-  return false;
-}
+export { matchesCardFilter };
 
 // --- options --------------------------------------------------------------------
 
@@ -243,6 +170,48 @@ export interface CardOption {
   readonly zone: ZoneName;
   /** Who controls/owns it right now. */
   readonly controller: PlayerId;
+}
+
+/**
+ * WHAT KIND OF THING is being named by a {@link ChooseValueChoice} — the printed
+ * noun after "choose a…": a colour, a creature type, a card type, a basic land
+ * type, or a player.
+ *
+ * It rides on the choice (rather than being inferred from the option list)
+ * because the ANSWERING POLICY differs per subject and nothing else can tell
+ * them apart: a list of five one-letter strings is a colour choice and a list of
+ * two seats is a player choice, and a pilot that cannot tell them apart has to
+ * guess. See `@jonny-boi/ai`'s `answerChooseValue` for the policy each subject
+ * gets and why choosing at random would make these cards noise in an A/B verdict.
+ */
+export type ChosenValueSubject = 'color' | 'creatureType' | 'cardType' | 'basicLandType' | 'player';
+
+/**
+ * The answer that means **nothing was chosen** — the ONE inert default, shared
+ * by every path that cannot ask, and explicit rather than accidental (the same
+ * discipline as a shockland's "an unasked entry is an unpaid one").
+ *
+ * Two different paths reach it:
+ *  - a permanent that enters where nobody CAN be asked — reanimated, put onto
+ *    the battlefield by another card's effect, minted as a token, hand-built in
+ *    a test — never records a value at all;
+ *  - a parked question that has to degrade (the game ended under the chooser, a
+ *    resolution blew its question budget) answers with this.
+ *
+ * Both leave `CardInstance.chosenAsEntered` absent, and **every reader of a
+ * chosen value treats absent as matching nothing**: no creature is of the
+ * unchosen type, no card is the unchosen colour, an unchosen mana mode produces
+ * nothing. That is the direction that can never play BETTER than the real card,
+ * which is the only direction an unasked default is allowed to point.
+ */
+export const NOTHING_CHOSEN = '';
+
+/** One nameable value on offer ("white", "Goblin", "artifact", "player B"). */
+export interface ChoiceValueOption {
+  /** Stable id the answer names — a `ManaColor`, a subtype, a `PlayerId`, … */
+  readonly value: string;
+  /** Human-readable text for the UI / event log. */
+  readonly label: string;
 }
 
 /** One selectable mode of a modal spell ("counter target spell", "draw a card"). */
@@ -477,6 +446,25 @@ export interface ChooseNumberRequest extends ChoiceRequestBase {
   readonly max: number;
 }
 
+/**
+ * **Name a value** — "As ~ enters, choose a creature type / a color / a player"
+ * (CR 614.1c). Exactly one option is named, and the answer is REMEMBERED on the
+ * permanent (`CardInstance.chosenAsEntered`) so the card's own later abilities,
+ * and other cards' filters, can read it for as long as it is on the battlefield.
+ *
+ * It is not a {@link ChooseModesRequest}: a mode is an EFFECT the answer selects
+ * and then discards, while this answer is a durable characteristic of the
+ * permanent — nothing runs when it is given. It is not a
+ * {@link SelectPlayersRequest} for the same reason (Stuffy Doll's chosen player
+ * is remembered for the rest of the game, not acted on once), which is why the
+ * `'player'` subject lives here rather than being split off.
+ */
+export interface ChooseValueRequest extends ChoiceRequestBase {
+  readonly kind: 'chooseValue';
+  readonly subject: ChosenValueSubject;
+  readonly options: readonly ChoiceValueOption[];
+}
+
 /** Everything a resolving effect may ask. */
 export type ChoiceRequest =
   | SelectCardsRequest
@@ -486,6 +474,7 @@ export type ChoiceRequest =
   | PayManaRequest
   | PayLifeRequest
   | ChooseNumberRequest
+  | ChooseValueRequest
   | SelectTargetsRequest;
 
 /** The kinds, as a discriminator. */
@@ -522,7 +511,17 @@ interface PendingChoiceBase {
    * resolution behind it, and the one question that parks with the turn itself
    * waiting on the answer.
    */
-  readonly context?: 'legendRule' | 'cleanupDiscard';
+  readonly context?: 'legendRule' | 'cleanupDiscard' | 'asEnters';
+  /**
+   * The permanent whose `chosenAsEntered` an `'asEnters'` answer is written to.
+   *
+   * It is carried explicitly rather than reusing {@link sourceInstanceId}
+   * because the two are only accidentally equal today (the permanent asking IS
+   * the permanent remembering), and an answer that wrote to "whatever asked"
+   * would silently record the value on the wrong card the first time a source
+   * asks on another permanent's behalf. Absent for every other context.
+   */
+  readonly appliesToInstanceId?: InstanceId;
 }
 
 export interface SelectCardsChoice extends PendingChoiceBase {
@@ -588,6 +587,13 @@ export interface ChooseNumberChoice extends PendingChoiceBase {
   readonly kind: 'chooseNumber';
 }
 
+/** Name one value — see {@link ChooseValueRequest}. */
+export interface ChooseValueChoice extends PendingChoiceBase {
+  readonly kind: 'chooseValue';
+  readonly subject: ChosenValueSubject;
+  readonly options: readonly ChoiceValueOption[];
+}
+
 /** A question parked in `GameState.pendingChoice`, awaiting an `answerChoice`. */
 export type PendingChoice =
   | SelectCardsChoice
@@ -597,6 +603,7 @@ export type PendingChoice =
   | PayManaChoice
   | PayLifeChoice
   | ChooseNumberChoice
+  | ChooseValueChoice
   | SelectTargetsChoice;
 
 // --- answers ----------------------------------------------------------------------
@@ -659,6 +666,18 @@ export interface ChooseNumberAnswer {
   readonly value: number;
 }
 
+export interface ChooseValueAnswer {
+  readonly kind: 'chooseValue';
+  /**
+   * The named option's `value`, or {@link NOTHING_CHOSEN} — which is always a
+   * legal answer, for the same reason declining a payment always is: it is the
+   * branch that cannot take anything the chooser did not agree to, and here it
+   * is also the exact value every unaskable entry path records. One inert
+   * default, spelled the same way everywhere.
+   */
+  readonly value: string;
+}
+
 /** What an `answerChoice` action carries. Plain data — clones and serializes. */
 export type ChoiceAnswer =
   | SelectCardsAnswer
@@ -668,6 +687,7 @@ export type ChoiceAnswer =
   | PayManaAnswer
   | PayLifeAnswer
   | ChooseNumberAnswer
+  | ChooseValueAnswer
   | SelectTargetsAnswer;
 
 // --- normalisation ----------------------------------------------------------------
@@ -697,6 +717,8 @@ export function choiceOptionCount(choice: PendingChoice): number {
     case 'chooseNumber':
       // min..max inclusive — the range IS the option list.
       return choice.max - choice.min + 1;
+    case 'chooseValue':
+      return choice.options.length;
     default:
       return 0;
   }
@@ -818,6 +840,20 @@ export function normalizeChoiceRequest(request: ChoiceRequest, source: ChoiceSou
       const min = Math.max(0, Math.min(Math.trunc(request.min ?? 0), max));
       return { ...base, kind: 'chooseNumber', min, max };
     }
+    case 'chooseValue':
+      // Exactly one value is named, always — the count bounds are `1..1` and
+      // are not negotiable, so there is no `normalizeCounts` call to make.
+      // Options are COPIED for the same reason a `payMana` cost is: the request's
+      // list is usually a frozen table on a card definition, and a parked choice
+      // outlives the call that raised it.
+      return {
+        ...base,
+        kind: 'chooseValue',
+        subject: request.subject,
+        options: request.options.map((option) => ({ value: option.value, label: option.label })),
+        min: 1,
+        max: 1,
+      };
     default:
       return null;
   }
@@ -942,6 +978,17 @@ export function validateChoiceAnswer(choice: PendingChoice, answer: ChoiceAnswer
       }
       return VALID;
     }
+    case 'chooseValue': {
+      const named = (answer as ChooseValueAnswer).value;
+      if (typeof named !== 'string') return invalid('the chosen value must be a name');
+      // Naming nothing is always legal — it is the inert default every unaskable
+      // entry path already records, so the two can never disagree.
+      if (named === NOTHING_CHOSEN) return VALID;
+      if (!choice.options.some((option) => option.value === named)) {
+        return invalid(`${named} is not one of the offered choices`);
+      }
+      return VALID;
+    }
     default:
       return invalid('unknown choice kind');
   }
@@ -991,6 +1038,20 @@ export function defaultAnswerFor(choice: PendingChoice): ChoiceAnswer {
       // The smallest legal value — for an X cost that is X = 0, the answer that
       // spends nothing on the chooser's behalf (same rule as the payment kinds).
       return { kind: 'chooseNumber', value: choice.min };
+    case 'chooseValue':
+      // Name NOTHING — unless exactly one value is on offer, which is not a
+      // decision but the only lawful naming (the same rule `selectTargets`
+      // applies to a single legal target).
+      //
+      // Deliberately NOT "the first option" in general: that would be an
+      // arbitrary pick dressed up as a default, and on a Cavern of Souls it
+      // would silently hand the degraded path a real, working creature type.
+      // See {@link NOTHING_CHOSEN} — the unasked default is the one that grants
+      // nothing, and it is the same value on every path that cannot ask.
+      return {
+        kind: 'chooseValue',
+        value: choice.options.length === 1 ? (choice.options[0] as ChoiceValueOption).value : NOTHING_CHOSEN,
+      };
     default:
       return { kind: 'confirm', yes: false };
   }
@@ -1038,6 +1099,13 @@ export function isTrivialChoice(choice: PendingChoice): boolean {
       // A range of one value is not a decision — notably X on a board that can
       // only fund X = 0, which must not stop the game to ask the inevitable.
       return choice.min === choice.max;
+    case 'chooseValue':
+      // One option is not a decision. ZERO options is the degenerate case
+      // ("choose a creature type" with no type list to offer) and settles to
+      // "nothing chosen" without stopping the game. Two or more IS a decision
+      // and is always asked: auto-picking a colour would make Coldsteel Heart
+      // produce a colour its controller never named.
+      return choice.options.length <= 1;
     default:
       return true;
   }
@@ -1191,6 +1259,15 @@ export function enumerateChoiceAnswers(choice: PendingChoice): ChoiceAnswer[] {
       }
       return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
     }
+    case 'chooseValue': {
+      // Every offered value, capped like the rest. `NOTHING_CHOSEN` is legal but
+      // is NOT enumerated: it is the floor for a path that cannot ask, not a
+      // move a pilot should ever be handed a reason to take.
+      const answers = choice.options
+        .slice(0, limit)
+        .map((option): ChoiceAnswer => ({ kind: 'chooseValue', value: option.value }));
+      return answers.length > 0 ? answers : [defaultAnswerFor(choice)];
+    }
     default:
       return [defaultAnswerFor(choice)];
   }
@@ -1236,6 +1313,8 @@ export function describeChoiceAnswer(answer: ChoiceAnswer): string {
       return answer.pay ? 'paid life' : 'declined to pay life';
     case 'chooseNumber':
       return `chose ${answer.value}`;
+    case 'chooseValue':
+      return answer.value === NOTHING_CHOSEN ? 'chose nothing' : `named ${answer.value}`;
     default:
       return 'answer';
   }
@@ -1316,4 +1395,11 @@ export interface ResolutionFrame {
   /** The ability's source permanent + label (trigger frames only). */
   sourceInstanceId?: InstanceId;
   label?: string;
+  /**
+   * The player the trigger's event was about — carried off the stack object for
+   * the same reason as {@link xValue}: the resolution outlives the stack object,
+   * and "that player draws an additional card" is read during it. Absent for
+   * spells and for triggers whose event names no player.
+   */
+  triggeringPlayer?: PlayerId;
 }

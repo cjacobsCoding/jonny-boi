@@ -198,9 +198,11 @@ describe('compileCard — honesty about what the engine cannot do', () => {
     //
     // The partition still has to be PROVEN to separate, though — a test whose
     // blocked half is empty by construction would pass even if `compileCards`
-    // stopped blocking anything at all. So the blocked half is a SPLIT card,
-    // which is honestly unimplementable: two castable halves on one object, with
-    // no second face to swap to (see `SECOND_CASTABLE_FACE_GAP`).
+    // stopped blocking anything at all. So the blocked half is a split-card
+    // RECORD WITH NO FACE DATA — split cards themselves compile now, but only
+    // from a record that carries its two faces; this one carries the combined
+    // name alone, so both halves would have to be guessed (see
+    // `SECOND_CASTABLE_FACE_GAP`).
     const bolt = scryfallFor(CARD_POOL.find((c) => c.name === 'Lightning Bolt')!);
     const liliana = scryfallFor(CARD_POOL.find((c) => c.name === 'Liliana of the Veil')!);
     const goyf = scryfallFor(CARD_POOL.find((c) => c.name === 'Tarmogoyf')!);

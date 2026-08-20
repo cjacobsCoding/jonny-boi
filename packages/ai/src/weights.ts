@@ -229,6 +229,33 @@ export interface HeuristicWeights {
    */
   readonly scryKeepValueThreshold: number;
 
+  /**
+   * TUTORING — how far BEYOND the mana it can currently produce a pilot will
+   * still reach when a library search lets it pick any card in the deck.
+   *
+   * A tutor answered on raw card value alone fetches the deck's biggest bomb
+   * every time, including on turn two, where it is a dead card for six turns —
+   * and a fetch that is dead in most games is noise in every A/B verdict the
+   * lab produces, which is the one thing a search must not be. So a candidate
+   * whose mana value exceeds `lands in play + this` is discounted by
+   * {@link tutorUncastablePenalty} rather than banned: an unreachable card is
+   * still the right pick when it is the only thing that qualifies (a tutor may
+   * always find, and "find nothing" is worse).
+   *
+   * One, not zero: the land drop for the turn is a mana source the pilot is
+   * about to have.
+   */
+  readonly tutorReachableManaLead: number;
+  /**
+   * The value subtracted from a searched card the pilot could not cast within
+   * {@link tutorReachableManaLead} of its current mana. Large enough to sort a
+   * castable card above an uncastable one of ANY size (the biggest creature in
+   * the corpus scores well under it), small enough to leave the ordering among
+   * uncastable cards intact — so a tutor whose every candidate is out of reach
+   * still fetches the best of them.
+   */
+  readonly tutorUncastablePenalty: number;
+
   // --- scoring EFFECTS (effect-value.ts — modal-spell modes) -----------------
   // Modes are scored on the SAME scale as spells above (removal ≈ 60, develop ≈ 40,
   // generic ≈ 25, pass = 0), reusing those weights wherever the category already
@@ -408,6 +435,12 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // needed land's `choiceLandShortValue` 20). So: bottom flooded lands, keep
   // everything else. See the field's doc comment for why one number suffices.
   scryKeepValueThreshold: 5,
+  // Reach one mana past the board: the land drop for the turn is mana the pilot
+  // is about to have. The penalty is bigger than any card's value (the biggest
+  // creature in the measured corpus scores under 100), so "castable soon" is a
+  // strict sort key ahead of raw power without ever making a fetch impossible.
+  tutorReachableManaLead: 1,
+  tutorUncastablePenalty: 100,
 
   // scoring effects (modal-spell modes) — the ordering these produce is
   //   lethal > counter/kill their best thing > draw a card > bounce a real threat
