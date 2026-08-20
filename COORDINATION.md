@@ -189,7 +189,19 @@ _Append dated notes here; keep them short. Newest at top._
   fail without the fix with the engine's own message ("Wall of Omens cannot block Black Knight",
   soak seed 1948110550). My edit is 3 small hunks + 1 import — **keep BOTH sides on conflict.**
 
-  📏 **ALL FOUR FIXES ARE BASELINE-NEUTRAL, and that is MEASURED, not assumed.** I scanned all
+  📏 **ALL FOUR FIXES ARE BASELINE-NEUTRAL, AND I RAN THE PAIRED GAUNTLET TO PROVE IT** — not a
+  deck scan, the actual numbers, on the MERGED tree, with my four hunks in and then reverted:
+
+  | run | with the fixes | with them reverted |
+  |---|---|---|
+  | Mono-Red Aggro, 40 games/deck, seed 99 | 81/280, cells 12/13/17/8/9/7/15 | **identical** |
+  | Mono-Red Aggro, 200 games/deck, seed 4242 | 432/1400, cells 63/88/91/58/34/33/65 | **identical** |
+
+  Byte-identical, cell for cell. The 200-game figure also matches DESIGN §3.4f's recorded
+  **432/1400** exactly. (Seed 99 reads 81/280 where §3.4a records 79/280 — that drift is the 54
+  sibling commits I merged, not this branch: it is present in BOTH columns above.)
+
+  📏 **And the mechanism, for anyone who wants to re-check without running 1,680 games.** I scanned all
   eight gauntlet decks in `packages/sim/data/decks` for every card each fix can possibly touch:
   **zero protection creatures, zero menace / `minBlockers` creatures, zero flashback-life-cost cards,
   zero characteristic-defining-P/T cards and zero flashback cards at all, across every one of them.**
