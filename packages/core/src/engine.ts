@@ -32,6 +32,7 @@ import {
   manaActivationConditionMet,
   manaExtrasOf,
   manaModesOf,
+  spendPurposeIfRestricted,
   playableFaceOf,
 } from './card.js';
 import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame, TargetOption } from './choices.js';
@@ -51,7 +52,13 @@ import {
   validateChoiceAnswer,
 } from './choices.js';
 import { interveningIfHolds } from './intervening.js';
-import { asEntersOptions, asEntersPrompt, chosenColorOf, recordChosenAsEntered } from './as-enters.js';
+import {
+  asEntersOptions,
+  asEntersPrompt,
+  chosenColorOf,
+  chosenSubtypeOf,
+  recordChosenAsEntered,
+} from './as-enters.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
@@ -71,6 +78,8 @@ import {
 } from './mana.js';
 import type { ManaTapPlan } from './mana-plan.js';
 import { planManaPayment } from './mana-plan.js';
+import type { ManaSpendRestriction } from './spend-restriction.js';
+import { resolveSpendRestriction, restrictionNamesChosenSubtype } from './spend-restriction.js';
 import type {
   CardInstance,
   GameState,
@@ -138,6 +147,7 @@ import {
   tapAttackers,
 } from './internal/combat.js';
 import { entersTapped, isAttackable, isCreature, isPlaneswalker } from './card.js';
+import { applyCopyAsEntersAnswer, askCopyAsEnters, extraLoyaltyForCopy } from './copy.js';
 import { addLoyalty, applyEnteringDefense, applyEnteringLoyalty, loyaltyOf, removeLoyalty } from './internal/stats.js';
 
 /**
@@ -707,6 +717,23 @@ function resolveTopOfStack(
 
   const card = top.card;
 
+  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 706), asked before anything else
+  // happens to this spell — before `stackResolved`, before a single effect runs,
+  // and above all before the permanent is on the battlefield, because the copied
+  // card is what decides its `entersTapped`, its summoning sickness, its
+  // starting loyalty and its starting defense.
+  //
+  // The stack object goes straight BACK on the stack while the question stands:
+  // nothing has been emitted and nothing has been mutated, so re-entering here
+  // after the answer resolves the spell exactly once. `copyAsEntersDecided`
+  // is what makes the second entry skip the question rather than re-ask it — a
+  // DECLINE has to stick, and "did they already choose?" cannot be read off the
+  // instance (declining leaves no trace on it, which is the whole point).
+  if (top.resolvesTo === 'battlefield' && top.copyAsEntersDecided !== true && askCopyAsEnters(state, card, emit)) {
+    state.stack.push(top);
+    return;
+  }
+
   emit({ type: 'stackResolved', instanceId: card.instanceId, name: card.def.name });
 
   // Where the card goes when it is done: the battlefield for a permanent, and
@@ -950,6 +977,23 @@ function finishSpellResolution(
     // A planeswalker enters with its printed loyalty (CR 306.5b) — said AFTER the
     // zoneChange so a replay folds "entered, then at loyalty N" in order.
     applyEnteringLoyalty(card, emit);
+    // "…except it enters with an ADDITIONAL loyalty counter on it if it's a
+    // planeswalker" (Spark Double). Added after the printed number rather than
+    // folded into it, because that is what the card says and because the
+    // printed number is the copied walker's, not this card's. `+1/+1` counters
+    // from the same "except" tail were applied with the copy itself — loyalty
+    // is different only because a walker ENTERS with it (CR 306.5b) and the
+    // helper above sets the record wholesale.
+    const bonusLoyalty = extraLoyaltyForCopy(card, card.def.copyAsEnters);
+    if (bonusLoyalty > 0) {
+      addLoyalty(card, bonusLoyalty);
+      emit({
+        type: 'loyaltyChanged',
+        instanceId: card.instanceId,
+        delta: bonusLoyalty,
+        to: loyaltyOf(card),
+      });
+    }
     // A battle enters with its printed defense counters (CR 310.4) by the same
     // rule and through the same kind of shared helper, so no entry path can
     // disagree with another about the number a permanent arrives carrying.
@@ -1284,7 +1328,7 @@ function dispatchAction(
   }
   switch (action.kind) {
     case 'answerChoice':
-      return applyAnswerChoice(state, prevState, action, effectRegistry, config, emit, events);
+      return applyAnswerChoice(state, prevState, action, config, effectRegistry, emit, events);
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
       // Passing with a madness window open DECLINES it (CR 702.35a): the card
@@ -1346,8 +1390,8 @@ function applyAnswerChoice(
   state: GameState,
   prevState: GameState,
   action: Extract<GameAction, { kind: 'answerChoice' }>,
-  registry: EffectRegistry,
   config: RulesConfig,
+  registry: EffectRegistry,
   emit: (e: GameEvent) => void,
   events: GameEvent[],
 ): EngineResult {
@@ -1539,6 +1583,70 @@ function applyAnswerChoice(
       state.priorityPlayer = state.activePlayer;
       state.consecutivePasses = 0;
     }
+    return { state, events };
+  }
+
+  // AN AS-ENTERS COPY answer (CR 614.1c + CR 706) belongs to the ENTRY PATH that
+  // raised it, not to a resolution. Routed by its own `context` marker for the
+  // same reason the legend rule is: "no frame behind it" also describes the
+  // shockland question below. Two entry paths raised it and each is finished
+  // here, because in both cases the permanent is NOT yet on the battlefield —
+  // which is precisely what makes the copied card decide how it enters.
+  if (choice.context === 'copyAsEnters' && answer.kind === 'selectCards') {
+    const chosen = answer.instanceIds;
+    // WHICH entry path raised it is read off where the copying card IS, not off
+    // a second state field: a permanent spell waiting to resolve is on the
+    // stack, and a land mid-play is still in its owner's hand. Instance ids are
+    // unique, so the two cases can never both match.
+    const waiting = spellOnStack(state, choice.sourceInstanceId);
+    if (waiting) {
+      // `resolveTopOfStack` put the stack object back untouched, so recording
+      // the decision and resolving again finishes the spell exactly once.
+      applyCopyAsEntersAnswer(state, waiting.card, chosen, emit);
+      patchSpellOnStack(state, waiting.instanceId, { copyAsEntersDecided: true });
+      resolveTopOfStack(state, config, registry, emit);
+      if (!state.pendingChoice && !state.gameOver) {
+        state.priorityPlayer = state.activePlayer;
+        state.consecutivePasses = 0;
+      }
+      return { state, events };
+    }
+    // A LAND being played. It is already on the battlefield (the entry model
+    // every land question uses — the shockland's, the reveal-land's and the
+    // naming's alike), so the copy is applied in place and then the entry ladder
+    // picks up where the copy left off: a copied land owes the COPIED card's
+    // naming, reveal and life questions, never this card's.
+    const land = findOnBattlefield(state, choice.appliesToInstanceId ?? choice.sourceInstanceId);
+    if (land) {
+      applyCopyAsEntersAnswer(state, land, chosen, emit);
+      // `entersTapped` was read off the UNCOPIED land, and the copy replaced the
+      // card it was read from — so it is re-read here, before anything can
+      // observe it. Nothing can: the `tapped` event is deferred to the end of
+      // the ladder, and answering is the only legal action while a question
+      // stands.
+      land.tapped = entersTapped(land.def, {
+        controller: land.controller,
+        battlefield: state.battlefield,
+        self: land,
+      });
+      raiseLandEntryChoice(state, land, choice.chooser, emit);
+      checkStateBasedActions(state, emit);
+      // Aim a landfall trigger only once the land has finished asking — the
+      // entry questions are all replacement effects that happen AS it enters
+      // (CR 614.1c), and `aimPendingTriggers` would park a question of its own
+      // over the ladder's next one.
+      if (!state.pendingChoice) aimPendingTriggers(state, emit);
+      if (!state.pendingChoice && !state.gameOver) {
+        // The land play never surrendered priority, so its player keeps the floor.
+        state.priorityPlayer = choice.chooser;
+        state.consecutivePasses = 0;
+      }
+      return { state, events };
+    }
+    // Neither — the spell was countered, or the state was hand-built. Nothing
+    // entered, so there is nothing to undo; the game simply continues.
+    state.priorityPlayer = state.activePlayer;
+    state.consecutivePasses = 0;
     return { state, events };
   }
 
@@ -1738,7 +1846,21 @@ function applyPlayLand(
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
-  raiseLandEntryChoice(state, card, action.player, emit);
+  // THE AS-ENTERS COPY (CR 706 - Vesuva, Echoing Deeps) is asked HERE, once,
+  // ahead of the entry ladder rather than as another rung of it. It is not a
+  // rung because it does not answer a question ABOUT this land -- it decides
+  // WHICH LAND the ladder is then asking about: a Vesuva that copies Cavern of
+  // Souls owes Cavern's naming, and one that copies a Temple owes nothing.
+  // Asking it from the single call site also means it can never be re-asked,
+  // which matters because a DECLINE leaves no trace on the permanent (the ladder
+  // is a step function, called again after every answer, and each of its rungs
+  // needs a recorded answer to stop asking).
+  //
+  // The copy's answer picks the ladder up again (`applyAnswerChoice`); with no
+  // copy question to ask, the ladder starts immediately.
+  if (!askCopyAsEnters(state, card, emit)) {
+    raiseLandEntryChoice(state, card, action.player, emit);
+  }
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
@@ -2194,7 +2316,10 @@ function manaModeBlockedReason(
     if (cost.life !== undefined && cost.life > 0 && player.life < cost.life) {
       return 'you do not have enough life to pay that cost';
     }
-    if (cost.mana && !canPay(player.manaPool, cost.mana)) {
+    if (
+      cost.mana &&
+      !canPay(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, perm.def, 'activate'))
+    ) {
       return `insufficient mana to activate ${perm.def.name}`;
     }
   }
@@ -2319,6 +2444,11 @@ function payManaCostFromBoard(
     if (!source || source.tapped) return false;
     tapPermanentForMana(state, source, player, tap.production, emit);
   }
+  // NO SPEND PURPOSE, deliberately. This pays a cost DEMANDED BY A RESOLVING
+  // EFFECT ("unless its controller pays {3}") — it is neither casting a spell nor
+  // activating an ability, so no printed spend restriction in this engine permits
+  // it, and `payCost` refuses restricted mana for exactly that reason. An
+  // Ancient Ziggurat mana cannot pay a Mana Leak tax, and it does not here.
   const result = payCost(state.players[player].manaPool, cost);
   if (!result.ok) return false;
   state.players[player].manaPool = result.pool;
@@ -2326,21 +2456,38 @@ function payManaCostFromBoard(
   return true;
 }
 
-/** Tap a source and add its production to its controller's pool, with events. */
+/**
+ * Tap a source and add its production to its controller's pool, with events.
+ *
+ * `restriction` is what the ability printed about the MANA ("Spend this mana only
+ * to cast a creature spell"); `undefined` for every ordinary source, in which
+ * case the pool stays the plain six-colour record the hot path short-circuits on.
+ */
 function tapPermanentForMana(
   state: GameState,
   source: CardInstance,
   player: PlayerId,
   production: ManaProduction,
   emit: (e: GameEvent) => void,
+  restriction?: ManaSpendRestriction,
 ): void {
   source.tapped = true;
   emit({ type: 'tapped', instanceId: source.instanceId });
   const owner = state.players[player];
-  owner.manaPool = addProduction(owner.manaPool, production);
+  owner.manaPool = addProduction(owner.manaPool, production, restriction);
   for (const color of MANA_COLORS) {
     const amount = production[color] ?? 0;
-    if (amount > 0) emit({ type: 'manaAdded', player, color, amount });
+    if (amount <= 0) continue;
+    // The restriction rides the event because mana in a pool is PUBLIC in this
+    // engine (see `sim/observation.ts`), so a restriction on public mana is
+    // public too: it was printed on a permanent everyone can read, and the whole
+    // table watched that permanent be tapped. Emitting the plain event shape when
+    // there is none keeps every existing log line byte-identical.
+    emit(
+      restriction === undefined
+        ? { type: 'manaAdded', player, color, amount }
+        : { type: 'manaAdded', player, color, amount, spendRestriction: restriction.label },
+    );
   }
 }
 
@@ -2383,7 +2530,15 @@ function applyTapForMana(
       // Paid BEFORE the production is added, which is what makes a filter land a
       // filter rather than a free two mana: the input leaves the pool, then the
       // output arrives.
-      const paid = payCost(player.manaPool, cost.mana);
+      const paid = payCost(
+        player.manaPool,
+        cost.mana,
+        // A mana ability IS an ability, so a restricted mana that may "activate
+        // abilities of artifacts" can legally fund an artifact filter land — and
+        // one that may only cast creature spells cannot. Same question, same
+        // helper, as every other activation.
+        spendPurposeIfRestricted(player.manaPool, source.def, 'activate'),
+      );
       if (!paid.ok) return rejectWith(prevState, paid.reason);
       player.manaPool = paid.pool;
       emit({ type: 'manaCostPaid', player: action.player, cost: { ...cost.mana } });
@@ -2394,7 +2549,14 @@ function applyTapForMana(
     }
   }
 
-  tapPermanentForMana(state, source, action.player, production, emit);
+  tapPermanentForMana(
+    state,
+    source,
+    action.player,
+    production,
+    emit,
+    spendRestrictionMadeBy(source, extra?.ability.spendRestriction),
+  );
 
   // The RIDER runs as part of the ability's own resolution, AFTER the mana is
   // added — a pain land's damage is not a cost you may decline, and it is damage
@@ -2423,6 +2585,25 @@ function applyTapForMana(
   if (damage > 0 || (extra?.ability.cost?.life ?? 0) > 0) checkStateBasedActions(state, emit);
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
+}
+
+/**
+ * The concrete restriction a tap of `source` puts on the mana it makes.
+ *
+ * For every card but the "…of the chosen type" three this is the printed
+ * restriction itself, returned by identity — the shared frozen object, no
+ * allocation. Cavern of Souls and friends name a creature type as they enter,
+ * and core's as-enters seam already stores that answer on the INSTANCE
+ * (`chosenAsEntered`), so the value is read from there rather than tracked a
+ * second time; substituting it here means the pool only ever holds concrete
+ * restrictions and no payment path has to find the permanent again.
+ */
+function spendRestrictionMadeBy(
+  source: CardInstance,
+  printed: ManaSpendRestriction | undefined,
+): ManaSpendRestriction | undefined {
+  if (printed === undefined || !restrictionNamesChosenSubtype(printed)) return printed;
+  return resolveSpendRestriction(printed, chosenSubtypeOf(source));
 }
 
 function applyCastSpell(
@@ -2591,8 +2772,15 @@ function applyCastSpell(
         ? madnessCost
         : castDef.cost;
   if (cost) {
-    if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
-    const result = payCost(player.manaPool, cost);
+    // WHAT the mana is being spent on, for any restricted mana in the pool. The
+    // face being CAST is the object a restriction reads (a modal DFC's back face
+    // is its own spell with its own types), which is why `castDef` is passed
+    // rather than the card's printed front.
+    const purpose = spendPurposeIfRestricted(player.manaPool, castDef, 'cast');
+    if (!canPay(player.manaPool, cost, purpose)) {
+      return rejectWith(prevState, 'insufficient mana to cast this spell');
+    }
+    const result = payCost(player.manaPool, cost, purpose);
     if (!result.ok) return rejectWith(prevState, result.reason);
     player.manaPool = result.pool;
   }
@@ -2739,6 +2927,7 @@ function patchSpellOnStack(
       | 'boughtBack'
       | 'additionalCostPaid'
       | 'awaitingCastChoice'
+      | 'copyAsEntersDecided'
     >
   >,
 ): void {
@@ -3373,8 +3562,14 @@ function applyCycleCard(
   const index = action.abilityIndex ?? 0;
   const ability = card.def.cycling?.[index];
   if (!ability) return rejectWith(prevState, 'that card has no such cycling ability');
-  if (!canPay(player.manaPool, ability.cost)) return rejectWith(prevState, 'insufficient mana to cycle this card');
-  const paid = payCost(player.manaPool, ability.cost);
+  // Cycling is an ACTIVATED ability of a card in your hand (CR 702.29a), so
+  // restricted mana that may activate abilities of that kind of source may fund
+  // it and mana that may only cast spells may not.
+  const cyclePurpose = spendPurposeIfRestricted(player.manaPool, card.def, 'activate');
+  if (!canPay(player.manaPool, ability.cost, cyclePurpose)) {
+    return rejectWith(prevState, 'insufficient mana to cycle this card');
+  }
+  const paid = payCost(player.manaPool, ability.cost, cyclePurpose);
   if (!paid.ok) return rejectWith(prevState, paid.reason);
   player.manaPool = paid.pool;
 
@@ -3470,7 +3665,11 @@ function applyActivateAbility(
   const player = state.players[action.player];
   const cost = ability.cost;
   if (cost.mana) {
-    const paid = payCost(player.manaPool, cost.mana);
+    const paid = payCost(
+      player.manaPool,
+      cost.mana,
+      spendPurposeIfRestricted(player.manaPool, source.def, 'activate'),
+    );
     if (!paid.ok) return rejectWith(prevState, paid.reason);
     player.manaPool = paid.pool;
   }
@@ -3569,7 +3768,12 @@ function unpayableActivationReason(
     // to a state-based action before the ability ever resolved.
     return 'you do not have enough life to pay that cost';
   }
-  if (cost.mana && !canPay(player.manaPool, cost.mana)) return 'insufficient mana for that ability';
+  if (
+    cost.mana &&
+    !canPay(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, source.def, 'activate'))
+  ) {
+    return 'insufficient mana for that ability';
+  }
   if (cost.loyalty !== undefined) {
     // A loyalty cost only means anything on a planeswalker carrying loyalty
     // counters; anything else declaring one is malformed data, refused loudly.
@@ -3788,7 +3992,13 @@ function madnessActionsFor(state: GameState): GameAction[] {
   pushManaTapActions(state, me, actions);
   const card = instanceIn(player.exile, window.instanceId);
   const cost = card?.def.madness;
-  if (!card || cost === undefined || !canPay(player.manaPool, cost)) return actions;
+  if (
+    !card ||
+    cost === undefined ||
+    !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))
+  ) {
+    return actions;
+  }
   const restriction = targetRestrictionOf(card.def);
   if (restriction === undefined) {
     actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'exile' });
@@ -3990,7 +4200,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     if (flashbackCost === undefined || isLand(card.def)) continue;
     const timing = castTiming(card.def);
     if (timing !== 'instant' && !sorcerySpeedWindow) continue;
-    if (!canPay(player.manaPool, flashbackCost)) continue;
+    if (
+      !canPay(
+        player.manaPool,
+        flashbackCost,
+        spendPurposeIfRestricted(player.manaPool, card.def, 'cast'),
+      )
+    ) {
+      continue;
+    }
     // A flashback cost may print a mandatory life rider ("Flashback—{1}{U}, Pay
     // 3 life"). It is part of the cost, so a caster who cannot pay it is not
     // offered the cast — the same gate `applyCastSpell` enforces.
@@ -4049,7 +4267,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     const cycling = card.def.cycling;
     if (!cycling || cycling.length === 0) continue;
     for (let index = 0; index < cycling.length; index++) {
-      if (!canPay(player.manaPool, cycling[index]!.cost)) continue;
+      if (
+        !canPay(
+          player.manaPool,
+          cycling[index]!.cost,
+          spendPurposeIfRestricted(player.manaPool, card.def, 'activate'),
+        )
+      ) {
+        continue;
+      }
       actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index });
     }
   }
@@ -4157,8 +4383,15 @@ function pushCastOffers(
   if (timing !== 'instant' && !sorcerySpeedWindow) return;
   // `free` is a permission that says "without paying its mana cost" (a Siege
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
-  // exactly what an AFTERMATH half cast from the graveyard pays.
-  if (options?.free !== true && def.cost && !canPay(pool, def.cost)) return;
+  // exactly what an AFTERMATH half cast from the graveyard pays, and which any
+  // restricted mana in the pool is only allowed to fund if this face qualifies.
+  if (
+    options?.free !== true &&
+    def.cost &&
+    !canPay(pool, def.cost, spendPurposeIfRestricted(pool, def, 'cast'))
+  ) {
+    return;
+  }
   // A modal spell with nothing it could legally announce cannot be cast — the
   // same judgement `applyCastSpell` makes, from the same helper.
   if (!modalSpellIsCastable(state, def, me)) return;

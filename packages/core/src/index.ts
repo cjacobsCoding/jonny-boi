@@ -45,7 +45,20 @@ export {
   payCost,
   canPay,
   repeatCost,
+  usableMana,
+  restrictedTotal,
 } from './mana.js';
+
+// SPEND RESTRICTIONS on produced mana ("Spend this mana only to cast a creature
+// spell"). The POOL carries them, not the source — see spend-restriction.ts.
+export type {
+  ManaSpendClause,
+  ManaSpendKind,
+  ManaSpendPurpose,
+  ManaSpendRestriction,
+  RestrictedMana,
+} from './spend-restriction.js';
+export { restrictionAllows } from './spend-restriction.js';
 
 // Card model seam
 export type {
@@ -87,6 +100,8 @@ export {
   isManaSource,
   manaModesOf,
   manaExtrasOf,
+  spendPurposeFor,
+  spendPurposeIfRestricted,
   manaColorsOffered,
   fixedManaColorsOf,
   manaActivationConditionMet,
@@ -240,6 +255,30 @@ export {
  */
 export type { FaceUp } from './transform.js';
 export { transformPermanent, faceUpOf, transformTargetOf } from './transform.js';
+
+/**
+ * COPY-EFFECT seam (`./copy.ts`) -- CR 706, the bottom of the layer system.
+ * "You may have ~ enter as a copy of any creature on the battlefield" is
+ * declared as data (`CardDefinition.copyAsEnters`) and applied by swapping the
+ * instance's `def` in LAYER 1, so counters (7d), anthems (7c) and until-EOT
+ * pumps all apply on top of the copied characteristics with no second code
+ * path. `copiableDefOf` is the single answer to "what would copying this give
+ * you" (CR 706.2 -- the printed front face, never the pumped board state), and
+ * `copyResultDef` is its pure preview, used by the AI to rank copy targets.
+ */
+export type { CopyAsEntersSpec, CopyExceptions, CopySourceZone } from './copy.js';
+export {
+  applyCopyAsEnters,
+  applyCopyAsEntersAnswer,
+  applyCopyExceptions,
+  askCopyAsEnters,
+  copiableDefOf,
+  copyCandidates,
+  copyResultDef,
+  COPY_ID_SUFFIX,
+  extraLoyaltyForCopy,
+  isCopy,
+} from './copy.js';
 
 /**
  * MODAL-SPELL seam (`./modal.ts`): which modes of a "Choose one --" card may be

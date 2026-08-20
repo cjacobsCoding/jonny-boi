@@ -506,14 +506,26 @@ interface PendingChoiceBase {
    * marker instead of guessing from the absence of a frame. Absent for every
    * ordinary choice, so all existing states and tests read unchanged.
    *
+   * `'asEnters'` marks the CR 614.1c NAMING ("As ~ enters, choose a creature
+   * type"), and `'copyAsEnters'` the CR 706 as-enters COPY ("you may have ~
+   * enter as a copy of any creature on the battlefield"). Both are raised by an
+   * ENTRY PATH rather than by a resolving effect, and both are routed by this
+   * marker for exactly the reason the legend rule is: "there is no frame behind
+   * it" also describes the shockland question, and the five must never be
+   * confused. They are two markers rather than one because the answers differ
+   * in kind — a naming records a VALUE on the instance, a copy replaces what the
+   * instance IS — and because a card can print both, in that order.
+   *
    * `'cleanupDiscard'` marks the cleanup step's discard down to maximum hand size
    * (CR 514.1) — likewise a turn-based action the GAME performs, with no
-   * resolution behind it, and the one question that parks with the turn itself
+   * resolution behind it, and the one question that parks with the TURN itself
    * waiting on the answer.
    */
-  readonly context?: 'legendRule' | 'cleanupDiscard' | 'asEnters';
+  readonly context?: 'legendRule' | 'cleanupDiscard' | 'asEnters' | 'copyAsEnters';
   /**
-   * The permanent whose `chosenAsEntered` an `'asEnters'` answer is written to.
+   * The permanent an entry-path answer applies to: the one whose
+   * `chosenAsEntered` an `'asEnters'` answer is written to, and the one a
+   * `'copyAsEnters'` answer turns into a copy.
    *
    * It is carried explicitly rather than reusing {@link sourceInstanceId}
    * because the two are only accidentally equal today (the permanent asking IS

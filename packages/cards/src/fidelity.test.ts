@@ -343,6 +343,13 @@ function behaviour(definition: CardDefinition): string {
     // size DOES at every read. Without it here, a Tarmogoyf compiled with the
     // wrong count (or the wrong offset) would pass the audit silently.
     characteristicPT: definition.characteristicPT ?? null,
+    // An as-enters COPY spec is behaviour too, and of the most consequential
+    // kind: it decides what the permanent IS. A hand-authored Clone whose
+    // filter or "except" tail differed from its printed text would be a
+    // different card entirely, and without this line the signature could not
+    // tell -- the same blind spot `modal` and `characteristicPT` were added to
+    // close.
+    copyAsEnters: definition.copyAsEnters ?? null,
   });
 }
 

@@ -173,8 +173,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Conditional and board-derived mana',
         detail:
-          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping. Still refused by name: "spend this mana only to…", which would need the mana POOL to carry the restriction.',
+          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping.',
         witness: { kind: 'rule', id: 'mana-ability-activation-restriction' },
+      },
+      {
+        title: 'Mana you may spend on only one thing',
+        detail:
+          'Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Giada and Power Depot print a restriction on the MANA rather than on the source: "Spend this mana only to cast a creature spell", "…only to cast artifact spells or activate abilities of artifacts". The floating pool carries it, so casting, activating an ability, cycling and a filter land’s own cost each ask what the mana is being spent on — and a spell it may not pay for is not offered at all. Mana you cannot spend still counts as floating and still empties at end of step, exactly like any other. Unclaimed Territory and Secluded Courtyard restrict theirs to “the chosen type”, read from the creature type the land itself named as it entered — and a land that named nothing makes mana that pays for nothing, never for everything. The shared payment planner spends restricted mana FIRST when it legally can, because it is the least flexible resource on the board.',
+        witness: {
+          kind: 'oracle',
+          text: '{T}: Add one mana of any color. Spend this mana only to cast a creature spell.',
+          as: 'creature',
+        },
       },
       {
         title: '{X} costs',
@@ -458,6 +468,22 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         detail:
           'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield.',
         witness: { kind: 'engine', api: 'hasCastableBackFace' },
+      },
+      {
+        title: 'Copy effects (Clone)',
+        detail:
+          '"You may have this creature enter as a copy of any creature on the battlefield" plays as printed, including the "except" tail (an added type or creature type, a kept name, legendary on or off, an extra +1/+1 or loyalty counter, an "enters tapped"). A copy is applied in LAYER 1 (CR 613.2), beneath everything: the permanent keeps its OWN +1/+1 counters, the anthems on the board still shine on it, and an until-end-of-turn pump still applies — all on top of the copied card. And you copy the PRINTED card (CR 706.2), so a 1/1 wearing three counters is copied as a 1/1 and a transformed permanent is copied by its front face. Sculpting Steel, Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva and Echoing Deeps all import as playable.',
+        witness: { kind: 'rule', id: 'copy-as-enters' },
+      },
+      {
+        title: 'Copying from a graveyard',
+        detail:
+          'The objects a copy may choose from are not always on the battlefield: Echoing Deeps enters tapped "as a copy of any land card in a graveyard", and a card in a graveyard is copied by exactly the same printed values a permanent is.',
+        witness: {
+          kind: 'oracle',
+          text: "You may have this land enter tapped as a copy of any land card in a graveyard, except it's a Cave in addition to its other types.",
+          as: 'creature',
+        },
       },
       {
         title: 'Split cards (Fire // Ice)',

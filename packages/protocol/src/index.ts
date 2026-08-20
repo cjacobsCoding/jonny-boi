@@ -125,6 +125,17 @@ export interface DeckList {
 export interface PublicPlayerView {
   readonly id: PlayerId;
   readonly life: number;
+  /**
+   * The floating pool, INCLUDING any spend restrictions on it ("only to cast a
+   * creature spell").
+   *
+   * Travels whole and unredacted, deliberately. Mana in a pool is open
+   * information in paper Magic, and a restriction on it is printed on a permanent
+   * everyone can read — there is no seat entitlement to compute. It also has to
+   * travel for the client to work at all: the online seat plans its own payments
+   * with core's shared planner (`auto-tap.ts`), and a planner handed a pool whose
+   * restrictions were stripped would offer casts the server then rejects.
+   */
   readonly manaPool: PlayerState['manaPool'];
   readonly landsPlayedThisTurn: number;
   readonly hasLost: boolean;
