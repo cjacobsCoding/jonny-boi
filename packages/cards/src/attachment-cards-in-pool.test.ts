@@ -370,8 +370,15 @@ describe('the pool Equipment really equips, moves, and survives its host', () =>
     expect(host, 'Bonesplitter ended the game attached to nothing').toBeDefined();
     const equipment = game.state.battlefield.find((c) => c.def.name === 'Bonesplitter')!;
     expect(host!.controller).toBe(equipment.controller);
+    // A deck plays FOUR Bonesplitters, and stacking two on one creature is a
+    // real (and correct) line — so the assertion counts what is actually on this
+    // host rather than assuming one, exactly as the Aura test above does.
+    const onThisHost = game.state.battlefield.filter(
+      (c) => c.def.name === 'Bonesplitter' && c.attachedTo === host!.instanceId,
+    ).length;
+    expect(onThisHost).toBeGreaterThan(0);
     const mod = indexContinuous(game.state).get(host!.instanceId) ?? NO_MOD;
-    expect(effectivePower(host!, mod)).toBe((host!.def.power ?? 0) + 2);
+    expect(effectivePower(host!, mod)).toBe((host!.def.power ?? 0) + 2 * onThisHost);
   });
 
   it('an Equipment whose creature dies UNATTACHES and stays on the battlefield (CR 704.5n)', () => {
