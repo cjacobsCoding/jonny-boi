@@ -648,7 +648,8 @@
         "Catch // Release",
         "Far // Away",
         "Give // Take",
-        "Ready // Willing"
+        "Ready // Willing",
+        "Integrity // Intervention"
       ]
     },
     {
@@ -678,7 +679,8 @@
         "Start // Finish",
         "Leave // Chance",
         "Destined // Lead",
-        "Dead // Gone"
+        "Dead // Gone",
+        "Road // Ruin"
       ]
     },
     {
@@ -708,11 +710,20 @@
         "Fierce Witchstalker",
         "Reaper of Night",
         "Tuinvale Treefolk",
-        "Petrified Wood-Kin"
+        "Petrified Wood-Kin",
+        "Bilbo Baggins, Burglar",
+        "Embereth Shieldbreaker",
+        "Frolicking Familiar",
+        "Minecart Daredevil",
+        "Obyra's Attendants",
+        "Smaug, the Great Calamity",
+        "Topaz Dragon",
+        "Two-Headed Hunter",
+        "Young Blue Dragon"
       ]
     },
     {
-      "role": "modal double-faced LANDS — the Pathway cycle, a land on both faces",
+      "role": "modal double-faced cards — the Pathway land//land cycle plus the spell//land halves that compile",
       "names": [
         "Barkchannel Pathway",
         "Blightstep Pathway",
@@ -723,7 +734,14 @@
         "Darkbore Pathway",
         "Hengegate Pathway",
         "Needleverge Pathway",
-        "Riverglide Pathway"
+        "Riverglide Pathway",
+        "Akoum Warrior",
+        "Glasswing Grace",
+        "Revitalizing Repast",
+        "Skyclave Cleric",
+        "Tangled Florahedron",
+        "Vastwood Fortification",
+        "Zof Consumption"
       ]
     },
     {

@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 465 cards.
+ * 483 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -186,6 +186,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 2,
     keywords: { lifelink: true },
     subtypes: ['cat', 'cleric'],
+  },
+  // Trample
+  {
+    id: 'afedce7b-0e18-40ad-a26a-1933fddb560d',
+    name: 'Akoum Warrior',
+    types: ['creature'],
+    cost: { generic: 5, R: 1 },
+    power: 4,
+    toughness: 5,
+    keywords: { trample: true },
+    subtypes: ['minotaur', 'warrior'],
+    backFace: {
+      id: 'afedce7b-0e18-40ad-a26a-1933fddb560d#back',
+      name: 'Akoum Teeth',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['R'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // Alchemist's Greeting deals 4 damage to target creature.
   // Madness {1}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
@@ -649,6 +669,35 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'other creatures you control get +1/+1',
       },
     ],
+  },
+  // When Bilbo Baggins enters, draw a card.
+  {
+    id: 'fa85f9e6-69ff-4669-b70a-440aa7b16c97',
+    name: 'Bilbo Baggins, Burglar',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 1,
+    legendary: true,
+    subtypes: ['halfling', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Enters: draw a card',
+      },
+    ],
+    backFace: {
+      id: 'fa85f9e6-69ff-4669-b70a-440aa7b16c97#back',
+      name: 'Take a Glance',
+      types: ['sorcery'],
+      cost: { U: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'scry', params: { count: 2 } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
   },
   // First strike (This creature deals combat damage before creatures without first strike.)
   // Protection from white (This creature can't be blocked, targeted, dealt damage, or enchanted by anything white.)
@@ -2074,6 +2123,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  {
+    id: '52e439d0-a263-4d53-9ae3-fa1f8aa8293e',
+    name: 'Embereth Shieldbreaker',
+    types: ['creature'],
+    cost: { generic: 1, R: 1 },
+    power: 2,
+    toughness: 1,
+    subtypes: ['human', 'knight'],
+    backFace: {
+      id: '52e439d0-a263-4d53-9ae3-fa1f8aa8293e#back',
+      name: 'Battle Display',
+      types: ['sorcery'],
+      cost: { R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'destroyTarget', params: { targets: 'artifact' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // This creature enters with X +1/+1 counters on it.
   {
     id: '7a51780a-fa28-4ee0-94c7-4330800ca9cb',
@@ -2527,6 +2596,41 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     },
     backFaceCastable: true,
   },
+  // Flying
+  // Whenever you cast an instant or sorcery spell, this creature gets +1/+1 until end of turn.
+  {
+    id: 'bbb6867f-7186-41de-9828-21be469178c1',
+    name: 'Frolicking Familiar',
+    types: ['creature'],
+    cost: { generic: 2, U: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['otter', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Cast instant: ~ gets +1/+1 until end of turn',
+      },
+      {
+        condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 1, toughness: 1 } }],
+        label: 'Cast sorcery: ~ gets +1/+1 until end of turn',
+      },
+    ],
+    backFace: {
+      id: 'bbb6867f-7186-41de-9828-21be469178c1#back',
+      name: 'Blow Off Steam',
+      types: ['instant'],
+      cost: { R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // {T}: Add {G}.
   {
     id: 'df317532-7d36-40fd-938f-e972749c8792',
@@ -2613,6 +2717,31 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['artifact'],
     cost: { generic: 5 },
     producesOptions: [{ W: 3 }, { U: 3 }, { B: 3 }, { R: 3 }, { G: 3 }],
+  },
+  // Enchant creature
+  // Enchanted creature gets +2/+2 and has flying and lifelink.
+  {
+    id: '3a3e8c9b-e458-4661-980d-0a84a4c2452b',
+    name: 'Glasswing Grace',
+    types: ['enchantment'],
+    cost: { generic: 3, hybrid: [['W', 'B'], ['W', 'B']] },
+    subtypes: ['aura'],
+    effects: [{ primitive: 'attachToTarget', params: { targets: 'creature' } }],
+    attachment: {
+      attachesTo: { anyOfTypes: ['creature'] },
+      whenIllegal: 'toGraveyard',
+      label: 'Enchant creature',
+      modifies: { power: 2, toughness: 2, keywords: { flying: true, lifelink: true } },
+    },
+    backFace: {
+      id: '3a3e8c9b-e458-4661-980d-0a84a4c2452b#back',
+      name: 'Age-Graced Chapel',
+      types: ['land'],
+      entersTapped: true,
+      producesOptions: [{ W: 1 }, { B: 1 }],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // Target player mills ten cards.
   {
@@ -3019,6 +3148,32 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { haste: true },
     subtypes: ['vampire'],
     madness: { generic: 2, R: 1 },
+  },
+  // Target creature gets +2/+2 until end of turn.
+  {
+    id: '12f252b1-d3da-43af-ab31-0c8a6807c3c4',
+    name: 'Integrity // Intervention',
+    types: ['instant'],
+    cost: { generic: 2, W: 1, R: 1, hybrid: [['R', 'W']] },
+    frontFace: {
+      id: '12f252b1-d3da-43af-ab31-0c8a6807c3c4',
+      name: 'Integrity',
+      types: ['instant'],
+      cost: { hybrid: [['R', 'W']] },
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2, targets: 'creature' } }],
+    },
+    backFace: {
+      id: '12f252b1-d3da-43af-ab31-0c8a6807c3c4#back',
+      name: 'Intervention',
+      types: ['instant'],
+      cost: { generic: 2, W: 1, R: 1 },
+      effects: [
+        { primitive: 'dealDamage', params: { amount: 3 } },
+        { primitive: 'gainLife', params: { amount: 3 } },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // (As a Siege enters, choose an opponent to protect it. You and others can attack it. When it's defeated, exile it, then cast it transformed.)
   // When this Siege enters, create a 2/2 white and blue Knight creature token with vigilance.
@@ -3951,6 +4106,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  {
+    id: 'df555f60-2164-49dc-be67-00aca9eb0d45',
+    name: 'Minecart Daredevil',
+    types: ['creature'],
+    cost: { generic: 2, R: 1 },
+    power: 4,
+    toughness: 2,
+    subtypes: ['dwarf', 'knight'],
+    backFace: {
+      id: 'df555f60-2164-49dc-be67-00aca9eb0d45#back',
+      name: 'Ride the Rails',
+      types: ['instant'],
+      cost: { generic: 1, R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 1, targets: 'creature' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // Double strike, protection from black and from green
   {
     id: 'fe69d9bd-2a60-4b33-a0d8-1ca18c2b6705',
@@ -4146,6 +4321,33 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { U: 1 },
     madness: { U: 1 },
     effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+  },
+  // Flying
+  {
+    id: '396b088d-f9af-4ee1-843f-dbe1633f9cc8',
+    name: 'Obyra\'s Attendants',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 3,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['faerie', 'wizard'],
+    backFace: {
+      id: '396b088d-f9af-4ee1-843f-dbe1633f9cc8#back',
+      name: 'Desperate Parry',
+      types: ['instant'],
+      cost: { generic: 1, U: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'pumpUntilEndOfTurn',
+          params: { power: -4, toughness: 0, targets: 'creature' },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
   },
   // Flash (You may cast this spell any time you could cast an instant.)
   // When this enchantment enters, scry 2, then draw a card.
@@ -4561,6 +4763,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['land'],
     manaAbilities: [{ derivedColors: 'landsYouControl', derivedIncludesColorless: true }],
   },
+  // Put a +1/+1 counter on target creature. It gains indestructible until end of turn.
+  {
+    id: '8dd6d060-d023-48a6-85cb-7a5521b6257b',
+    name: 'Revitalizing Repast',
+    types: ['instant'],
+    cost: { hybrid: [['B', 'G']] },
+    effects: [
+      { primitive: 'addCounters', params: { amount: 1, targets: 'creature' } },
+      { primitive: 'grantKeywordUntilEndOfTurn', params: { keywords: { indestructible: true } } },
+    ],
+    backFace: {
+      id: '8dd6d060-d023-48a6-85cb-7a5521b6257b#back',
+      name: 'Old-Growth Grove',
+      types: ['land'],
+      entersTapped: true,
+      producesOptions: [{ B: 1 }, { G: 1 }],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // Ward {3} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {3}.)
   {
     id: 'ec47cf67-2580-464f-8118-7eabea5be11c',
@@ -4608,6 +4830,47 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       isBackFace: true,
     },
     backFaceCastable: true,
+  },
+  // Search your library for a basic land card, put it onto the battlefield tapped, then shuffle.
+  {
+    id: 'f18d8939-7ee8-4a44-a1c8-6ae3a08f52fd',
+    name: 'Road // Ruin',
+    types: ['instant', 'sorcery'],
+    cost: { generic: 3, R: 2, G: 1 },
+    frontFace: {
+      id: 'f18d8939-7ee8-4a44-a1c8-6ae3a08f52fd',
+      name: 'Road',
+      types: ['instant'],
+      cost: { generic: 2, G: 1 },
+      effects: [
+        {
+          primitive: 'searchLibrary',
+          params: {
+            who: 'controller',
+            count: 1,
+            filter: { anyOfTypes: ['land'] },
+            nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+            destination: 'battlefield',
+            tapped: true,
+          },
+        },
+      ],
+    },
+    backFace: {
+      id: 'f18d8939-7ee8-4a44-a1c8-6ae3a08f52fd#back',
+      name: 'Ruin',
+      types: ['sorcery'],
+      cost: { generic: 1, R: 2 },
+      effects: [
+        {
+          primitive: 'dealDamage',
+          params: { amount: { countOf: 'landsYouControl' }, targets: 'creature' },
+        },
+      ],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+    backFaceCastZones: ['graveyard'],
   },
   // Create a 6/6 green Wurm creature token.
   // Flashback {3}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -5179,6 +5442,32 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     produces: ['U'],
   },
+  // When this creature enters, you gain 2 life.
+  {
+    id: 'da9e3910-9a1c-43a9-9138-ca971b2bccae',
+    name: 'Skyclave Cleric',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['kor', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: 'Enters: you gain 2 life',
+      },
+    ],
+    backFace: {
+      id: 'da9e3910-9a1c-43a9-9138-ca971b2bccae#back',
+      name: 'Skyclave Basilica',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['W'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // Flying, double strike
   {
     id: '0c07d09e-e127-4573-b827-6c50246f7a31',
@@ -5211,6 +5500,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { indestructible: true },
     entersTapped: true,
     producesOptions: [{ R: 1 }, { G: 1 }],
+  },
+  // Flying
+  {
+    id: 'fc75cfec-e1f6-4cb5-8a3c-2f7b2c39c03f',
+    name: 'Smaug, the Great Calamity',
+    types: ['creature'],
+    cost: { generic: 5, R: 2 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['dragon'],
+    backFace: {
+      id: 'fc75cfec-e1f6-4cb5-8a3c-2f7b2c39c03f#back',
+      name: 'Spew Flame',
+      types: ['sorcery'],
+      cost: { generic: 4, R: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'dealDamage', params: { amount: 5, targets: 'creature' } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
   },
   // Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.
   {
@@ -5645,6 +5957,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 2 },
     manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ G: 1 }, { W: 1 }], rider: { damageToController: 1 } }],
   },
+  // {T}: Add {G}.
+  {
+    id: '53542c79-a62a-4d6a-97db-5296e9c68302',
+    name: 'Tangled Florahedron',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 1,
+    toughness: 1,
+    subtypes: ['elemental'],
+    produces: ['G'],
+    backFace: {
+      id: '53542c79-a62a-4d6a-97db-5296e9c68302#back',
+      name: 'Tangled Vale',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // This land enters tapped.
   // Indestructible
   // {T}: Add {G} or {U}.
@@ -6046,6 +6378,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { U: 1 },
     effects: [{ primitive: 'mill', params: { amount: 5, targets: 'player' } }],
   },
+  // Flying, deathtouch
+  {
+    id: 'ca8535f2-1f96-4836-bd32-5e952f9bee72',
+    name: 'Topaz Dragon',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true, deathtouch: true },
+    subtypes: ['dragon'],
+    backFace: {
+      id: 'ca8535f2-1f96-4836-bd32-5e952f9bee72#back',
+      name: 'Entropic Cloud',
+      types: ['instant'],
+      cost: { generic: 1, B: 1 },
+      keywords: { deathtouch: true },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'grantKeywordToYoursUntilEndOfTurn',
+          params: { keywords: { deathtouch: true }, anyOfTypes: ['creature'] },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // As an additional cost to cast this spell, discard a card.
   // Draw two cards.
   {
@@ -6150,6 +6510,33 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { produces: [{ C: 1 }] },
       { produces: [{ B: 2 }, { B: 1, G: 1 }, { G: 2 }], cost: { mana: { hybrid: [['B', 'G']] } } },
     ],
+  },
+  // Menace (This creature can't be blocked except by two or more creatures.)
+  {
+    id: '0f222f3d-f02b-42b9-aedf-fb7ed92d4889',
+    name: 'Two-Headed Hunter',
+    types: ['creature'],
+    cost: { generic: 4, R: 1 },
+    power: 5,
+    toughness: 4,
+    keywords: { menace: true },
+    subtypes: ['giant'],
+    backFace: {
+      id: '0f222f3d-f02b-42b9-aedf-fb7ed92d4889#back',
+      name: 'Twice the Rage',
+      types: ['instant'],
+      cost: { generic: 1, R: 1 },
+      subtypes: ['adventure'],
+      effects: [
+        {
+          primitive: 'grantKeywordUntilEndOfTurn',
+          params: { keywords: { doubleStrike: true }, targets: 'creature' },
+        },
+      ],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
   },
   // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
   {
@@ -6378,6 +6765,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'creatures you control of the chosen type get +1/+1',
       },
     ],
+  },
+  // Put a +1/+1 counter on target creature.
+  {
+    id: 'ce148a0c-6c63-49d5-a156-99efae4e367a',
+    name: 'Vastwood Fortification',
+    types: ['instant'],
+    cost: { G: 1 },
+    effects: [{ primitive: 'addCounters', params: { amount: 1, targets: 'creature' } }],
+    backFace: {
+      id: 'ce148a0c-6c63-49d5-a156-99efae4e367a#back',
+      name: 'Vastwood Thicket',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // {T}: Add {B}.
   {
@@ -6755,6 +7159,28 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['land'],
     manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ G: 1 }, { U: 1 }], rider: { damageToController: 1 } }],
   },
+  // Flying
+  {
+    id: 'fff28b30-9903-4a0a-a723-31216abd457d',
+    name: 'Young Blue Dragon',
+    types: ['creature'],
+    cost: { generic: 4, U: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['dragon'],
+    backFace: {
+      id: 'fff28b30-9903-4a0a-a723-31216abd457d#back',
+      name: 'Sand Augury',
+      types: ['sorcery'],
+      cost: { generic: 1, U: 1 },
+      subtypes: ['adventure'],
+      effects: [{ primitive: 'scry' }, { primitive: 'drawCards', params: { count: 1 } }],
+      isBackFace: true,
+      adventure: true,
+    },
+    backFaceCastable: true,
+  },
   // First strike
   {
     id: 'ef2a24f5-ce5e-4054-843a-2cae0c66318a',
@@ -6786,6 +7212,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['land'],
     produces: ['C'],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'scry' }], label: 'Enters: scry 1' }],
+  },
+  // Each opponent loses 4 life and you gain 4 life.
+  {
+    id: 'd9f11985-e460-425d-b083-9cb0edf1983a',
+    name: 'Zof Consumption',
+    types: ['sorcery'],
+    cost: { generic: 4, B: 2 },
+    effects: [
+      { primitive: 'loseLife', params: { amount: 4, whichPlayer: 'opponent' } },
+      { primitive: 'gainLife', params: { amount: 4 } },
+    ],
+    backFace: {
+      id: 'd9f11985-e460-425d-b083-9cb0edf1983a#back',
+      name: 'Zof Bloodbog',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['B'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   {
     id: 'eadd88b6-e75a-4482-8382-561718121772',
