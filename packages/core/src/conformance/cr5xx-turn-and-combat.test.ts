@@ -14,9 +14,11 @@
 
 import { describe, expect } from 'vitest';
 import {
+  DEFAULT_RULES,
   STEP_ORDER,
   aggregateFor,
   createGame,
+  defaultAnswerFor,
   effectiveToughness,
   generateLegalActions,
   type CardDefinition,
@@ -446,6 +448,98 @@ describe('CR 511 / 514 — end of combat and cleanup', () => {
     }
     expect(withPriority.has('cleanup')).toBe(false);
     expect(withPriority.has('end')).toBe(true);
+  });
+
+  crTest('514.1', 'the ACTIVE player discards down to their maximum hand size, and chooses which', () => {
+    // CR 514.1 is the first turn-based action of the cleanup step, and it is the
+    // active player's alone — the opponent keeps whatever they are holding until
+    // their own turn ends. WHICH cards go is a choice, not the game's decision,
+    // so this asserts that the chosen ones are the ones that left.
+    const maximum = DEFAULT_RULES.maximumHandSize;
+    const state = atMain();
+    const held = giveHand(state, 'A', Array.from({ length: maximum + 2 }, () => MOUNTAIN));
+    giveHand(state, 'B', Array.from({ length: maximum + 2 }, () => MOUNTAIN));
+
+    let s = state;
+    for (let guard = 0; guard < 200 && s.pendingChoice?.context !== 'cleanupDiscard'; guard++) {
+      s = pass(s, registry);
+    }
+    const choice = s.pendingChoice;
+    if (choice?.kind !== 'selectCards') throw new Error('the cleanup discard was never asked');
+    expect(choice.chooser).toBe(s.activePlayer);
+    expect(choice.fromZone).toBe('hand');
+
+    // Pitch the LAST two on offer, so "the chosen ones" is a real claim rather
+    // than whatever a default would have taken anyway.
+    const chosen = [held[held.length - 1]!.instanceId, held[held.length - 2]!.instanceId];
+    const after = act(
+      s,
+      { kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer: { kind: 'selectCards', instanceIds: chosen } },
+      registry,
+    );
+
+    expect(after.players.A.hand).toHaveLength(maximum);
+    for (const id of chosen) {
+      expect(after.players.A.hand.some((c) => c.instanceId === id)).toBe(false);
+      expect(after.players.A.graveyard.some((c) => c.instanceId === id)).toBe(true);
+    }
+    // The non-active player is untouched: they did not end a turn.
+    expect(after.players.B.hand).toHaveLength(maximum + 2);
+  });
+
+  crTest('514.1', 'the discard happens every turn, so a hand cannot grow without bound', () => {
+    // The rule this engine went without: a whole game used to be playable with an
+    // unbounded hand, which changes what card draw and held-back reactive spells
+    // are worth. Neither hand may ever be over the maximum once its owner's turn
+    // has ended, over several turns of drawing.
+    const maximum = DEFAULT_RULES.maximumHandSize;
+    let s = atMain();
+    giveHand(s, 'A', Array.from({ length: maximum + 1 }, () => MOUNTAIN));
+    giveHand(s, 'B', Array.from({ length: maximum + 1 }, () => MOUNTAIN));
+
+    const startedAt = s.turnNumber;
+    for (let guard = 0; guard < 900 && s.turnNumber < startedAt + 6; guard++) {
+      const parked = s.pendingChoice;
+      s = parked
+        ? act(
+            s,
+            { kind: 'answerChoice', player: parked.chooser, choiceId: parked.id, answer: defaultAnswerFor(parked) },
+            registry,
+          )
+        : pass(s, registry);
+      // Whoever's turn has most recently ENDED cannot still be over the limit.
+      if (s.step === 'untap') {
+        expect(s.players.A.hand.length).toBeLessThanOrEqual(maximum);
+        expect(s.players.B.hand.length).toBeLessThanOrEqual(maximum);
+      }
+    }
+    expect(s.turnNumber).toBeGreaterThanOrEqual(startedAt + 6);
+  });
+
+  crTest('514.3a', 'a discard alone does NOT open a priority window; the turn simply ends', () => {
+    // CR 514.3a hands out priority only when state-based actions were performed
+    // or triggered abilities are waiting. A discard is neither: it is the CR
+    // 514.1 turn-based action, and nothing in this engine's `TriggerEvent`
+    // vocabulary watches a card leave a hand. So the turn ends the moment the
+    // question is answered — no second cleanup step, and nobody gets to cast an
+    // instant in cleanup off the back of it.
+    const state = atMain();
+    giveHand(state, 'A', Array.from({ length: DEFAULT_RULES.maximumHandSize + 1 }, () => MOUNTAIN));
+
+    let s = state;
+    for (let guard = 0; guard < 200 && s.pendingChoice?.context !== 'cleanupDiscard'; guard++) {
+      s = pass(s, registry);
+    }
+    const choice = s.pendingChoice;
+    if (!choice) throw new Error('the cleanup discard was never asked');
+    const turnBefore = s.turnNumber;
+    const after = act(
+      s,
+      { kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer: defaultAnswerFor(choice) },
+      registry,
+    );
+    expect(after.turnNumber).toBe(turnBefore + 1);
+    expect(after.step).not.toBe('cleanup');
   });
 
   crTest('500.5', 'each player’s mana pool empties as a step ends', () => {
