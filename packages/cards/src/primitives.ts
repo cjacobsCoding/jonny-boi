@@ -160,7 +160,11 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller, ctx.source.def)) return; // illegal → fizzle
 
   const replacements = indexReplacements(ctx.state);
-  const emit = (event: GameEvent): void => ctx.emit(event);
+  // `ctx.emit` is a plain function property on the context (see core's
+  // `createEffectContext`), never a `this`-bound method, so it is passed by
+  // reference rather than wrapped — a wrapper here would be one closure
+  // allocated per damage event on the engine's hottest path.
+  const emit = ctx.emit;
 
   if (isPlayerTarget(target)) {
     const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, target, amount);
@@ -264,7 +268,7 @@ export const drawCards: EffectPrimitive = (ctx) => {
     // instead" and "…you win the game instead" have to mean the same thing for a
     // Divination as for a draw step, and one implementation is how that is
     // guaranteed rather than remembered.
-    drawCardForPlayer(ctx.state, drawer, (event) => ctx.emit(event));
+    drawCardForPlayer(ctx.state, drawer, ctx.emit);
     if (ctx.state.gameOver) return;
   }
 };
@@ -768,7 +772,7 @@ export const fight: EffectPrimitive = (ctx) => {
   // could do changes the outcome, and asking first means a prevention SHIELD is
   // not spent on damage that was never going to land.
   const replacements = indexReplacements(ctx.state);
-  const emit = (event: GameEvent): void => ctx.emit(event);
+  const emit = ctx.emit;
   if (otherPower > 0) {
     if (protectionPreventsDamage(ctx.state, self, other.def)) {
       ctx.emit({
@@ -833,7 +837,7 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
   // an effect that was live when the sweeper resolved is live for all of them —
   // the same argument `assignAndDealCombatDamage` makes for a damage step.
   const replacements = indexReplacements(ctx.state);
-  const emit = (event: GameEvent): void => ctx.emit(event);
+  const emit = ctx.emit;
 
   if (boolParam(ctx, 'creatures', false)) {
     // Snapshot first: damage is dealt simultaneously, so a creature dying to it
@@ -1005,7 +1009,7 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
     target,
     kind,
     Math.abs(amount),
-    (event) => ctx.emit(event),
+    ctx.emit,
   );
   if (magnitude <= 0) return;
   // REPLACE the record, never write into it — `CardInstance.counters` is shared
