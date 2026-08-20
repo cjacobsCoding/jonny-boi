@@ -170,6 +170,41 @@ describe('the pilot equips an Equipment whose value is its trigger', () => {
     const equipped = pilotEquips(state);
     expect(equipped?.targets?.[0]).toBe(big?.instanceId);
   });
+
+  /**
+   * ⚠️ THE ACTION-CAP LOOP. `bestEquipHost` excludes the creature the Equipment
+   * is already on, which stops it re-equipping the SAME body — but with two
+   * hosts and a free equip cost the pilot moved it to the other one, then found
+   * the first was again the best non-host and moved it back, forever. The
+   * full-pool soak caught it as three games that burned the 6000-action cap
+   * without ending, all three holding Lightning Greaves (Equip {0}).
+   */
+  describe('a FREE equip cost does not become a loop', () => {
+    const FREE_SWORD: CardDefinition = {
+      ...TRIGGER_ONLY_SWORD,
+      id: 'free-sword',
+      name: 'Free Sword',
+      activated: equipAbility(0),
+    };
+
+    /** The board, with the Sword already carried by the named creature. */
+    function alreadyOn(host: 'Big' | 'Small'): GameState {
+      const state = mainPhase([creatureDef('Big', 4, 4), creatureDef('Small', 1, 1), FREE_SWORD], 0);
+      const carrier = state.battlefield.find((c) => c.def.name === host)!;
+      state.battlefield.find((c) => c.def.name === 'Free Sword')!.attachedTo = carrier.instanceId;
+      return state;
+    }
+
+    it('will not move a free Equipment onto a WORSE host', () => {
+      expect(pilotEquips(alreadyOn('Big')), 'the pilot moved it off the better body').toBeUndefined();
+    });
+
+    it('still moves it when the other host is genuinely better', () => {
+      const state = alreadyOn('Small');
+      const big = state.battlefield.find((c) => c.def.name === 'Big');
+      expect(pilotEquips(state)?.targets?.[0]).toBe(big?.instanceId);
+    });
+  });
 });
 
 describe('a combat-damage trigger is a reason to attack', () => {

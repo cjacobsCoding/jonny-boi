@@ -22,6 +22,22 @@ import type { NormalizedCard } from './types.js';
 const FACE_NAME_SEPARATOR = ' // ';
 
 /**
+ * The half of a multi-faced card's name that Scryfall's `/cards/collection`
+ * endpoint actually resolves.
+ *
+ * MEASURED, not assumed: posting `{ name: 'Fire // Ice' }` comes back in
+ * `not_found`, while `{ name: 'Fire' }` returns the whole `Fire // Ice` record.
+ * That is true of every two-faced layout — transform, modal DFC, split,
+ * aftermath, adventure — so ANY path that turns a stored/committed card name
+ * back into a Scryfall request has to come through here. The card index stores
+ * the combined name (it is the card's real name); the starter list and every
+ * lookup carry the front half.
+ */
+export function frontFaceName(name: string): string {
+  return name.split(FACE_NAME_SEPARATOR)[0]!;
+}
+
+/**
  * The name to ask Scryfall for when re-fetching a stored card.
  *
  * A double-faced card is stored under its combined name ("Delver of Secrets //
@@ -30,7 +46,7 @@ const FACE_NAME_SEPARATOR = ' // ';
  * too, so both paths ask for the same thing.
  */
 export function scryfallLookupName(card: NormalizedCard): string {
-  return card.name.split(FACE_NAME_SEPARATOR)[0]!;
+  return frontFaceName(card.name);
 }
 
 /** One field that differs between the stored record and the fetched one. */
