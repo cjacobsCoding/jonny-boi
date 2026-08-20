@@ -134,10 +134,10 @@ throughput (games/sec) from regressing.
 _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-20 worker: `test/interaction-matrix` 🚧 PUSHED — **the interactions between the
-  shipped systems are now an executable matrix, and finding two real defects took eight
-  pair suites.** 253 cells (every unordered pair of 23 systems, stated exactly once):
-  **42 covered here · 9 covered by an existing suite · 1 GAP cell · 81 not-applicable ·
-  120 untested-and-said-so.** `packages/cards/src/interaction/interaction-matrix.test.ts`
+  shipped systems is now an executable matrix, and finding three real defects took nine
+  pair suites.** **300 cells** — every unordered pair of **25 systems**, stated exactly
+  once: **49 covered here · 9 covered by an existing suite · 1 GAP cell · 96
+  not-applicable · 145 untested-and-said-so.** `packages/cards/src/interaction/interaction-matrix.test.ts`
   holds the table and ENFORCES it — a covered cell must name a test file that exists, a
   gap must carry a CR reference and a reproduction, an n/a must carry a reason, and every
   system must resolve a witness core still exports. **Adding a system fails the
@@ -196,20 +196,37 @@ _Append dated notes here; keep them short. Newest at top._
      recorded as the placement argument for whoever adds the second counter route
      (persist, a −1/−1 ETB replacement, proliferate).
 
-  📌 **A finding for whoever owns the pool: five shipped systems have NO card a player can
+  📌 **A finding for whoever owns the pool: SEVEN shipped systems have NO card a player can
   see** — the mana-ability model (riders/restrictions/derived colours), step triggers +
-  the intervening "if", split/aftermath/adventure cards, as-enters choices, and mandatory
-  additional costs. `pool-mechanics.test.ts` names four *other* unrepresentable systems
+  the intervening "if", split/aftermath/adventure cards, as-enters choices, mandatory
+  additional costs, replacement/prevention effects, and copy effects. `pool-mechanics.test.ts` names four *other* unrepresentable systems
   with reasons; these five are in neither list. DESIGN §3.20's own rule is that a feature
   nobody can see is not done. (Not my file to edit — reporting it.)
 
-  📌 **Sabotage-checked: 20 deliberate rule breaks, each run against the whole suite.** The
-  results are in the report; the discipline is the point — a cell that stays green when you
-  delete the rule it names is not a test.
+  ⚠️ **DEFECT 3, FIXED — `origin/main` did not compile.** `feat/replacement-effects` added
+  two `GameEvent` kinds and `test/full-pool-soak`'s exhaustive `SOAK_EVENT_WITNESS` map was
+  merged without them. That map is DESIGNED to stop compiling until somebody answers the
+  question, so it worked exactly as intended and the merge answered nothing. Caught by
+  `npm run build` — **`npx vitest run` was green the whole time**, which is TESTING.md's own
+  warning about the second gate, demonstrated. The file's owner has since fixed it upstream
+  and I dropped my duplicate; flagging it because two branches merged in the same hour can
+  break a gate every other worker then hits.
+
+  📌 **The `sba-on-priority` GAP has NARROWED, and that is the matrix working.** A sibling
+  closed the announcement half (`applyCastSpell` now runs the pass, CR 704.3) — my
+  reproduction went RED, which is the signal it was designed to give, and the cell is now a
+  POSITIVE test. The priority-pass and step-advance halves still stand and keep their own
+  reproduction.
+
+  📌 **Sabotage-checked: 22 deliberate rule breaks, each run against the whole suite; 22
+  went RED, none stayed green.** The discipline is the point — a cell that stays green when
+  you delete the rule it names is not a test.
 
   GATE: `npx vitest run` 0 failed · `npm run verify` exit 0 · `npm run build` exit 0, all
-  after merging `origin/main` (which brought the fourth wave: step triggers, split cards,
-  as-enters, additional costs — folded into the matrix, 19 → 23 systems, 171 → 253 cells).
+  after merging `origin/main` **three times mid-flight** — the fourth wave (step triggers,
+  split cards, as-enters, additional costs), then replacement effects, then copy effects.
+  Each merge ADDED cells rather than invalidating them: 19 → 23 → 24 → **25 systems**,
+  171 → 253 → 276 → **300 cells**. Doc conflicts resolved keeping BOTH sides.
 
 - 2026-08-20 worker: `feat/replacement-effects` 🚧 PUSHED — **replacement and prevention effects
   (CR 614/615/616), a layer the engine had never had.** Three template buckets that are ONE system

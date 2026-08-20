@@ -29,6 +29,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   chosenSubtypeOf,
+  copiableDefOf,
+  isCopy,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   effectivePower,
@@ -205,6 +207,17 @@ function boltAt(state: GameState, reg: Registry, target: InstanceId, caster: 'A'
   if (!next.pendingChoice) next.priorityPlayer = before;
   return next;
 }
+
+/** "You may have this enter as a copy of any creature on the battlefield." */
+const CLONE: CardDefinition = {
+  id: 'matrix-clone',
+  name: 'Matrix Clone',
+  types: ['creature'],
+  cost: { generic: 2, U: 2 },
+  power: 0,
+  toughness: 0,
+  copyAsEnters: { filter: { anyOfTypes: ['creature'] } },
+};
 
 function statsOf(state: GameState, id: InstanceId): { power: number; toughness: number } {
   const inst = onBattlefield(state, id);
@@ -602,6 +615,82 @@ describe('CELL: replacement effects x protection x indestructible (three ways da
   });
 });
 
+// --- COPY EFFECTS x transform x counters x the legend rule -------------------------
+
+describe('CELL: copy effects x transform x counters x the legend rule (CR 706.2)', () => {
+  it('copying a TRANSFORMED permanent copies its FRONT face, and copies nothing else about it', () => {
+    const reg = buildRegistry();
+    let state = boardAtMain(reg);
+    const delver = resolvePermanent(state, reg, poolCard('Delver of Secrets'), 'A');
+    state = delver.state;
+    // Load the original with everything that must NOT be copied: counters and
+    // marked damage are per-object state, not copiable values (CR 706.2).
+    state = castCard(state, reg, counterSpell('matrix-copy-counters', 3), 'A', [delver.id]).state;
+    transformPermanent(state, delver.id, () => {});
+    onBattlefield(state, delver.id).damageMarked = 1;
+    expect(onBattlefield(state, delver.id).def.name).toBe('Insectile Aberration');
+
+    // CR 706.2 in one call: the copiable values of a transformed permanent are
+    // its FRONT face's. A clone that read `def` would come in as a 3/2 flier.
+    const copiable = copiableDefOf(onBattlefield(state, delver.id));
+    expect(copiable.name).toBe('Delver of Secrets');
+    expect(copiable.power).toBe(1);
+
+    // The copy question is asked WHILE the clone resolves, so the cast parks and
+    // the answer is what finishes putting it onto the battlefield.
+    const clone = castCard(state, reg, CLONE, 'A');
+    state = clone.state;
+    expect(state.pendingChoice?.kind).toBe('selectCards');
+    state = answerEverySelection(state, reg, delver.id);
+    state = settle(state, reg);
+
+    const copy = onBattlefield(state, clone.id);
+    expect(copy.def.name).toBe('Delver of Secrets');
+    expect(isCopy(copy)).toBe(true);
+    // Counters and damage are NOT copiable values.
+    expect(copy.counters[PLUS_ONE_COUNTER] ?? 0).toBe(0);
+    expect(copy.damageMarked).toBe(0);
+    expect(statsOf(state, clone.id)).toEqual({ power: 1, toughness: 1 });
+    // ...and the original kept everything it had.
+    expect(onBattlefield(state, delver.id).counters[PLUS_ONE_COUNTER]).toBe(3);
+  });
+
+  it('copying a LEGEND makes a duplicate the legend rule then answers', () => {
+    const reg = buildRegistry();
+    let state = boardAtMain(reg);
+    const zetalpa = resolvePermanent(state, reg, poolCard('Zetalpa, Primal Dawn'), 'A');
+    state = zetalpa.state;
+    expect(state.pendingChoice ?? null).toBeNull();
+
+    const clone = castCard(state, reg, CLONE, 'A');
+    state = clone.state;
+    // Answer ONLY the copy question. The legend-rule question that follows is a
+    // `selectCards` too, and a helper that kept answering would silently pick
+    // the ORIGINAL as the survivor and bury the copy before the assertion.
+    state = answerOneSelection(state, reg, zetalpa.id);
+    state = settle(state, reg);
+
+    // The copy IS legendary, because `legendary` is a copiable value - so the
+    // rule that fires is the ordinary one, keyed on the printed supertype.
+    expect(onBattlefield(state, clone.id).def.legendary).toBe(true);
+    expect(state.pendingChoice?.context).toBe('legendRule');
+    state = act(
+      state,
+      {
+        kind: 'answerChoice',
+        player: 'A',
+        choiceId: state.pendingChoice!.id,
+        answer: { kind: 'selectCards', instanceIds: [clone.id] },
+      },
+      reg,
+    );
+    expect(isOnBattlefield(state, zetalpa.id)).toBe(false);
+    expect(isOnBattlefield(state, clone.id)).toBe(true);
+    // The loser goes to its OWNER's graveyard as ITSELF, not as what it copied.
+    expect(state.players.A.graveyard.some((c) => c.instanceId === zetalpa.id)).toBe(true);
+  });
+});
+
 // --- shared drivers ---------------------------------------------------------------
 
 /** Answer a parked selectCards question, preferring `wanted` when offered. */
@@ -625,6 +714,24 @@ function answerEverySelection(state: GameState, reg: Registry, wanted: InstanceI
     );
   }
   return next;
+}
+
+/** Answer exactly ONE parked selectCards question, preferring `wanted`. */
+function answerOneSelection(state: GameState, reg: Registry, wanted: InstanceId): GameState {
+  const choice = state.pendingChoice;
+  if (!choice || choice.kind !== 'selectCards') throw new Error('no card selection is parked');
+  const ids = choice.candidates.map((c) => c.instanceId);
+  const pick = ids.includes(wanted) ? wanted : ids[0];
+  return act(
+    state,
+    {
+      kind: 'answerChoice',
+      player: choice.chooser,
+      choiceId: choice.id,
+      answer: { kind: 'selectCards', instanceIds: pick === undefined ? [] : [pick] },
+    },
+    reg,
+  );
 }
 
 /** Answer the parked as-enters question by NAMING `value`. */
