@@ -48,7 +48,7 @@ import { colorsOfDefinition } from './card.js';
 import type { CardInstance, GameState } from './state.js';
 import type { ManaColor } from './mana.js';
 import { effectiveKeywords } from './internal/stats.js';
-import { aggregateFor } from './internal/continuous.js';
+import { aggregateFor, anyContinuousModification } from './internal/continuous.js';
 
 // `colorsOfDefinition` moved to card.ts (the shared `CardFilter` needs it too,
 // and choices.ts importing this module would cycle through the continuous
@@ -133,16 +133,22 @@ export function protectionBlocksSource(
 /**
  * The protection list `permanent` currently has, granted qualities included.
  *
- * Same fast-path shape as `isTargetableBy`: with no temporary continuous
- * effects the printed list is the answer, and the aggregation is built only
- * when a grant could exist. (An `until end of turn` protection grant always
- * puts an entry in `state.continuous`, so the gate cannot miss one.)
+ * Same fast-path shape as `isTargetableBy`: when nothing on the board can modify
+ * a keyword the printed list is the answer, and the aggregation is built only
+ * when a grant could exist.
+ *
+ * ⚠️ The gate is {@link anyContinuousModification}, NOT `state.continuous.length`.
+ * That list carries only until-end-of-turn effects; an Aura or Equipment granting
+ * "protection from red" to its host, and an anthem or emblem granting it to a
+ * team, are DERIVED from the battlefield and put nothing in it. Keying the fast
+ * path on the list made every one of those grants invisible here — so an Aura the
+ * gained protection should have knocked off (CR 704.5m) stayed on.
  */
 export function effectiveProtectionOf(
   state: GameState,
   permanent: CardInstance,
 ): readonly ProtectionQuality[] | undefined {
-  if (state.continuous.length === 0) return permanent.def.keywords?.protectionFrom;
+  if (!anyContinuousModification(state)) return permanent.def.keywords?.protectionFrom;
   return effectiveKeywords(permanent, aggregateFor(state, permanent.instanceId)).protectionFrom;
 }
 
@@ -164,6 +170,8 @@ export function protectionPreventsDamage(
  * two ward abilities is paying both costs.
  */
 export function effectiveWardOf(state: GameState, permanent: CardInstance): number {
-  if (state.continuous.length === 0) return permanent.def.keywords?.ward ?? 0;
+  // Same gate, same reason, as `effectiveProtectionOf` — a granted ward that only
+  // an Equipment or an anthem confers is still a ward the opponent has to pay.
+  if (!anyContinuousModification(state)) return permanent.def.keywords?.ward ?? 0;
   return effectiveKeywords(permanent, aggregateFor(state, permanent.instanceId)).ward ?? 0;
 }

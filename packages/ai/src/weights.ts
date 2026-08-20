@@ -61,6 +61,24 @@ export interface HeuristicWeights {
   readonly burnFaceLifeReference: number;
   /** Score for burn that is *lethal* to the opponent right now — take the win. */
   readonly lethalBurnScore: number;
+  /**
+   * What one point of PREVENTED combat damage is worth when deciding whether to
+   * cast a fog. Deliberately per-damage rather than a flat score: a fog is worth
+   * exactly what it stops, so a two-power poke should leave it in hand while a
+   * real attack gets it cast. A swing that would KILL is not priced here at all
+   * — it takes {@link lethalBurnScore}, because surviving is the whole game.
+   */
+  readonly fogValuePerDamagePrevented: number;
+  /**
+   * The least damage a fog must prevent to be worth the CARD it costs. Below it
+   * the pilot holds the fog — two points of life at a healthy total is not worth
+   * a card, and a pilot that fires prevention at every poke has thrown it away
+   * before the attack that mattered. Ignored when the pilot is already at or
+   * below {@link desperateLifeThreshold}, where every point does matter, and
+   * irrelevant against a LETHAL swing, which is priced at
+   * {@link lethalBurnScore} instead.
+   */
+  readonly fogMinimumDamagePrevented: number;
 
   // --- developing the board ------------------------------------------------
   /** Base score for casting a creature to develop the board. */
@@ -94,6 +112,15 @@ export interface HeuristicWeights {
   /** Extra score per keyword granted (flying/trample/lifelink all change a race
    *  more than a stat point does, so this is worth more than one stat). */
   readonly attachPerKeyword: number;
+  /** Extra score per TRIGGERED ability the attachment gives its HOST — a Sword's
+   *  "whenever equipped creature deals combat damage to a player, …".
+   *
+   *  This is the knob that makes such an Equipment worth picking up at all. The
+   *  equip score was computed from the P/T and keyword grant alone, so an
+   *  Equipment whose whole text is a host-watching trigger scored `undefined`
+   *  and was equipped by nobody, ever: a card in the pool that no game played.
+   *  Priced above a keyword because a saboteur trigger pays out every combat. */
+  readonly attachPerHostTrigger: number;
 
   // --- generic / fallback --------------------------------------------------
   /** Score for any other castable spell we don't specifically understand. Above
@@ -127,6 +154,18 @@ export interface HeuristicWeights {
   /** How much a point of damage to the opponent's face is worth when weighing an
    *  attack (aggression). */
   readonly faceDamageValue: number;
+  /** What CONNECTING is worth beyond the damage, per triggered ability that fires
+   *  on combat damage to a player — the attacker's own "whenever ~ deals combat
+   *  damage to a player, …" and the ones its Equipment gives it.
+   *
+   *  Such a creature attacks for a reason the face-damage term cannot see: a 1/1
+   *  Ragavan-shaped body is priced at one point of damage and held back, while
+   *  the card is played precisely to get it through. Counted only where the
+   *  attack is expected to CONNECT (the no-profitable-block branch) — a trigger
+   *  that fires on damage to a player pays nothing when the attacker is
+   *  blocked, so paying for it there would be a pilot attacking into removal
+   *  for a benefit it is not going to get. */
+  readonly attackSaboteurTriggerValue: number;
   /** How much losing our own creature in a trade costs us (by its power+toughness),
    *  per stat point — discourages suiciding good creatures into bad blocks. */
   readonly ownCreatureLossPerStat: number;
@@ -220,6 +259,23 @@ export interface HeuristicWeights {
    */
   readonly scryKeepValueThreshold: number;
 
+  // --- choosing a COPY TARGET (CR 706) --------------------------------------
+  //
+  // A dedicated ruler, and it has to be: `cardValue` prices a card by what it
+  // is worth IN HAND (cost as a proxy) and reads EFFECTIVE stats off the board.
+  // Neither is the question here. "Which permanent should I BE?" is about
+  // PRINTED, copiable values (CR 706.2 - counters and anthems do not come
+  // along) and about what the permanent does once it is in play. These four
+  // weights price exactly that, and nothing else, so the policy is one short
+  // function a reader can check against the board.
+  /** Worth per point of PRINTED (power + toughness) on a copy target. */
+  readonly copyTargetPerStatValue: number;
+  /** Worth of one printed ability (a trigger, an activated ability, a static). */
+  readonly copyTargetAbilityValue: number;
+  /** Worth of one printed keyword (flying, deathtouch, trample, ...). */
+  readonly copyTargetKeywordValue: number;
+  /** Worth of being a MANA SOURCE at all - what a copied land is mostly for. */
+  readonly copyTargetManaSourceValue: number;
   /**
    * TUTORING — how far BEYOND the mana it can currently produce a pilot will
    * still reach when a library search lets it pick any card in the deck.
@@ -343,6 +399,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   burnFacePerDamage: 6,
   burnFaceLifeReference: 24,
   lethalBurnScore: 1000,
+  // A fog is priced between a cheap creature and a removal spell per point it
+  // saves: six damage prevented (~48) outbids developing a two-drop (~44) and
+  // stays below killing a real threat, which is the trade a fog actually is.
+  fogValuePerDamagePrevented: 8,
+  fogMinimumDamagePrevented: 3,
 
   // develop
   castCreatureBaseScore: 40,
@@ -360,6 +421,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   attachBaseScore: 30,
   attachPerStat: 4,
   attachPerKeyword: 6,
+  // A host-watching trigger repeats every combat, so it is worth more than the
+  // one-off a keyword grant is — and it is the ONLY term that can make a
+  // trigger-only Equipment (Skullclamp, Sword of the Animist) worth equipping.
+  attachPerHostTrigger: 10,
 
   // generic / fallback
   genericSpellScore: 25,
@@ -373,6 +438,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // attacking
   attackValueThreshold: 1,
   faceDamageValue: 1,
+  // One connection is worth about three points of face damage: enough that a
+  // small saboteur body clears the threshold on its own, not so much that it
+  // outweighs the rest of the attack evaluation.
+  attackSaboteurTriggerValue: 3,
   ownCreatureLossPerStat: 1,
   killEnemyPerStat: 1,
   // A walker at N loyalty prices like a creature with ~2N stats on the table
@@ -429,6 +498,15 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // strict sort key ahead of raw power without ever making a fetch impossible.
   tutorReachableManaLead: 1,
   tutorUncastablePenalty: 100,
+
+  // Copy targets. Stats dominate (a 4/4 scores 16), then abilities (an ETB
+  // trigger is worth about a point of power each way), then keywords, then the
+  // bare fact of tapping for mana - which is what separates a copied Temple
+  // from a copied Wastes without letting a Wastes outrank a real creature.
+  copyTargetPerStatValue: 2,
+  copyTargetAbilityValue: 4,
+  copyTargetKeywordValue: 2,
+  copyTargetManaSourceValue: 3,
 
   // scoring effects (modal-spell modes) — the ordering these produce is
   //   lethal > counter/kill their best thing > draw a card > bounce a real threat

@@ -18,6 +18,7 @@ import { isBattle } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
+import type { FloatingReplacement } from './internal/replacement.js';
 import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetRestriction } from './targeting.js';
@@ -99,6 +100,32 @@ export interface CardInstance {
    * test `!= null`, and `cloneInstance` copies it conditionally.
    */
   printedDef?: CardDefinition | null;
+  /**
+   * While this permanent is a **COPY** of something else (CR 706 — layer 1, the
+   * bottom of the layer system), the definition it would be if the copy ended:
+   * its own printed card. `null`/absent means "this is really what it says it
+   * is", which is every instance in the game except a Clone that has made its
+   * as-enters choice.
+   *
+   * The copy itself lives in {@link CardInstance.def}, exactly as a transformed
+   * face does — which is what routes every characteristic read (P/T, types,
+   * keywords, triggers, mana production, art) through the copied card with no
+   * second code path, and what automatically leaves counters (7d), anthems (7c)
+   * and until-end-of-turn pumps applying ON TOP of it. See `copy.ts`.
+   *
+   * ⚠️ SEPARATE from {@link printedDef}, and not redundant with it: `printedDef`
+   * answers "which FACE is up", this answers "which CARD is this really". A copy
+   * of a transforming DFC that then transforms needs both answers at once, and
+   * one field can only give one of them. The leave-the-battlefield reset
+   * (`resetInstanceForNewZone`) restores this one first — a bounced Clone is a
+   * Clone in hand, never the Bear it was copying (CR 706.2 / CR 400.7).
+   *
+   * OPTIONAL and written only when a permanent actually becomes a copy, for the
+   * same object-shape/throughput reason as {@link CardInstance.attachedTo} —
+   * readers test `!= null`, and `cloneInstance` copies it conditionally. Anyone
+   * adding a field here must also edit `internal/clone.ts`.
+   */
+  uncopiedDef?: CardDefinition | null;
   /** Controller (who plays/controls it). For MVP, owner === controller. */
   controller: PlayerId;
   owner: PlayerId;
@@ -384,6 +411,16 @@ export interface SpellStackObject {
    * reads it through {@link spellLeaveDestination}.
    */
   readonly castFrom?: 'hand' | 'graveyard' | 'exile';
+  /**
+   * Set once the as-enters COPY question (`CardDefinition.copyAsEnters`, CR 706)
+   * has been answered for this spell — including when it was answered "no".
+   *
+   * It has to live on the STACK OBJECT rather than on the instance because a
+   * DECLINE leaves no trace on the permanent: `uncopiedDef` stays absent, which
+   * is indistinguishable from "never asked". Without this marker the resolution
+   * re-entry after the answer would ask again, forever.
+   */
+  readonly copyAsEntersDecided?: boolean;
 }
 
 /**
@@ -554,6 +591,20 @@ export interface GameState {
    * (`hasCardGrants`), so the hot paths stay exactly as fast as before.
    */
   cardGrants?: CardGrant[];
+  /**
+   * FLOATING replacement and prevention effects (CR 614/615) — a fog's "prevent
+   * all combat damage that would be dealt this turn", a "prevent the next N
+   * damage" shield. See `internal/replacement.ts`. The ones PRINTED on a
+   * permanent are derived from `battlefield` on every read and never stored, for
+   * the same reason an anthem is.
+   *
+   * OPTIONAL, like `cardGrants`, and for the same two reasons: every state
+   * serialized (or hand-built in a test) before this existed stays valid, and a
+   * game that never creates one never touches the field — `indexReplacements`
+   * starts with the same one-property empty check, so the damage and counter hot
+   * paths stay exactly as fast as they were.
+   */
+  replacements?: FloatingReplacement[];
   combat: CombatState | null;
   /** Set once the game is decided. */
   winner: PlayerId | null;

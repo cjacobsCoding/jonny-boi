@@ -34,7 +34,7 @@ import {
   isLand,
   MANA_COLORS,
 } from '@jonny-boi/core';
-import type { EffectRegistry } from '@jonny-boi/core';
+import type { EffectRegistry, ManaPool } from '@jonny-boi/core';
 import type { Pilot } from '@jonny-boi/ai';
 import type { LoadedDeck } from '@jonny-boi/sim';
 import { DEFAULT_SIM_CONFIG } from '@jonny-boi/sim';
@@ -102,7 +102,7 @@ function snapSide(state: GameState, player: PlayerId): ReplaySide {
 }
 
 /** Copy the pool as a plain record, dropping zeroes so the UI shows only mana. */
-function snapManaPool(pool: Readonly<Record<string, number>>): Record<string, number> {
+function snapManaPool(pool: ManaPool): Record<string, number> {
   const out: Record<string, number> = {};
   for (const symbol of MANA_COLORS) {
     const amount = pool[symbol] ?? 0;

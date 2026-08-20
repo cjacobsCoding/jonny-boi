@@ -42,6 +42,8 @@ import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
 import type { ContinuousIndex } from './continuous.js';
 import { indexContinuous, NO_MOD } from './continuous.js';
+import type { ReplacementIndex } from './replacement.js';
+import { indexReplacements, replaceDamage } from './replacement.js';
 
 /** Effective keywords for an instance under the given continuous index. */
 function kw(inst: CardInstance, index: ContinuousIndex): KeywordFlags {
@@ -174,11 +176,65 @@ function applyDamage(
   state: GameState,
   source: CardInstance,
   target: CardInstance | PlayerId,
-  amount: number,
+  requested: number,
   index: ContinuousIndex,
+  replacements: ReplacementIndex,
   emit: (e: GameEvent) => void,
 ): void {
-  if (amount <= 0) return;
+  if (requested <= 0) return;
+  // PROTECTION FIRST. It is an absolute prevention (CR 702.16e), so nothing a
+  // replacement effect could do changes the outcome — and running it first means
+  // a "prevent the next 3 damage" SHIELD is not spent on a hit that was never
+  // going to land. Only a plain permanent can carry it; a player, a walker's
+  // loyalty and a battle's defense are handled below.
+  if (typeof target !== 'string' && !isPlaneswalker(target.def) && !isBattle(target.def)) {
+    const protection = kw(target, index).protectionFrom;
+    if (protection !== undefined && protectionBlocksSource(protection, source.def)) {
+      emit({
+        type: 'damagePrevented',
+        source: source.instanceId,
+        target: target.instanceId,
+        amount: requested,
+        combat: true,
+      });
+      return;
+    }
+  }
+  // THE ONE REPLACEMENT SEAM (CR 614/615). Every damage site in the engine asks
+  // this same question — combat here, `dealDamage`/`dealDamageToEach`/`fight` in
+  // the primitives — so a damage doubler and a fog cannot mean two different
+  // things depending on where the damage came from. Inert when the index is
+  // empty: one `.length` read, no allocation.
+  let amount = requested;
+  if (replacements.length > 0) {
+    const recipient = typeof target === 'string' ? undefined : target;
+    const affectedPlayer = typeof target === 'string' ? target : target.controller;
+    const result = replaceDamage(
+      state,
+      replacements,
+      source,
+      source.controller,
+      recipient,
+      affectedPlayer,
+      amount,
+      true,
+      emit,
+    );
+    if (result.prevented > 0) {
+      emit({
+        type: 'damagePrevented',
+        source: source.instanceId,
+        target: typeof target === 'string' ? target : target.instanceId,
+        amount: result.prevented,
+        combat: true,
+      });
+    }
+    amount = result.amount;
+    // Fully prevented: no damage, and no LIFELINK either — the source dealt
+    // nothing, so there is nothing to link (the same reading protection's half
+    // already had).
+    if (amount <= 0) return;
+  }
   if (typeof target === 'string') {
     const player = state.players[target];
     player.life -= amount;
@@ -203,20 +259,9 @@ function applyDamage(
       emit({ type: 'defenseChanged', instanceId: target.instanceId, delta: -removed, to: defenseOf(target) });
     }
   } else {
-    // Protection's second half: damage from a source with a protected quality
-    // is PREVENTED (CR 702.16e). Lifelink below is skipped with it — no damage
-    // was dealt, so there is nothing to link.
-    const protection = kw(target, index).protectionFrom;
-    if (protection !== undefined && protectionBlocksSource(protection, source.def)) {
-      emit({
-        type: 'damagePrevented',
-        source: source.instanceId,
-        target: target.instanceId,
-        amount,
-        combat: true,
-      });
-      return;
-    }
+    // Protection's second half (CR 702.16e) was already applied at the top of
+    // this function, before the replacement layer — see the comment there for
+    // why the order matters.
     target.damageMarked += amount;
     if (kw(source, index).deathtouch) target.markedByDeathtouch = true;
     emit({ type: 'damageDealt', source: source.instanceId, target: target.instanceId, amount, combat: true });
@@ -249,12 +294,13 @@ function dealToAttackedObject(
   attacked: InstanceId | PlayerId,
   amount: number,
   index: ContinuousIndex,
+  replacements: ReplacementIndex,
   defendingPlayer: PlayerId,
   emit: (e: GameEvent) => void,
 ): void {
   if (amount <= 0) return;
   if (typeof attacked === 'string') {
-    applyDamage(state, attacker, attacked, amount, index, emit);
+    applyDamage(state, attacker, attacked, amount, index, replacements, emit);
     return;
   }
   const object = findOnBattlefield(state, attacked);
@@ -265,11 +311,11 @@ function dealToAttackedObject(
     // the excess to the defending player — who, for a battle, IS its protector.
     const lethal = isBattle(object.def) ? defenseOf(object) : loyaltyOf(object);
     const toObject = Math.min(amount, lethal);
-    applyDamage(state, attacker, object, toObject, index, emit);
-    applyDamage(state, attacker, defendingPlayer, amount - toObject, index, emit);
+    applyDamage(state, attacker, object, toObject, index, replacements, emit);
+    applyDamage(state, attacker, defendingPlayer, amount - toObject, index, replacements, emit);
     return;
   }
-  applyDamage(state, attacker, object, amount, index, emit);
+  applyDamage(state, attacker, object, amount, index, replacements, emit);
 }
 
 /** What this attacker was declared attacking (the defending player by default). */
@@ -293,6 +339,7 @@ function runDamageStep(
   defendingPlayer: PlayerId,
   firstStep: boolean,
   index: ContinuousIndex,
+  replacements: ReplacementIndex,
   emit: (e: GameEvent) => void,
 ): void {
   const participates = (inst: CardInstance): boolean =>
@@ -334,12 +381,12 @@ function runDamageStep(
         // no damage; with trample it tramples its full power through (all
         // "lethal" was absorbed by the now-dead blocker = 0 remaining to assign).
         if (kw(attacker, index).trample) {
-          dealToAttackedObject(state, attacker, attacked, atkPower, index, defendingPlayer, emit);
+          dealToAttackedObject(state, attacker, attacked, atkPower, index, replacements, defendingPlayer, emit);
         }
         continue;
       }
       // Genuinely unblocked → straight to the attacked player/permanent.
-      dealToAttackedObject(state, attacker, attacked, atkPower, index, defendingPlayer, emit);
+      dealToAttackedObject(state, attacker, attacked, atkPower, index, replacements, defendingPlayer, emit);
       continue;
     }
     // Blocked → assign lethal to each blocker in order, trample overflow.
@@ -348,11 +395,11 @@ function runDamageStep(
       if (remaining <= 0) break;
       const need = lethalNeeded(blocker, attacker, index);
       const assign = Math.min(remaining, need);
-      applyDamage(state, attacker, blocker, assign, index, emit);
+      applyDamage(state, attacker, blocker, assign, index, replacements, emit);
       remaining -= assign;
     }
     if (remaining > 0 && kw(attacker, index).trample) {
-      dealToAttackedObject(state, attacker, attacked, remaining, index, defendingPlayer, emit);
+      dealToAttackedObject(state, attacker, attacked, remaining, index, replacements, defendingPlayer, emit);
     }
   }
 
@@ -363,7 +410,7 @@ function runDamageStep(
     if (!blocker || !attacker || !participates(blocker)) continue;
     const blkPower = power(blocker, index);
     if (blkPower <= 0) continue;
-    applyDamage(state, blocker, attacker, blkPower, index, emit);
+    applyDamage(state, blocker, attacker, blkPower, index, replacements, emit);
   }
 }
 
@@ -380,8 +427,15 @@ export function assignAndDealCombatDamage(
   const combat = state.combat;
   if (!combat) return;
   const index = indexContinuous(state);
+  // ONE replacement index per damage STEP, exactly like the continuous index
+  // above and for the same reason: all combat damage in a step is dealt
+  // simultaneously, so an effect that was live when the step began is live for
+  // every assignment in it. A prevention SHIELD spent by the first assignment is
+  // still not reusable by the second — the record it was read from is written
+  // through and spliced out of the state (see `internal/replacement.ts`).
+  const replacements = indexReplacements(state);
   const defendingPlayer = defendingPlayerOf(state);
-  runDamageStep(state, combat, defendingPlayer, step === 'firstStrike', index, emit);
+  runDamageStep(state, combat, defendingPlayer, step === 'firstStrike', index, replacements, emit);
 }
 
 /** The non-active player is the defender in this 2-player MVP. */

@@ -146,9 +146,26 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // Transforming happens on the battlefield in front of everyone (CR 712.8);
   // both face names are public the moment the permanent flips.
   transformed: 'public',
+  // A copy is chosen and applied ON THE TABLE (CR 706): which permanent became
+  // a copy, the card it printed as, the card it now is, and the visible object
+  // it was copied from are all things a spectator sees. Copying from a
+  // GRAVEYARD (Echoing Deeps) is public for the same reason — a graveyard is a
+  // public zone, so no variant of this event carries a secret.
+  becameCopy: 'public',
   stackResolved: 'public',
   // Mana in a pool is open information in paper Magic, and it is the raw material
   // for the brief's §35–37 "represented mana" reasoning.
+  //
+  // ⚠️ DELIBERATE: this now also carries `spendRestriction` — the printed wording
+  // on restricted mana ("only to cast a creature spell"). It travels PUBLIC, and
+  // that is the correct classification rather than a convenient one: the
+  // restriction is printed on a permanent every seat can read, and the whole table
+  // watched that permanent be tapped. There is no seat entitlement to compute, so
+  // it satisfies this file's one rule — "only what a spectator holding no cards
+  // would know". Redacting it would ALSO be a mistake in the other direction: an
+  // opponent who sees three mana float off Ancient Ziggurat and cannot see the
+  // restriction would read the board as three mana of represented interaction,
+  // which is the exact inference §35–37 asks the pilot to make correctly.
   manaAdded: 'public',
   manaPoolEmptied: 'public',
   // Paying "unless its controller pays {3}" happens on the table, in front of
@@ -290,6 +307,16 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // that put it there, and the granting ability resolved in front of the table.
   cardGrantAdded: 'public',
   cardGrantExpired: 'public',
+  /*
+   * A replacement effect firing is as public as the event it replaced. Both
+   * halves are already public — the counters land face up, the damage moves a
+   * life total — and the card that did it is on the battlefield in front of
+   * everybody. `from`/`to` say only how much of each; nothing here names a card
+   * in a hand or a library, and the `label` is the printed line, which every
+   * player can read off the permanent.
+   */
+  replacementApplied: 'public',
+  replacementExpired: 'public',
   permanentAttached: 'public',
   permanentUnattached: 'public',
   attachmentFailed: 'public',

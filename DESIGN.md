@@ -1260,6 +1260,76 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
     taps close the same shortfall, and refuses to plan a payment that kills its own controller.
   **Measured PAIRED against the same cached corpus on the same day's `main`: 328 → 384 of 2100
   (15.6% → 18.3%), +56 cards.** (Against the 229 baseline the brief was written from, the same +56.)
+- ✅ ***the fifth mana shape: a SPEND RESTRICTION on produced mana*.** The other four shapes
+  decorate the SOURCE; this one colours the MANA, and that is the whole of why it needed a different
+  design. `ManaPool` was `Record<ManaColor, number>`, so a restricted mana became indistinguishable
+  from an unrestricted one the moment it landed in the pool. **The pool carries it now**, and
+  `canPay`, `payCost`, the payment planner, the event log, the debug snapshot, the masked protocol
+  view and the AI all honour it. `ManaAbility.spendRestriction` is DATA — a disjunction of clauses
+  over the object being paid for (purpose, types, subtypes, colour/colourless, legendary) — so no
+  card has a branch, and "cast artifact spells **or** activate abilities of artifacts" is two
+  clauses rather than a Power Depot case.
+  **Measured on the cached 2100-card corpus against the matched `origin/main` (a6419e5): 510 → 516
+  playable, +6 cards, 0 regressions, and the 15-card "spend restriction" gap is gone** — dissolved
+  into six newly playable cards (Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the
+  Spirit Dragon, Unclaimed Territory, Secluded Courtyard) and three precisely-named residuals, each
+  of which is a different system.
+  Five properties make it faithful rather than approximately right:
+  - **It is a SUBTRACTION, not a matching problem.** One `payCost` call funds ONE thing, so every
+    pip in it shares the same purpose and each mana is either usable for the whole payment or for
+    none of it. Hide what this purpose may not touch, run the existing algorithm on the rest: linear
+    in the number of restricted parcels, no search, and — because it is the same algorithm — no
+    second opinion about what a hybrid symbol or a generic pip costs.
+  - **`purpose === undefined` means NO.** A caller that asks "can this pool pay {2}{G}?" without
+    saying what for cannot be told yes about restricted mana. A forgotten purpose therefore produces
+    a PESSIMISTIC answer (a cast the engine could have offered), never an ILLEGAL one — which is the
+    failure that would poison a verdict. It is also why a "unless its controller pays {3}" tax
+    cannot be paid with Ancient Ziggurat mana, correctly and with no special case.
+  - **Mana you cannot spend is still mana.** `pool[color]` stays the TOTAL, restricted included, so
+    `poolTotal`, the seat panel, the replay format and the end-of-step empty are unchanged and still
+    true — a restriction changes legality, not quantity. Restricted mana that can never be spent
+    drains at end of step with its `manaPoolEmptied` event, and never earlier.
+  - **The hot path pays one property read.** `restricted` is ABSENT on every pool in a game with no
+    restricted source, and `canPay` / `payCost` / the planner each short-circuit on that `undefined`
+    before doing anything else. The planner takes the card DEFINITION and resolves the purpose
+    LAZILY — gating it on the live pool was a real bug caught by the pilot tests, because at
+    planning time the pool is empty and the restricted mana does not exist yet, so the planner
+    refused to tap Ancient Ziggurat at all and a castable creature read as uncastable.
+  - **"…of the chosen type" reads the PERMANENT, and reads it once.** Cavern of Souls, Unclaimed
+    Territory and Secluded Courtyard name a creature type as they enter, which core's as-enters seam
+    already stores on the instance (`CardInstance.chosenAsEntered`) — so this branch reads that value
+    rather than tracking a second copy of the same answer. The clause on the shared definition is a
+    DECLARATION (`subtypeChosenBySource`); the value is substituted when the mana is MADE, which is
+    the only moment both the source and its choice are in hand. The pool therefore only ever holds
+    CONCRETE restrictions, no payment path has to find a permanent, and clone/serialization stay
+    unchanged. A permanent that named NOTHING makes mana that pays for nothing — never for
+    everything, which is the direction that would hand it the best mana on the board. The compiler
+    refuses the clause outright on a card whose text never names a type, because mana that can never
+    be spent is as much a lie as mana that pays for anything.
+  - **Restricted mana is spent FIRST.** It is the least flexible resource on the board, and the
+    planner's existing "least flexible source first" ordering could not see it (Ancient Ziggurat
+    offers five colours, so `flexibility` ranked it LAST). A `restrictedRank` term joins that same
+    ordering — below `pain`, because "least flexible" must never outrank "does not kill me" — and
+    `payCost` drains restricted parcels first within a colour and prefers colours holding them when
+    paying the generic portion.
+  **A restriction on public mana is PUBLIC.** Mana in a pool is open information in this engine
+  (`sim/observation.ts`), and the restriction was printed on a permanent every seat can read, so it
+  travels on the `manaAdded` event and in the masked protocol view. Redacting it would be the worse
+  error: an opponent watching mana float off an Ancient Ziggurat and unable to see the restriction
+  would read the board as represented interaction that is not there.
+  📌 **KNOWN REACH LIMIT, pinned in the planner's comments:** a plan will not chain a restricted
+  source into ANOTHER source's mana cost (Power Depot's "activate abilities of artifacts" mana
+  paying for an artifact filter land). Same shape as the filter-land reach limit already recorded
+  above, and it can only ever decline a payment, never make an illegal one.
+  ⛔ **NOT shipped, and reported by name rather than faked: the COMMANDER.** "Add one mana of any
+  color in your commander's color identity" (Command Tower, Arcane Signet) needs a commander, a
+  command zone holding one, and a format that has both. This engine has none of them, and a fake
+  commander — any seat's "best" card, or a colour identity guessed from the decklist — would
+  silently set those two cards' output in every game the lab plays, corrupting exactly the A/B
+  verdicts they appear in. The general seam it would need ("colours derived from a named object the
+  engine tracks") is deliberately NOT built either: with one hypothetical consumer it would be a
+  guess at an interface, and the six cards previously grouped with it turned out to need something
+  else entirely (a tapped-for-mana trigger), which is now reported under its own name.
 
 Still open, roughly by how often they block a real decklist:
 - *aiming a trigger body at the player whose step or turn it is* ("At the beginning of each player's
@@ -1267,17 +1337,20 @@ Still open, roughly by how often they block a real decklist:
   Font of Mythos). The trigger itself is expressible (`who: 'any'`); what is missing is the
   triggering player riding the resolution the way `xValue` and `kicked` do, so a body can say "that
   player" rather than "the controller",
-- ***a SPEND RESTRICTION on produced mana* — the fifth mana shape, and the one that is genuinely a
-  different system** (4 sole-blocked, 15 blocks: Cavern of Souls, Delighted Halfling). The other
-  four decorate the SOURCE; this one colours the MANA. `ManaPool` is `Record<ManaColor, number>` —
-  a restricted mana is indistinguishable from an unrestricted one the moment it lands in the pool —
-  so the pool would have to carry the restriction and every payment path (`payCost`, `canPay`, the
-  planner's dense buffers, serialization, the AI's mana math) would have to honour it. Reported by
-  name, not approximated.
 - *two smaller mana gaps that are cost/vocabulary rather than system*: a mana-ability cost that
   **taps another permanent** (Springleaf Drum — a third cost component AND a choice of which
-  permanent, which nothing asks), and a colour derived from an object this engine does not have (a
-  commander's identity, refused for good — see the completion plan §5).
+  permanent, which nothing asks), and a spend restriction naming a creature type **chosen as the
+  permanent enters** (Cavern of Souls, Secluded Courtyard, Unclaimed Territory — the restriction
+  itself works now; what is missing is a per-INSTANCE remembered choice).
+- *a spell that **cannot be countered*** ("…and that spell can't be countered" — Cavern of Souls and
+  Delighted Halfling print it after a spend restriction, and 15 more print it on the spell itself).
+  Counterspells are real in this engine, so the clause is not vacuous and is never dropped.
+- *the two colour-derivation families this engine has no object for*, now reported separately
+  because they are not the same work: a **commander's colour identity** (Command Tower, Arcane
+  Signet) needs a format this engine does not implement and will not fake — see below — while
+  **"add one mana of any type that land produced"** (Mirari's Wake, Zendikar Resurgent, Vorinclex,
+  Kinnan, Extraplanar Lens, Incubation Druid) is an ordinary triggered ability watching a permanent
+  being tapped for mana, and is engine work somebody can simply do.
 - *the payment planner cannot CHAIN into a filter land inside one plan.* The mana half of a mana
   ability's cost is gated on the FLOATING pool, exactly as `unpayableActivationReason` gates every
   other activated ability, so a filter land is offered once its input is floating and not before —
@@ -1289,7 +1362,7 @@ Still open, roughly by how often they block a real decklist:
   what remains is *suspend*, *spectacle*, *evoke*, an **{X} in a cycling cost** (Shark Typhoon: an
   activation cost has no answer-and-charge step the way a casting cost does) and a **madness cost
   printed in words** ("Madness—Pay six {C}"). *Phyrexian costs*,
-  *fuse* (CR 702.102 — **split, aftermath, adventure and the Siege reward all landed in §3.21**;
+  *fuse* (CR 702.102 — **split, aftermath, adventure and the Siege reward all landed in §3.22**;
   what is left of that family is casting BOTH halves as one spell, and the Room/door system CR 714),
   *flashback riders that are not mana or life* ("Flashback—{1}{U}, Discard a card" — the cast
   pipeline can charge mana and life, and nothing else, so a discard or sacrifice rider reports),
@@ -1870,7 +1943,6 @@ character-indexed object (nothing had printed a label that long until the fetchl
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
 
-
 ### 3.21 The triggering player + the intervening "if" — the "At the beginning of…" family — ✅ done
 The biggest template cluster in the coverage audit (~65 corpus cards) had ONE thing standing in front
 of it, and it was not a template: **a trigger's resolution did not know which player set it off.**
@@ -1947,7 +2019,7 @@ a created token has no COLOUR.** `makeToken` builds a `CardDefinition` with no c
 or a protection-from-red. It predates this branch (every token card in the pool has it) and closing it
 needs a `colors` field on `CardDefinition` plus the colour reader honouring it — a small system, and
 one that belongs to whoever owns `makeToken`, not to a trigger branch.
-### 3.21 The second castable half — split, aftermath, adventure and the Siege reward — ✅ done
+### 3.22 The second castable half — split, aftermath, adventure and the Siege reward — ✅ done
 The coverage audit's #1 and #2 gaps were one system: *casting the second half of a split, adventure or
 Siege card* (60 card-blocks) and *the "//" card type* (38). Four printed layouts, four different cast
 paths, and — as it turned out — one model.
@@ -2019,7 +2091,7 @@ DFC both print two faces with two costs — and the compiler refuses to guess it
 ⚠️ **The committed card index predates the `layout` field, so no pool card compiles as a split card
 yet.** The fetch pipeline captures it from now on; a re-fetch of the index is what puts these layouts
 in front of a player who has not imported a decklist, and that file belongs to the pool branch.
-### 3.21 "As ~ enters, choose a…" — a value NAMED as a permanent enters, and remembered — ✅ done
+### 3.23 "As ~ enters, choose a…" — a value NAMED as a permanent enters, and remembered — ✅ done
 The replacement-effect naming of CR 614.1c: **"As Cavern of Souls enters, choose a creature type."**
 The corpus audit named it as one gap of 27 cards, but the prompt was never the hard half. **The crux
 is that the answer has to stick to the permanent and still be readable ten turns later** — by the
@@ -2146,6 +2218,428 @@ missing you-may template:
 - **fear** (Cover of Darkness) — an evasion keyword the engine does not model;
 - **Multiversal Passage's "this land is the chosen type"** — a type-changing effect that would have to
   grant the named basic land type's mana ability.
+### 3.24 Copy effects — layer 1, beneath everything — ✅ done
+The engine had never had a copy effect, and an earlier branch was told to skip clones for exactly that
+reason. `You may have ~ enter as a copy of any creature on the battlefield` now plays as printed.
+
+**The mechanism is one swap, and it is the transform system's.** A copy is applied by swapping
+`CardInstance.def` — every characteristic read in the codebase already routes through it (combat's
+P/T, targeting's types, the trigger collector's ability list, mana production, the AI's evaluation,
+the renderer's art), so the swap IS the routing and there is no second code path anywhere.
+`CardInstance.uncopiedDef` is the way back, restored by `resetInstanceForNewZone` when the permanent
+leaves (CR 400.7 — a bounced Clone is a Clone in hand). It is a **separate field from `printedDef`**
+and not redundant with it: `printedDef` answers "which FACE is up", `uncopiedDef` answers "which CARD
+is this really", and a copy of a DFC that then transforms needs both answers at once.
+
+**LAYER 1 IS THE WHOLE FEATURE (CR 613.2).** A copy is applied beneath everything, so counters (7d),
+anthems (7c), Auras and until-end-of-turn pumps all apply **on top of** the copied characteristics —
+which falls out for free, because those layers are computed from `inst.def` plus the instance's own
+state. And **you copy the printed card (CR 706.2)**: a 1/1 wearing three +1/+1 counters is copied as a
+**1/1**, a transformed permanent is copied by its **front face**, and a permanent that is itself a copy
+is copied by what it copies — and an ADVENTURER on the battlefield is copied as its creature half,
+which needs no special case because the cast path already put that half in `def` (CR 715.2).
+`copiableDefOf` is the single answer to that question and every path asks it. `copy.test.ts` pins all of it, including a copier that keeps its own counters and its own pump.
+
+**It is an as-enters REPLACEMENT, and it joins the existing one.** `CardDefinition.copyAsEnters` sits
+beside `asEntersChoice` (§3.23's CR 614.1c naming) and the `entersTapped*` family because it is the
+same kind of thing, and it deliberately reuses §3.23's machinery rather than growing a rival:
+`'copyAsEnters'` is a second `PendingChoice.context`, and the answer applies to
+`appliesToInstanceId` exactly as a naming's does.
+
+For a **permanent spell** the engine raises it in `resolveTopOfStack`, before `stackResolved` and
+before a single effect runs — the stack object goes straight back on the stack untouched while the
+question stands, and `SpellStackObject.copyAsEntersDecided` is what makes a DECLINE stick (a decline
+leaves no trace on the instance, so without the marker the resolution would re-ask forever). Asking
+there is what lets the COPIED card decide summoning sickness, starting loyalty and starting defense.
+
+For a **land**, `applyPlayLand` asks it **once, ahead of §3.23's `raiseLandEntryChoice` ladder**,
+and it is not another rung of that ladder for a precise reason: it does not answer a question about
+this land, it decides *which land the ladder is then asking about* — a Vesuva that copies Cavern of
+Souls owes Cavern's naming, one that copies a Temple owes nothing. Asking from the single call site
+also means it can never be re-asked. The answer re-reads `entersTapped` off the copied card (nothing
+can observe the intermediate value: the `tapped` event is deferred to the end of the ladder, and
+answering is the only legal action while a question stands) and then hands control back to the
+ladder.
+
+**Compiler: two closed tables, and a card outside them reports.** `copy-as-enters` owns the whole
+printed clause including its tapped-ness and its "except …" tail — an added card type or creature
+subtype, a kept name, legendary on or off, Spark Double's extra +1/+1 and loyalty counters, Vesuva's
+"enters tapped". **Measured PAIRED against the same-day `origin/main` on the cached
+2100-card corpus: 485 → 493 playable, nothing lost** — Sculpting Steel, Mirrormade, Copy Enchantment,
+Clever Impersonator, Spark Double, Vesuva, Echoing Deeps (which copies a land card in a **graveyard**)
+and Glasspool Mimic, whose copy clause sits on a modal-DFC face and so needed §3.22's work too.
+Throughput is at parity, measured rather than assumed: 562 vs 562 scavenges over 40 identical seeded
+self-play games (29,899 actions, byte-identical in both arms).
+
+**The AI has a policy, and it needed one.** The generic `selectCards` path prices candidates with
+`cardValue`, which reads EFFECTIVE stats — so a pilot would copy the 1/1 wearing three counters over
+the printed 4/4 beside it and end up a 1/1. `copyTargetValue` prices what the copy WOULD BE from
+PRINTED characteristics (body, abilities, keywords, mana source), and the decline bar is the copier's
+own printed body scored the same way — usually zero, because a Clone's own body is a 0/0 that dies to a
+state-based action on arrival. Proven against the real heuristic pilot in real games.
+
+**`Kindred` (CR 308) became a real card type.** Its entire rules content is that the card's subtypes
+are creature types without the card being a creature, and that it counts as a card type in a graveyard
+(Tarmogoyf) — so it is a member of `CardType`, has a bit in `CARD_TYPE_BIT`, and `TYPES_WITHOUT_SYSTEM`
+stays honestly empty. A record whose ONLY type is Kindred still reports: CR 308.1 requires a second.
+
+**Reported by name, not half-built:** copying a SPELL on the stack (Reverberate, Narset's Reversal) and
+TOKEN copies (Rite of Replication, Kiki-Jiki) need a stack object that is **not a card** and ceases to
+exist as it resolves (CR 707.10 — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of
+them would leave a phantom card in a zone that delirium, flashback and Tarmogoyf all count), plus an
+aiming moment for "you may choose new targets for the copy" and the copy carrying the original's X and
+modes (CR 706.10). Also reported: a copy that GRANTS an ability printed in quotes (Phantasmal Image's
+"becomes the target" sacrifice, Sakashima's delayed return), a copy bounded by **the amount of mana
+spent** to cast it (Mockingbird — nothing records that number), and "becomes a copy" applied by an
+activated ability rather than as the permanent enters (Mirage Mirror, Thespian's Stage).
+
+
+### 3.25 Replacement and prevention effects — a layer the engine never had — ✅ done
+CR 614/615/616. A replacement effect never goes on the stack and never "happens": it watches for an
+event that *would* happen and changes what happens instead. Three printed families that looked like
+three template buckets are **one system underneath**, and this ships as one layer that damage,
+counters and draws all consult — `packages/core/src/replacement.ts` (what a card DECLARES) and
+`packages/core/src/internal/replacement.ts` (what the layer DOES), beside `internal/continuous.ts`
+and `internal/combat.ts`.
+
+**What plays as printed now.**
+- **Counter multipliers** — "If one or more +1/+1 counters would be put on a creature you control,
+  that many **plus one** are put on it instead" (Hardened Scales, Conclave Mentor, Ozolith, Kami of
+  Whispered Hopes) and "**twice** that many" (Corpsejack Menace, Branching Evolution, Doubling
+  Season's counter half).
+- **Damage scaling** — "If a **red** source **you control** would deal damage to **an opponent or a
+  permanent an opponent controls**, it deals that much damage **plus 2** instead" (Torbran) and the
+  doubling/tripling forms (Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+  Tyrant, Dictate of the Twin Gods, Gisela). All three restrictions are kept: a colour read off the
+  cost pips by the same reader protection uses, a source TYPE ("a creature you control"), and whose
+  objects may be hit. A clause with no controller tail is the symmetric card and is **not** quietly
+  read as "yours".
+- **Prevention** — the one-shot form ("Prevent all combat damage that would be dealt this turn" —
+  Fog, Darkness, Spore Frog's sacrifice ability) registers a floating effect that expires in cleanup;
+  the STATIC form ("Prevent all combat damage that would be dealt to **attacking** creatures you
+  control" — Dolmen Gate) is card data whose lifetime is derived from the battlefield. The two are
+  separated by the printed tail "this turn" and by a permanent check, because compiling a Fog as a
+  static would prevent damage for the rest of the game. "Prevent **half** that damage, rounded up"
+  (Gisela's second clause) is its own outcome, since halving produces a prevented amount the log must
+  report and the rounding direction is printed.
+- **Draw replacement** — "If you would draw a card **except the first one you draw in each of your
+  draw steps**, draw two cards instead" (Teferi's Ageless Insight) and "…**while your library has no
+  cards in it, you win the game** instead" (Laboratory Maniac). The printed exception is EXACT, not
+  approximated: core records a `drewInOwnDrawStep` turn fact as the draw-step draw happens, so the
+  second and every later draw in that step really is replaced.
+
+**⚠️ THE THREE THINGS THAT ARE EASY TO GET WRONG HERE, and what this branch did instead.**
+
+**1. CR 614.5 — an effect applies AT MOST ONCE to a given event.** This is the rule that makes a
+doubling effect terminate. After a replacement modifies the event the engine re-asks which effects
+apply *to the modified event*, and Doubling Season still matches its own output. The applicable set
+is therefore a **bitmask over the candidate list**, so an effect already applied is never offered
+again and the loop runs at most `candidates.length` times **by construction** — no recursion, no
+depth counter to tune. Two doublers on one event give ×4; one doubler gives ×2 and logs exactly one
+application.
+
+**2. CR 616.1 — the ORDER is the affected player's, and it is a real choice.** Hardened Scales then
+Corpsejack Menace puts **4** counters; the other order puts **3**. This engine settles that
+decision **deterministically, in one place, for every seat and every call site**: it enumerates the
+orders (exhaustively up to `ORDER_SEARCH_MAX_CANDIDATES = 4`, canonical order beyond) and takes the
+one the affected player would take — least damage, most `+1/+1` counters, fewest counters of any
+other kind (`affectedPlayerPrefersMore`, one named objective) — with ties broken by a canonical
+order that is a function of the state alone, so a paired A/B run cannot diverge on it.
+
+⚠️ **It is settled rather than ASKED, and the reason is structural, not laziness.** The hottest call
+site is the combat damage step, which is a synchronous batch inside the turn machine: `resolveCombatDamage`
+applies every assignment before priority exists again, so there is no resolution frame to park a
+`pendingChoice` in. A layer that asked a question for a Lightning Bolt and decided silently for a
+combat hit would be exactly the drift this repo keeps having to unwind. This is the same class of
+delegated sub-decision as "which lands get tapped to pay this cost", which core's shared payment
+planner has always answered on the player's behalf (§3.11) — every order it can produce is legal, and
+the decision the CARD prints is modelled in full.
+
+**3. A prevention SHIELD is consumed, and cannot resurrect.** "Prevent the next N damage" carries
+`remaining` on its floating record; it is decremented by exactly what it prevented, written back
+*and* spliced out of `GameState.replacements` the moment it hits zero. Both writes are deliberate:
+an index built earlier **in the same damage step** still holds a reference to the record, so the
+write is what stops the second attacker in one combat re-using a spent shield, and the removal is
+what stops any later index seeing it at all. A shield declared as a PRINTED ability is refused by the
+layer outright — it would have nowhere to keep its count and would prevent N *every time, forever*,
+which is a different and much better card.
+
+**⚡ THE LAYER IS INERT AND ALLOCATION-FREE WHEN NOTHING REPLACES ANYTHING.** This sits on the damage
+and counter paths, the hottest in the game, so `indexReplacements` returns the **shared frozen empty
+array by reference** unless some permanent, emblem or floating record actually declares a
+replacement; the guard at every call site is `index.length === 0`. The discovery loop is the same
+shape as `indexContinuous`'s — an indexed `for` over `state.battlefield`, one property read per
+permanent, no iterator, no output array unless something is found — and `GameState.replacements` is
+OPTIONAL and **absent** in every game that never makes one, exactly like `cardGrants`.
+
+**Measured three ways, because wall clock on this box is worthless** (the same build read 39 and then
+108 games/sec within one session):
+| measurement | origin/main | this branch |
+|---|---|---|
+| **Allocation** — scavenges over 40 seeded self-play games, semi-space pinned to 1 MB, median of 3 | **560** | **561** (identical 29,899 actions) |
+| **The added work itself** — `indexReplacements` calls / permanent property reads over 120 games | — | **4,324 calls / 60,530 reads, zero allocation** |
+| **Gauntlet, Mono-Red Aggro, 40 games/deck, seed 99** | **81/280** | **81/280 — every matchup row equal** |
+| **CPU time**, `process.cpuUsage`, paired and interleaved, 8 pairs | median 1844 ms | median 1851 ms (**1.004×**) |
+
+⚠️ Read the CPU row with its own caveat: the BASE arm alone swung 1421–2109 ms run to run (48%) on
+this shared box, so anything under ~10% there is below the machine's resolution. The allocation row
+and the byte-identical gauntlet are the load-bearing evidence.
+
+**The AI is not blind to it, and that was two separate fixes.** `packages/ai/src/tactical.ts`
+re-prices every attacker's damage through the layer (`projectDamage`), so `maxDamage`, the guaranteed
+damage after optimal blocks, the **lethal** flag and the clock all read the doubled swing — a pilot
+that owned a Gratuitous Violence and still attacked on printed power would decline a lethal attack.
+`totalIncomingDamage` does the same for the blocking decision. Both go through `projectDamage`, which
+runs the **identical** loop with the identical ordering rule and **writes nothing** — there is no
+second copy of the arithmetic, and a pilot weighing its options cannot spend the prevention shield it
+is weighing. A new `fog` spell intent is priced by exactly what it prevents (zero in a main phase,
+`lethalBurnScore` in front of a lethal swing, with a named floor so a poke does not buy a card).
+
+⚠️ **A REAL PILOT DEFECT FELL OUT OF IT, and it was not about fogs.** `chooseBlock` used to `return`
+a pass when no block was worth making, which made **every instant-speed response in the
+declare-blockers step unreachable** for a pilot that had declined to block — a fog, a combat trick, a
+burn spell to finish the turn. "Nothing is worth blocking" is an answer to WHICH BLOCKS, not to what
+to do with priority; it now falls through to the priority logic, which ends in the same pass when
+nothing is worth casting. **Gauntlet seed 99 is unchanged** (81/280, every row equal), because the
+shipped pool contains no instant the pilot wants in that window — the fix is what makes the pool's
+next one work.
+
+**Measured PAIRED against the same-day `origin/main` (`068be3d`) on the same cached corpus:
+485 → 501 of 2100 playable (23.1% → 23.9%), +16 cards.** The same +16 was measured against the
+pre-merge main this branch started from (408 → 424), which is the useful cross-check: the families
+that landed meanwhile moved the baseline, not this work's contribution. Re-run with
+`node packages/cards/scripts/coverage-audit.mjs --input <corpus.json> --top 0`.
+
+The 16, by shape: **counter multipliers** (Hardened Scales, Branching Evolution, Corpsejack Menace),
+**damage scaling** (Torbran, Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+Tyrant, Dictate of the Twin Gods, Gisela), **prevention** (Fog, Darkness, Spore Frog, Dolmen Gate)
+and **draws** (Laboratory Maniac, Teferi's Ageless Insight). Several more cards in these families
+compile their replacement clause correctly and stay `incomplete` on a DIFFERENT line — Conclave
+Mentor on "gain life equal to its power", City on Fire on convoke, Iroas on devotion — which is the
+contract working, not a gap in this system.
+
+**Still reported, by name, never approximated** (each is now its own `UNSUPPORTED_HINTS` entry, so
+the audit names the residual rather than a solved system):
+- a **TOKEN-count** replacement ("twice that many of those tokens are created instead" — Doubling
+  Season's other half, Parallel Lives, Anointed Procession): the layer scales a NUMBER, and creating
+  extra objects is a different outcome;
+- a **ZONE-CHANGE** replacement ("if it would die, exile it instead" — Rest in Peace, Dauthi
+  Voidwalker): the layer changes quantities, not destinations;
+- a **LIFE-CHANGE** event (Alhammarret's Archive, Rhox Faithmender, Bloodletter of Aclazotz) — one
+  more event kind on this same layer, blocked on nothing but a chokepoint at `changeLife`;
+- a prevention **RIDER** ("prevent that damage AND put a +1/+1 counter on it for each 1 prevented" —
+  Vigor, The Mindskinner): prevention itself is implemented, the rider is not;
+- a shield bound to **a source of your choice** (Deflecting Palm) — choosing a source is a question
+  nothing asks;
+- a draw replacement whose result is a different **ACTION** (Notion Thief's skip-and-redirect,
+  Abundance's reveal-until).
+
+⚠️ **NOT YET IN THE SHIPPED POOL.** Every card above is reachable through the deck importer and plays
+as printed, but none is in `packages/cards/data/expanded-pool.ts` yet, so a player browsing the pool
+cannot see the mechanic. Closing that is a DATA edit on the §3.20 path (add the names to
+`expansion-candidates.json`, re-run `build-expansion.ts`, re-fetch data-tools, regenerate the web card
+index) — it needs the network and it rewrites three generated files, so it is deliberately left to
+whoever next runs that pipeline rather than done from this branch.
+### 3.26 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
+Twelve engine systems shipped in three days (§3.13–§3.20) and the pool went 191 → 357 cards. Every one
+of them was tested **in isolation by the agent that built it**, and almost none were ever tested
+together. The gauntlet decks in `packages/sim/data/decks` are eight curated archetypes: they exercise a
+fraction of the pool and essentially none of the collisions. No test in the repo had ever put a
+planeswalker, an Equipment, a protection creature, a modal spell and a flashback spell in one game.
+
+The soak does. `packages/sim/src/soak*.ts` plays thousands of seeded games with **randomised-but-legal**
+decks drawn from the whole pool, deliberately mixing mechanic families, and asserts INVARIANTS — not
+"it finished", which is the exact check this repo has been burned by (a combat-declaration bug once made
+games unable to END while the whole suite stayed green).
+
+**Three things it does that the existing suites do not.**
+1. **Invariants on every settled state** (`SOAK_INVARIANTS`): every action a pilot submits is legal;
+   the engine never REJECTS an action it offered; no game reaches the action cap; no stack object
+   survives a turn; state-based actions leave no dead creature, 0-loyalty walker or 0-defense battle;
+   an instance is in exactly one zone; no card in a hidden zone leaks into an observation;
+   `applyActionInPlace` stays bit-identical to `applyAction`; and no pool card resolves an
+   `effectUnsupported` no-op.
+2. **Occurrence, not coverage.** `SOAK_MECHANICS` is an inventory and the run **fails when a mechanic
+   the pool prints never fires** — the sim-side twin of `pool-mechanics.test.ts`, which fails when a
+   mechanic loses its last card. Between them, "shipped but unreachable" has nowhere to hide. Witnesses
+   are labelled `action` / `event` / `state` so a weaker claim reads as a weaker claim.
+3. **A NEW ENGINE EVENT BREAKS THE BUILD.** `SOAK_EVENT_WITNESS` is a mapped type over
+   `GameEvent['type']` (the `OBSERVATION_POLICY` idiom), so the next system to ship cannot go untested
+   by simply not being thought of.
+
+**Two tiers.** The FAST tier (`soak.test.ts`) runs in the ordinary suite every time — one anchored
+matchup per mechanic plus a block of mixed games, every invariant on every decision: **104 games,
+2,210 turns, 64,657 actions, ~17 s CPU.** The DEEP tier (`soak-deep.test.ts`, `JB_SOAK_GAMES=N`, or
+`npm run sim -- soak --games N`) plays thousands — the run that found the last defect was **5,064
+games, 106,099 turns, 3,203,620 actions, 498 s CPU**, with a 1.1% turn-cap draw rate and zero
+action-cap games. Both tiers are sized in GAMES and report CPU: wall clock on this box is worthless
+(the same build has measured 39–87 games/sec inside an hour).
+
+**What it found.** Four real defects, fixed here, and three reported. Two of the four are
+state-based-action gaps in `applyCastSpell`, and neither is reachable by any gauntlet deck — which
+is precisely why nothing before this had seen them.
+- ✅ **FIXED (core) — state-based actions did not run when a spell was CAST, only when one
+  RESOLVED.** The caster receives priority the instant a spell is announced, which is an SBA check
+  point (CR 704.3) — and casting MOVES A CARD BETWEEN ZONES, which characteristic-defining P/T reads.
+  A flashback cast takes the last instant out of a graveyard, every Tarmogoyf loses a point of
+  toughness, and one already shrunk by a Weakness is at 0 and must die; the engine handed priority
+  back to a player looking at a creature that should already be in a graveyard. Turn 8 of seed
+  1727114651 — **once in 5,064 games and 3.2 million actions.**
+- ✅ **FIXED (core) — paying a flashback LIFE cost did not end the game.** `applyCastSpell` charges
+  "Flashback—{1}{B}, Pay 3 life" and never ran the state-based-action pass, so a caster who paid
+  itself to exactly 0 kept holding priority and casting spells (turn 20 of seed 3856639351 — once in
+  4,000 games). Paying yourself to 0 is legal (CR 118.4); surviving it is not (CR 704.3 / 704.5a). One
+  `checkStateBasedActions` call — the third copy of a rule `applyTapForMana` and the shockland
+  pay-life choice already apply.
+- ✅ **FIXED (AI) — the pilot tapped five lands toward a flashback cast it could never make.** Its
+  candidate loop checked mana and not the life rider, so below the threshold it committed the taps,
+  found no cast, and passed — floating the whole pool and wasting the turn at exactly the moment it
+  was about to die. Seed 3329123684.
+- ✅ **FIXED (AI) — the pilot proposed blocks the rules forbid.** `canBlockByEvasion` in
+  `packages/ai/src/heuristic.ts` mirrored core's `canBlock` **minus its protection clause**
+  (CR 702.16e), so a white creature kept being assigned to block a Black Knight. One illegal pair
+  invalidates the WHOLE `declareBlockers` action, so the engine refused it and the harness passed
+  priority after three rejections — **the defender took the entire attack unblocked, every combat.**
+  Nothing isolated could see it: the protection tests never asked a pilot to block, and the pilot tests
+  never put a protection creature on the other side. `needsMultipleBlockers` was reading `def.keywords`
+  bare in the same function, so a GRANTED menace was invisible too. Both fixed; both regression tests
+  fail without the fix, with the engine's own message.
+- ⚠️ **REPORTED — the rich mana-ability model has no card in the pool.** §3.11's `manaAbilities`
+  (a tap cost, a rider, an activation restriction, board-derived colours) is matched by **0 of 357**
+  pool cards, so nothing a player can see exercises it. That is rule 10's inert feature; it needs a
+  pool regeneration, not an engine change.
+- ⚠️ **REPORTED — the redaction guarantee is narrower than it reads.** A buyback spell returns
+  itself to its owner's HAND as it resolves, so the public `stackResolved` observation names an
+  instance now in a hidden zone. Not an exploitable leak (the table watched that card go back), but
+  "no observation ever names a card in a hand or library" is false as stated, and
+  `observation.test.ts` passes only because none of its curated matchups plays a buyback card.
+- ⚠️ **REPORTED — no maximum hand size.** `RulesConfig` has no `maxHandSize` and the cleanup step
+  performs no discard (CR 514.1), so hands grow without bound. Adding it would move every recorded
+  win-rate baseline in §3.4a, so it is a decision, not a patch.
+
+**What the merge with the four 2026-08-20 branches showed.** Two things, and the second is a finding
+in its own right. First, **the event manifest earned its keep immediately**: `chosenAsEnters` and
+`triggerFizzled` were new `GameEvent` members, so `soak-config.ts` stopped compiling until they were
+classified — nobody had to remember to widen the soak, the build asked. Second, and worse:
+**all four systems are unreachable from the shipped pool.** Measured on the merged tree, the pool is
+still 357 cards and prints 0 split/adventure/aftermath cards, 0 modal DFCs, 0 as-enters choices, 0
+mandatory additional costs, 0 intervening-"if" triggers and 0 multi-destination searches. The compiler
+got wider and the generated pool was never regenerated — §3.20's failure, four systems later. The soak
+watches all five and says "not in the pool (not required)" out loud, and will start failing without an
+occurrence the day one card appears.
+
+**And two false alarms worth writing down, because both are the harness's own recorded failure shape.**
+Asserting state-based actions on a state that is MID-RESOLUTION reports Magma Jet ("2 damage, then
+scry 2") as leaving a dead creature on the battlefield — it does, legally, until the scry is answered
+(CR 704.3 / 608.2). And scanning an observation against the state the action STARTED from reports every
+land drop in the game as a hidden-zone leak. `soak.ts` carries both traps as comments beside the code
+that avoids them.
+### 3.27 Combat damage, and what the EQUIPPED creature does — ✅ done
+The two seams the ~38-card corpus family shares, and they are one idea seen twice: **a trigger has a
+watched object, and it is not always the card it is printed on.**
+
+**`TriggerCondition.watches` is a SCOPE, not a new event.** "Whenever equipped creature deals combat
+damage to a player" is the *same game occurrence* as the creature's own printed line — a creature
+dealt combat damage to a player — watched on a different object. So the vocabulary grew by one
+optional field (`'self' | 'attachedHost'`, absent meaning `'self'`), not by an
+`equippedDealsCombatDamage` event sitting beside `combatDamageToPlayer`. Two event names for one
+occurrence is how a matcher ends up with two answers to the same question, and every existing trigger
+is byte-identical data. The scope applies uniformly to the five self-referential events, so
+`attacks`, `dies` and the combat-damage line all read it through one `watchedInstanceId` helper.
+
+Three properties, each of which fails silently if it is got wrong:
+- **The SOURCE is still the attachment.** A Sword's trigger is controlled by the Sword's controller,
+  ordered by the Sword's battlefield position, and its "~ deals 2 damage" means the Sword. Only the
+  watched object moves — which is exactly why this is a field on the condition and not a different
+  `sourceInstanceId`.
+- **Attached to nothing matches NOTHING.** A Sword lying loose on the battlefield has an ability that
+  can never fire. A fallback to "watch myself" would be the Sword swinging on its own.
+- **The answer is the CURRENT attachment.** The trigger runtime caches one `TriggerSource` per
+  permanent and rebuilds it only when the controller or the ability list changes — so a copied
+  `attachedTo` would answer with the attachment the Equipment had when it was first seen this action.
+  `TriggerSource.permanent` is therefore a LIVE reference (one narrowly-typed field), which is what
+  makes an Equipment correct when its host dies to first-strike damage between the two damage steps,
+  and when the Equipment itself leaves the battlefield (`resetInstanceForNewZone` nulls `attachedTo`).
+  `equipped-triggers.test.ts` changes the attachment between two events of ONE action, which is the
+  case a copy gets wrong and nothing else would notice.
+
+**"When equipped creature dies" (Skullclamp) fires because of the state-based-action ORDER**, and the
+order is now pinned by a test rather than assumed: the SBA fixpoint checks attachments first and
+deaths second, so a pass emits `creatureDied` while the Equipment is still attached and only the pass
+after that unattaches it. Reversing those two would make the rule compile a trigger that silently
+never fires.
+
+**The compiler.** Six new trigger rules (`combatDamageToPlayer` and `attacks`/`dies` scoped to the
+host, each with its "you may" sibling), built on the existing `mayEffects` wrapper through a shared
+`optionalTriggerFrom` that compiles only the INNER body — the `trigger-etb-you-may` shape, so a body
+that implements its own option is not asked twice. The **assembly refuses a host-watching trigger on
+a card with no "Equip {N}"/"Enchant …" line**, for the same reason it already refused a lone
+modification: attached to nothing, forever, it could never fire.
+
+**The static half now carries the payload keywords.** "Equipped creature gets +2/+2 and has
+protection from black and from green" and "gets +1/+0 and has haste and ward {1}" reach core's
+`protectionFrom`/`ward` through `parseProtectionOrWard` — the *same* parser the printed keyword line
+uses, so an Equipment and a creature cannot disagree about which forms are real. The conjunction that
+separates two keywords is the same word that separates two protection qualities, so the split is
+re-joined before parsing. "Protection from instants and from sorceries" (Sword of Wealth and Power)
+still reports: core has no check for that quality.
+
+**Both seats, because an Equipment nothing equips is inert.** Two AI defects fell out, and both were
+invisible in a win rate:
+- the equip search gated on `attachment.modifies`, so an Equipment whose whole text is a host-watching
+  trigger (Skullclamp, Sword of the Animist) scored `undefined` and was **never equipped in any game
+  ever simulated**. It now gates on `attachment`, and `attachPerHostTrigger` prices the triggers;
+- an attacker's value counted the face damage and nothing else, so a Ragavan-shaped 1/1 was priced at
+  one point and held back. `attackSaboteurTriggerValue` counts every `combatDamageToPlayer` trigger
+  connecting would set off — the creature's own AND the ones its attachments watch it with — in the
+  branch where the attack is expected to CONNECT only, since a blocked attacker collects nothing. And
+  the walker diversion now sends the *vanilla* at the planeswalker: "combat damage to a player" pays
+  nothing there, and two same-size attackers are otherwise interchangeable, which is exactly when
+  diverting the wrong one is invisible.
+
+**Measured yield, PAIRED against the merged `origin/main` on the same cached corpus: 485 → 494
+playable (23.1% → 23.5%), +9 cards, ZERO regressions** (the two playable sets were dumped and
+diffed, not just counted). The nine: Sword of Fire and Ice, Sword of the Animist, Argentum Armor,
+Lavaspur Boots, Mask of Memory, Spirit Mantle, Aqueous Form, Akroma's Memorial and Vindicate.
+Skullclamp compiles too and is already a pool candidate.
+
+Measured alone at the branch point it was 408 → 421 (+13); four of those thirteen — Corpse Knight,
+Marauding Blight-Priest, Poison-Tip Archer, Elas il-Kor — were independently unblocked by §3.21's
+step-trigger work while this branch was out, so the paired figure is the honest one.
+
+Gauntlet seed 99 was **byte-identical** to the same-day `origin/main` (81/280, every matchup row
+equal) — the shipped pool contains no card of this family yet — and min-of-12 `process.cpuUsage` was
+2625 ms on the branch vs 2702 ms on `main`, i.e. parity inside a noise band of ±15% on a box running
+ten agents.
+
+
+⚠️ **A DEFECT THIS EXPOSED, worth more than the feature.** `keywordsParam` — the reader every
+until-end-of-turn keyword grant goes through — kept only `=== true` values, so the three PAYLOAD
+keywords were silently dropped on the way in: `protectionFrom` is a list, `ward` and `minBlockers` are
+numbers. **"Target creature gains protection from red until end of turn" has been compiling
+`'complete'` and doing nothing at all**, since the day that rule landed. Its test asserted the compiled
+EFFECT REFS and never played the card, which is exactly why the suite stayed green. Widening
+`parseKeywordList` to the payload keywords would have routed three more rule-table entries through the
+same hole, so the reader is fixed here and the new test resolves the grant through core's own
+`applyEffectRef` and reads it back through `indexContinuous` — a hand-built context passes while the
+real spell does nothing, which is the shape of the original mistake.
+
+⛔ **Still reported, by name and by clause.** Treasure tokens (Goldvein Pick, Beamtown Beatstick,
+Sword of Wealth and Power); **proliferate** (Sword of Truth and Justice, Thrummingbird, Bloated
+Contaminator); **"that player"** — the player the damage was dealt to, which no effect can be aimed at
+yet (Sword of Feast and Famine, Fallen Shinobi, Nashi); **"that many"** — the damage amount as a
+derived value (Cold-Eyed Selkie, Lathril, Gishath, The Key to the Vault); **"to a player or
+planeswalker"** and **"or battle"**, which are wider watched-object sets (Psychic Frog, Grateful
+Apparition, Beamtown Beatstick); **"up to one target"**, an optional target chosen at announcement
+(Sword of Light and Shadow, Sword of Hearth and Home); and the narrowed equip costs ("Equip legendary
+creature {3}", "Equip {4}. This ability costs {1} less…"), bestow, reconfigure and living weapon.
+
+⚠️ **The shipped POOL still contains none of these cards**, and cannot until someone runs
+`scripts/build-expansion.ts --fetch` — the generator's scratch index is a gitignored cache and the
+committed `card-index.json` has none of the Swords in it, so the regeneration is a NETWORK step that
+must not run in a gate. Skullclamp is already in `expansion-candidates.json` and now compiles, so the
+next `--fetch` picks it up for free. Until then the family is reachable by deck import only, and
+`equipped-triggers.test.ts` plays it end to end from real printed Oracle text.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
@@ -2169,7 +2663,7 @@ missing you-may template:
 - Every feature adds tests and leaves the full suite green.
 - Claim work on `COORDINATION.md` before starting; pick a unique `feat/<slug>` branch.
 
-### 3.24 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
+### 3.28 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
 
 Every other suite in this repo is organised BY FEATURE, each written by the agent that built that
 feature, asserting what that agent believed the rule was. That answers "do our tests pass?" It cannot

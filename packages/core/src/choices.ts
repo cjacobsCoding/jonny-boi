@@ -564,15 +564,29 @@ interface PendingChoiceBase {
    * What machinery this parked choice belongs to, when it is NOT a resolving
    * effect's question. `'legendRule'` marks the state-based legend-rule choice
    * (CR 704.5j — "choose which to keep"), raised by the SBA pass with no
-   * resolution frame behind it; `'cleanupDiscard'` marks the CR 514.1 discard
-   * down to maximum hand size, raised by the turn machine; `applyAnswerChoice`
-   * routes the answer by this marker instead of guessing from the absence of a
-   * frame. Absent for every ordinary choice, so all existing states and tests
-   * read unchanged.
+   * resolution frame behind it; `applyAnswerChoice` routes the answer by this
+   * marker instead of guessing from the absence of a frame. Absent for every
+   * ordinary choice, so all existing states and tests read unchanged.
+   *
+   * `'asEnters'` marks the CR 614.1c NAMING ("As ~ enters, choose a creature
+   * type"), and `'copyAsEnters'` the CR 706 as-enters COPY ("you may have ~
+   * enter as a copy of any creature on the battlefield"). Both are raised by an
+   * ENTRY PATH rather than by a resolving effect, and both are routed by this
+   * marker for exactly the reason the legend rule is: "there is no frame behind
+   * it" also describes the shockland question, and the four must never be
+   * confused. They are two markers rather than one because the answers differ
+   * in kind — a naming records a VALUE on the instance, a copy replaces what the
+   * instance IS — and because a card can print both, in that order.
+   *
+   * `'cleanupDiscard'` marks the CR 514.1 discard down to maximum hand size,
+   * raised by the TURN MACHINE — the fifth thing with no frame behind it, and
+   * the only one the turn itself is waiting on.
    */
-  readonly context?: 'legendRule' | 'asEnters' | 'cleanupDiscard';
+  readonly context?: 'legendRule' | 'asEnters' | 'copyAsEnters' | 'cleanupDiscard';
   /**
-   * The permanent whose `chosenAsEntered` an `'asEnters'` answer is written to.
+   * The permanent an entry-path answer applies to: the one whose
+   * `chosenAsEntered` an `'asEnters'` answer is written to, and the one a
+   * `'copyAsEnters'` answer turns into a copy.
    *
    * It is carried explicitly rather than reusing {@link sourceInstanceId}
    * because the two are only accidentally equal today (the permanent asking IS

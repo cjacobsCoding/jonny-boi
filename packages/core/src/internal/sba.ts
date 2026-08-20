@@ -339,6 +339,19 @@ export function loseGame(state: GameState, player: PlayerId, reason: string, emi
 }
 
 /**
+ * Mark a player as having WON — "you win the game instead" (Laboratory Maniac).
+ *
+ * Expressed as the other seat LOSING, because that is how this engine already
+ * decides a game: `resolveWinner` reads `hasLost`, so there is exactly one way
+ * for a game to end and no second field that could disagree with it.
+ */
+export function winGame(state: GameState, player: PlayerId, reason: string, emit: (e: GameEvent) => void): void {
+  for (const pid of PLAYER_IDS) {
+    if (pid !== player) loseGame(state, pid, reason, emit);
+  }
+}
+
+/**
  * If the game is decided, set winner/gameOver. Returns true if it changed.
  *
  * The two seats are read DIRECTLY rather than through `PLAYER_IDS.filter(...)`,

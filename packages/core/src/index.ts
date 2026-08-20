@@ -45,7 +45,20 @@ export {
   payCost,
   canPay,
   repeatCost,
+  usableMana,
+  restrictedTotal,
 } from './mana.js';
+
+// SPEND RESTRICTIONS on produced mana ("Spend this mana only to cast a creature
+// spell"). The POOL carries them, not the source — see spend-restriction.ts.
+export type {
+  ManaSpendClause,
+  ManaSpendKind,
+  ManaSpendPurpose,
+  ManaSpendRestriction,
+  RestrictedMana,
+} from './spend-restriction.js';
+export { restrictionAllows } from './spend-restriction.js';
 
 // Card model seam
 export type {
@@ -85,6 +98,8 @@ export {
   isManaSource,
   manaModesOf,
   manaExtrasOf,
+  spendPurposeFor,
+  spendPurposeIfRestricted,
   manaColorsOffered,
   fixedManaColorsOf,
   manaActivationConditionMet,
@@ -220,6 +235,30 @@ export type { FaceUp } from './transform.js';
 export { transformPermanent, faceUpOf, transformTargetOf } from './transform.js';
 
 /**
+ * COPY-EFFECT seam (`./copy.ts`) -- CR 706, the bottom of the layer system.
+ * "You may have ~ enter as a copy of any creature on the battlefield" is
+ * declared as data (`CardDefinition.copyAsEnters`) and applied by swapping the
+ * instance's `def` in LAYER 1, so counters (7d), anthems (7c) and until-EOT
+ * pumps all apply on top of the copied characteristics with no second code
+ * path. `copiableDefOf` is the single answer to "what would copying this give
+ * you" (CR 706.2 -- the printed front face, never the pumped board state), and
+ * `copyResultDef` is its pure preview, used by the AI to rank copy targets.
+ */
+export type { CopyAsEntersSpec, CopyExceptions, CopySourceZone } from './copy.js';
+export {
+  applyCopyAsEnters,
+  applyCopyAsEntersAnswer,
+  applyCopyExceptions,
+  askCopyAsEnters,
+  copiableDefOf,
+  copyCandidates,
+  copyResultDef,
+  COPY_ID_SUFFIX,
+  extraLoyaltyForCopy,
+  isCopy,
+} from './copy.js';
+
+/**
  * MODAL-SPELL seam (`./modal.ts`): which modes of a "Choose one --" card may be
  * ANNOUNCED on this board, and what each announced mode resolves into. Read by
  * the engine at cast time, by the AI to price a mode before choosing it, and by
@@ -245,11 +284,13 @@ export type {
   TriggerCondition,
   TriggerEvent,
   TriggerWho,
+  TriggerWatches,
   PendingTrigger,
   TriggerSource,
   TriggerSubject,
 } from './triggers.js';
 export {
+  DEFAULT_TRIGGER_WATCHES,
   conditionMatches,
   matchTriggers,
   orderPendingTriggers,
@@ -276,6 +317,45 @@ export {
   expireContinuousEffects,
   NO_MOD,
 } from './internal/continuous.js';
+
+// Replacement + prevention effects (CR 614/615/616) — the ONE seam damage,
+// counters and draws all consult. `replacement.ts` is the card-facing
+// vocabulary (what a card DECLARES); `internal/replacement.ts` is the engine
+// (what the layer DOES). A caller with a batch of damage to deal builds the
+// index once and threads it, exactly as it does with `indexContinuous`.
+export type {
+  ReplacementAbility,
+  ReplacementApplies,
+  ReplacementEventKind,
+  ReplacementOutcome,
+} from './replacement.js';
+export {
+  REPLACEMENT_EVENT_KINDS,
+  affectedPlayerPrefersMore,
+  replacementIsInert,
+  replacementsOf,
+} from './replacement.js';
+export type {
+  ActiveReplacement,
+  DamageReplacementResult,
+  DrawReplacementResult,
+  FloatingReplacement,
+  ReplaceableEvent,
+  ReplacementIndex,
+} from './internal/replacement.js';
+export {
+  NO_REPLACEMENTS,
+  ORDER_SEARCH_MAX_CANDIDATES,
+  addFloatingReplacement,
+  expireFloatingReplacements,
+  hasAnyReplacement,
+  indexReplacements,
+  projectDamage,
+  replaceCounters,
+  replaceDamage,
+  replaceDraw,
+  runReplacements,
+} from './internal/replacement.js';
 
 // State
 export type {
@@ -320,6 +400,7 @@ export type {
   EffectPrimitive,
   EffectRegistry,
   ContinuousModRequest,
+  ReplacementEffectRequest,
   ChoiceChannel,
   ChoiceRequestArgs,
 } from './effects.js';
@@ -422,6 +503,7 @@ export {
   createGame,
   createEngine,
   applyAction,
+  drawCardForPlayer,
   applyActionInPlace,
   generateLegalActions,
   choiceActionsFor,
@@ -432,6 +514,22 @@ export {
  * with `applyActionInPlace`: a look-ahead pilot clones once, then mutates freely.
  */
 export { cloneState } from './internal/clone.js';
+/**
+ * Reset the transient, battlefield-only state on an instance that has just
+ * CHANGED ZONES (CR 400.7 - it is a new object now): tapped, marked damage,
+ * summoning sickness, counters, what it was attached to, whether its loyalty
+ * ability has been used this turn, how many times its spell was kicked, the
+ * value it named as it entered, and which face is up.
+ *
+ * Exported because there are TWO funnels that move a permanent off the
+ * battlefield - core's own `moveToZone` and the cards package's
+ * `movePermanentTo` - and a hand-copied second list DID drift: it cleared five
+ * of the eight fields, so a bounced Aura came back still pointing at its old
+ * host, a bounced planeswalker could not re-activate, and a bounced
+ * "as ~ enters, choose a type" lord still lorded over the type it named last
+ * time. One function, one answer.
+ */
+export { resetInstanceForNewZone } from './internal/zones.js';
 
 // Stat helpers (combat/SBA-facing; AI heuristics will want these). The effective
 // accessors take an optional AggregatedMod so callers can layer continuous effects

@@ -8,7 +8,7 @@ import type { PendingChoice } from './choices.js';
 import { choiceOptionCount } from './choices.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
-import { poolTotal } from './mana.js';
+import { poolTotal, restrictedTotal } from './mana.js';
 import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
 import { isBattle, isCreature, isPlaneswalker } from './card.js';
@@ -28,6 +28,17 @@ export interface SerializedState {
     {
       readonly life: number;
       readonly manaTotal: number;
+      /**
+       * How much of `manaTotal` carries a printed SPEND RESTRICTION.
+       *
+       * ⚠️ OMITTED ENTIRELY when there is none, which is not a style choice: this
+       * snapshot is hashed by `selfplay-lock.test.ts` to prove that a refactor did
+       * not change the game the engine plays. A field that appeared on every
+       * ordinary board would have moved all 24 golden state digests while the
+       * event log stayed byte-identical — a false alarm that reads exactly like a
+       * rules regression, in the one test whose job is to tell them apart.
+       */
+      readonly manaRestricted?: number;
       readonly handSize: number;
       readonly librarySize: number;
       readonly graveyardSize: number;
@@ -95,9 +106,11 @@ export function serializeState(state: GameState): SerializedState {
   const players = {} as SerializedState['players'];
   for (const pid of PLAYER_IDS) {
     const p = state.players[pid];
+    const restricted = restrictedTotal(p.manaPool);
     players[pid] = {
       life: p.life,
       manaTotal: poolTotal(p.manaPool),
+      ...(restricted > 0 ? { manaRestricted: restricted } : {}),
       handSize: p.hand.length,
       librarySize: p.library.length,
       graveyardSize: p.graveyard.length,
@@ -158,7 +171,7 @@ export function dumpState(state: GameState): string {
   for (const pid of PLAYER_IDS) {
     const p = s.players[pid];
     lines.push(
-      `  ${pid}: life=${p.life} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}` +
+      `  ${pid}: life=${p.life} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}${p.manaRestricted ? ` (${p.manaRestricted} restricted)` : ''}` +
         (p.hasLost ? ' [LOST]' : ''),
     );
   }

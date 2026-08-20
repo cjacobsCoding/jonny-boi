@@ -26,13 +26,19 @@ import {
   SELECTABLE_PILOT_IDS,
 } from '@jonny-boi/ai';
 import type { Pilot } from '@jonny-boi/ai';
+import type { CardDefinition } from '@jonny-boi/core';
 import { loadDeck } from './deck.js';
 import type { Deck } from './deck.js';
 import type { MatchupPilots } from './matchup.js';
 import { evaluateSwap } from './swap.js';
 import type { PairedBaseRecord } from './paired-arms.js';
 import { createPairedArmRunner, pairedSlotAt, swappedInstanceIdsFor } from './paired-arms.js';
-import { LIBRARY_READING_PRIMITIVES, LIBRARY_SAFE_PRIMITIVES } from './paired-arms-config.js';
+import {
+  ABILITY_ACQUIRING_DEFINITION_FIELDS,
+  acquiresForeignAbilities,
+  LIBRARY_READING_PRIMITIVES,
+  LIBRARY_SAFE_PRIMITIVES,
+} from './paired-arms-config.js';
 import { MONO_RED_AGGRO, MONO_GREEN_STOMPY, UW_CONTROL, MONO_BLUE_TEMPO, RAKDOS_GOBLINS } from '../data/decks/index.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
@@ -183,6 +189,26 @@ describe('the identical-game skip is exact', () => {
     const usage = makeRunner({ pilotId: HYBRID_PILOT_ID }).usage();
     expect(usage.identicalGameSkipEnabled).toBe(false);
     expect(usage.identicalGameSkipDisabledReason).toMatch(/hidden library|rolls out/i);
+  });
+
+  it('switches itself off for a deck containing an as-enters COPY card', () => {
+    // A Clone's abilities are the COPIED card's, not the ones its decklist row
+    // prints -- and the decklist row is the map `peekCouldReadHeroLibrary`
+    // reasons through. A copied library-reading ETB would therefore be invisible
+    // to the skip, and the verdict wrong. Asserted on the predicate the runner
+    // asks (not on a deck built here) because no pool card prints the clause
+    // yet: this test is what fails the day one does and the guard is missing.
+    const clone: CardDefinition = {
+      id: 'paired-arms-clone-probe',
+      name: 'Probe Clone',
+      types: ['creature'],
+      power: 0,
+      toughness: 0,
+      copyAsEnters: { filter: { anyOfTypes: ['creature'] } },
+    };
+    expect(acquiresForeignAbilities(clone)).toBe(true);
+    expect(acquiresForeignAbilities({ id: 'p', name: 'Plains', types: ['land'] })).toBe(false);
+    expect(ABILITY_ACQUIRING_DEFINITION_FIELDS).toContain('copyAsEnters');
   });
 
   it('every SELECTABLE pilot is deliberately classified as library-reading or not', () => {

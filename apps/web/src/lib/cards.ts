@@ -20,6 +20,7 @@
  * definition of the card shape (no duplicated interfaces here).
  */
 import type { CardIndex, NormalizedCard, ManaCost } from '@jonny-boi/data-tools';
+import { COPY_ID_SUFFIX } from '@jonny-boi/core';
 import rawIndex from '../data/card-index.json';
 import { engineDisplayCards } from './cards/enginePool.js';
 import { importedCard, importedCards } from './decklist/importedCards.js';
@@ -125,6 +126,15 @@ function backFaceRecord(backId: string): NormalizedCard | undefined {
  */
 export function getCard(id: string): NormalizedCard | undefined {
   if (id.endsWith(BACK_FACE_ID_SUFFIX)) return backFaceRecord(id);
+  // A COPY's definition id is the COPIED card's id plus `#copy` (core's
+  // `COPY_ID_SUFFIX`) -- derived exactly as a back face is, and for the same
+  // reason: the copy is not the pool's row for that card, because the printed
+  // "except" tail may have changed its name or its types. What it should LOOK
+  // like, though, is the thing it copied, so the id resolves to that record and
+  // the board shows a Clone wearing the copied creature's art.
+  if (id.endsWith(COPY_ID_SUFFIX)) {
+    return getCard(id.slice(0, -COPY_ID_SUFFIX.length));
+  }
   return cardsById.get(id) ?? importedCard(id);
 }
 
