@@ -15,6 +15,7 @@
  * just a definition whose `types` includes `'creature'`.
  */
 
+import type { CastZone } from './actions.js';
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
 
@@ -605,6 +606,58 @@ export interface CardDefinition {
    * back face counts as the turn's land play like any other land.
    */
   readonly backFaceCastable?: boolean;
+  /**
+   * The FIRST castable half of a SPLIT card (CR 709) — "Fire" of "Fire // Ice".
+   *
+   * A split card is ONE card with TWO halves, and the object that sits in a
+   * hand, graveyard or library is neither half: CR 709.4 gives it the COMBINED
+   * characteristics (both names, the union of the type lines and colours, and a
+   * mana value equal to the sum). So for a split card THIS definition carries
+   * those combined characteristics and is not itself castable, while the two
+   * halves hang off it as {@link frontFace} and {@link backFace}.
+   *
+   * That is the whole difference from a modal DFC, whose front face IS one of
+   * the castable halves (CR 712.8a gives an MDFC in a non-battlefield zone only
+   * its front face's characteristics). `playableFaceOf` reads this field, so
+   * every cast path asks one function which object it is actually casting and
+   * no caller has to know which layout it is holding.
+   *
+   * Absent on every other card, including modal DFCs — reading it is how the
+   * engine tells the two layouts apart.
+   */
+  readonly frontFace?: CardDefinition;
+  /**
+   * The zones the CASTABLE BACK half may be cast from. Absent means `['hand']`,
+   * which is a modal DFC and the left-to-right half of an ordinary split card.
+   *
+   * `['graveyard']` is AFTERMATH (CR 702.127a: "cast this spell only from your
+   * graveyard") — the second half of Dusk // Dawn is not castable from hand at
+   * all, and offering it there would be a strictly better card than printed.
+   * `['exile']` is a SIEGE's reward half, which becomes castable only once the
+   * battle is defeated and exiled (see {@link backFaceFreeCast}); the exile
+   * offer additionally requires the per-instance permission a defeated Siege
+   * grants, so an exiled Siege that was never defeated is not castable.
+   */
+  readonly backFaceCastZones?: readonly CastZone[];
+  /**
+   * The back half is cast WITHOUT PAYING ITS MANA COST — a Siege's reward (CR
+   * 310.4: "exile it, then you may cast it transformed without paying its mana
+   * cost"). Data rather than a special case at the cast seam, so the one cast
+   * path charges what the card says and nothing else.
+   */
+  readonly backFaceFreeCast?: boolean;
+  /**
+   * Marks THIS definition as an ADVENTURE — the instant/sorcery half of an
+   * adventurer card (CR 715), printed on the back face beside the creature.
+   *
+   * It is the whole of what makes an adventure different from any other spell:
+   * when it RESOLVES the card is exiled instead of being put into its owner's
+   * graveyard, and its owner may then cast the creature half from exile (CR
+   * 715.3d). Countered, it goes to the graveyard like anything else — which is
+   * why the exile lives in `spellLeaveDestination`'s `reason` and not in a flag
+   * each exit reads for itself.
+   */
+  readonly adventure?: boolean;
   /**
    * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
    * data: what it may be attached to, what it does to its host while attached, and
@@ -1419,9 +1472,35 @@ function conditionMet(
  * casting the 3/2 Aberration half of a Delver directly.
  */
 export function playableFaceOf(def: CardDefinition, face: 'front' | 'back' | undefined): CardDefinition | undefined {
-  if (face !== 'back') return def;
+  // A SPLIT card's own definition is the CR 709.4 combined object, which is
+  // never cast: `'front'` on one means its LEFT half. Every other layout is its
+  // own front face, so this is one property read for all of them.
+  if (face !== 'back') return def.frontFace ?? def;
   if (def.backFaceCastable !== true) return undefined;
   return def.backFace;
+}
+
+/**
+ * The zones a card's castable BACK half may be cast from — `['hand']` unless
+ * the definition says otherwise. THE accessor: the offer loop and the accept
+ * path both ask it, so aftermath's graveyard-only restriction and a Siege
+ * reward's exile-only one cannot be enforced in one place and forgotten in the
+ * other.
+ */
+export function backFaceCastZonesOf(def: CardDefinition): readonly CastZone[] {
+  return def.backFaceCastZones ?? DEFAULT_BACK_FACE_CAST_ZONES;
+}
+
+/** The zones a back half is castable from when its definition does not say. */
+const DEFAULT_BACK_FACE_CAST_ZONES: readonly CastZone[] = ['hand'];
+
+/**
+ * Whether this definition is a SPLIT card's combined object rather than a
+ * castable spell — the question "is what I am holding itself a thing I can
+ * cast?", asked by name so no caller re-derives it from `frontFace != null`.
+ */
+export function isSplitCard(def: CardDefinition): boolean {
+  return def.frontFace !== undefined;
 }
 
 /**

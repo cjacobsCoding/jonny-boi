@@ -88,7 +88,9 @@ export {
   castTiming,
   canRevealForUntapped,
   entersTapped,
+  backFaceCastZonesOf,
   hasCastableBackFace,
+  isSplitCard,
   playableFaceOf,
 } from './card.js';
 
@@ -181,6 +183,7 @@ export type { CardGrant, CardGrantRequest } from './card-grants.js';
 export {
   addCardGrant,
   expireCardGrants,
+  castPermissionFor,
   flashbackCostOf,
   hasCardGrants,
   pruneCardGrantsFor,
