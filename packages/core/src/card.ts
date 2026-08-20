@@ -207,6 +207,35 @@ export interface CardDefinition {
    */
   readonly subtypes?: readonly string[];
   /**
+   * The object's colors, stated EXPLICITLY rather than derived from cost pips.
+   *
+   * Almost every card in Magic prints its colour as mana symbols, and
+   * {@link colorsOfDefinition} reads those — so this field is absent on
+   * essentially every card definition and nothing about them changes. It exists
+   * for objects that print a colour in WORDS and carry no mana cost at all:
+   *
+   *  - **TOKENS.** "Create a 1/1 **black** Faerie Rogue creature token" and
+   *    "create a 1/1 **blue and black** Faerie creature token" are printed
+   *    colours with no pip anywhere to read them off. Without this field every
+   *    token in the game entered COLOURLESS and was therefore invisible to
+   *    "black creatures you control get +1/+1", to protection from red, to
+   *    "destroy target nonblack creature", and to every {@link CardFilter}
+   *    `anyOfColors` query — the card compiled `'complete'` and then played as
+   *    something different from what is printed.
+   *  - **The explicitly colourless token** ("a 1/1 **colorless** Thopter
+   *    artifact creature token"), which is why an EMPTY array is meaningful and
+   *    distinct from the field being absent: `[]` says "printed colourless",
+   *    absent says "read my pips".
+   *
+   * A colour INDICATOR (a transforming DFC's back face) is the same shape and
+   * would fit here, but the data pipeline does not capture one yet, so that
+   * limit is still the one {@link colorsOfDefinition} documents.
+   *
+   * Order and duplicates do not matter — the reader normalises to canonical
+   * WUBRG and de-duplicates, so `['B','U']` and `['U','B']` are one answer.
+   */
+  readonly colors?: readonly ManaColor[];
+  /**
    * The printed **Basic** supertype. Carried for the same reason
    * {@link legendary} is: a rule keys on it — "unless you control two or more
    * basic lands" (the battlelands) — and no other characteristic answers it.
@@ -333,6 +362,27 @@ export interface CardDefinition {
    * because both of those systems discover emblems alongside permanents.
    */
   readonly isEmblem?: boolean;
+  /**
+   * Marks this definition as a TOKEN (CR 111) — an object created on the
+   * battlefield by an effect rather than a card that was ever in a deck.
+   *
+   * It lives on the DEFINITION, beside {@link isEmblem}, rather than on
+   * `CardInstance`, for three reasons that all point the same way:
+   *  - a token definition is MINTED by the effect that creates it and is never
+   *    shared with a card, so "this definition describes a token" and "this
+   *    object is a token" are the same statement here;
+   *  - `cloneInstance` shares `def` by reference, so the flag cannot be dropped
+   *    by the field-by-field clone the way an instance field can — the trap
+   *    `internal/clone.ts` warns about;
+   *  - it costs the engine's hottest allocation nothing at all.
+   *
+   * Two things read it, and both are rules the game gets wrong without it:
+   * {@link CardFilter.isToken} (the printed words "nontoken" and "token", e.g.
+   * "Destroy all nontoken creatures") and CR 704.5d — a token that has left the
+   * battlefield ceases to exist, which is what stops a dead token from sitting
+   * in a graveyard forever inflating every graveyard count in the game.
+   */
+  readonly isToken?: boolean;
   readonly keywords?: KeywordFlags;
   /**
    * Ordered effects run when this spell resolves (instants/sorceries) or as the
