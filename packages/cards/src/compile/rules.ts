@@ -6256,9 +6256,18 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     //    would look identical on the board and be wrong one step later: a grant
     //    is layer 6 on THAT object, so it is not among the copiable values a
     //    second copy would take, and "except it has haste" is.
+    //  - an "except …" tail on a SPELL copy: "except that the copy is red"
+    //    (Fork). `CopyExceptions` is shared with the as-enters copy and models
+    //    types, subtypes, keywords, a name and legendary-ness — not colour, and
+    //    not a spell's characteristics generally. A token copy's tail is read;
+    //    a spell copy is created without one.
+    //  - a COUNT that depends on something else: "if this spell was cast from a
+    //    graveyard, copy that spell TWICE instead" (Increasing Vengeance). The
+    //    count itself is a param on the copy ref; what is missing is a condition
+    //    on the zone the spell was cast from.
     pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
     missingEngineSystem:
-      'a COPY-CREATING template outside the compiler’s closed tables (copying a spell on the stack and token copies are BOTH implemented — what is missing is this selector: an activated/triggered ABILITY on the stack, a "nonlegendary"/"another"/"token" target, a token that enters tapped, "copy THAT spell" naming the spell that triggered the ability, or a follow-up sentence about the token just created)',
+      'a COPY-CREATING template outside the compiler’s closed tables (copying a spell on the stack and token copies are BOTH implemented — what is missing is this selector or tail: an activated/triggered ABILITY on the stack, a "nonlegendary"/"another"/"token" target, a token that enters tapped, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, or a copy COUNT conditional on where the spell was cast from)',
   },
   {
     // Everything else in the family: a selector or an "except" clause outside

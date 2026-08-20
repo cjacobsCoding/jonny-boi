@@ -159,7 +159,14 @@ describe('the "except …" tail — how the copy differs (CR 707.3)', () => {
 });
 
 describe('the residuals are reported by NAME, never as "copying is missing"', () => {
-  it('a spell copy names the stack object that would have to cease to exist', () => {
+  /*
+   * ✅ FLIPPED BY §3.30. These two cases used to assert that a spell copy and a
+   * token copy REPORTED by name — the honest record the as-enters branch left
+   * behind. Both systems are shipped, so the same two printings now compile, and
+   * the tests say so rather than being deleted: the pair is the before/after of
+   * this file's whole contract.
+   */
+  it('a SPELL copy compiles (it used to report the non-card stack object)', () => {
     const result = compiled({
       name: 'Reverberate Test',
       types: ['Instant'],
@@ -167,20 +174,81 @@ describe('the residuals are reported by NAME, never as "copying is missing"', ()
       toughness: null,
       oracleText: 'Copy target instant or sorcery spell. You may choose new targets for the copy.',
     });
-    expect(result.status).toBe('incomplete');
-    expect(result.missing[0]?.missingEngineSystem).toMatch(/COPYING A SPELL ON THE STACK/);
+    expect(result.status).toBe('complete');
+    const ref = result.definition?.effects?.[0];
+    expect(ref?.primitive).toBe('copySpell');
+    // The narrow restriction, never the broad `'spell'` — Reverberate may not
+    // copy a creature spell, and widening it would make the card castable in a
+    // board state the printed one is dead in.
+    expect(ref?.params?.targets).toBe('instantOrSorcerySpell');
+    // The printed permission is DATA, so a card that omits it keeps the aim.
+    expect(ref?.params?.mayRetarget).toBe(true);
   });
 
-  it('a token copy is named as the same missing piece', () => {
+  it('a TOKEN copy compiles, and its kicked count replaces the base count', () => {
     const result = compiled({
       name: 'Replication Test',
       types: ['Sorcery'],
       power: null,
       toughness: null,
-      oracleText: "Create a token that's a copy of target creature.",
+      oracleText:
+        "Create a token that's a copy of target creature. If this spell was kicked, create five of those tokens instead.",
+    });
+    expect(result.status).toBe('complete');
+    const ref = result.definition?.effects?.[0];
+    expect(ref?.primitive).toBe('createTokenCopy');
+    expect(ref?.params?.count).toBe(1);
+    // "INSTEAD" — one ref with two counts, not a base token plus five more.
+    expect(ref?.params?.kickedCount).toBe(5);
+    expect(result.definition?.effects).toHaveLength(1);
+  });
+
+  it('"you may choose new targets" is NOT granted to a card that does not print it', () => {
+    const result = compiled({
+      name: 'Plain Copy Test',
+      types: ['Instant'],
+      power: null,
+      toughness: null,
+      oracleText: 'Copy target instant or sorcery spell.',
+    });
+    expect(result.status).toBe('complete');
+    expect(result.definition?.effects?.[0]?.params?.mayRetarget).toBe(false);
+  });
+
+  it('"then return it to its owner's hand" is a SECOND ref, ordered after the copy', () => {
+    const result = compiled({
+      name: 'Reversal Test',
+      types: ['Instant'],
+      power: null,
+      toughness: null,
+      oracleText:
+        "Copy target instant or sorcery spell, then return it to its owner's hand. You may choose new targets for the copy.",
+    });
+    expect(result.status).toBe('complete');
+    expect(result.definition?.effects?.map((e) => e.primitive)).toEqual(['copySpell', 'returnSpellToHand']);
+  });
+
+  it('a token copy whose SELECTOR is outside the closed table still reports', () => {
+    const result = compiled({
+      name: 'Kiki Test',
+      types: ['Creature'],
+      oracleText: "Create a token that's a copy of target nonlegendary creature you control.",
     });
     expect(result.status).toBe('incomplete');
-    expect(result.missing[0]?.missingEngineSystem).toMatch(/TOKEN COPY/);
+    expect(result.missing[0]?.missingEngineSystem).toMatch(/COPY-CREATING template/);
+  });
+
+  it('the DELAYED sacrifice is reported by name — dropping it would be strictly better', () => {
+    const result = compiled({
+      name: 'Twin Test',
+      types: ['Sorcery'],
+      power: null,
+      toughness: null,
+      oracleText:
+        "Create a token that's a copy of target creature, except it has haste. Sacrifice it at the beginning of the next end step.",
+    });
+    expect(result.status).toBe('incomplete');
+    expect(result.missing[0]?.missingEngineSystem).toMatch(/DELAYED triggered ability/);
   });
 
   it('a "becomes a copy" activated ability reports as a TEMPLATE, not a system', () => {
