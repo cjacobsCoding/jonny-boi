@@ -19,6 +19,7 @@
  */
 import {
   planManaPayment,
+  spendPurposeIfRestricted,
   type CardInstance,
   type CastZone,
   type GameAction,
@@ -60,7 +61,15 @@ export function castSequence(
 ): GameAction[] | null {
   const cost = castCost(card, fromZone);
   if (cost === null) return null; // graveyard cast of a card with no flashback
-  const plan = cost ? planManaPayment(view, player, cost, legalActions) : [];
+  const plan = cost
+    ? planManaPayment(
+        view,
+        player,
+        cost,
+        legalActions,
+        spendPurposeIfRestricted(view.players[player].manaPool, card.def, 'cast'),
+      )
+    : [];
   if (!plan) return null;
 
   const actions: GameAction[] = plan.map((tap) => ({
@@ -99,7 +108,8 @@ export function castableWithTaps(
   for (const card of hand) {
     const cost = card.def.cost;
     if (!cost) continue;
-    if (planManaPayment(view, player, cost, legalActions)) out.add(card.instanceId);
+    const purpose = spendPurposeIfRestricted(view.players[player].manaPool, card.def, 'cast');
+    if (planManaPayment(view, player, cost, legalActions, purpose)) out.add(card.instanceId);
   }
   return out;
 }
@@ -128,7 +138,8 @@ export function graveyardCastableWithTaps(
     if (cost === undefined) continue;
     const instantSpeed = card.def.timing === 'instant' || card.def.types.includes('instant');
     if (!instantSpeed && !sorceryWindowOpen) continue;
-    if (planManaPayment(view, player, cost, legalActions)) out.add(card.instanceId);
+    const purpose = spendPurposeIfRestricted(view.players[player].manaPool, card.def, 'cast');
+    if (planManaPayment(view, player, cost, legalActions, purpose)) out.add(card.instanceId);
   }
   return out;
 }

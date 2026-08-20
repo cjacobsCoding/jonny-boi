@@ -8,7 +8,7 @@ import type { PendingChoice } from './choices.js';
 import { choiceOptionCount } from './choices.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
-import { poolTotal } from './mana.js';
+import { poolTotal, restrictedTotal } from './mana.js';
 import { effectivePower, effectiveToughness } from './internal/stats.js';
 import { indexContinuous, NO_MOD } from './internal/continuous.js';
 import { isBattle, isCreature, isPlaneswalker } from './card.js';
@@ -28,6 +28,13 @@ export interface SerializedState {
     {
       readonly life: number;
       readonly manaTotal: number;
+      /**
+       * How much of `manaTotal` carries a printed SPEND RESTRICTION. Present in
+       * the debug snapshot because a pool of 3 that can only pay for one spell is
+       * exactly the state somebody debugging a "why won't it cast" would need to
+       * see, and the total alone hides it. Zero on an ordinary board.
+       */
+      readonly manaRestricted: number;
       readonly handSize: number;
       readonly librarySize: number;
       readonly graveyardSize: number;
@@ -86,6 +93,7 @@ export function serializeState(state: GameState): SerializedState {
     players[pid] = {
       life: p.life,
       manaTotal: poolTotal(p.manaPool),
+      manaRestricted: restrictedTotal(p.manaPool),
       handSize: p.hand.length,
       librarySize: p.library.length,
       graveyardSize: p.graveyard.length,
@@ -145,7 +153,7 @@ export function dumpState(state: GameState): string {
   for (const pid of PLAYER_IDS) {
     const p = s.players[pid];
     lines.push(
-      `  ${pid}: life=${p.life} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}` +
+      `  ${pid}: life=${p.life} hand=${p.handSize} lib=${p.librarySize} gy=${p.graveyardSize} mana=${p.manaTotal}${p.manaRestricted > 0 ? ` (${p.manaRestricted} restricted)` : ''}` +
         (p.hasLost ? ' [LOST]' : ''),
     );
   }

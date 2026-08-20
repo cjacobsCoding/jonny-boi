@@ -66,6 +66,7 @@ import {
   loyaltyOf,
   MANA_COLORS,
   planManaPayment,
+  spendPurposeIfRestricted,
   restrictionOfEffects,
   modalSpecOf,
   modeCountsFor,
@@ -280,7 +281,13 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
   const exiled = window ? view.players[me].exile.find((c) => c.instanceId === window.instanceId) : undefined;
   const cost = exiled?.def.madness;
   if (cost) {
-    const plan = planManaPayment(view as GameState, me, cost, legalActions);
+    const plan = planManaPayment(
+      view as GameState,
+      me,
+      cost,
+      legalActions,
+      spendPurposeIfRestricted(view.players[me].manaPool, exiled!.def, 'cast'),
+    );
     const next = plan?.[0];
     if (next) {
       const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
@@ -543,7 +550,13 @@ function bestEquipPlay(
 
       const score = scoreEquip(modifies, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
-      const plan = planManaPayment(view as GameState, me, mana, legalActions);
+      const plan = planManaPayment(
+        view as GameState,
+        me,
+        mana,
+        legalActions,
+        spendPurposeIfRestricted(view.players[me].manaPool, perm.def, 'activate'),
+      );
       if (!plan) continue; // cannot fund it this turn
       const action: GameAction =
         plan.length > 0
@@ -643,7 +656,13 @@ function bestSpellGoal(
   // step, so it runs on ranked candidates and stops at the first payable one.
   const me = ctx.view.priorityPlayer;
   for (const goal of scored) {
-    const plan = planManaPayment(ctx.view as GameState, me, goal.cost, ctx.legalActions);
+    const plan = planManaPayment(
+      ctx.view as GameState,
+      me,
+      goal.cost,
+      ctx.legalActions,
+      spendPurposeIfRestricted(ctx.view.players[me].manaPool, goal.card.def, 'cast'),
+    );
     if (plan) return { goal, plan };
   }
   return undefined;
@@ -1332,7 +1351,13 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
           : -Infinity;
       if (score <= weights.passScore) continue;
       if (best && score <= best.score) continue;
-      const plan = planManaPayment(view as GameState, me, ability.cost, ctx.legalActions);
+      const plan = planManaPayment(
+        view as GameState,
+        me,
+        ability.cost,
+        ctx.legalActions,
+        spendPurposeIfRestricted(view.players[me].manaPool, card.def, 'activate'),
+      );
       if (!plan) continue;
       best = {
         action: { kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index },
@@ -2307,7 +2332,13 @@ function collectPriorityCandidates(
 
   // THE ATOMIC CASTS. Every legal, scored spell, each bundled with its funding.
   for (const goal of scoredSpellGoals(view, weights, explain, index)) {
-    const plan = planManaPayment(state, me, goal.cost, legalActions);
+    const plan = planManaPayment(
+      state,
+      me,
+      goal.cost,
+      legalActions,
+      spendPurposeIfRestricted(view.players[me].manaPool, goal.card.def, 'cast'),
+    );
     if (!plan) continue; // cannot be funded from this board — not an option at all
     const plies: GameAction[] = [];
     for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });
@@ -2366,7 +2397,13 @@ function bestEquipMacro(
       if (!host) continue;
       const score = scoreEquip(modifies, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
-      const plan = planManaPayment(view as GameState, me, mana, legalActions);
+      const plan = planManaPayment(
+        view as GameState,
+        me,
+        mana,
+        legalActions,
+        spendPurposeIfRestricted(view.players[me].manaPool, perm.def, 'activate'),
+      );
       if (!plan) continue;
       const plies: GameAction[] = [];
       for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });
