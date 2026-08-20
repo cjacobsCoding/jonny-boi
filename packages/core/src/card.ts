@@ -30,7 +30,28 @@ export type CardType =
   | 'artifact'
   | 'enchantment'
   | 'planeswalker'
-  | 'battle';
+  | 'battle'
+  /**
+   * **Kindred** (CR 308, the type formerly printed as "Tribal") — a card type
+   * that ALWAYS appears alongside another one ("Kindred Sorcery", "Kindred
+   * Enchantment - Faerie"), and whose entire rules content is that the card's
+   * subtypes are CREATURE types even though the card is not a creature.
+   *
+   * That is why it is a real member of this union rather than a word the
+   * compiler quietly drops. Two things in this engine read it, and both would
+   * be wrong without it:
+   *   - `subtypes` on a Kindred card are creature types, so a tribal static
+   *     ("Faeries you control get +1/+1") and a subtype filter select it
+   *     exactly as the printed card does — which they already do, because
+   *     subtypes are one list here;
+   *   - a card type in a GRAVEYARD is a card type: Tarmogoyf counts Kindred,
+   *     so it needs a bit in `CARD_TYPE_BIT` (`derived.ts`) like every other.
+   *
+   * What it deliberately does NOT do is make the card a permanent: a Kindred
+   * Instant is an instant and nothing else, so `isPermanentType` ignores it and
+   * the card's OTHER type decides everything about how it is played.
+   */
+  | 'kindred';
 
 /**
  * Keyword ability flags the combat/turn systems read as data. Core implements the

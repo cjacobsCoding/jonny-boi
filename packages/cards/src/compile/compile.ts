@@ -124,6 +124,13 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
   enchantment: 'enchantment',
   planeswalker: 'planeswalker',
   battle: 'battle',
+  // Kindred (CR 308, printed as "Tribal" before 2024) — a real card type with a
+  // real, small meaning: it never appears alone, and it makes the card's
+  // subtypes CREATURE types without making the card a creature. Mapped rather
+  // than reported because core models exactly that (see `CardType`), so a
+  // Kindred Sorcery is a sorcery with Eldrazi among its subtypes, which is what
+  // the printed card is.
+  kindred: 'kindred',
 });
 
 /**
@@ -145,6 +152,15 @@ const TYPE_MAP: Readonly<Record<string, CardType>> = Object.freeze({
  * says so per card rather than letting a type-level "supported" imply it.
  */
 export const TYPES_WITHOUT_SYSTEM: Readonly<Record<string, string>> = Object.freeze({});
+
+/**
+ * A Kindred card ALWAYS prints a second card type (CR 308.1), and the second
+ * one is what decides how the card is played. A record that somehow carried
+ * `Kindred` alone would therefore be malformed rather than unsupported — it is
+ * reported through the generic "a card type the engine can represent" check
+ * below rather than being given a system-shaped excuse.
+ */
+const KINDRED_TYPE = 'kindred';
 
 /** Basic land subtypes → the mana they tap for. */
 const LAND_SUBTYPE_MANA: Readonly<Record<string, ManaColor>> = Object.freeze({
@@ -272,6 +288,7 @@ interface Assembly {
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
   entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
+  copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
   /** The printed "Kicker {COST}", once some line prints it. */
   kicker?: ManaCost;
   /** The printed "Multikicker {COST}" — an additional cost paid any number of times. */
@@ -332,6 +349,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
     assembly.entersTappedUnlessLifePaid = contribution.entersTappedUnlessLifePaid;
   }
+  if (contribution.copyAsEnters !== undefined) assembly.copyAsEnters = contribution.copyAsEnters;
   if (contribution.entersTappedUnlessRevealed !== undefined) {
     assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
   }
@@ -725,7 +743,11 @@ export function compileCard(card: CompilableCard): CompileResult {
       });
     }
   }
-  if (types.length === 0) {
+  // A Kindred card that prints NOTHING else is not a card this engine (or the
+  // rules) can play: CR 308.1 requires a second card type, and the second one is
+  // what decides the zone, the timing and the stack behaviour. Reported rather
+  // than played as a typeless object.
+  if (types.length === 0 || (types.length === 1 && types[0] === KINDRED_TYPE)) {
     assembly.missing.push({
       text: `${card.typeLine.types.join(' ') || '(no type line)'}`,
       missingEngineSystem: 'a card type the engine can represent',
@@ -1064,6 +1086,7 @@ export function compileCard(card: CompilableCard): CompileResult {
       : {}),
     ...(assembly.entersTapped ? { entersTapped: true } : {}),
     ...(assembly.entersTappedUnless ? { entersTappedUnless: assembly.entersTappedUnless } : {}),
+    ...(assembly.copyAsEnters !== undefined ? { copyAsEnters: assembly.copyAsEnters } : {}),
     ...(assembly.entersTappedUnlessRevealed !== undefined
       ? { entersTappedUnlessRevealed: assembly.entersTappedUnlessRevealed }
       : {}),

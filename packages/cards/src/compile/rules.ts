@@ -15,7 +15,10 @@
  */
 
 import type {
+  CardFilter,
   CardType,
+  CopyAsEntersSpec,
+  CopyExceptions,
   EffectRef,
   KeywordFlags,
   ManaActivationCondition,
@@ -2708,6 +2711,18 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'copy-as-enters',
+    description:
+      '"You may have ~ enter [tapped] as a copy of <selector>[, except <clauses>]" (Clone, Sculpting Steel, Spark Double, Vesuva, Echoing Deeps) - CR 706',
+    // Placed above `enters-tapped` because Vesuva's line contains the word
+    // "tapped" and this rule owns the whole clause, tapped-ness included.
+    pattern: /^you may have ~ enter( tapped)? as a copy of (.+?)(?:, except (.+))?$/,
+    build(match, ctx) {
+      const spec = buildCopyAsEnters(match[2] ?? '', match[3], match[1] !== undefined, ctx);
+      return spec === null ? null : { copyAsEnters: spec };
+    },
+  },
+  {
     id: 'enters-tapped',
     description: '"~ enters tapped" (the unconditional form only)',
     pattern: /^~ enters(?: the battlefield)? tapped$/,
@@ -3084,6 +3099,208 @@ const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   "can't be blocked": 'unblockable',
   "can't block": 'cantBlock',
 });
+
+/**
+ * ---------------------------------------------------------------------------
+ * COPY EFFECTS — "You may have ~ enter as a copy of …" (CR 706)
+ * ---------------------------------------------------------------------------
+ *
+ * Two CLOSED tables and two parsers, for the same reason every other closed
+ * table in this file exists: a copy card's whole identity is *what it may copy*
+ * and *how the copy differs*, so a selector or an "except" clause the compiler
+ * only half-read would produce a card that is not the printed one. Anything
+ * outside these tables makes the rule return `null`, and the card reports.
+ */
+
+/**
+ * The printed nouns a copy clause may select, mapped to the `CardFilter` each
+ * one means. `{}` (an empty filter) is "any permanent", which is exactly what an
+ * absent filter is — spelled out rather than omitted so the table reads as a
+ * complete list of what is understood.
+ */
+const COPY_SELECTOR_FILTERS: Readonly<Record<string, CardFilter>> = Object.freeze({
+  creature: { anyOfTypes: ['creature'] },
+  artifact: { anyOfTypes: ['artifact'] },
+  enchantment: { anyOfTypes: ['enchantment'] },
+  planeswalker: { anyOfTypes: ['planeswalker'] },
+  land: { anyOfTypes: ['land'] },
+  permanent: {},
+  'nonland permanent': { noneOfTypes: ['land'] },
+  'artifact or creature': { anyOfTypes: ['artifact', 'creature'] },
+  'artifact or enchantment': { anyOfTypes: ['artifact', 'enchantment'] },
+  'creature or planeswalker': { anyOfTypes: ['creature', 'planeswalker'] },
+});
+
+/** The card-type words a copy "except" clause may add to the copied types. */
+const COPY_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  artifact: 'artifact',
+  creature: 'creature',
+  enchantment: 'enchantment',
+  land: 'land',
+  planeswalker: 'planeswalker',
+});
+
+/**
+ * Parse the "of …" half of a copy clause: WHICH objects, WHOSE, and WHERE.
+ *
+ * Understood shapes, and nothing else:
+ *   "any creature on the battlefield"   → any, battlefield
+ *   "a creature you control"            → yours, battlefield
+ *   "any land card in a graveyard"      → any, graveyard   (Echoing Deeps)
+ *
+ * Returns `null` for every other wording — notably Mockingbird's "…with mana
+ * value less than or equal to the amount of mana spent to cast ~", which needs a
+ * fact (how much mana was spent) nothing records, and "target land", which is a
+ * targeted ability rather than an as-enters choice.
+ */
+function parseCopySelector(text: string): Partial<Pick<CopyAsEntersSpec, 'filter' | 'from' | 'whose'>> | null {
+  const trimmed = text.trim();
+  const graveyard = trimmed.match(/^any ([a-z ]+?) card in a graveyard$/);
+  if (graveyard) {
+    const filter = COPY_SELECTOR_FILTERS[graveyard[1] ?? ''];
+    return filter === undefined ? null : { filter, from: 'graveyard' };
+  }
+  const battlefield = trimmed.match(/^any ([a-z ]+?) on the battlefield$/);
+  if (battlefield) {
+    const filter = COPY_SELECTOR_FILTERS[battlefield[1] ?? ''];
+    return filter === undefined ? null : { filter };
+  }
+  const yours = trimmed.match(/^an? ([a-z ]+?) you control$/);
+  if (yours) {
+    const filter = COPY_SELECTOR_FILTERS[yours[1] ?? ''];
+    return filter === undefined ? null : { filter, whose: 'you' };
+  }
+  return null;
+}
+
+/**
+ * Split the printed "except …" tail into its clauses.
+ *
+ * Real cards join them with ", " and a final ", and " / " and " (Spark Double
+ * prints three, Sakashima three, Phantasmal Image two). Splitting on both
+ * separators is safe because every clause the table below accepts is a fixed
+ * short phrase containing neither — and a clause that DOES contain one (a quoted
+ * granted ability, which always carries commas inside its quotes) simply fails
+ * to match any entry, which reports the whole card. That is the right outcome
+ * for it anyway.
+ */
+function splitExceptClauses(text: string): string[] {
+  return text
+    .split(/,\s*and\s+|,\s*|\s+and\s+/)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/**
+ * Read one "except …" clause into a {@link CopyExceptions} patch, or `null` when
+ * the compiler does not understand it.
+ *
+ * A CLOSED table of printed phrasings, and it must be closed for the reason this
+ * whole file exists: "except it has 'When this creature becomes the target of a
+ * spell or ability, sacrifice it'" (Phantasmal Image) grants a TRIGGERED ABILITY
+ * on a condition the engine has no event for, and a copy missing that drawback
+ * would be strictly better than the printed card.
+ */
+function parseCopyException(clause: string, ctx: RuleContext): CopyExceptions | null {
+  // "it's an Illusion in addition to its other types" / "it's an artifact …".
+  // One printed word may be a card TYPE or a creature SUBTYPE, and a card may
+  // print two subtypes at once ("it's a Shapeshifter Rogue in addition…").
+  const addition = clause.match(/^it'?s (?:an?|the) ([a-z' ]+?) in addition to its other types$/);
+  if (addition) {
+    const words = (addition[1] ?? '').split(' ').filter((w) => w.length > 0);
+    if (words.length === 0) return null;
+    if (words.length === 1 && words[0] === 'legendary') return { legendary: true };
+    const types: CardType[] = [];
+    const subtypes: string[] = [];
+    for (const word of words) {
+      const asType = COPY_TYPE_WORDS[word];
+      if (asType !== undefined) {
+        types.push(asType);
+      } else {
+        // Anything else is a creature SUBTYPE — which is what these clauses
+        // print (Bird, Illusion, Cave, Shapeshifter, Rogue). Subtypes are free
+        // text in this engine and compared case-insensitively, so the word is
+        // carried verbatim rather than checked against a list that could not be
+        // complete.
+        subtypes.push(word.charAt(0).toUpperCase() + word.slice(1));
+      }
+    }
+    return {
+      ...(types.length > 0 ? { addTypes: types } : {}),
+      ...(subtypes.length > 0 ? { addSubtypes: subtypes } : {}),
+    };
+  }
+  // "it's legendary" — the supertype form, which the branch above deliberately
+  // does not swallow (a supertype is not "another type").
+  if (/^it'?s legendary(?: in addition to its other types)?$/.test(clause)) return { legendary: true };
+  // "it isn't legendary" (Spark Double).
+  if (/^it isn'?t legendary$/.test(clause)) return { legendary: false };
+  // "its name is ~" — the copy keeps the copying card's own printed name
+  // (Sakashima the Impostor, Chameleon's "his name is …").
+  if (/^(?:its|his|her|their) name is ~$/.test(clause)) return { name: ctx.card.name };
+  // "it has flying" — only words that are real engine keyword flags.
+  const keyword = clause.match(/^it has ([a-z' ]+)$/);
+  if (keyword) {
+    const flag = KEYWORD_FLAGS[(keyword[1] ?? '').trim()];
+    return flag === undefined ? null : { addKeywords: { [flag]: true } as KeywordFlags };
+  }
+  // "it enters with an additional +1/+1 counter on it if it's a creature".
+  if (/^it enters with an additional \+1\/\+1 counter on it if it'?s a creature$/.test(clause)) {
+    return { extraCounters: { [PLUS_ONE_COUNTER]: 1 } };
+  }
+  // "it enters with an additional loyalty counter on it if it's a planeswalker".
+  if (/^it enters with an additional loyalty counter on it if it'?s a planeswalker$/.test(clause)) {
+    return { extraLoyalty: 1 };
+  }
+  return null;
+}
+
+/** Merge one parsed exception patch into the accumulating tail. */
+function mergeCopyExceptions(base: CopyExceptions, patch: CopyExceptions): CopyExceptions {
+  return {
+    ...base,
+    ...patch,
+    ...(base.addTypes || patch.addTypes ? { addTypes: [...(base.addTypes ?? []), ...(patch.addTypes ?? [])] } : {}),
+    ...(base.addSubtypes || patch.addSubtypes
+      ? { addSubtypes: [...(base.addSubtypes ?? []), ...(patch.addSubtypes ?? [])] }
+      : {}),
+    ...(base.addKeywords || patch.addKeywords
+      ? { addKeywords: { ...base.addKeywords, ...patch.addKeywords } }
+      : {}),
+    ...(base.extraCounters || patch.extraCounters
+      ? { extraCounters: { ...base.extraCounters, ...patch.extraCounters } }
+      : {}),
+  };
+}
+
+/**
+ * Build the whole `copyAsEnters` spec from a matched copy clause, or `null` when
+ * any part of it is not fully understood.
+ *
+ * `tapped` is the printed word in "you may have ~ enter **tapped** as a copy of
+ * any land on the battlefield" (Vesuva). It is carried as an EXCEPTION rather
+ * than as the card's own `entersTapped`, because the copied land replaces this
+ * card's characteristics entirely — the copying card's printed word has to
+ * survive that replacement or Vesuva enters untapped.
+ */
+function buildCopyAsEnters(
+  selectorText: string,
+  exceptText: string | undefined,
+  tapped: boolean,
+  ctx: RuleContext,
+): CopyAsEntersSpec | null {
+  const selector = parseCopySelector(selectorText);
+  if (selector === null) return null;
+  let except: CopyExceptions = tapped ? { entersTapped: true } : {};
+  if (exceptText !== undefined && exceptText.trim().length > 0) {
+    for (const clause of splitExceptClauses(exceptText)) {
+      const patch = parseCopyException(clause, ctx);
+      if (patch === null) return null;
+      except = mergeCopyExceptions(except, patch);
+    }
+  }
+  return { ...selector, ...(Object.keys(except).length > 0 ? { except } : {}) };
+}
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({
@@ -3630,6 +3847,42 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // since half a modal spell is not a modal spell.
     pattern: /^choose (?:one|two|three|four|five|up to)\b|^choose one or both\b/,
     missingEngineSystem: 'a modal template the compiler does not recognize yet',
+  },
+  // --- COPY EFFECTS: the SYSTEM is shipped; what lands here is a residual -----
+  //
+  // Core applies a copy in LAYER 1 (`CardDefinition.copyAsEnters`, `copy.ts`)
+  // and the compiler builds the whole clause including its "except" tail. So
+  // none of the three hints below claims copying is missing — that would send
+  // the next contributor to rebuild something that exists. Each names the ONE
+  // part of a specific card the compiler still cannot read. They sit above the
+  // generic "you may / choose" hint, which would otherwise swallow all three.
+  {
+    // Mockingbird. The selector is a mana-value bound against "the amount of
+    // mana spent to cast ~", and nothing records that number: the engine
+    // charges a cost and forgets what was spent, so an X-costed copier cannot
+    // know its own bound. A different fact, not a different template.
+    pattern: /as a copy of .*the amount of mana spent to cast/,
+    missingEngineSystem:
+      'a copy whose legal targets depend on THE AMOUNT OF MANA SPENT to cast it (copy effects themselves are implemented — nothing records how much mana paid for a spell)',
+  },
+  {
+    // Phantasmal Image and Sakashima the Impostor. Both print an "except … and
+    // it has "<ability>" tail that GRANTS an ability to the copy — a
+    // triggered ability on "becomes the target of a spell or ability" (an event
+    // the engine does not raise for data triggers) and an activated ability
+    // with a delayed "at the beginning of the next end step" return. Granting
+    // the ability is the missing half, not the copying.
+    pattern: /as a copy of .*, except .*\bit has "/,
+    missingEngineSystem:
+      'a copy that GRANTS AN ABILITY printed in quotes (copy effects and their "except" tail are implemented — an ability granted as text is not)',
+  },
+  {
+    // Everything else in the family: a selector or an "except" clause outside
+    // the compiler's closed tables (`COPY_SELECTOR_FILTERS`,
+    // `parseCopyException`). A rule-table entry, not engine work.
+    pattern: /\bas a copy of\b|\bbecomes a copy of\b|\bcopy of (?:target|another target)\b/,
+    missingEngineSystem:
+      'a COPY template the compiler does not recognize yet (as-enters copies are implemented — this selector or "except" clause is outside the closed tables, or the copy is applied by an activated ability rather than as the permanent enters)',
   },
   {
     // The printed word "you may" IS implemented now, as the `mayEffects`

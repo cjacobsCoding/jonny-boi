@@ -161,6 +161,13 @@ export interface ClauseContribution {
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
+   * The printed "you may have ~ enter as a copy of …" replacement — which
+   * objects may be copied, and the "except …" tail
+   * (`CardDefinition.copyAsEnters`, CR 706). One clause, one field, because the
+   * whole clause is one replacement effect.
+   */
+  readonly copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
+  /**
    * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
    * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N
    * life" rider as {@link flashbackLifeCost}, so all three printed forms of
