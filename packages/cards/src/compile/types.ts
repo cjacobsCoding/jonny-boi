@@ -168,6 +168,14 @@ export interface ClauseContribution {
    */
   readonly copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
   /**
+   * "As ~ enters, choose a…" — the CR 614.1c naming this card makes as it
+   * enters. Only the DECLARATION: who raises the question is decided once, by
+   * the assembly, from whether the card is a land.
+   */
+  readonly asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
+  /** "~ is the chosen type in addition to its other types". */
+  readonly isChosenSubtype?: boolean;
+  /**
    * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
    * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N
    * life" rider as {@link flashbackLifeCost}, so all three printed forms of
@@ -185,6 +193,13 @@ export interface ClauseContribution {
    * asks about at cast time (`CardDefinition.kicker`).
    */
   readonly kicker?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed "As an additional cost to cast this spell, …" line — a MANDATORY
+   * additional cost (`CardDefinition.additionalCost`). Unlike {@link kicker} it
+   * cannot be declined, so a caster who cannot pay it cannot cast the spell at
+   * all; see the core type for why that difference earns its own field.
+   */
+  readonly additionalCost?: import('@jonny-boi/core').AdditionalCastCost;
   /**
    * The printed "Multikicker {COST}" line — an additional cost the caster may
    * pay ANY NUMBER of times, so the cast-time question is a count rather than a

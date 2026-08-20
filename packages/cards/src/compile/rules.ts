@@ -17,6 +17,7 @@
 import type {
   CardFilter,
   CardType,
+  ChosenValueSubject,
   CopyAsEntersSpec,
   CopyExceptions,
   EffectRef,
@@ -29,8 +30,10 @@ import type {
   SpellMode,
   StaticAbility,
   TargetRestriction,
+  InterveningIf,
   TriggerCondition,
   TriggeredAbility,
+  TriggerWho,
 } from '@jonny-boi/core';
 import { DEFAULT_TARGET_RESTRICTION, PLUS_ONE_COUNTER, formatManaCost, MANA_COLORS } from '@jonny-boi/core';
 import type { ClauseContribution, CompileRule, RuleContext } from './types.js';
@@ -342,6 +345,54 @@ const KEYWORD_TOKEN = `(${Object.keys(KEYWORD_FLAGS).join('|')})`;
  * control with flying") selects by a subtype or by a characteristic the static
  * filter deliberately cannot read, so those lines keep reporting.
  */
+/**
+ * The printed nouns "As ~ enters, choose …" may name, mapped to the choice
+ * SUBJECT core answers with. A CLOSED table: a noun outside it ("choose a
+ * number between 1 and 10", Talion) is a naming this engine can store but
+ * nothing can yet read, and it reports rather than compiling into a value no
+ * printed line consumes.
+ */
+const AS_ENTERS_SUBJECTS: Readonly<Record<string, ChosenValueSubject>> = Object.freeze({
+  'a creature type': 'creatureType',
+  'a color': 'color',
+  'a player': 'player',
+  'a basic land type': 'basicLandType',
+});
+
+/**
+ * The card-type words an explicit "choose artifact, creature, …" menu may list.
+ * Closed for the same reason every other type table here is: a word outside it
+ * would become a menu entry no reader could ever match.
+ */
+const CHOOSABLE_CARD_TYPES: readonly string[] = Object.freeze([
+  'artifact',
+  'creature',
+  'enchantment',
+  'instant',
+  'sorcery',
+  'land',
+  'planeswalker',
+  'battle',
+]);
+
+/**
+ * Whether the card being compiled prints an "As ~ enters, choose …" line at all.
+ *
+ * Every "of the chosen …" reader consults this before compiling, because a
+ * reader without a naming is the exact half-card shape this compiler exists to
+ * refuse: it would produce an anthem (or a mana ability) over a value nothing
+ * ever writes — a card that reports `'complete'` and then does nothing on the
+ * board. Reported, never approximated.
+ *
+ * Read off the RAW oracle text rather than off the assembly so it works whatever
+ * order the card prints its lines in (Realmwalker names its type on the second
+ * line, Banner of Kinship on the first), and so it does not depend on which
+ * clauses have been absorbed yet.
+ */
+function namesAValueAsItEnters(ctx: RuleContext): boolean {
+  return /\bas [^.]*?\benters, choose\b/i.test(ctx.card.oracleText);
+}
+
 const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.freeze({
   creature: 'creature',
   permanent: null,
@@ -454,7 +505,8 @@ const SEARCH_BOUND_PHRASE = `(${Object.keys(SEARCH_BOUND_FIELDS).join('|')})`;
  * what the filter can say.
  *
  * `noun` is the word before "card" — a card type or a {@link SEARCHABLE_SUBTYPES}
- * subtype. The three bound arguments are the optional "with X N [or less |
+ * subtype; `color` is the optional printed colour adjective before it ("a
+ * **blue** instant card"). The three bound arguments are the optional "with X N [or less |
  * or greater]" tail; **no** direction word means an EXACT value (Tribute Mage's
  * "with mana value 2"), which is both bounds set to the same number.
  */
@@ -463,16 +515,34 @@ function searchFilterFrom(
   characteristic?: string,
   amount?: string,
   direction?: string,
+  color?: string,
 ): Record<string, unknown> | null {
   const filter: Record<string, unknown> = {};
-  const type = SPELL_TYPE_WORDS[noun];
-  if (type) {
-    filter.anyOfTypes = [type];
-  } else if (SEARCHABLE_SUBTYPES.has(noun)) {
-    filter.anyOfSubtypes = [noun];
-  } else {
-    return null; // not a restriction this filter can express — report the line
+  if (color !== undefined && color.length > 0) {
+    const letter = COLOR_WORDS[color];
+    // A colour word outside the five is not a colour — report the line rather
+    // than silently fetching from a wider pool than the card prints.
+    if (!letter) return null;
+    filter.anyOfColors = [letter];
   }
+  // A printed UNION ("an instant or sorcery card", "an Aura or Equipment card")
+  // is a list of nouns that must all be the same KIND: `CardFilter` ANDs
+  // `anyOfTypes` with `anyOfSubtypes`, so a mixed union ("an artifact or Goblin
+  // card") would compile into a search for something that is BOTH — a tutor that
+  // can never find. Mixed unions therefore report.
+  const nouns = noun.split(' or ').map((word) => word.trim()).filter((word) => word.length > 0);
+  if (nouns.length === 0) return null;
+  const types: CardType[] = [];
+  const subtypes: string[] = [];
+  for (const word of nouns) {
+    const type = SPELL_TYPE_WORDS[word];
+    if (type) types.push(type);
+    else if (SEARCHABLE_SUBTYPES.has(word)) subtypes.push(word);
+    else return null; // not a restriction this filter can express — report the line
+  }
+  if (types.length > 0 && subtypes.length > 0) return null;
+  if (types.length > 0) filter.anyOfTypes = types;
+  else filter.anyOfSubtypes = subtypes;
 
   if (characteristic === undefined) return filter;
   const fields = SEARCH_BOUND_FIELDS[characteristic];
@@ -489,6 +559,48 @@ function searchFilterFrom(
 }
 
 /**
+ * Turn a printed list of land types ("Swamp, Forest, or Island", "Mountain or
+ * Plains") into the individual words, or `null` when any of them is not a land
+ * type. The list may be any length — Farseek prints four.
+ */
+function landTypeList(text: string): readonly string[] | null {
+  const words = text
+    .split(/,\s*(?:or\s+)?|\s+or\s+/)
+    .map((word) => word.trim().toLowerCase())
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  return words.every((word) => LAND_SUBTYPES.has(word)) ? words : null;
+}
+
+/**
+ * The BASIC land cards a printed type list names, BY NAME — the same way "a
+ * basic land card" is written everywhere else in this table (`CardFilter` has
+ * no supertype field; see `restrictToNames` in ../choice-primitives.ts).
+ *
+ * The name of a basic land IS its land type, which is what makes this exact
+ * rather than a heuristic: a card named "Swamp" is a basic Swamp.
+ */
+function basicNamesFor(types: readonly string[]): readonly string[] {
+  const byType = new Map(BASIC_LAND_NAMES.map((name) => [name.toLowerCase(), name]));
+  // PRINTED order, not the pool's: the params a card carries should read the way
+  // the card reads, which is what makes a diff of two compiled cards legible.
+  const names: string[] = [];
+  for (const type of types) {
+    const name = byType.get(type);
+    if (name !== undefined && !names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/**
+ * The optional colour adjective a search may print — "a **blue** instant card"
+ * (Merchant Scroll), "a **green** creature card" (Green Sun's Zenith). Written
+ * as its own capture rather than folded into the noun so an unrecognised
+ * adjective reports instead of being read as a subtype.
+ */
+const SEARCH_COLOR_PHRASE = `(?:(${Object.keys(COLOR_WORDS).join('|')}) )?`;
+
+/**
  * The printed restrictions a "you choose a ___ card from it" discard may carry,
  * mapped to the `CardFilter` implementing each. Anything outside this table is a
  * restriction the filter cannot express, so the rule declines rather than
@@ -501,6 +613,45 @@ const DISCARD_RESTRICTIONS: Readonly<Record<string, { readonly noneOfTypes?: rea
     creature: { anyOfTypes: Object.freeze(['creature']) },
     land: { anyOfTypes: Object.freeze(['land']) },
   });
+
+/**
+ * The permanent kinds a printed MANDATORY additional cost may sacrifice, mapped
+ * to the `CardFilter` selecting each. A CLOSED table: a noun outside it has no
+ * faithful filter, and a cost that sacrificed the wrong permanent — or nothing —
+ * would be a silently different card.
+ *
+ * The "or" forms are listed as their own entries rather than parsed, because
+ * "an artifact or creature" is ONE printed phrase whose meaning (either type)
+ * is a union, and enumerating the two printed unions that actually appear is
+ * exact where a general parser would be a guess.
+ */
+const SACRIFICE_COST_NOUNS: Readonly<Record<string, { readonly anyOfTypes: readonly CardType[] }>> =
+  Object.freeze({
+    creature: { anyOfTypes: Object.freeze<CardType[]>(['creature']) },
+    land: { anyOfTypes: Object.freeze<CardType[]>(['land']) },
+    artifact: { anyOfTypes: Object.freeze<CardType[]>(['artifact']) },
+    enchantment: { anyOfTypes: Object.freeze<CardType[]>(['enchantment']) },
+    'artifact or creature': { anyOfTypes: Object.freeze<CardType[]>(['artifact', 'creature']) },
+    'creature or artifact': { anyOfTypes: Object.freeze<CardType[]>(['creature', 'artifact']) },
+  });
+
+/** The filter a printed sacrifice-cost noun means, or null if unexpressible. */
+function sacrificeCostFilterFor(noun: string): { readonly anyOfTypes: readonly CardType[] } | null {
+  return SACRIFICE_COST_NOUNS[noun.replace(/^an? /, '').trim()] ?? null;
+}
+
+/**
+ * The filter a printed DISCARD-cost noun means. Only the unrestricted "a card"
+ * is expressible as no filter at all; the restricted forms reuse the same closed
+ * table an effect's discard restriction reads, so "discard a land card" cannot
+ * mean two different things in two places. `null` reports the line.
+ */
+function discardCostFilterFor(noun: string): Record<string, unknown> | null | undefined {
+  const word = noun.replace(/^an? /, '').trim();
+  if (word === 'card') return undefined; // any card — no filter
+  const restricted = word.endsWith(' card') ? word.slice(0, -' card'.length) : word;
+  return discardFilterFor(restricted) as Record<string, unknown> | null;
+}
 
 /** The regex alternation of the discard restrictions above. */
 const DISCARD_RESTRICTION_TOKEN = Object.keys(DISCARD_RESTRICTIONS).join('|');
@@ -836,6 +987,118 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     build(match) {
       const count = parseCount(match[1]);
       return count === null ? null : effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
+    // --- WHO the effect happens to -------------------------------------------
+    // The rules below are one family: a printed body that happens to somebody
+    // OTHER than the source's controller. They all compile to the same shared
+    // "whichPlayer" vocabulary (`playersForParam` in effect-helpers), so "each
+    // player", "that player" and "each opponent" mean one thing each wherever
+    // they are printed.
+    id: 'each-player-draws',
+    description: '"Each player draws N cards"',
+    pattern: new RegExp(`^each player draws ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      return count === null
+        ? null
+        : effects({ primitive: 'drawCards', params: { count, whichPlayer: 'each' } });
+    },
+  },
+  {
+    id: 'each-player-draws-and-loses-life',
+    description: '"Each player draws N cards and loses M life" (Stormfist Crusader)',
+    // Printed as ONE sentence, so the sentence splitter never separates the two
+    // halves that would each compile alone — the same reason `draw-and-lose-life`
+    // exists for the untargeted "you" form.
+    pattern: new RegExp(`^each player draws ${COUNT_TOKEN} cards? and loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      const life = parseCount(match[2]);
+      if (count === null || life === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count, whichPlayer: 'each' } },
+        { primitive: 'loseLife', params: { amount: life, whichPlayer: 'each' } },
+      );
+    },
+  },
+  {
+    id: 'that-player-draws',
+    description:
+      '"That player draws N [additional] cards" — a trigger body aimed at the TRIGGERING player',
+    // Howling Mine, Kami of the Crescent Moon, Dictate of Kruphix, Font of
+    // Mythos. "Additional" is descriptive: the extra draw IS the effect, and the
+    // turn's own draw happens on its own. Compiling the word into a second draw
+    // would double it.
+    pattern: new RegExp(`^that player draws ${COUNT_TOKEN} (?:additional )?cards?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      return count === null
+        ? null
+        : effects({ primitive: 'drawCards', params: { count, whichPlayer: 'triggering' } });
+    },
+  },
+  {
+    id: 'that-player-loses-life',
+    description: '"That player loses N life" — a trigger body aimed at the TRIGGERING player',
+    pattern: new RegExp(`^that player loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]);
+      return amount === null
+        ? null
+        : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'triggering' } });
+    },
+  },
+  {
+    id: 'each-opponent-loses-life',
+    description: '"Each opponent loses N life"',
+    // The bare form, with none of the "and you gain that much life" tail that
+    // `each-opponent-loses-life-you-gain` handles; that rule is declared earlier,
+    // so the longer printed line keeps the rule that knows about its second half.
+    pattern: new RegExp(`^each opponent loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]);
+      return amount === null
+        ? null
+        : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
+    },
+  },
+  {
+    id: 'draw-additional-cards',
+    description: '"Draw an additional card" (The Immortal Sun\'s draw step)',
+    // Plain `drawCards`: the word "additional" describes WHY the draw is extra
+    // (the draw step already drew one), not a second effect on top of it.
+    pattern: new RegExp(`^(?:you )?draw ${COUNT_TOKEN} additional cards?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      return count === null ? null : effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
+    id: 'that-player-cycles-hand',
+    description:
+      '"That player puts the cards in their hand on the bottom of their library in any order, then draws that many cards" (Teferi\'s Puzzle Box)',
+    pattern:
+      /^that player puts the cards in their hand on the bottom of their library in any order, then draws that many cards$/,
+    build() {
+      return effects({ primitive: 'handToBottomThenDraw', params: { who: 'triggering' } });
+    },
+  },
+  {
+    id: 'source-damage-to-that-player',
+    description:
+      '"~ deals N damage to that player / to them" — UNTARGETED damage at the triggering player',
+    // Untargeted on purpose: the printed line names no target, it names the
+    // player the trigger was about. Compiling it as targeted damage would ask
+    // the controller to aim something the card never asks them to aim, and would
+    // subject it to targeting restrictions the printed line does not have.
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to (?:that player|them)$`),
+    build(match) {
+      const amount = parseCount(match[1]);
+      return amount === null
+        ? null
+        : effects({ primitive: 'dealDamage', params: { amount, whichPlayer: 'triggering' } });
     },
   },
   {
@@ -1760,13 +2023,19 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // "tapped" and the optional trailing shuffle both printed forms carry.
     // Selection is by SUBTYPE, so this finds a dual land with those land types
     // exactly as the printed card does — not just a basic.
+    // The list may be any length: a fetchland prints two, Farseek prints four
+    // ("a Plains, Island, Swamp, or Mountain card"). `landTypeList` refuses any
+    // word that is not a land type, so "a basic Swamp … card" falls through to
+    // the basic-types rule instead of being read as a subtype search — those are
+    // genuinely different cards (this one finds a DUAL), and the printed word
+    // "basic" is the only thing that tells them apart.
     pattern:
-      /^search your library for an? ([a-z]+)(?: or ([a-z]+))? card, put it onto the battlefield( tapped)?(?:, then shuffle)?$/,
+      /^search your library for an? ([a-z]+(?:,? (?:or )?[a-z]+)*) card, put (?:it|that card) onto the battlefield( tapped)?(?:, then shuffle)?$/,
     build(match) {
-      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      const subtypes = landTypeList(match[1] ?? '');
       // Only LAND subtypes are safe here: a non-land search would need the card
       // to be castable, which this template does not express.
-      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      if (!subtypes) return null;
       return effects({
         primitive: 'searchLibrary',
         params: {
@@ -1774,7 +2043,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
           count: 1,
           filter: { anyOfTypes: ['land'], anyOfSubtypes: subtypes },
           destination: 'battlefield',
-          ...(match[3] ? { tapped: true } : {}),
+          ...(match[2] ? { tapped: true } : {}),
         },
       });
     },
@@ -1910,6 +2179,191 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'search-any-card',
+    description:
+      '"Search your library for a card, put that card into your hand/graveyard, then shuffle" (Diabolic Tutor, Grim Tutor, Vile Entomber)',
+    // The UNRESTRICTED tutor: no noun before "card", so no filter at all. It is
+    // its own rule rather than an optional capture on the filtered one because
+    // "for a card" and "for a creature card" are different sentences, and a
+    // pattern loose enough to match both would also match "for a basic land
+    // card" and quietly drop the restriction.
+    pattern: /^search your library for a card, put (?:it|that card) into your (hand|graveyard), then shuffle$/,
+    build(match) {
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count: 1, destination: match[1] === 'graveyard' ? 'graveyard' : 'hand' },
+      });
+    },
+  },
+  {
+    id: 'search-to-battlefield-by-filter',
+    description:
+      '"Search your library for a land card, put it onto the battlefield tapped, then shuffle" (Urza’s Cave, Wood Elves)',
+    // The battlefield sibling of `search-to-hand-by-filter`, sharing its noun
+    // parser so "an Aura or Equipment card" cannot mean one thing when fetched to
+    // hand and another when put onto the battlefield. The land-type list above
+    // still runs FIRST, so a multi-type fetchland keeps its own rule.
+    pattern: new RegExp(
+      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) onto the battlefield( tapped)?, then shuffle$`,
+    ),
+    build(match) {
+      const filter = searchFilterFrom(match[2] ?? '', match[3], match[4], match[5], match[1]);
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter,
+          destination: 'battlefield',
+          ...(match[6] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'search-to-graveyard-by-filter',
+    description: '"Search your library for a creature card, put it into your graveyard, then shuffle" (the entomb family)',
+    pattern: new RegExp(
+      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) into your graveyard, then shuffle$`,
+    ),
+    build(match) {
+      const filter = searchFilterFrom(match[2] ?? '', match[3], match[4], match[5], match[1]);
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count: 1, filter, destination: 'graveyard' },
+      });
+    },
+  },
+  {
+    id: 'sacrifice-a-permanent-you-control',
+    description: '"Sacrifice a land." — a sacrifice as a RESOLUTION effect, not as a cost (Roiling Regrowth)',
+    // The controller chooses which of their own permanents to give up, which is
+    // the same question an edict asks of a victim — so it is the same primitive
+    // pointed at `'controller'` rather than a second sacrifice implementation.
+    // A board with nothing that qualifies sacrifices nothing, exactly as the
+    // printed card does.
+    pattern: /^sacrifice an? (creature|land|artifact|enchantment|permanent)$/,
+    build(match) {
+      const kind = match[1]!;
+      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: { who: 'controller', ...(filter ? { filter } : {}) },
+      });
+    },
+  },
+  {
+    id: 'search-basic-types-to-battlefield',
+    description:
+      '"Search your library for a basic Swamp, Forest, or Island card, put it onto the battlefield tapped, then shuffle" (the Landscape cycle)',
+    // "a **basic** Swamp card" is a Swamp with the basic supertype, which is
+    // exactly the five basics BY NAME — the same way every other basic-land
+    // search in this table is written (`CardFilter` has no supertype field).
+    // Contrast the fetchland rule above, whose list omits "basic" and therefore
+    // finds a DUAL land as well. Dropping the word would print a better card.
+    pattern:
+      /^search your library for a basic ([a-z]+(?:,? (?:or )?[a-z]+)*) card, put (?:it|that card) onto the battlefield( tapped)?(?:, then shuffle)?$/,
+    build(match) {
+      const types = landTypeList(match[1] ?? '');
+      if (!types) return null;
+      const names = basicNamesFor(types);
+      if (names.length === 0) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: LAND_FILTER,
+          nameAnyOf: names,
+          destination: 'battlefield',
+          ...(match[2] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'search-basic-lands-to-battlefield-plural',
+    description:
+      '"Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle" (Explosive Vegetation, Migration Path, Burnished Hart, the Harrow body)',
+    // "UP TO N" is a maximum, and `searchLibrary` already implements exactly
+    // that: its selection floor is zero, because a search may always fail to
+    // find. So a library holding one basic (or none) plays this correctly with
+    // no special case — which is the whole reason the count is a parameter and
+    // not N copies of a one-card rule.
+    pattern: new RegExp(
+      `^search your library for up to ${COUNT_TOKEN} basic land cards, put them onto the battlefield( tapped)?, then shuffle$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count,
+          filter: LAND_FILTER,
+          nameAnyOf: BASIC_LAND_NAMES,
+          destination: 'battlefield',
+          ...(match[2] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'search-two-basics-split-destination',
+    description:
+      '"Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle" (Cultivate, Kodamas Reach)',
+    // The MULTI-DESTINATION search: the two found cards go to two DIFFERENT
+    // zones, and which one goes where is a real decision. It compiles to
+    // `searchLibrary`'s `route` param — an ordered list of steps, one per card
+    // the search may find — so the answer's order IS the routing and no second
+    // question has to be invented (see the primitive).
+    //
+    // Written as one whole-line idiom rather than two clauses because the second
+    // half is meaningless without the first: "put one onto the battlefield" does
+    // not say what "one" is.
+    pattern:
+      /^search your library for up to two basic land cards, reveal those cards, put one onto the battlefield( tapped)? and the other into your hand, then shuffle$/,
+    build(match) {
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: LAND_FILTER,
+          nameAnyOf: BASIC_LAND_NAMES,
+          route: [
+            { destination: 'battlefield', ...(match[1] ? { tapped: true } : {}) },
+            { destination: 'hand' },
+          ],
+        },
+      });
+    },
+  },
+  {
+    id: 'search-cards-to-graveyard',
+    description: '"Search your library for up to three creature cards, put them into your graveyard, then shuffle" (Buried Alive)',
+    // A tutor whose destination is the GRAVEYARD — the same primitive, the same
+    // filter vocabulary, one more destination. It only reaches a zone
+    // `searchLibrary`'s closed destination table names, so a wording that put a
+    // card anywhere else still reports.
+    pattern: new RegExp(
+      `^search your library for up to ${COUNT_TOKEN} ([a-z]+) cards, put them into your graveyard, then shuffle$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      const filter = searchFilterFrom(match[2] ?? '');
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count, filter, destination: 'graveyard' },
+      });
+    },
+  },
+  {
     id: 'search-to-hand-by-filter',
     description:
       '"Search your library for a TYPE card [with CHARACTERISTIC N [or less|or greater]], reveal it, put it into your hand, then shuffle" (the Mage cycle, Goblin Matron, Recruiter of the Guard, Fierce Empath)',
@@ -1922,11 +2376,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // mana value 1 or less" would fetch the best card in the deck instead of the
     // best cheap one, i.e. a strictly better card. `searchFilterFrom` refuses
     // anything it cannot express, so the line reports rather than over-fetches.
+    //
+    // The colour adjective and the reveal are both OPTIONAL halves of the same
+    // template: "a **blue** instant card" (Merchant Scroll) narrows the search,
+    // and a card printing no "reveal" ("…for a Goblin card, put it into your
+    // hand, then shuffle") is mechanically identical — the reveal is
+    // information, and no engine state can observe it.
     pattern: new RegExp(
-      `^search your library for an? ([a-z]+) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, reveal (?:it|that card), put (?:it|that card) into your hand, then shuffle$`,
+      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) into your hand, then shuffle$`,
     ),
     build(match) {
-      const filter = searchFilterFrom(match[1] ?? '', match[2], match[3], match[4]);
+      const filter = searchFilterFrom(match[2] ?? '', match[3], match[4], match[5], match[1]);
       if (filter === null) return null;
       return effects({
         primitive: 'searchLibrary',
@@ -2196,18 +2656,115 @@ const STEP_TRIGGER_EVENTS: Readonly<Record<string, TriggerCondition['on']>> = Ob
   'draw step': 'drawStep',
   'first main phase': 'precombatMain',
   'end step': 'endStep',
+  // "At the beginning of EACH combat" (Unnatural Growth, Sting). The "on your
+  // turn" phrasing is a rule of its own because it prints a different tail, but
+  // the event is the same one, from the same `STEP_FOR_TRIGGER` table in core.
+  combat: 'beginCombat',
 });
 
-/** "your …" / "each player's …" — whose step the trigger watches. */
-const STEP_TRIGGER_SCOPES: Readonly<Record<string, 'you' | 'any'>> = Object.freeze({
+/**
+ * "your …" / "each player's …" / "each opponent's …" / bare "each …" — whose
+ * step the trigger watches, in core's `TriggerWho` vocabulary.
+ *
+ * ⚠️ ORDER IS LOAD-BEARING. The alternation is built from these keys in
+ * insertion order, so the two-word scopes must precede the bare `each`; with
+ * `each` first, "at the beginning of each player's draw step" would match `each`
+ * and leave "player's draw step" as the step word, which is in no table — the
+ * card would report despite being fully expressible.
+ */
+const STEP_TRIGGER_SCOPES: Readonly<Record<string, TriggerWho>> = Object.freeze({
   your: 'you',
   "each player's": 'any',
+  "each opponent's": 'opponent',
+  // "At the beginning of each upkeep" is every player's upkeep — the same thing
+  // "each player's upkeep" says with one word fewer.
+  each: 'any',
 });
 
 /** The alternation of both tables, built FROM them so they cannot drift. */
 const STEP_TRIGGER_PHRASE = `(${Object.keys(STEP_TRIGGER_SCOPES).join('|')}) (${Object.keys(
   STEP_TRIGGER_EVENTS,
 ).join('|')})`;
+
+/**
+ * A printed intervening "if" clause, and the {@link InterveningIf} each one
+ * means. A CLOSED table for the same reason `STEP_TRIGGER_EVENTS` is one: a
+ * condition the engine cannot decide must make its card REPORT, never compile
+ * to a trigger whose condition is quietly always true (a strictly better card)
+ * or always false (a dead one).
+ */
+const INTERVENING_IF_RULES: readonly {
+  readonly pattern: RegExp;
+  build(match: RegExpMatchArray): InterveningIf | null;
+}[] = Object.freeze([
+  {
+    // "if this artifact is untapped" (Howling Mine). `selfReference` has already
+    // folded "this artifact" into `~`.
+    pattern: /^~ is untapped$/,
+    build: (): InterveningIf => ({ kind: 'sourceUntapped' }),
+  },
+  {
+    // "if you control three or more artifacts" / "an artifact" / "no snakes" /
+    // "a creature with power 4 or greater".
+    pattern: new RegExp(
+      `^you control (no|an?|${COUNT_TOKEN} or more) ([a-z]+?)s?` +
+        `(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))?$`,
+    ),
+    build(match: RegExpMatchArray): InterveningIf | null {
+      const quantifier = match[1] ?? '';
+      const noun = match[3] ?? '';
+      const filter = searchFilterFrom(noun);
+      if (filter === null) return null;
+      const condition: Record<string, unknown> = { kind: 'controlCount', filter };
+      if (quantifier === 'no') condition.max = 0;
+      else if (quantifier === 'a' || quantifier === 'an') condition.min = 1;
+      else {
+        const value = parseCount(match[2]);
+        if (value === null) return null;
+        condition.min = value;
+      }
+      const characteristic = match[4];
+      if (characteristic !== undefined) {
+        // ONLY "with power N or greater", and only as a FLOOR. The bound has to
+        // be read against EFFECTIVE power — counters and anthems are what make a
+        // creature "power 4 or greater" on the board in front of the player — and
+        // `InterveningIf.minPower` is the field that does that. A toughness or
+        // mana-value bound has no such field, so it reports rather than being
+        // silently answered from the printed box.
+        if (characteristic !== 'power' || match[6] !== 'greater') return null;
+        const bound = Number.parseInt(match[5] ?? '', 10);
+        if (!Number.isFinite(bound)) return null;
+        condition.minPower = bound;
+      }
+      return condition as unknown as InterveningIf;
+    },
+  },
+]);
+
+/**
+ * Split a trigger's text into its printed intervening "if" and the body that
+ * follows it, or report `null` when there is no such clause.
+ *
+ * Returns `'unreadable'` — distinct from "no clause" — when the text DOES print
+ * an intervening "if" that {@link INTERVENING_IF_RULES} cannot express, so the
+ * caller refuses the whole line instead of compiling the body as though the
+ * condition were not there. That distinction is the entire safety property here:
+ * "at the beginning of your upkeep, if you have 40 or more life, you win the
+ * game" must not become "at the beginning of your upkeep, you win the game".
+ */
+function splitInterveningIf(
+  text: string,
+): { readonly condition?: InterveningIf; readonly body: string } | 'unreadable' {
+  const match = /^if (.+?), (.+)$/.exec(text);
+  if (!match) return { body: text };
+  for (const rule of INTERVENING_IF_RULES) {
+    const found = rule.pattern.exec(match[1] ?? '');
+    if (!found) continue;
+    const condition = rule.build(found);
+    if (condition) return { condition, body: match[2] ?? '' };
+  }
+  return 'unreadable';
+}
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
   {
@@ -2279,26 +2836,23 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    id: 'trigger-upkeep',
-    description: '"At the beginning of your upkeep, BODY"',
-    pattern: /^at the beginning of your upkeep, (.+)$/,
-    build(match, ctx) {
-      return triggerFrom(
-        ctx,
-        { on: 'upkeep', who: 'you' },
-        match[1] ?? '',
-        `Upkeep: ${match[1] ?? ''}`,
-      );
-    },
-  },
-  {
     id: 'trigger-step-begins',
     description:
-      '"At the beginning of your upkeep / draw step / first main phase / end step, BODY" — and the "each player\'s" form',
+      '"At the beginning of [your | each player’s | each opponent’s | each] upkeep / draw step / first main phase / end step / combat, [if CONDITION,] [you may] BODY"',
     // One rule for the whole family, because the printed lines differ only in
-    // which step they name and whose it is. The step words are a closed table
-    // (`STEP_TRIGGER_EVENTS`): a step the engine does not have would otherwise
-    // compile to a trigger that silently never fires.
+    // which step they name, whose it is, and whether an intervening "if" gates
+    // it. The step words are a closed table (`STEP_TRIGGER_EVENTS`): a step the
+    // engine does not have would otherwise compile to a trigger that silently
+    // never fires.
+    //
+    // ⚠️ THE "EACH PLAYER'S" FORM USED TO REPORT, AND THIS IS WHAT CHANGED.
+    // A `who: 'any'` trigger fires on both players' steps but resolves under the
+    // SOURCE's controller, so a body reading its controller would make Howling
+    // Mine draw its own controller a card on every turn. The triggering player
+    // now rides the stack object into `EffectContext.triggeringPlayer` (core's
+    // `PendingTrigger.triggeringPlayer`), which is what the bodies that print
+    // "that player" read — so the scope is finally expressible instead of being
+    // refused.
     pattern: new RegExp(`^at the beginning of ${STEP_TRIGGER_PHRASE}, (.+)$`),
     build(match, ctx) {
       const scope = match[1] ?? '';
@@ -2307,27 +2861,29 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       if (!event) return null;
       const who = STEP_TRIGGER_SCOPES[scope];
       if (!who) return null;
-      // Only the SOURCE CONTROLLER's own step is expressible today. "Each
-      // player's end step" fires on both, but its body almost always says "that
-      // player", and the engine cannot yet aim an effect at the player whose
-      // step it is — so a `who: 'any'` trigger would run the body for the
-      // controller every time, which is a different card. It reports instead.
-      if (who !== 'you') return null;
-      const body = match[3] ?? '';
-      const compiled = ctx.compileTriggerBody(body);
-      if (compiled === null || compiled.effects.length === 0) return null;
+      // The printed intervening "if", if there is one. `'unreadable'` means the
+      // line DOES print a condition this compiler cannot express — refused
+      // outright, because compiling the body without it would be a card that
+      // always does the thing it only sometimes does.
+      const split = splitInterveningIf(match[3] ?? '');
+      if (split === 'unreadable') return null;
+      const body = split.body;
       const optional = body.startsWith('you may ');
       const inner = optional ? body.slice('you may '.length) : body;
-      const effectRefs = optional
-        ? mayEffectsFrom(inner, ctx.compileTriggerBody(inner)?.effects ?? [])
-        : compiled.effects;
+      const compiled = ctx.compileTriggerBody(inner);
+      if (compiled === null || compiled.effects.length === 0) return null;
+      const effectRefs = optional ? mayEffectsFrom(inner, compiled.effects) : compiled.effects;
       if (effectRefs === null || effectRefs.length === 0) return null;
       return {
         triggers: [
           {
-            condition: { on: event, who },
+            condition: {
+              on: event,
+              who,
+              ...(split.condition ? { intervening: split.condition } : {}),
+            },
             effects: effectRefs,
-            label: `${step}: ${body}`,
+            label: `${scope} ${step}: ${match[3] ?? ''}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
           },
         ],
@@ -2402,6 +2958,43 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"Whenever you cast a [TYPE] spell OF THE CHOSEN TYPE, BODY"**
+     * (Vanquisher's Banner, Chronicle of Victory) — the cast trigger narrowed by
+     * the creature type this permanent named as it entered.
+     *
+     * Ordered ABOVE the plain cast trigger, because "a creature spell of the
+     * chosen type" also matches that rule's shape once the tail is ignored — and
+     * ignoring the tail would be a card that draws off EVERY creature spell.
+     *
+     * Refused on a card with no naming line, like every other "of the chosen …"
+     * reader: a trigger over a value nothing writes never fires, and a card that
+     * reports `'complete'` and then does nothing is the failure this contract
+     * exists to prevent.
+     */
+    id: 'trigger-cast-spell-of-chosen-type',
+    description: '"Whenever you cast a [TYPE] spell of the chosen type, BODY"',
+    pattern: /^whenever you cast an? (?:([a-z ]+?) )?spell of the chosen type, (.+)$/,
+    build(match, ctx) {
+      if (!namesAValueAsItEnters(ctx)) return null;
+      const typeWord = match[1];
+      // An absent type word is "a spell of the chosen type" (Chronicle of
+      // Victory) — every card type, narrowed only by the named subtype.
+      const base: readonly TriggerCondition[] =
+        typeWord === undefined ? [{ on: 'castSpell', who: 'you' }] : (spellFiltersFor(typeWord) ?? []);
+      if (base.length === 0) return null;
+      const body = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return {
+        triggers: base.map((condition) => ({
+          condition: { ...condition, spellSubtypeIsChosen: true },
+          effects: body,
+          label: `Cast ${describeSpellFilter(condition)} of the chosen type: ${match[2] ?? ''}`,
+        })),
+      };
+    },
+  },
+  {
     id: 'trigger-cast-spell',
     description: '"Whenever you cast a(n) TYPE spell, BODY" (incl. prowess-style text)',
     pattern: /^whenever you cast an? ([a-z ]+?) spell, (.+)$/,
@@ -2417,6 +3010,30 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
           label: `Cast ${describeSpellFilter(condition)}: ${match[2] ?? ''}`,
         })),
       };
+    },
+  },
+  {
+    id: 'trigger-draws-card',
+    description: '"Whenever you / a player / an opponent draws a card, BODY"',
+    // The draw WATCHER, not the draw step. It fires on every draw — the turn's
+    // own, a spell's, another trigger's — which is what the printed line says,
+    // and it is a different card from "at the beginning of each player's draw
+    // step" (Spiteful Visions prints BOTH, one on each line).
+    //
+    // The body reads the drawing player through the same `triggering` vocabulary
+    // every other scoped trigger body uses, so "that player loses 1 life"
+    // compiles identically whether the trigger watched a draw, a step or a life
+    // gain.
+    pattern: /^whenever (you|a player|an opponent) draws a card, (.+)$/,
+    build(match, ctx) {
+      const printed = match[1] ?? '';
+      const who: TriggerWho = printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
+      return triggerFrom(
+        ctx,
+        { on: 'drawsCard', who },
+        match[2] ?? '',
+        `${printed} draws: ${match[2] ?? ''}`,
+      );
     },
   },
   {
@@ -2507,6 +3124,54 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // mana would be a cost we cannot ask for, so the line stays reported.
       const cost = parseManaSymbols(match[1]!);
       return cost === null ? null : { multikicker: cost };
+    },
+  },
+  {
+    id: 'additional-cast-cost',
+    description:
+      '"As an additional cost to cast this spell, sacrifice a creature / discard a card" (Village Rites, Thrill of Possibility, Diabolic Intent, Harrow)',
+    // A MANDATORY additional cost, and the difference from `kicker-cost` above is
+    // the whole reason it compiles to its own field: a kicker may be declined, so
+    // a caster who cannot pay it still casts the spell. This one cannot be
+    // declined — CR 601.2h makes an unpayable cost an ILLEGAL CAST — so the
+    // engine refuses to offer Village Rites with an empty board rather than
+    // printing a free two-card draw.
+    //
+    // The noun is read through a CLOSED table for the same reason every other
+    // filter word in this file is: "sacrifice a Clue" or "exile a card from your
+    // graveyard" must report, not compile into a cost that sacrifices the wrong
+    // thing (or nothing at all, which would be strictly better than printed).
+    // "Exile" and "pay N life" additional costs are outside the table on purpose:
+    // core's `AdditionalCastCost` performs a sacrifice or a discard, and a cost
+    // it cannot perform must never look implemented.
+    //
+    // The LABEL is the printed phrase itself, capitalized — not a sentence
+    // rebuilt from the parsed pieces. A rebuilt label drifts from the card ("a
+    // creature" becomes "creature"), and it is what the hotseat prompt and the
+    // log show the player, so it should read the way the card reads.
+    // The outer group is the printed phrase (the label); the inner ones are the
+    // verb, the count and the noun, so nothing has to be recovered by slicing
+    // the phrase back apart.
+    pattern: new RegExp(
+      `^as an additional cost to cast this spell, ((sacrifice|discard) (?:${COUNT_TOKEN} )?([a-z ]+?)s?)$`,
+    ),
+    build(match) {
+      const phrase = match[1] ?? '';
+      const kind = match[2] === 'discard' ? 'discard' : 'sacrifice';
+      const count = match[3] === undefined ? 1 : parseCount(match[3]);
+      if (count === null || count <= 0) return null;
+      const noun = (match[4] ?? '').trim();
+      const filter = kind === 'discard' ? discardCostFilterFor(noun) : sacrificeCostFilterFor(noun);
+      if (filter === null) return null;
+      const label = phrase.charAt(0).toUpperCase() + phrase.slice(1);
+      return {
+        additionalCost: {
+          kind,
+          ...(count === 1 ? {} : { count }),
+          ...(filter ? { filter } : {}),
+          label,
+        },
+      };
     },
   },
   {
@@ -2867,11 +3532,82 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"As ~ enters, choose a creature type / a color / a player / a basic land
+     * type"** (CR 614.1c) — the naming a permanent makes on the way in.
+     *
+     * The rule contributes only the DECLARATION
+     * (`CardDefinition.asEntersChoice`); who asks it is decided by what kind of
+     * permanent this is, and the assembly (`../compile.ts`) decides that once,
+     * in one place: a land is played, so core's land-play path asks; anything
+     * else resolves, so the `chooseAsEnters` primitive is prepended to the
+     * card's script. A rule that emitted the primitive itself would have to know
+     * the card's type line, and would get it wrong for the first card that is
+     * both.
+     */
+    id: 'as-enters-choose-value',
+    description:
+      '"As ~ enters, choose a creature type / a color / a player / a basic land type" — the CR 614.1c naming, remembered on the permanent',
+    pattern: new RegExp(`^as ~ enters, choose (${Object.keys(AS_ENTERS_SUBJECTS).join('|')})$`),
+    build(match) {
+      const subject = AS_ENTERS_SUBJECTS[match[1] ?? ''];
+      if (subject === undefined) return null;
+      return { asEntersChoice: { subject } };
+    },
+  },
+  {
+    /**
+     * The EXPLICIT-MENU form — Cloud Key's "As ~ enters, choose artifact,
+     * creature, enchantment, instant, or sorcery." Here the card, not the rules,
+     * decides what may be named, so the printed list is parsed into
+     * `AsEntersChoice.options` rather than derived from the subject.
+     *
+     * Kept separate from the rule above because its shape genuinely differs:
+     * there is no "a <noun>" to look up, and folding the two would mean one
+     * pattern with a dead alternation for every card.
+     */
+    id: 'as-enters-choose-from-list',
+    description: '"As ~ enters, choose artifact, creature, enchantment, instant, or sorcery" (Cloud Key)',
+    pattern: /^as ~ enters, choose ((?:[a-z]+, )+or [a-z]+)$/,
+    build(match) {
+      const words = (match[1] ?? '')
+        // ", or" is one separator, not a comma followed by the word "or" — the
+        // printed list is "artifact, creature, …, or sorcery".
+        .split(/,\s*(?:or\s+)?|\s+or\s+/)
+        .map((word) => word.trim())
+        .filter(Boolean);
+      // A closed table, like every other type-word read in this file: a word
+      // outside it would be a menu entry no reader could ever match.
+      if (words.length === 0 || !words.every((word) => CHOOSABLE_CARD_TYPES.includes(word))) return null;
+      return { asEntersChoice: { subject: 'cardType', options: words } };
+    },
+  },
+  {
+    /**
+     * **"~ is the chosen type in addition to its other types"** (Adaptive
+     * Automaton, Metallic Mimic, Roaming Throne) — the permanent joins the type
+     * it named, so the NEXT lord's "of the chosen type" filter can see it.
+     *
+     * Refused on a card that names nothing: a type-gaining line with no naming
+     * line would silently gain nothing, which is exactly the half-card this
+     * contract forbids.
+     */
+    id: 'is-the-chosen-type',
+    description: '"~ is the chosen type in addition to its other types"',
+    pattern: /^~ is the chosen type in addition to its other types$/,
+    build(_match, ctx) {
+      if (!namesAValueAsItEnters(ctx)) return null;
+      return { isChosenSubtype: true };
+    },
+  },
+  {
     id: 'static-buff-your-creatures',
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
     pattern: new RegExp(
-      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s ` +
+        `(you control|of the chosen type|of the chosen color)(?: of the chosen (type|color))? ` +
+        `(?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
     build(match, ctx) {
       // Only a PERMANENT can carry a static ability. An instant/sorcery printing
@@ -2882,9 +3618,24 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
-      const toughness = match[5] === undefined ? 0 : Number.parseInt(match[5], 10);
+      const power = match[6] === undefined ? 0 : Number.parseInt(match[6], 10);
+      const toughness = match[7] === undefined ? 0 : Number.parseInt(match[7], 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      // WHOSE creatures, and NARROWED BY THE NAMED VALUE. The two tails are one
+      // group because a printed anthem says exactly one of them first: "creatures
+      // you control of the chosen type" (Patchwork Banner) narrows a friendly
+      // anthem, while "creatures of the chosen color" (Gauntlet of Power) is
+      // SYMMETRIC — it pumps the opponent's team too, and reading it as friendly
+      // would be a strictly better card than the one printed.
+      const scopeWord = match[4] ?? '';
+      const narrowWord = match[5] ?? (scopeWord.startsWith('of the chosen ') ? scopeWord.slice('of the chosen '.length) : undefined);
+      const scope: 'you' | 'any' = scopeWord === 'you control' ? 'you' : 'any';
+      if (narrowWord !== undefined && narrowWord !== 'type' && narrowWord !== 'color') return null;
+      // A card can only read a value it also NAMES. Compiling "of the chosen
+      // type" on a card with no "As ~ enters, choose…" line would be an anthem
+      // over a value nothing ever writes — silently blank rather than wrong, and
+      // silently blank is the failure this contract exists to prevent.
+      if (narrowWord !== undefined && !namesAValueAsItEnters(ctx)) return null;
       // The printed NOUN decides the filter's type. "Permanent" maps to no type
       // entry at all, because an absent filter already matches every permanent -
       // inventing a 'permanent' type word would match nothing.
@@ -2897,7 +3648,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const colorWord = match[2]?.trim();
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
-      const keywordText = match[6] ?? match[7];
+      const keywordText = match[8] ?? match[9];
       const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
       // A keyword the engine does not model reports the whole line, never a
       // half-granted anthem.
@@ -2905,8 +3656,10 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const ability: StaticAbility = {
         affects: {
           ...(nounType === null ? {} : { anyOfTypes: [nounType] }),
-          controller: 'you',
+          controller: scope,
           ...(color ? { anyOfColors: [color as never] } : {}),
+          ...(narrowWord === 'type' ? { ofChosenSubtype: true } : {}),
+          ...(narrowWord === 'color' ? { ofChosenColor: true } : {}),
           // The printed word "other": the lord pumps the team, not itself.
           ...(match[1] ? { excludeSource: true } : {}),
         },
@@ -3607,6 +4360,29 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"{T}: Add one mana of the chosen color."** (Coldsteel Heart, Heraldic
+     * Banner, Temple of the Dragon Queen) — the colour is whatever THIS
+     * permanent named as it entered.
+     *
+     * Compiles to `ManaAbility.chosenColor`, which enumerates the five nameable
+     * colours as modes and lets the engine gate them per instance — the same
+     * shape `derivedColors` uses, so the mode index space stays a property of
+     * the definition rather than of the board.
+     *
+     * Refused on a card with no naming line, for the same reason the "of the
+     * chosen type" anthem is: a mana ability that can never produce anything is
+     * a blank, and a blank that reports `'complete'` is worse than a report.
+     */
+    id: 'mana-ability-chosen-color',
+    description: '"{T}: Add one mana of the chosen color."',
+    pattern: /^\{t\}: add one mana of the chosen color$/,
+    build(_match, ctx) {
+      if (!namesAValueAsItEnters(ctx)) return null;
+      return { manaAbilities: [{ chosenColor: true, label: 'Add one mana of the chosen color' }] };
+    },
+  },
+  {
     // COLOURS DERIVED FROM THE BOARD: Reflecting Pool, Exotic Orchard, Fellwar
     // Stone. The mode list is the five colours either way — which colours are
     // actually AVAILABLE is asked of the live board every time the ability is
@@ -3909,23 +4685,57 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'a COPY template the compiler does not recognize yet (as-enters copies are implemented — this selector or "except" clause is outside the closed tables, or the copy is applied by an activated ability rather than as the permanent enters)',
   },
   {
+    // NAMING a value as a permanent enters IS implemented now — the choice, the
+    // memory on the instance, and three readers (an anthem, a mana ability and a
+    // cast trigger, all narrowed by "of the chosen …"). So a line that mentions
+    // the named value and still lands here is a READER with no rule, and calling
+    // it "a you may / choose template" would name the wrong blocker entirely:
+    // the value IS stored and readable, and what is missing is the printed
+    // sentence that consumes it (a cost reduction, a copy effect, an extra
+    // trigger instance, a counter formula).
+    //
+    // Checked BEFORE the generic "you may / choose" hint below, which would
+    // otherwise swallow every one of these on the word "chosen".
+    pattern: /\bthe chosen (?:type|color|colour|player|number|name)\b/,
+    missingEngineSystem:
+      'a "the chosen …" READER the compiler does not recognize yet (the named value IS stored on the permanent; this printed line has no rule that reads it)',
+  },
+  {
     // The printed word "you may" IS implemented now, as the `mayEffects`
     // wrapper: "When ~ enters, you may BODY" and "At the beginning of your
     // <step>, you may BODY" compile to a real yes/no whose no is a complete
-    // outcome. So this hint no longer claims the system is missing — that would
-    // send the next agent to rebuild it. What still lands here is a TEMPLATE:
-    // an optional clause whose BODY has no rule (a blink, a copy, a
-    // sacrifice-then-if-you-do chain), or a "choose" that is not a yes/no.
+    // outcome — and so is "As ~ enters, choose a creature type / a color / a
+    // player / a basic land type", which compiles to a naming REMEMBERED on the
+    // permanent. So this hint no longer claims either system is missing; that
+    // would send the next agent to rebuild something that exists. What still
+    // lands here is a TEMPLATE: an optional clause whose BODY has no rule (a
+    // blink, a copy, a sacrifice-then-if-you-do chain), a naming this engine
+    // could store but no printed line can yet read ("choose a number between 1
+    // and 10"), a "choose" that is neither a yes/no nor a naming, or an
+    // ADDITIONAL COST offering a CHOICE of payments ("discard a card or pay 3
+    // life") — the mandatory single-payment forms compile (see the sacrifice
+    // hint below).
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
   {
-    // Searches to the BATTLEFIELD (basic lands, fetchland subtypes) and to HAND
-    // filtered by type, subtype, mana value, power or toughness all compile.
+    // THE TUTOR FAMILY IS CLOSED for every destination the primitive can reach.
+    // Searches to HAND, to the BATTLEFIELD (tapped or not) and to the GRAVEYARD
+    // compile, filtered by type, a type/subtype UNION ("an instant or sorcery
+    // card"), colour, mana value, power or toughness — as do the unrestricted
+    // tutor ("for a card"), a printed land-type list of any length (Farseek's
+    // four), the "basic X, Y, or Z" form, "up to N" counts, and the
+    // MULTI-DESTINATION route ("put one onto the battlefield tapped and the
+    // other into your hand").
+    //
     // What still lands here is a search whose restriction the shared
-    // `CardFilter` cannot say ("a card with the same mana value as this", "an
-    // artifact card with a mana ability"), a subtype outside the closed
-    // `SEARCHABLE_SUBTYPES` table, or a destination other than hand/battlefield.
+    // `CardFilter` cannot say ("a nonlegendary card", "an artifact card with a
+    // mana ability", "with mana value X or less" — X is a cast-time value no
+    // filter reads), a word outside the closed `SEARCHABLE_SUBTYPES` table, a
+    // union mixing a type with a subtype (the filter would AND them, so it could
+    // never find), a destination other than hand/battlefield/graveyard ("shuffle
+    // and put that card on top"), or a rider on the find ("then if you control
+    // four or more lands, untap that land").
     pattern: /\bsearch your library\b|\bsearch their library\b/,
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },
@@ -3983,10 +4793,19 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
   },
   {
-    // "Target player sacrifices a creature" (the edict shape) and "sacrifice ~"
-    // as an activation cost both compile now, so what lands here is some OTHER
-    // sacrifice shape: a sacrifice as an additional cast cost, "sacrifice
-    // another creature", "at the beginning of your upkeep, sacrifice ~", …
+    // Four sacrifice shapes compile now: the edict ("target player sacrifices a
+    // creature"), "Sacrifice ~" as an ACTIVATION cost, "Sacrifice a land" as a
+    // RESOLUTION effect, and the MANDATORY ADDITIONAL CAST COST ("As an
+    // additional cost to cast this spell, sacrifice a creature" — a cost that
+    // makes the cast illegal when it cannot be paid, CR 601.2h).
+    //
+    // So what lands here is some OTHER sacrifice shape: "sacrifice another
+    // creature" as a cost (nothing asks which OTHER permanent), an additional
+    // cost that is a choice between two payments ("sacrifice an artifact or
+    // discard a card") or an optional one ("you may sacrifice one or more"),
+    // "at the beginning of your upkeep, sacrifice ~", a sacrifice whose noun is
+    // outside the closed cost table, or a value derived from what was
+    // sacrificed (Fling's "damage equal to the sacrificed creature's power").
     pattern: /\bsacrifice\b/,
     missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
   },
@@ -3996,8 +4815,10 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // puts them on one creature or on a whole filtered group, a static can read
     // "with a +1/+1 counter on it", and the trigger vocabulary now covers ETB,
     // attacks, `permanentEnters`/`permanentDies` (with a controller scope, a
-    // `CardFilter` and the printed word "another"), life gain, combat damage to
-    // a player, begin-combat and the step-beginning triggers. What lands here
+    // `CardFilter` and the printed word "another"), life gain, a DRAW
+    // ("whenever a player draws a card"), combat damage to a player,
+    // begin-combat, and the step-beginning triggers in every printed scope with
+    // their intervening "if". What lands here
     // is a counters TEMPLATE with no rule — and, named so nobody re-builds
     // finished work: phasing, DOUBLING counters, proliferate
     // (needs a chooser over every permanent and player with a counter), counter
@@ -4196,6 +5017,27 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   {
     pattern: /\bdraws? (?:a|two|three|\d+) cards? and (?:you )?loses? \d+ life/,
     missingEngineSystem: 'a compound draw/lose template the compiler does not recognize yet',
+  },
+  {
+    // THE STEP-BEGINNING TRIGGER IS NOT A MISSING SYSTEM, and this hint says so
+    // because the previous wording sent readers to build one that exists.
+    //
+    // What ships: every printed scope — "your", "each player's", "each
+    // opponent's" and the bare "each" — over upkeep, draw step, first main
+    // phase, end step and combat; the optional "you may" form; the printed
+    // intervening "if" (CR 603.4, checked BOTH when the ability would trigger
+    // and again as it resolves); and the TRIGGERING PLAYER, which rides the
+    // stack object into the resolution so a body can say "that player".
+    //
+    // What lands here is therefore a BODY with no rule — not a trigger the
+    // engine cannot express. Named so nobody re-builds finished work, the bodies
+    // still missing in the corpus are: "you win/lose the game", blink (exile
+    // then return), token COPIES of a permanent, the city's blessing/ascend,
+    // amass, discover, the Ring, a delayed "at the beginning of your NEXT
+    // upkeep", and any count derived from a revealed card's mana value.
+    pattern: /^at the beginning of /,
+    missingEngineSystem:
+      'an "at the beginning of…" trigger BODY the compiler does not recognize yet (the trigger itself — every printed scope, the "you may" form, the intervening "if", and the triggering player a body points at — is implemented)',
   },
 ]);
 

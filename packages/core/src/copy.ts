@@ -176,6 +176,15 @@ export interface CopyAsEntersSpec {
  *
  * Case 1 is tested first because a copy that has since transformed is BOTH, and
  * the front face of the copied card is the right answer for it too.
+ *
+ * A SPLIT/ADVENTURE card needs no case of its own, and that is worth saying
+ * because it looks like it should. A split card is never a permanent, so an
+ * as-enters copy can never be pointed at one; and an ADVENTURER on the
+ * battlefield already carries its creature half in `def` (the cast path swapped
+ * it there and parked the CR 709.4 combined object in `printedDef`), which is
+ * exactly the set of characteristics CR 715.2 says such a permanent has. So
+ * `def` is the right answer for it by construction, and `isBackFace` is false
+ * on a primary half, which keeps it out of case 1.
  */
 export function copiableDefOf(inst: {
   readonly def: CardDefinition;
@@ -420,7 +429,12 @@ export function askCopyAsEnters(state: GameState, card: CardInstance, emit: (e: 
     { id: state.nextInstanceId++, sourceInstanceId: card.instanceId, sourceName: card.def.name },
   );
   if (!choice) return false;
-  state.pendingChoice = { ...choice, context: 'copyAsEnters' };
+  // `appliesToInstanceId` names the permanent the answer acts on, the same
+  // convention the CR 614.1c naming uses: the two are only accidentally equal
+  // today (the object asking IS the object becoming a copy), and an answer that
+  // acted on "whatever asked" would copy onto the wrong permanent the first time
+  // a source ever asks on another's behalf.
+  state.pendingChoice = { ...choice, context: 'copyAsEnters', appliesToInstanceId: card.instanceId };
   state.priorityPlayer = choice.chooser;
   state.consecutivePasses = 0;
   emit({

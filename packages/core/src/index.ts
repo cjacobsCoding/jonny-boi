@@ -50,6 +50,7 @@ export {
 // Card model seam
 export type {
   ActivatedAbility,
+  AdditionalCastCost,
   CyclingAbility,
   ActivationCost,
   EntersUntappedCondition,
@@ -68,10 +69,13 @@ export type {
   DerivedManaColors,
   ModalSpec,
   SpellMode,
+  AsEntersChoice,
+  ChoiceBearingPermanent,
 } from './card.js';
 export {
   hasType,
   hasSubtype,
+  permanentHasSubtype,
   isLand,
   isCreature,
   isPlaneswalker,
@@ -88,7 +92,9 @@ export {
   castTiming,
   canRevealForUntapped,
   entersTapped,
+  backFaceCastZonesOf,
   hasCastableBackFace,
+  isSplitCard,
   playableFaceOf,
 } from './card.js';
 
@@ -99,6 +105,23 @@ export {
  * so every consumer that already reads effective values gets statics for free.
  */
 export type { PermanentModification, StaticAbility, StaticAffects, StaticControllerScope } from './statics.js';
+
+/**
+ * "As ~ enters, choose a…" (CR 614.1c) — the value a permanent NAMES as it
+ * enters, remembered on the instance and read back by its own abilities and by
+ * other cards' filters. See `as-enters.ts` for why the memory, not the prompt,
+ * is the system.
+ */
+export {
+  CHOOSABLE_COLORS,
+  asEntersOptions,
+  asEntersPrompt,
+  chosenColorOf,
+  chosenPlayerOf,
+  chosenSubtypeOf,
+  describeChosenValue,
+  recordChosenAsEntered,
+} from './as-enters.js';
 
 // Derived values — the ONE evaluator behind "equal to the number of …" params
 // and characteristic-defining P/T, plus its closed count vocabulary.
@@ -181,6 +204,7 @@ export type { CardGrant, CardGrantRequest } from './card-grants.js';
 export {
   addCardGrant,
   expireCardGrants,
+  castPermissionFor,
   flashbackCostOf,
   hasCardGrants,
   pruneCardGrantsFor,
@@ -247,8 +271,19 @@ export type {
   TriggerWho,
   PendingTrigger,
   TriggerSource,
+  TriggerSubject,
 } from './triggers.js';
-export { conditionMatches, matchTriggers, orderPendingTriggers } from './triggers.js';
+export {
+  conditionMatches,
+  matchTriggers,
+  orderPendingTriggers,
+  triggeringPlayerFor,
+} from './triggers.js';
+
+// The printed intervening "if" (CR 603.4) — declared as trigger-condition DATA
+// and evaluated by one shared reader at both of the moments the rules check it.
+export type { InterveningIf } from './intervening.js';
+export { interveningIfHolds } from './intervening.js';
 
 // Continuous-effects seam (DESIGN §3.9): the ONE layering path. `indexContinuous`
 // aggregates both lifetimes — "until end of turn" P/T buffs / keyword grants AND the
@@ -343,6 +378,8 @@ export type {
   CardFilter,
   CardOption,
   ChoiceMode,
+  ChoiceValueOption,
+  ChosenValueSubject,
   ChoiceKind,
   ChoiceValence,
   ChoiceRequest,
@@ -353,6 +390,7 @@ export type {
   PayManaRequest,
   PayLifeRequest,
   ChooseNumberRequest,
+  ChooseValueRequest,
   SelectTargetsRequest,
   TargetOption,
   PendingChoice,
@@ -363,6 +401,7 @@ export type {
   PayManaChoice,
   PayLifeChoice,
   ChooseNumberChoice,
+  ChooseValueChoice,
   SelectTargetsChoice,
   ChoiceAnswer,
   SelectCardsAnswer,
@@ -372,6 +411,7 @@ export type {
   PayManaAnswer,
   PayLifeAnswer,
   ChooseNumberAnswer,
+  ChooseValueAnswer,
   SelectTargetsAnswer,
   AnswerValidation,
   ResolutionFrame,
@@ -392,6 +432,7 @@ export {
   cloneChoiceAnswer,
   MAX_CHOICES_PER_RESOLUTION,
   MAX_ENUMERATED_CHOICE_ANSWERS,
+  NOTHING_CHOSEN,
 } from './choices.js';
 
 // Mana payment planning — shared by the AI pilots and the hotseat/online auto-tap

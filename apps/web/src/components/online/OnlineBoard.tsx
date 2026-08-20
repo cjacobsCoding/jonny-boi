@@ -755,7 +755,9 @@ export function OnlineBoard({
         one choice UI, not two. It appears only for the seat the server addressed the
         choice to, which is also the only seat that was sent its candidates. Every
         kind routes here, including the CAST-TIME questions: an {'{X}'} cost arrives
-        as `chooseNumber`, kicker as `payMana`, a shockland's as `payLife`.
+        as `chooseNumber`, kicker as `payMana`, a shockland's as `payLife`, and the
+        naming a permanent makes as it enters ("choose a creature type") as
+        `chooseValue`.
       */}
       {ownChoice && (
         <ChoicePrompt

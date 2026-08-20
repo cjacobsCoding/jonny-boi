@@ -158,6 +158,11 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // recast creature is kicked (or not) by its own new cast, never by its last
   // one. Same shape-guard as `attachedTo`.
   if (inst.timesKicked !== undefined) delete inst.timesKicked;
+  // The value named AS this permanent entered (CR 614.1c) is a fact about THAT
+  // entry, and CR 400.7 makes the card a new object the moment it leaves — so a
+  // bounced-and-recast Adaptive Automaton names a type again rather than still
+  // lording over the one it named last time. Same shape-guard as `attachedTo`.
+  if (inst.chosenAsEntered !== undefined) delete inst.chosenAsEntered;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that

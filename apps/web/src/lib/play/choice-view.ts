@@ -58,6 +58,7 @@ const KIND_NOUNS: Readonly<Record<ChoiceKind, { one: string; many: string }>> = 
   payMana: { one: 'answer', many: 'answers' },
   payLife: { one: 'answer', many: 'answers' },
   chooseNumber: { one: 'value', many: 'values' },
+  chooseValue: { one: 'choice', many: 'choices' },
   selectTargets: { one: 'target', many: 'targets' },
 });
 
@@ -78,7 +79,7 @@ function isBinaryKind(kind: ChoiceKind): boolean {
  * copy, which is why this is a second predicate rather than a wider first one.
  */
 function isScalarKind(kind: ChoiceKind): boolean {
-  return isBinaryKind(kind) || kind === 'chooseNumber';
+  return isBinaryKind(kind) || kind === 'chooseNumber' || kind === 'chooseValue';
 }
 
 /** A readable zone name, degrading to the raw id for a zone we have no copy for. */
@@ -107,7 +108,8 @@ export type ChoiceDraft =
   | { readonly kind: 'confirm'; readonly yes: boolean | null }
   | { readonly kind: 'payMana'; readonly pay: boolean | null }
   | { readonly kind: 'payLife'; readonly pay: boolean | null }
-  | { readonly kind: 'chooseNumber'; readonly value: number | null };
+  | { readonly kind: 'chooseNumber'; readonly value: number | null }
+  | { readonly kind: 'chooseValue'; readonly value: string | null };
 
 /** The value one selectable option contributes to the draft. */
 export type ChoiceOptionValue = InstanceId | PlayerId | string;
@@ -129,6 +131,12 @@ export function emptyDraft(choice: PendingChoice): ChoiceDraft {
       return { kind: 'payLife', pay: null };
     case 'chooseNumber':
       return { kind: 'chooseNumber', value: null };
+    case 'chooseValue':
+      // `null` is UNDECIDED, and is deliberately not `NOTHING_CHOSEN`: naming
+      // nothing is a legal answer the engine accepts, so the two must stay
+      // distinguishable or the Confirm button would submit "nothing" the moment
+      // the prompt opened.
+      return { kind: 'chooseValue', value: null };
     default:
       return { kind: 'confirm', yes: null };
   }
@@ -236,6 +244,11 @@ export function setChooseNumber(draft: ChoiceDraft, value: number): ChoiceDraft 
   return draft.kind === 'chooseNumber' ? { kind: 'chooseNumber', value } : draft;
 }
 
+/** Name a value ("choose a creature type") — a no-op on any other kind. */
+export function setChosenValue(draft: ChoiceDraft, value: string): ChoiceDraft {
+  return draft.kind === 'chooseValue' ? { kind: 'chooseValue', value } : draft;
+}
+
 /** Clear every pick — the "choose none" path of a `may` selection. */
 export function clearDraft(choice: PendingChoice, draft: ChoiceDraft): ChoiceDraft {
   return isScalarKind(draft.kind) ? draft : emptyDraft(choice);
@@ -271,6 +284,8 @@ export function draftToAnswer(draft: ChoiceDraft): ChoiceAnswer | null {
       return draft.pay === null ? null : { kind: 'payLife', pay: draft.pay };
     case 'chooseNumber':
       return draft.value === null ? null : { kind: 'chooseNumber', value: draft.value };
+    case 'chooseValue':
+      return draft.value === null ? null : { kind: 'chooseValue', value: draft.value };
     default:
       return draft.yes === null ? null : { kind: 'confirm', yes: draft.yes };
   }
@@ -296,7 +311,13 @@ export function draftStatus(choice: PendingChoice, draft: ChoiceDraft): DraftSta
   if (!answer) {
     const paying = choice.kind === 'payMana' || choice.kind === 'payLife';
     const hint =
-      choice.kind === 'chooseNumber' ? NUMBER_UNDECIDED_HINT : paying ? PAY_UNDECIDED_HINT : CONFIRM_UNDECIDED_HINT;
+      choice.kind === 'chooseValue'
+        ? VALUE_UNDECIDED_HINT
+        : choice.kind === 'chooseNumber'
+          ? NUMBER_UNDECIDED_HINT
+          : paying
+            ? PAY_UNDECIDED_HINT
+            : CONFIRM_UNDECIDED_HINT;
     return { answer: null, canSubmit: false, hint };
   }
   const verdict: AnswerValidation = validateChoiceAnswer(choice, answer);
@@ -315,10 +336,20 @@ function readyHint(choice: PendingChoice, draft: ChoiceDraft): string {
   return picked === 0 ? 'Choosing nothing is allowed here.' : 'Ready to confirm.';
 }
 
+/** What each naming subject is called in the requirement line (UI copy only). */
+const VALUE_SUBJECT_NOUNS: Readonly<Record<string, string>> = Object.freeze({
+  color: 'color',
+  creatureType: 'creature type',
+  cardType: 'card type',
+  basicLandType: 'basic land type',
+  player: 'player',
+});
+
 /** The two undecided-draft hints, named so the copy is not buried in a branch. */
 const CONFIRM_UNDECIDED_HINT = 'Choose Yes or No.';
 const PAY_UNDECIDED_HINT = 'Choose whether to pay.';
 const NUMBER_UNDECIDED_HINT = 'Choose a value.';
+const VALUE_UNDECIDED_HINT = 'Name one.';
 
 function capitalize(text: string): string {
   return text.length === 0 ? text : text.charAt(0).toUpperCase() + text.slice(1);
@@ -360,6 +391,13 @@ function requirementText(choice: PendingChoice): string {
     return choice.min === choice.max
       ? `Only ${choice.min} can be chosen here.`
       : `Choose a value from ${choice.min} to ${choice.max} — every value shown is one you can pay for.`;
+  }
+  if (choice.kind === 'chooseValue') {
+    // The naming is permanent and PUBLIC — both halves matter to a human, and
+    // neither is obvious from the prompt, so the requirement line says them.
+    return choice.options.length === 0
+      ? 'There is nothing to name here.'
+      : `Name one ${VALUE_SUBJECT_NOUNS[choice.subject]}. It is announced to the table and stays on this permanent.`;
   }
   if (choice.kind === 'payLife') {
     return choice.affordable
