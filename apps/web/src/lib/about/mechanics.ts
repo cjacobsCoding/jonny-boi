@@ -17,7 +17,14 @@
  * bugs; a capabilities page that lies is the worst kind).
  */
 
-import { hasCastableBackFace, modalSpecOf, playableFaceOf } from '@jonny-boi/core';
+import {
+  backFaceCastZonesOf,
+  castPermissionFor,
+  hasCastableBackFace,
+  isSplitCard,
+  modalSpecOf,
+  playableFaceOf,
+} from '@jonny-boi/core';
 import {
   CARD_POOL,
   CHOICE_PRIMITIVES,
@@ -385,8 +392,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Modal double-faced cards',
         detail:
-          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield. Split and adventure cards still report — they are two halves of one object, not two faces.',
+          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield.',
         witness: { kind: 'engine', api: 'hasCastableBackFace' },
+      },
+      {
+        title: 'Split cards (Fire // Ice)',
+        detail:
+          'One card, two halves, either castable for its own cost. While it sits in a hand, graveyard or library it is NEITHER half: CR 709.4 gives it the combined name, the union of the type lines and a mana value equal to the sum of both — which is what a discard filter or a "mana value 3 or less" clause reads. Casting one puts THAT half on the stack, and the card reverts to the combined object on the way out.',
+        witness: { kind: 'engine', api: 'isSplitCard' },
+      },
+      {
+        title: 'Aftermath (Dusk // Dawn)',
+        detail:
+          'The second half of an aftermath card is castable ONLY from your graveyard (CR 702.127a), never from your hand, and it pays its own printed cost rather than a flashback cost it does not print. It is exiled after it resolves — the same one answer that exiles a flashback spell, so the two can never disagree.',
+        witness: { kind: 'engine', api: 'backFaceCastZonesOf' },
+      },
+      {
+        title: 'Adventures (Bonecrusher Giant // Stomp)',
+        detail:
+          'Cast the adventure half as an instant or sorcery and, when it RESOLVES, the card is exiled instead of being buried — with permission for its owner to cast the creature half from exile later (CR 715.3d). Countered, it goes to the graveyard like anything else and the creature is gone. The permission names one face, dies with the object if the card ever leaves exile (CR 400.7), and a Town // Adventure card whose primary half is a land is PLAYED from exile as your land drop.',
+        witness: { kind: 'engine', api: 'castPermissionFor' },
       },
       {
         title: 'Gaining control of a permanent',
@@ -408,7 +433,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Battles (Sieges)',
         detail:
-          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. ⚠️ Printed Sieges still import as unplayable: their reward is casting the back face, which needs the modal double-faced system.",
+          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. A defeated SIEGE is exiled rather than buried, and its controller may then cast its reward half from exile without paying its mana cost (CR 310.4).",
         witness: { kind: 'primitive', id: 'createEmblem' },
       },
       {
@@ -581,12 +606,18 @@ export function mechanicsSummary(): MechanicsSummary {
  * a deleted seam becomes a compile error here, not a silently-passing witness.
  */
 const CORE_ENGINE_API = {
-  /** A card declares a second, CASTABLE face (a modal DFC). */
+  /** A card declares a second, CASTABLE face (a modal DFC, a split half). */
   hasCastableBackFace,
   /** Which face a cast/play action names. */
   playableFaceOf,
   /** A card's printed modal header + modes. */
   modalSpecOf,
+  /** The definition is a SPLIT card's combined object, not a castable spell. */
+  isSplitCard,
+  /** Which zones a castable back half may be cast FROM (aftermath, a Siege). */
+  backFaceCastZonesOf,
+  /** Permission to cast a card out of exile (an adventure, a defeated Siege). */
+  castPermissionFor,
 } as const;
 
 /** A minimal real-shaped card wrapped around a witness's Oracle text. */

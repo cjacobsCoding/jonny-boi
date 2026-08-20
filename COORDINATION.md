@@ -116,6 +116,8 @@ throughput (games/sec) from regressing.
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
 | feat/step-trigger-templates | worker | packages/core (NEW intervening.ts + step-triggers.test.ts; triggers/state/choices/effects/events/engine/index + internal triggers-runtime & clone), packages/cards (compile/rules.ts, primitives, choice-primitives, effect-helpers, index + NEW compile/step-trigger-templates.test.ts + 2 flipped tests), packages/sim (paired-arms-config +1, observation +1), apps/web/src/lib/about/mechanics.ts (3 witnesses), DESIGN §3.21 | 🚧 PUSHED, not merged |
+| feat/split-cards | worker | packages/core (card.ts/card-grants.ts/actions.ts/state.ts/engine.ts + internal/sba.ts + index.ts + NEW split-cards.test.ts + 1 test literal in alternative-costs.test.ts), packages/cards (compile/compile.ts + compile/index.ts + index.ts + NEW compile/split-cards.test.ts + 3 stale test claims + 1 pool-mechanics reason), packages/data-tools (normalize.ts + types.ts - `layout` capture), packages/ai (heuristic.ts + NEW split-cards-pilot.test.ts), apps/web (lib/play/session.ts, components/play/PlayBoard.tsx, lib/about/mechanics.ts + NEW lib/play/split-cards-session.test.ts), DESIGN §3.21 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
+
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
@@ -216,6 +218,98 @@ _Append dated notes here; keep them short. Newest at top._
   `packages/sim/src/paired-arms-config.ts` + `observation.ts` (one classification each),
   `apps/web/src/lib/about/mechanics.ts` (three witnesses), DESIGN §3.21 + the §3.11 open list,
   COORDINATION.md.
+- 2026-08-20 worker: `feat/split-cards` 🚧 PUSHED — **the coverage audit's #1 and #2 gaps were one
+  system, and it is four printed layouts sharing one model.** A card may carry a second half that is
+  really cast, plus the list of ZONES that half may be cast from, plus — for the two halves you earn
+  rather than hold — a per-instance PERMISSION. Split (CR 709), aftermath (CR 702.127a), adventure
+  (CR 715) and the Siege reward (CR 310.4) are four configurations of exactly that. DESIGN §3.21 has
+  the table.
+
+  **Measured, cached 2100-card corpus, `--top 20`: 408 → 421 playable (19.4% → 20.0%).** Both headline
+  gaps are gone from the ranked backlog entirely; nothing that used to report them reports a SYSTEM
+  any more (the remaining split/adventure cards are blocked on ordinary rule-table templates, which
+  belong to whoever is working the template families).
+
+  ⚠️ **TWELVE OF THOSE THIRTEEN CARDS CAME FROM ONE MISSING FIELD, and it is worth knowing why.**
+  `normalizeCard` never captured Scryfall's **`layout`**. Without it `isModalDfc` — which reads the
+  layout and deliberately has NO keyword fallback — returned false for every modal DFC in a fetched
+  corpus, all 45 fell through to the `name.includes(' // ')` catch-all, and they reported the
+  castable-second-face gap they had already been given a system for. The layout is the only
+  unambiguous statement of what a two-faced record MEANS (a split card and a modal DFC both print two
+  faces with two costs), so it is captured verbatim and never derived. **If you are measuring
+  coverage against a corpus, check the normalizer is not dropping the field your detector reads.**
+
+  ⚠️ **THE ONE MODELLING CALL THAT WOULD HAVE BEEN SILENT IF WRONG.** A SPLIT card's own definition is
+  the CR 709.4 **combined object** — both names, the union of the type lines, the SUM of the two costs
+  — and its halves hang off it as `frontFace`/`backFace`. An ADVENTURER's definition is the CREATURE
+  (CR 715.2), with no `frontFace` at all. Every characteristic read in the engine goes through
+  `card.def`, so modelling a split card as its left half would have quietly mis-answered every discard
+  filter, cost reduction and "mana value 3 or less" clause in the game while looking perfectly fine in
+  a cast test. `playableFaceOf` now answers "which object am I casting?" for all three shapes, so the
+  cast path stayed one shape.
+
+  ✅ **NEW NAMES, and the existing ones I reused instead of inventing.** New on `CardDefinition`:
+  `frontFace`, `backFaceCastZones`, `backFaceFreeCast`, `adventure`. New on `CardGrant`: `castFace`,
+  `castFree`, read through **`castPermissionFor(state, card)`** — modelled on `flashbackCostOf`, one
+  accessor that both the offer loop and the accept path ask, so a hostile client cannot cast an exiled
+  card the menu would never have shown. `PlayLandAction` gained **`fromZone`**, the same field name
+  and the same values `CastSpellAction.fromZone` already had. I did NOT add a new event, a new
+  primitive, or a new state field: the permission is a **card grant**, so CR 400.7 (it dies with the
+  object) and the per-action clone both fall out of machinery that already exists.
+
+  ⚠️ **`spellLeaveDestination`'s `reason` argument earned itself again.** An adventure exiles its card
+  when it RESOLVES and not when it is COUNTERED (CR 715.3d) — a countered adventure is an ordinary
+  countered spell and the creature half is gone for good. That is the third exit-destination rule to
+  live in that one function. **A hand-built stack-object literal in `alternative-costs.test.ts` had
+  `card: {} as never`, which now throws** — it is a spell with no definition, and the function reads
+  the face on the stack. Given a real stand-in `def` instead.
+
+  ⚠️ **STATE-BASED ACTIONS DO NOT RUN ON A BARE PRIORITY PASS.** Cost me a debug: a battle put on the
+  battlefield at zero defense and then passed on does not die. They run after a RESOLUTION. If you are
+  testing an SBA, resolve something.
+
+  🚫 **REPORTED BY NAME, NOT APPROXIMATED — and both are in the corpus, so expect to see them:**
+  **FUSE** (`FUSE_GAP`, CR 702.102 — one spell that is BOTH halves, with a combined cost, two scripts
+  and per-half targets that must each still be legal on resolution; that is a second shape of spell,
+  not a flag on this one) and **ROOMS** (`ROOM_DOOR_GAP`, CR 714 — Scryfall files them under the
+  `split` layout and they share nothing else: a permanent whose second door unlocks on the battlefield
+  for its mana cost as a sorcery). **Four of the six split-layout cards in the corpus are Rooms**, so
+  whoever picks up CR 714 gets most of that family. `SECOND_CASTABLE_FACE_GAP` is REWORDED rather than
+  deleted: it now names the residual — a record carrying the combined `A // B` name with no per-face
+  data, or a layout with no cast path at all (meld, flip). Three tests that asserted "a split card
+  still reports" / "a REAL Siege stays reported" were reworded to that claim rather than deleted, so
+  the catch-all keeps its guard.
+
+  ⚠️ **THE ONLINE BOARD IS STILL FRONT-FACE-ONLY, DELIBERATELY, AND IT IS NOW A MISSING OPTION RATHER
+  THAN A WRONG ONE.** `lib/online/legal-actions.ts` withholds every `face: 'back'` offer because its
+  sets carry an instance id alone; for a split card that means the LEFT half is offered and the right
+  is not. I did not extend it — that board's keying is another branch's test-pinned surface. The
+  HOTSEAT board I did extend, to `instanceId:face`, because there the front-face-only behaviour would
+  have been actively wrong: one button showing the CR 709.4 combined cost that casts the left half for
+  a different price.
+
+  ⚠️ **NO POOL CARD COMPILES AS A SPLIT CARD YET, and that is a DATA fact, not an engine one.** The
+  committed `card-index.json` predates the `layout` capture (and, for Sieges, the printed-defense
+  capture), so these layouts are reachable today only by importing a decklist. **I deliberately did
+  not regenerate the index** — it is being regenerated on `feat/pool-expansion` and a second
+  concurrent regeneration is a guaranteed conflict on the largest generated file in the repo. Whoever
+  next re-fetches gets the modal DFCs, split cards and adventurers for free. `pool-mechanics.test.ts`'s
+  battle reason now says exactly this instead of "the back face is cast by a path the engine does not
+  have".
+
+  📊 **RULE 7 (wall clock here is worthless — six agents):** the gauntlet is **byte-identical** to the
+  branch point. `npm run sim -- gauntlet "Mono-Red Aggro" --games 40 --seed 99`, run against a
+  separate same-box `origin/main` worktree (1dd5b90) and against this branch, gives the SAME SEVEN
+  per-deck lines — 12/13/17/8/9/7/15 — for the same **81/280 = 28.9%**. Not "within noise": equal. The three new loops (an exile walk in
+  `generateLegalActions`, an exile walk in the land loop, an exile walk in the pilot) are each behind
+  **`hasCardGrants(state)`**, the same empty check every other card-grant reader starts with, so a
+  game that never exiles anything under permission walks no exile zone at all; and the pilot's
+  half-walk allocates NOTHING for a card with one half (`castableHalvesInHand` returns a one-element
+  literal and builds the synthetic instance only for a card that actually prints two halves).
+
+  GATE: full suite **3680 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0,
+  measured after merging `origin/main`.
+
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine
   systems had shipped with almost nothing in the pool printing them (no flashback, {X}, kicker, scry,

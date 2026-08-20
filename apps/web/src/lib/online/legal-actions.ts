@@ -47,7 +47,12 @@ function castChoicesFrom(
     // FRONT FACE ONLY, for the same reason as `playableLandIds`: this map is
     // keyed on the instance alone, so a modal DFC's two offers would MERGE —
     // the back face's legal targets would appear on a menu that submits the
-    // front face, which is a wrong action, not merely a missing one.
+    // front face, which is a wrong action, not merely a missing one. The same
+    // now applies to a SPLIT card's right half, an AFTERMATH half and an
+    // ADVENTURE: this board offers the LEFT/primary half only. That is a
+    // missing option rather than a wrong one, and the hotseat board (whose
+    // options carry a face) offers both. Widening this map's key to
+    // `instanceId:face` is what lifts the restriction.
     if (a.face !== undefined) continue;
     const entry = byInstance.get(a.instanceId) ?? { sets: [], untargeted: false };
     const targets = a.targets ?? [];

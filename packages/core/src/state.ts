@@ -357,8 +357,16 @@ export function spellLeaveDestination(
   reason: SpellLeaveReason,
 ): 'graveyard' | 'exile' | 'hand' {
   // Flashback first: exiling a card cast from the graveyard applies however it
-  // leaves the stack, so it outranks everything else here.
+  // leaves the stack, so it outranks everything else here. It is also what
+  // AFTERMATH (CR 702.127a) rides — its second half is cast only from the
+  // graveyard and is exiled after it resolves, which is the same sentence.
   if (spell.castFrom === 'graveyard') return 'exile';
+  // An ADVENTURE exiles its own card, but ONLY as it resolves (CR 715.3d): an
+  // adventure spell that is countered goes to the graveyard like anything else,
+  // and the creature half is then gone for good. Reading the face that is on
+  // the stack — a card is only ever an Adventure while its adventure half is
+  // being cast — is what keeps the creature half out of this branch.
+  if (reason === 'resolve' && spell.card.def.adventure === true) return 'exile';
   // Buyback returns the card to its owner's HAND — but only as it RESOLVES
   // (CR 702.27a). A bought-back spell that is countered goes to the graveyard
   // like any other countered spell; a caller that forgets the distinction

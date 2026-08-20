@@ -81,6 +81,10 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
     rarity: raw.rarity ?? '',
     imageUris: resolveImageUris(raw),
     localImages: {},
+    // Verbatim, never derived: the layout is what tells the compiler whether a
+    // two-faced record is a transforming DFC, a modal DFC, a split card or an
+    // adventure, and those four play by four different rules.
+    ...(typeof raw.layout === 'string' && raw.layout.length > 0 ? { layout: raw.layout } : {}),
     isDoubleFaced,
     faces,
   };

@@ -96,13 +96,14 @@ describe('battles', () => {
     expect(result.missing.some((m) => m.text === 'defense')).toBe(true);
   });
 
-  it('a REAL Siege stays reported, naming the castable-second-face system', () => {
-    // ⚠️ THE POINT OF THIS WHOLE FILE. Every printed battle is a Siege whose
-    // reward is casting its back face, and that system belongs to another
-    // branch. The battle OBJECT is complete — defense counters, attacking,
-    // damage, defeat — but the CARD is not, and the compiler says exactly which
-    // system is missing rather than shipping a Siege that silently pays no
-    // reward when its last counter comes off.
+  it('a Siege record with NO per-face data still reports — there is no reward to compile', () => {
+    // The Siege's reward (exile it, then you may cast the back face free from
+    // exile) SHIPPED — `compile/split-cards.test.ts` pins a real two-faced Siege
+    // compiling complete, and `core/split-cards.test.ts` plays it. What is left
+    // under this gap is the residual it now names: a record carrying only the
+    // combined `A // B` name, with nothing to compile the reward half FROM. A
+    // Siege built from that would silently pay no reward when its last counter
+    // came off, so it reports instead.
     const result = compileCard(
       card({
         id: 'battle-real',

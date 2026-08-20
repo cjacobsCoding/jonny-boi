@@ -1289,8 +1289,8 @@ Still open, roughly by how often they block a real decklist:
   what remains is *suspend*, *spectacle*, *evoke*, an **{X} in a cycling cost** (Shark Typhoon: an
   activation cost has no answer-and-charge step the way a casting cost does) and a **madness cost
   printed in words** ("Madness—Pay six {C}"). *Phyrexian costs*,
-  *split / adventure* (two castable halves on ONE object — modal DFCs landed in §3.16, but those
-  are two FACES, which is a different shape),
+  *fuse* (CR 702.102 — **split, aftermath, adventure and the Siege reward all landed in §3.21**;
+  what is left of that family is casting BOTH halves as one spell, and the Room/door system CR 714),
   *flashback riders that are not mana or life* ("Flashback—{1}{U}, Discard a card" — the cast
   pipeline can charge mana and life, and nothing else, so a discard or sacrifice rider reports),
   *P/T formulas outside the closed count vocabulary* (a star box counting something the
@@ -1893,6 +1893,78 @@ a created token has no COLOUR.** `makeToken` builds a `CardDefinition` with no c
 or a protection-from-red. It predates this branch (every token card in the pool has it) and closing it
 needs a `colors` field on `CardDefinition` plus the colour reader honouring it — a small system, and
 one that belongs to whoever owns `makeToken`, not to a trigger branch.
+### 3.21 The second castable half — split, aftermath, adventure and the Siege reward — ✅ done
+The coverage audit's #1 and #2 gaps were one system: *casting the second half of a split, adventure or
+Siege card* (60 card-blocks) and *the "//" card type* (38). Four printed layouts, four different cast
+paths, and — as it turned out — one model.
+
+**A card may carry a second half that is really cast, plus the list of ZONES that half may be cast
+from, plus (for the two halves you earn rather than hold) a per-instance PERMISSION.** That is the
+whole design, and each layout is one configuration of it:
+
+| layout | the card's own definition | second half | cast from | pays |
+|---|---|---|---|---|
+| modal DFC (§3.16) | the front face | `backFace` | hand | its own cost |
+| **split** (CR 709) | the **combined object** (`frontFace` present) | `backFace` | hand | its own cost |
+| **aftermath** (CR 702.127a) | the combined object | `backFace` | **graveyard only** | its own cost |
+| **adventure** (CR 715) | the **creature** | `backFace` (`adventure: true`) | hand → then the creature from **exile** | its own cost |
+| **Siege** (CR 310.4) | the battle | `backFace` | **exile**, once defeated | **nothing** |
+
+**The one judgement worth reading twice: a SPLIT card's own definition is the CR 709.4 COMBINED
+object, and an ADVENTURER's is not.** A split card in a hand, graveyard or library is *neither half* —
+it has both names, the union of the type lines, and a mana value equal to the sum — while an
+adventurer card in every zone but the stack is *just the creature* (CR 715.2). Every characteristic
+read in the engine goes through `card.def`, so modelling a split card as its left half would have
+silently mis-answered every discard filter, cost reduction and "mana value 3 or less" clause. Making
+the combined object the definition, with the halves hanging off it as `frontFace`/`backFace`, makes
+all of that correct with no reader changed: `playableFaceOf` answers "which object am I casting?" for
+a split card, a modal DFC and an ordinary spell alike, so the cast path has one shape.
+
+**The permission is a card GRANT, not a new field.** "You may cast the creature later from exile" and
+"exile it, then you may cast it transformed" are the same sentence with different nouns, and both need
+exactly what `card-grants.ts` already provides: a record attached to one instance in one zone that is
+pruned the moment the card moves. CR 400.7 — the permission dies with the object — therefore falls
+out for free, and so does the clone (`cloneCardGrant` spreads, and `split-cards.test.ts` pins it).
+
+**Aftermath needed almost nothing, because the exit was already right.** `castFrom: 'graveyard'` makes
+a spell exile itself however it leaves the stack — written for flashback (CR 702.34a), and word for
+word what aftermath's "then exile it" asks for. The only new thing is the zone list, and the one
+deliberate exception in the cast path: a graveyard-legal BACK half pays its own printed cost rather
+than a flashback cost it does not print.
+
+**An adventure exiles on RESOLVE and not on COUNTER**, which is exactly the distinction
+`spellLeaveDestination(spell, reason)` exists to force a caller to state. A countered adventure goes
+to the graveyard like any other countered spell and the creature half is gone for good.
+
+**A `playLand` may now name a source zone**, for the one land play that does not come from a hand:
+a Town // Adventure card waiting in exile under its own permission.
+
+**Both seats play it.** The heuristic pilot walks the castable HALVES of every card in hand (a shallow
+synthetic instance whose `def` IS the half, so the scorer, the target-legality check and the mana
+planner all see the right cost with no second code path), plus an aftermath offer in the graveyard
+loop and an exile loop for permission casts — without which the pilot would cast Stomp and never take
+the Giant, which is strictly worse than not owning the card. The hotseat board returns one cast option
+per half, each labelled with that half's own name and cost and keyed `instanceId:face`, because the
+failure it replaces was not a missing button but a WRONG one: a single button showing the combined
+cost that cast the left half for a different price.
+
+**Reported, never approximated, each with its own named gap:** **FUSE** (CR 702.102 — one spell that
+is both halves at once, with a combined cost, two scripts and per-half targets: a second shape of
+spell, not a flag on this one) and **ROOMS** (CR 714 — Scryfall files them under the `split` layout and
+they share nothing else: a permanent whose second door is unlocked on the battlefield). Four of the
+six split-layout cards in the 2100-card corpus are Rooms. `SECOND_CASTABLE_FACE_GAP` is reworded to
+the residual it now names: a record carrying the combined `A // B` name with no per-face data to
+compile from, or a layout with no cast path at all (meld, flip).
+
+**Measured on the cached 2100-card corpus: 408 → 421 playable (19.4% → 20.0%).** Twelve of the
+thirteen come from a single missing FIELD: `normalizeCard` dropped Scryfall's `layout`, so every modal
+DFC in a fetched corpus fell through the compiler's face detection and reported this very gap. The
+layout is the only unambiguous statement of what a two-faced record means — a split card and a modal
+DFC both print two faces with two costs — and the compiler refuses to guess it from the name.
+
+⚠️ **The committed card index predates the `layout` field, so no pool card compiles as a split card
+yet.** The fetch pipeline captures it from now on; a re-fetch of the index is what puts these layouts
+in front of a player who has not imported a decklist, and that file belongs to the pool branch.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
