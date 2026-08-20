@@ -542,7 +542,7 @@ export interface CardDefinition {
    *
    * Paying it is a real sacrifice/discard performed by the engine as the answer
    * is accepted, through the same zone-change funnel every other one uses —
-   * which is what makes "whenever you sacrifice a permanent" and the madness
+   * which is what makes a dies/leaves-the-battlefield trigger and the madness
    * discard replacement see it, because in the rules they genuinely do.
    */
   readonly additionalCost?: AdditionalCastCost;
@@ -780,13 +780,6 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
 }
 
 /**
- * What activating an ability costs. Every field is optional and they combine —
- * a fetchland pays all three of tap, life, and sacrifice.
- *
- * Costs are PAID ON ACTIVATION, before the ability goes on the stack, and are
- * not refunded if the ability is later countered or fizzles (rule 602.2).
- */
-/**
  * A mandatory additional cost printed on a spell — see
  * {@link CardDefinition.additionalCost}.
  *
@@ -813,6 +806,13 @@ export interface AdditionalCastCost {
   readonly label: string;
 }
 
+/**
+ * What activating an ability costs. Every field is optional and they combine —
+ * a fetchland pays all three of tap, life, and sacrifice.
+ *
+ * Costs are PAID ON ACTIVATION, before the ability goes on the stack, and are
+ * not refunded if the ability is later countered or fizzles (rule 602.2).
+ */
 export interface ActivationCost {
   /** Mana component, paid from the controller's floating pool. */
   readonly mana?: ManaCost;
