@@ -115,9 +115,86 @@ throughput (games/sec) from regressing.
 | feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
+| feat/as-enters-choices | worker | packages/core (NEW as-enters.ts + as-enters.test.ts; card/choices/state/statics/triggers/effects/events/engine/index, internal clone+zones+triggers-runtime), packages/cards (choice-primitives `chooseAsEnters`, compile rules/compile/types + NEW as-enters-cards.test.ts), packages/ai (choices.ts + NEW as-enters-pilot.test.ts), packages/sim (observation +1, paired-arms +1), apps/web (play/choice-view + ChoicePrompt + styles.css + play-format + replay-format + about/mechanics + 2 tests), DESIGN §3.21, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `feat/as-enters-choices` 🚧 PUSHED — **"As ~ enters, choose a creature type"
+  (CR 614.1c): the naming is asked at the printed moment and REMEMBERED on the permanent, and four
+  different printed lines can now read it back.** DESIGN §3.21 has the full write-up.
+
+  **Measured offline, PAIRED against the same cached corpus on the `origin/main` this branched from:
+  408 → 414 / 2100 playable (19.4% → 19.7%).** Newly complete: Adaptive Automaton, Patchwork Banner,
+  Heraldic Banner, Coldsteel Heart, Vanquisher's Banner, Chronicle of Victory. The 24-game self-play
+  behaviour lock is **byte-identical** (same winner, turns, actions, event-log hash and final-state
+  hash on every seed), and allocation is parity: scavenge probe, 40 seeded games, 29,899 actions
+  either way, branch **561 / 560** vs main **561 / 561** on paired runs.
+
+  ⚠️ **THE PROMPT IS THE EASY HALF, AND FOUR THINGS ARE EASY TO GET WRONG HERE.**
+  1. **A chosen value nothing can READ is a half-card.** The naming ships with four readers:
+     `StaticAffects.ofChosenSubtype`/`ofChosenColor` (an anthem), `CardDefinition.isChosenSubtype`
+     (the permanent joins the type it named), `ManaAbility.chosenColor` (a mana ability), and
+     `TriggerCondition.spellSubtypeIsChosen` (a cast trigger). **Every one of them is REFUSED at
+     compile time on a card with no naming line** — an anthem over a value nothing writes would
+     report `'complete'` and then do nothing, which is the exact failure the contract exists to stop.
+  2. **The unasked default is "nothing named", and nothing named MATCHES NOTHING.** Reanimation, a
+     token, another card's "put it onto the battlefield" and a hand-built test instance all record no
+     value, and every reader treats absent as the EMPTY SET rather than as "no filter". A reanimated
+     Adaptive Automaton is an anthem over nobody, never over the whole board. `defaultAnswerFor`
+     therefore names NOTHING rather than the first option — an arbitrary pick dressed as a default
+     would hand the degraded path a working creature type.
+  3. **A LAND CAN OWE TWO QUESTIONS AND ONLY ONE CHOICE CAN BE PARKED.** Multiversal Passage names a
+     basic land type and *then* offers to pay 2 life; Temple of the Dragon Queen offers a reveal and
+     names a colour. `raiseLandEntryChoice` is a STEP function — asks the first unanswered question,
+     called again from the answer handler — rather than three independent branches, which is how the
+     second one gets silently dropped. **If you add a third entry question to a land, add it there.**
+  4. **DO NOT widen the `spellCast` EVENT to carry subtypes.** I did, briefly, so a cast trigger
+     could read "of the chosen type" — and it broke `selfplay-lock.test.ts` on all 24 seeds while the
+     winner, turn count, action count and FINAL STATE hashes were identical, because the event log is
+     hashed byte for byte. The spell object already carries its subtypes; it is resolved through the
+     existing `TriggerSubject` seam (`resolveSubject` now also searches the stack) and the golden
+     table did not have to move.
+
+  🧠 **THE PILOT NAMES DELIBERATELY, AND THAT IS THE DIFFERENCE BETWEEN A CARD AND NOISE.** A pilot
+  naming at random still plays legal Magic — it just plays a Cavern of Souls that taps for nothing,
+  and **the lab then reports "no measurable difference" about a card that is a lord.**
+  `answerChooseValue` names the type on the most of the chooser's OWN cards (the deck's tribe), the
+  colour their own cards demand most counted in coloured PIPS (one triple-black bomb outweighs two
+  cantrips), and the OPPONENT for a player naming. It reads only the chooser's own zones — a player
+  knows their decklist — and is deterministic, ties breaking on core's fixed option order.
+
+  📌 **ENFORCED TABLES, both deliberate rather than convenient.** `OBSERVATION_POLICY` marks the new
+  `chosenAsEnters` event **public**: a choice ANSWER is private to its chooser (hence the three
+  redacted choice events), but a value named as a permanent enters is announced at the table and stays
+  legible on the card. The option LIST — whose length is a weak read on the chooser's decklist — never
+  leaves the choice, whose `choiceAsked` observation is already redacted to a count.
+  `paired-arms-config.ts` classifies `chooseAsEnters` as **library-reading**, conservatively: it moves
+  and reveals nothing, but its creature-type menu is built from the chooser's library, so a swapped
+  card can change what is on offer and therefore what gets named.
+
+  📌 **THE HINTS MOVED.** A printed line that mentions the named value and still fails now reports
+  `a "the chosen …" READER the compiler does not recognize yet (the named value IS stored on the
+  permanent; this printed line has no rule that reads it)` instead of "a you may / choose template",
+  which named the wrong blocker entirely. Anyone re-running the coverage audit will see the you-may
+  family shrink and a new reader family appear — that is the fix, not a regression.
+
+  ⛔ **DEFERRED, with named blockers** (all reported by clause, none approximated): the **spend
+  restriction** on produced mana (Cavern of Souls — unchanged, still the mana-pool system), **cost
+  reduction by the named type** (Urza's Incubator, Morophon, Cloud Key — the cast-cost branch),
+  **counter formulas** over the named type (Door of Destinies, Banner of Kinship), a **replacement
+  effect on other permanents entering** (Metallic Mimic), **copying a spell** (Reflections of
+  Littjara), an **extra instance of a triggered ability** (Roaming Throne), an **additional mana when
+  a land is tapped** (Caged Sun, Gauntlet of Power, Utopia Sprawl), **"choose a NUMBER between 1 and
+  10"** (Talion — deliberately left out of the closed subject table, because a naming no printed line
+  can read is the half-card this contract forbids), **fear** (Cover of Darkness), and Multiversal
+  Passage's **"this land is the chosen type"**.
+
+  ⚠️ **ONE NAME PER CONCEPT, for the five siblings inventing vocabulary right now:** the instance
+  field is `CardInstance.chosenAsEntered`, the declaration is `CardDefinition.asEntersChoice`, the
+  choice kind is `chooseValue`, the primitive is `chooseAsEnters`, the event is `chosenAsEnters`, and
+  the "nothing named" sentinel is `NOTHING_CHOSEN` (the empty string). If you need any of those,
+  reuse them rather than coining a second spelling.
 
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine

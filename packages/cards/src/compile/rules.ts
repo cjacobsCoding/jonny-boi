@@ -3829,13 +3829,33 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a modal template the compiler does not recognize yet',
   },
   {
+    // NAMING a value as a permanent enters IS implemented now — the choice, the
+    // memory on the instance, and three readers (an anthem, a mana ability and a
+    // cast trigger, all narrowed by "of the chosen …"). So a line that mentions
+    // the named value and still lands here is a READER with no rule, and calling
+    // it "a you may / choose template" would name the wrong blocker entirely:
+    // the value IS stored and readable, and what is missing is the printed
+    // sentence that consumes it (a cost reduction, a copy effect, an extra
+    // trigger instance, a counter formula).
+    //
+    // Checked BEFORE the generic "you may / choose" hint below, which would
+    // otherwise swallow every one of these on the word "chosen".
+    pattern: /\bthe chosen (?:type|color|colour|player|number|name)\b/,
+    missingEngineSystem:
+      'a "the chosen …" READER the compiler does not recognize yet (the named value IS stored on the permanent; this printed line has no rule that reads it)',
+  },
+  {
     // The printed word "you may" IS implemented now, as the `mayEffects`
     // wrapper: "When ~ enters, you may BODY" and "At the beginning of your
     // <step>, you may BODY" compile to a real yes/no whose no is a complete
-    // outcome. So this hint no longer claims the system is missing — that would
-    // send the next agent to rebuild it. What still lands here is a TEMPLATE:
-    // an optional clause whose BODY has no rule (a blink, a copy, a
-    // sacrifice-then-if-you-do chain), or a "choose" that is not a yes/no.
+    // outcome — and so is "As ~ enters, choose a creature type / a color / a
+    // player / a basic land type", which compiles to a naming REMEMBERED on the
+    // permanent. So this hint no longer claims either system is missing; that
+    // would send the next agent to rebuild something that exists. What still
+    // lands here is a TEMPLATE: an optional clause whose BODY has no rule (a
+    // blink, a copy, a sacrifice-then-if-you-do chain), a naming this engine
+    // could store but no printed line can yet read ("choose a number between 1
+    // and 10"), or a "choose" that is neither a yes/no nor a naming.
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
