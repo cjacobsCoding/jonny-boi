@@ -514,6 +514,22 @@ export {
  * with `applyActionInPlace`: a look-ahead pilot clones once, then mutates freely.
  */
 export { cloneState } from './internal/clone.js';
+/**
+ * Reset the transient, battlefield-only state on an instance that has just
+ * CHANGED ZONES (CR 400.7 - it is a new object now): tapped, marked damage,
+ * summoning sickness, counters, what it was attached to, whether its loyalty
+ * ability has been used this turn, how many times its spell was kicked, the
+ * value it named as it entered, and which face is up.
+ *
+ * Exported because there are TWO funnels that move a permanent off the
+ * battlefield - core's own `moveToZone` and the cards package's
+ * `movePermanentTo` - and a hand-copied second list DID drift: it cleared five
+ * of the eight fields, so a bounced Aura came back still pointing at its old
+ * host, a bounced planeswalker could not re-activate, and a bounced
+ * "as ~ enters, choose a type" lord still lorded over the type it named last
+ * time. One function, one answer.
+ */
+export { resetInstanceForNewZone } from './internal/zones.js';
 
 // Stat helpers (combat/SBA-facing; AI heuristics will want these). The effective
 // accessors take an optional AggregatedMod so callers can layer continuous effects
