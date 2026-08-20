@@ -17,6 +17,9 @@
 
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
+import type { LandPlayZone } from './actions.js';
+import type { CardFilter } from './choices.js';
+import { matchesCardFilter } from './choices.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
 export type CardType =
@@ -315,6 +318,55 @@ export interface CardDefinition {
    * rule has one implementation rather than a walker-only special case.
    */
   readonly legendary?: boolean;
+  /**
+   * **Changeling** (CR 702.73a) — "this card is every creature type." A
+   * characteristic-defining ability that applies in every zone, which is exactly
+   * why it is a flag on the DEFINITION and not a static ability or a continuous
+   * effect: a Universal Automaton in a graveyard, in a library or on the stack is
+   * a Goblin there too, and a battlefield-only mechanism would answer wrongly for
+   * every typal search, every "sacrifice a Zombie" cost and every graveyard
+   * count.
+   *
+   * It is honoured by {@link hasSubtype}, the one funnel every subtype question
+   * in the engine goes through, so no consumer has to know the keyword exists.
+   */
+  readonly changeling?: boolean;
+  /**
+   * **"This spell can't be countered."** A property of the CARD (Supreme Verdict,
+   * Abrupt Decay, Dovin's Veto), so it lives on the definition rather than on the
+   * stack object.
+   *
+   * It is not a targeting restriction and must not be implemented as one: an
+   * uncounterable spell is a perfectly legal target for Counterspell, which then
+   * resolves and does nothing (CR 701.5a — "counter" is the effect that fails, not
+   * the targeting). The rule is enforced at the single point where a spell is
+   * actually removed from the stack, so every counter path — the plain
+   * counterspell, "unless its controller pays", a modal counter mode and the ward
+   * trigger — inherits it without a second implementation to keep in step.
+   */
+  readonly cantBeCountered?: boolean;
+  /**
+   * **"You have no maximum hand size."** Reliquary Tower, Spellbook, Venser's
+   * Journal — a static ability of a permanent its controller controls, read by
+   * the cleanup step's discard (CR 514.1).
+   *
+   * A boolean rather than a number because every printing of the effect on this
+   * side removes the limit entirely; a card that RAISES the limit by N would be a
+   * different field, and one that lowers an opponent's (Jin-Gitaxias) is a
+   * different effect again — neither is approximated by this flag.
+   */
+  readonly noMaximumHandSize?: boolean;
+  /**
+   * **"You may play lands from your graveyard."** Crucible of Worlds, Ramunap
+   * Excavator, Conduit of Worlds — a static ability of a permanent that widens
+   * where its controller's land plays may come from.
+   *
+   * A list of zones rather than a boolean so "from the top of your library"
+   * (Courser of Kruphix, Oracle of Mul Daya) is the same field with a different
+   * value, instead of a second flag that the land-play path would have to ask
+   * about separately.
+   */
+  readonly playLandsFrom?: readonly LandPlayZone[];
   /**
    * Marks this definition as an EMBLEM (CR 114) — the object a planeswalker
    * ultimate leaves behind. An emblem is not a card and not a permanent: it has
@@ -834,12 +886,61 @@ export interface CyclingAbility {
 const SUBTYPE_SET_MEMO = new WeakMap<CardDefinition, ReadonlySet<string>>();
 
 /**
+ * The subtypes that are **not** creature types, so {@link CardDefinition.changeling}
+ * ("this card is every creature type", CR 702.73a) cannot claim them.
+ *
+ * Changeling is expressed as an EXCLUSION list rather than as the ~280-entry
+ * creature-type list, and only this direction stays correct as Magic prints new
+ * words: every set adds creature types, and a new one would be silently missing
+ * from an inclusion list — a changeling that stops being a Cephalid the day
+ * Cephalids matter. The non-creature subtype vocabulary (land / artifact /
+ * enchantment / spell types) is the half that is genuinely closed.
+ *
+ * Planeswalker types are deliberately absent: they are only ever asked about
+ * alongside the planeswalker CARD TYPE, and {@link hasSubtype} already gates the
+ * changeling answer on the card being a creature.
+ *
+ * Lower-cased, because {@link hasSubtype} folds both sides.
+ */
+const NON_CREATURE_SUBTYPES: ReadonlySet<string> = new Set([
+  // Land types (basic and nonbasic).
+  'plains', 'island', 'swamp', 'mountain', 'forest', 'wastes',
+  'desert', 'gate', 'lair', 'locus', 'mine', 'power-plant', 'sphere', 'tower',
+  "urza's", 'cave',
+  // Artifact types.
+  'equipment', 'fortification', 'vehicle', 'contraption', 'clue', 'food',
+  'treasure', 'gold', 'blood', 'powerstone', 'map', 'junk', 'incubator',
+  'bobblehead', 'attraction',
+  // Enchantment types.
+  'aura', 'cartouche', 'case', 'class', 'curse', 'rune', 'saga', 'shard',
+  'shrine', 'background', 'role',
+  // Spell types.
+  'adventure', 'arcane', 'chorus', 'lesson', 'omen', 'trap',
+]);
+
+/**
  * Whether a definition has a printed subtype, compared case-insensitively.
  *
  * A card with no subtypes answers `false` without touching the memo, so the common
  * board pays a single property check.
+ *
+ * CHANGELING (CR 702.73a) is answered here and nowhere else, because this is the
+ * single funnel every subtype question in the engine already goes through — the
+ * shared `CardFilter` (`choices.ts`), every static's `anyOfSubtypes` /
+ * `noneOfSubtypes`, fetchland searches, and the enters-tapped `controlsSubtype`
+ * condition. A card that "is every creature type" therefore becomes one for lords,
+ * for typal searches and for "non-Goblin" exclusions alike, with no consumer
+ * having to learn the keyword exists.
  */
 export function hasSubtype(def: CardDefinition, subtype: string): boolean {
+  const folded = subtype.toLowerCase();
+  // Changeling is asked BEFORE the printed list, because the whole point of the
+  // keyword is that the printed list is not the answer. It is gated on the card
+  // actually being a creature: the keyword grants creature types, and an artifact
+  // creature with changeling is still not an Equipment.
+  if (def.changeling === true && def.types.includes('creature') && !NON_CREATURE_SUBTYPES.has(folded)) {
+    return true;
+  }
   const printed = def.subtypes;
   if (!printed || printed.length === 0) return false;
   let set = SUBTYPE_SET_MEMO.get(def);
@@ -847,7 +948,7 @@ export function hasSubtype(def: CardDefinition, subtype: string): boolean {
     set = new Set(printed.map((s) => s.toLowerCase()));
     SUBTYPE_SET_MEMO.set(def, set);
   }
-  return set.has(subtype.toLowerCase());
+  return set.has(folded);
 }
 
 /** Convenience predicates over a definition's type line. */
@@ -1303,6 +1404,28 @@ export interface EntersUntappedCondition {
    * SUBTYPES as two basics and would otherwise be counted as one.
    */
   readonly minBasicLands?: number;
+  /**
+   * "unless you control **a legendary creature**" (Minas Tirith, Rivendell,
+   * Barad-dûr), "unless you control **a basic land**" (Ba Sing Se), "unless you
+   * control **three or more other Swamps**" (Witch's Cottage) — the GENERAL form
+   * of which the three fields above are fixed printings.
+   *
+   * Satisfied when the controller's OTHER permanents matching `filter` number at
+   * least `minimum` (default 1). It reuses the shared {@link CardFilter} rather
+   * than growing a fourth bespoke count, so a new wording of the same rule is a
+   * data edit; the older fields stay because live card data already uses them and
+   * a silent re-encoding is exactly the kind of change that flips a land's
+   * behaviour without a test noticing.
+   *
+   * Like every other condition here it counts only permanents the controller
+   * controls, and never the entering land itself (the `self` exclusion in
+   * {@link EntersTappedContext}) — which is what makes "three or more OTHER
+   * Swamps" the plain reading rather than an off-by-one.
+   */
+  readonly controlsMatching?: {
+    readonly filter: CardFilter;
+    readonly minimum?: number;
+  };
 }
 
 /**
@@ -1398,10 +1521,24 @@ function conditionMet(
 
   if (condition.controlsSubtype !== undefined) {
     const wanted = condition.controlsSubtype;
-    const has = others.some((permanent) =>
-      (permanent.def.subtypes ?? []).some((subtype) => wanted.includes(subtype)),
-    );
+    // Through `hasSubtype`, so a changeling counts as the wanted type here for the
+    // same reason it counts everywhere else — and so casing cannot break a
+    // checkland.
+    const has = others.some((permanent) => wanted.some((subtype) => hasSubtype(permanent.def, subtype)));
     if (!has) return false;
+  }
+
+  if (condition.controlsMatching !== undefined) {
+    const { filter, minimum } = condition.controlsMatching;
+    const needed = minimum ?? 1;
+    let found = 0;
+    for (const permanent of others) {
+      if (!matchesCardFilter(permanent, filter)) continue;
+      // Counting stops the moment the printed threshold is met: the condition is
+      // "three or MORE", so the exact total past that point changes no answer.
+      if (++found >= needed) break;
+    }
+    if (found < needed) return false;
   }
 
   return true;

@@ -51,7 +51,7 @@
  * can therefore never reach a state where nobody can move.
  */
 
-import type { CardType, EffectRef } from './card.js';
+import type { CardDefinition, CardType, EffectRef } from './card.js';
 import { colorsOfDefinition, hasSubtype } from './card.js';
 import type { ManaColor, ManaCost } from './mana.js';
 import type { TargetRestriction } from './targeting.js';
@@ -114,6 +114,23 @@ export interface CardFilter {
    * land, most artifacts) matches no color and is excluded by any color filter.
    */
   readonly anyOfColors?: readonly ManaColor[];
+  /**
+   * Require (`true`) or forbid (`false`) the printed **Legendary** supertype —
+   * "unless you control a legendary creature" (the Lord of the Rings lands),
+   * "Legendary creatures you control get +1/+1", "target nonlegendary creature".
+   *
+   * A supertype, not a type, so it needs its own field rather than an entry in
+   * {@link anyOfTypes}: a card is a legendary CREATURE, and folding the two would
+   * make "legendary" and "creature" alternatives instead of both being required.
+   */
+  readonly legendary?: boolean;
+  /**
+   * Require (`true`) or forbid (`false`) the printed **Basic** supertype —
+   * "unless you control a basic land", "search for a nonbasic land". Same
+   * supertype argument as {@link legendary}, and the same flag the battlelands'
+   * `minBasicLands` condition already reads.
+   */
+  readonly basic?: boolean;
 }
 
 /**
@@ -123,8 +140,15 @@ export interface CardFilter {
  * (`statics.ts`) run this for every permanent on the battlefield inside the
  * continuous-layering pass, which combat and every legality check drive, and a
  * closure allocated per predicate per candidate showed up in the hot path.
+ *
+ * The parameter is anything carrying a `def` rather than a full `CardInstance`,
+ * because every characteristic a filter reads is PRINTED (see
+ * {@link CardFilter.minPower}) and a caller with only a definition in hand — the
+ * enters-tapped conditions in `card.ts`, which see the battlefield as
+ * `{ controller, def }` — must not be forced to fabricate an instance to ask the
+ * same question a second way.
  */
-export function matchesCardFilter(card: CardInstance, filter?: CardFilter): boolean {
+export function matchesCardFilter(card: { readonly def: CardDefinition }, filter?: CardFilter): boolean {
   if (!filter) return true;
   const def = card.def;
   // The helper forms are the allocation-free, case-insensitive ones — required by
@@ -135,6 +159,10 @@ export function matchesCardFilter(card: CardInstance, filter?: CardFilter): bool
   if (filter.anyOfSubtypes !== undefined && !hasAnySubtype(def, filter.anyOfSubtypes)) return false;
   if (filter.noneOfSubtypes !== undefined && hasAnySubtype(def, filter.noneOfSubtypes)) return false;
   if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
+  // Supertypes: absent on most definitions, so `=== true` rather than truthiness —
+  // `legendary: false` must match a plain creature, not be treated as "unset".
+  if (filter.legendary !== undefined && (def.legendary === true) !== filter.legendary) return false;
+  if (filter.basic !== undefined && (def.basic === true) !== filter.basic) return false;
   if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
     const mv = def.cost ? convertedManaCost(def.cost) : 0;
     if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
@@ -488,8 +516,13 @@ interface PendingChoiceBase {
    * resolution frame behind it; `applyAnswerChoice` routes the answer by this
    * marker instead of guessing from the absence of a frame. Absent for every
    * ordinary choice, so all existing states and tests read unchanged.
+   *
+   * `'cleanupDiscard'` marks the cleanup step's discard down to maximum hand size
+   * (CR 514.1) — likewise a turn-based action the GAME performs, with no
+   * resolution behind it, and the one question that parks with the turn itself
+   * waiting on the answer.
    */
-  readonly context?: 'legendRule';
+  readonly context?: 'legendRule' | 'cleanupDiscard';
 }
 
 export interface SelectCardsChoice extends PendingChoiceBase {

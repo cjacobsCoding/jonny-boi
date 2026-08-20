@@ -24,7 +24,20 @@ export interface PassPriorityAction {
  */
 export type CastFace = 'front' | 'back';
 
-/** Play a land from hand (sorcery-speed, one per turn, empty stack). */
+/**
+ * Where a land play may come FROM, beyond the hand.
+ *
+ * The hand is not listed: it is the default every land play has always had, and
+ * an absent {@link PlayLandAction.fromZone} still means it, so every action built
+ * before this existed stays valid unchanged.
+ *
+ * `'graveyard'` is Crucible of Worlds / Ramunap Excavator; `'libraryTop'` is
+ * Oracle of Mul Daya / Augur of Autumn / Courser of Kruphix, which play the TOP
+ * CARD specifically rather than any card in the library.
+ */
+export type LandPlayZone = 'graveyard' | 'libraryTop';
+
+/** Play a land (sorcery-speed, one per turn, empty stack). */
 export interface PlayLandAction {
   readonly kind: 'playLand';
   readonly player: PlayerId;
@@ -35,6 +48,20 @@ export interface PlayLandAction {
    * like any other land.
    */
   readonly face?: CastFace;
+  /**
+   * Where the land is being played from. Omitted (the overwhelming default) means
+   * the HAND. Any other zone must be unlocked by a permanent its controller
+   * controls declaring `CardDefinition.playLandsFrom` — the engine re-derives that
+   * permission from the board at play time rather than trusting the action, so a
+   * hostile client naming a zone nothing grants is rejected.
+   *
+   * Playing a land from anywhere is still a LAND PLAY (CR 305.1): it costs the
+   * turn's land drop, needs an empty stack and a main phase, and is not a spell.
+   * That is why this is a field on the land action rather than a second action
+   * kind — every one of those rules would otherwise have a second implementation
+   * to keep in step.
+   */
+  readonly fromZone?: LandPlayZone;
 }
 
 /** Tap a mana source for mana (adds to the controller's pool). */
