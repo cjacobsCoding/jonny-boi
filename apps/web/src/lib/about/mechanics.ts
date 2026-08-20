@@ -341,6 +341,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'enters-tapped-unless-revealed' },
       },
       {
+        title: '"As ~ enters, choose a creature type / a color"',
+        detail:
+          'The naming a permanent makes on the way in (CR 614.1c), asked at the printed moment — while a land is being played, or while a permanent spell is resolving and the card is not yet on the battlefield. The answer is REMEMBERED on that permanent for as long as it is there, which is the whole point: Adaptive Automaton becomes the type it named and pumps the others of it, Coldsteel Heart taps for the colour it named, and Chronicle of Victory draws off the type it named. A permanent that enters where nobody can be asked — reanimated, put onto the battlefield by another card, copied as a token — names NOTHING, and nothing named matches nothing.',
+        witness: { kind: 'primitive', id: 'chooseAsEnters' },
+      },
+      {
+        title: '"Of the chosen type / color" — reading a named value back',
+        detail:
+          'The three readers that make a naming worth making: an anthem narrowed to the named type or colour ("creatures you control of the chosen type get +1/+1"), a mana ability that adds the named colour, and a cast trigger that fires only on the named type. Each is refused at compile time on a card that never names anything, because an anthem over a value nothing writes is a card that reports as playable and then does nothing.',
+        witness: { kind: 'rule', id: 'as-enters-choose-value' },
+      },
+      {
         title: 'Optional triggers ("you may")',
         detail:
           'The printed "you may" is a genuine yes/no asked as the ability resolves, and declining is a complete outcome — never auto-answered to make a card compile, because a forced yes is a different card. Reclamation-Sage-style entries, the Mage cycle\'s tutors and Farhaven Elf all play both ways.',

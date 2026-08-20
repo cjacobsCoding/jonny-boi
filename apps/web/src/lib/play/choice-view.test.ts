@@ -12,6 +12,7 @@ import {
   orderBadge,
   pickCount,
   setChooseNumber,
+  setChosenValue,
   setConfirm,
   setPayMana,
   toggleOption,
@@ -357,6 +358,69 @@ describe('choice-view — prompt copy + viewer gating', () => {
     expect(zoneLabel('graveyard')).toBe('graveyard');
     expect(zoneLabel('somewhere-new')).toBe('somewhere-new');
     expect(zoneLabel(undefined)).toBeUndefined();
+  });
+});
+
+describe('choice-view — naming a value ("As ~ enters, choose a creature type")', () => {
+  function chooseValue(options = [{ value: 'goblin', label: 'goblin' }, { value: 'elf', label: 'elf' }]): PendingChoice {
+    return {
+      ...BASE,
+      kind: 'chooseValue',
+      prompt: 'As Cavern of Souls enters, choose a creature type',
+      sourceName: 'Cavern of Souls',
+      subject: 'creatureType',
+      options,
+      min: 1,
+      max: 1,
+    } as PendingChoice;
+  }
+
+  it('starts UNDECIDED — an empty draft must not read as "named nothing"', () => {
+    // Naming nothing IS a legal answer, so the two states have to stay
+    // distinguishable or the Confirm button would submit the moment it opened.
+    const choice = chooseValue();
+    const draft = emptyDraft(choice);
+    expect(draftToAnswer(draft)).toBeNull();
+    const status = draftStatus(choice, draft);
+    expect(status.canSubmit).toBe(false);
+    expect(status.hint).toBe('Name one.');
+  });
+
+  it('a named value submits as the engine-valid answer', () => {
+    const choice = chooseValue();
+    const status = draftStatus(choice, setChosenValue(emptyDraft(choice), 'elf'));
+    expect(status.canSubmit).toBe(true);
+    expect(status.answer).toEqual({ kind: 'chooseValue', value: 'elf' });
+    expect(validateChoiceAnswer(choice, status.answer!).ok).toBe(true);
+  });
+
+  it('behaves like a RADIO group — naming again replaces, never accumulates', () => {
+    const choice = chooseValue();
+    const draft = setChosenValue(setChosenValue(emptyDraft(choice), 'goblin'), 'elf');
+    expect(draftToAnswer(draft)).toEqual({ kind: 'chooseValue', value: 'elf' });
+  });
+
+  it('a value that was never offered is refused by the engine validator the button obeys', () => {
+    const choice = chooseValue();
+    const status = draftStatus(choice, setChosenValue(emptyDraft(choice), 'sliver'));
+    expect(status.canSubmit).toBe(false);
+  });
+
+  it('the prompt copy says the naming is public and permanent, and offers no "choose none"', () => {
+    const view = choicePromptView(chooseValue(), NAMES);
+    expect(view.requirement).toContain('creature type');
+    expect(view.requirement).toContain('announced');
+    // `optional` drives the "Choose none" button; a naming is never optional.
+    expect(view.optional).toBe(false);
+    expect(view.optionCount).toBe(2);
+  });
+
+  it('selection machinery no-ops on it — it is a scalar, not a selection', () => {
+    const choice = chooseValue();
+    const draft = setChosenValue(emptyDraft(choice), 'goblin');
+    expect(toggleOption(choice, draft, 'elf')).toBe(draft);
+    expect(clearDraft(choice, draft)).toBe(draft);
+    expect(draftValues(draft)).toEqual([]);
   });
 });
 
