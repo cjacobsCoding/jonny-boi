@@ -118,6 +118,17 @@ export interface TriggerCondition {
    */
   readonly permanentFilter?: CardFilter;
   /**
+   * Set for the printed words "**of the chosen type**" on a CAST trigger —
+   * "whenever you cast a creature spell of the chosen type, draw a card"
+   * (Vanquisher's Banner), "whenever you cast a spell of the chosen type"
+   * (Chronicle of Victory).
+   *
+   * The value comes from the SOURCE (`TriggerSource.chosenAsEntered`), so it is
+   * this permanent's own naming — and a source that named nothing fires on
+   * nothing, exactly as its anthem reaches nothing.
+   */
+  readonly spellSubtypeIsChosen?: boolean;
+  /**
    * For `permanentEnters`/`permanentDies`: the printed word "**another**" — the
    * source's own arrival or death does not set it off. A distinct flag rather
    * than something inferred, for the same reason `StaticAffects.excludeSource`
@@ -177,6 +188,16 @@ export interface TriggerSource {
   readonly controller: PlayerId;
   readonly name: string;
   readonly triggers: readonly TriggeredAbility[];
+  /**
+   * What this source NAMED as it entered (`CardInstance.chosenAsEntered`), for
+   * the conditions narrowed by it — "whenever you cast a creature spell **of the
+   * chosen type**".
+   *
+   * Snapshotted onto the source rather than looked up during matching because
+   * `triggers.ts` is a pure matcher with no access to the game state, exactly as
+   * `TriggerSubject` is. Absent means nothing was named, which matches nothing.
+   */
+  readonly chosenAsEntered?: string;
 }
 
 /**
@@ -190,6 +211,7 @@ export function conditionMatches(
   sourceInstanceId: InstanceId,
   sourceController: PlayerId,
   subject?: TriggerSubject,
+  sourceChosenAsEntered?: string,
 ): boolean {
   switch (condition.on) {
     case 'etb':
@@ -207,6 +229,15 @@ export function conditionMatches(
       if (!whoMatches(condition.who, event.player, sourceController)) return false;
       if (condition.spellType && !event.castTypes.includes(condition.spellType)) return false;
       if (condition.spellTypeNoneOf?.some((type) => event.castTypes.includes(type))) return false;
+      if (condition.spellSubtypeIsChosen === true) {
+        // "…of the chosen type". A source that named NOTHING matches nothing —
+        // never everything — for the same reason `StaticAffects.ofChosenSubtype`
+        // does: an unnamed value is the inert default, and a trigger that fired
+        // on every spell would be a strictly better card than the printed one.
+        if (sourceChosenAsEntered === undefined || sourceChosenAsEntered === '') return false;
+        const wanted = sourceChosenAsEntered.toLowerCase();
+        if (!event.castSubtypes.some((subtype) => subtype.toLowerCase() === wanted)) return false;
+      }
       return true;
     }
     case 'permanentEnters': {
@@ -369,6 +400,7 @@ export function matchTriggers(
           src.instanceId,
           src.controller,
           watchesBoard ? subjectOf() : undefined,
+          src.chosenAsEntered,
         )
       ) {
         continue;

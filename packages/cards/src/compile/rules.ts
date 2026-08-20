@@ -2448,6 +2448,43 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"Whenever you cast a [TYPE] spell OF THE CHOSEN TYPE, BODY"**
+     * (Vanquisher's Banner, Chronicle of Victory) — the cast trigger narrowed by
+     * the creature type this permanent named as it entered.
+     *
+     * Ordered ABOVE the plain cast trigger, because "a creature spell of the
+     * chosen type" also matches that rule's shape once the tail is ignored — and
+     * ignoring the tail would be a card that draws off EVERY creature spell.
+     *
+     * Refused on a card with no naming line, like every other "of the chosen …"
+     * reader: a trigger over a value nothing writes never fires, and a card that
+     * reports `'complete'` and then does nothing is the failure this contract
+     * exists to prevent.
+     */
+    id: 'trigger-cast-spell-of-chosen-type',
+    description: '"Whenever you cast a [TYPE] spell of the chosen type, BODY"',
+    pattern: /^whenever you cast an? (?:([a-z ]+?) )?spell of the chosen type, (.+)$/,
+    build(match, ctx) {
+      if (!namesAValueAsItEnters(ctx)) return null;
+      const typeWord = match[1];
+      // An absent type word is "a spell of the chosen type" (Chronicle of
+      // Victory) — every card type, narrowed only by the named subtype.
+      const base: readonly TriggerCondition[] =
+        typeWord === undefined ? [{ on: 'castSpell', who: 'you' }] : (spellFiltersFor(typeWord) ?? []);
+      if (base.length === 0) return null;
+      const body = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return {
+        triggers: base.map((condition) => ({
+          condition: { ...condition, spellSubtypeIsChosen: true },
+          effects: body,
+          label: `Cast ${describeSpellFilter(condition)} of the chosen type: ${match[2] ?? ''}`,
+        })),
+      };
+    },
+  },
+  {
     id: 'trigger-cast-spell',
     description: '"Whenever you cast a(n) TYPE spell, BODY" (incl. prowess-style text)',
     pattern: /^whenever you cast an? ([a-z ]+?) spell, (.+)$/,

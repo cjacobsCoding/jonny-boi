@@ -34,6 +34,17 @@ export type GameEvent =
       /** The card types of the spell cast (so cast-triggers can filter by type). */
       readonly castTypes: readonly CardType[];
       /**
+       * The spell's printed SUBTYPES, lowercased — what a cast trigger narrowed
+       * by a creature type reads ("whenever you cast a creature spell **of the
+       * chosen type**", Vanquisher's Banner).
+       *
+       * Carried on the event rather than looked up from the instance because the
+       * trigger matcher is a pure function of the event (`triggers.ts` has no
+       * state), and because by the time a cast trigger resolves the spell may
+       * already have left the stack.
+       */
+      readonly castSubtypes: readonly string[];
+      /**
        * Present (as `'graveyard'`) when this was a flashback cast, so the log,
        * the replay and the inspector can say WHICH way the spell was cast —
        * absent for the ordinary from-hand cast every existing consumer knows.
