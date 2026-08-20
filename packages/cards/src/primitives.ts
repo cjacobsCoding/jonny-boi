@@ -40,6 +40,7 @@ import type {
 } from '@jonny-boi/core';
 import {
   DEFENSE_COUNTER,
+  MANA_COLORS,
   addCardGrant,
   LOYALTY_COUNTER,
   MINUS_ONE_COUNTER,
@@ -53,6 +54,7 @@ import {
   isLegalTarget,
   matchesCardFilter,
   isPlaneswalker,
+  type ManaColor,
   type ManaCost,
   protectionPreventsDamage,
 } from '@jonny-boi/core';
@@ -526,8 +528,13 @@ export const addMana: EffectPrimitive = (ctx) => {
   const symbols = strArrayParam(ctx, 'mana');
   const pool = ctx.state.players[ctx.controller].manaPool;
   for (const sym of symbols) {
-    if (sym in pool) {
-      const color = sym as keyof typeof pool;
+    // Membership is tested against the COLOUR PALETTE, not against the pool
+    // object. A pool carrying spend restrictions also carries a `restricted`
+    // key, so `sym in pool` would answer true for it — turning a malformed card
+    // param into a write over the restriction list. The palette is the authority
+    // on what a colour is; the pool is merely where they are counted.
+    if ((MANA_COLORS as readonly string[]).includes(sym)) {
+      const color = sym as ManaColor;
       pool[color] += 1;
       ctx.emit({ type: 'manaAdded', player: ctx.controller, color, amount: 1 });
     }
