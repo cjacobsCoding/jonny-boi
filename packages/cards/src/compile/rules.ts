@@ -26,6 +26,8 @@ import type {
   ManaColor,
   ManaCost,
   ManaProduction,
+  ManaSpendClause,
+  ManaSpendRestriction,
   ProtectionQuality,
   ReplacementApplies,
   SpellMode,
@@ -4853,6 +4855,195 @@ function parseManaActivationCondition(text: string): ManaActivationCondition | n
 /** The five basic land types, lowercased — the only subtypes a Verge/Maze names. */
 const BASIC_LAND_SUBTYPES: readonly string[] = ['plains', 'island', 'swamp', 'mountain', 'forest'];
 
+// --- SPEND RESTRICTIONS on produced mana ------------------------------------
+//
+// "Spend this mana only to cast a creature spell" (Ancient Ziggurat), "…only to
+// cast artifact spells or activate abilities of artifacts" (Power Depot). The
+// restriction is carried by the MANA rather than by the source, which is why it
+// compiles to `ManaAbility.spendRestriction` and is honoured by the POOL — see
+// core's spend-restriction.ts.
+//
+// The parser below REFUSES anything it does not fully understand, because both
+// directions of error print a different card: a restriction the engine drops
+// makes Ancient Ziggurat a strictly better land, and one the engine invents makes
+// it strictly worse. Cavern of Souls' "of the chosen type" is the live refusal —
+// it needs a per-INSTANCE remembered creature type, which is the separate
+// "As ~ enters, choose a creature type" template, and there is no honest way to
+// compile it without one.
+
+/**
+ * Whether this card prints "As ~ enters, choose a creature type" — the naming
+ * that gives "…of the chosen type" something to refer to.
+ *
+ * Read off the card's own Oracle text for the same reason `cardHasXCost` reads
+ * the printed cost: a rule runs while the assembly is still being built, so the
+ * compiled `asEntersChoice` may not exist yet when this line is reached.
+ */
+function cardNamesACreatureTypeAsItEnters(ctx: RuleContext): boolean {
+  return /enters, choose a creature type/i.test(ctx.card.oracleText);
+}
+
+/** The printed head nouns a "cast …" restriction ends on. */
+const SPEND_HEAD_NOUNS: readonly string[] = ['spell', 'spells', 'source', 'sources'];
+
+/** Type words a spend restriction may name, singular and plural, to `CardType`. */
+const SPEND_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  creature: 'creature',
+  creatures: 'creature',
+  artifact: 'artifact',
+  artifacts: 'artifact',
+  enchantment: 'enchantment',
+  enchantments: 'enchantment',
+  instant: 'instant',
+  instants: 'instant',
+  sorcery: 'sorcery',
+  sorceries: 'sorcery',
+  land: 'land',
+  lands: 'land',
+  planeswalker: 'planeswalker',
+  planeswalkers: 'planeswalker',
+  battle: 'battle',
+  battles: 'battle',
+});
+
+/**
+ * Parse the OBJECT half of one restriction clause — "a creature spell",
+ * "colorless eldrazi spells", "artifacts", "a dragon creature spell".
+ *
+ * Token-driven rather than one regex, because the printed parts stack
+ * independently (article, "colorless", "legendary", a colour, a subtype, a type,
+ * a head noun) and a regex making each of them optional is exactly how a pattern
+ * quietly matches a wording it does not implement. EVERY token must be
+ * recognised; one that is not returns `null` and the card reports.
+ *
+ * `requireHead` is true for "cast …", which always ends in "spell(s)". The
+ * "activate abilities of …" form names its objects bare ("of artifacts"), so it
+ * does not.
+ */
+function parseSpendObject(
+  spec: string,
+  purpose: 'cast' | 'activate',
+  requireHead: boolean,
+): ManaSpendClause | null {
+  const tokens = spec
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) return null;
+  if (tokens[0] === 'a' || tokens[0] === 'an') tokens.shift();
+  // "…of the chosen type" trails the head noun ("a creature spell OF THE CHOSEN
+  // TYPE"), so it comes off first — otherwise the head-noun test looks at "type"
+  // and the whole clause is refused. The flag it sets is a DECLARATION; the value
+  // is substituted when the mana is made (core's `resolveSpendRestriction`).
+  let subtypeChosenBySource = false;
+  if (tokens.slice(-4).join(' ') === 'of the chosen type') {
+    tokens.length -= 4;
+    subtypeChosenBySource = true;
+  }
+  if (SPEND_HEAD_NOUNS.includes(tokens[tokens.length - 1] ?? '')) tokens.pop();
+  else if (requireHead) return null;
+
+  const types: CardType[] = [];
+  const colors: ManaColor[] = [];
+  const subtypes: string[] = [];
+  let colorless = false;
+  let legendary = false;
+  for (const token of tokens) {
+    if (token === 'colorless') {
+      colorless = true;
+      continue;
+    }
+    if (token === 'legendary') {
+      legendary = true;
+      continue;
+    }
+    const color = COLOR_WORDS[token];
+    if (color) {
+      colors.push(color);
+      continue;
+    }
+    const type = SPEND_TYPE_WORDS[token];
+    if (type) {
+      types.push(type);
+      continue;
+    }
+    // Anything left must be a printed SUBTYPE ("dragon", "eldrazi", "angel",
+    // "omen"), and there may be only one — "of the chosen type" and every other
+    // unread wording leaves several unrecognised words here and is refused.
+    //
+    // A PLURAL subtype is refused too: subtypes match the printed word, so
+    // "dragons" would match nothing, and mana that can never be spent is as wrong
+    // as mana that can be spent on anything. Refusing only ever declines a card;
+    // it cannot mis-compile one.
+    if (subtypes.length > 0 || !/^[a-z][a-z'-]*$/.test(token) || token.endsWith('s')) return null;
+    subtypes.push(token);
+  }
+  if (
+    types.length === 0 &&
+    subtypes.length === 0 &&
+    colors.length === 0 &&
+    !colorless &&
+    !legendary &&
+    !subtypeChosenBySource
+  ) {
+    // "…only to cast a spell" restricts nothing this engine can check. No printed
+    // card says it, and refusing stops the rule from becoming a way to compile
+    // mana whose restriction is silently vacuous.
+    return null;
+  }
+  const clause: {
+    purpose: 'cast' | 'activate';
+    types?: readonly CardType[];
+    subtypes?: readonly string[];
+    colors?: readonly ManaColor[];
+    colorless?: boolean;
+    legendary?: boolean;
+    subtypeChosenBySource?: boolean;
+  } = { purpose };
+  if (types.length > 0) clause.types = types;
+  if (subtypes.length > 0) clause.subtypes = subtypes;
+  if (colors.length > 0) clause.colors = colors;
+  if (colorless) clause.colorless = true;
+  if (legendary) clause.legendary = true;
+  if (subtypeChosenBySource) clause.subtypeChosenBySource = true;
+  return clause as ManaSpendClause;
+}
+
+/**
+ * Parse the whole "spend this mana only to …" tail into a restriction.
+ *
+ * The printed "or" is a DISJUNCTION over clauses, and a later alternative may
+ * omit the verb ("cast a Dragon spell **or an Omen spell**"), so the previous
+ * alternative's verb carries forward — which is how the sentence reads in English
+ * and what keeps Maelstrom of the Spirit Dragon from being read as "cast a Dragon
+ * spell or activate an Omen".
+ */
+function parseManaSpendRestriction(text: string): ManaSpendRestriction | null {
+  const parts = text.trim().split(' or ');
+  const allow: ManaSpendClause[] = [];
+  let verb: 'cast' | 'activate' | null = null;
+  for (const part of parts) {
+    const trimmed = part.trim();
+    const activate = trimmed.match(/^activate (?:abilities|an ability) of (.+)$/);
+    if (activate) {
+      verb = 'activate';
+      const clause = parseSpendObject(activate[1] ?? '', 'activate', false);
+      if (!clause) return null;
+      allow.push(clause);
+      continue;
+    }
+    const cast = trimmed.match(/^cast (.+)$/);
+    if (cast) verb = 'cast';
+    // A leading alternative with no verb at all is not a printed form; refusing
+    // keeps the carry-forward from inventing a reading.
+    if (verb === null) return null;
+    const clause = parseSpendObject(cast ? (cast[1] ?? '') : trimmed, verb, verb === 'cast');
+    if (!clause) return null;
+    allow.push(clause);
+  }
+  return allow.length > 0 ? { label: `only to ${text.trim()}`, allow } : null;
+}
+
 /**
  * A printed cost run that MAY contain colour/colour hybrid symbols — the filter
  * lands' "{W/U}". `parseManaSymbols` deliberately refuses a hybrid because most
@@ -5066,13 +5257,46 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
       };
     },
   },
+  {
+    // A SPEND RESTRICTION on the mana this ability makes: Ancient Ziggurat,
+    // Somberwald Sage, Eldrazi Temple, Giada, Power Depot. The restriction rides
+    // the MANA into the pool rather than decorating the source, which is why it
+    // is the one entry in the mana model that outlives the tap — see core's
+    // spend-restriction.ts.
+    //
+    // The "add" half is the ordinary payload parser, so every production shape
+    // the other rules read ("one mana of any color", "three mana of any one
+    // color", a printed run) is available here with no second grammar.
+    id: 'mana-ability-spend-restriction',
+    description: '"{T}: Add one mana of any color. Spend this mana only to cast a creature spell"',
+    pattern: /^\{t\}: add (.+?)\. spend this mana only to (.+)$/,
+    build(match, ctx) {
+      const produces = parseManaPayload(match[1] ?? '');
+      const spendRestriction = parseManaSpendRestriction(match[2] ?? '');
+      if (!produces || !spendRestriction) return null;
+      // "…of the chosen type" only means something on a card that ACTUALLY names
+      // a creature type as it enters. Compiling it on a card that does not would
+      // print a land whose mana can never be spent — strictly worse than the real
+      // one, and just as much a lie as one whose mana pays for anything. The
+      // clause is checked against the card's own printed text rather than against
+      // the assembly, because rules run before the assembly is complete and a
+      // land's naming line may compile after this one.
+      if (
+        spendRestriction.allow.some((clause) => clause.subtypeChosenBySource === true) &&
+        !cardNamesACreatureTypeAsItEnters(ctx)
+      ) {
+        return null;
+      }
+      return { manaAbilities: [{ produces, spendRestriction }] };
+    },
+  },
   // NOTE: there is still deliberately NO rule for a mana ability whose colours
   // come from somewhere the engine cannot read — "add one mana of any color in
-  // your commander's color identity" (no commander here, and never will be, see
-  // the completion plan §5) or "of any type that land produced". Nor is there one
-  // for a SPEND RESTRICTION ("spend this mana only to cast creature spells"),
-  // which needs the mana POOL to carry the restriction, not the source. Those
-  // fall through to `missing` (see UNSUPPORTED_HINTS).
+  // your commander's color identity" (there is no commander here and no format
+  // that has one, see the completion plan §5) or "of any type that land
+  // produced" (a REMEMBERED permanent, which is a triggered ability watching a
+  // tap, not a mana ability at all). Those fall through to `missing` (see
+  // UNSUPPORTED_HINTS), each named for what it actually needs.
 ]);
 
 /**
@@ -5171,9 +5395,9 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   // hints below no longer claim those systems are missing — that would send the
   // next contributor to rebuild something that exists. What reaches them is a
   // WORDING the rule table has no entry for yet, inside a shape the engine can
-  // already express, with two exceptions that are still genuinely engine work and
-  // say so: the SPEND RESTRICTION (the pool would have to carry it) and a cost
-  // component the model has no field for (tapping another permanent).
+  // already express. The SPEND RESTRICTION has since joined them — the pool
+  // carries it now — leaving one cost component the model genuinely has no field
+  // for (tapping another permanent), which says so.
   //
   // Order matters: the first matching hint wins, so these sit above the generic
   // mana hint.
@@ -5207,25 +5431,52 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'an ADDITIONAL-COST wording on a mana ability the compiler does not recognize yet (life and mana costs themselves are implemented)',
   },
   {
-    // Cavern of Souls, Delighted Halfling, Somberwald Sage. STILL A SYSTEM: the
-    // restriction belongs to the MANA, not to the source, so the pool would have
-    // to carry it and every payment path would have to honour it. Nothing about
-    // `manaAbilities` helps — a restricted mana is indistinguishable from an
-    // unrestricted one the moment it lands in the pool.
+    // Delighted Halfling and Cavern of Souls print a spend restriction AND make
+    // the spell uncounterable. Counterspells are real in this engine, so that
+    // second clause is NOT vacuous — it is a live rules effect with no seam, and
+    // it must not be silently dropped just because the mana half now compiles.
+    pattern: /spend this mana only to .*can'?t be countered/,
+    missingEngineSystem:
+      'a spell that CANNOT BE COUNTERED (the spend restriction itself is implemented; countering has no "uncounterable" flag yet)',
+  },
+  {
+    // "...of the chosen type" on a card that never NAMES one. Both halves ship —
+    // the spend restriction (core's spend-restriction.ts) and the as-entered
+    // naming (core's as-enters.ts) — so what lands here is a card whose
+    // restriction refers to a choice its own text does not make. Compiling it
+    // would print a land whose mana can never be spent, which is as much a lie
+    // as one whose mana pays for anything. Order matters: above the generic form.
+    pattern: /spend this mana only to .*of the chosen type/,
+    missingEngineSystem:
+      'a SPEND-RESTRICTION wording the compiler cannot read yet — it names "the chosen type" but the card never chooses one (both restricted mana and the as-entered naming are implemented)',
+  },
+  {
     pattern: /spend this mana only to/,
     missingEngineSystem:
-      'a SPEND RESTRICTION on produced mana (the mana pool records colour, not what each mana may pay for)',
+      'a SPEND-RESTRICTION wording the compiler cannot read yet (restricted mana itself is implemented — the pool carries the restriction)',
   },
   {
     // "…that a land you control could produce" and "…that a land an opponent
     // controls could produce" are read off the live board. What lands here is a
-    // derivation from something this engine does not have at all — a COMMANDER's
-    // colour identity (§5 of the completion plan rules those out for good), or a
-    // remembered "that land".
+    // derivation from an object this engine does not have.
+    //
+    // Split in two ON PURPOSE, because the two halves are not the same work and
+    // reporting them together hid that: a COMMANDER's colour identity needs a
+    // format this engine does not implement and will not fake (completion plan
+    // §5 — Command Tower, Arcane Signet), while "any type that land produced"
+    // needs a TRIGGERED ABILITY that watches a permanent being tapped for mana
+    // and copies what it made (Mirari's Wake, Zendikar Resurgent, Vorinclex,
+    // Kinnan, Extraplanar Lens, Incubation Druid). The second is ordinary engine
+    // work; the first is a decision.
+    pattern: /add one mana of any (?:color|type) in your commander'?s color identity/,
+    missingEngineSystem:
+      "a mana colour derived from a COMMANDER'S COLOR IDENTITY (this engine has no commander and no format that has one; a fake one would corrupt every verdict touching these cards)",
+  },
+  {
     pattern:
       /add one mana of any (?:color|type) (?:in|that)|of any type that (?:land|permanent) produced/,
     missingEngineSystem:
-      'a mana colour derived from an object this engine has no concept of (a commander, or a remembered permanent)',
+      'a mana-DOUBLING trigger that copies what a permanent was just tapped for ("whenever you tap a land for mana, add one mana of any type that land produced" — needs a tapped-for-mana trigger and a remembered production)',
   },
   {
     pattern: /add one mana of any color|add \{[wubrgc]\} or \{[wubrgc]\}|add one mana of any/,

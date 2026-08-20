@@ -173,8 +173,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Conditional and board-derived mana',
         detail:
-          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping. Still refused by name: "spend this mana only to…", which would need the mana POOL to carry the restriction.',
+          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping.',
         witness: { kind: 'rule', id: 'mana-ability-activation-restriction' },
+      },
+      {
+        title: 'Mana you may spend on only one thing',
+        detail:
+          'Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Giada and Power Depot print a restriction on the MANA rather than on the source: "Spend this mana only to cast a creature spell", "…only to cast artifact spells or activate abilities of artifacts". The floating pool carries it, so casting, activating an ability, cycling and a filter land’s own cost each ask what the mana is being spent on — and a spell it may not pay for is not offered at all. Mana you cannot spend still counts as floating and still empties at end of step, exactly like any other. Unclaimed Territory and Secluded Courtyard restrict theirs to “the chosen type”, read from the creature type the land itself named as it entered — and a land that named nothing makes mana that pays for nothing, never for everything. The shared payment planner spends restricted mana FIRST when it legally can, because it is the least flexible resource on the board.',
+        witness: {
+          kind: 'oracle',
+          text: '{T}: Add one mana of any color. Spend this mana only to cast a creature spell.',
+          as: 'creature',
+        },
       },
       {
         title: '{X} costs',

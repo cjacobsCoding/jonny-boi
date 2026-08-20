@@ -27,6 +27,7 @@ import {
   isLand,
   planManaPayment,
   playableFaceOf,
+  spendPurposeIfRestricted,
   type CardDefinition,
   type CardInstance,
   type CastZone,
@@ -37,6 +38,7 @@ import {
   type GameState,
   type InstanceId,
   type ManaCost,
+  type ManaSpendKind,
   type ManaTapPlan,
   type PendingChoice,
   type PlayerId,
@@ -365,15 +367,23 @@ export class GameSession {
     if (cost) {
       const guard = this.state.battlefield.length + 1; // bound the loop
       let taps = 0;
-      while (!canPay(working.state.players[player].manaPool, cost) && taps < guard) {
-        const next = working.nextTapToward(player, cost);
+      // What the mana will be spent on, so restricted mana in the pool is counted
+      // only when this spell may legally use it. `undefined` (and free) whenever
+      // nothing on the board prints a spend restriction.
+      const purposeFor = (session: GameSession) =>
+        spendPurposeIfRestricted(session.state.players[player].manaPool, card.def, 'cast');
+      while (
+        !canPay(working.state.players[player].manaPool, cost, purposeFor(working)) &&
+        taps < guard
+      ) {
+        const next = working.nextTapToward(player, cost, card.def, 'cast');
         if (!next) break;
         const tapped = working.tapForMana(next.instanceId, next.mode);
         if (tapped.rejected) break;
         working = tapped.session;
         taps += 1;
       }
-      if (!canPay(working.state.players[player].manaPool, cost)) {
+      if (!canPay(working.state.players[player].manaPool, cost, purposeFor(working))) {
         return { session: this, rejected: 'not enough mana available to cast this spell', events: [] };
       }
     }
@@ -538,7 +548,10 @@ export class GameSession {
       // for tap-to-afford we rely on the engine rejecting a bad-timing cast cleanly.
       const cost = card.def.cost;
       const affordableNow = castableNow.has(castKey(card.instanceId, half.face));
-      const affordableWithTap = this.canAffordWithTaps(player, cost);
+      // The FACE being cast is the object a spend restriction reads — a split
+      // card's two halves are different spells with different types, so the half
+      // is what decides whether restricted mana may fund this offer.
+      const affordableWithTap = this.canAffordWithTaps(player, cost, card.def, 'cast');
       // Only present a card whose timing the engine would currently allow. The engine
       // lists a card in `castSpell` only when timing is OK and the pool already pays;
       // when the pool doesn't yet pay we can't see timing directly, so we gate the
@@ -603,7 +616,9 @@ export class GameSession {
             a.instanceId === card.instanceId &&
             a.face === 'back',
         );
-        const withTap = this.canAffordWithTaps(player, halfCost);
+        // The BACK FACE is the spell being cast, so it is the object any
+        // restricted mana is asked about.
+        const withTap = this.canAffordWithTaps(player, halfCost, half, 'cast');
         if (nowCastable || withTap) {
           options.push({
             instanceId: card.instanceId,
@@ -623,7 +638,7 @@ export class GameSession {
       if (flashback === undefined || isLand(card.def)) continue;
       const affordableNow = castableNow.has(card.instanceId);
       if (!affordableNow && !this.timingAllows(card, player)) continue;
-      const affordableWithTap = this.canAffordWithTaps(player, flashback);
+      const affordableWithTap = this.canAffordWithTaps(player, flashback, card.def, 'cast');
       if (!affordableNow && !affordableWithTap) continue;
       options.push({
         instanceId: card.instanceId,
@@ -676,7 +691,7 @@ export class GameSession {
         needsTarget: needsTarget(card.def),
         requirement: targetRequirement(card.def),
         affordableNow: castableNow,
-        affordableWithTap: this.canAffordWithTaps(window.controller, madness),
+        affordableWithTap: this.canAffordWithTaps(window.controller, madness, card.def, 'cast'),
         fromZone: 'exile',
       },
       ...permissions,
@@ -706,7 +721,7 @@ export class GameSession {
       const nowCastable = legal.some(
         (a) => a.kind === 'castSpell' && a.fromZone === 'exile' && a.instanceId === card.instanceId,
       );
-      const withTap = this.canAffordWithTaps(player, cost);
+      const withTap = this.canAffordWithTaps(player, cost, castDef, 'cast');
       if (!nowCastable && !withTap) continue;
       options.push({
         instanceId: card.instanceId,
@@ -752,7 +767,7 @@ export class GameSession {
       for (let index = 0; index < abilities.length; index++) {
         const ability = abilities[index] as NonNullable<(typeof abilities)[number]>;
         const affordableNow = offered.has(`${card.instanceId}:${index}`);
-        const affordableWithTap = this.canAffordWithTaps(player, ability.cost);
+        const affordableWithTap = this.canAffordWithTaps(player, ability.cost, card.def, 'activate');
         if (!affordableNow && !affordableWithTap) continue;
         options.push({
           instanceId: card.instanceId,
@@ -785,15 +800,22 @@ export class GameSession {
     let working: GameSession = this;
     const guard = this.state.battlefield.length + 1;
     let taps = 0;
-    while (!canPay(working.state.players[player].manaPool, ability.cost) && taps < guard) {
-      const next = working.nextTapToward(player, ability.cost);
+    // Cycling is an ACTIVATED ability of the card in hand (CR 702.29a) — the same
+    // purpose the engine charges it under.
+    const cyclePurposeFor = (session: GameSession) =>
+      spendPurposeIfRestricted(session.state.players[player].manaPool, card!.def, 'activate');
+    while (
+      !canPay(working.state.players[player].manaPool, ability.cost, cyclePurposeFor(working)) &&
+      taps < guard
+    ) {
+      const next = working.nextTapToward(player, ability.cost, card!.def, 'activate');
       if (!next) break;
       const tapped = working.tapForMana(next.instanceId, next.mode);
       if (tapped.rejected) break;
       working = tapped.session;
       taps += 1;
     }
-    if (!canPay(working.state.players[player].manaPool, ability.cost)) {
+    if (!canPay(working.state.players[player].manaPool, ability.cost, cyclePurposeFor(working))) {
       return { session: this, rejected: 'not enough mana available to cycle this card', events: [] };
     }
     const cycled = working.submit({ kind: 'cycleCard', player, instanceId, abilityIndex });
@@ -959,8 +981,20 @@ export class GameSession {
    * AI pilots use — so auto-tap picks the right COLOURS and stops as soon as the
    * cost is met, instead of grabbing whatever permanent came first.
    */
-  private nextTapToward(player: PlayerId, cost: ManaCost): ManaTapPlan | null {
-    const plan = planManaPayment(this.state, player, cost, this.legalActions());
+  private nextTapToward(
+    player: PlayerId,
+    cost: ManaCost,
+    def: CardDefinition,
+    kind: ManaSpendKind,
+  ): ManaTapPlan | null {
+    const plan = planManaPayment(
+      this.state,
+      player,
+      cost,
+      this.legalActions(),
+      def,
+      kind,
+    );
     return plan && plan.length > 0 ? (plan[0] as ManaTapPlan) : null;
   }
 
@@ -973,9 +1007,23 @@ export class GameSession {
    * real question exactly, and respects summoning sickness because the candidate
    * taps come from the engine's own legal actions.
    */
-  private canAffordWithTaps(player: PlayerId, cost: ManaCost | undefined): boolean {
+  private canAffordWithTaps(
+    player: PlayerId,
+    cost: ManaCost | undefined,
+    def: CardDefinition,
+    kind: ManaSpendKind,
+  ): boolean {
     if (!cost) return true;
-    return planManaPayment(this.state, player, cost, this.legalActions()) !== undefined;
+    return (
+      planManaPayment(
+        this.state,
+        player,
+        cost,
+        this.legalActions(),
+        def,
+        kind,
+      ) !== undefined
+    );
   }
 
   /** Whether the card's casting timing is allowed for `player` right now. */
