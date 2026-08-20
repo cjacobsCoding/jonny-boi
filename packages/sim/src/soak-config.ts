@@ -484,6 +484,22 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     label: 'a spell on the stack was COPIED — an object that is not a card (CR 707.10)',
     witnessKind: 'event',
     printedBy: (_c, t) => t.includes('"copySpell"'),
+    /*
+     * ⚠️ A COPY EFFECT NEEDS SOMETHING TO COPY, and its target must be ON THE
+     * STACK — which is a harder enabler than madness's discard outlet, because
+     * it is a TIMING window rather than a card. The only reliable way to reach
+     * it is the classic line the card is printed for: cast an instant or
+     * sorcery, RETAIN priority, and copy your own spell before it resolves.
+     * So the enabler is any instant or sorcery worth copying, packed into the
+     * same deck. Without it the soak reported `spell-copy` inert and was
+     * reporting the DECK, not the engine — the exact confusion `enabledBy`
+     * exists to prevent.
+     *
+     * A LAND is excluded implicitly (it is neither type), and so is a permanent
+     * spell: `'instantOrSorcerySpell'` is what the copy may point at, and a deck
+     * whose only spells are creatures gives it no legal target at all.
+     */
+    enabledBy: (card) => card.types.includes('instant') || card.types.includes('sorcery'),
   },
   {
     id: 'token-copy',

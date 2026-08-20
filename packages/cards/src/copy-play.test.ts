@@ -21,6 +21,7 @@ import type {
   CardInstance,
   ChoiceAnswer,
   GameAction,
+  GameEvent,
   GameState,
   InstanceId,
   PlayerId,
@@ -46,8 +47,19 @@ function deck(def: CardDefinition, n = 60): { cards: CardDefinition[] } {
   return { cards: Array.from({ length: n }, () => def) };
 }
 
+/**
+ * Every event this test has seen. Collected because the two copy EVENTS are the
+ * only record a log, a replay or the full-pool soak has of the mechanic firing:
+ * `spellCopied` names the copy and what it was made from, and
+ * `spellCopyCeasedToExist` is emitted INSTEAD of the `zoneChange` every other
+ * spell leaving the stack emits. A field nothing reads is an inert field, and
+ * this project's contract forbids one.
+ */
+let seen: GameEvent[] = [];
+
 function act(state: GameState, action: GameAction, reg: Registry): GameState {
   const result = applyAction(state, action, DEFAULT_RULES, reg);
+  seen.push(...result.events);
   const rejected = result.events.find((e) => e.type === 'actionRejected');
   if (rejected) throw new Error(`unexpected rejection: ${(rejected as { reason: string }).reason}`);
   return result.state;
@@ -134,6 +146,7 @@ function giveHand(state: GameState, player: PlayerId, def: CardDefinition): Inst
 }
 
 function openGame(seed: number): { s: GameState; reg: Registry } {
+  seen = [];
   const reg = buildRegistry();
   const { state } = createGame({ seed, decks: { A: deck(FOREST), B: deck(FOREST) }, registry: reg });
   const s = advanceToMain(state, reg);
@@ -194,6 +207,21 @@ describe('copying a SPELL on the stack (CR 707.10)', () => {
       ...s.players.B.hand,
     ];
     expect(everywhere.filter((c) => c.def.name === 'Lightning Bolt')).toHaveLength(1);
+
+    // BOTH events fired, and they name each other. `spellCopied` is the soak's
+    // only witness that a copy was CREATED (every later event a copy emits is
+    // indistinguishable from the original's), and `spellCopyCeasedToExist` is
+    // the only record of where it went — emitted INSTEAD of a `zoneChange`, so a
+    // consumer folding zone changes never puts it in a graveyard.
+    const created = seen.find((e) => e.type === 'spellCopied');
+    expect(created, 'spellCopied should name the copy').toBeTruthy();
+    expect(created && 'copiedInstanceId' in created ? created.copiedInstanceId : undefined).toBe(boltId);
+    expect(created && 'name' in created ? created.name : undefined).toBe('Lightning Bolt');
+    const gone = seen.find((e) => e.type === 'spellCopyCeasedToExist');
+    expect(gone, 'spellCopyCeasedToExist should say the copy left').toBeTruthy();
+    expect(created && 'instanceId' in created && gone && 'instanceId' in gone ? gone.instanceId : -1).toBe(
+      created && 'instanceId' in created ? created.instanceId : -2,
+    );
   });
 
   it("Narset's Reversal returns the ORIGINAL to its owner's hand and the copy still resolves", () => {
@@ -246,6 +274,14 @@ describe('a TOKEN COPY of a permanent (CR 707.2 + CR 111)', () => {
     // cease to exist when it leaves the battlefield (CR 704.5d) — which it does
     // because `createToken` stamps the flag, not because this primitive did.
     expect(token?.def.isToken).toBe(true);
+    // The token copy's own event — the ONLY thing that says which board object
+    // it is a copy of. `tokenCreated` (which it also emits) says a token
+    // appeared and nothing more, so it cannot separate a token copy from a
+    // Bitterblossom Faerie.
+    const made = seen.find((e) => e.type === 'tokenCopyCreated');
+    expect(made, 'tokenCopyCreated should name the copied permanent').toBeTruthy();
+    expect(made && 'copiedInstanceId' in made ? made.copiedInstanceId : undefined).toBe(bearId);
+    expect(made && 'instanceId' in made ? made.instanceId : undefined).toBe(token?.instanceId);
     // And it is the real body, not a blank: P/T, types and subtypes all copied.
     expect(token?.def.power).toBe(bearDef.power);
     expect(token?.def.toughness).toBe(bearDef.toughness);

@@ -124,6 +124,16 @@ const PRIMITIVE = Object.freeze({
    * "generic spell" and the pilot would never hold it up at all.
    */
   counterUnlessPaid: 'counterUnlessPaid',
+  /**
+   * COPY TARGET INSTANT OR SORCERY SPELL (CR 707.10). Played on the same clock
+   * as a counterspell and for the opposite reason: both are only castable with a
+   * spell on the stack, so both must be HELD UP rather than fired in a main
+   * phase. Missing from this list, a Reverberate classified as a "generic
+   * spell", and a generic spell is offered only with an EMPTY stack — so the
+   * pilot could never cast it at all, and the full-pool soak reported the whole
+   * mechanic INERT. That is what caught it.
+   */
+  copySpell: 'copySpell',
   /** A symmetric board sweeper (Wrath of God / Day of Judgment). */
   destroyAll: 'destroyAll',
   gainLife: 'gainLife',
@@ -161,6 +171,13 @@ type SpellIntent =
   | { readonly kind: 'shrink'; readonly toughness: number }
   | { readonly kind: 'pump'; readonly power: number; readonly toughness: number }
   | { readonly kind: 'counter' }
+  /**
+   * "Copy target instant or sorcery spell" — a counterspell's timing with the
+   * opposite sign. It answers the TOP of the stack like a counter does, but it
+   * wants that spell to be GOOD (its own, usually) rather than an opposing
+   * threat, and it is worth exactly what the spell it copies is worth.
+   */
+  | { readonly kind: 'copySpell' }
   | { readonly kind: 'sweeper' }
   | { readonly kind: 'creature' }
   /**
@@ -1223,6 +1240,20 @@ function scoreSpell(
         reason: explain ? `fog the attack with ${card.def.name}` : NO_REASON,
       };
     }
+    case 'copySpell': {
+      const target = copyTarget(view, otherPlayer(opp));
+      if (!target) return undefined; // nothing on the stack worth copying — hold it
+      return {
+        // Worth what the copy is worth, on the same card ruler removal uses — so
+        // a Reverberate held for a Cryptic Command outscores one spent on a
+        // cantrip, which is the whole discipline of the card.
+        score: cardValue(target.card, weights, cardValueContext(view as GameState, index)),
+        card,
+        cost,
+        targets: [target.instanceId],
+        reason: explain ? `copy ${target.card.def.name}` : NO_REASON,
+      };
+    }
     case 'sweeper': {
       const net = sweeperValue(view, otherPlayer(opp), weights, index);
       if (net <= 0) return undefined; // our own board would pay for it — hold it
@@ -1362,6 +1393,30 @@ function counterTarget(view: PilotView, me: PlayerId) {
   const top = view.stack[view.stack.length - 1];
   if (!top || top.kind !== 'spell') return undefined;
   if (top.controller === me) return undefined; // already answered / it is ours
+  return top as Extract<typeof top, { kind: 'spell' }>;
+}
+
+/**
+ * The spell on the stack a COPY should point at, or undefined for "hold it".
+ *
+ * The mirror image of {@link counterTarget}, and the differences are the card:
+ *
+ *  - it answers the TOP object, for the same reason a counter does — anything
+ *    below has already been responded to;
+ *  - the spell must be an INSTANT OR SORCERY, because that is what the printed
+ *    restriction allows and offering anything else builds a cast the engine
+ *    rejects, which is the loop `scoredSpellGoals` exists to avoid;
+ *  - unlike a counter, OUR OWN spell is the good case, not the disqualifying
+ *    one. Casting a burn spell and copying it before it resolves is the line the
+ *    card is printed for. An opponent's spell is legal to copy too (the copy is
+ *    ours — CR 707.10), and worth exactly as much.
+ */
+function copyTarget(view: PilotView, me: PlayerId) {
+  void me;
+  const top = view.stack[view.stack.length - 1];
+  if (!top || top.kind !== 'spell') return undefined;
+  const types = top.card.def.types;
+  if (!types.includes('instant') && !types.includes('sorcery')) return undefined;
   return top as Extract<typeof top, { kind: 'spell' }>;
 }
 
@@ -2185,6 +2240,7 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
     if (ref.primitive === PRIMITIVE.counterSpell || ref.primitive === PRIMITIVE.counterUnlessPaid) {
       return { kind: 'counter' };
     }
+    if (ref.primitive === PRIMITIVE.copySpell) return { kind: 'copySpell' };
     if (ref.primitive === PRIMITIVE.destroyAll) return { kind: 'sweeper' };
     if (ref.primitive === PRIMITIVE.preventDamage) {
       return {
