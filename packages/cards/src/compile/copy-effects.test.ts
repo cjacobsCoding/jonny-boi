@@ -215,7 +215,7 @@ describe('the residuals are reported by NAME, never as "copying is missing"', ()
     expect(result.definition?.effects?.[0]?.params?.mayRetarget).toBe(false);
   });
 
-  it('"then return it to its owner's hand" is a SECOND ref, ordered after the copy', () => {
+  it(`"then return it to its owner's hand" is a SECOND ref, ordered after the copy`, () => {
     const result = compiled({
       name: 'Reversal Test',
       types: ['Instant'],

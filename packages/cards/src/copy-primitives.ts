@@ -227,15 +227,32 @@ export const createTokenCopy: EffectPrimitive = (ctx) => {
 };
 
 /**
- * What `createTokenCopy` copies: the targeted permanent, or — when the card
- * names no target — the permanent this effect's source is ATTACHED TO.
+ * What `createTokenCopy` copies — three printed selectors, one lookup:
  *
- * The second case is Helm of the Host's "a copy of equipped creature", which
- * points at its host rather than at a target. Reusing `attachedTo` is what makes
- * that a data answer instead of a second primitive, and it is the same field the
- * equipped-creature trigger family already reads.
+ *  - `self` — "a copy of THIS creature" (Giant Adephage, Homunculus Horde). No
+ *    target at all, which is precisely what makes it legal inside a triggered
+ *    ability: a trigger that needed a target would have to be aimed as it went
+ *    on the stack, and this one names its own source.
+ *  - `equipped` — "a copy of equipped creature" (Helm of the Host) / "of
+ *    enchanted artifact" (Mechanized Production): the source's HOST. Reusing
+ *    `attachedTo` is what makes that a data answer rather than a second
+ *    primitive, and it is the same field the equipped-creature trigger family
+ *    already reads.
+ *  - otherwise, the TARGET, re-checked for legality here exactly as every other
+ *    targeting primitive in this package re-checks at resolution.
+ *
+ * The source is read off the BATTLEFIELD in every case, so a permanent that has
+ * left between the ability going on the stack and resolving simply makes no
+ * token — the outcome that can never play better than the printed card.
  */
 function copySourceFor(ctx: EffectContext): CardInstance | undefined {
+  if (ctx.params.self === true) {
+    // Re-read from the battlefield rather than trusting `ctx.source`: the
+    // resolution outlives the object, and `frameSource` hands back a
+    // last-known-information stand-in for a permanent that has died. Copying
+    // that stand-in would create a token of a card called "unknown".
+    return ctx.state.battlefield.find((c) => c.instanceId === ctx.source.instanceId);
+  }
   if (ctx.params.equipped === true) {
     const host = ctx.source.attachedTo;
     if (host == null) return undefined;
