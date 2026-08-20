@@ -134,19 +134,25 @@ describe('the mechanic inventory is a closed, checkable manifest', () => {
     // like a guarantee and asserting nothing.
     const byEvent = new Set(Object.values(SOAK_EVENT_WITNESS).filter((v): v is SoakMechanicId => v !== null));
     const missing = SOAK_MECHANICS.filter(
-      (m) => m.witnessKind === 'event' && !byEvent.has(m.id) && !WITNESSED_BY_CHOICE_SOURCE.has(m.id),
+      (m) => m.witnessKind === 'event' && !byEvent.has(m.id) && !WITNESSED_WITH_EXTRA_CONTEXT.has(m.id),
     );
     expect(missing.map((m) => m.id)).toEqual([]);
   });
 });
 
 /**
- * Mechanics whose witness is an event PLUS the identity of the card that asked —
- * X, kicker and buyback all park a question, and scry and surveil are the same
- * printed look with different destinations, so the event type alone cannot name
- * them (see `soak.ts`'s `choiceAsked` handling).
+ * Mechanics witnessed by an event PLUS something the event TYPE alone cannot say,
+ * so they are absent from `SOAK_EVENT_WITNESS`'s one-type-one-mechanic table.
+ *
+ * Two shapes, both handled in `soak.ts`:
+ *  - the SOURCE that asked. X, kicker and buyback all park a question, and scry
+ *    and surveil are the same printed look with different destinations, so the
+ *    mechanic lives in the card behind `choiceAsked.sourceInstanceId`;
+ *  - the counter KIND. `counterAdded` covers +1/+1, loyalty and defense alike,
+ *    and crediting it wholesale would let a planeswalker entering play satisfy
+ *    the +1/+1-counter requirement.
  */
-const WITNESSED_BY_CHOICE_SOURCE: ReadonlySet<SoakMechanicId> = new Set([
+const WITNESSED_WITH_EXTRA_CONTEXT: ReadonlySet<SoakMechanicId> = new Set([
   'x-cost',
   'kicker',
   'buyback',
@@ -154,6 +160,7 @@ const WITNESSED_BY_CHOICE_SOURCE: ReadonlySet<SoakMechanicId> = new Set([
   'surveil',
   'optional-payment',
   'graveyard-recursion',
+  'counters',
 ]);
 
 describe('the fast soak', () => {
