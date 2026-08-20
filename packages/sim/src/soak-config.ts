@@ -179,7 +179,8 @@ export type SoakMechanicId =
   | 'additional-cast-cost'
   | 'intervening-if'
   | 'tutor-route'
-  | 'replacement-effect';
+  | 'replacement-effect'
+  | 'copy-effect';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -399,6 +400,14 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     // the definition, not an effect the script runs.
     printedBy: (_c, t) => t.includes('"replacements"'),
   },
+  {
+    id: 'copy-effect',
+    label: 'copy effect — a permanent entered as a copy of another (CR 706, layer 1)',
+    witnessKind: 'event',
+    // Declared through `CardDefinition.copyOnEnter`-style data rather than a
+    // primitive id, like the replacement layer above.
+    printedBy: (_c, t) => t.includes('"copy') || t.includes('enterAsCopy'),
+  },
   { id: 'graveyard-recursion', label: 'graveyard recursion — a card returned from a graveyard', witnessKind: 'event', printedBy: (_c, t) => t.includes('returnFromGraveyard') || t.includes('persistReturn') },
   {
     id: 'optional-payment',
@@ -606,6 +615,9 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   // The application IS the mechanic firing: a multiplier or a shield changed a
   // quantity. `prevented > 0` is the prevention half, already witnessed above by
   // `damagePrevented`, so this stays one id rather than splitting the family.
+  // A permanent took on another object's copiable values — the mechanic firing,
+  // and public: the table watches a Clone arrive as something.
+  becameCopy: 'copy-effect',
   replacementApplied: 'replacement-effect',
   // Bookkeeping, like `continuousEffectExpired`: a floating effect wearing off
   // proves it EXISTED, not that it ever replaced anything. An unspent fog expires

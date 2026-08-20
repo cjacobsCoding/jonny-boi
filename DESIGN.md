@@ -2221,7 +2221,7 @@ spent** to cast it (Mockingbird — nothing records that number), and "becomes a
 activated ability rather than as the permanent enters (Mirage Mirror, Thespian's Stage).
 
 
-### 3.24 Replacement and prevention effects — a layer the engine never had — ✅ done
+### 3.25 Replacement and prevention effects — a layer the engine never had — ✅ done
 CR 614/615/616. A replacement effect never goes on the stack and never "happens": it watches for an
 event that *would* happen and changes what happens instead. Three printed families that looked like
 three template buckets are **one system underneath**, and this ships as one layer that damage,
@@ -2367,7 +2367,7 @@ cannot see the mechanic. Closing that is a DATA edit on the §3.20 path (add the
 `expansion-candidates.json`, re-run `build-expansion.ts`, re-fetch data-tools, regenerate the web card
 index) — it needs the network and it rewrites three generated files, so it is deliberately left to
 whoever next runs that pipeline rather than done from this branch.
-### 3.25 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
+### 3.26 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
 Twelve engine systems shipped in three days (§3.13–§3.20) and the pool went 191 → 357 cards. Every one
 of them was tested **in isolation by the agent that built it**, and almost none were ever tested
 together. The gauntlet decks in `packages/sim/data/decks` are eight curated archetypes: they exercise a
@@ -2461,7 +2461,7 @@ scry 2") as leaving a dead creature on the battlefield — it does, legally, unt
 (CR 704.3 / 608.2). And scanning an observation against the state the action STARTED from reports every
 land drop in the game as a hidden-zone leak. `soak.ts` carries both traps as comments beside the code
 that avoids them.
-### 3.26 Combat damage, and what the EQUIPPED creature does — ✅ done
+### 3.27 Combat damage, and what the EQUIPPED creature does — ✅ done
 The two seams the ~38-card corpus family shares, and they are one idea seen twice: **a trigger has a
 watched object, and it is not always the card it is printed on.**
 
@@ -2590,7 +2590,7 @@ next `--fetch` picks it up for free. Until then the family is reachable by deck 
 - Every feature adds tests and leaves the full suite green.
 - Claim work on `COORDINATION.md` before starting; pick a unique `feat/<slug>` branch.
 
-### 3.27 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
+### 3.28 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
 
 Every other suite in this repo is organised BY FEATURE, each written by the agent that built that
 feature, asserting what that agent believed the rule was. That answers "do our tests pass?" It cannot

@@ -117,7 +117,7 @@ throughput (games/sec) from regressing.
 | feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
-| test/full-pool-soak | worker | packages/sim (NEW soak.ts + soak-config.ts + soak-decks.ts + soak.test.ts + soak-deep.test.ts; cli.ts `soak` command; index.ts exports), packages/ai (heuristic.ts — 4 small hunks + 1 import; indestructible-blocking-pilot.test.ts +3 cases; flashback-pilot.test.ts +3 cases), packages/core (engine.ts — ONE `checkStateBasedActions` call in `applyCastSpell`; flashback.test.ts +3 cases; sba.test.ts +1 case), DESIGN §3.24, TESTING.md, COORDINATION. **No pool change, no meta-deck change, no compiler rule.** The two core edits are both state-based-action passes in `applyCastSpell`; they emit nothing unless something actually dies, and no gauntlet deck contains a card that can make one fire (measured — see the note below), so every recorded baseline is unmoved. | 🚧 PUSHED, not merged |
+| test/full-pool-soak | worker | packages/sim (NEW soak.ts + soak-config.ts + soak-decks.ts + soak.test.ts + soak-deep.test.ts; cli.ts `soak` command; index.ts exports), packages/ai (heuristic.ts — 4 small hunks + 1 import; indestructible-blocking-pilot.test.ts +3 cases; flashback-pilot.test.ts +3 cases), packages/core (engine.ts — ONE `checkStateBasedActions` call in `applyCastSpell`; flashback.test.ts +3 cases; sba.test.ts +1 case), DESIGN §3.26, TESTING.md, COORDINATION. **No pool change, no meta-deck change, no compiler rule.** The two core edits are both state-based-action passes in `applyCastSpell`; they emit nothing unless something actually dies, and no gauntlet deck contains a card that can make one fire (measured — see the note below), so every recorded baseline is unmoved. | 🚧 PUSHED, not merged |
 | feat/step-trigger-templates | worker | packages/core (NEW intervening.ts + step-triggers.test.ts; triggers/state/choices/effects/events/engine/index + internal triggers-runtime & clone), packages/cards (compile/rules.ts, primitives, choice-primitives, effect-helpers, index + NEW compile/step-trigger-templates.test.ts + 2 flipped tests), packages/sim (paired-arms-config +1, observation +1), apps/web/src/lib/about/mechanics.ts (3 witnesses), DESIGN §3.21 | 🚧 PUSHED, not merged |
 | feat/split-cards | worker | packages/core (card.ts/card-grants.ts/actions.ts/state.ts/engine.ts + internal/sba.ts + index.ts + NEW split-cards.test.ts + 1 test literal in alternative-costs.test.ts), packages/cards (compile/compile.ts + compile/index.ts + index.ts + NEW compile/split-cards.test.ts + 3 stale test claims + 1 pool-mechanics reason), packages/data-tools (normalize.ts + types.ts - `layout` capture), packages/ai (heuristic.ts + NEW split-cards-pilot.test.ts), apps/web (lib/play/session.ts, components/play/PlayBoard.tsx, lib/about/mechanics.ts + NEW lib/play/split-cards-session.test.ts), DESIGN §3.21 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 
@@ -315,11 +315,11 @@ _Append dated notes here; keep them short. Newest at top._
   shipped in three days and every one was tested in isolation by the agent that built it; the eight
   gauntlet decks never put a walker, an Equipment, a protection creature, a modal spell and a
   flashback spell in one game. `packages/sim/src/soak*.ts` builds randomised-but-legal decks from the
-  whole pool that do. DESIGN §3.24 and TESTING.md have the full write-up.
+  whole pool that do. DESIGN §3.26 and TESTING.md have the full write-up.
 
   ⚠️ **Numbering note for the integrator: `origin/main` currently has THREE sections numbered
   §3.21** (step-triggers, split-cards, as-enters) — they were merged without renumbering. I took
-  §3.24 for the soak rather than unilaterally renumbering three other agents' sections, since their
+  §3.26 for the soak rather than unilaterally renumbering three other agents' sections, since their
   in-flight COORDINATION rows all point at "§3.21". They want to become §3.21/§3.22/§3.23.
 
   **Run it:** the FAST tier is in `npm test` already (≈104 games, every invariant on every decision,
@@ -471,8 +471,8 @@ _Append dated notes here; keep them short. Newest at top._
 - 2026-08-20 integrator: ✅ **RESOLVED — the §3.21 collision below is fixed.** DESIGN's sections
   after §3.20 are now unique and in document order: **§3.21** the triggering player + intervening
   "if" · **§3.22** the second castable half (split/aftermath/adventure/Siege) · **§3.23** the named
-  as-enters value · **§3.24** replacement and prevention · **§3.25** the full-pool soak · **§3.26**
-  combat damage and the equipped creature · **§3.27** rules conformance. Every cross-reference that
+  as-enters value · **§3.24** copy effects · **§3.25** replacement and prevention · **§3.26** the
+  full-pool soak · **§3.27** combat damage and the equipped creature · **§3.28** rules conformance. Every cross-reference that
   pointed at an ambiguous number was repointed by CONTENT, not by guess (DESIGN's fuse note →
   §3.22; the board's Siege note → §3.22; the naming write-up → §3.23; the completion plan's
   "what still blocks the rest" → §3.23; `soak-config.ts`'s "§3.21 ×3" → "§3.21–§3.23"). Three
