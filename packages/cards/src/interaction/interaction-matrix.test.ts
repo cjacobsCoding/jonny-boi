@@ -388,7 +388,7 @@ counters x attachments   | covered   | layers-counters-cda + transform-and-trigg
 counters x statics       | covered   | layers-counters-cda: an anthem, counters and a pump on one creature read the sum
 counters x triggers      | covered   | transform-and-triggers: a trigger that adds a counter to itself, on an ENGINE-created permanent
 
-cda x turnfacts          | gap       | sba-on-priority: a star box that shrinks on a NON-cast path keeps standing with lethal damage until the next resolution. CR 704.3
+cda x turnfacts          | covered   | layers-counters-cda: a star box that shrinks on a NON-cast path is dead before anybody gets priority (CR 704.3, closed by fix/max-hand-size-and-sba)
 cda x mana               | n/a       | a star box is a P/T; a mana ability produces mana
 cda x attachments        | covered   | layers-counters-cda: an Equipment on a star box adds to the formula base
 cda x statics            | covered   | layers-counters-cda: an anthem on a star box adds to the formula base
@@ -560,6 +560,14 @@ interface Gap {
   readonly what: string;
   /** Why it is recorded rather than fixed here. */
   readonly whyNotFixedHere: string;
+  /**
+   * The branch that CLOSED it, when one has. The entry stays either way — a
+   * register that deletes what it fixed cannot tell you the cell was ever wrong,
+   * and this file already kept one closed entry as prose (`two-zone-change-
+   * funnels`). Making it a FIELD is what lets the honesty tests below tell an
+   * open gap from a historical one instead of counting both.
+   */
+  readonly closedBy?: string;
 }
 
 const GAPS: readonly Gap[] = [
@@ -567,19 +575,21 @@ const GAPS: readonly Gap[] = [
     id: 'sba-on-priority',
     cr: 'CR 704.3',
     repro: 'graveyard-and-alt-costs.test.ts',
+    closedBy: 'feat/replacement-effects (announcement half) + fix/max-hand-size-and-sba (priority half)',
     what:
-      'NARROWED, not closed. CR 704.3 checks state-based actions whenever a player WOULD RECEIVE ' +
-      'PRIORITY. A sibling has since closed the announcement half - `applyCastSpell` now runs the ' +
-      'pass after a cast is announced, which is what a flashback cast emptying a graveyard card ' +
-      'TYPE out from under a Tarmogoyf needed, and that cell is now covered positively. What ' +
-      'remains: `onPassPriority`, `advanceToStepWithPriority` and `grantPriority` still never call ' +
-      '`checkStateBasedActions`, so a board that becomes illegal on any path that is NOT a cast, a ' +
-      'resolution, combat damage, the draw step or cleanup stays illegal until the next resolution.',
+      'CLOSED, kept here as the record. CR 704.3 checks state-based actions whenever a player ' +
+      'WOULD RECEIVE PRIORITY, and it was answered in two halves by two branches. A sibling ' +
+      'closed the ANNOUNCEMENT half - `applyCastSpell` runs the pass after a cast is announced, ' +
+      'which is what a flashback cast emptying a graveyard card TYPE out from under a Tarmogoyf ' +
+      'needed. `fix/max-hand-size-and-sba` closed the PRIORITY-PASS half: `onPassPriority` now ' +
+      'runs the check too, so a board that becomes illegal on a path that is NOT a cast, a ' +
+      'resolution, combat damage, the draw step or cleanup is settled before anybody acts again. ' +
+      'Both reproductions are now positive tests.',
     whyNotFixedHere:
-      'the remaining half puts an SBA pass on the engine\'s hottest loop (every priority pass, ' +
-      'every step change), and wall clock on this box is worthless - the same build reads 39-87 ' +
-      'games/sec within an hour - so it needs a paired CPU-time measurement by whoever owns the ' +
-      'hot path. The reproduction pins the honest current behaviour meanwhile.',
+      'it WAS fixed, by the branch briefed to own the hot path. The check sits behind ' +
+      '`stateBasedActionsPossible`, an allocation-free single walk that is conservative in one ' +
+      'direction only, measured with paired `process.cpuUsage` rather than with the wall clock ' +
+      'this box cannot be trusted for. The entry stays so the cell cannot silently regress.',
   },
   {
     id: 'spell-draw-decking',
@@ -601,6 +611,7 @@ const GAPS: readonly Gap[] = [
     id: 'two-zone-change-funnels',
     cr: 'CR 400.7',
     repro: 'new-systems.test.ts',
+    closedBy: 'test/interaction-matrix',
     what:
       'FIXED ON THIS BRANCH, kept here as the record. There are two funnels that move a ' +
       'permanent off the battlefield - core\'s `moveToZone` + `resetInstanceForNewZone`, and the ' +
@@ -616,16 +627,20 @@ const GAPS: readonly Gap[] = [
     id: 'counter-annihilation-is-not-an-sba',
     cr: 'CR 704.5q',
     repro: 'layers-counters-cda.test.ts',
+    closedBy: 'fix/max-hand-size-and-sba',
     what:
-      '+1/+1 and -1/-1 counters annihilate inside the `addCounters` PRIMITIVE rather than in ' +
-      'the state-based-action pass. Two kinds arriving by two different routes therefore ' +
-      'coexist until the next `addCounters` on that permanent. Unreachable by any printed card ' +
-      'today (every route in the shipped pool goes through `addCounters`), which is why it is ' +
-      'recorded rather than fixed speculatively.',
+      'CLOSED, kept here as the record. +1/+1 and -1/-1 counters used to annihilate inside the ' +
+      '`addCounters` PRIMITIVE rather than in the state-based-action pass, so two kinds arriving ' +
+      'by two different routes coexisted until the next `addCounters` on that permanent. It was ' +
+      'reachable after all: PERSIST returns a creature carrying its -1/-1 counter without going ' +
+      'anywhere near `addCounters` - and it wrote a NEGATIVE +1/+1 tally, so nothing could even ' +
+      'ask whether the creature had a -1/-1 counter, which is the printed condition persist ' +
+      'itself turns on.',
     whyNotFixedHere:
-      'no printed card reaches it, and moving the rule into the SBA pass costs a counters walk ' +
-      'on every state-based check. The reproduction is the placement argument for whoever adds ' +
-      'the second counter route (persist, a -1/-1 ETB replacement, proliferate).',
+      'it WAS fixed, by `fix/max-hand-size-and-sba`: the rule now lives in `internal/sba.ts` and ' +
+      'the primitive no longer annihilates at all, so there is one implementation. The counters ' +
+      'walk costs one reference comparison per permanent on a board where nothing carries a ' +
+      'counter (`NO_COUNTERS` is shared and frozen). Persist now writes a real -1/-1 counter.',
   },
 ];
 
@@ -714,14 +729,22 @@ describe('every matrix cell is HONEST', () => {
   });
 
   it('a gap cell carries a GAP id and a CR reference', () => {
-    const gaps = CELLS.filter((c) => c.status === 'gap');
-    // A matrix with no gaps at all, over this many systems built this fast, would
-    // be a claim to disbelieve rather than a result to celebrate.
-    expect(gaps.length).toBeGreaterThan(0);
-    for (const gap of gaps) {
+    for (const gap of CELLS.filter((c) => c.status === 'gap')) {
       expect(gap.note, `${key(gap.a, gap.b)} has no CR reference`).toMatch(/CR \d/);
       expect(gap.note.split(':')[0]?.trim().length, `${key(gap.a, gap.b)} has no GAP id`).toBeGreaterThan(0);
     }
+  });
+
+  it('the register still records at least one OPEN gap', () => {
+    // A rules engine of this size with nothing outstanding, indexed this fast,
+    // would be a claim to disbelieve rather than a result to celebrate.
+    //
+    // Asserted over the REGISTER rather than over gap CELLS, because a gap need
+    // not land on a pair of systems: `spell-draw-decking` is about the draw rule,
+    // which is not a system in this matrix. The gap CELLS emptied as the engine
+    // got fixed, and reading that as "nothing is outstanding" was the one way
+    // this suite could have quietly started lying.
+    expect(GAPS.filter((g) => g.closedBy === undefined).length).toBeGreaterThan(0);
   });
 
   it('an n/a or untested cell carries a real reason', () => {

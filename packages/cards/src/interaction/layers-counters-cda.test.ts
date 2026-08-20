@@ -131,7 +131,7 @@ describe('CELL: characteristic-defining P/T x counters x anthem x until-EOT pump
     expect(statsOf(state, goyf.id).power).toBe(1);
   });
 
-  it('GAP: a star box that SHRINKS below its damage survives until the next resolution (CR 704.3)', () => {
+  it('a star box that SHRINKS below its damage is dead before anybody gets priority (CR 704.3)', () => {
     const reg = buildRegistry();
     let state = boardAtMain(reg);
     place(state, 'A', 'graveyard', poolCard('Lightning Bolt'));
@@ -155,23 +155,19 @@ describe('CELL: characteristic-defining P/T x counters x anthem x until-EOT pump
     expect(statsOf(state, goyf.id)).toEqual({ power: 2, toughness: 3 });
     state = passOnce(state, reg);
 
-    // HONEST CURRENT BEHAVIOUR - this is a recorded GAP, not a rule passing.
-    // `onPassPriority`, `advanceToStepWithPriority` and `grantPriority` never call
-    // `checkStateBasedActions`; the engine runs them only after a RESOLUTION,
-    // after combat damage, after the draw step and at cleanup. A board that
-    // becomes illegal without a resolution therefore stays illegal, and this
-    // creature stands there with lethal damage on it.
+    // ⚑ This cell was a recorded GAP: `onPassPriority` never called
+    // `checkStateBasedActions`, so a board that became illegal without a
+    // RESOLUTION behind it stayed illegal and this creature stood there with
+    // lethal damage on it until something else happened to run the check.
     //
-    // The reachable card-level reproduction is in `interaction-matrix.test.ts`
-    // under the GAP id `sba-on-priority` (Tarmogoyf x a flashback cast, which
-    // moves a card out of a graveyard at CAST time, before anybody responds).
-    expect(isOnBattlefield(state, goyf.id)).toBe(true);
-    expect(onBattlefield(state, goyf.id).damageMarked).toBe(3);
-
-    // And it dies the moment ANY resolution happens, which is what makes the gap
-    // a WINDOW rather than a permanently wrong answer.
-    state = settle(castCard(state, reg, poolCard('Shock'), 'A', ['B']).state, reg);
+    // `onPassPriority` now runs the check (behind the cheap
+    // `stateBasedActionsPossible` gate), which is what CR 704.3 asks for: the
+    // game looks whenever a player WOULD receive priority, however the board got
+    // into that state. Note the shrink here is caused by writing on the
+    // graveyard directly — no cast, no resolution, no mutation site — which is
+    // precisely why only the boundary can catch it.
     expect(isOnBattlefield(state, goyf.id)).toBe(false);
+    expect(state.players.A.graveyard.some((c) => c.instanceId === goyf.id)).toBe(true);
   });
 });
 
@@ -194,33 +190,34 @@ describe('CELL: +1/+1 counters x -1/-1 counters (CR 704.5q annihilation)', () =>
     expect(statsOf(state, bear.id)).toEqual({ power: 3, toughness: 3 });
   });
 
-  it('KNOWN GAP: annihilation is done by the counters PRIMITIVE, not by a state-based action', () => {
-    // CR 704.5q is a STATE-BASED ACTION: any permanent with both kinds has them
-    // removed in pairs whenever SBAs are checked, whoever put them there. Here it
-    // lives inside `putCountersOn`, so two kinds that arrive by two DIFFERENT
-    // routes coexist until the next `addCounters` on that permanent.
+  it('annihilates counters that arrived by a route the counters primitive never touched', () => {
+    // ⚑ This cell was a GAP PIN — "annihilation is done by the counters
+    // PRIMITIVE, not by a state-based action" — and it is now a positive test.
+    // CR 704.5q IS a state-based action, so it lives in the SBA pass
+    // (`internal/sba.ts`), where it applies to counters however they arrived
+    // rather than only to the ones `putCountersOn` put there. The primitive no
+    // longer annihilates at all; there is one implementation of the rule.
     //
-    // Today every route in the shipped pool goes through `addCounters`, so this
-    // is unreachable by any printed card - which is why it is recorded as a GAP
-    // with its honest current behaviour rather than fixed speculatively. The
-    // moment a second counter route exists (persist, a -1/-1 ETB replacement,
-    // proliferate) this test is the one that says where the rule belongs.
+    // The second route below is the one persist actually takes (it returns a
+    // creature carrying a -1/-1 counter without going through `addCounters`),
+    // and the one any future -1/-1 ETB replacement or proliferate will take.
     const reg = buildRegistry();
     let state = boardAtMain(reg);
     const bear = resolvePermanent(state, reg, BEAR, 'A');
     state = bear.state;
     state = castCard(state, reg, counterSpell('matrix-plus-one-a', 1), 'A', [bear.id]).state;
 
-    // A second route: counters written straight onto the instance, as a future
-    // replacement effect or a non-`addCounters` primitive would.
+    // A second route: counters written straight onto the instance, as persist and
+    // any future replacement effect or non-`addCounters` primitive does.
     const inst = onBattlefield(state, bear.id);
     inst.counters = { ...inst.counters, [MINUS_ONE_COUNTER]: 1 };
     state = settle(passOnce(state, reg), reg);
 
-    // HONEST CURRENT BEHAVIOUR: the pair survives the SBA pass. The net P/T is
-    // right, which is exactly why this hides.
-    expect(onBattlefield(state, bear.id).counters[PLUS_ONE_COUNTER]).toBe(1);
-    expect(onBattlefield(state, bear.id).counters[MINUS_ONE_COUNTER]).toBe(1);
+    // The pair is GONE, so "does it have a -1/-1 counter on it?" — persist's own
+    // printed condition — answers honestly. The net P/T never moved, which is
+    // exactly why this hid for so long.
+    expect(onBattlefield(state, bear.id).counters[PLUS_ONE_COUNTER] ?? 0).toBe(0);
+    expect(onBattlefield(state, bear.id).counters[MINUS_ONE_COUNTER] ?? 0).toBe(0);
     expect(statsOf(state, bear.id)).toEqual({ power: 2, toughness: 2 });
   });
 });

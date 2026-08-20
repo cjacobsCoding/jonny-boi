@@ -244,7 +244,7 @@ describe('CELL: non-hand casting x characteristic-defining P/T', () => {
     expect(state.stack.some((o) => o.instanceId === call)).toBe(true);
   });
 
-  it('GAP: the SAME shrink caused WITHOUT a cast still waits for the next resolution (CR 704.3)', () => {
+  it('the SAME shrink caused WITHOUT a cast is also settled before priority (CR 704.3)', () => {
     const reg = buildRegistry();
     let state = boardAtMain(reg);
     place(state, 'A', 'graveyard', poolCard('Lightning Bolt'));
@@ -261,19 +261,17 @@ describe('CELL: non-hand casting x characteristic-defining P/T', () => {
     state.players.A.graveyard = state.players.A.graveyard.filter((c) => c.instanceId !== sorcery);
     expect(statsOf(state, goyf.id)).toEqual({ power: 2, toughness: 3 });
 
-    // HONEST CURRENT BEHAVIOUR - recorded GAP `sba-on-priority`, now NARROWED.
-    // A sibling closed the announcement half (the cell above): `applyCastSpell`
-    // runs the pass after the announcement. `onPassPriority`,
-    // `advanceToStepWithPriority` and `grantPriority` still do not, so a board
-    // that becomes illegal on any OTHER path stays illegal until the next
-    // resolution.
+    // ⚑ This was the last standing half of the recorded GAP `sba-on-priority`.
+    // A sibling closed the ANNOUNCEMENT half (the cell above): `applyCastSpell`
+    // runs the pass after a spell is announced. The PRIORITY-PASS half is closed
+    // here — `onPassPriority` now runs the check too, behind the cheap
+    // `stateBasedActionsPossible` gate — which is what makes the answer
+    // independent of HOW the board became illegal. That independence is the
+    // whole point of CR 704.3, and it is what a per-site discipline cannot give:
+    // the next mutation path that forgets to call the check is covered by this.
     state = act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
-    expect(isOnBattlefield(state, goyf.id)).toBe(true);
-    expect(onBattlefield(state, goyf.id).damageMarked).toBe(3);
-
-    // It dies the moment ANY resolution happens - a window, not a wrong board.
-    state = settle(castCard(state, reg, poolCard('Shock'), 'A', ['B']).state, reg);
     expect(isOnBattlefield(state, goyf.id)).toBe(false);
+    expect(state.players.A.graveyard.some((c) => c.instanceId === goyf.id)).toBe(true);
   });
 });
 
