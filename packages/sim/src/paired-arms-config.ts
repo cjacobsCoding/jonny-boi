@@ -158,6 +158,13 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // Attaching an Aura/Equipment reads only the battlefield permanent it targets.
   'attachToTarget',
   'dealDamageToEach',
+  /*
+   * `preventDamage` registers a floating prevention effect (a fog) and touches
+   * nothing else — no library is read, and the effect it creates is consulted
+   * only by the damage layer, which reads the battlefield and a life total.
+   * Paired arms stay comparable for exactly the reason `dealDamage` does.
+   */
+  'preventDamage',
   'addCounters',
   'gainLife',
   'loseLife',

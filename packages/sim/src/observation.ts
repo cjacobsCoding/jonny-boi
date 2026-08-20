@@ -245,6 +245,16 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // that put it there, and the granting ability resolved in front of the table.
   cardGrantAdded: 'public',
   cardGrantExpired: 'public',
+  /*
+   * A replacement effect firing is as public as the event it replaced. Both
+   * halves are already public — the counters land face up, the damage moves a
+   * life total — and the card that did it is on the battlefield in front of
+   * everybody. `from`/`to` say only how much of each; nothing here names a card
+   * in a hand or a library, and the `label` is the printed line, which every
+   * player can read off the permanent.
+   */
+  replacementApplied: 'public',
+  replacementExpired: 'public',
   permanentAttached: 'public',
   permanentUnattached: 'public',
   attachmentFailed: 'public',
