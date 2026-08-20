@@ -2191,9 +2191,12 @@ ladder.
 **Compiler: two closed tables, and a card outside them reports.** `copy-as-enters` owns the whole
 printed clause including its tapped-ness and its "except …" tail — an added card type or creature
 subtype, a kept name, legendary on or off, Spark Double's extra +1/+1 and loyalty counters, Vesuva's
-"enters tapped". **Measured on the cached 2100-card corpus: 408 → 415 playable** (Sculpting Steel,
-Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva, Echoing Deeps — which copies
-a land card in a **graveyard**).
+"enters tapped". **Measured PAIRED against the same-day `origin/main` on the cached
+2100-card corpus: 485 → 493 playable, nothing lost** — Sculpting Steel, Mirrormade, Copy Enchantment,
+Clever Impersonator, Spark Double, Vesuva, Echoing Deeps (which copies a land card in a **graveyard**)
+and Glasspool Mimic, whose copy clause sits on a modal-DFC face and so needed §3.22's work too.
+Throughput is at parity, measured rather than assumed: 562 vs 562 scavenges over 40 identical seeded
+self-play games (29,899 actions, byte-identical in both arms).
 
 **The AI has a policy, and it needed one.** The generic `selectCards` path prices candidates with
 `cardValue`, which reads EFFECTIVE stats — so a pilot would copy the 1/1 wearing three counters over

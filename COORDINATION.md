@@ -128,8 +128,21 @@ _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-20 worker: `feat/copy-effects` 🚧 PUSHED — **the engine has copy effects now, and they are
   applied in LAYER 1.** An earlier branch was told to skip clones for exactly this reason.
-  **Measured offline against the same cached 2100-card corpus: 408 → 415 playable (+7).** Suite
-  **3685 passed / 0 failed**; `npm run verify` exit 0; `npm run build` exit 0.
+
+  **Measured PAIRED against the same-day `origin/main` (068be3d) in a second worktree on this box,
+  same cached 2100-card corpus: 485 → 493 playable (+8), and NOTHING lost.** The eight, by name:
+  Sculpting Steel, Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva, Echoing
+  Deeps, and **Glasspool Mimic** — which needed BOTH this branch and `feat/split-adventure` (its
+  copy clause is on a modal-DFC face). Suite **3853 passed / 0 failed** after merging that main;
+  `npm run verify` exit 0; `npm run build` exit 0.
+
+  ⚡ **Throughput: parity, and paid for rather than assumed.** Allocation over 40 identical seeded
+  self-play games (29,899 actions, byte-identical in both arms): **562 vs 562** and **561 vs 562**
+  scavenges. ⚠️ The FIRST paired run read 581 vs 835 and was pure noise — two repeats settled it.
+  Paired best-of-5 CPU across three pairs: 1.02× / 1.07× / 0.75×, i.e. the CPU number on this box
+  is not usable either; the scavenge count is. The hot path is untouched by construction:
+  `askCopyAsEnters` returns on one `undefined` property read for every card that is not a copier,
+  and `uncopiedDef` is copied conditionally.
 
   ✅ **`CardDefinition.copyAsEnters` + `CardInstance.uncopiedDef`** — "You may have ~ enter as a copy
   of any creature on the battlefield", including the printed "except …" tail (an added card type or
@@ -215,11 +228,12 @@ _Append dated notes here; keep them short. Newest at top._
      @jonny-boi/data-tools`, network) and holds 357 cards, none of them a copier. Adding Clever
      Impersonator to the pool needs that fetch. Until then the seven cards are reachable through deck
      IMPORT, which is how most of the corpus reaches the app.
-  2. **Glasspool Mimic still reports** — and NOT for a copy reason. Its copy clause compiles; the card
-     is a modal DFC, and `normalizeCard` (data-tools) does not carry Scryfall's `layout`, so
-     `isModalDfc` never fires on a fetched record and the card falls through to
-     `SECOND_CASTABLE_FACE_GAP`. That belongs to whoever owns `feat/modal-casting` /
-     `feat/double-faced-cards`; I did not touch data-tools.
+  2. ~~Glasspool Mimic still reports~~ — **RESOLVED BY THE MERGE, and worth knowing as a pattern.**
+     Its copy clause compiled here from the start, but the card is a modal DFC and the record's
+     `layout` was not reaching `isModalDfc`, so it fell through to `SECOND_CASTABLE_FACE_GAP`.
+     `feat/split-adventure` landing on main closed that half. The card needed BOTH branches and
+     neither could have delivered it alone — so a coverage audit run on one branch under-counts a
+     card whose two gaps are owned by two workers.
 
   Files owned: `packages/core` (NEW `copy.ts` + `copy.test.ts`; `card.ts`, `state.ts`, `choices.ts`,
   `events.ts`, `engine.ts`, `derived.ts`, `index.ts`, `internal/clone.ts`, `internal/zones.ts`),
