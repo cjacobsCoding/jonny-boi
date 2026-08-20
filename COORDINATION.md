@@ -139,9 +139,11 @@ _Append dated notes here; keep them short. Newest at top._
 - 2026-08-20 worker: `feat/pool-expansion-2` 🚧 PUSHED — **the shipped pool is 357 → 530 cards, and
   every one of the eleven blind mechanics now prints a card a player can see without importing a
   decklist.** Pool + fetch pipeline only: **no compiler rule, no engine change, and NO meta deck
-  touched**, so every recorded DESIGN §3.4a baseline is unmoved. Gauntlet seed 99 is
-  **byte-identical** to the same-box `origin/main` this branch merged (78e3299), every matchup row
-  equal.
+  touched**. Gauntlet seed 99 is **byte-identical** to the same-box `origin/main` this branch merged
+  (`b5752b2`): **80/280**, rows 12·13·17·7·9·7·15, every one equal.
+  ⚠️ **The recorded 81/280 is now 80/280 and that game is NOT mine** — a baseline worktree at
+  `b5752b2` with no pool change reads 80/280 as well, so it belongs to
+  `feat/block-requirements-and-statics`. Whoever re-records §3.4a should use 80/280.
 
   🔑 **THE THING TO KNOW: three of the eleven were blocked in the FETCH PATH, not by the compiler.**
   Every sibling branch signed off with "whoever next runs the pipeline gets these free." They were
@@ -223,8 +225,9 @@ _Append dated notes here; keep them short. Newest at top._
      soak reported it INERT while Delver of Secrets was never dealt in. Narrowed to "a back face that
      is not separately castable". It did not start wrong; it BECAME wrong when the pool grew.
 
-  📊 **Corpus coverage does not move: 524/2100 (25.0%) on the `origin/main` this merged (78e3299) and
-  524/2100 here**, measured in two worktrees on the same box. This branch adds no compiler rule.
+  📊 **Corpus coverage does not move: 533/2100 (25.4%) on `origin/main` at `b5752b2` and 533/2100
+  here**, measured in two worktrees on the same box — and 524/524 against the earlier `78e3299`, so
+  the claim has now held across two baselines. This branch adds no compiler rule.
 
   ⚠️ Three stale-guard fixes fell out, all worth knowing: `expanded-pool.test.ts`'s "no mana source
   taps for more than 2" now takes an exception list BY NAME (Gilded Lotus and Thran Dynamo genuinely
