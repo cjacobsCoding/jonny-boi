@@ -37,7 +37,14 @@ import {
   SOAK_DECK_SIZE,
 } from './soak-decks.js';
 import type { SoakReport } from './soak.js';
-import { compareApplyPaths, formatSoakReport, formatViolations, runSoak, soakSimConfig } from './soak.js';
+import {
+  compareApplyPaths,
+  formatSoakReport,
+  formatViolations,
+  replaySoakMixedGame,
+  runSoak,
+  soakSimConfig,
+} from './soak.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -205,6 +212,50 @@ describe('the fast soak', () => {
     expect(report.turns / report.games, 'games are ending before anything happens').toBeGreaterThan(3);
     expect(report.actions).toBeGreaterThan(report.games * 20);
   });
+});
+
+/*
+ * PINNED SOAK VIOLATIONS — one game each, replayed from the seed the run printed.
+ *
+ * The soak's whole contract is that a violation reproduces (`soak-config.ts`'s
+ * header: "a violation prints the seed AND both decklists"). This is where that
+ * contract gets spent: a defect the tier found becomes a ~200 ms test that fails
+ * for exactly the original reason, instead of a seed in a commit message that
+ * nobody can afford to re-run.
+ *
+ * Add a row when a soak finds something. Keep the row after it is fixed — the
+ * point is the fix staying fixed.
+ */
+describe('soak violations stay fixed, replayed from their seed alone', () => {
+  const PINNED: ReadonlyArray<{
+    readonly seed: number;
+    readonly onPlay?: 'A' | 'B';
+    readonly what: string;
+  }> = [
+    {
+      seed: 4222011655,
+      what:
+        'CR 704.5f: a Weakness-ed Blood Artist held above zero toughness by a Trusty Machete that ' +
+        "Costly Plunder's additional cost then sacrificed — the payment handed priority straight " +
+        'back to the caster, so nothing checked state-based actions and the 0/0 sat there for five ' +
+        'turns (fixed by moving the CR 704.3 boundary to the end of every action)',
+    },
+  ];
+
+  for (const { seed, onPlay, what } of PINNED) {
+    it(`seed ${seed}: ${what}`, () => {
+      const violations = replaySoakMixedGame({
+        pool,
+        registry,
+        pilot,
+        seed,
+        ...(onPlay ? { onPlay } : {}),
+      });
+      expect(violations.length, `
+${formatViolations(violations)}
+`).toBe(0);
+    });
+  }
 });
 
 describe('applyActionInPlace stays exact on SOAK decks', () => {
