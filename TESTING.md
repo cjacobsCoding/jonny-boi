@@ -133,6 +133,66 @@ Scryfall fetch/normalize/parse pipeline, and the masked-view protocol.
 
 ---
 
+## The interaction matrix — `packages/cards/src/interaction`
+
+Every suite above tests ONE system. This directory tests PAIRS of them, because
+that is where a rules engine actually breaks: twenty-three systems landed here in
+four days, each built by a different agent and each tested in isolation by its
+own author, and an interaction has no author at all.
+
+**The matrix is a test, not a document.**
+[`interaction-matrix.test.ts`](packages/cards/src/interaction/interaction-matrix.test.ts)
+holds a table with one line per *unordered pair* of shipped systems and the suite
+refuses to let it be convenient:
+
+| status | means | the suite enforces |
+|---|---|---|
+| `covered` | a test in this directory plays the pair in a real game | the named file exists |
+| `elsewhere` | an existing suite already plays it | the named file exists |
+| `gap` | the pair is genuinely wrong or unimplemented | it carries a **CR reference** and an entry in the GAP register |
+| `n/a` | the two systems cannot interact | it carries a real reason |
+| `untested` | they *can* interact and nobody has proved it | it carries what a test would need |
+
+`untested` exists on purpose. Calling an unproved pair "not applicable" is how a
+matrix becomes a claim instead of a measurement, so the honest category is a
+first-class one and it is the biggest column.
+
+**How to read it**
+
+1. Open the table. Find the two systems you are about to touch.
+2. `covered` → the named file is the test that will catch you.
+3. `gap` → read the GAP register at the top of the same file. Every gap names the
+   CR rule it violates, the reproduction that pins the **honest current
+   behaviour**, and *why it was recorded rather than fixed*. A gap's reproduction
+   is green today and goes **red the day somebody fixes the rule** — that is the
+   signal to move the cell to `covered`.
+4. `untested` → the note says what a test would need. Writing it is a good
+   afternoon.
+
+**How to add a system.** Add it to `SYSTEMS` with a WITNESS — a name `core` must
+still export, and (where the shipped pool prints one) a card predicate. The
+completeness test then fails and tells you *exactly which pairs you owe*: a new
+system cannot land without stating what it does to every system already here.
+
+**The house rules for a cell**, learned from the bugs in this repo:
+
+- **Play a real game.** Every board comes from `createGame`, and every permanent
+  reaches the battlefield by being cast (`harness.ts`'s `resolvePermanent` /
+  `castCard` / `playLand`). A hand-built `CardInstance` carries its own
+  `counters: {}` and so is structurally unable to see the frozen-`NO_COUNTERS`
+  class of bug; a hand-built board is how three of these systems' defects hid.
+- **Use real printed cards.** Pool cards by name where the pool prints one; a
+  real Oracle record through the real compiler (`compiled()`) where it does not.
+  Authoring a `CardDefinition` is authoring the answer.
+- **Assert both halves of a legality claim.** The menu (`legal()`) keeps a pilot
+  honest; the rejection (`rejectionOf()`) keeps a hand-built action honest. A
+  guard proved only by an absent menu entry is decoration.
+- **Sabotage-check it.** Break the rule the cell claims to guard and watch the
+  cell go red. A test that cannot fail is this repo's single most-recorded
+  defect shape.
+
+---
+
 ## Unsupported mechanics
 
 Cards whose printed text needs an engine system that does not exist yet are
