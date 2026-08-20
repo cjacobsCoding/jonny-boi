@@ -439,6 +439,9 @@ describe('CR 608 — resolving spells and abilities', () => {
     let s = act(state, { kind: 'castSpell', player: 'A', instanceId: card!.instanceId }, registry);
     s = bothPass(s);
     expect(orderLog).toEqual(['first', 'second']);
+    // …and the spell genuinely finished: an assertion on a log alone would pass
+    // for a spell that ran its script twice, or never left the stack.
+    expect(s.stack).toHaveLength(0);
   });
 
   crTest('608.3', 'a resolving permanent spell becomes a permanent on the battlefield', () => {

@@ -301,7 +301,7 @@ describe('CR 702 — ward', () => {
   function shockAt(state: GameState, target: CardInstance): GameState {
     const [shock] = giveHand(state, 'A', [SHOCK]);
     const land = putOnBattlefield(state, 'A', MOUNTAIN);
-    let s = act(state, { kind: 'tapForMana', player: 'A', instanceId: land.instanceId }, registry);
+    const s = act(state, { kind: 'tapForMana', player: 'A', instanceId: land.instanceId }, registry);
     return act(
       s,
       { kind: 'castSpell', player: 'A', instanceId: shock!.instanceId, targets: [target.instanceId] },
