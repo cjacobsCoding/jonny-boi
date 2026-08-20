@@ -2842,7 +2842,12 @@ function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e:
       },
       { id: state.nextInstanceId++, sourceInstanceId: afterBuyback.instanceId, sourceName: def.name },
     );
-    if (choice && !isTrivialChoice(choice)) {
+    // A chooser who can no longer act is never stopped for a question, exactly as
+    // the mode/X questions above handle it — the cost is still PAID, because it
+    // is mandatory and the spell is already on the stack.
+    const settleHere =
+      !choice || isTrivialChoice(choice) || state.gameOver || state.players[caster].hasLost;
+    if (!settleHere) {
       patchSpellOnStack(state, spellInstanceId, { awaitingCastChoice: 'additionalCost' });
       parkCastChoice(state, choice, emit);
       return;
@@ -2859,7 +2864,9 @@ function askCostChoices(state: GameState, spellInstanceId: InstanceId, emit: (e:
         chooser: caster,
         choiceKind: choice.kind,
         answer: { kind: 'selectCards', instanceIds: forced },
-        reason: 'only one legal way to pay this additional cost',
+        reason: isTrivialChoice(choice)
+          ? 'only one legal way to pay this additional cost'
+          : 'the chooser can no longer act',
       });
     }
     payAdditionalCost(state, extra, caster, forced, emit);
