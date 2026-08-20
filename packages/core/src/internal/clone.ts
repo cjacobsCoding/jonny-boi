@@ -307,10 +307,20 @@ export function cloneState(state: GameState): GameState {
   // overwhelming majority of clones (every action of every sim game) see two null
   // checks and nothing else. Assigned rather than conditionally spread: spreading
   // `cond ? {...} : {}` allocated the empty object BOTH times, on every clone,
-  // purely to add no properties. Key order is unchanged (these still land last),
-  // which matters because a serialized state is compared field-for-field.
-  if (state.pendingChoice) next.pendingChoice = clonePendingChoice(state.pendingChoice);
-  if (state.resolution) next.resolution = cloneResolution(state.resolution);
+  // purely to add no properties.
+  //
+  // ⚠️ THE KEY IS ALWAYS WRITTEN, even when there is no choice, and that is not
+  // decoration. `applyAction` is `applyActionInPlace` over a clone, and
+  // `selfplay-lock.test.ts` compares the two states as SERIALIZED TEXT — so the
+  // two paths must agree on key ORDER, not just on values. A conditional key
+  // diverges the moment a choice survives an action boundary: the pure path
+  // re-inserts it here (in the middle), while the in-place path appends it to the
+  // end at the moment it is first parked, and the two states stringify
+  // differently while being identical. Writing `null` costs no allocation and
+  // pins the position for both paths; `createGame`'s state literal carries the
+  // same field at the same place for the same reason.
+  next.pendingChoice = state.pendingChoice ? clonePendingChoice(state.pendingChoice) : null;
+  next.resolution = state.resolution ? cloneResolution(state.resolution) : null;
   // Same conditional rule as the two above, and the same stakes as any dropped
   // field: forgetting this line would silently strip an active "gains flashback
   // until end of turn" grant at the very next action boundary. Only paid for

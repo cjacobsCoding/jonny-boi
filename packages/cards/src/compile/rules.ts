@@ -15,6 +15,7 @@
  */
 
 import type {
+  BooleanKeywordName,
   CardFilter,
   CardType,
   ChosenValueSubject,
@@ -404,6 +405,60 @@ const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.free
   enchantment: 'enchantment',
   land: 'land',
 });
+
+/**
+ * The number words a printed count may use, as a regex alternation. Built from
+ * {@link SMALL_NUMBER_WORDS} so the pattern and the parser cannot list different
+ * words — a rule that MATCHES "five" and then fails to parse it reports a line it
+ * looked like it understood.
+ */
+const SMALL_NUMBER_WORD_TOKEN = 'one|two|three|four';
+
+/**
+ * The printed permanent NOUN of an "unless you control …" condition, as the
+ * `CardFilter` it selects.
+ *
+ * A singular or plural card-type noun ("a legendary CREATURE", "three or more
+ * other SWAMPS") or a land SUBTYPE. Anything else — a noun outside both closed
+ * tables — yields `undefined` and the line reports rather than compiling a
+ * condition that matches the wrong permanents.
+ */
+function permanentNounFilter(noun: string): CardFilter | undefined {
+  const singular = noun.endsWith('s') ? noun.slice(0, -1) : noun;
+  const nounType = STATIC_NOUN_TYPES[singular];
+  // `null` is the "permanent" entry: no type filter at all, because an absent
+  // filter already matches every permanent.
+  if (nounType === null) return {};
+  if (nounType !== undefined) return { anyOfTypes: [nounType] };
+  if (LAND_SUBTYPES.has(singular)) return { anyOfSubtypes: [singular] };
+  return undefined;
+}
+
+/**
+ * The card types in a printed spell-type list — "creature", "creature and
+ * enchantment" — as a `CardFilter`'s `anyOfTypes`.
+ *
+ * Returns `null` for anything outside the closed type table ("noncreature",
+ * "multicolored", "legendary"), so a narrowing this engine cannot express reports
+ * instead of compiling into a WIDER ability than the card prints — which, for
+ * "can't be countered", would be strictly better than printed.
+ */
+function parseSpellTypeList(text: string): CardType[] | null {
+  const words = text
+    .replace(/\band\b|\bor\b/g, ' ')
+    .split(/[\s,]+/)
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  const types: CardType[] = [];
+  for (const word of words) {
+    const type = STATIC_NOUN_TYPES[word];
+    // `null` ("permanent") is not a spell type — a permanent SPELL is every
+    // non-instant/sorcery card, which this list cannot say.
+    if (type === undefined || type === null) return null;
+    if (!types.includes(type)) types.push(type);
+  }
+  return types;
+}
 
 /**
  * Colour words Oracle uses, mapped to colour letters — in removal restrictions
@@ -1957,6 +2012,25 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({
         primitive: 'grantKeywordToYoursUntilEndOfTurn',
         params: { keywords, ...(nounType === null ? {} : { anyOfTypes: [nounType] }) },
+      });
+    },
+  },
+  {
+    // The SELF form of the evasion grant, with a comparing restriction attached:
+    // "~ can't be blocked this turn except by creatures with haste" (Gingerbrute's
+    // activated ability). It is the same continuous grant as every other
+    // until-end-of-turn keyword — `grantKeywordUntilEndOfTurn` falls back to the
+    // SOURCE when no target was chosen, which is what an activated ability on the
+    // creature itself gives it — so it expires at cleanup through the one path.
+    id: 'grant-self-block-restriction-until-eot',
+    description: `"~ can't be blocked this turn except by creatures with haste" (Gingerbrute)`,
+    pattern: /^~ can'?t be blocked this turn except by creatures with ([a-z ]+)$/,
+    build(match) {
+      const keyword = BLOCKER_QUALITY_KEYWORDS[(match[1] ?? '').trim()];
+      if (keyword === undefined) return null;
+      return effects({
+        primitive: 'grantKeywordUntilEndOfTurn',
+        params: { keywords: { blockRestriction: { blockerMustHaveAnyOf: [keyword] } } },
       });
     },
   },
@@ -4104,6 +4178,163 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'must-be-blocked-if-able',
+    description: '"~ must be blocked if able" — a block REQUIREMENT (CR 509.1c)',
+    // The other half of declare-blockers from every restriction above. It is not a
+    // per-pair rule and cannot be one: "if able" is a question about the whole
+    // declaration, which is why core resolves it with a solver.
+    pattern: /^~ must be blocked if able\.?$/,
+    build() {
+      return { keywords: { mustBeBlocked: true } };
+    },
+  },
+  {
+    id: 'blocked-by-all-able',
+    description: '"All creatures able to block ~ do so" — the Lure requirement',
+    // Strictly stronger than "must be blocked": one requirement PER creature that
+    // could block, so blocking with only some of them is illegal.
+    pattern: /^all creatures able to block ~ do so\.?$/,
+    build() {
+      return { keywords: { blockedByAllAble: true } };
+    },
+  },
+  {
+    id: 'cant-be-blocked-except-by-keyword',
+    description: `"~ can't be blocked except by creatures with haste" (Gingerbrute)`,
+    // A restriction whose selector reads the BLOCKER — the shape a per-pair check
+    // could not express before `blockRestriction` carried the payload. The keyword
+    // table is closed: a quality outside it ("except by Walls", "except by
+    // artifact creatures") reports rather than compiling a weaker restriction.
+    pattern: /^~ can'?t be blocked(?: this turn)? except by creatures with ([a-z ]+)\.?$/,
+    build(match) {
+      const keyword = BLOCKER_QUALITY_KEYWORDS[(match[1] ?? '').trim()];
+      if (keyword === undefined) return null;
+      return { keywords: { blockRestriction: { blockerMustHaveAnyOf: [keyword] } } };
+    },
+  },
+  {
+    id: 'cant-be-blocked-by-power-or-toughness',
+    description: `"~ can't be blocked by creatures with power 2 or less" / "with toughness 3 or greater"`,
+    // The bound is inverted as it compiles — "can't be blocked by power 2 or
+    // LESS" is the restriction "the blocker's power must be at least 3" — so core
+    // never has to reason about the printed polarity, and both printings meet in
+    // one pair of fields.
+    pattern: new RegExp(
+      `^~ can'?t be blocked(?: this turn)? by creatures with (power|toughness) ${COUNT_TOKEN} or (less|greater|more)\\.?$`,
+    ),
+    build(match) {
+      const bound = parseCount(match[2]);
+      if (bound === null) return null;
+      const stat = match[1];
+      const direction = match[3];
+      if (direction === 'less') {
+        // Excluded up to and including `bound` ⇒ a legal blocker needs bound + 1.
+        return stat === 'power'
+          ? { keywords: { blockRestriction: { minBlockerPower: bound + 1 } } }
+          : { keywords: { blockRestriction: { minBlockerToughness: bound + 1 } } };
+      }
+      // "greater"/"more": excluded from `bound` upward ⇒ at most bound - 1.
+      return stat === 'power'
+        ? { keywords: { blockRestriction: { maxBlockerPower: bound - 1 } } }
+        : { keywords: { blockRestriction: { maxBlockerToughness: bound - 1 } } };
+    },
+  },
+  {
+    id: 'enters-tapped-unless-controls-matching',
+    description:
+      '"~ enters tapped unless you control a legendary creature / a basic land / three or more other Swamps" — the general "unless you control [N] [permanents]" condition',
+    // The GENERAL form of the four fixed conditions above, and the reason the
+    // shared `CardFilter` was worth reaching for: a legendary creature, a basic
+    // land and "three or more other Swamps" are one board question with three
+    // different filters, not three rules.
+    //
+    // Tried AFTER the fixed cycles (fastland / slowland / battleland / checkland)
+    // so those keep compiling to the fields live card data already uses — this
+    // rule's pattern would otherwise swallow "two or more basic lands" and
+    // silently re-encode a shipped cycle.
+    pattern: new RegExp(
+      `^~ enters(?: the battlefield)? tapped unless you control ` +
+        `(?:(an?|${SMALL_NUMBER_WORD_TOKEN}) )?(?:or more )?(other )?(legendary |basic )?([a-z]+)$`,
+    ),
+    build(match) {
+      const [, countWord, other, supertype, noun] = match;
+      // "a"/"an" is one; a number word is itself. Anything else (no count at all)
+      // means the line said something this rule did not actually read.
+      const minimum =
+        countWord === undefined ? null
+        : countWord === 'a' || countWord === 'an' ? 1
+        : (SMALL_NUMBER_WORDS[countWord] ?? null);
+      if (minimum === null || minimum < 1) return null;
+      const filter = permanentNounFilter(noun ?? '');
+      if (!filter) return null;
+      // "OTHER" is already the printed meaning of every enters-tapped condition
+      // (the entering land never counts itself), so the word needs no field — but
+      // it must be READ, or a line carrying it would fall through to the hint.
+      void other;
+      const supertyped =
+        supertype === 'legendary ' ? { ...filter, legendary: true }
+        : supertype === 'basic ' ? { ...filter, basic: true }
+        : filter;
+      return { entersTappedUnless: { controlsMatching: { filter: supertyped, minimum } } };
+    },
+  },
+  {
+    id: 'this-spell-cant-be-countered',
+    description: `"This spell can't be countered" (Supreme Verdict, Abrupt Decay, Dovin's Veto)`,
+    // A property of the CARD, not a targeting restriction: an uncounterable spell
+    // is a legal target for Counterspell, which resolves and does nothing. Core
+    // enforces it where a spell actually leaves the stack, so every counter path
+    // inherits it. See `countering.ts`.
+    pattern: /^this spell can'?t be countered\.?$/,
+    build() {
+      return { cantBeCountered: true };
+    },
+  },
+  {
+    id: 'spells-cant-be-countered',
+    description: `"Spells you control can't be countered" / "Creature spells you control can't be countered" / "Spells can't be countered"`,
+    // The permanent-side printing of the same rule. The card-type list is read
+    // through the shared `CardFilter`, so "creature and enchantment spells" is
+    // data rather than a rule of its own, and Lier's unrestricted wording is the
+    // same shape with an 'any' scope.
+    pattern: /^([a-z, ]+? )?spells( you control)? can'?t be countered\.?$/,
+    build(match) {
+      const typeWords = match[1];
+      const yours = match[2] !== undefined;
+      const controller = yours ? ('you' as const) : ('any' as const);
+      if (typeWords === undefined) return { spellsCantBeCountered: { controller } };
+      const types = parseSpellTypeList(typeWords);
+      // A narrowing this engine cannot express as card types ("noncreature",
+      // "multicolored") reports rather than compiling a wider ability than the
+      // card prints.
+      if (!types) return null;
+      return { spellsCantBeCountered: { controller, filter: { anyOfTypes: types } } };
+    },
+  },
+  {
+    id: 'no-maximum-hand-size',
+    description: `"You have no maximum hand size" (Reliquary Tower, Spellbook, Venser's Journal)`,
+    // Read by the cleanup step's discard (CR 514.1). The rule it removes is real:
+    // without a maximum hand size to lift, this would compile a card that does
+    // nothing.
+    pattern: /^you have no maximum hand size\.?$/,
+    build() {
+      return { noMaximumHandSize: true };
+    },
+  },
+  {
+    id: 'play-lands-from-zone',
+    description:
+      '"You may play lands from your graveyard" (Crucible of Worlds) / "from the top of your library" (Courser of Kruphix)',
+    // One rule, two zones, because the printed sentence differs by four words and
+    // the permission is the same one — `CardDefinition.playLandsFrom`.
+    pattern: /^you may play lands from (your graveyard|the top of your library)\.?$/,
+    build(match) {
+      const zone = match[1] === 'your graveyard' ? ('graveyard' as const) : ('libraryTop' as const);
+      return { playLandsFrom: [zone] };
+    },
+  },
+  {
     id: 'characteristic-defining-pt',
     description:
       'the star P/T box: power equals the number of X, toughness that number plus N (Tarmogoyf) — a characteristic-defining P/T, applied in CR 613.3 layer 7a',
@@ -4509,6 +4740,25 @@ const LEADING_GRANT_VERB = /^(?:has|have|gains?) /;
 const KEYWORD_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   "can't be blocked": 'unblockable',
   "can't block": 'cantBlock',
+});
+
+/**
+ * The printed QUALITIES an "except by creatures with …" restriction may name,
+ * mapped to the engine keyword a blocker must actually have.
+ *
+ * Closed on purpose, and typed as `BooleanKeywordName` so a word that does not
+ * name a real keyword cannot be added by a typo. A quality outside the table —
+ * "except by Walls", "except by artifact creatures" — is a filter over card types
+ * rather than a keyword, which this payload cannot say, so the line reports.
+ */
+const BLOCKER_QUALITY_KEYWORDS: Readonly<Record<string, BooleanKeywordName>> = Object.freeze({
+  haste: 'haste',
+  flying: 'flying',
+  reach: 'reach',
+  vigilance: 'vigilance',
+  defender: 'defender',
+  deathtouch: 'deathtouch',
+  'first strike': 'firstStrike',
 });
 
 /**
@@ -5362,6 +5612,22 @@ export function isVacuousClause(clause: string): boolean {
  */
 export const KEYWORD_ABILITY_BUILDERS: Readonly<Record<string, () => ClauseContribution>> =
   Object.freeze({
+    // CHANGELING (CR 702.73a) — "this card is every creature type". It lands here
+    // rather than in `KEYWORD_FLAGS` because it is not a `KeywordFlags` boolean:
+    // it is a characteristic-defining ability that applies in EVERY zone, which is
+    // why core carries it on the definition and answers it inside `hasSubtype`. A
+    // continuous-effect flag would be wrong for the Changeling Outcast sitting in
+    // a graveyard, which is still a Zombie there.
+    //
+    // Being a builder also settles the Scryfall keyword sweep for free: the sweep
+    // skips any word with a builder, so "Changeling" is not reported a second
+    // time after the printed line compiled it.
+    changeling: () => ({ changeling: true }),
+    // SKULK (CR 702.118a) — "can't be blocked by creatures with greater power".
+    // A payload restriction rather than a `KeywordFlags` boolean, because the
+    // bound is the ATTACKER'S OWN effective power and is read at declare-blockers
+    // time: a skulking creature pumped this turn really is harder to block.
+    skulk: () => ({ keywords: { blockRestriction: { blockerPowerAtMostMine: true } } }),
     persist: () => ({
       triggers: [
         {
@@ -5774,19 +6040,31 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // "except by N or more creatures"). Granting evasion for a turn compiles
     // through the ordinary continuous grant.
     //
-    // What still lands here is two different things, and the hint says which:
-    //   - a block REQUIREMENT ("must be blocked if able", "all creatures able to
-    //     block ~ do so"). CR 509.1c/d resolves requirements and restrictions
-    //     TOGETHER — maximise satisfied requirements without violating any
-    //     restriction — which is a solver, not a check, and is not built;
-    //   - a restriction whose SELECTOR the engine cannot express: a power or
-    //     toughness comparison between the two creatures ("can't be blocked by
-    //     creatures with power 3 or greater", skulk), or a filtered set the
-    //     static layer deliberately cannot read (Tetsuko's "with power or
-    //     toughness 1 or less" — see `statics.ts` on printed characteristics).
+    // Block REQUIREMENTS are engine-enforced now too, so this hint no longer
+    // claims they are missing: "~ must be blocked if able" and "all creatures
+    // able to block ~ do so" are keyword flags resolved against the WHOLE
+    // declaration by `internal/block-solver.ts`, which does what CR 509.1c/d
+    // actually says — satisfy the maximum possible number of requirements without
+    // violating any restriction. So are the comparing restrictions:
+    // `KeywordFlags.blockRestriction` carries "except by creatures with haste", a
+    // power or toughness bound, and skulk's comparison against the attacker's own
+    // power, each judged against EFFECTIVE stats.
+    //
+    // What still lands here is a SELECTOR none of that can express, and the hint
+    // names the three shapes rather than a missing system:
+    //   - a static whose filter would have to read EFFECTIVE power or toughness
+    //     (Tetsuko's "creatures you control with power or toughness 1 or less",
+    //     Delney) — `statics.ts` matches PRINTED characteristics by design, which
+    //     is what keeps the continuous pass single-pass with no CR 613.8 loop;
+    //   - a comparison against ANOTHER permanent's power (Champion of Lambholt's
+    //     "power less than ~'s power"), which needs the restriction's threshold
+    //     recomputed from its source at declare-blockers time;
+    //   - a per-combat TARGETED requirement ("target creature blocks it this
+    //     combat if able" — Fighter Class), which is combat state rather than a
+    //     characteristic, and a COST to block (Archangel of Tithes).
     pattern: /\bmust be blocked\b|\bable to block\b|\bblocks? it\b|\bcan't be blocked\b|\bcan't block\b|\bmenace\b|\bskulk\b/,
     missingEngineSystem:
-      'a block REQUIREMENT, or a block restriction whose selector compares creatures',
+      'a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)',
   },
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`

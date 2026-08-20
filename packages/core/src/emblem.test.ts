@@ -20,6 +20,7 @@ import {
   createEffectRegistry,
   createGame,
   DEFAULT_RULES,
+  defaultAnswerFor,
   effectivePower,
   legalTargetsFor,
   type CardDefinition,
@@ -206,7 +207,21 @@ describe('abilities work from the command zone', () => {
     let s = state;
     let guard = 0;
     while (guard++ < 400 && fired === 0 && !s.gameOver) {
-      s = act(s, { kind: 'passPriority', player: s.priorityPlayer }, registry);
+      // A parked question outranks priority (the cleanup discard, CR 514.1), so
+      // walking the turn means answering whatever is asked, not only passing.
+      const question = s.pendingChoice;
+      s = question
+        ? act(
+            s,
+            {
+              kind: 'answerChoice',
+              player: question.chooser,
+              choiceId: question.id,
+              answer: defaultAnswerFor(question),
+            },
+            registry,
+          )
+        : act(s, { kind: 'passPriority', player: s.priorityPlayer }, registry);
     }
     expect(fired).toBeGreaterThan(0);
   });

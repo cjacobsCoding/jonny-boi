@@ -207,6 +207,15 @@ export interface HeuristicWeights {
    *  if the trade is at least this good (kills the attacker without losing more
    *  than we gain). */
   readonly blockValueThreshold: number;
+  /** How much a printed block REQUIREMENT ("~ must be blocked if able", "all
+   *  creatures able to block ~ do so") is worth when the pilot ranks creatures.
+   *  A LURE IS A THREAT, NOT A GIFT: it does not make the attacker easier to kill,
+   *  it takes the defender's blockers away from every other attacker, and a pilot
+   *  that read "must be blocked" as good news would leave the card alone and then
+   *  lose to the attack it enabled. Expressed in the same units as a point of
+   *  power or toughness, so it competes with body size on the removal-target
+   *  ranking rather than overriding it. */
+  readonly blockRequirementThreatValue: number;
 
   // --- answering player choices (choices.ts) --------------------------------
   /** What a LAND is worth when the pilot must rank cards for a choice ("which card
@@ -467,6 +476,9 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // blocking
   desperateLifeThreshold: 10,
   blockValueThreshold: 0,
+  // Worth roughly a two-point body: a lure on a 1/1 is still the card that decides
+  // the combat, and this is what makes the pilot point removal at it.
+  blockRequirementThreatValue: 4,
 
   // answering choices — the ordering these produce is
   //   big creature > small creature ≈ expensive spell > cheap spell > land

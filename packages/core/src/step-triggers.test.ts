@@ -22,6 +22,7 @@ import {
   cloneState,
   createGame,
   DEFAULT_RULES,
+  defaultAnswerFor,
   interveningIfHolds,
   matchTriggers,
   triggeringPlayerFor,
@@ -30,6 +31,7 @@ import {
   type GameAction,
   type GameState,
   type PlayerId,
+  type RulesConfig,
   type TriggeredAbility,
 } from './index.js';
 import { createEffectRegistry, type EffectRegistry } from './effects.js';
@@ -67,15 +69,44 @@ function testRegistry(witness: Witness): EffectRegistry {
   return reg;
 }
 
+/**
+ * These tests are about WHICH SEAT a step trigger runs for, and they measure it by
+ * watching hands grow. The cleanup step's discard down to maximum hand size
+ * (CR 514.1) would erase exactly that evidence at the end of every turn — a seat
+ * that drew two extra cards is back at seven before the next assertion runs — so
+ * the limit is lifted here. It is not being avoided: `block-and-statics.test.ts`
+ * and `engine.test.ts` are where the discard itself is pinned.
+ */
+const RULES: RulesConfig = { ...DEFAULT_RULES, maximumHandSize: Number.MAX_SAFE_INTEGER };
+
 function act(state: GameState, action: GameAction, reg: EffectRegistry): GameState {
-  const result = applyAction(state, action, DEFAULT_RULES, reg);
+  const result = applyAction(state, action, RULES, reg);
   const rejected = result.events.find((e) => e.type === 'actionRejected');
   if (rejected) throw new Error(`unexpected rejection: ${(rejected as { reason: string }).reason}`);
   return result.state;
 }
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState, reg: EffectRegistry): GameState {
-  return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
+  return act(state, nextActionFor(state), reg);
+}
+
+/** The only thing a seat may legally do right now: answer, or pass. */
+function nextActionFor(state: GameState): GameAction {
+  const question = state.pendingChoice;
+  return question
+    ? {
+        kind: 'answerChoice',
+        player: question.chooser,
+        choiceId: question.id,
+        answer: defaultAnswerFor(question),
+      }
+    : { kind: 'passPriority', player: state.priorityPlayer };
 }
 
 /** Pass priority until `turnNumber` reaches `target` (resolving everything on the way). */
@@ -301,7 +332,7 @@ describe('the printed intervening "if" (CR 603.4)', () => {
     let sawTriggerOnStack = false;
     let guard = 0;
     while (s.turnNumber < 5 && !s.gameOver && guard++ < 900) {
-      const result = applyAction(s, { kind: 'passPriority', player: s.priorityPlayer }, DEFAULT_RULES, reg);
+      const result = applyAction(s, nextActionFor(s), RULES, reg);
       if (result.events.some((e) => e.type === 'triggerPutOnStack')) sawTriggerOnStack = true;
       s = result.state;
     }
@@ -328,7 +359,7 @@ describe('the printed intervening "if" (CR 603.4)', () => {
     const events: string[] = [];
     guard = 0;
     while (s.stack.length > 0 && !s.gameOver && guard++ < 20) {
-      const result = applyAction(s, { kind: 'passPriority', player: s.priorityPlayer }, DEFAULT_RULES, reg);
+      const result = applyAction(s, nextActionFor(s), RULES, reg);
       for (const e of result.events) events.push(e.type);
       s = result.state;
     }

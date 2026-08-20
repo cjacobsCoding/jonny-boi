@@ -132,6 +132,7 @@ import { declineMadness } from './madness.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
+import { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
 import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
@@ -254,6 +255,13 @@ export function createGame(setup: GameSetup): EngineResult {
     consecutivePasses: 0,
     seed: setup.seed,
     rngState: rng.state,
+    // Written even though nothing is asking yet, so the field's POSITION in the
+    // object is fixed from the start. See `internal/clone.ts`: `applyAction` is
+    // `applyActionInPlace` over a clone, and the two are compared as serialized
+    // text, so a key that appears at different times in the two paths makes
+    // identical states stringify differently.
+    pendingChoice: null,
+    resolution: null,
   };
 
   // Wrap emit so events are scanned for triggers (none can fire during setup
@@ -497,6 +505,11 @@ function performStepTurnBasedActions(
       }
       emptyManaPools(state, emit);
       checkStateBasedActions(state, emit);
+      // DISCARD DOWN TO MAXIMUM HAND SIZE (CR 514.1) — a turn-based action, and
+      // the active player CHOOSES which cards to keep, so it can park a question.
+      // When it does the turn stays here: accepting the answer is what calls
+      // `passTurn`, so nothing observes a hand over the limit.
+      if (raiseCleanupDiscard(state, config, emit)) break;
       // Cleanup normally grants no priority; advance straight to next turn.
       passTurn(state, config, emit);
       break;
@@ -529,6 +542,107 @@ function passTurn(state: GameState, config: RulesConfig, emit: (e: GameEvent) =>
   state.combat = null;
   state.activePlayer = otherPlayer(state.activePlayer);
   beginTurn(state, config, emit);
+}
+
+/**
+ * Raise the cleanup step's discard down to maximum hand size (CR 514.1), or do
+ * nothing when the active player is already at or under it.
+ *
+ * Returns whether a question was parked. The caller uses that answer to decide
+ * whether to pass the turn NOW or to leave the turn waiting — which is the whole
+ * reason this returns a boolean rather than being fire-and-forget: a hand over the
+ * limit must never be observed by the next turn's draw.
+ *
+ * WHY IT IS A QUESTION AND NOT A RULE-CHOSEN DISCARD: the active player chooses
+ * which cards to keep, and that choice is frequently the most important decision
+ * of a turn (which land, which removal spell). An engine that picked for them
+ * would be playing a different game, so the pick goes through the same
+ * `selectCards` machinery every other "choose N cards" uses — which means the
+ * pilots, the hotseat UI and the online client all already know how to answer it.
+ */
+function raiseCleanupDiscard(state: GameState, config: RulesConfig, emit: (e: GameEvent) => void): boolean {
+  if (state.gameOver) return false;
+  const active = state.activePlayer;
+  const hand = state.players[active].hand;
+  const excess = hand.length - config.maximumHandSize;
+  // The common case is a hand under the limit, which costs one subtraction.
+  if (excess <= 0) return false;
+  // Reliquary Tower and friends: no limit at all, so nothing is discarded. Asked
+  // only once the hand is actually over the printed limit, so the ordinary board
+  // never walks the battlefield for it.
+  if (hasNoMaximumHandSize(state, active)) return false;
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'selectCards',
+      chooser: active,
+      prompt: `Discard down to ${config.maximumHandSize} cards: choose ${excess} to discard`,
+      candidates: hand.map(cardOption),
+      min: excess,
+      max: excess,
+      fromZone: 'hand',
+      // Being SELECTED here is being discarded, so a pilot's "pick your best"
+      // steer would pick exactly wrong. `'loss'` is what tells it to part with
+      // the cards it values least.
+      valence: 'loss',
+    },
+    {
+      id: state.nextInstanceId++,
+      // A turn-based action has no source permanent. The first card in hand is
+      // named so the field stays a real instance id for the inspector and the
+      // wire format; nothing routes on it (the `context` marker below does).
+      sourceInstanceId: (hand[0] as CardInstance).instanceId,
+      sourceName: CLEANUP_DISCARD_SOURCE_NAME,
+    },
+  );
+  // `normalizeChoiceRequest` refuses a question with no legal answer. There always
+  // is one here (`excess < hand.length` by construction), but if that ever stopped
+  // holding the turn must still end rather than wedge.
+  if (!choice) return false;
+  state.pendingChoice = { ...choice, context: 'cleanupDiscard' };
+  state.priorityPlayer = active;
+  state.consecutivePasses = 0;
+  emit({
+    type: 'choiceAsked',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    prompt: choice.prompt,
+    sourceInstanceId: choice.sourceInstanceId,
+    optionCount: choiceOptionCount(choice),
+  });
+  return true;
+}
+
+/**
+ * The `sourceName` on a cleanup discard question. The rule has no source card, and
+ * naming the rule is what a player sees in the log — "Cleanup" rather than
+ * whichever card happened to be first in hand.
+ */
+const CLEANUP_DISCARD_SOURCE_NAME = 'Cleanup';
+
+/**
+ * Discard the named cards from a player's hand, through the ONE funnel that knows
+ * a hand → graveyard move is a discard: `moveToZone`, which routes it past
+ * `discardDestination` so a madness card exiles itself here exactly as it would
+ * when an effect made the player discard it.
+ *
+ * Ids that are not in the hand are skipped rather than rejected — the caller has
+ * already validated the answer, and a defensive skip here cannot wedge a turn.
+ */
+function discardChosenCards(
+  state: GameState,
+  player: PlayerId,
+  instanceIds: readonly InstanceId[],
+  emit: (e: GameEvent) => void,
+): void {
+  for (const id of instanceIds) {
+    const card = instanceIn(state.players[player].hand, id);
+    if (!card) continue;
+    // No discard-specific event: `moveToZone` already emits the `zoneChange`
+    // (hand → graveyard) that every consumer reads a discard from, and a second
+    // event saying the same thing is one more thing to keep in step.
+    moveToZone(state, card, 'graveyard', emit, player);
+  }
 }
 
 function otherPlayer(p: PlayerId): PlayerId {
@@ -1536,6 +1650,33 @@ function applyAnswerChoice(
     return { state, events };
   }
 
+  // A CLEANUP-DISCARD answer likewise belongs to a turn-based action, and it is
+  // the one answer the TURN is waiting on: the cleanup step deliberately did not
+  // pass the turn while the question stood, so accepting it here is what ends the
+  // turn. Routed by its own `context` marker for the same reason the legend rule
+  // is — "a card selection with no frame behind it" also describes several
+  // ordinary questions.
+  if (choice.context === 'cleanupDiscard' && answer.kind === 'selectCards') {
+    discardChosenCards(state, choice.chooser, answer.instanceIds, emit);
+    checkStateBasedActions(state, emit);
+    if (state.gameOver) return { state, events };
+    // A discarded MADNESS card exiles itself and opens a window (CR 702.35a). Its
+    // controller must get the chance to cast it, so the turn does not end yet:
+    // players take priority in cleanup (CR 514.3a) and the ordinary step machine
+    // passes the turn once they are done, because cleanup is the last step.
+    if (state.madnessWindow) {
+      state.priorityPlayer = state.madnessWindow.controller;
+      state.consecutivePasses = 0;
+      return { state, events };
+    }
+    // The hand can still be over the limit only if the answer was smaller than the
+    // excess, which `validateChoiceAnswer` refuses — so this asks again purely to
+    // keep the invariant local rather than assuming a validator elsewhere.
+    if (raiseCleanupDiscard(state, config, emit)) return { state, events };
+    passTurn(state, config, emit);
+    return { state, events };
+  }
+
   // A TARGETING answer belongs to the stack, not to a resolution: it names what a
   // triggered ability points at, chosen as the ability went on the stack. Nothing
   // is resumed — the aim is recorded, and any trigger still waiting behind it asks
@@ -1633,22 +1774,40 @@ function applyPlayLand(
   if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
-  // Nearly every land play comes from the hand; the one that does not is an
-  // ADVENTURER card whose primary half is a land, waiting in exile with the
-  // permission its own adventure left behind ("You may play the land later from
-  // exile"). Validated the same way the cast path validates a cast from exile,
-  // by the same accessor, so neither can be tricked into playing a card that
-  // was merely exiled.
+  // WHERE FROM. The hand needs no permission. Every other zone does, and there
+  // are two different KINDS of permission, which is why they are read apart:
+  //   - `'exile'` is a permission the CARD carries — an ADVENTURER whose primary
+  //     half is a land, waiting in exile with the note its own adventure left
+  //     behind ("You may play the land later from exile"). Validated by the same
+  //     accessor the CAST path uses, so neither can be tricked into playing a card
+  //     that was merely exiled.
+  //   - `'graveyard'` / `'libraryTop'` are permissions the BOARD carries (Crucible
+  //     of Worlds, Courser of Kruphix). Re-derived here rather than trusted from
+  //     the action, so a hostile client cannot play a land out of its graveyard by
+  //     asking nicely — and a Crucible destroyed in response genuinely stops the
+  //     replay.
   const fromZone = action.fromZone ?? 'hand';
-  if (fromZone !== 'hand' && fromZone !== 'exile') {
-    return rejectWith(prevState, 'a land can only be played from your hand or from exile');
-  }
-  const card =
-    fromZone === 'exile'
-      ? instanceIn(player.exile, action.instanceId)
-      : instanceIn(player.hand, action.instanceId);
-  if (!card) {
-    return rejectWith(prevState, fromZone === 'exile' ? 'that card is not in exile' : 'that card is not in your hand');
+  let card: CardInstance | undefined;
+  if (fromZone === 'hand') {
+    card = instanceIn(player.hand, action.instanceId);
+    if (!card) return rejectWith(prevState, 'that card is not in your hand');
+  } else if (fromZone === 'exile') {
+    card = instanceIn(player.exile, action.instanceId);
+    if (!card) return rejectWith(prevState, 'that card is not in exile');
+  } else if (!landPlayZonesFor(state, action.player).includes(fromZone)) {
+    return rejectWith(prevState, `nothing you control lets you play lands from your ${fromZone}`);
+  } else if (fromZone === 'graveyard') {
+    card = instanceIn(player.graveyard, action.instanceId);
+    if (!card) return rejectWith(prevState, 'that card is not in your graveyard');
+  } else {
+    // "from the TOP of your library" is a one-card permission, not a search:
+    // index 0 is the top (`drawCard` shifts from the front), and naming any other
+    // card in the library is rejected.
+    const top = player.library[0];
+    if (!top || top.instanceId !== action.instanceId) {
+      return rejectWith(prevState, 'that card is not the top card of your library');
+    }
+    card = top;
   }
   const permission = fromZone === 'exile' ? castPermissionFor(state, card) : undefined;
   if (fromZone === 'exile') {
@@ -3772,11 +3931,25 @@ function applyDeclareBlockers(
     if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
   }
 
-  // Declaration-level restrictions (menace), which no per-pair check can see.
+  // Declaration-level restrictions (menace) AND requirements ("must be blocked if
+  // able"), neither of which a per-pair check can see. The requirement half needs
+  // every creature the defender COULD have blocked with, not only the ones they
+  // did — "if able" is a question about the whole board.
   const attackingCreatures = state.combat.attackers
     .map((id) => findOnBattlefield(state, id))
     .filter((c): c is CardInstance => c !== undefined);
-  const declarationProblem = illegalBlockDeclaration(attackingCreatures, action.blocks, cont);
+  const availableBlockers: CardInstance[] = [];
+  for (const permanent of state.battlefield) {
+    if (permanent.controller !== action.player) continue;
+    if (!isCreature(permanent.def)) continue;
+    availableBlockers.push(permanent);
+  }
+  const declarationProblem = illegalBlockDeclaration(
+    attackingCreatures,
+    action.blocks,
+    cont,
+    availableBlockers,
+  );
   if (declarationProblem) return rejectWith(prevState, declarationProblem);
 
   const blocks: Record<InstanceId, InstanceId> = {};
@@ -3899,10 +4072,36 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
         actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, face: 'back' });
       }
     }
+    // Lands playable from somewhere OTHER than the hand (Crucible of Worlds,
+    // Courser of Kruphix). Gated on the shared frozen empty list, so a board with
+    // no such permanent pays one `length === 0` check and never walks a graveyard.
+    const extraZones = landPlayZonesFor(state, me);
+    if (extraZones.length > 0) {
+      if (extraZones.includes('graveyard')) {
+        for (let g = 0; g < player.graveyard.length; g++) {
+          const card = player.graveyard[g] as CardInstance;
+          if (card.def.isBackFace === true) continue;
+          if (isLand(card.def)) {
+            actions.push({ kind: 'playLand', player: me, instanceId: card.instanceId, fromZone: 'graveyard' });
+          }
+        }
+      }
+      if (extraZones.includes('libraryTop')) {
+        // ONE card, the top one — never a search. This action names a card in a
+        // hidden zone, which is safe because legal actions are generated for the
+        // priority-holder alone and this is that player's own library.
+        const top = player.library[0];
+        if (top && top.def.isBackFace !== true && isLand(top.def)) {
+          actions.push({ kind: 'playLand', player: me, instanceId: top.instanceId, fromZone: 'libraryTop' });
+        }
+      }
+    }
     // The LAND half of an adventurer card, waiting in exile with permission
-    // (CR 715.3d, "you may play the land later from exile"). Behind the same
-    // empty check as every other card-grant consumer, so a game with nothing
-    // exiled under permission walks no exile zone here either.
+    // (CR 715.3d, "you may play the land later from exile"). A permission the CARD
+    // carries rather than one the BOARD grants, which is why it is read separately
+    // from the zones above — and behind the same empty check as every other
+    // card-grant consumer, so a game with nothing exiled under permission walks no
+    // exile zone here either.
     if (hasCardGrants(state)) {
       const exile = player.exile;
       for (let e = 0; e < exile.length; e++) {
