@@ -357,26 +357,53 @@ describe('the leak scanner reports what it is supposed to report', () => {
   });
 
   it('does NOT report a bought-back spell, in its window OR many windows later', () => {
-    // HOLE 2, both halves. Elvish Fury is cast and resolves inside one window,
-    // landing back in its owner's hand: `stackResolved` names a card that is
-    // hidden by the time anyone looks. Then, at cleanup much later, the pump it
-    // left behind expires and names it AGAIN — with the card still in that hand.
-    // Neither tells a pilot anything: the table watched the spell be cast.
+    // HOLE 2, both halves, modelled exactly as the engine plays it (seed
+    // 3246281276): Elvish Fury is cast out of a hand — and sits on the STACK for
+    // a whole decision, which is where the table sees it — then resolves back
+    // into that hand, and at cleanup MUCH later the pump it left behind expires
+    // naming it a third time. None of the three tells a pilot anything.
     const inHand = hiddenState([70]);
+    const onStack = hiddenState([]); // on the stack: not in a hand, not in a library
     const cast = { type: 'spellCast', player: 'B', instanceId: 70, name: 'Elvish Fury', castTypes: ['instant'] } as Observation;
     const resolved = { type: 'stackResolved', instanceId: 70, name: 'Elvish Fury' } as Observation;
     const expired = { type: 'continuousEffectExpired', targetInstanceId: 90, sourceInstanceId: 70, duration: 'endOfTurn' } as Observation;
-    expect(run([[[], inHand], [[cast, resolved], inHand], [[], inHand], [[expired], inHand]])).toEqual([]);
+    expect(
+      run([
+        [[], inHand],
+        [[cast], onStack],
+        [[resolved], inHand],
+        [[], inHand],
+        [[expired], inHand],
+      ]),
+    ).toEqual([]);
   });
 
-  it('still reports ANOTHER hidden card named by an exempted observation', () => {
-    // The buyback exemption is the observation's own SUBJECT and nothing else.
-    const state = hiddenState([70, 71]);
+  it('and it is the trip through the STACK that makes that legal, not the event type', () => {
+    // The positive control for the test above, and the reason this file needs no
+    // "…except stackResolved" exemption: delete the window where the card was on
+    // the stack and the very same observations become a leak. Nothing about
+    // `stackResolved` is privileged — being seen is.
+    const inHand = hiddenState([70]);
     const resolved = { type: 'stackResolved', instanceId: 70, name: 'Elvish Fury' } as Observation;
-    const asked = { type: 'choiceAsked', choiceId: 2, chooser: 'B', choiceKind: 'selectCards', sourceInstanceId: 71, optionCount: 1 } as unknown as Observation;
-    expect(run([[[], state], [[resolved, asked], state]])).toEqual([
-      'observation choiceAsked names #71, a card the table has never seen',
+    const expired = { type: 'continuousEffectExpired', targetInstanceId: 90, sourceInstanceId: 70, duration: 'endOfTurn' } as Observation;
+    expect(run([[[], inHand], [[resolved], inHand], [[expired], inHand]])).toEqual([
+      'observation stackResolved names #70, a card the table has never seen',
+      'observation continuousEffectExpired names #70, a card the table has never seen',
     ]);
+  });
+
+  it('a card seen ONCE stays seen — the memory is the whole game, not one window', () => {
+    // "Hidden before the window as well as after" is a one-window approximation
+    // and the Elvish Fury walks straight through it: by the time its pump
+    // expires, the card has been sitting in a hand for many windows. This is the
+    // difference between the two rules, pinned.
+    const inHand = hiddenState([70]);
+    const onStack = hiddenState([]);
+    const expired = { type: 'continuousEffectExpired', targetInstanceId: 90, sourceInstanceId: 70, duration: 'endOfTurn' } as Observation;
+    const windows: Array<readonly [readonly Observation[], GameState]> = [[[], inHand], [[], onStack]];
+    for (let i = 0; i < 20; i++) windows.push([[], inHand]);
+    windows.push([[expired], inHand]);
+    expect(run(windows)).toEqual([]);
   });
 
   it('reports a forbidden field at any depth', () => {

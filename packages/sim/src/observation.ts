@@ -73,17 +73,25 @@
  * So the scan does not ask "is this card hidden right now", nor even "was it
  * hidden before the window as well as after" — that second rule is a one-window
  * approximation, and the Elvish Fury above walks straight through it. It tracks
- * the ids that have **never once been on public display**, which is the direct
- * reading of the promise, and reports only those. An id leaves that set the first
- * time it is seen anywhere but a hand or a library, or the first time an
- * observation in {@link SUBJECT_PUBLIC_AT_EMISSION} names it as its subject.
+ * the ids that have **never once been on public display** and reports only those.
+ * An id leaves that set the first time it is seen anywhere but a hand or a
+ * library.
  *
- * That is deliberately more permissive than "hidden before and after", and the
- * difference is exactly the cards the table has already seen. It is not more
- * permissive about the thing that matters: an id that has only ever sat in a hand
- * or a library — which is every card whose identity would read the opponent's
- * decklist — is still reported the instant anything names it. The CR 514.1
- * cleanup-discard leak that started all this is caught by this rule unchanged.
+ * There is deliberately **no exemption list** — no "…except `stackResolved`,
+ * which is allowed to name a bought-back spell". One was written, and measuring
+ * it showed it never fired: a spell is on the STACK, which is not a hidden zone,
+ * for at least one whole decision between being cast and resolving, so the rule
+ * above has already recorded it as seen by the time anything names it in a hand.
+ * An exemption that never fires is worse than none — it reads like the thing
+ * keeping the scan honest while asserting nothing.
+ *
+ * That is more permissive than "hidden before and after", and the difference is
+ * exactly the cards the table has already seen. It is not more permissive about
+ * the thing that matters: an id that has only ever sat in a hand or a library —
+ * every card whose identity would read the opponent's decklist — is still
+ * reported the instant anything names it. The CR 514.1 cleanup-discard leak that
+ * started all this is caught by this rule unchanged, and there is a test that
+ * reintroduces it and watches this scan fail.
  *
  * ## And "which cards does this name?" is not a key-name guess
  * The scan asks core's {@link instanceIdsNamedBy}, which is driven by a mapped
@@ -431,31 +439,6 @@ export function hiddenInstanceIds(state: GameState): Set<InstanceId> {
 /** Field names an observation must never carry, whatever the event, at any depth. */
 export const FORBIDDEN_OBSERVATION_KEYS: readonly string[] = ['seed', 'prompt', 'answer', 'summary'];
 
-/**
- * Event types whose SUBJECT — the `instanceId` the observation is about — is in a
- * PUBLIC ZONE at the instant the event fires, whatever zone it has reached by the
- * time the scan looks.
- *
- * This is the whole of the exemption, it is two entries long, and each is a rules
- * fact rather than a convenience:
- *
- *  - `spellCast` — CR 601.2a: casting a spell MOVES THE CARD TO THE STACK as its
- *    first step. The event cannot fire for a card that is not on the stack.
- *  - `stackResolved` — CR 608.2: the object is on the stack while it resolves; it
- *    reaches a graveyard, exile or (with buyback, CR 702.27a) its owner's hand
- *    only afterwards, in a `zoneChange` this file already anonymises. `engine.ts`
- *    emits it before the move, which is what makes this true of the code and not
- *    only of the rules.
- *
- * The stack is a public zone (CR 405.1). Nothing else is exempted: any OTHER
- * hidden id inside one of these observations is still a leak, and every other
- * event type is scanned unchanged.
- */
-export const SUBJECT_PUBLIC_AT_EMISSION: ReadonlySet<GameEvent['type']> = new Set<GameEvent['type']>([
-  'spellCast',
-  'stackResolved',
-]);
-
 /** Every key present anywhere in a value — the deep half of the forbidden-field check. */
 function collectKeys(value: unknown, into: Set<string>, seen: Set<object>): Set<string> {
   if (value === null || typeof value !== 'object') return into;
@@ -540,18 +523,6 @@ export function createObservationLeakScanner(report: (detail: string) => void): 
         const keys = collectKeys(observation, new Set<string>(), new Set<object>());
         for (const key of FORBIDDEN_OBSERVATION_KEYS) {
           if (keys.has(key)) report(`observation ${observation.type} carries a forbidden field "${key}"`);
-        }
-        /*
-         * The subject of a `spellCast` / `stackResolved` was on the stack when
-         * the event fired, so the table saw it — even if the same action window
-         * also put it back into a hand (buyback). Recorded rather than merely
-         * skipped, because the id stays public knowledge for the rest of the
-         * game: the pump that spell left behind expires at cleanup, naming it
-         * again, and that is not a second leak either.
-         */
-        if (SUBJECT_PUBLIC_AT_EMISSION.has(observation.type)) {
-          const subject = (observation as { readonly instanceId?: InstanceId }).instanceId;
-          if (subject !== undefined) neverSeen.delete(subject);
         }
         // Driven by core's field table, so `sourceInstanceId`, `attackTargets`'
         // KEYS and an answer's `instanceIds` are as visible as `instanceId`.
