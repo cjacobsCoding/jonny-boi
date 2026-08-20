@@ -838,6 +838,118 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // --- WHO the effect happens to -------------------------------------------
+    // The rules below are one family: a printed body that happens to somebody
+    // OTHER than the source's controller. They all compile to the same shared
+    // "whichPlayer" vocabulary (`playersForParam` in effect-helpers), so "each
+    // player", "that player" and "each opponent" mean one thing each wherever
+    // they are printed.
+    id: 'each-player-draws',
+    description: '"Each player draws N cards"',
+    pattern: new RegExp(`^each player draws ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      return count === null
+        ? null
+        : effects({ primitive: 'drawCards', params: { count, whichPlayer: 'each' } });
+    },
+  },
+  {
+    id: 'each-player-draws-and-loses-life',
+    description: '"Each player draws N cards and loses M life" (Stormfist Crusader)',
+    // Printed as ONE sentence, so the sentence splitter never separates the two
+    // halves that would each compile alone — the same reason `draw-and-lose-life`
+    // exists for the untargeted "you" form.
+    pattern: new RegExp(`^each player draws ${COUNT_TOKEN} cards? and loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      const life = parseCount(match[2]);
+      if (count === null || life === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count, whichPlayer: 'each' } },
+        { primitive: 'loseLife', params: { amount: life, whichPlayer: 'each' } },
+      );
+    },
+  },
+  {
+    id: 'that-player-draws',
+    description:
+      '"That player draws N [additional] cards" — a trigger body aimed at the TRIGGERING player',
+    // Howling Mine, Kami of the Crescent Moon, Dictate of Kruphix, Font of
+    // Mythos. "Additional" is descriptive: the extra draw IS the effect, and the
+    // turn's own draw happens on its own. Compiling the word into a second draw
+    // would double it.
+    pattern: new RegExp(`^that player draws ${COUNT_TOKEN} (?:additional )?cards?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      return count === null
+        ? null
+        : effects({ primitive: 'drawCards', params: { count, whichPlayer: 'triggering' } });
+    },
+  },
+  {
+    id: 'that-player-loses-life',
+    description: '"That player loses N life" — a trigger body aimed at the TRIGGERING player',
+    pattern: new RegExp(`^that player loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]);
+      return amount === null
+        ? null
+        : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'triggering' } });
+    },
+  },
+  {
+    id: 'each-opponent-loses-life',
+    description: '"Each opponent loses N life"',
+    // The bare form, with none of the "and you gain that much life" tail that
+    // `each-opponent-loses-life-you-gain` handles; that rule is declared earlier,
+    // so the longer printed line keeps the rule that knows about its second half.
+    pattern: new RegExp(`^each opponent loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]);
+      return amount === null
+        ? null
+        : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
+    },
+  },
+  {
+    id: 'draw-additional-cards',
+    description: '"Draw an additional card" (The Immortal Sun\'s draw step)',
+    // Plain `drawCards`: the word "additional" describes WHY the draw is extra
+    // (the draw step already drew one), not a second effect on top of it.
+    pattern: new RegExp(`^(?:you )?draw ${COUNT_TOKEN} additional cards?$`),
+    build(match) {
+      const count = parseCount(match[1]);
+      return count === null ? null : effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
+    id: 'that-player-cycles-hand',
+    description:
+      '"That player puts the cards in their hand on the bottom of their library in any order, then draws that many cards" (Teferi\'s Puzzle Box)',
+    pattern:
+      /^that player puts the cards in their hand on the bottom of their library in any order, then draws that many cards$/,
+    build() {
+      return effects({ primitive: 'handToBottomThenDraw', params: { who: 'triggering' } });
+    },
+  },
+  {
+    id: 'source-damage-to-that-player',
+    description:
+      '"~ deals N damage to that player / to them" — UNTARGETED damage at the triggering player',
+    // Untargeted on purpose: the printed line names no target, it names the
+    // player the trigger was about. Compiling it as targeted damage would ask
+    // the controller to aim something the card never asks them to aim, and would
+    // subject it to targeting restrictions the printed line does not have.
+    pattern: new RegExp(`^~ deals ${COUNT_TOKEN} damage to (?:that player|them)$`),
+    build(match) {
+      const amount = parseCount(match[1]);
+      return amount === null
+        ? null
+        : effects({ primitive: 'dealDamage', params: { amount, whichPlayer: 'triggering' } });
+    },
+  },
+  {
     id: 'gain-life',
     description: '"You gain N life"',
     pattern: new RegExp(`^you gain ${COUNT_TOKEN} life$`),

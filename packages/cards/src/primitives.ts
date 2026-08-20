@@ -93,6 +93,11 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
  *   - `'player'` — "target player or planeswalker" only. Lava Spike, which must
  *     never kill a creature.
  *
+ * With NO target at all it reads `params.whichPlayer` instead — the UNTARGETED
+ * player form a trigger prints ("~ deals 1 damage to that player"), resolved
+ * through the shared `playersForParam` vocabulary. That form asks nobody to aim
+ * anything, which is the printed card: the trigger already knows who it means.
+ *
  * A creature target gets marked damage (SBAs destroy it if lethal); a player target
  * loses life. The restriction is already enforced when the cast is offered and when
  * it is applied (core's targeting.ts); it is re-checked HERE because a target can
@@ -104,7 +109,21 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const target = ctx.targets[0];
-  if (target === undefined) return;
+  if (target === undefined) {
+    // The UNTARGETED player form — "~ deals 1 damage to that player" / "to
+    // them", printed by a trigger that already knows who it means. No targeting
+    // question is asked and no target restriction applies, because the printed
+    // line names no target: it names the player the trigger was about. With no
+    // `whichPlayer` either, there is genuinely nothing to damage — a safe no-op,
+    // exactly as before.
+    const whichPlayer = strParam(ctx, 'whichPlayer');
+    if (whichPlayer === undefined) return;
+    for (const victim of playersForParam(ctx, whichPlayer)) {
+      changeLife(ctx, victim, -amount);
+      ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: victim, amount, combat: false });
+    }
+    return;
+  }
   // `ctx.controller` is passed so an "opponent-only" restriction can be judged —
   // without it the check cannot tell the caster apart from their opponent.
   // The source definition rides along so protection's "can't be targeted" half
