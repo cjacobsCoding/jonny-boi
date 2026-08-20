@@ -3998,6 +3998,18 @@ const BASIC_LAND_SUBTYPES: readonly string[] = ['plains', 'island', 'swamp', 'mo
 // "As ~ enters, choose a creature type" template, and there is no honest way to
 // compile it without one.
 
+/**
+ * Whether this card prints "As ~ enters, choose a creature type" — the naming
+ * that gives "…of the chosen type" something to refer to.
+ *
+ * Read off the card's own Oracle text for the same reason `cardHasXCost` reads
+ * the printed cost: a rule runs while the assembly is still being built, so the
+ * compiled `asEntersChoice` may not exist yet when this line is reached.
+ */
+function cardNamesACreatureTypeAsItEnters(ctx: RuleContext): boolean {
+  return /enters, choose a creature type/i.test(ctx.card.oracleText);
+}
+
 /** The printed head nouns a "cast …" restriction ends on. */
 const SPEND_HEAD_NOUNS: readonly string[] = ['spell', 'spells', 'source', 'sources'];
 
@@ -4046,6 +4058,15 @@ function parseSpendObject(
     .filter((token) => token.length > 0);
   if (tokens.length === 0) return null;
   if (tokens[0] === 'a' || tokens[0] === 'an') tokens.shift();
+  // "…of the chosen type" trails the head noun ("a creature spell OF THE CHOSEN
+  // TYPE"), so it comes off first — otherwise the head-noun test looks at "type"
+  // and the whole clause is refused. The flag it sets is a DECLARATION; the value
+  // is substituted when the mana is made (core's `resolveSpendRestriction`).
+  let subtypeChosenBySource = false;
+  if (tokens.slice(-4).join(' ') === 'of the chosen type') {
+    tokens.length -= 4;
+    subtypeChosenBySource = true;
+  }
   if (SPEND_HEAD_NOUNS.includes(tokens[tokens.length - 1] ?? '')) tokens.pop();
   else if (requireHead) return null;
 
@@ -4084,7 +4105,14 @@ function parseSpendObject(
     if (subtypes.length > 0 || !/^[a-z][a-z'-]*$/.test(token) || token.endsWith('s')) return null;
     subtypes.push(token);
   }
-  if (types.length === 0 && subtypes.length === 0 && colors.length === 0 && !colorless && !legendary) {
+  if (
+    types.length === 0 &&
+    subtypes.length === 0 &&
+    colors.length === 0 &&
+    !colorless &&
+    !legendary &&
+    !subtypeChosenBySource
+  ) {
     // "…only to cast a spell" restricts nothing this engine can check. No printed
     // card says it, and refusing stops the rule from becoming a way to compile
     // mana whose restriction is silently vacuous.
@@ -4097,12 +4125,14 @@ function parseSpendObject(
     colors?: readonly ManaColor[];
     colorless?: boolean;
     legendary?: boolean;
+    subtypeChosenBySource?: boolean;
   } = { purpose };
   if (types.length > 0) clause.types = types;
   if (subtypes.length > 0) clause.subtypes = subtypes;
   if (colors.length > 0) clause.colors = colors;
   if (colorless) clause.colorless = true;
   if (legendary) clause.legendary = true;
+  if (subtypeChosenBySource) clause.subtypeChosenBySource = true;
   return clause as ManaSpendClause;
 }
 
@@ -4367,10 +4397,23 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
     id: 'mana-ability-spend-restriction',
     description: '"{T}: Add one mana of any color. Spend this mana only to cast a creature spell"',
     pattern: /^\{t\}: add (.+?)\. spend this mana only to (.+)$/,
-    build(match) {
+    build(match, ctx) {
       const produces = parseManaPayload(match[1] ?? '');
       const spendRestriction = parseManaSpendRestriction(match[2] ?? '');
       if (!produces || !spendRestriction) return null;
+      // "…of the chosen type" only means something on a card that ACTUALLY names
+      // a creature type as it enters. Compiling it on a card that does not would
+      // print a land whose mana can never be spent — strictly worse than the real
+      // one, and just as much a lie as one whose mana pays for anything. The
+      // clause is checked against the card's own printed text rather than against
+      // the assembly, because rules run before the assembly is complete and a
+      // land's naming line may compile after this one.
+      if (
+        spendRestriction.allow.some((clause) => clause.subtypeChosenBySource === true) &&
+        !cardNamesACreatureTypeAsItEnters(ctx)
+      ) {
+        return null;
+      }
       return { manaAbilities: [{ produces, spendRestriction }] };
     },
   },
@@ -4524,19 +4567,15 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'a spell that CANNOT BE COUNTERED (the spend restriction itself is implemented; countering has no "uncounterable" flag yet)',
   },
   {
-    // SPEND RESTRICTIONS ARE IMPLEMENTED NOW: the mana POOL carries them and
-    // `canPay`/`payCost`/the payment planner/serialization all honour them
-    // (core's spend-restriction.ts). So this hint no longer claims a missing
-    // system — that would send the next contributor to rebuild one that exists.
-    //
-    // What reaches here is a restriction the compiler cannot READ. By far the
-    // most common is Cavern of Souls' "of the chosen type", which is a genuinely
-    // different system — a creature type REMEMBERED on the permanent, chosen as
-    // it enters — and it is named separately so nobody mistakes it for a wording
-    // gap. Order matters: it sits above the generic form.
+    // "...of the chosen type" on a card that never NAMES one. Both halves ship —
+    // the spend restriction (core's spend-restriction.ts) and the as-entered
+    // naming (core's as-enters.ts) — so what lands here is a card whose
+    // restriction refers to a choice its own text does not make. Compiling it
+    // would print a land whose mana can never be spent, which is as much a lie
+    // as one whose mana pays for anything. Order matters: above the generic form.
     pattern: /spend this mana only to .*of the chosen type/,
     missingEngineSystem:
-      'a spend restriction naming a type CHOSEN AS THE PERMANENT ENTERS (spend restrictions themselves are implemented; a per-permanent remembered choice is not)',
+      'a SPEND-RESTRICTION wording the compiler cannot read yet — it names "the chosen type" but the card never chooses one (both restricted mana and the as-entered naming are implemented)',
   },
   {
     pattern: /spend this mana only to/,

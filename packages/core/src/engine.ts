@@ -52,7 +52,13 @@ import {
   validateChoiceAnswer,
 } from './choices.js';
 import { interveningIfHolds } from './intervening.js';
-import { asEntersOptions, asEntersPrompt, chosenColorOf, recordChosenAsEntered } from './as-enters.js';
+import {
+  asEntersOptions,
+  asEntersPrompt,
+  chosenColorOf,
+  chosenSubtypeOf,
+  recordChosenAsEntered,
+} from './as-enters.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
@@ -73,6 +79,7 @@ import {
 import type { ManaTapPlan } from './mana-plan.js';
 import { planManaPayment } from './mana-plan.js';
 import type { ManaSpendRestriction } from './spend-restriction.js';
+import { resolveSpendRestriction, restrictionNamesChosenSubtype } from './spend-restriction.js';
 import type {
   CardInstance,
   GameState,
@@ -2225,7 +2232,14 @@ function applyTapForMana(
     }
   }
 
-  tapPermanentForMana(state, source, action.player, production, emit, extra?.ability.spendRestriction);
+  tapPermanentForMana(
+    state,
+    source,
+    action.player,
+    production,
+    emit,
+    spendRestrictionMadeBy(source, extra?.ability.spendRestriction),
+  );
 
   // The RIDER runs as part of the ability's own resolution, AFTER the mana is
   // added — a pain land's damage is not a cost you may decline, and it is damage
@@ -2254,6 +2268,25 @@ function applyTapForMana(
   if (damage > 0 || (extra?.ability.cost?.life ?? 0) > 0) checkStateBasedActions(state, emit);
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
+}
+
+/**
+ * The concrete restriction a tap of `source` puts on the mana it makes.
+ *
+ * For every card but the "…of the chosen type" three this is the printed
+ * restriction itself, returned by identity — the shared frozen object, no
+ * allocation. Cavern of Souls and friends name a creature type as they enter,
+ * and core's as-enters seam already stores that answer on the INSTANCE
+ * (`chosenAsEntered`), so the value is read from there rather than tracked a
+ * second time; substituting it here means the pool only ever holds concrete
+ * restrictions and no payment path has to find the permanent again.
+ */
+function spendRestrictionMadeBy(
+  source: CardInstance,
+  printed: ManaSpendRestriction | undefined,
+): ManaSpendRestriction | undefined {
+  if (printed === undefined || !restrictionNamesChosenSubtype(printed)) return printed;
+  return resolveSpendRestriction(printed, chosenSubtypeOf(source));
 }
 
 function applyCastSpell(

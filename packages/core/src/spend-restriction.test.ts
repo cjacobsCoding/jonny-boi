@@ -484,3 +484,99 @@ describe('the payment planner', () => {
     expect(plan?.map((tap) => tap.instanceId)).toEqual([forest]);
   });
 });
+
+describe(`the chosen type comes from the permanent own as-entered choice`, () => {
+  /** Unclaimed Territory: any colour, only for a creature spell of the named type. */
+  const TERRITORY: CardDefinition = {
+    id: 'Territory',
+    name: 'Unclaimed Territory',
+    types: ['land'],
+    asEntersChoice: { subject: 'creatureType' },
+    manaAbilities: [
+      {
+        produces: [{ W: 1 }, { U: 1 }, { B: 1 }, { R: 1 }, { G: 1 }],
+        spendRestriction: {
+          label: 'only to cast a creature spell of the chosen type',
+          allow: [{ purpose: 'cast', types: ['creature'], subtypeChosenBySource: true }],
+        },
+      },
+    ],
+  };
+
+  const GOBLIN: CardDefinition = {
+    id: 'Goblin',
+    name: 'Mogg Fanatic',
+    types: ['creature'],
+    subtypes: ['Goblin'],
+    power: 1,
+    toughness: 1,
+    cost: { G: 1 },
+  };
+
+  function territoryNaming(chosen: string | undefined): { state: GameState; land: InstanceId } {
+    const base = newGame();
+    const land = place(base, TERRITORY, 'A');
+    // The as-enters seam stores the answer on the INSTANCE. This branch reads
+    // that field rather than tracking a second copy of the same answer.
+    if (chosen !== undefined) {
+      (base.battlefield.find((p) => p.instanceId === land) as { chosenAsEntered?: string }).chosenAsEntered =
+        chosen;
+    }
+    return { state: advanceToStep(base, 'precombatMain'), land };
+  }
+
+  it('pays for a creature of the named type', () => {
+    const { state: start, land } = territoryNaming('Goblin');
+    const goblin = putInHand(start, GOBLIN, 'A');
+    let state = act(start, { kind: 'tapForMana', player: 'A', instanceId: land, mode: 4 });
+    // The parcel in the pool is CONCRETE — the choice was substituted when the
+    // mana was made, so no payment path has to find the permanent again.
+    expect(restrictedTotal(state.players.A.manaPool)).toBe(1);
+    state = act(state, { kind: 'castSpell', player: 'A', instanceId: goblin });
+    expect(state.stack).toHaveLength(1);
+  });
+
+  it('does NOT pay for a creature of a different type', () => {
+    const { state: start, land } = territoryNaming('Goblin');
+    const bear = putInHand(start, BEAR, 'A');
+    const state = act(start, { kind: 'tapForMana', player: 'A', instanceId: land, mode: 4 });
+    expect(castOffered(state, bear)).toBe(false);
+    expect(rejectionOf(state, { kind: 'castSpell', player: 'A', instanceId: bear })).toBe(
+      'insufficient mana to cast this spell',
+    );
+  });
+
+  it('a permanent that named NOTHING makes mana that pays for nothing — never for everything', () => {
+    // The safe direction. Widening an unnamed type would hand this land the best
+    // mana on the board; the printed card makes mana no spell qualifies for.
+    const { state: start, land } = territoryNaming(undefined);
+    const goblin = putInHand(start, GOBLIN, 'A');
+    const state = act(start, { kind: 'tapForMana', player: 'A', instanceId: land, mode: 4 });
+    expect(poolTotal(state.players.A.manaPool)).toBe(1);
+    expect(castOffered(state, goblin)).toBe(false);
+  });
+
+  it('the planner will not plan a tap whose named type does not match', () => {
+    const { state: goblinLand } = territoryNaming('Goblin');
+    expect(
+      planManaPayment(
+        goblinLand,
+        'A',
+        { G: 1 },
+        generateLegalActions(goblinLand),
+        BEAR,
+        'cast',
+      ),
+    ).toBeUndefined();
+    expect(
+      planManaPayment(
+        goblinLand,
+        'A',
+        { G: 1 },
+        generateLegalActions(goblinLand),
+        GOBLIN,
+        'cast',
+      ),
+    ).toHaveLength(1);
+  });
+});

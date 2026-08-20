@@ -84,6 +84,19 @@ export interface ManaSpendClause {
   readonly colorless?: boolean;
   /** The object must be at least one of these colours. */
   readonly colors?: readonly ManaColor[];
+  /**
+   * "…of the chosen type" — Cavern of Souls, Unclaimed Territory, Secluded
+   * Courtyard, whose restriction names the creature type the SOURCE itself
+   * chose as it entered (`CardInstance.chosenAsEntered`, core's as-enters seam).
+   *
+   * A DECLARATION, never an answer. The clause on the card definition is shared
+   * and immutable, so it cannot hold one permanent's choice; the value is
+   * substituted by {@link resolveSpendRestriction} at the moment the mana is
+   * MADE, which is the only moment at which both the source and its choice are
+   * in hand. What lands in the pool is therefore always a concrete restriction,
+   * and no payment path ever has to look a permanent up.
+   */
+  readonly subtypeChosenBySource?: boolean;
 }
 
 /**
@@ -113,6 +126,51 @@ export interface RestrictedMana {
   readonly restriction: ManaSpendRestriction;
 }
 
+/**
+ * Substitute the SOURCE's as-entered choice into a printed restriction, giving
+ * the concrete restriction the produced mana will carry.
+ *
+ * Called once per activation of a chosen-type mana ability — never on a payment
+ * path. Returns the printed object UNCHANGED (by identity) when no clause names
+ * a chosen type, which is every card but three, so the shared frozen restriction
+ * keeps being shared.
+ *
+ * `chosen === undefined` means the permanent named nothing (it declined, or the
+ * question was never asked). Those clauses are then DROPPED rather than widened:
+ * an unnamed type matches nothing, never everything. A restriction whose every
+ * clause drops has an empty `allow`, which is mana that can pay for nothing —
+ * faithful, and the safe direction. Widening would hand a Cavern that named
+ * nothing the best mana on the board.
+ */
+export function resolveSpendRestriction(
+  restriction: ManaSpendRestriction,
+  chosen: string | undefined,
+): ManaSpendRestriction {
+  if (!restrictionNamesChosenSubtype(restriction)) return restriction;
+  const allow: ManaSpendClause[] = [];
+  for (const clause of restriction.allow) {
+    if (clause.subtypeChosenBySource !== true) {
+      allow.push(clause);
+      continue;
+    }
+    if (chosen === undefined) continue;
+    const lowered = chosen.toLowerCase();
+    const subtypes = clause.subtypes === undefined ? [lowered] : [...clause.subtypes, lowered];
+    const { subtypeChosenBySource: _dropped, ...rest } = clause;
+    allow.push({ ...rest, subtypes });
+  }
+  const named = chosen === undefined ? 'nothing' : chosen;
+  return { label: `${restriction.label} (${named})`, allow };
+}
+
+/** Whether any clause defers to the source's as-entered choice. */
+export function restrictionNamesChosenSubtype(restriction: ManaSpendRestriction): boolean {
+  for (const clause of restriction.allow) {
+    if (clause.subtypeChosenBySource === true) return true;
+  }
+  return false;
+}
+
 /** Whether one clause is satisfied by the object being paid for. */
 function clauseAllows(clause: ManaSpendClause, purpose: ManaSpendPurpose): boolean {
   if (clause.purpose !== purpose.kind) return false;
@@ -120,6 +178,10 @@ function clauseAllows(clause: ManaSpendClause, purpose: ManaSpendPurpose): boole
   if (types !== undefined && !anyOf(types, purpose.types)) return false;
   const subtypes = clause.subtypes;
   if (subtypes !== undefined && !anyOf(subtypes, purpose.subtypes)) return false;
+  // An UNRESOLVED chosen-type clause matches nothing. It should never reach a
+  // payment — `resolveSpendRestriction` substitutes at production time — but if
+  // one ever did, matching everything would be the expensive direction of wrong.
+  if (clause.subtypeChosenBySource === true) return false;
   if (clause.legendary === true && !purpose.legendary) return false;
   if (clause.colorless === true && purpose.colors.length > 0) return false;
   const colors = clause.colors;

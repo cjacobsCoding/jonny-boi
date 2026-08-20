@@ -18,7 +18,8 @@ import { manaExtrasOf, manaModesOf, spendPurposeFor } from './card.js';
 import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { addProduction, canPay, MANA_COLORS, payCost, usableMana } from './mana.js';
 import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
-import { restrictionAllows } from './spend-restriction.js';
+import { resolveSpendRestriction, restrictionAllows, restrictionNamesChosenSubtype } from './spend-restriction.js';
+import { chosenSubtypeOf } from './as-enters.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 
 /**
@@ -295,6 +296,7 @@ export function planManaPayment(
   // restriction apparatus below out of the ranking loop.
   let anyRestricted = current.restricted !== undefined;
   let lastDef: CardDefinition | undefined;
+  let lastPerm: CardInstance | undefined;
   for (let i = 0; i < legalActions.length; i++) {
     const action = legalActions[i] as GameAction;
     if (action.kind !== 'tapForMana' || action.player !== player) continue;
@@ -305,6 +307,7 @@ export function planManaPayment(
       const perm = findOnBattlefield(bf, action.instanceId);
       modes = perm ? manaModesOf(perm.def) : undefined;
       lastDef = perm?.def;
+      lastPerm = perm;
       // Inlined `manaAbilities` test for the same reason `pushManaTapActions`
       // inlines it: one property read, no call, on the hottest path in the sim.
       lastExtras =
@@ -328,7 +331,15 @@ export function planManaPayment(
     // artifact filter land). That is the same shape as the reach limit already
     // pinned on filter lands generally — the one-shot planner does not search
     // chains — and it can only ever decline a payment, never make an illegal one.
-    const spendRestriction = manaSpendRestrictionOf(lastExtras, mode);
+    // Resolved through the SAME helper the engine's apply path uses, so a
+    // Cavern of Souls that named Goblin is planned against Goblin rather than
+    // against an unresolved clause that matches nothing. Identity for every card
+    // that does not print "…of the chosen type".
+    const printedRestriction = manaSpendRestrictionOf(lastExtras, mode);
+    const spendRestriction =
+      printedRestriction !== undefined && restrictionNamesChosenSubtype(printedRestriction)
+        ? resolveSpendRestriction(printedRestriction, lastPerm ? chosenSubtypeOf(lastPerm) : undefined)
+        : printedRestriction;
     if (spendRestriction !== undefined) {
       if (!restrictionAllows(spendRestriction, resolvePurpose())) continue;
       anyRestricted = true;

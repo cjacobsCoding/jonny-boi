@@ -266,13 +266,12 @@ describe('what the mana model still does NOT have is reported by name', () => {
     return result.missing.map((m) => m.missingEngineSystem).join(' | ');
   }
 
-  it('Cavern of Souls names the CHOSEN TYPE — the pool carries the restriction now', () => {
-    // The spend restriction itself is implemented (core's spend-restriction.ts and
-    // `spend-restriction.test.ts`). What Cavern still needs is a creature type
-    // REMEMBERED on the permanent, chosen as it enters — a different system, and
-    // the hint has to say so rather than sending the next contributor to rebuild
-    // a pool that already carries restrictions.
-    const gap = gapsOf(
+  it('Cavern of Souls minus its uncounterable clause COMPILES - both halves ship', () => {
+    // The spend restriction is this branch (core spend-restriction.ts) and the
+    // as-entered naming is core as-enters.ts; the printed card still reports,
+    // but only for its third clause (that spell cannot be countered), which is a
+    // real unimplemented rules effect rather than anything about mana.
+    const result = compileCard(
       makeCard({
         name: 'Cavern of Souls',
         typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
@@ -280,8 +279,11 @@ describe('what the mana model still does NOT have is reported by name', () => {
           'As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.',
       }),
     );
-    expect(gap).toContain('CHOSEN AS THE PERMANENT ENTERS');
-    expect(gap).not.toContain('a SPEND RESTRICTION on produced mana');
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.asEntersChoice).toEqual({ subject: 'creatureType' });
+    expect(result.definition.manaAbilities?.[1]?.spendRestriction?.allow).toEqual([
+      { purpose: 'cast', types: ['creature'], subtypeChosenBySource: true },
+    ]);
   });
 
   it('Gwenna names a spend-restriction WORDING gap, not a missing system', () => {

@@ -171,17 +171,46 @@ describe('the printed forms that compile', () => {
 });
 
 describe('what the parser must REFUSE, and what it says instead', () => {
-  it('"of the chosen type" names the remembered choice, not the spend restriction', () => {
-    const gap = gapsOf(
+  it('Unclaimed Territory: "of the chosen type" defers to the as-entered choice', () => {
+    // The restriction cannot hold the answer - the definition is shared and
+    // immutable - so the clause is a DECLARATION and core substitutes the
+    // permanent own `chosenAsEntered` when the mana is made.
+    const result = compiled(
       land(
         'Unclaimed Territory',
         'As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.',
       ),
     );
-    expect(gap).toContain('CHOSEN AS THE PERMANENT ENTERS');
-    // A restriction with the chosen type quietly dropped would be Unclaimed
-    // Territory with no creature-type clause at all — a strictly better land.
-    expect(gap).not.toContain('a SPEND RESTRICTION on produced mana');
+    expect(result.definition.asEntersChoice).toEqual({ subject: 'creatureType' });
+    expect(result.definition.manaAbilities?.[1]?.spendRestriction?.allow).toEqual([
+      { purpose: 'cast', types: ['creature'], subtypeChosenBySource: true },
+    ]);
+  });
+
+  it('Secluded Courtyard: the chosen type carries into the ACTIVATE clause too', () => {
+    const result = compiled(
+      land(
+        'Secluded Courtyard',
+        'As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type or activate an ability of a creature source of the chosen type.',
+      ),
+    );
+    expect(result.definition.manaAbilities?.[1]?.spendRestriction?.allow).toEqual([
+      { purpose: 'cast', types: ['creature'], subtypeChosenBySource: true },
+      { purpose: 'activate', types: ['creature'], subtypeChosenBySource: true },
+    ]);
+  });
+
+  it('REFUSES "of the chosen type" on a card that never names one', () => {
+    // Mana that can never be spent is as much a lie as mana that pays for
+    // anything. With no naming line the clause refers to nothing, so the card
+    // reports rather than compiling a land strictly worse than the printed one.
+    const gap = gapsOf(
+      land(
+        'Test Unnamed Chosen Type',
+        '{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.',
+      ),
+    );
+    expect(gap).toContain('SPEND-RESTRICTION wording');
   });
 
   it('"and that spell can\'t be countered" is reported — counterspells are real here', () => {
