@@ -59,8 +59,10 @@ import type {
   PlayerId,
   SelectCardsChoice,
   SelectPlayersChoice,
+  CardDefinition,
+  CardInstance,
 } from '@jonny-boi/core';
-import { defaultAnswerFor, modeById, nextUnaimedPick, opponentOf } from '@jonny-boi/core';
+import { copyResultDef, defaultAnswerFor, modeById, nextUnaimedPick, opponentOf } from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
 import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
@@ -139,7 +141,114 @@ function selectionSize(choice: { min: number; max: number; valence: PendingChoic
   return choice.valence === 'gain' ? choice.max : choice.min;
 }
 
+/**
+ * The permanent-to-be that a copy question was raised for.
+ *
+ * `findInstance` deliberately does not search the STACK, and the copier is
+ * ALWAYS somewhere that question does not reach: the as-enters choice is asked
+ * before the permanent enters, so a creature/artifact/enchantment is still a
+ * spell on the stack and a land is still in its owner's hand. Looking on the
+ * stack first is what makes the policy fire at all — without it every copy
+ * question falls through to "decline", which is a 0/0 in the graveyard and
+ * looks exactly like a pilot that chose badly.
+ */
+function copierFor(state: GameState, instanceId: InstanceId): CardInstance | undefined {
+  for (let i = state.stack.length - 1; i >= 0; i--) {
+    const object = state.stack[i] as StackObject | undefined;
+    if (object?.kind === 'spell' && object.instanceId === instanceId) return object.card;
+  }
+  return findInstance(state, instanceId);
+}
+
+/**
+ * **The copy-target ruler (CR 706.2).** What a permanent with these PRINTED
+ * characteristics is worth to be.
+ *
+ * Deliberately not `cardValue`, and the difference is the whole point of the
+ * policy: `cardValue` prices a card by what it is worth IN HAND (mana value as
+ * a proxy for power) and reads EFFECTIVE stats off the board. Neither answers
+ * "which permanent should I BE?".
+ *
+ *  - **Printed, never effective.** Counters (7d), anthems (7c) and until-EOT
+ *    pumps do not come along when you copy something — you get the printed
+ *    card. A pilot ranking by the board would copy the 1/1 wearing three +1/+1
+ *    counters instead of the printed 4/4 next to it, and end up with a 1/1.
+ *  - **What it DOES in play, not what it cost.** A copy of a Sol Ring is worth
+ *    more than a blank artifact even though it costs less, so mana value has no
+ *    place here; printed abilities and the bare fact of tapping for mana do.
+ *
+ * Pure and deterministic — no state, no clock, no RNG — so the same definition
+ * always scores the same and the policy can be tested directly.
+ */
+export function copyTargetValue(def: CardDefinition, weights: HeuristicWeights): number {
+  const stats = (def.power ?? 0) + (def.toughness ?? 0);
+  const abilities =
+    (def.effects?.length ?? 0) +
+    (def.triggers?.length ?? 0) +
+    (def.activated?.length ?? 0) +
+    (def.statics?.length ?? 0);
+  const keywords = def.keywords ? Object.values(def.keywords).filter(Boolean).length : 0;
+  const manaSource =
+    def.produces !== undefined || def.producesOptions !== undefined || def.manaAbilities !== undefined;
+  return (
+    Math.max(0, stats) * weights.copyTargetPerStatValue +
+    abilities * weights.copyTargetAbilityValue +
+    keywords * weights.copyTargetKeywordValue +
+    (manaSource ? weights.copyTargetManaSourceValue : 0)
+  );
+}
+
+/**
+ * Answer an AS-ENTERS COPY question (CR 706): "you may have ~ enter as a copy
+ * of …". Two decisions, and the generic valence path would get both wrong.
+ *
+ * 1. **WHICH to copy** — the best candidate by {@link copyTargetValue}, scored
+ *    on what the copy WOULD BE (`copyResultDef`, the very function the engine
+ *    applies, so the "except …" tail is priced too: Spark Double's extra
+ *    counter, Phyrexian Metamorph's added artifact type). Ties break on the
+ *    order the choice offered, which is battlefield order — stable and seedable.
+ * 2. **WHETHER to copy at all** — `min: 0` makes declining legal, and the bar is
+ *    this card's OWN printed body scored by the SAME ruler. That is what makes
+ *    the comparison meaningful: every card printing this clause is a body
+ *    designed to be replaced (a 0/0 Clone, a blank artifact, a land that taps
+ *    for nothing), so the bar is usually zero and the pilot copies. It is a
+ *    comparison rather than an unconditional "always copy" so a future card
+ *    with a real body of its own is judged rather than assumed.
+ *
+ * Copying the WORST creature on the board is the failure this exists to
+ * prevent: a card that is noise in every A/B verdict it appears in is worse
+ * than a card that is not implemented.
+ */
+function answerCopyAsEnters(state: GameState, choice: SelectCardsChoice, weights: HeuristicWeights): ChoiceAnswer {
+  const decline: ChoiceAnswer = { kind: 'selectCards', instanceIds: [] };
+  const self = copierFor(state, choice.sourceInstanceId);
+  if (!self) return decline;
+  // The copier's OWN printed card — `uncopiedDef` when it is somehow already a
+  // copy, so the spec is read off the card that prints the clause.
+  const own = self.uncopiedDef ?? self.def;
+  const spec = own.copyAsEnters;
+  if (spec === undefined) return decline;
+
+  let bestId: InstanceId | undefined;
+  let bestValue = copyTargetValue(own, weights);
+  for (const option of choice.candidates) {
+    const source = findInstance(state, option.instanceId);
+    if (!source) continue;
+    const value = copyTargetValue(copyResultDef(own, source, spec), weights);
+    if (value > bestValue) {
+      bestValue = value;
+      bestId = option.instanceId;
+    }
+  }
+  return bestId === undefined ? decline : { kind: 'selectCards', instanceIds: [bestId] };
+}
+
 function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights: HeuristicWeights): ChoiceAnswer {
+  // The as-enters COPY question is not a "how many of these do I want?" — it is
+  // "which permanent should I BE?", and the ruler is the copiable values, not
+  // the board's. See `answerCopyAsEnters`.
+  if (choice.context === 'copyAsEnters') return answerCopyAsEnters(state, choice, weights);
+
   // Score every candidate, then sort BEST FIRST. `ordered` choices use exactly this
   // order (first = the position that comes up soonest — top of library, drawn
   // first), so the good card is the one we see again first.
