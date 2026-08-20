@@ -2826,20 +2826,18 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // rebuilt from the parsed pieces. A rebuilt label drifts from the card ("a
     // creature" becomes "creature"), and it is what the hotseat prompt and the
     // log show the player, so it should read the way the card reads.
+    // The outer group is the printed phrase (the label); the inner ones are the
+    // verb, the count and the noun, so nothing has to be recovered by slicing
+    // the phrase back apart.
     pattern: new RegExp(
-      `^as an additional cost to cast this spell, ((sacrifice|discard) (?:${COUNT_TOKEN} )?[a-z ]+?s?)$`,
+      `^as an additional cost to cast this spell, ((sacrifice|discard) (?:${COUNT_TOKEN} )?([a-z ]+?)s?)$`,
     ),
     build(match) {
       const phrase = match[1] ?? '';
       const kind = match[2] === 'discard' ? 'discard' : 'sacrifice';
       const count = match[3] === undefined ? 1 : parseCount(match[3]);
       if (count === null || count <= 0) return null;
-      // What is left of the phrase once the verb and the count are removed.
-      const noun = phrase
-        .slice((match[2] ?? '').length)
-        .replace(match[3] === undefined ? '' : ` ${match[3]}`, '')
-        .replace(/s$/, '')
-        .trim();
+      const noun = (match[4] ?? '').trim();
       const filter = kind === 'discard' ? discardCostFilterFor(noun) : sacrificeCostFilterFor(noun);
       if (filter === null) return null;
       const label = phrase.charAt(0).toUpperCase() + phrase.slice(1);
