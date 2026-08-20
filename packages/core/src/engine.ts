@@ -36,6 +36,7 @@ import {
   isTrivialChoice,
   MAX_CHOICES_PER_RESOLUTION,
   normalizeChoiceRequest,
+  NOTHING_CHOSEN,
   permanentTargetOption,
   validateChoiceAnswer,
 } from './choices.js';
@@ -1276,7 +1277,12 @@ function applyAnswerChoice(
       raiseLandEntryChoice(state, entering, choice.chooser, emit);
     }
     checkStateBasedActions(state, emit);
-    aimPendingTriggers(state, emit);
+    // Aim any waiting trigger only once the land has finished asking. Two
+    // reasons, and they agree: the entry questions are REPLACEMENT effects that
+    // all happen as the permanent enters, before a landfall trigger is put on
+    // the stack (CR 614.1c) — and `aimPendingTriggers` parks a question of its
+    // own, which would overwrite the land's second question and lose it.
+    if (!state.pendingChoice) aimPendingTriggers(state, emit);
     if (!state.pendingChoice && !state.gameOver) {
       // The land play never surrendered priority, so its player keeps the floor.
       state.priorityPlayer = choice.chooser;
@@ -1511,10 +1517,14 @@ function raiseLandEntryChoice(
         valence: 'gain',
       }, 'asEnters');
       if (state.pendingChoice) return;
+    } else {
+      // Nothing on offer (an empty menu) settles to "nothing named" WITHOUT
+      // stopping the game — the inert default, reached honestly and announced
+      // like any other naming. Recorded rather than left absent so this step
+      // function, which is called again after every answer, cannot come back
+      // round and ask again.
+      recordChosenAsEntered(card, naming, NOTHING_CHOSEN, emit);
     }
-    // Nothing on offer (an empty menu) leaves nothing named — the inert
-    // default, reached without stopping the game. Fall through to the tapped
-    // questions below.
   }
 
   // 2. A REVEAL-LAND: "you may reveal an Island or Swamp card from your hand. If

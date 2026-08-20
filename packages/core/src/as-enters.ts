@@ -212,9 +212,17 @@ export function chosenPlayerOf(permanent: ChoiceBearingPermanent): PlayerId | un
  * permanent spell resolves. Two paths, one function, so the stored form and the
  * announcement can never disagree about what "chose nothing" looks like.
  *
- * Naming NOTHING stores nothing: the field stays absent, which keeps the ordinary
- * instance on the object shape `cloneInstance` copies cheapest, and keeps
- * "nothing chosen" spelled exactly one way for every reader.
+ * ⚠️ **Naming NOTHING stores `NOTHING_CHOSEN`, not `undefined`**, and the
+ * difference is a wedge rather than a nicety. The field is what both asking
+ * paths test to decide whether this permanent has ALREADY been asked — the
+ * land-play path in particular is a step function that is called again after
+ * every answer, so if declining left the field absent it would re-raise the same
+ * question forever, and the engine's own degraded answer (`defaultAnswerFor`,
+ * which names nothing) would spin on it.
+ *
+ * That costs an extra property only on a permanent that was asked and named
+ * nothing, which no ordinary play produces — and every reader already treats the
+ * empty string exactly as it treats an absent value: matching nothing.
  */
 export function recordChosenAsEntered(
   permanent: CardInstance,
@@ -222,7 +230,7 @@ export function recordChosenAsEntered(
   value: string,
   emit: (event: GameEvent) => void,
 ): void {
-  if (value !== NOTHING_CHOSEN) permanent.chosenAsEntered = value;
+  permanent.chosenAsEntered = value;
   emit({
     type: 'chosenAsEnters',
     instanceId: permanent.instanceId,

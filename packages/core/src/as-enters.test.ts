@@ -351,15 +351,38 @@ describe('a land naming a value as it enters', () => {
     expect(onBattlefield(declined, landId).chosenAsEntered).toBe('Swamp');
   });
 
-  it('naming NOTHING is accepted and leaves the permanent with no value', () => {
+  it('naming NOTHING is accepted, reads as nothing, and does NOT ask again', () => {
     const reg = createEffectRegistry();
     const { state, landId } = playLand(reg, NAMING_LAND);
     const done = answer(state, reg, { kind: 'chooseValue', value: NOTHING_CHOSEN });
-    expect(onBattlefield(done, landId).chosenAsEntered).toBeUndefined();
+    const land = onBattlefield(done, landId);
+    // Recorded as the empty string, not left absent: the land-play path asks its
+    // questions in a STEP function that re-enters after every answer, so an
+    // absent value here would re-raise the same question forever — and the
+    // engine's own degraded answer names nothing, so it would spin.
+    expect(land.chosenAsEntered).toBe(NOTHING_CHOSEN);
+    expect(chosenColorOf(land)).toBeUndefined();
+    expect(done.pendingChoice ?? null).toBeNull();
+    // …and the mana ability reads it as nothing, so the land taps for nothing.
+    expect(generateLegalActions(done).filter((a) => a.kind === 'tapForMana')).toHaveLength(0);
   });
 });
 
-// --- 4. the value survives, and is cleared when it should be --------------------------
+// --- 4. the named value is OBSERVABLE ------------------------------------------------
+
+describe('the debug surface', () => {
+  it('the state dump shows what a permanent named', () => {
+    const reg = createEffectRegistry();
+    const { state } = playLand(reg, NAMING_LAND);
+    // Before the answer there is nothing to show, and the row is unchanged.
+    expect(dumpState(state)).not.toContain('named:');
+    const done = answer(state, reg, { kind: 'chooseValue', value: 'R' });
+    // An anthem that "isn't working" is unreadable in a dump without this.
+    expect(dumpState(done)).toContain('named:R');
+  });
+});
+
+// --- 5. the value survives, and is cleared when it should be --------------------------
 
 describe('the named value persists', () => {
   it('cloneState copies it — a dropped field would blank the card one action later', () => {

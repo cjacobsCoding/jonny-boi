@@ -194,11 +194,15 @@ export interface CardInstance {
    * card's own type line ("this creature is the chosen type in addition to its
    * other types", `CardDefinition.isChosenSubtype`).
    *
-   * **ABSENT MEANS NOTHING WAS CHOSEN, AND MATCHES NOTHING.** That is the one
-   * inert default (`NOTHING_CHOSEN` in `choices.ts`), reached by every entry path
-   * that cannot ask a question — reanimation, another card's "put it onto the
-   * battlefield", a token, a hand-built test instance. No reader may invent a
-   * value for an absent one.
+   * **ABSENT — OR THE EMPTY STRING — MEANS NOTHING WAS CHOSEN, AND MATCHES
+   * NOTHING.** That is the one inert default (`NOTHING_CHOSEN` in `choices.ts`),
+   * and no reader may invent a value for it. The two spellings are the two ways
+   * of reaching it, and the difference is bookkeeping rather than meaning:
+   * ABSENT is a permanent that was never asked (reanimation, another card's "put
+   * it onto the battlefield", a token, a hand-built test instance), while the
+   * EMPTY STRING is one that was asked and declined — which the asking paths need
+   * to tell apart from "not asked yet", because the land-play path re-enters its
+   * question step after every answer and would otherwise ask again forever.
    *
    * Cleared when the permanent leaves the battlefield (`resetInstanceForNewZone`):
    * a new entry is a new naming, so a bounced-and-recast Adaptive Automaton must
