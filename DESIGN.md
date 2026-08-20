@@ -1810,6 +1810,65 @@ character-indexed object (nothing had printed a label that long until the fetchl
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
 
+### 3.21 Copy effects — layer 1, beneath everything — ✅ done
+The engine had never had a copy effect, and an earlier branch was told to skip clones for exactly that
+reason. `You may have ~ enter as a copy of any creature on the battlefield` now plays as printed.
+
+**The mechanism is one swap, and it is the transform system's.** A copy is applied by swapping
+`CardInstance.def` — every characteristic read in the codebase already routes through it (combat's
+P/T, targeting's types, the trigger collector's ability list, mana production, the AI's evaluation,
+the renderer's art), so the swap IS the routing and there is no second code path anywhere.
+`CardInstance.uncopiedDef` is the way back, restored by `resetInstanceForNewZone` when the permanent
+leaves (CR 400.7 — a bounced Clone is a Clone in hand). It is a **separate field from `printedDef`**
+and not redundant with it: `printedDef` answers "which FACE is up", `uncopiedDef` answers "which CARD
+is this really", and a copy of a DFC that then transforms needs both answers at once.
+
+**LAYER 1 IS THE WHOLE FEATURE (CR 613.2).** A copy is applied beneath everything, so counters (7d),
+anthems (7c), Auras and until-end-of-turn pumps all apply **on top of** the copied characteristics —
+which falls out for free, because those layers are computed from `inst.def` plus the instance's own
+state. And **you copy the printed card (CR 706.2)**: a 1/1 wearing three +1/+1 counters is copied as a
+**1/1**, a transformed permanent is copied by its **front face**, and a permanent that is itself a copy
+is copied by what it copies. `copiableDefOf` is the single answer to that question and every path asks
+it. `copy.test.ts` pins all of it, including a copier that keeps its own counters and its own pump.
+
+**Asked before the permanent enters, on both entry paths.** `CardDefinition.copyAsEnters` sits beside
+`entersTapped` / `entersTappedUnlessLifePaid` / `entersTappedUnlessRevealed` because it is the same
+family: an as-enters REPLACEMENT (CR 614.1c), not a resolution effect. The engine raises it in
+`resolveTopOfStack` (a permanent spell — the stack object goes back on the stack untouched while the
+question stands, and `copyAsEntersDecided` makes a DECLINE stick) and in `applyPlayLand` (a land —
+`completeLandPlay` was split out so the play finishes after the answer). Both ask **before** the
+permanent is on the battlefield, which is what lets the COPIED card decide `entersTapped`, summoning
+sickness, starting loyalty and starting defense.
+
+**Compiler: two closed tables, and a card outside them reports.** `copy-as-enters` owns the whole
+printed clause including its tapped-ness and its "except …" tail — an added card type or creature
+subtype, a kept name, legendary on or off, Spark Double's extra +1/+1 and loyalty counters, Vesuva's
+"enters tapped". **Measured on the cached 2100-card corpus: 408 → 415 playable** (Sculpting Steel,
+Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva, Echoing Deeps — which copies
+a land card in a **graveyard**).
+
+**The AI has a policy, and it needed one.** The generic `selectCards` path prices candidates with
+`cardValue`, which reads EFFECTIVE stats — so a pilot would copy the 1/1 wearing three counters over
+the printed 4/4 beside it and end up a 1/1. `copyTargetValue` prices what the copy WOULD BE from
+PRINTED characteristics (body, abilities, keywords, mana source), and the decline bar is the copier's
+own printed body scored the same way — usually zero, because a Clone's own body is a 0/0 that dies to a
+state-based action on arrival. Proven against the real heuristic pilot in real games.
+
+**`Kindred` (CR 308) became a real card type.** Its entire rules content is that the card's subtypes
+are creature types without the card being a creature, and that it counts as a card type in a graveyard
+(Tarmogoyf) — so it is a member of `CardType`, has a bit in `CARD_TYPE_BIT`, and `TYPES_WITHOUT_SYSTEM`
+stays honestly empty. A record whose ONLY type is Kindred still reports: CR 308.1 requires a second.
+
+**Reported by name, not half-built:** copying a SPELL on the stack (Reverberate, Narset's Reversal) and
+TOKEN copies (Rite of Replication, Kiki-Jiki) need a stack object that is **not a card** and ceases to
+exist as it resolves (CR 707.10 — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of
+them would leave a phantom card in a zone that delirium, flashback and Tarmogoyf all count), plus an
+aiming moment for "you may choose new targets for the copy" and the copy carrying the original's X and
+modes (CR 706.10). Also reported: a copy that GRANTS an ability printed in quotes (Phantasmal Image's
+"becomes the target" sacrifice, Sakashima's delayed return), a copy bounded by **the amount of mana
+spent** to cast it (Mockingbird — nothing records that number), and "becomes a copy" applied by an
+activated ability rather than as the permanent enters (Mirage Mirror, Thespian's Stage).
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

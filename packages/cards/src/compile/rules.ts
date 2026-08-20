@@ -3877,6 +3877,30 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'a copy that GRANTS AN ABILITY printed in quotes (copy effects and their "except" tail are implemented — an ability granted as text is not)',
   },
   {
+    // COPYING A SPELL ON THE STACK (Reverberate, Narset's Reversal, Fork) and
+    // TOKEN COPIES (Rite of Replication, Twinflame, Kiki-Jiki) are a DIFFERENT
+    // system from the as-enters copy this branch shipped, and reported by name
+    // rather than half-built. What each needs, precisely:
+    //
+    //  - a stack object that is NOT A CARD. A copy of a spell ceases to exist as
+    //    it resolves (CR 707.10); `SpellStackObject.resolvesTo` can only send a
+    //    spell to the battlefield, a graveyard, exile or a hand, and a copy that
+    //    took any of those exits would leave a phantom card in a zone that
+    //    Tarmogoyf, delirium and flashback all count.
+    //  - a "you may choose NEW TARGETS for the copy" moment. Aiming happens at
+    //    cast time or as a trigger goes on the stack; nothing aims an object the
+    //    engine itself just created.
+    //  - the copy carrying the original's X, kicks and chosen modes (CR 706.10),
+    //    which live on the stack object being copied.
+    //
+    // A TOKEN copy needs the first of those plus a token whose definition is
+    // another permanent's copiable values -- reachable, but a token is created by
+    // `createToken` from authored data today, never from a board object.
+    pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery)\b|token that'?s a copy|tokens that are copies/,
+    missingEngineSystem:
+      'COPYING A SPELL ON THE STACK, or creating a TOKEN COPY of a permanent (as-enters copies are implemented; a copy that is not a card needs a stack object that ceases to exist as it resolves, and an aiming moment for "you may choose new targets for the copy")',
+  },
+  {
     // Everything else in the family: a selector or an "except" clause outside
     // the compiler's closed tables (`COPY_SELECTOR_FILTERS`,
     // `parseCopyException`). A rule-table entry, not engine work.
