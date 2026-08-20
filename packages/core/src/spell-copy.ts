@@ -56,7 +56,7 @@ import { modeById } from './modal.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject } from './state.js';
 import { NO_COUNTERS } from './state.js';
 import type { TargetRestriction } from './targeting.js';
-import { targetRestrictionOf } from './targeting.js';
+import { DEFAULT_TARGET_RESTRICTION, targetRestrictionOf } from './targeting.js';
 
 /** The shared empty aim list — frozen, so nothing can write through it. */
 const NO_TARGETS_AIMED: readonly (InstanceId | PlayerId)[] = Object.freeze([]);
@@ -230,9 +230,23 @@ export function spellCopyAimAt(copy: SpellStackObject, slot: number): readonly (
  * that can never play better than the printed card.
  */
 export function spellCopyAimRestriction(copy: SpellStackObject, slot: number): TargetRestriction | undefined {
-  if (slot === MODELESS_AIM_SLOT) return targetRestrictionOf(copy.card.def);
+  if (slot === MODELESS_AIM_SLOT) {
+    // ⚠️ `targetRestrictionOf` deliberately answers `undefined` for a spell whose
+    // effect declares the DEFAULT restriction, because "any target" is left
+    // unpoliced on the cast path for cost reasons (see its own note). Read
+    // literally that would mean Lightning Bolt — the single most-copied card in
+    // Magic — could never be re-aimed, so the default is restored here. It is a
+    // restoration and not a guess: a slot is only offered when the copy already
+    // AIMS somewhere, so the spell provably targets, and `'any'` is precisely
+    // the set the engine let it be cast at in the first place.
+    return targetRestrictionOf(copy.card.def) ?? DEFAULT_TARGET_RESTRICTION;
+  }
   const pick = copy.modePicks?.[slot];
   if (pick === undefined) return undefined;
+  // A MODE's restriction needs no such fallback: it is explicit data, where
+  // present means "this mode names exactly one target of this shape" and `'any'`
+  // is meaningful (see `SpellMode.targets`). Absent means the mode is
+  // target-free, and a target-free mode is never offered a slot.
   return modeById(copy.card.def, pick.modeId)?.targets;
 }
 
