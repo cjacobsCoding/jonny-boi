@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-20T11:56:46.364Z",
+  "generatedAt": "2026-08-20T13:21:00.474Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 545,
+  "requested": 553,
   "unresolved": [],
   "cards": [
     {
@@ -4705,6 +4705,66 @@
       "localImages": {
         "normal": "burnished-hart-normal.jpg",
         "art_crop": "burnished-hart-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9e2adca5-f39c-4a09-bcce-8238ebac2c4a",
+      "name": "Cackling Counterpart",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Create a token that's a copy of target creature you control.\nFlashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Flashback"
+      ],
+      "set": "inr",
+      "collectorNumber": "55",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.jpg?1783908167",
+        "normal": "https://cards.scryfall.io/normal/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.jpg?1783908167",
+        "large": "https://cards.scryfall.io/large/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.jpg?1783908167",
+        "png": "https://cards.scryfall.io/png/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.png?1783908167",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.jpg?1783908167",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.jpg?1783908167",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.webp?1783908167",
+        "grid": "https://cards.scryfall.io/grid/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.webp?1783908167",
+        "display": "https://cards.scryfall.io/display/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.webp?1783908167",
+        "art": "https://cards.scryfall.io/art/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.webp?1783908167",
+        "crop": "https://cards.scryfall.io/crop/front/a/8/a865fdc5-955a-4c4a-90c0-342c15fd7bbc.webp?1783908167"
+      },
+      "localImages": {
+        "normal": "cackling-counterpart-normal.jpg",
+        "art_crop": "cackling-counterpart-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -9603,6 +9663,69 @@
       "faces": []
     },
     {
+      "id": "8eb7c0a5-6190-40de-b473-2d1daa3bbe28",
+      "name": "Dualcaster Mage",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Wizard"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Wizard",
+      "oracleText": "Flash\nWhen this creature enters, copy target instant or sorcery spell. You may choose new targets for the copy.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Flash"
+      ],
+      "set": "c21",
+      "collectorNumber": "165",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.jpg?1783927545",
+        "normal": "https://cards.scryfall.io/normal/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.jpg?1783927545",
+        "large": "https://cards.scryfall.io/large/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.jpg?1783927545",
+        "png": "https://cards.scryfall.io/png/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.png?1783927545",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.jpg?1783927545",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.jpg?1783927545",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.webp?1783927545",
+        "grid": "https://cards.scryfall.io/grid/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.webp?1783927545",
+        "display": "https://cards.scryfall.io/display/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.webp?1783927545",
+        "art": "https://cards.scryfall.io/art/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.webp?1783927545",
+        "crop": "https://cards.scryfall.io/crop/front/d/e/defcc4a3-40e0-4f5d-b23c-6cd6a614abc1.webp?1783927545"
+      },
+      "localImages": {
+        "normal": "dualcaster-mage-normal.jpg",
+        "art_crop": "dualcaster-mage-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "a4d33e21-d3fe-4d5b-903c-b75e859d6f7f",
       "name": "Elas il-Kor, Sadistic Pilgrim",
       "manaCost": {
@@ -12771,6 +12894,68 @@
       "localImages": {
         "normal": "geistflame-normal.jpg",
         "art_crop": "geistflame-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8e1d261d-b8d3-4fb1-922d-47789854b5b3",
+      "name": "Giant Adephage",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Insect"
+        ]
+      },
+      "rawTypeLine": "Creature — Insect",
+      "oracleText": "Trample\nWhenever this creature deals combat damage to a player, create a token that's a copy of this creature.",
+      "power": 7,
+      "toughness": 7,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Trample"
+      ],
+      "set": "dsc",
+      "collectorNumber": "179",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.jpg?1783909607",
+        "normal": "https://cards.scryfall.io/normal/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.jpg?1783909607",
+        "large": "https://cards.scryfall.io/large/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.jpg?1783909607",
+        "png": "https://cards.scryfall.io/png/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.png?1783909607",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.jpg?1783909607",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.jpg?1783909607",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.webp?1783909607",
+        "grid": "https://cards.scryfall.io/grid/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.webp?1783909607",
+        "display": "https://cards.scryfall.io/display/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.webp?1783909607",
+        "art": "https://cards.scryfall.io/art/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.webp?1783909607",
+        "crop": "https://cards.scryfall.io/crop/front/8/9/893b22a7-b46c-4473-8d88-11ddf4406af1.webp?1783909607"
+      },
+      "localImages": {
+        "normal": "giant-adephage-normal.jpg",
+        "art_crop": "giant-adephage-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -20785,6 +20970,64 @@
       "faces": []
     },
     {
+      "id": "d55f6c70-321f-4fb4-bd33-0850ae1a7c36",
+      "name": "Narset's Reversal",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Copy target instant or sorcery spell, then return it to its owner's hand. You may choose new targets for the copy.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "tdc",
+      "collectorNumber": "92",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.jpg?1783907140",
+        "normal": "https://cards.scryfall.io/normal/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.jpg?1783907140",
+        "large": "https://cards.scryfall.io/large/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.jpg?1783907140",
+        "png": "https://cards.scryfall.io/png/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.png?1783907140",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.jpg?1783907140",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.jpg?1783907140",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.webp?1783907140",
+        "grid": "https://cards.scryfall.io/grid/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.webp?1783907140",
+        "display": "https://cards.scryfall.io/display/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.webp?1783907140",
+        "art": "https://cards.scryfall.io/art/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.webp?1783907140",
+        "crop": "https://cards.scryfall.io/crop/front/4/e/4ede8d68-6870-445c-b140-da98adbc246a.webp?1783907140"
+      },
+      "localImages": {
+        "normal": "narset-s-reversal-normal.jpg",
+        "art_crop": "narset-s-reversal-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "78826359-fe63-44ad-adc4-a17ffcd710e4",
       "name": "Nature's Lore",
       "manaCost": {
@@ -23562,6 +23805,124 @@
       "faces": []
     },
     {
+      "id": "38394ee3-6726-4f91-bc25-36bce0c6aab9",
+      "name": "Reiterate",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)\nCopy target instant or sorcery spell. You may choose new targets for the copy.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Buyback"
+      ],
+      "set": "tsr",
+      "collectorNumber": "182",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.jpg?1783927791",
+        "normal": "https://cards.scryfall.io/normal/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.jpg?1783927791",
+        "large": "https://cards.scryfall.io/large/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.jpg?1783927791",
+        "png": "https://cards.scryfall.io/png/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.png?1783927791",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.jpg?1783927791",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.jpg?1783927791",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.webp?1783927791",
+        "grid": "https://cards.scryfall.io/grid/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.webp?1783927791",
+        "display": "https://cards.scryfall.io/display/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.webp?1783927791",
+        "art": "https://cards.scryfall.io/art/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.webp?1783927791",
+        "crop": "https://cards.scryfall.io/crop/front/9/9/99302c41-434f-41ff-a61a-2c3681a0c135.webp?1783927791"
+      },
+      "localImages": {
+        "normal": "reiterate-normal.jpg",
+        "art_crop": "reiterate-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a1f55890-31c5-4ed4-a2cd-7a4a9f05f8ca",
+      "name": "Reverberate",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Copy target instant or sorcery spell. You may choose new targets for the copy.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "m13",
+      "collectorNumber": "145",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.jpg?1783940482",
+        "normal": "https://cards.scryfall.io/normal/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.jpg?1783940482",
+        "large": "https://cards.scryfall.io/large/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.jpg?1783940482",
+        "png": "https://cards.scryfall.io/png/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.png?1783940482",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.jpg?1783940482",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.jpg?1783940482",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.webp?1783940482",
+        "grid": "https://cards.scryfall.io/grid/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.webp?1783940482",
+        "display": "https://cards.scryfall.io/display/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.webp?1783940482",
+        "art": "https://cards.scryfall.io/art/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.webp?1783940482",
+        "crop": "https://cards.scryfall.io/crop/front/5/9/5996feb4-02ac-45e8-a7f2-966cf74391dc.webp?1783940482"
+      },
+      "localImages": {
+        "normal": "reverberate-normal.jpg",
+        "art_crop": "reverberate-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8dd6d060-d023-48a6-85cb-7a5521b6257b",
       "name": "Revitalizing Repast // Old-Growth Grove",
       "manaCost": {
@@ -23890,6 +24251,66 @@
           "imageUris": {}
         }
       ]
+    },
+    {
+      "id": "fb60739e-1dc3-481d-a056-ad72e665c680",
+      "name": "Rite of Replication",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Kicker {5} (You may pay an additional {5} as you cast this spell.)\nCreate a token that's a copy of target creature. If this spell was kicked, create five of those tokens instead.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [
+        "Kicker"
+      ],
+      "set": "soc",
+      "collectorNumber": "202",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.jpg?1783903790",
+        "normal": "https://cards.scryfall.io/normal/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.jpg?1783903790",
+        "large": "https://cards.scryfall.io/large/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.jpg?1783903790",
+        "png": "https://cards.scryfall.io/png/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.png?1783903790",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.jpg?1783903790",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.jpg?1783903790",
+        "thumb": "https://cards.scryfall.io/thumb/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.webp?1783903790",
+        "grid": "https://cards.scryfall.io/grid/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.webp?1783903790",
+        "display": "https://cards.scryfall.io/display/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.webp?1783903790",
+        "art": "https://cards.scryfall.io/art/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.webp?1783903790",
+        "crop": "https://cards.scryfall.io/crop/front/5/0/5032d71d-d9f8-498c-97d1-271c2e9c1c47.webp?1783903790"
+      },
+      "localImages": {
+        "normal": "rite-of-replication-normal.jpg",
+        "art_crop": "rite-of-replication-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "4924b3a4-a218-4783-8a4d-82361fdecc78",
@@ -32538,6 +32959,64 @@
       "localImages": {
         "normal": "twilight-mire-normal.jpg",
         "art_crop": "twilight-mire-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8f878efc-850f-43d2-a6fe-5ea8d1dd5afb",
+      "name": "Twincast",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 2,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Copy target instant or sorcery spell. You may choose new targets for the copy.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "m10",
+      "collectorNumber": "78",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.jpg?1783942387",
+        "normal": "https://cards.scryfall.io/normal/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.jpg?1783942387",
+        "large": "https://cards.scryfall.io/large/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.jpg?1783942387",
+        "png": "https://cards.scryfall.io/png/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.png?1783942387",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.jpg?1783942387",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.jpg?1783942387",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.webp?1783942387",
+        "grid": "https://cards.scryfall.io/grid/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.webp?1783942387",
+        "display": "https://cards.scryfall.io/display/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.webp?1783942387",
+        "art": "https://cards.scryfall.io/art/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.webp?1783942387",
+        "crop": "https://cards.scryfall.io/crop/front/f/3/f38eec33-a40e-4739-ad2c-2f57008cef4e.webp?1783942387"
+      },
+      "localImages": {
+        "normal": "twincast-normal.jpg",
+        "art_crop": "twincast-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,

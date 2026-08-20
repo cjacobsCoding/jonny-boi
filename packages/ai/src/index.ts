@@ -156,7 +156,7 @@ export {
   answerAction,
   safeFallbackAction,
   cardValue,
-  // The COPY-TARGET ruler (CR 706.2): what a permanent with these PRINTED
+  // The COPY-TARGET ruler (CR 707.2): what a permanent with these PRINTED
   // characteristics is worth to be. Exported so the policy can be tested
   // directly and so a UI could preview the pilot's reasoning.
   copyTargetValue,

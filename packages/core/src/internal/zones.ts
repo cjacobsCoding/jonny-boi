@@ -217,7 +217,7 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
     inst.def = inst.printedDef;
     inst.printedDef = null;
   }
-  // CR 706 + CR 400.7: a copy effect applies to the PERMANENT, and a permanent
+  // CR 707 + CR 400.7: a copy effect applies to the PERMANENT, and a permanent
   // that changes zones is a new object — so a Clone that dies, bounces or is
   // exiled stops being what it copied. Restored AFTER the face revert above and
   // not instead of it: the two answer different questions ("which face" vs

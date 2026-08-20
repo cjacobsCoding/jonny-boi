@@ -472,7 +472,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Copy effects (Clone)',
         detail:
-          '"You may have this creature enter as a copy of any creature on the battlefield" plays as printed, including the "except" tail (an added type or creature type, a kept name, legendary on or off, an extra +1/+1 or loyalty counter, an "enters tapped"). A copy is applied in LAYER 1 (CR 613.2), beneath everything: the permanent keeps its OWN +1/+1 counters, the anthems on the board still shine on it, and an until-end-of-turn pump still applies — all on top of the copied card. And you copy the PRINTED card (CR 706.2), so a 1/1 wearing three counters is copied as a 1/1 and a transformed permanent is copied by its front face. Sculpting Steel, Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva and Echoing Deeps all import as playable.',
+          '"You may have this creature enter as a copy of any creature on the battlefield" plays as printed, including the "except" tail (an added type or creature type, a kept name, legendary on or off, an extra +1/+1 or loyalty counter, an "enters tapped"). A copy is applied in LAYER 1 (CR 613.2), beneath everything: the permanent keeps its OWN +1/+1 counters, the anthems on the board still shine on it, and an until-end-of-turn pump still applies — all on top of the copied card. And you copy the PRINTED card (CR 707.2), so a 1/1 wearing three counters is copied as a 1/1 and a transformed permanent is copied by its front face. Sculpting Steel, Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva and Echoing Deeps all import as playable.',
         witness: { kind: 'rule', id: 'copy-as-enters' },
       },
       {
@@ -484,6 +484,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
           text: "You may have this land enter tapped as a copy of any land card in a graveyard, except it's a Cave in addition to its other types.",
           as: 'creature',
         },
+      },
+      {
+        title: 'Copying a SPELL on the stack (Reverberate)',
+        detail:
+          'A copy of a spell is put on the stack ABOVE the original, carrying every decision made for it — its targets, the value of X, whether it was kicked, and a modal spell’s announced modes with each mode’s own aim (CR 707.10). You may then choose new targets for the copy, asked as a real question while the copying spell resolves. The copy is NOT A CARD: when it leaves the stack it goes to no zone at all (CR 704.5e), so it can never leave a phantom card that delirium counts, Tarmogoyf reads or flashback could recast. Reverberate, Twincast, Reiterate, Narset’s Reversal and Dualcaster Mage all import as playable.',
+        witness: { kind: 'primitive', id: 'copySpell' },
+      },
+      {
+        title: 'Token copies (Rite of Replication)',
+        detail:
+          '"Create a token that’s a copy of target creature" makes a token whose characteristics are the copied card’s PRINTED ones (CR 707.2) — so a 1/1 wearing three +1/+1 counters is copied as a 1/1, and a transformed permanent by its front face. It is a real token: it answers every "nontoken" filter and it ceases to exist when it leaves the battlefield. The printed "if this spell was kicked, create five of those tokens instead" REPLACES the count rather than adding to it. Rite of Replication, Cackling Counterpart and Giant Adephage all import as playable.',
+        witness: { kind: 'primitive', id: 'createTokenCopy' },
       },
       {
         title: 'Split cards (Fire // Ice)',

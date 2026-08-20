@@ -88,6 +88,7 @@ import {
   targetedSpellOnStack,
 } from './effect-helpers.js';
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
+import { COPY_PRIMITIVES } from './copy-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -1480,6 +1481,11 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   attachToTarget,
   grantFlashback,
   ...CHOICE_PRIMITIVES,
+  // The copy family (`./copy-primitives`): a copy of a spell on the stack and a
+  // token copy of a permanent. Kept in their own module because both create an
+  // object that is NOT A CARD, and both read what a copy IS from core's single
+  // `copiableDefOf` answer rather than deciding it here.
+  ...COPY_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */

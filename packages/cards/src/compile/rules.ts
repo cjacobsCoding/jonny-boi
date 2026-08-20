@@ -158,6 +158,13 @@ const CREATURE_TARGET: TargetRestriction = 'creature';
 /** "target creature you control" — never widened to any creature on the table. */
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
+/**
+ * "target instant or sorcery spell" — narrower than {@link SPELL_TARGET} and
+ * never interchangeable with it: a copy effect that says "instant or sorcery"
+ * may not copy a creature spell, and widening it would make the card castable
+ * (and useful) in a board state where the printed one is not.
+ */
+const INSTANT_OR_SORCERY_SPELL_TARGET: TargetRestriction = 'instantOrSorcerySpell';
 const PLAYER_TARGET: TargetRestriction = 'player';
 const ARTIFACT_TARGET: TargetRestriction = 'artifact';
 const PERMANENT_TARGET: TargetRestriction = 'permanent';
@@ -2059,6 +2066,56 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         primitive: 'transformRevealTop',
         params: { filter: { anyOfTypes: ['instant', 'sorcery'] } },
       });
+    },
+  },
+  {
+    id: 'copy-target-spell',
+    description:
+      `"Copy target instant or sorcery spell[, then return it to its owner's hand]. You may choose new targets for the copy." (Reverberate, Fork, Reiterate, Narset's Reversal) — CR 707.10`,
+    // ONE rule for the whole printed idiom, matched on the WHOLE LINE rather
+    // than sentence by sentence, because "you may choose new targets for the
+    // copy" is not an effect of its own — it is the permission that governs the
+    // copy the first sentence makes. Split them and the second sentence is a
+    // vacuous rule that contributes nothing, which is exactly the shape this
+    // table refuses everywhere else.
+    pattern:
+      /^copy target instant or sorcery spell(, then return (?:it|that spell) to its owner's hand)?(\. you may choose new targets for the copy)?$/,
+    needsChosenTarget: true,
+    build(match) {
+      const refs: EffectRef[] = [
+        {
+          primitive: 'copySpell',
+          params: {
+            targets: INSTANT_OR_SORCERY_SPELL_TARGET,
+            // The printed permission, carried as data so a card that does NOT
+            // print it (and they exist) keeps the original's aim rather than
+            // being handed a free re-aim it never had.
+            mayRetarget: match[2] !== undefined,
+          },
+        },
+      ];
+      // "…, THEN return it to its owner's hand" (Narset's Reversal). A second
+      // ref rather than a flag on the copy, because it is a second printed
+      // sentence with its own meaning: the spell is RETURNED, not countered, so
+      // "this spell can't be countered" does not stop it. Ordered AFTER the copy
+      // because the copy is made while the original is still on the stack.
+      if (match[1] !== undefined) {
+        refs.push({ primitive: 'returnSpellToHand', params: { targets: INSTANT_OR_SORCERY_SPELL_TARGET } });
+      }
+      return effects(...refs);
+    },
+  },
+  {
+    id: 'create-token-copy',
+    description:
+      `"Create [N] token[s] that's a copy of <selector>[, except <clauses>][. If this spell was kicked, create five of those tokens instead]" (Rite of Replication, Cackling Counterpart, Giant Adephage) — CR 707.2`,
+    // The selector and the "except" tail are parsed by the SAME two closed
+    // tables the as-enters copy uses (`parseCopyException`), so "except it has
+    // haste" means one thing in this codebase rather than two. A selector or a
+    // clause outside them returns null and the card reports.
+    pattern: /^create (a|an|one|two|three|four|five) tokens? that(?:'s a copy|s are copies) of (.+)$/,
+    build(match, ctx) {
+      return buildTokenCopy(match[1] ?? 'a', match[2] ?? '', ctx);
     },
   },
   {
@@ -4267,7 +4324,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'copy-as-enters',
     description:
-      '"You may have ~ enter [tapped] as a copy of <selector>[, except <clauses>]" (Clone, Sculpting Steel, Spark Double, Vesuva, Echoing Deeps) - CR 706',
+      '"You may have ~ enter [tapped] as a copy of <selector>[, except <clauses>]" (Clone, Sculpting Steel, Spark Double, Vesuva, Echoing Deeps) - CR 707',
     // Placed above `enters-tapped` because Vesuva's line contains the word
     // "tapped" and this rule owns the whole clause, tapped-ness included.
     pattern: /^you may have ~ enter( tapped)? as a copy of (.+?)(?:, except (.+))?$/,
@@ -4979,7 +5036,7 @@ const BLOCKER_QUALITY_KEYWORDS: Readonly<Record<string, BooleanKeywordName>> = O
 
 /**
  * ---------------------------------------------------------------------------
- * COPY EFFECTS — "You may have ~ enter as a copy of …" (CR 706)
+ * COPY EFFECTS — "You may have ~ enter as a copy of …" (CR 707)
  * ---------------------------------------------------------------------------
  *
  * Two CLOSED tables and two parsers, for the same reason every other closed
@@ -5177,6 +5234,115 @@ function buildCopyAsEnters(
     }
   }
   return { ...selector, ...(Object.keys(except).length > 0 ? { except } : {}) };
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * TOKEN COPIES — "create a token that's a copy of …" (CR 707.2 + CR 111)
+ * ---------------------------------------------------------------------------
+ *
+ * The other half of the copy family, and it deliberately reuses this file's
+ * existing copy vocabulary rather than growing a rival: the "except …" tail is
+ * parsed by {@link parseCopyException}, the very function the as-enters copy
+ * uses, so "except it has haste" and "except it isn't legendary" mean exactly
+ * one thing in this codebase. What is NEW is only the selector — a token copy
+ * points at a TARGET (or at the permanent the source is attached to, or at the
+ * source itself), where an as-enters copy chooses from a filtered zone.
+ */
+
+/**
+ * The printed selectors a token-copy clause may name, mapped to how the
+ * primitive finds the permanent.
+ *
+ * A CLOSED table, for the same reason `COPY_SELECTOR_FILTERS` is closed: a
+ * selector the compiler only half-read produces a card that copies something
+ * the printed one cannot. "target NONLEGENDARY creature you control"
+ * (Kiki-Jiki) is deliberately absent — the engine has no such target
+ * restriction, and pretending it were "target creature you control" would let
+ * the card copy a legend it may not.
+ */
+const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
+  'target creature': { targets: CREATURE_TARGET },
+  'target creature you control': { targets: CREATURE_YOU_CONTROL_TARGET },
+  'target artifact': { targets: ARTIFACT_TARGET },
+  'target permanent': { targets: PERMANENT_TARGET },
+  // "a copy of equipped creature" (Helm of the Host) / "of enchanted artifact"
+  // (Mechanized Production): the source's HOST, not a target. One param covers
+  // both printings because the engine models both with `attachedTo`.
+  'equipped creature': { equipped: true },
+  'enchanted creature': { equipped: true },
+  'enchanted artifact': { equipped: true },
+  'enchanted permanent': { equipped: true },
+  // "a copy of this creature" (Giant Adephage, Homunculus Horde) — `~` after the
+  // self-reference pass. No target at all, which is what makes it legal inside a
+  // triggered ability.
+  '~': { self: true },
+});
+
+/** How many tokens each printed count word makes. */
+const TOKEN_COPY_COUNTS: Readonly<Record<string, number>> = Object.freeze({
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+});
+
+/**
+ * Build a `createTokenCopy` ref from the tail of a token-copy clause, or `null`
+ * when any part of it is not fully understood.
+ *
+ * `rest` is everything after "… that's a copy of", and it may carry two printed
+ * tails that are parsed off the END first, longest-anchored first, so the
+ * selector is whatever remains:
+ *   ". if this spell was kicked, create five of those tokens instead"
+ *   ", except it has haste"
+ * Parsing from the end rather than with one greedy regex is what keeps a
+ * selector containing a comma from being mistaken for an "except" clause.
+ */
+function buildTokenCopy(countWord: string, rest: string, ctx: RuleContext): ClauseContribution | null {
+  const count = TOKEN_COPY_COUNTS[countWord];
+  if (count === undefined) return null;
+  let body = rest.trim();
+
+  // "… If this spell was kicked, create FIVE of those tokens INSTEAD" (Rite of
+  // Replication). A replacement of the COUNT, so it is one number on the same
+  // ref rather than a second `ifKicked`-guarded effect — which would create the
+  // base token AND five more.
+  let kickedCount = 0;
+  const kicked = body.match(/\. if this spell was kicked, create (a|an|one|two|three|four|five) of those tokens instead$/);
+  if (kicked) {
+    const kickedValue = TOKEN_COPY_COUNTS[kicked[1] ?? ''];
+    if (kickedValue === undefined) return null;
+    kickedCount = kickedValue;
+    body = body.slice(0, body.length - (kicked[0] ?? '').length).trim();
+  }
+
+  let except: CopyExceptions = {};
+  const exceptAt = body.indexOf(', except ');
+  if (exceptAt >= 0) {
+    const exceptText = body.slice(exceptAt + ', except '.length);
+    body = body.slice(0, exceptAt).trim();
+    for (const clause of splitExceptClauses(exceptText)) {
+      const patch = parseCopyException(clause, ctx);
+      if (patch === null) return null;
+      except = mergeCopyExceptions(except, patch);
+    }
+  }
+
+  const selector = TOKEN_COPY_SELECTORS[body];
+  if (selector === undefined) return null;
+  return effects({
+    primitive: 'createTokenCopy',
+    params: {
+      ...selector,
+      count,
+      ...(kickedCount > 0 ? { kickedCount } : {}),
+      ...(Object.keys(except).length > 0 ? { except } : {}),
+    },
+  });
 }
 
 /** Number words a printed "N or fewer" uses. */
@@ -6042,28 +6208,66 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
       'a copy that GRANTS AN ABILITY printed in quotes (copy effects and their "except" tail are implemented — an ability granted as text is not)',
   },
   {
-    // COPYING A SPELL ON THE STACK (Reverberate, Narset's Reversal, Fork) and
-    // TOKEN COPIES (Rite of Replication, Twinflame, Kiki-Jiki) are a DIFFERENT
-    // system from the as-enters copy this branch shipped, and reported by name
-    // rather than half-built. What each needs, precisely:
+    // A DELAYED TRIGGERED ABILITY (CR 603.7) created by a resolving spell or
+    // ability: "Sacrifice it at the beginning of the next end step" (Kiki-Jiki,
+    // The Fire Crystal, Orthion, Jaxis, Molten Duplication), "Exile those tokens
+    // at the beginning of the next end step" (Twinflame). This is the single
+    // biggest remaining blocker in the TOKEN-COPY family, and it is NOT the
+    // copying: the token copy itself is implemented and plays, so a card that
+    // compiled while dropping this clause would be a permanent hasty copy with
+    // no drawback — strictly better than printed, which is the one outcome this
+    // compiler must never produce.
     //
-    //  - a stack object that is NOT A CARD. A copy of a spell ceases to exist as
-    //    it resolves (CR 707.10); `SpellStackObject.resolvesTo` can only send a
-    //    spell to the battlefield, a graveyard, exile or a hand, and a copy that
-    //    took any of those exits would leave a phantom card in a zone that
-    //    Tarmogoyf, delirium and flashback all count.
-    //  - a "you may choose NEW TARGETS for the copy" moment. Aiming happens at
-    //    cast time or as a trigger goes on the stack; nothing aims an object the
-    //    engine itself just created.
-    //  - the copy carrying the original's X, kicks and chosen modes (CR 706.10),
-    //    which live on the stack object being copied.
-    //
-    // A TOKEN copy needs the first of those plus a token whose definition is
-    // another permanent's copiable values -- reachable, but a token is created by
-    // `createToken` from authored data today, never from a board object.
-    pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery)\b|token that'?s a copy|tokens that are copies/,
+    // What it needs, precisely: an ability that exists on NO object, created at
+    // resolution, which goes on the stack at a named future step and then never
+    // again. Every trigger this engine has hangs off a permanent's definition
+    // (`triggers.ts` collects them from the battlefield), so there is nowhere
+    // for one to live.
+    pattern: /\b(?:sacrifice|exile) (?:it|them|those tokens|this token) at the beginning of the (?:next end step|end step)\b/,
     missingEngineSystem:
-      'COPYING A SPELL ON THE STACK, or creating a TOKEN COPY of a permanent (as-enters copies are implemented; a copy that is not a card needs a stack object that ceases to exist as it resolves, and an aiming moment for "you may choose new targets for the copy")',
+      'a DELAYED triggered ability created at resolution ("sacrifice it at the beginning of the next end step" — CR 603.7); token copies themselves are implemented, and a copy compiled without this clause would be strictly better than the printed card',
+  },
+  {
+    // What is LEFT of the copy-creating family now that the system is shipped.
+    // `copySpell` and `createTokenCopy` are real primitives, so this hint must
+    // not say copying is missing — that would send the next contributor to
+    // rebuild something that exists. Every card that lands here is blocked on
+    // the SELECTOR, or on what kind of object it copies:
+    //
+    //  - "copy target ACTIVATED OR TRIGGERED ability" (Lithoform Engine, Return
+    //    the Favor). An ability on the stack is a `TriggeredStackObject`, which
+    //    carries effect refs rather than a card, and nothing can target one:
+    //    `TargetRestriction` reaches spells and permanents only.
+    //  - "target NONLEGENDARY creature you control" (Kiki-Jiki), "ANOTHER target
+    //    creature you control" (Orthion, Jaxis), "target TOKEN you control"
+    //    (Caretaker’s Talent), "a card exiled with this artifact" (Mimic Vat) —
+    //    selectors outside the closed `TOKEN_COPY_SELECTORS` table, each of
+    //    which would need a target restriction of its own.
+    //  - "create a TAPPED token that’s a copy of …" (Skyclave Relic, Kambal), and
+    //    "tapped and attacking" (Delina, Thousand-Faced Shadow): a token that
+    //    arrives already tapped, which no `createToken` path can express.
+    //  - "whenever you cast a spell, COPY THAT SPELL" (Reflections of Littjara,
+    //    Jin-Gitaxias, Sword of Wealth and Power): the copy is of the spell that
+    //    TRIGGERED the ability, and a trigger carries its triggering PLAYER but
+    //    not the stack object that set it off.
+    //  - a FOLLOW-UP SENTENCE about the object the previous one created — "That
+    //    token gains haste" (Helm of the Host), "It gains haste" (Mimic Vat,
+    //    Orthion). Deliberately NOT folded into the copy's own keywords, which
+    //    would look identical on the board and be wrong one step later: a grant
+    //    is layer 6 on THAT object, so it is not among the copiable values a
+    //    second copy would take, and "except it has haste" is.
+    //  - an "except …" tail on a SPELL copy: "except that the copy is red"
+    //    (Fork). `CopyExceptions` is shared with the as-enters copy and models
+    //    types, subtypes, keywords, a name and legendary-ness — not colour, and
+    //    not a spell's characteristics generally. A token copy's tail is read;
+    //    a spell copy is created without one.
+    //  - a COUNT that depends on something else: "if this spell was cast from a
+    //    graveyard, copy that spell TWICE instead" (Increasing Vengeance). The
+    //    count itself is a param on the copy ref; what is missing is a condition
+    //    on the zone the spell was cast from.
+    pattern: /\bcopy (?:that|target) (?:spell|instant|sorcery|activated)\b|tokens? that(?:'?s| are) (?:a )?cop(?:y|ies)/,
+    missingEngineSystem:
+      'a COPY-CREATING template outside the compiler’s closed tables (copying a spell on the stack and token copies are BOTH implemented — what is missing is this selector or tail: an activated/triggered ABILITY on the stack, a "nonlegendary"/"another"/"token" target, a token that enters tapped, "copy THAT spell" naming the spell that triggered the ability, a follow-up sentence about the token just created, an "except …" tail on a SPELL copy, or a copy COUNT conditional on where the spell was cast from)',
   },
   {
     // Everything else in the family: a selector or an "except" clause outside

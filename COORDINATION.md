@@ -134,12 +134,123 @@ throughput (games/sec) from regressing.
 | feat/pool-expansion-2 | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts + data/expansion-report.json; scripts/build-expansion.ts front-face lookup; src/pool-mechanics.test.ts REWRITTEN inventory + 12 new play tests, src/pool.test.ts counts, src/expanded-pool.test.ts mana cap, src/attachment-cards-in-pool.test.ts +4 PRINTED rows), packages/data-tools (src/normalize.ts + types.ts per-face defense/loyalty + adventurer cost, src/verify.ts + index.ts `frontFaceName`, src/normalize.test.ts +5, GENERATED data/card-index.json + data/starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/core (engine.ts `unpayableAdditionalCostReason` EXPORTED + index.ts +1 export — no behaviour change), packages/ai (heuristic.ts: additional-cost goal filter + `equipIsAnUpgrade`; equipment-pilot.test.ts +3; NEW additional-cost-pilot.test.ts), packages/sim/src/soak-config.ts (ONE predicate), DESIGN §3.20, COORDINATION. **No compiler rule, NO meta deck touched; gauntlet seed 99 byte-identical.** | 🚧 PUSHED, not merged |
 
 | fix/token-characteristics | worker | packages/core (card/choices/events/index/derived, internal/zones + clone COMMENT ONLY, NEW token-clone.test.ts), packages/cards (primitives, effect-helpers, compile/rules + compile/compile, data/pool.ts + REGENERATED data/expanded-pool.ts & expansion-report & expansion-candidates, NEW token-characteristics.test.ts + 4 updated tests), packages/data-tools (src/client.ts + regenerated data/), packages/sim/src/observation.ts (+1 classification), apps/web (about/mechanics.ts + regenerated src/data/card-index.json), DESIGN 3.29 | PUSHED, not merged |
+| feat/spell-and-token-copies | worker | packages/core (NEW spell-copy.ts + spell-copy.test.ts; copy.ts `tokenCopyDefOf`, state.ts `isSpellCopy` + `spellLeaveDestination`, engine.ts finishSpellResolution/targetOptionFor/selectTargets guard, targeting.ts `instantOrSorcerySpell`, events.ts +3, choices.ts resolvesTo, index.ts, internal/clone.ts +1 field), packages/cards (NEW copy-primitives.ts + copy-play.test.ts; primitives.ts registry line, effect-helpers.ts counter exit, compile/rules.ts 2 rules + 2 reworded hints + TOKEN_COPY_SELECTORS, compile/copy-effects.test.ts flipped, pool.test.ts count, pool-mechanics.test.ts +2 inventory, GENERATED data/*), packages/ai (choices.ts re-aim policy, effect-value.ts +3 valuers, heuristic.ts `copySpell` intent, NEW copy-spell-pilot.test.ts), packages/sim (observation +3, soak-config +2 mechanics & +3 witnesses & tightened `copy-effect` predicate, paired-arms-config +3 SAFE), packages/data-tools/data (regenerated), apps/web (about/mechanics +2, play-format + replay-format +3 lines, data/card-index regenerated), DESIGN §3.31, COORDINATION | 🚧 PUSHED, not merged |
 
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `feat/spell-and-token-copies` 🚧 PUSHED — **the corpus's #1 gap is closed, and
+  it was closed the way `feat/copy-effects` said it had to be.** That branch reported copying a SPELL
+  and TOKEN COPIES by name rather than half-building them, and named the trap precisely: a copy needs
+  a stack object that is **not a card** and that ceases to exist as it resolves, because
+  `resolvesTo` offers only battlefield/graveyard/exile/hand and **every one of them leaves a phantom
+  CARD** in a zone delirium, flashback and Tarmogoyf all count. That was exactly right.
+
+  📊 **Measured, paired, same cached 2100-card corpus, against the `origin/main` this merges into
+  (`ab0e41a`): 545 → 550 playable, +5, 0 regressions** — I diffed the two full playable SETS, not the
+  counts. Reverberate, Reiterate, Narset's Reversal, Rite of Replication, Giant Adephage. The shipped
+  pool is **545 → 553** (Twincast, Cackling Counterpart and **Dualcaster Mage** join too — the last
+  one copies a spell from an ETB TRIGGER, aimed as the trigger goes on the stack).
+
+  👻 **HOW THE PHANTOM IS AVOIDED — the one thing worth copying rather than re-deriving.**
+  `spellLeaveDestination` gains a FOURTH answer, `'ceaseToExist'` (CR 704.5e), asked **first** so it
+  outranks flashback's exile, buyback's return to hand and the graveyard. Both exits from the stack
+  already funnel through that one function and they live in **two different packages** (core's
+  `finishSpellResolution`, the cards package's `counterSpellOnStack`) — which is exactly why the
+  answer is a value in a RETURN TYPE and not an `if` at each call site: neither caller type-checks
+  without handling it, and the compiler caught the second the moment the type widened. Nothing is
+  ever pushed into a zone, so there is no phantom to clean up. A copy of a PERMANENT spell is the one
+  copy that keeps an object, and it keeps it as a **token** (stamped on the DEFINITION, which
+  survives the per-action clone by construction).
+
+  ⚠️ **TWO LATENT ENGINE BUGS, both older than this branch, both fixed here:**
+  1. `applyAnswerChoice` routed **every** `selectTargets` answer to `recordTriggerTargets` with no
+     `!state.resolution` guard — the three sibling branches beside it all have one. Any target
+     question raised from inside a resolution would have aimed an unrelated trigger and parked the
+     suspended resolution forever.
+  2. `targetOptionFor` never searched the **stack**, so every counterspell's own target has been
+     rendering as `#7` to the UI and to the AI's target scorer since "target spell" existed.
+
+  ⚠️ **THE FULL-POOL SOAK CAUGHT THE MECHANIC INERT, AND IT WAS THE PILOT — worth knowing if you
+  ship anything castable in response.** The pool printed `spell-copy` and no soak game fired it. The
+  heuristic classifies spells by INTENT; `copySpell` was in no intent, so a Reverberate was a
+  "generic spell", and a generic spell is offered **only with an empty stack**. The pilot could never
+  cast it. A `copySpell` intent (a counterspell's timing, the opposite sign) fixes it and the soak
+  goes green. **§3.26 earned its keep here.**
+
+  🎯 **The pilot also needed a re-aim policy, and the default was actively bad.**
+  `answerSelectTargets` had two cases (a modal cast, a trigger); "you may choose new targets for the
+  copy" is a THIRD, asked from inside a resolution. With nothing to price, every candidate scores
+  zero and the pilot takes the FIRST offered — which for a copy of a Lightning Bolt is very often its
+  own face. It now reads the spell being COPIED off the resolving frame's own target.
+
+  📚 **CR 707, NOT CR 706 — please do not re-introduce it.** Copying objects is section **707**; 706
+  is rolling a die. The repo cited 706 in 24 files. `conformance/rules-manifest.ts` already had it
+  right and five anchors in that same file confirm the numbering (708 face-down, 709 split, 712 DFC,
+  715 adventurer). Corrected throughout the source; DESIGN §3.24's prose still says 706 and is left
+  for its owner.
+
+  🧪 **21 tests, 20/21 sabotages RED first pass.** The survivor is instructive rather than a hole:
+  nulling ONE of the two `spell-copy` soak witnesses changes nothing because they cover each other
+  (exactly as `tokenCreated`/`tokenCeasedToExist` do), and the case that matters — a copy created but
+  never ceasing to exist — fires only the first, so it still fails. Two real product bugs were found
+  by tests rather than review: `createTokenCopy` never implemented the `self` selector the compiler
+  emits, and `spellCopyAimRestriction` read `targetRestrictionOf` literally (which answers
+  `undefined` for the default `'any'`, so Lightning Bolt could never have been re-aimed).
+
+  🪤 **A TRAP THAT WILL BITE THE NEXT AGENT: `applyAction` takes `(state, action, CONFIG, REGISTRY)`
+  POSITIONALLY.** Passing `{ registry, config }` — which reads like an options object and which
+  several existing suites in this repo do — puts the object in `config` and leaves the registry
+  UNDEFINED, so every primitive degrades to `effectUnsupported` and your test stays GREEN while
+  proving nothing. It cost an hour here.
+
+  🔒 **`ABILITY_ACQUIRING_DEFINITION_FIELDS` was answered deliberately and left ALONE**, with the
+  rule for whoever adds the next copy system written into the file: a field belongs there when the
+  copy is applied to an object that KEEPS its instance id (a Clone does — `sourceCardFor` places it
+  and reads the wrong card), and does not when the copy is a NEW object (a spell copy and a token get
+  minted ids outside both decklist ranges, so the runner already takes its conservative branch).
+  "Becomes a copy" by an activated ability (Mirage Mirror, Thespian's Stage) is the first kind and
+  will need a field there the day it lands.
+
+  ⚡ **Rule 7: the gauntlet at seed 99 is byte-identical to `ab0e41a` — 79/280, rows 12 · 13 · 17 · 7
+  · 9 · 7 · 14.** (Note for the record: the board reads **79/280** at `ab0e41a`, not the 80/280 that
+  was current a day ago — that movement is not this branch's; a baseline worktree at the branch point
+  reads 79 too.) Scavenge probe, interleaved, same 30,600 actions: 584/583 here vs 584/585 at HEAD,
+  and 606 at the branch point — this branch allocates slightly LESS, because `legalTargetsFor`'s
+  `'spell'` branch stopped building two intermediate arrays.
+
+  🚧 **STILL REPORTED BY NAME, and the biggest one is a whole system somebody should take:** a
+  **DELAYED triggered ability** created at resolution (CR 603.7 — "sacrifice it at the beginning of
+  the next end step"). Kiki-Jiki, Twinflame, Splinter Twin, The Fire Crystal, Orthion, Jaxis, Molten
+  Duplication and Mimic Vat are blocked on that one clause and nothing else. Also open: copying an
+  activated/triggered ABILITY on the stack, a token that enters TAPPED, "whenever you cast a spell,
+  copy THAT spell", a follow-up sentence about the token just created ("That token gains haste"), and
+  an "except …" tail on a SPELL copy (Fork's "except that the copy is red").
+
+  ✅ **RE-GATED AFTER MERGING `origin/main` at `b01cedf`** (CR 704.3 at the priority boundary,
+  CR 704.5q, the CR 514.1 cleanup discard): `npm run verify` exit 0, `npm run build` exit 0,
+  **4981 passed / 0 failed**, gauntlet at seed 99 STILL 79/280 with the same seven rows. The doc
+  conflicts in DESIGN and this file were resolved keeping BOTH sides. And the generated pool data
+  was checked BY NAME rather than by count, because that merge text-merges silently:
+  `starter-cards.json`, `expanded-pool.ts` and both card indexes are strict SUPERSETS of
+  `origin/main`’s — 545 → 553 with nothing of main’s dropped.
+
+  ✅ **AND RE-GATED AGAIN after `origin/main` moved to `98488b2`** (the hidden-information
+  guarantee). Two things for whoever merges this:
+  1. **My DESIGN section is §3.31, not §3.30** — `fix/redaction-guarantee` published a §3.30 while
+     I was out, so I moved rather than collide. Please keep both.
+  2. That branch’s `packages/core/src/instance-ids.ts` is an ENFORCED table over every field of
+     every event, and it broke my build until my three new events were classified. They are, and
+     every id in them names an object on the STACK or the BATTLEFIELD — never a card in a hand or a
+     library — which is the same fact that makes them `public` observations. ⚠️ Worth knowing: that
+     table’s source scan checks a FIELD NAME across all entries, so declaring one event’s ids
+     `'none'` stays GREEN if another event classifies the same name. A sabotage caught it; two
+     cases now ask `instanceIdsNamedBy` per EVENT.
+
+  verify 0, build 0, **5007 passed / 0 failed**, gauntlet seed 99 still **79/280**, same seven rows.
 
 - 2026-08-20 worker: `fix/redaction-guarantee` 🚧 PUSHED — **the hidden-information scan recognised
   ONE key name and walked past eighteen others; the class is now closed, and the wider net found a
@@ -196,7 +307,6 @@ _Append dated notes here; keep them short. Newest at top._
   `packages/core`'s state-based-action pass, is not a redaction bug, and does not reproduce inside the
   fast soak's game range. Reproduce with `runSoak({ mixedGames: 400, anchorAttempts:
   SOAK_MECHANIC_SEED_ATTEMPTS, baseSeed: SOAK_BASE_SEED })`.
-
 
 - 2026-08-20 worker: `fix/max-hand-size-and-sba` 🚧 PUSHED — **CR 704.3 at the priority boundary,
   CR 704.5q as a real state-based action, a REVIEW of the CR 514.1 that landed while I was building
@@ -277,8 +387,7 @@ _Append dated notes here; keep them short. Newest at top._
   ⚠️ **Timing note for whoever merges:** this branch merged `origin/main` at `b5752b2`. It touches
   `engine.ts`, `internal/sba.ts` and `internal/clone.ts`, so it conflicts with anything else in
   those files — but everything it adds to the cleanup step is layered ON TOP of main's
-  implementation, not a second copy of it.
-- 2026-08-20 worker: `fix/token-characteristics` 🚧 PUSHED — **every token in the game was entering
+  implementation, not a second copy of it.- 2026-08-20 worker: `fix/token-characteristics` 🚧 PUSHED — **every token in the game was entering
   COLOURLESS, with no creature type, and not knowing it was a token.** `makeToken` built a
   `CardDefinition` with a name and a P/T and nothing else, `colorsOfDefinition` reads colour off cost
   PIPS, and a token has no mana cost — so "a 1/1 **black** Faerie Rogue creature token" and "a 5/5

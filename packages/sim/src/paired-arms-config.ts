@@ -181,7 +181,7 @@ export const CONTROL_CHANGING_PRIMITIVES: ReadonlySet<string> = new Set<string>(
  *
  * `peekCouldReadHeroLibrary` answers "could this source have read the hero's
  * library?" by looking the source's instance id up in the pre-shuffle decklist
- * and scanning THAT card's effect refs. A COPY effect (CR 706) makes that scan
+ * and scanning THAT card's effect refs. A COPY effect (CR 707) makes that scan
  * read the wrong card: a Clone whose `def` is now somebody's Temple has an ETB
  * scry that its own decklist row does not print, so the scan would answer "no
  * library read" for an ability that just read one. The verdict would be wrong,
@@ -200,6 +200,30 @@ export const CONTROL_CHANGING_PRIMITIVES: ReadonlySet<string> = new Set<string>(
 export const ABILITY_ACQUIRING_DEFINITION_FIELDS: readonly (keyof CardDefinition)[] = Object.freeze([
   'copyAsEnters',
 ]);
+
+/*
+ * ✅ ASKED AND ANSWERED for §3.30's two new copy systems, because the obvious
+ * reading is that they belong here and they do NOT.
+ *
+ * A copy of a SPELL and a TOKEN COPY both run abilities that are not on the
+ * copying card's decklist row — so far, identical to a Clone. The difference is
+ * WHICH OBJECT runs them. A Clone runs them as ITSELF: same instance id, still
+ * indexable in the pre-shuffle library, so `sourceCardFor` places it, reads the
+ * WRONG card's effect refs, and answers confidently wrong. That is the failure
+ * this list exists for, and it can only be fixed by withdrawing the skip.
+ *
+ * A copy and a token are NEW OBJECTS with minted ids, outside both decklist
+ * ranges, so `sourceCardFor` returns undefined and the runner already takes its
+ * conservative branch. Adding the primitives here would disqualify every game
+ * containing a Reverberate whether or not one was ever cast — strictly more
+ * conservative, and buying no soundness at all.
+ *
+ * The rule to apply to the NEXT copy system: it belongs here when the copy is
+ * applied to an object that KEEPS its instance id, and does not when the copy is
+ * a newly created object. "Becomes a copy" applied by an activated ability
+ * (Mirage Mirror, Thespian's Stage) is the first kind and will need a field here
+ * the day it lands.
+ */
 
 /** Whether a card can end up running abilities its decklist row does not print. */
 export function acquiresForeignAbilities(def: CardDefinition): boolean {
@@ -302,6 +326,40 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * the swapped card until that card has publicly arrived in the yard.
    */
   'grantFlashback',
+  /*
+   * THE COPY FAMILY (CR 707) — all three SAFE, and the argument is the same one
+   * `createToken` and `makeToken` already make, so it is worth stating rather
+   * than assuming.
+   *
+   * The worry is real: `copySpell` can copy a PONDER, and `createTokenCopy` can
+   * copy a permanent whose enters-the-battlefield trigger scries. Neither of
+   * those reads is on the copying card's decklist row, so the scan
+   * `peekCouldReadHeroLibrary` performs would answer "no library read" for an
+   * effect that just read one — exactly the unsoundness
+   * `ABILITY_ACQUIRING_DEFINITION_FIELDS` exists to prevent.
+   *
+   * What makes it sound is that the created object gets a MINTED instance id.
+   * Ids are handed out hero-library-first, opponent-library-next, and a copy or
+   * a token is numbered past both ranges — so `sourceCardFor` cannot place it,
+   * and the runner's conservative "an id I cannot place" branch disqualifies the
+   * game. The read is therefore SEEN, through the copy's own id, rather than
+   * missed through the copier's. `paired-arms.test.ts` pins the id being new,
+   * because that invariant is what this classification rests on.
+   *
+   * Note what this is NOT: it is not the same case as `copyAsEnters`, which IS
+   * listed in `ABILITY_ACQUIRING_DEFINITION_FIELDS`. A Clone keeps its OWN
+   * decklist instance id while running somebody else's abilities, so the scan
+   * places it and reads the wrong card. A copy or a token has no decklist id at
+   * all. Two different failures, and only the first needs the coarse withdrawal.
+   */
+  'copySpell',
+  'createTokenCopy',
+  /*
+   * Returning a spell to its owner's hand moves ONE known card out of a public
+   * zone; it reads no library and branches on nothing hidden. Same shape as
+   * `returnToHand` above.
+   */
+  'returnSpellToHand',
 ]);
 
 /**
