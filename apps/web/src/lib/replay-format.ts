@@ -87,6 +87,14 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':
       return { text: `Player ${event.controller} creates ${event.name}.`, tone: 'cast' };
+    case 'tokenCopyCreated':
+      return { text: `Player ${event.controller}'s token is a copy of ${event.name}.`, tone: 'cast' };
+    case 'spellCopied':
+      return { text: `Player ${event.controller} copies ${event.name}.`, tone: 'cast' };
+    case 'spellCopyCeasedToExist':
+      // CR 704.5e — and it is emitted INSTEAD of a `zoneChange`, so a reader
+      // folding this log must not put the object in a graveyard.
+      return { text: `The copy of ${event.name} ceases to exist.` };
     case 'triggerPutOnStack':
       return { text: `Trigger: ${event.label}.`, tone: 'trigger' };
     case 'triggeredAbilityResolved':

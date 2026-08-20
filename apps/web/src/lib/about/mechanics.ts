@@ -486,6 +486,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         },
       },
       {
+        title: 'Copying a SPELL on the stack (Reverberate)',
+        detail:
+          'A copy of a spell is put on the stack ABOVE the original, carrying every decision made for it — its targets, the value of X, whether it was kicked, and a modal spell’s announced modes with each mode’s own aim (CR 707.10). You may then choose new targets for the copy, asked as a real question while the copying spell resolves. The copy is NOT A CARD: when it leaves the stack it goes to no zone at all (CR 704.5e), so it can never leave a phantom card that delirium counts, Tarmogoyf reads or flashback could recast. Reverberate, Twincast, Reiterate, Narset’s Reversal and Dualcaster Mage all import as playable.',
+        witness: { kind: 'primitive', id: 'copySpell' },
+      },
+      {
+        title: 'Token copies (Rite of Replication)',
+        detail:
+          '"Create a token that’s a copy of target creature" makes a token whose characteristics are the copied card’s PRINTED ones (CR 707.2) — so a 1/1 wearing three +1/+1 counters is copied as a 1/1, and a transformed permanent by its front face. It is a real token: it answers every "nontoken" filter and it ceases to exist when it leaves the battlefield. The printed "if this spell was kicked, create five of those tokens instead" REPLACES the count rather than adding to it. Rite of Replication, Cackling Counterpart and Giant Adephage all import as playable.',
+        witness: { kind: 'primitive', id: 'createTokenCopy' },
+      },
+      {
         title: 'Split cards (Fire // Ice)',
         detail:
           'One card, two halves, either castable for its own cost. While it sits in a hand, graveyard or library it is NEITHER half: CR 709.4 gives it the combined name, the union of the type lines and a mana value equal to the sum of both — which is what a discard filter or a "mana value 3 or less" clause reads. Casting one puts THAT half on the stack, and the card reverts to the combined object on the way out.',

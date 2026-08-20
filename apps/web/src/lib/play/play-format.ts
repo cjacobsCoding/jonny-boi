@@ -91,6 +91,21 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':
       return { text: `${r.playerName(event.controller)} creates ${event.name}.`, tone: 'cast' };
+    case 'tokenCopyCreated':
+      // Said IN ADDITION to `tokenCreated` (which fires for this object too),
+      // because "a token" and "a token that is a copy of that creature" read as
+      // very different board states to a player watching the log.
+      return {
+        text: `${r.playerName(event.controller)}'s token is a copy of ${event.name}.`,
+        tone: 'cast',
+      };
+    case 'spellCopied':
+      return { text: `${r.playerName(event.controller)} copies ${event.name}.`, tone: 'cast' };
+    case 'spellCopyCeasedToExist':
+      // CR 704.5e. Worth a line rather than silence: without it a player sees a
+      // second spell resolve and then sees nothing go to a graveyard, which
+      // looks like a bug rather than the rule it is.
+      return { text: `The copy of ${event.name} ceases to exist.` };
     case 'cardsLookedAt':
       // The COUNT only — the cards themselves are not public, and this shared
       // hotseat log is exactly the channel that must not leak them.
