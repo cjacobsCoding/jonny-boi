@@ -57,14 +57,27 @@ import { findInstance } from './internal/zones.js';
  *    creature exiled or bounced did not die.
  *  - `youGainedLife` — "you gained life this turn". True for the player whose
  *    life total went UP; a payment that later restores it does not un-gain it.
+ *  - `drewInOwnDrawStep` — "you have already taken the first draw of your draw
+ *    step this turn". The exact reading of the printed exception "except the
+ *    FIRST one you draw in each of your draw steps" (Teferi's Ageless Insight,
+ *    Alhammarret's Archive, Notion Thief). Set as that draw happens, so the
+ *    replacement layer — which asks BEFORE the draw — sees `false` for the first
+ *    one and `true` for every later draw in the same step. Each player has one
+ *    draw step per turn, so a turn-scoped fact says exactly what a step-scoped
+ *    one would, with no second lifetime to keep.
  */
-export type TurnFact = 'permanentLeftBattlefield' | 'creatureDied' | 'youGainedLife';
+export type TurnFact =
+  | 'permanentLeftBattlefield'
+  | 'creatureDied'
+  | 'youGainedLife'
+  | 'drewInOwnDrawStep';
 
 /** Every tracked fact, in canonical order — the closed vocabulary itself. */
 export const TURN_FACTS: readonly TurnFact[] = Object.freeze([
   'permanentLeftBattlefield',
   'creatureDied',
   'youGainedLife',
+  'drewInOwnDrawStep',
 ]);
 
 /** The bit each fact occupies in a player's mask. */
@@ -72,6 +85,7 @@ const FACT_BIT: Readonly<Record<TurnFact, number>> = Object.freeze({
   permanentLeftBattlefield: 1 << 0,
   creatureDied: 1 << 1,
   youGainedLife: 1 << 2,
+  drewInOwnDrawStep: 1 << 3,
 });
 
 /** Clear every player's facts. Called as a turn begins. */
@@ -136,6 +150,14 @@ export function recordTurnFacts(state: GameState, event: GameEvent): void {
     }
     case 'lifeChanged': {
       if (event.delta > 0) setTurnFact(state, 'youGainedLife', event.player);
+      return;
+    }
+    case 'drawCard': {
+      // Only a draw taken during that player's OWN draw step counts — the
+      // printed exception is about the draw step, not about drawing generally.
+      if (state.step === 'draw' && event.player === state.activePlayer) {
+        setTurnFact(state, 'drewInOwnDrawStep', event.player);
+      }
       return;
     }
     default:

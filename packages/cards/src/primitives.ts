@@ -34,7 +34,9 @@ import type {
   EffectPrimitive,
   EffectRef,
   EffectRegistry,
+  GameEvent,
   PlayerId,
+  ReplacementIndex,
   StaticAbility,
   TriggeredAbility,
 } from '@jonny-boi/core';
@@ -57,6 +59,10 @@ import {
   type ManaColor,
   type ManaCost,
   protectionPreventsDamage,
+  drawCardForPlayer,
+  indexReplacements,
+  replaceCounters,
+  replaceDamage,
 } from '@jonny-boi/core';
 import {
   boolParam,
@@ -85,6 +91,49 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 // --- the primitives ------------------------------------------------------------
 
 /**
+ * The ONE question every NONCOMBAT damage site in this package asks: how much
+ * damage is actually dealt, after the replacement and prevention layer
+ * (CR 614/615)? Combat asks the same question through the same engine —
+ * `internal/replacement.ts` — from `internal/combat.ts`.
+ *
+ * Returns the amount to deal, and emits the `damagePrevented` half itself so
+ * every caller reports a prevented hit identically. Inert when nothing in the
+ * game replaces anything: `index.length === 0` and an immediate return.
+ */
+function damageAfterReplacement(
+  ctx: EffectContext,
+  index: ReplacementIndex,
+  emit: (e: GameEvent) => void,
+  source: CardInstance,
+  recipient: CardInstance | undefined,
+  affectedPlayer: PlayerId,
+  amount: number,
+): number {
+  if (index.length === 0) return amount;
+  const result = replaceDamage(
+    ctx.state,
+    index,
+    source,
+    source.controller,
+    recipient,
+    affectedPlayer,
+    amount,
+    false,
+    emit,
+  );
+  if (result.prevented > 0) {
+    emit({
+      type: 'damagePrevented',
+      source: source.instanceId,
+      target: recipient === undefined ? affectedPlayer : recipient.instanceId,
+      amount: result.prevented,
+      combat: false,
+    });
+  }
+  return result.amount;
+}
+
+/**
  * `dealDamage` — deal `amount` damage to the chosen target. Reads `params.amount`
  * and `params.targets`, the {@link TargetRestriction} naming what the printed card
  * may point at:
@@ -108,7 +157,7 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
  * every caller remembering it. No valid target → safe no-op.
  */
 export const dealDamage: EffectPrimitive = (ctx) => {
-  const amount = intParam(ctx, 'amount', 0);
+  let amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const target = ctx.targets[0];
   if (target === undefined) {
@@ -132,13 +181,25 @@ export const dealDamage: EffectPrimitive = (ctx) => {
   // re-fizzles a target that gained protection between cast and resolution.
   if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller, ctx.source.def)) return; // illegal → fizzle
 
+  const replacements = indexReplacements(ctx.state);
+  // `ctx.emit` is a plain function property on the context (see core's
+  // `createEffectContext`), never a `this`-bound method, so it is passed by
+  // reference rather than wrapped — a wrapper here would be one closure
+  // allocated per damage event on the engine's hottest path.
+  const emit = ctx.emit;
+
   if (isPlayerTarget(target)) {
-    changeLife(ctx, target, -amount);
-    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target, amount, combat: false });
+    const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, target, amount);
+    if (dealt <= 0) return;
+    changeLife(ctx, target, -dealt);
+    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target, amount: dealt, combat: false });
     return;
   }
   const perm = permanentById(ctx.state, target);
   if (!perm) return; // target fizzled (already gone) — safe no-op
+  const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, perm, perm.controller, amount);
+  if (dealt <= 0) return;
+  amount = dealt;
   if (isPlaneswalker(perm.def)) {
     // Damage to a planeswalker removes that many loyalty counters immediately
     // (CR 120.3c) — the modern rules aim burn AT the walker ("any target"
@@ -218,16 +279,19 @@ export const drawCards: EffectPrimitive = (ctx) => {
   for (const drawer of playersForParam(ctx, strParam(ctx, 'whichPlayer'))) {
     const player = ctx.state.players[drawer];
     for (let i = 0; i < count; i++) {
-      const top = player.library.shift();
-      if (!top) {
-        // Decking: leave the empty library; core's SBA will register the loss when
-        // a *draw step* draw fails. A spell-driven empty draw is rare in the pool;
-        // emit nothing rather than fabricate a loss event here.
-        break;
-      }
-      top.zone = 'hand';
-      player.hand.push(top);
-      ctx.emit({ type: 'drawCard', player: drawer, instanceId: top.instanceId });
+      // Decking: leave the empty library; core's SBA will register the loss when
+      // a *draw step* draw fails. A spell-driven empty draw is rare in the pool;
+      // stop rather than fabricate a loss event here. Checked BEFORE the draw
+      // (rather than by a failed `shift()`) because the draw itself now goes
+      // through core, and an empty library ends THIS player's draws and nobody
+      // else's — in "each player draws a card" the other player still draws.
+      if (player.library.length === 0) break;
+      // Core's draw, not a second copy of it: "if you would draw a card, draw
+      // two instead" and "…you win the game instead" (the CR 614 replacement
+      // layer) have to mean the same thing for a Divination as for a draw step,
+      // and one implementation is how that is guaranteed rather than remembered.
+      drawCardForPlayer(ctx.state, drawer, ctx.emit);
+      if (ctx.state.gameOver) return;
     }
   }
 };
@@ -731,7 +795,13 @@ export const fight: EffectPrimitive = (ctx) => {
   const otherPower = effectivePower(other, aggregateFor(ctx.state, other.instanceId));
 
   // Protection prevents the damage a protected fighter would take, in either
-  // direction, without stopping the other half of the fight (CR 702.16e).
+  // direction, without stopping the other half of the fight (CR 702.16e). It is
+  // asked BEFORE the replacement layer for the reason `internal/combat.ts` gives
+  // at the same seam: it is an absolute prevention, so nothing a replacement
+  // could do changes the outcome, and asking first means a prevention SHIELD is
+  // not spent on damage that was never going to land.
+  const replacements = indexReplacements(ctx.state);
+  const emit = ctx.emit;
   if (otherPower > 0) {
     if (protectionPreventsDamage(ctx.state, self, other.def)) {
       ctx.emit({
@@ -742,14 +812,17 @@ export const fight: EffectPrimitive = (ctx) => {
         combat: false,
       });
     } else {
-      self.damageMarked += otherPower;
-      ctx.emit({
-        type: 'damageDealt',
-        source: other.instanceId,
-        target: self.instanceId,
-        amount: otherPower,
-        combat: false,
-      });
+      const dealt = damageAfterReplacement(ctx, replacements, emit, other, self, self.controller, otherPower);
+      if (dealt > 0) {
+        self.damageMarked += dealt;
+        ctx.emit({
+          type: 'damageDealt',
+          source: other.instanceId,
+          target: self.instanceId,
+          amount: dealt,
+          combat: false,
+        });
+      }
     }
   }
   if (selfPower > 0) {
@@ -762,14 +835,17 @@ export const fight: EffectPrimitive = (ctx) => {
         combat: false,
       });
     } else {
-      other.damageMarked += selfPower;
-      ctx.emit({
-        type: 'damageDealt',
-        source: self.instanceId,
-        target: other.instanceId,
-        amount: selfPower,
-        combat: false,
-      });
+      const dealt = damageAfterReplacement(ctx, replacements, emit, self, other, other.controller, selfPower);
+      if (dealt > 0) {
+        other.damageMarked += dealt;
+        ctx.emit({
+          type: 'damageDealt',
+          source: self.instanceId,
+          target: other.instanceId,
+          amount: dealt,
+          combat: false,
+        });
+      }
     }
   }
   // Death is the engine's state-based check, exactly as with combat damage.
@@ -785,6 +861,12 @@ export const fight: EffectPrimitive = (ctx) => {
 export const dealDamageToEach: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
+
+  // ONE index for the whole sweep: every hit in it is dealt simultaneously, so
+  // an effect that was live when the sweeper resolved is live for all of them —
+  // the same argument `assignAndDealCombatDamage` makes for a damage step.
+  const replacements = indexReplacements(ctx.state);
+  const emit = ctx.emit;
 
   if (boolParam(ctx, 'creatures', false)) {
     // Snapshot first: damage is dealt simultaneously, so a creature dying to it
@@ -802,12 +884,22 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
         });
         continue;
       }
-      creature.damageMarked += amount;
+      const dealt = damageAfterReplacement(
+        ctx,
+        replacements,
+        emit,
+        ctx.source,
+        creature,
+        creature.controller,
+        amount,
+      );
+      if (dealt <= 0) continue;
+      creature.damageMarked += dealt;
       ctx.emit({
         type: 'damageDealt',
         source: ctx.source.instanceId,
         target: creature.instanceId,
-        amount,
+        amount: dealt,
         combat: false,
       });
     }
@@ -819,7 +911,14 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
     const victims: PlayerId[] = hitEveryPlayer
       ? [ctx.controller, otherPlayer(ctx.controller)]
       : [otherPlayer(ctx.controller)];
-    for (const victim of victims) changeLife(ctx, victim, -amount);
+    for (const victim of victims) {
+      const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, victim, amount);
+      // Deliberately only the life change, exactly as before this layer existed:
+      // this primitive has never emitted `damageDealt` for its player half, and
+      // adding one here would be a separate (real) log gap to close, not part of
+      // the replacement work.
+      if (dealt > 0) changeLife(ctx, victim, -dealt);
+    }
   }
 };
 
@@ -926,7 +1025,22 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
   // that the counters now genuinely EXIST as the card says they do, so state can
   // be inspected ("does it have a -1/-1 counter?") and the two kinds annihilate.
   const kind = amount < 0 ? MINUS_ONE_COUNTER : PLUS_ONE_COUNTER;
-  const magnitude = Math.abs(amount);
+  // THE REPLACEMENT LAYER (CR 614) — "that many PLUS ONE are put on it instead"
+  // (Hardened Scales), "TWICE that many" (Corpsejack Menace). This is the ONE
+  // counter site in the engine, which is what makes those cards apply to a spell,
+  // to a triggered ability and to "~ enters with N +1/+1 counters on it" alike:
+  // CR 614.1c puts those on as the permanent enters, and they come through here.
+  // The KIND is passed, so a `+1/+1` doubler correctly ignores a `-1/-1` counter.
+  const magnitude = replaceCounters(
+    ctx.state,
+    indexReplacements(ctx.state),
+    ctx.source,
+    target,
+    kind,
+    Math.abs(amount),
+    ctx.emit,
+  );
+  if (magnitude <= 0) return;
   // REPLACE the record, never write into it — `CardInstance.counters` is shared
   // and FROZEN while a permanent has no counters (`NO_COUNTERS`), so an in-place
   // write threw "object is not extensible" for the very first counter put on any
@@ -1152,6 +1266,63 @@ export const mayEffects: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * `preventDamage` — the ONE-SHOT half of the prevention family: "Prevent all
+ * combat damage that would be dealt this turn" (Fog, Darkness, Spore Frog's
+ * sacrifice ability, Dawn Charm's first mode), "Prevent all damage that would be
+ * dealt to you this turn" (Riot Control), "Prevent the next N damage that would
+ * be dealt to target creature".
+ *
+ * It registers a FLOATING replacement effect (core's `addReplacementEffect`) and
+ * mutates nothing else. The prevention itself happens in the one place every
+ * damage site already asks — `internal/replacement.ts` — so a fog covers combat
+ * damage, a Lightning Bolt, a sweeper and a fight through exactly one rule.
+ *
+ * The PRINTED prevention statics ("Prevent all combat damage that would be dealt
+ * to attacking creatures you control" — Dolmen Gate) are NOT this primitive:
+ * they are `CardDefinition.replacements` data, whose lifetime is derived from
+ * the source being on the battlefield and needs no record at all.
+ *
+ * Params (each a printed word, none inferred):
+ *   - `combat` — `true` for "all COMBAT damage", `false` for "all NONCOMBAT
+ *     damage", omitted for a clause that prints neither.
+ *   - `scope` — whose objects it guards, relative to the caster (`'you'` /
+ *     `'opponent'` / `'any'`). Omitted ⇒ everyone's, which is what a fog says.
+ *   - `recipientKind` — `'player'` for "…dealt to you", `'permanent'` for
+ *     "…dealt to creatures you control". Omitted ⇒ either.
+ *   - `attacking` — `true` for "…to ATTACKING creatures you control".
+ *   - `amount` — a SHIELD ceiling ("prevent the next N damage"). Omitted ⇒ a
+ *     blanket prevention with no ceiling.
+ *   - `targeted` — bind the shield to `ctx.targets[0]`, the chosen creature or
+ *     player. Without it the effect guards every object the rest of the filter
+ *     admits.
+ *   - `label` — the printed line, for the log.
+ */
+export const preventDamage: EffectPrimitive = (ctx) => {
+  const shield = intParam(ctx, 'amount', 0);
+  const scope = strParam(ctx, 'scope');
+  const recipientKind = strParam(ctx, 'recipientKind');
+  const targeted = boolParam(ctx, 'targeted', false);
+  const target = targeted ? ctx.targets[0] : undefined;
+  // "prevent the next N damage that would be dealt to TARGET creature" with no
+  // legal target left is a fizzle, not a blanket fog — refusing here is the
+  // direction that can never play better than printed.
+  if (targeted && target === undefined) return;
+  const combat = ctx.params.combat;
+  ctx.addReplacementEffect({
+    event: 'damage',
+    applies: {
+      ...(typeof combat === 'boolean' ? { combat } : {}),
+      ...(scope === 'you' || scope === 'opponent' || scope === 'any' ? { recipientController: scope } : {}),
+      ...(recipientKind === 'player' || recipientKind === 'permanent' ? { recipientKind } : {}),
+      ...(boolParam(ctx, 'attacking', false) ? { recipientAttacking: true } : {}),
+      ...(target !== undefined ? { recipientIs: target } : {}),
+    },
+    outcome: shield > 0 ? { preventUpTo: shield } : { preventAll: true },
+    ...(strParam(ctx, 'label') !== undefined ? { label: strParam(ctx, 'label') as string } : {}),
+  });
+};
+
+/**
  * `grantFlashback` — "target instant or sorcery card in your graveyard gains
  * flashback until end of turn" (Snapcaster Mage).
  *
@@ -1234,6 +1405,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   mill,
   fight,
   dealDamageToEach,
+  preventDamage,
   addCounters,
   attachToTarget,
   grantFlashback,

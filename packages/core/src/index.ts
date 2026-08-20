@@ -260,11 +260,13 @@ export type {
   TriggerCondition,
   TriggerEvent,
   TriggerWho,
+  TriggerWatches,
   PendingTrigger,
   TriggerSource,
   TriggerSubject,
 } from './triggers.js';
 export {
+  DEFAULT_TRIGGER_WATCHES,
   conditionMatches,
   matchTriggers,
   orderPendingTriggers,
@@ -291,6 +293,45 @@ export {
   expireContinuousEffects,
   NO_MOD,
 } from './internal/continuous.js';
+
+// Replacement + prevention effects (CR 614/615/616) — the ONE seam damage,
+// counters and draws all consult. `replacement.ts` is the card-facing
+// vocabulary (what a card DECLARES); `internal/replacement.ts` is the engine
+// (what the layer DOES). A caller with a batch of damage to deal builds the
+// index once and threads it, exactly as it does with `indexContinuous`.
+export type {
+  ReplacementAbility,
+  ReplacementApplies,
+  ReplacementEventKind,
+  ReplacementOutcome,
+} from './replacement.js';
+export {
+  REPLACEMENT_EVENT_KINDS,
+  affectedPlayerPrefersMore,
+  replacementIsInert,
+  replacementsOf,
+} from './replacement.js';
+export type {
+  ActiveReplacement,
+  DamageReplacementResult,
+  DrawReplacementResult,
+  FloatingReplacement,
+  ReplaceableEvent,
+  ReplacementIndex,
+} from './internal/replacement.js';
+export {
+  NO_REPLACEMENTS,
+  ORDER_SEARCH_MAX_CANDIDATES,
+  addFloatingReplacement,
+  expireFloatingReplacements,
+  hasAnyReplacement,
+  indexReplacements,
+  projectDamage,
+  replaceCounters,
+  replaceDamage,
+  replaceDraw,
+  runReplacements,
+} from './internal/replacement.js';
 
 // State
 export type {
@@ -335,6 +376,7 @@ export type {
   EffectPrimitive,
   EffectRegistry,
   ContinuousModRequest,
+  ReplacementEffectRequest,
   ChoiceChannel,
   ChoiceRequestArgs,
 } from './effects.js';
@@ -437,6 +479,7 @@ export {
   createGame,
   createEngine,
   applyAction,
+  drawCardForPlayer,
   applyActionInPlace,
   generateLegalActions,
   choiceActionsFor,

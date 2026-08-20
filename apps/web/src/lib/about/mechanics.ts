@@ -224,8 +224,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Auras & Equipment',
         detail:
-          'One attachment relationship covers both: an Aura dies when its host is illegal (CR 704.5m), Equipment falls off and stays (CR 704.5n), and grants layer with anthems and pumps.',
+          'One attachment relationship covers both: an Aura dies when its host is illegal (CR 704.5m), Equipment falls off and stays (CR 704.5n), and grants layer with anthems and pumps. What it grants is the full printed line — "Equipped creature gets +2/+2 and has protection from black and from green", "gets +1/+0 and has haste and ward {1}" — including the two keywords that carry a value.',
         witness: { kind: 'primitive', id: 'attachToTarget' },
+      },
+      {
+        title: 'What the EQUIPPED creature does',
+        detail:
+          'An Equipment or Aura may watch its HOST rather than itself: "whenever equipped creature deals combat damage to a player", "whenever equipped creature attacks", "when equipped creature dies". It is the same trigger the creature\'s own printed line uses, scoped to whatever the attachment is on right now — so it follows the Sword when the Sword moves, and fires for nobody while the Sword is lying loose. The ability still belongs to the Equipment: its "~ deals 2 damage" means the Sword (Sword of Fire and Ice, Argentum Armor, Skullclamp).',
+        witness: { kind: 'rule', id: 'trigger-equipped-combat-damage-to-player' },
+      },
+      {
+        title: 'Connecting with an attacker',
+        detail:
+          '"Whenever ~ deals combat damage to a player" fires on the hit itself, never on damage to a creature or a planeswalker, and the AI treats it as a reason to attack — and as a reason NOT to send that creature at a planeswalker, where the trigger would pay nothing. Optional bodies are a real question: "you may draw two cards" is asked, and the no is a complete outcome.',
+        witness: {
+          kind: 'oracle',
+          text: 'Whenever ~ deals combat damage to a player, you may draw a card.',
+          as: 'creature',
+        },
       },
       {
         title: 'Targeting restrictions',
@@ -439,6 +455,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         title: 'Gaining control of a permanent',
         detail: '"Gain control of target creature until end of turn" — Act of Treason effects.',
         witness: { kind: 'rule', id: 'gain-control-until-eot' },
+      },
+      {
+        title: 'Replacement effects — damage doublers and counter multipliers',
+        detail:
+          'CR 614: an effect that changes what WOULD happen. "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put on it instead" (Hardened Scales, Corpsejack Menace); "If a red source you control would deal damage to an opponent, it deals that much damage plus 2 instead" (Torbran, Gratuitous Violence, Fiery Emancipation). Damage, counters and draws all ask ONE layer, so a doubler applies to a burn spell, a combat hit, a sweeper and a fight alike. Each effect applies at most once per event (CR 614.5 — a doubler never doubles its own output), and when two apply the order is the one the affected player would pick, which is why Hardened Scales plus Corpsejack Menace puts four counters and not three.',
+        witness: { kind: 'rule', id: 'replacement-damage-scaled' },
+      },
+      {
+        title: 'Prevention — fogs and prevention statics',
+        detail:
+          'CR 615: "Prevent all combat damage that would be dealt this turn" (Fog, Darkness) creates a real prevention effect that wears off in cleanup, and "Prevent all combat damage that would be dealt to attacking creatures you control" (Dolmen Gate) is a static that lives exactly as long as its source. A "prevent the next N damage" shield is consumed as it prevents and is gone the moment it is spent. The pilot casts a fog in front of an attack that matters and holds it against one that does not.',
+        witness: { kind: 'primitive', id: 'preventDamage' },
+      },
+      {
+        title: 'Replacing a draw',
+        detail:
+          '"If you would draw a card except the first one you draw in each of your draw steps, draw two cards instead" (Teferi’s Ageless Insight) and "If you would draw a card while your library has no cards in it, you win the game instead" (Laboratory Maniac). The printed exception is exact, not approximated — the engine remembers whether you have already taken your draw step’s draw this turn.',
+        witness: { kind: 'rule', id: 'replacement-draw' },
       },
       {
         title: 'Anthems (static buffs)',

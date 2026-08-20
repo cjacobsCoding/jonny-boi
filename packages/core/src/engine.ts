@@ -131,11 +131,12 @@ import {
 import { declineMadness } from './madness.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
-import { clearTurnFacts } from './turn-facts.js';
+import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
+import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
-import { applyLegendRuleChoice, checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.js';
+import { applyLegendRuleChoice, checkStateBasedActions, loseGame, resolveWinner, winGame } from './internal/sba.js';
 import {
   assignAndDealCombatDamage,
   canBlock,
@@ -273,7 +274,9 @@ export function createGame(setup: GameSetup): EngineResult {
   // Draw opening hands.
   for (const pid of PLAYER_IDS) {
     for (let i = 0; i < config.startingHandSize; i++) {
-      drawCard(state, pid, emit);
+      // The opening hand is drawn before anything is on the battlefield, so no
+      // replacement effect can exist to consult — the plain draw, deliberately.
+      drawOneCard(state, pid, emit);
     }
   }
 
@@ -309,8 +312,45 @@ export function createEngine(config: RulesConfig = DEFAULT_RULES, registry?: Eff
 
 // --- draw / turn machine -------------------------------------------------------
 
-/** Draw one card for a player. Empty library flags a loss (decking). */
-function drawCard(state: GameState, player: PlayerId, emit: (e: GameEvent) => void): void {
+/**
+ * Draw one card for a player, THROUGH the replacement layer (CR 614) — the same
+ * seam damage and counters consult.
+ *
+ * Exported because a draw happens in two places and must mean one thing: the
+ * turn-based draw-step draw here, and the `drawCards` primitive in
+ * `@jonny-boi/cards`. A second implementation is how "if you would draw a card,
+ * draw two instead" would end up applying to a Divination and not to a draw
+ * step.
+ *
+ * Inert when nothing in the game replaces a draw: one `.length` read, then the
+ * plain draw, exactly as before.
+ */
+export function drawCardForPlayer(state: GameState, player: PlayerId, emit: (e: GameEvent) => void): void {
+  const replacements = indexReplacements(state);
+  if (replacements.length === 0) {
+    drawOneCard(state, player, emit);
+    return;
+  }
+  // "except the FIRST one you draw in each of your draw steps" — asked BEFORE
+  // the draw, and answered by the turn fact the draw itself will set (see
+  // turn-facts.ts). This is what makes the printed exception exact rather than
+  // an assumption about how many cards a draw step draws.
+  const firstDrawStepDraw =
+    state.step === 'draw' &&
+    player === state.activePlayer &&
+    !turnFactHolds(state, 'drewInOwnDrawStep', player);
+  const result = replaceDraw(state, replacements, player, firstDrawStepDraw, emit);
+  if (result.winsGame) {
+    // Laboratory Maniac: the draw does not happen at all, so the
+    // draw-from-an-empty-library loss below is never reached.
+    winGame(state, player, 'a replacement effect won the game instead of a draw', emit);
+    return;
+  }
+  for (let i = 0; i < result.count; i++) drawOneCard(state, player, emit);
+}
+
+/** Draw one card with no replacement question asked. Empty library flags a loss (decking). */
+function drawOneCard(state: GameState, player: PlayerId, emit: (e: GameEvent) => void): void {
   const p = state.players[player];
   const top = p.library.shift();
   if (!top) {
@@ -412,7 +452,7 @@ function performStepTurnBasedActions(
       // ("on the play"), who skips their first draw.
       const skipFirst = config.playerOnPlaySkipsFirstDraw && state.turnNumber === 1;
       if (!skipFirst) {
-        for (let i = 0; i < config.cardsPerDrawStep; i++) drawCard(state, state.activePlayer, emit);
+        for (let i = 0; i < config.cardsPerDrawStep; i++) drawCardForPlayer(state, state.activePlayer, emit);
       }
       checkStateBasedActions(state, emit);
       grantPriority(state);
@@ -446,6 +486,10 @@ function performStepTurnBasedActions(
       // (Snapcaster's "until end of turn"), through its own list — see
       // `card-grants.ts` for why it is not part of the continuous layer.
       expireCardGrants(state, 'endOfTurn', emit);
+      // A fog guarded THIS turn's combat and a "prevent the next N damage"
+      // shield lasted until end of turn; both wear off here, on the same clock
+      // and through their own list (see `internal/replacement.ts`).
+      expireFloatingReplacements(state, 'endOfTurn', emit);
       for (const inst of state.battlefield) {
         inst.damageMarked = 0;
         inst.markedByDeathtouch = false;
@@ -2469,7 +2513,24 @@ function applyCastSpell(
   }
   // The life half of the flashback cost, charged alongside the mana. Everything
   // above is validated, so this cannot half-pay.
-  if (flashbackLife > 0) payLifeCost(state, action.player, flashbackLife, emit);
+  if (flashbackLife > 0) {
+    payLifeCost(state, action.player, flashbackLife, emit);
+    /*
+     * PAYING A COST CAN KILL YOU, AND THAT HAS TO END THE GAME HERE.
+     *
+     * "Flashback—{1}{B}, Pay 3 life" at exactly 3 life is a legal thing to do
+     * (CR 118.4 — the engine does not forbid it), and the caster then receives
+     * priority, which is when state-based actions are checked (CR 704.3) and a
+     * player at 0 or less life loses (CR 704.5a). Without this the game carried
+     * on with a corpse holding priority: the soak found a player sitting at 0
+     * life, casting spells, on turn 20 of seed 3856639351.
+     *
+     * The two sibling payment paths already do exactly this — `applyTapForMana`
+     * for a pain land's rider and the shockland's pay-life choice — so this is
+     * the third copy of one rule, not a new one.
+     */
+    checkStateBasedActions(state, emit);
+  }
 
   // Move the card to the stack, out of whichever zone it was cast from.
   removeFromZoneArray(
@@ -2542,6 +2603,26 @@ function applyCastSpell(
   // one-mode menu) is never asked — the forced answer is recorded and the game
   // does not stop.
   askNextCastChoice(state, card.instanceId, emit);
+  /*
+   * STATE-BASED ACTIONS AFTER THE ANNOUNCEMENT (CR 704.3). The caster receives
+   * priority the instant the spell is announced, and that is a check point —
+   * so casting is not exempt just because nothing has resolved yet.
+   *
+   * It matters because CASTING MOVES A CARD BETWEEN ZONES, and characteristic-
+   * defining P/T reads zones: a flashback cast takes the last instant out of a
+   * graveyard, every Tarmogoyf on the board loses a point of toughness, and one
+   * wearing a Weakness (-2/-1) is at 0 and must die. Without this the game
+   * handed priority to a player looking at a creature that should already be in
+   * a graveyard — they could respond by targeting it, and its controller could
+   * still spend it. Found by the full-pool soak (`@jonny-boi/sim`'s `soak.ts`)
+   * at turn 8 of seed 1727114651, once in ~5,000 games and 3.2 million actions.
+   *
+   * Skipped while a CAST-TIME CHOICE stands, because then the announcement is
+   * not finished and nobody has priority yet (CR 601.2) — the answer path runs
+   * the pass itself. The check is a no-op on an ordinary board, and emits
+   * nothing when nothing dies, so no event log or paired-arm comparison moves.
+   */
+  if (!state.pendingChoice) checkStateBasedActions(state, emit);
   return { state, events };
 }
 

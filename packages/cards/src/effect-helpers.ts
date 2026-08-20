@@ -180,19 +180,45 @@ export function strArrayParam(ctx: EffectContext, key: string): readonly string[
 
 /**
  * Read a `keywords` param (a `KeywordFlags`-shaped object, e.g. `{ trample: true }`)
- * keeping only the boolean-true flags. A missing/ill-typed param yields an empty
- * grant (safe no-op).
+ * into the flags a grant may set. A missing/ill-typed param yields an empty grant
+ * (safe no-op).
+ *
+ * ⚠️ THE THREE PAYLOAD KEYWORDS ARE NOT BOOLEANS, and dropping them here is
+ * silent. `protectionFrom` is a list of qualities, `ward` and `minBlockers` are
+ * numbers — so a filter of `=== true` threw all three away and turned "target
+ * creature gains protection from red until end of turn" into a spell that
+ * compiled `'complete'` and did NOTHING at resolution. (The rule's test asserted
+ * the compiled EFFECT REFS and never played the card, which is why it stayed
+ * green.) Each is copied here with the same validity check `grantInto` in core's
+ * continuous layer applies when it merges them, so the two cannot disagree about
+ * what a real grant looks like.
  */
 export function keywordsParam(ctx: EffectContext): KeywordFlags {
   const v = ctx.params.keywords;
   if (typeof v !== 'object' || v === null) return {};
   const src = v as Record<string, unknown>;
-  const out: Record<string, boolean> = {};
+  const out: Record<string, unknown> = {};
   for (const key in src) {
     if (src[key] === true) out[key] = true;
   }
+  const protection = src.protectionFrom;
+  if (Array.isArray(protection)) {
+    const qualities = protection.filter((q): q is string => typeof q === 'string');
+    if (qualities.length > 0) out.protectionFrom = qualities;
+  }
+  for (const numeric of NUMERIC_KEYWORD_KEYS) {
+    const value = src[numeric];
+    if (typeof value === 'number' && value > 0) out[numeric] = value;
+  }
   return out as KeywordFlags;
 }
+
+/**
+ * The keyword flags whose value is a positive NUMBER rather than a boolean.
+ * A table so adding one is a data edit here rather than another `if` above —
+ * and so the omission that made this function drop them cannot recur silently.
+ */
+const NUMERIC_KEYWORD_KEYS: readonly string[] = Object.freeze(['ward', 'minBlockers']);
 
 /**
  * Read a `ManaCost`-shaped param (`{ generic: 3 }`, `{ generic: 1, U: 1 }`) — the
