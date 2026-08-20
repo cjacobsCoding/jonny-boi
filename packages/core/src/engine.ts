@@ -2266,6 +2266,26 @@ function applyCastSpell(
   // one-mode menu) is never asked — the forced answer is recorded and the game
   // does not stop.
   askNextCastChoice(state, card.instanceId, emit);
+  /*
+   * STATE-BASED ACTIONS AFTER THE ANNOUNCEMENT (CR 704.3). The caster receives
+   * priority the instant the spell is announced, and that is a check point —
+   * so casting is not exempt just because nothing has resolved yet.
+   *
+   * It matters because CASTING MOVES A CARD BETWEEN ZONES, and characteristic-
+   * defining P/T reads zones: a flashback cast takes the last instant out of a
+   * graveyard, every Tarmogoyf on the board loses a point of toughness, and one
+   * wearing a Weakness (-2/-1) is at 0 and must die. Without this the game
+   * handed priority to a player looking at a creature that should already be in
+   * a graveyard — they could respond by targeting it, and its controller could
+   * still spend it. Found by the full-pool soak (`@jonny-boi/sim`'s `soak.ts`)
+   * at turn 8 of seed 1727114651, once in ~5,000 games and 3.2 million actions.
+   *
+   * Skipped while a CAST-TIME CHOICE stands, because then the announcement is
+   * not finished and nobody has priority yet (CR 601.2) — the answer path runs
+   * the pass itself. The check is a no-op on an ordinary board, and emits
+   * nothing when nothing dies, so no event log or paired-arm comparison moves.
+   */
+  if (!state.pendingChoice) checkStateBasedActions(state, emit);
   return { state, events };
 }
 
