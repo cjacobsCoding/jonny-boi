@@ -207,6 +207,20 @@ export interface SoakMechanic {
    * is) rather than failing here for a reason the soak cannot fix.
    */
   readonly printedBy: (card: CardDefinition, serialized: string) => boolean;
+  /**
+   * Cards that ENABLE the mechanic — the ones a deck also needs before the
+   * anchor card can do anything.
+   *
+   * Most mechanics enable themselves: a flashback spell reaches the graveyard by
+   * being cast, a protection creature is attacked in the ordinary course of
+   * combat. Madness does not — a madness card sits in hand for ever unless
+   * something DISCARDS it, and this engine has no cleanup-step hand-size discard
+   * (CR 514.1) to do it unprompted, so the only outlets are the three cards in
+   * the pool that make a player discard. An anchored deck packs its enablers
+   * alongside its anchors; without that the soak would report madness inert and
+   * be reporting the deck, not the engine.
+   */
+  readonly enabledBy?: (card: CardDefinition, serialized: string) => boolean;
 }
 
 /** Serialize a definition once for the cheap "does it mention" probes. */
@@ -313,7 +327,17 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     witnessKind: 'event',
     printedBy: hasKey('buyback'),
   },
-  { id: 'madness', label: 'madness — a discarded card exiled with its window open', witnessKind: 'event', printedBy: hasKey('madness') },
+  {
+    id: 'madness',
+    label: 'madness — a discarded card exiled with its window open',
+    witnessKind: 'event',
+    printedBy: hasKey('madness'),
+    // The discard outlets. `discardCard` is the choice primitive every "discard
+    // a card" clause in the pool resolves through, which is exactly the funnel
+    // madness hooks — so this finds the enablers by BEHAVIOUR rather than by a
+    // list of three card names that would rot the moment the pool grew.
+    enabledBy: (_c, t) => t.includes('discardCard'),
+  },
   { id: 'scry', label: 'scry — the top of a library looked at and reordered', witnessKind: 'event', printedBy: (_c, t) => t.includes('"scry"') },
   { id: 'surveil', label: 'surveil — the top of a library looked at, graveyard available', witnessKind: 'event', printedBy: (_c, t) => t.includes('"surveil"') },
   { id: 'mill', label: 'mill — cards moved library → graveyard', witnessKind: 'event', printedBy: (_c, t) => t.includes('"mill"') },

@@ -67,6 +67,25 @@ export const SOAK_ANCHOR_COPIES = SOAK_MAX_COPIES;
 export const SOAK_ANCHOR_CARDS = 3;
 
 /**
+ * Distinct ENABLER cards an anchored deck packs, and how many copies of each.
+ *
+ * Fewer and thinner than the anchors: an enabler is a means, not the thing under
+ * test, and a deck that is half Mind Rot stops being a mixed-systems game.
+ */
+export const SOAK_ENABLER_CARDS = 2;
+export const SOAK_ENABLER_COPIES = 3;
+
+/**
+ * The most colours an anchored deck will stretch to.
+ *
+ * Higher than a mixed deck's three because an anchor plus its enablers can
+ * genuinely need four (a red madness card wants a black discard outlet), and the
+ * generated mana base is 26 lands with the pool's duals available. Five is
+ * refused: at that point the deck casts nothing and the anchor never resolves.
+ */
+export const SOAK_ANCHOR_MAX_COLORS = 4;
+
+/**
  * The most expensive spell a generated deck will run.
  *
  * A random pile has no ramp package, so a seven-drop is a blank. Cutting the top
@@ -90,15 +109,6 @@ export const SOAK_COLOR_COUNT_WEIGHTS: readonly (readonly [count: number, weight
  * turn six. Index past the end falls back to the last entry.
  */
 export const SOAK_CURVE_WEIGHTS: readonly number[] = [3, 8, 10, 8, 5, 3, 2];
-
-/** Basic lands, by the colour each one taps for. */
-const BASIC_BY_COLOR: Readonly<Partial<Record<ManaColor, string>>> = {
-  W: 'Plains',
-  U: 'Island',
-  B: 'Swamp',
-  R: 'Mountain',
-  G: 'Forest',
-};
 
 /** The five colours a deck may be built in (colourless is never a "colour" here). */
 const COLORED: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
@@ -253,6 +263,11 @@ export interface SoakCardIndex {
   readonly basics: Readonly<Partial<Record<ManaColor, CardDefinition>>>;
   /** Cards printing each mechanic, by mechanic id. Empty ⇒ the pool has none. */
   readonly byMechanic: ReadonlyMap<SoakMechanicId, readonly CardDefinition[]>;
+  /**
+   * Cards that ENABLE each mechanic — see `SoakMechanic.enabledBy`. Empty for
+   * every mechanic that enables itself, which is nearly all of them.
+   */
+  readonly enablersByMechanic: ReadonlyMap<SoakMechanicId, readonly CardDefinition[]>;
 }
 
 /**
@@ -265,12 +280,17 @@ export function indexPoolForSoak(cards: readonly CardDefinition[]): SoakCardInde
   const lands: CardDefinition[] = [];
   const basics: Partial<Record<ManaColor, CardDefinition>> = {};
   const byMechanic = new Map<SoakMechanicId, CardDefinition[]>();
-  for (const mechanic of SOAK_MECHANICS) byMechanic.set(mechanic.id, []);
+  const enablersByMechanic = new Map<SoakMechanicId, CardDefinition[]>();
+  for (const mechanic of SOAK_MECHANICS) {
+    byMechanic.set(mechanic.id, []);
+    enablersByMechanic.set(mechanic.id, []);
+  }
 
   for (const card of cards) {
     const serialized = serializeDefinition(card);
     for (const mechanic of SOAK_MECHANICS) {
       if (mechanic.printedBy(card, serialized)) byMechanic.get(mechanic.id)!.push(card);
+      if (mechanic.enabledBy?.(card, serialized)) enablersByMechanic.get(mechanic.id)!.push(card);
     }
     if (isLand(card)) {
       lands.push(card);
@@ -281,7 +301,7 @@ export function indexPoolForSoak(cards: readonly CardDefinition[]): SoakCardInde
     }
     if (costManaValue(card.cost) <= SOAK_MAX_SPELL_MANA_VALUE) spells.push(card);
   }
-  return { spells, lands, basics, byMechanic };
+  return { spells, lands, basics, byMechanic, enablersByMechanic };
 }
 
 /** Choose a colour set of `count` colours, biased toward colours the pool is deep in. */
@@ -389,7 +409,7 @@ function buildManaBase(
   const floors = exact.map((v) => Math.floor(v));
   let shortfall = remaining - floors.reduce((a, b) => a + b, 0);
   const order = colorList
-    .map((color, i) => ({ i, frac: exact[i]! - floors[i]! }))
+    .map((_color, i) => ({ i, frac: exact[i]! - floors[i]! }))
     .sort((a, b) => b.frac - a.frac || a.i - b.i);
   for (const { i } of order) {
     if (shortfall <= 0) break;
@@ -401,6 +421,50 @@ function buildManaBase(
     if (count > 0) entries.push({ cardId: index.basics[colorList[i]!]!.id, count });
   }
   return entries;
+}
+
+/**
+ * The LAST thing every generated list passes through: merge duplicate lines,
+ * enforce the four-of rule, and top the deck back up to sixty.
+ *
+ * It exists because the generator writes the same card from two places — an
+ * anchor LAND is packed by `buildAnchoredDeck` and the mana base may
+ * independently pick it, and the anchor pass and the filler pass can both reach
+ * for a card. The loader counts copies per CARD, not per line (see `deck.ts`,
+ * which learned this the same way), so two legal-looking `4x Darksteel Citadel`
+ * lines are an illegal eight-of. The soak found that on its own first run —
+ * which is the harness working, but there is no reason to hand it decks it will
+ * only reject.
+ */
+function normalizeEntries(
+  entries: readonly DeckEntry[],
+  index: SoakCardIndex,
+  colors: ReadonlySet<ManaColor>,
+): DeckEntry[] {
+  const basicIds = new Map(Object.entries(index.basics).map(([color, def]) => [def!.id, color as ManaColor]));
+  const merged = new Map<string, number>();
+  for (const entry of entries) merged.set(entry.cardId, (merged.get(entry.cardId) ?? 0) + entry.count);
+  let total = 0;
+  const out: DeckEntry[] = [];
+  for (const [cardId, count] of merged) {
+    const capped = basicIds.has(cardId) ? count : Math.min(count, SOAK_MAX_COPIES);
+    if (capped <= 0) continue;
+    out.push({ cardId, count: capped });
+    total += capped;
+  }
+  if (total < SOAK_DECK_SIZE) {
+    // The cap took slots away; give them back as basics of the deck's own
+    // colours, which can never make the deck illegal or unplayable.
+    const fill =
+      [...colors].map((color) => index.basics[color]).find((def) => def !== undefined)
+      ?? Object.values(index.basics)[0];
+    if (fill) {
+      const existing = out.find((e) => e.cardId === fill.id);
+      if (existing) existing.count += SOAK_DECK_SIZE - total;
+      else out.push({ cardId: fill.id, count: SOAK_DECK_SIZE - total });
+    }
+  }
+  return out;
 }
 
 /** Assemble a `SoakDeck` from a spell map, a colour set and a land budget. */
@@ -421,7 +485,7 @@ function assemble(
   return {
     name,
     archetype: anchor ? `soak/${anchor}` : `soak/${colorList.join('') || 'C'}`,
-    cards: [...spellEntries, ...landEntries],
+    cards: normalizeEntries([...spellEntries, ...landEntries], index, colors),
     seed,
     colors: colorList,
     ...(anchor ? { anchor } : {}),
@@ -467,23 +531,38 @@ export function buildAnchoredDeck(
   if (castable.length === 0) return undefined;
 
   const rng = createRng(seed);
-  const anchors = sampleDistinct(rng, castable, SOAK_ANCHOR_CARDS);
   const colors = new Set<ManaColor>();
   const spells = new Map<string, { readonly def: CardDefinition; count: number }>();
   const landAnchors: DeckEntry[] = [];
-  for (const card of anchors) {
+
+  /**
+   * Add one card at anchor strength, widening the colour set to fit it. Refuses
+   * a card that would push the deck past every colour there is — a five-colour
+   * random pile casts nothing, which would make the anchoring pointless.
+   */
+  const packAtAnchorStrength = (card: CardDefinition, copies: number): boolean => {
     const needed = new Set<ManaColor>([...colors, ...requiredColors(card.cost)]);
     // A hybrid symbol is satisfiable if the deck already plays one of its halves;
     // otherwise it needs the first half, which is what this adds.
     for (const symbol of hybridOptions(card.cost)) {
       if (!symbol.some((c) => needed.has(c as ManaColor))) needed.add(symbol[0] as ManaColor);
     }
-    if (needed.size > COLORED.length) continue;
+    if (needed.size > SOAK_ANCHOR_MAX_COLORS) return false;
     for (const color of needed) colors.add(color);
-    if (isLand(card)) landAnchors.push({ cardId: card.id, count: SOAK_ANCHOR_COPIES });
-    else spells.set(card.id, { def: card, count: SOAK_ANCHOR_COPIES });
-  }
+    if (isLand(card)) landAnchors.push({ cardId: card.id, count: copies });
+    else spells.set(card.id, { def: card, count: copies });
+    return true;
+  };
+
+  for (const card of sampleDistinct(rng, castable, SOAK_ANCHOR_CARDS)) packAtAnchorStrength(card, SOAK_ANCHOR_COPIES);
   if (spells.size === 0 && landAnchors.length === 0) return undefined;
+  // The ENABLERS (see `SoakMechanic.enabledBy`) — the cards without which the
+  // anchor cannot do anything. They come second so the anchor's colours win any
+  // contest for the colour budget: an enabled deck that cannot cast its anchor
+  // is worse than an unenabled one.
+  for (const card of sampleDistinct(rng, index.enablersByMechanic.get(mechanic) ?? [], SOAK_ENABLER_CARDS)) {
+    packAtAnchorStrength(card, SOAK_ENABLER_COPIES);
+  }
   // A mono-colourless anchor (an artifact) still needs a colour to build around,
   // or the filler is colourless too and the deck plays four cards.
   if (colors.size === 0) for (const color of pickColors(rng, rollColorCount(rng))) colors.add(color);
@@ -493,8 +572,9 @@ export function buildAnchoredDeck(
   const deck = assemble(rng, index, colors, spells, seed, `soak-${mechanic}-${seed}`, mechanic);
   if (landAnchors.length === 0) return deck;
   // Anchor lands displace basics rather than adding to the deck, so it stays
-  // exactly `SOAK_DECK_SIZE` and stays legal.
-  return { ...deck, cards: displaceBasics(deck.cards, landAnchors, index) };
+  // exactly `SOAK_DECK_SIZE`; `normalizeEntries` then merges any line the mana
+  // base happened to pick as well, which is what keeps it LEGAL.
+  return { ...deck, cards: normalizeEntries(displaceBasics(deck.cards, landAnchors, index), index, new Set(deck.colors)) };
 }
 
 /**

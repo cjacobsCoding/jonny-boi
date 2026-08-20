@@ -62,6 +62,7 @@ import {
   isPlaneswalker,
   protectorOf,
   legalTargetsFor,
+  protectionBlocksSource,
   defenseOf,
   loyaltyOf,
   MANA_COLORS,
@@ -1563,7 +1564,7 @@ function attackIsProfitable(
   // blockers the defender actually needs: menace (or "except by N or more") means
   // a single blocker is not a legal block at all, so a lone potential blocker is
   // no deterrent and this attack is really unopposed.
-  const blockersNeeded = needsMultipleBlockers(attacker) ? MENACE_BLOCKERS_NEEDED : 1;
+  const blockersNeeded = needsMultipleBlockers(attacker, index) ? MENACE_BLOCKERS_NEEDED : 1;
   const blockerExists = eligibleBlockers >= blockersNeeded;
 
   // If the opponent has a block that's good for them (positive value) AND it kills
@@ -1659,7 +1660,7 @@ function pickBlocker(
   // block at all: it assigns a single blocker per attacker, and a lone blocker on
   // a menacing attacker makes the WHOLE declaration illegal - so every other
   // block in the same action is lost with it.
-  if (needsMultipleBlockers(attacker)) return undefined;
+  if (needsMultipleBlockers(attacker, index)) return undefined;
   const aPower = power(attacker, index);
   const aTough = toughness(attacker, index);
 
@@ -1959,6 +1960,18 @@ function canBlockByEvasion(
   if (bk.cantBlock) return false;
   if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
+  /*
+   * PROTECTION'S BLOCKING HALF (CR 702.16e): an attacker with protection from a
+   * quality can't be blocked by creatures having it. Core's `canBlock` has
+   * always enforced this; this mirror did not, so every white creature the pilot
+   * owned kept proposing a block on a Black Knight — and because a single
+   * illegal pair makes the WHOLE `declareBlockers` action illegal, the engine
+   * rejected the declaration, the harness passed priority after three
+   * rejections, and the defender took the entire attack UNBLOCKED. Found by the
+   * full-pool soak (`packages/sim/src/soak.ts`), seed 1948110550: "Wall of Omens
+   * cannot block Black Knight".
+   */
+  if (ak.protectionFrom !== undefined && protectionBlocksSource(ak.protectionFrom, blocker.def)) return false;
   return true;
 }
 
@@ -1970,14 +1983,20 @@ function canBlockByEvasion(
 const MENACE_BLOCKERS_NEEDED = 2;
 
 /**
- * Whether this attacker prints a blocking requirement of two or more creatures
+ * Whether this attacker has a blocking requirement of two or more creatures
  * (menace, or the general "except by N or more"). This pilot never assigns more
  * than one blocker to an attacker, so proposing ANY block on such a creature is
  * proposing an illegal declaration - the engine rejects the whole thing, and the
  * pilot loses every other block in it as well.
+ *
+ * Keywords are read EFFECTIVE, for the same reason `canBlockByEvasion` reads
+ * them effective: menace GRANTED by an Aura or an until-end-of-turn pump is
+ * menace, and the rules path (`requiredBlockerCount` in core) reads the granted
+ * set. Two answers to one question is exactly the shape `board-stats.ts` exists
+ * to make unspellable.
  */
-function needsMultipleBlockers(attacker: CardInstance): boolean {
-  const ak = attacker.def.keywords ?? {};
+function needsMultipleBlockers(attacker: CardInstance, index: ContinuousIndex): boolean {
+  const ak = keywordsOf(attacker, index);
   return Boolean(ak.menace) || (ak.minBlockers ?? 0) > 1;
 }
 

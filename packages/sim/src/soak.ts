@@ -10,7 +10,7 @@
  *
  * ## How the checks attach without forking the harness
  * `runMatch` hands each decision to a `Pilot`. So the soak WRAPS the pilot
- * ({@link createSoakPilot}): the wrapper sees the settled state before every
+ * (`createGameWatcher`): the wrapper sees the settled state before every
  * decision — which is precisely the moment state-based actions have finished, so
  * it is the right place to demand that nothing dead is still on the battlefield
  * — and it sees the ACTION the pilot chose, which is where a flashback cast, a
@@ -51,6 +51,7 @@ import type {
 } from '@jonny-boi/core';
 import {
   DEFAULT_RULES,
+  defenseOf,
   effectiveKeywords,
   effectiveToughness,
   indexContinuous,
@@ -58,8 +59,10 @@ import {
   isBattle,
   isCreature,
   isPlaneswalker,
+  loyaltyOf,
   NO_MOD,
   PLAYER_IDS,
+  PLUS_ONE_COUNTER,
   poolTotal,
 } from '@jonny-boi/core';
 import type { CardPool } from '@jonny-boi/cards';
@@ -420,9 +423,24 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
     record(SOAK_INVARIANTS.stackDepth, `the stack is ${state.stack.length} deep on turn ${state.turnNumber}`);
   }
 
+  /*
+   * ⚠️ **STATE-BASED ACTIONS ARE NOT CHECKED MID-RESOLUTION** (CR 704.3: they are
+   * checked when a player *would receive priority*, and CR 608.2: a spell
+   * finishes resolving first). A spell that deals lethal damage and then parks a
+   * question — Magma Jet's "2 damage, then scry 2" — genuinely leaves the dead
+   * creature on the battlefield until its scry is answered, and asserting
+   * otherwise reports a defect that does not exist. This harness did exactly
+   * that on its first run (seed 4100621904, Magma Jet into a Nightwind Glider);
+   * the creature dies the instant the choice is answered.
+   *
+   * `rules-audit.test.ts` documents this discipline ("settled means: between
+   * actions, with nothing mid-resolution") without implementing it — its curated
+   * decks simply never line the case up. The guard below is the implementation.
+   */
+  const settled = state.pendingChoice == null && state.resolution == null;
   const cont = indexContinuous(state);
   for (const inst of state.battlefield) {
-    if (isCreature(inst.def)) {
+    if (settled && isCreature(inst.def)) {
       const toughness = effectiveToughness(inst, cont.get(inst.instanceId) ?? NO_MOD);
       const kw = effectiveKeywords(inst, cont.get(inst.instanceId) ?? NO_MOD);
       if (toughness <= 0) {
@@ -436,17 +454,21 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
     }
     // A walker whose last loyalty counter is gone, or a battle whose last
     // defense counter is gone, is put into its owner's graveyard by a
-    // state-based action (CR 704.5i / 704.5s). Both are counters, so both are
-    // also covered by the non-negative check below — this is the "still here"
-    // half, which is the one that would let a player attack a dead walker.
-    if (isPlaneswalker(inst.def) && (inst.counters['loyalty'] ?? 0) <= 0) {
-      record(SOAK_INVARIANTS.deadWalkersLeave, `#${inst.instanceId} ${inst.def.name} sits at ${inst.counters['loyalty'] ?? 0} loyalty`);
+    // state-based action (CR 704.5i / 704.5s) — so, like the creature checks
+    // above, only once the resolution that removed them has finished.
+    if (settled && isPlaneswalker(inst.def) && loyaltyOf(inst) <= 0) {
+      record(SOAK_INVARIANTS.deadWalkersLeave, `#${inst.instanceId} ${inst.def.name} sits at ${loyaltyOf(inst)} loyalty`);
     }
-    if (isBattle(inst.def) && (inst.counters['defense'] ?? 0) <= 0) {
-      record(SOAK_INVARIANTS.deadBattlesLeave, `#${inst.instanceId} ${inst.def.name} sits at ${inst.counters['defense'] ?? 0} defense`);
+    if (settled && isBattle(inst.def) && defenseOf(inst) <= 0) {
+      record(SOAK_INVARIANTS.deadBattlesLeave, `#${inst.instanceId} ${inst.def.name} sits at ${defenseOf(inst)} defense`);
     }
     for (const [kind, amount] of Object.entries(inst.counters)) {
-      if (amount < 0) {
+      // `+1/+1` is the one SIGNED counter in this engine: a -1/-1 counter is
+      // modelled as a negative `+1/+1`, because that is the single counter the
+      // layer-7d stat pipeline reads (see `persistReturn` in
+      // `@jonny-boi/cards` — Kitchen Finks comes back as a 2/1 that way). Every
+      // other kind counts UP from zero and a negative one is a bug.
+      if (kind !== PLUS_ONE_COUNTER && amount < 0) {
         record(SOAK_INVARIANTS.countersNonNegative, `#${inst.instanceId} ${inst.def.name} has ${amount} ${kind} counters`);
       }
     }
@@ -454,7 +476,7 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
 
   for (const pid of PLAYER_IDS) {
     const player = state.players[pid as PlayerId];
-    if (player.life <= 0 && !state.gameOver) {
+    if (settled && player.life <= 0 && !state.gameOver) {
       record(SOAK_INVARIANTS.lossAtZeroLife, `${pid} is at ${player.life} life but the game is not over`);
     }
     if (poolTotal(player.manaPool) < 0) {
@@ -487,6 +509,8 @@ interface GameWatcher {
   readonly mechanics: ReadonlySet<SoakMechanicId>;
   /** Turns at which a turn-boundary check ran (so the caller can see it did). */
   readonly turnChecks: number;
+  /** The most recent settled state the wrapper was shown, or `null` before any. */
+  readonly lastState: GameState | null;
 }
 
 function createGameWatcher(inner: Pilot): GameWatcher {
@@ -504,6 +528,9 @@ function createGameWatcher(inner: Pilot): GameWatcher {
   const defs = new Map<InstanceId, CardDefinition>();
   const serialized = new Map<InstanceId, string>();
   let originalIds: Set<InstanceId> | null = null;
+  /** Stack object ids seen at the previous decision, and at the previous turn. */
+  const stackIdsThisTurn = new Set<InstanceId>();
+  let stackIdsLastTurn: ReadonlySet<InstanceId> = new Set();
   let lastTurn = 0;
   let lastState: GameState | null = null;
   let turnChecks = 0;
@@ -540,12 +567,30 @@ function createGameWatcher(inner: Pilot): GameWatcher {
     if (state.turnNumber !== lastTurn) {
       lastTurn = state.turnNumber;
       turnChecks++;
-      // Turn-boundary law: what a player checks the instant their turn starts.
-      // The stack must have emptied before the turn ended (CR 500.4/514.3) —
-      // a turn that begins with somebody's spell still on it is the shape of a
-      // game that cannot end.
-      if (state.stack.length > 0) {
-        record(SOAK_INVARIANTS.stackEmpties, `${state.stack.length} object(s) survived into turn ${state.turnNumber}`, state, action);
+      // Freeze what the previous turn ended with before this turn overwrites it.
+      stackIdsLastTurn = new Set(stackIdsThisTurn);
+      /*
+       * Turn-boundary law: what a player checks the instant their turn starts.
+       *
+       * THE STACK MUST HAVE EMPTIED before the turn ended (CR 500.4 — every step
+       * ends with an empty stack, and 514.3's cleanup only repeats while
+       * something is waiting). But "the stack is empty at the first decision of
+       * the turn" is the WRONG test, and asserting it reported three false
+       * defects on this harness's first run: the first decision of a turn is in
+       * the UPKEEP, and an upkeep trigger (Delver of Secrets) is put on the stack
+       * before anybody gets priority. So what is checked is that no object
+       * SURVIVED — the stack objects present now must all be new ones.
+       */
+      for (const obj of state.stack) {
+        if (stackIdsLastTurn.has(obj.instanceId)) {
+          record(
+            SOAK_INVARIANTS.stackEmpties,
+            `stack object #${obj.instanceId} (${obj.kind}) survived from turn ${state.turnNumber - 1} into turn ${state.turnNumber}`,
+            state,
+            action,
+          );
+          break;
+        }
       }
       const active = state.activePlayer;
       for (const inst of state.battlefield) {
@@ -569,6 +614,11 @@ function createGameWatcher(inner: Pilot): GameWatcher {
       }
     }
     lastState = state;
+    // Snapshot the stack for the next turn-boundary check above. Cleared and
+    // refilled every decision, so it always holds the LAST thing seen on the
+    // turn that is ending.
+    stackIdsThisTurn.clear();
+    for (const obj of state.stack) stackIdsThisTurn.add(obj.instanceId);
   };
 
   const pilot: Pilot = {
@@ -641,6 +691,9 @@ function createGameWatcher(inner: Pilot): GameWatcher {
     get turnChecks() {
       return turnChecks;
     },
+    get lastState() {
+      return lastState;
+    },
   };
 }
 
@@ -656,28 +709,57 @@ const FORBIDDEN_OBSERVATION_KEYS: readonly string[] = ['seed', 'prompt', 'answer
  * A pilot that watches the observation feed and reports anything it should not
  * have been told. Wraps the soak pilot so a scanned game plays IDENTICALLY to an
  * unscanned one apart from the observer being attached.
+ *
+ * ⚠️ **THE SCAN'S TIMING IS THE WHOLE TEST, and it is easy to get backwards.**
+ * "Is this card hidden?" must be asked of the state the action LANDED IN, not
+ * the one it started from. A land played from hand is named by `landPlayed` and
+ * by a `zoneChange` into the battlefield — both entirely public — and it was
+ * sitting in a hand a microsecond earlier. Scanning against the pre-action state
+ * therefore reports every land drop in the game as a leak. (It did, on the first
+ * run of this file.) The equal and opposite mistake is scanning at the END of the
+ * game: a creature bounced to hand later would retro-actively turn an honest
+ * `spellCast` into a leak.
+ *
+ * So observations are BUFFERED as they arrive and flushed at the next decision,
+ * whose `view` is exactly the post-action state — the same instant
+ * `observation.test.ts` scans at with its own hand-rolled loop. The tail (the
+ * final action of a game, after which nobody is asked to decide) is flushed
+ * against the last state seen, which is the closest truth available and cannot
+ * mask a leak that a later game state would have revealed.
  */
 function createLeakScanningPilot(
   inner: Pilot,
-  hidden: () => ReadonlySet<InstanceId>,
   report: (detail: string) => void,
-): Pilot {
+): Pilot & { flush(state: GameState | null): void } {
+  const pending: Observation[] = [];
+  const flush = (state: GameState | null): void => {
+    if (pending.length === 0) return;
+    const hidden = state ? hiddenInstanceIds(state) : new Set<InstanceId>();
+    for (const observation of pending) {
+      for (const key of FORBIDDEN_OBSERVATION_KEYS) {
+        if (key in (observation as Record<string, unknown>)) {
+          report(`observation ${observation.type} carries a forbidden field "${key}"`);
+        }
+      }
+      const present = collectInstanceIds(observation);
+      for (const id of hidden) {
+        if (present.has(id)) report(`observation ${observation.type} names #${id}, which is in a hidden zone`);
+      }
+    }
+    pending.length = 0;
+  };
   return {
     id: `leakscan(${inner.id})`,
     description: `${inner.description} — plus the soak's redaction scan`,
-    chooseAction: (ctx) => inner.chooseAction(ctx),
+    flush,
+    chooseAction(ctx) {
+      flush(ctx.view as unknown as GameState);
+      return inner.chooseAction(ctx);
+    },
     createGameObserver(): GameObserver {
       return {
         observe(observation: Observation) {
-          for (const key of FORBIDDEN_OBSERVATION_KEYS) {
-            if (key in (observation as Record<string, unknown>)) {
-              report(`observation ${observation.type} carries a forbidden field "${key}"`);
-            }
-          }
-          const present = collectInstanceIds(observation);
-          for (const id of hidden()) {
-            if (present.has(id)) report(`observation ${observation.type} names #${id}, which is in a hidden zone`);
-          }
+          pending.push(observation);
         },
       };
     },
@@ -726,22 +808,10 @@ function playOne(
   const watcher = createGameWatcher(options.pilot);
   const leakEvery = options.leakScanEvery ?? 0;
   const scanning = leakEvery > 0 && gameIndex % leakEvery === 0;
-  // The scan needs the hidden set AT THE MOMENT the observation is delivered.
-  // `runMatch` owns the state, so the watcher's most recent view is the closest
-  // truth available — and it is the right one: an observation is delivered while
-  // applying an action whose starting state is exactly that view.
-  let liveHidden: ReadonlySet<InstanceId> = new Set();
-  const basePilot = watcher.pilot;
-  const trackingPilot: Pilot = {
-    ...basePilot,
-    chooseAction(ctx) {
-      liveHidden = hiddenInstanceIds(ctx.view as unknown as GameState);
-      return basePilot.chooseAction(ctx);
-    },
-  };
-  const pilot = scanning
-    ? createLeakScanningPilot(trackingPilot, () => liveHidden, (detail) => push(SOAK_INVARIANTS.noObservationLeak, detail))
-    : trackingPilot;
+  const scanner = scanning
+    ? createLeakScanningPilot(watcher.pilot, (detail) => push(SOAK_INVARIANTS.noObservationLeak, detail))
+    : null;
+  const pilot: Pilot = scanner ?? watcher.pilot;
 
   const seats = makeSeats(loadedA, loadedB, { pilotA: pilot, pilotB: pilot }, options.registry);
 
@@ -753,6 +823,11 @@ function playOne(
     push(SOAK_INVARIANTS.noException, stack.split('\n').slice(0, 6).join(' | '));
     return { result: null, violations: out, mechanics: watcher.mechanics };
   }
+
+  // The tail: observations emitted by the game's final action, which no later
+  // decision will flush. See `createLeakScanningPilot` for why the state used
+  // here is the closest available truth.
+  scanner?.flush(watcher.lastState);
 
   for (const v of watcher.violations) push(v.invariant, v.detail, v.turn, v.step, v.action);
 
