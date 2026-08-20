@@ -968,6 +968,19 @@ export function runSoak(options: SoakOptions): SoakReport {
   const nameOf = (id: string) => options.pool.get(id)?.name ?? id;
   const required = requiredMechanicsOf(index);
 
+  /*
+   * The sampled checks apply to BOTH halves. The anchored half is where the
+   * exotic systems live (a transform deck, a madness deck), so scanning only the
+   * mixed half would aim the two most expensive checks away from the cards most
+   * likely to break them. The stride runs over the global game index, so the
+   * anchored games at 0, 31, 62 … are the ones that get scanned.
+   */
+  const withSampling: SoakOptions = {
+    ...options,
+    leakScanEvery: options.leakScanEvery ?? SOAK_LEAK_SCAN_SAMPLE_EVERY,
+    equivalenceEvery: options.equivalenceEvery ?? SOAK_EQUIVALENCE_SAMPLE_EVERY,
+  };
+
   const violations: SoakViolation[] = [];
   const mechanicGames = new Map<SoakMechanicId, number>();
   const wins: Record<PlayerId, number> = { A: 0, B: 0 };
@@ -1010,7 +1023,7 @@ export function runSoak(options: SoakOptions): SoakReport {
       const other = required[(m + 1 + attempt) % required.length]!;
       const deckB = buildAnchoredDeck(index, other, seed ^ 0x5bf03635) ?? buildMixedDeck(index, seed ^ 0x5bf03635);
       if (!deckA) break; // the pool cannot anchor it — reported by the inert list
-      const played = playOne(options, deckA, deckB, seed, gameIndex, sim, nameOf);
+      const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
       violations.push(...played.violations);
       tally(played.mechanics);
       account(played.result);
@@ -1024,15 +1037,7 @@ export function runSoak(options: SoakOptions): SoakReport {
     const seed = gameSeedFor(options.baseSeed ^ 0x1d872b41, g);
     const deckA = buildMixedDeck(index, seed);
     const deckB = buildMixedDeck(index, seed ^ 0x27d4eb2f);
-    const played = playOne(
-      { ...options, leakScanEvery: options.leakScanEvery ?? SOAK_LEAK_SCAN_SAMPLE_EVERY, equivalenceEvery: options.equivalenceEvery ?? SOAK_EQUIVALENCE_SAMPLE_EVERY },
-      deckA,
-      deckB,
-      seed,
-      gameIndex,
-      sim,
-      nameOf,
-    );
+    const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
     violations.push(...played.violations);
     tally(played.mechanics);
     account(played.result);
