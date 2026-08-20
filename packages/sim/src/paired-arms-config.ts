@@ -74,6 +74,16 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   'revealTopCard',
   // Writes a card into the library, moving the slot we reason about.
   'putFromHandOnTop',
+  /*
+   * Teferi's Puzzle Box: writes the WHOLE HAND into the library (at the bottom)
+   * and then draws that many cards. Classified with `putFromHandOnTop` and for
+   * the same reason — it moves cards into the library, so the slot the runner
+   * reasons about is no longer the slot it started from. The bottoming ORDER is
+   * chosen by a pilot looking at a hand the swap may have changed, which is the
+   * second, independent reason: the two arms can pick different orders from the
+   * same visible moves.
+   */
+  'handToBottomThenDraw',
   // A shuffle permutes both arms identically, but the *question* ("may I shuffle?")
   // is answered by a pilot valuing a library it can see. Classified conservatively.
   'mayShuffleLibrary',
