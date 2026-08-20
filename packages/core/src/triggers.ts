@@ -22,6 +22,7 @@ import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
 import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
 import type { TargetRestriction } from './targeting.js';
+import type { InterveningIf } from './intervening.js';
 
 /**
  * The game occurrences a trigger can watch. Kept small and explicit (the §3.9
@@ -42,6 +43,12 @@ import type { TargetRestriction } from './targeting.js';
  *   - `combatDamageToPlayer` : this permanent dealt COMBAT damage to a player.
  *   - `permanentEnters`: ANOTHER permanent entered the battlefield — "whenever a
  *                        creature you control enters", landfall, constellation.
+ *   - `drawsCard`      : a player DREW a card ("whenever a player draws a card",
+ *                        "whenever an opponent draws a card"). Scoped by `who`
+ *                        like every other relational trigger. It watches the
+ *                        `drawCard` event, so it counts every draw — the draw
+ *                        step's, a spell's, and another trigger's — which is
+ *                        what the printed line says.
  *   - `permanentDies`  : a permanent died (battlefield → graveyard) — "whenever a
  *                        creature you control dies", "whenever ~ or another
  *                        creature dies". Distinct from `dies`, which is this
@@ -74,7 +81,8 @@ export type TriggerEvent =
   | 'gainLife'
   | 'combatDamageToPlayer'
   | 'permanentEnters'
-  | 'permanentDies';
+  | 'permanentDies'
+  | 'drawsCard';
 
 /**
  * Whose action a relational trigger (cast / a step / life gain) cares about.
@@ -125,6 +133,23 @@ export interface TriggerCondition {
    * turn it lands.
    */
   readonly excludeSelf?: boolean;
+  /**
+   * The printed **intervening "if"** clause — "at the beginning of your upkeep,
+   * **if you control three or more artifacts**, you gain 1 life".
+   *
+   * It is part of the CONDITION, not of the body, because CR 603.4 checks it
+   * TWICE: once when the trigger would fire (a false condition means the ability
+   * never goes on the stack at all) and again as it resolves (a condition that
+   * has since become false removes the ability from the stack, doing nothing).
+   * Compiling it as an `if` inside the effects would implement only the second
+   * check — the ability would still go on the stack, still be counted by
+   * anything watching the stack, and still be responded to.
+   *
+   * Evaluated by `interveningIfHolds` (intervening.ts), which needs the game
+   * state; `triggers.ts` stays a pure matcher, so the runtime applies it after
+   * this file has said the event matched.
+   */
+  readonly intervening?: InterveningIf;
 }
 
 /**
@@ -169,6 +194,23 @@ export interface PendingTrigger {
   readonly ability: TriggeredAbility;
   /** A stable per-source ordering key (index of the ability on the card). */
   readonly abilityIndex: number;
+  /**
+   * The player the EVENT was about — whose step began, who gained the life, who
+   * drew the card, who controlled the permanent that entered or died. This is
+   * the referent of the printed words "**that player**" / "**them**".
+   *
+   * It exists because the triggering player does NOT otherwise survive into the
+   * resolution: a `who: 'any'` trigger fires under the SOURCE's controller, so a
+   * body that read `ctx.controller` would make Howling Mine draw its own
+   * controller a card on every player's draw step — a different card. The value
+   * rides the stack object and then the resolution frame into `EffectContext`,
+   * exactly the way `xValue` and `kicked` ride a cast-time choice down to
+   * "deals X damage".
+   *
+   * Absent for a trigger whose event is about no particular player (a self ETB,
+   * an attack, this permanent's own death), where a body has nothing to point at.
+   */
+  readonly triggeringPlayer?: PlayerId;
 }
 
 /** The card-name + source needed to describe a pending trigger for events. */
@@ -240,6 +282,13 @@ export function conditionMatches(
       if (event.type !== 'gainLife') return false;
       return whoMatches(condition.who, event.player, sourceController);
     }
+    case 'drawsCard': {
+      // "Whenever a player draws a card" / "whenever an opponent draws a card".
+      // Keyed on `drawCard`, the one event every draw path emits, so the turn's
+      // own draw counts exactly as a spell's does.
+      if (event.type !== 'drawCard') return false;
+      return whoMatches(condition.who, event.player, sourceController);
+    }
     case 'combatDamageToPlayer':
       // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
       // the string test is what distinguishes "to a player" from "to a
@@ -253,6 +302,46 @@ export function conditionMatches(
     default:
       // Unknown condition kind → never matches (safe no-op).
       return false;
+  }
+}
+
+/**
+ * Who the event was ABOUT — the referent of a body's "that player" / "them".
+ *
+ * Answered from the EVENT rather than from the source, which is the whole point:
+ * a `who: 'any'` trigger resolves under the source's controller, so this is the
+ * only place the other player survives. Returns `undefined` for the events that
+ * are about a permanent or about nobody, where no printed body says "that
+ * player".
+ *
+ * Called only for triggers that actually matched (a handful per turn), never on
+ * the per-event scan.
+ */
+export function triggeringPlayerFor(
+  condition: TriggerCondition,
+  event: GameEvent,
+  subject?: TriggerSubject,
+): PlayerId | undefined {
+  switch (condition.on) {
+    case 'upkeep':
+    case 'drawStep':
+    case 'precombatMain':
+    case 'endStep':
+    case 'beginCombat':
+      return event.type === 'stepBegin' ? event.activePlayer : undefined;
+    case 'gainLife':
+      return event.type === 'gainLife' ? event.player : undefined;
+    case 'drawsCard':
+      return event.type === 'drawCard' ? event.player : undefined;
+    case 'castSpell':
+      return event.type === 'spellCast' ? event.player : undefined;
+    case 'permanentEnters':
+    case 'permanentDies':
+      // The permanent's CONTROLLER — "whenever a creature an opponent controls
+      // dies, that player loses 1 life".
+      return subject?.controller;
+    default:
+      return undefined;
   }
 }
 
@@ -373,11 +462,19 @@ export function matchTriggers(
       ) {
         continue;
       }
+      // Resolved only for the triggers that FIRED, and only when the event
+      // names a player at all — so the per-event scan above pays nothing.
+      const triggeringPlayer = triggeringPlayerFor(
+        ability.condition,
+        event,
+        watchesBoard ? subjectOf() : undefined,
+      );
       (pending ??= []).push({
         sourceInstanceId: src.instanceId,
         controller: src.controller,
         ability,
         abilityIndex,
+        ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
       });
     }
   }

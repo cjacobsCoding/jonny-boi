@@ -416,6 +416,20 @@ export interface TriggeredStackObject {
    * reason state-based actions are derived from the board rather than queued.
    */
   readonly awaitingTargets?: TargetRestriction;
+  /**
+   * The player the EVENT that set this ability off was about — the referent of
+   * a body's "that player" / "them". Rides the stack object so it survives into
+   * the resolution frame and then into `EffectContext`, exactly the way a cast's
+   * `xValue`/`kicked` do (see `PendingTrigger.triggeringPlayer` for why the
+   * source's controller is NOT the answer).
+   */
+  readonly triggeringPlayer?: PlayerId;
+  /**
+   * The trigger's printed intervening "if", carried so it can be re-checked as
+   * the ability RESOLVES (CR 603.4's second check). Absent for every trigger
+   * that prints no such clause, which is almost all of them.
+   */
+  readonly intervening?: import('./intervening.js').InterveningIf;
 }
 
 /** Anything that can sit on the stack. */

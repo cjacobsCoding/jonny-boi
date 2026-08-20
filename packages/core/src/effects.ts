@@ -64,6 +64,23 @@ export interface EffectContext {
    * through {@link kicked}.
    */
   readonly kickCount?: number;
+  /**
+   * For a TRIGGERED ability: the player the event that set it off was about —
+   * whose step began, who drew the card, who controlled the permanent that
+   * entered or died. This is what a body's printed "**that player**" / "**them**"
+   * points at.
+   *
+   * It is NOT `controller`, and the difference is the whole reason the field
+   * exists: an "at the beginning of EACH player's draw step" ability resolves
+   * under its source's controller on both players' turns, so a body reading
+   * `controller` would make Howling Mine draw its own controller a card every
+   * turn instead of drawing whoever's draw step it is.
+   *
+   * `undefined` for spells and for triggers whose event names no player — a
+   * primitive asked for the triggering player then falls back to the controller,
+   * matching how every other player param degrades.
+   */
+  readonly triggeringPlayer?: PlayerId;
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -295,6 +312,7 @@ export function applyEffectRef(
     xValue: base.xValue,
     kicked: base.kicked,
     kickCount: base.kickCount,
+    triggeringPlayer: base.triggeringPlayer,
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
@@ -348,7 +366,7 @@ export function applyEffectRef(
 /** The parts of an `EffectContext` the caller supplies; the rest are wired here. */
 export type EffectContextBase = Pick<
   EffectContext,
-  'state' | 'source' | 'controller' | 'xValue' | 'kicked' | 'kickCount'
+  'state' | 'source' | 'controller' | 'xValue' | 'kicked' | 'kickCount' | 'triggeringPlayer'
 >;
 
 /**

@@ -21,6 +21,7 @@ import type { CardInstance, GameState, InstanceId } from '../state.js';
 import { recordTurnFacts } from '../turn-facts.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
 import { matchTriggers, orderPendingTriggers } from '../triggers.js';
+import { interveningIfHolds } from '../intervening.js';
 
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
@@ -198,8 +199,18 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     snapshot ??= [...seenSources.values()];
     const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
-    if (queue === null) queue = [];
-    for (const m of matched) queue.push(m);
+    for (const m of matched) {
+      // CR 603.4's FIRST check: an ability whose intervening "if" is false does
+      // not trigger at all — it never reaches the stack, so nobody may respond
+      // to it. Done here rather than inside `matchTriggers` because the answer
+      // needs the game state and `triggers.ts` is a pure matcher.
+      if (
+        !interveningIfHolds(state, m.ability.condition.intervening, m.sourceInstanceId, m.controller, m.triggeringPlayer)
+      ) {
+        continue;
+      }
+      (queue ??= []).push(m);
+    }
   };
 
   const flush = (): number => {
@@ -220,6 +231,14 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         effects: pending.ability.effects,
         targets: [],
         label,
+        // Carried onto the stack object so the body can say "that player" — see
+        // `PendingTrigger.triggeringPlayer`. Conditional so every trigger that
+        // names no player is pushed byte-for-byte as it always was.
+        ...(pending.triggeringPlayer !== undefined ? { triggeringPlayer: pending.triggeringPlayer } : {}),
+        // Carried for CR 603.4's second check, made as the ability resolves.
+        ...(pending.ability.condition.intervening !== undefined
+          ? { intervening: pending.ability.condition.intervening }
+          : {}),
         // An ability that declares what it targets goes on the stack UNAIMED; the
         // engine asks its controller immediately afterwards (`aimPendingTriggers`),
         // which is when the rules say targets are chosen. Absent for every other
