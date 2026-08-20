@@ -3094,7 +3094,7 @@ export function additionalCostCandidates(
  * cast at all, rather than cast without the cost. That is the entire reason
  * this is a hard gate and not a declinable question.
  */
-function unpayableAdditionalCostReason(
+export function unpayableAdditionalCostReason(
   state: GameState,
   def: CardDefinition,
   caster: PlayerId,

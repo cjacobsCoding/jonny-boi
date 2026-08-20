@@ -280,7 +280,19 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     id: 'transform-dfc',
     label: 'transforming double-faced cards — a permanent flipped',
     witnessKind: 'event',
-    printedBy: hasKey('backFace'),
+    /*
+     * NOT `hasKey('backFace')`. FOUR printed layouts hang a second half off that
+     * field — split, aftermath, adventure and the modal DFC — and none of them
+     * ever emits `transformed`; they have their own `second-castable-face`
+     * witness. The moment the pool gained them (44 cards against Delver's one)
+     * this theme's deck was drafted almost entirely out of cards that cannot
+     * transform, and the mechanic reported INERT while its one real card was
+     * never dealt into a game. A TRANSFORMING DFC is the one whose back face is
+     * not separately castable.
+     */
+    printedBy: (c) =>
+      (c as { backFace?: unknown }).backFace !== undefined &&
+      (c as { backFaceCastable?: boolean }).backFaceCastable !== true,
   },
   {
     id: 'modal-cast',
