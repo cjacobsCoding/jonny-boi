@@ -332,7 +332,7 @@ describe('CR 602 — activating an ability', () => {
 // --- CR 603: triggered abilities ---------------------------------------------------------
 
 describe('CR 603 — triggered abilities', () => {
-  crTest('603.2', 'a triggered ability goes on the stack the next time a player would get priority', () => {
+  crTest('603.3', 'a triggered ability goes on the stack the next time a player would get priority', () => {
     const state = atMain();
     const [card] = giveHand(state, 'A', [PINGER]);
     let s = withRedMana(state, 1);
@@ -369,7 +369,7 @@ describe('CR 603 — triggered abilities', () => {
     expect(s.continuous).toHaveLength(1);
   });
 
-  crTest('603.2', 'a trigger whose condition never occurs never goes on the stack', () => {
+  crTest('603.3', 'a trigger whose condition never occurs never goes on the stack', () => {
     const state = atMain();
     // The Pinger is put onto the battlefield directly (no zone change into it
     // through the engine), so no ETB event exists to match.
@@ -413,7 +413,7 @@ describe('CR 606 — loyalty abilities', () => {
     ).toBeTruthy();
   });
 
-  crTest('118.5', 'a minus ability cannot be activated for more loyalty than the walker has', () => {
+  crTest('606.6', 'a minus ability cannot be activated for more loyalty than the walker has', () => {
     const { state, walkerId } = withWalker();
     expect(
       generateLegalActions(state).some(
@@ -457,7 +457,7 @@ describe('CR 608 — resolving spells and abilities', () => {
 // --- CR 614: replacement effects ------------------------------------------------------------------
 
 describe('CR 614 — replacement effects', () => {
-  crTest('614.1', 'a permanent that "enters tapped" is never untapped on the battlefield first', () => {
+  crTest('614.1c', 'a permanent that "enters tapped" is never untapped on the battlefield first', () => {
     const state = atMain();
     const [card] = giveHand(state, 'A', [TAPLAND]);
     const after = actWithEvents(state, { kind: 'playLand', player: 'A', instanceId: card!.instanceId }, registry);

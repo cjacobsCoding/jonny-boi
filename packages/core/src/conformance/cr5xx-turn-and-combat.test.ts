@@ -116,7 +116,7 @@ describe('CR 500–505 — phases and steps', () => {
     expect(seen.slice(0, expectedTail.length)).toEqual([...expectedTail]);
   });
 
-  crTest('502.3', 'no player receives priority during the untap step', () => {
+  crTest('502.4', 'no player receives priority during the untap step', () => {
     const state = atMain();
     // Run into the next turn and record every step a priority window opened in.
     let s = state;
@@ -129,7 +129,7 @@ describe('CR 500–505 — phases and steps', () => {
     expect(withPriority.has('upkeep')).toBe(true);
   });
 
-  crTest('502.1', 'the active player untaps their permanents as their turn begins', () => {
+  crTest('502.3', 'the active player untaps their permanents as their turn begins', () => {
     const state = atMain();
     const mine = putOnBattlefield(state, 'A', BEAR, { tapped: true });
     const theirs = putOnBattlefield(state, 'B', BEAR, { tapped: true });
@@ -150,7 +150,7 @@ describe('CR 500–505 — phases and steps', () => {
     expect(drawStep.players.B.hand.length).toBe(before + 1);
   });
 
-  crTest('505.6b', 'a sorcery may only be cast in the active player’s main phase with an empty stack', () => {
+  crTest('505.6a', 'a sorcery may only be cast in the active player’s main phase with an empty stack', () => {
     const sorcery: CardDefinition = { id: 'slow', name: 'Slow', types: ['sorcery'], effects: [{ primitive: 'noop' }] };
     const state = atMain();
     const [card] = giveHand(state, 'A', [sorcery]);
@@ -185,7 +185,7 @@ describe('CR 508 — declare attackers', () => {
     ).toMatch(/do not control/i);
   });
 
-  crTest('508.1c', 'a tapped creature cannot be declared as an attacker', () => {
+  crTest('508.1a', 'a tapped creature cannot be declared as an attacker', () => {
     const state = atMain();
     const tapped = putOnBattlefield(state, 'A', BEAR, { tapped: true });
     const declare = advanceTo(state, 'declareAttackers', registry);
@@ -275,7 +275,7 @@ describe('CR 509 — declare blockers', () => {
     ).toMatch(/is not attacking/i);
   });
 
-  crTest('509.1h', 'a blocked creature deals no damage to the defending player, even so', () => {
+  crTest('510.1c', 'a blocked creature deals no damage to the defending player, even so', () => {
     const state = atMain();
     const attacker = putOnBattlefield(state, 'A', BEAR);
     const blocker = putOnBattlefield(state, 'B', creatureDef('Wall', 0, 9));
@@ -295,7 +295,7 @@ describe('CR 509 — declare blockers', () => {
     expect(onBattlefield(s, blocker.instanceId)?.damageMarked).toBe(2);
   });
 
-  crTest('509.1b', 'a blocked creature stays blocked even after its blocker leaves combat', () => {
+  crTest('509.1h', 'a blocked creature stays blocked even after its blocker leaves combat', () => {
     // The blocker dies in the first-strike step; without trample the attacker
     // still deals nothing to the player in the normal step.
     const state = atMain();
@@ -325,7 +325,7 @@ describe('CR 509 — declare blockers', () => {
 // --- CR 510: combat damage ------------------------------------------------------------------
 
 describe('CR 510 — combat damage', () => {
-  crTest('510.1c', 'an unblocked attacker deals its power to the defending player', () => {
+  crTest('510.1b', 'an unblocked attacker deals its power to the defending player', () => {
     const state = atMain();
     const attacker = putOnBattlefield(state, 'A', BEAR);
     const lifeBefore = state.players.B.life;
@@ -333,7 +333,7 @@ describe('CR 510 — combat damage', () => {
     expect(s.players.B.life).toBe(lifeBefore - BEAR.power!);
   });
 
-  crTest('510.1a', 'a blocked attacker and its blocker deal damage to each other simultaneously', () => {
+  crTest('510.2', 'a blocked attacker and its blocker deal damage to each other simultaneously', () => {
     const state = atMain();
     const attacker = putOnBattlefield(state, 'A', creatureDef('Trader', 2, 2));
     const blocker = putOnBattlefield(state, 'B', creatureDef('Trader B', 2, 2));
@@ -448,7 +448,7 @@ describe('CR 511 / 514 — end of combat and cleanup', () => {
     expect(withPriority.has('end')).toBe(true);
   });
 
-  crTest('500.4', 'each player’s mana pool empties as a step ends', () => {
+  crTest('500.5', 'each player’s mana pool empties as a step ends', () => {
     const state = atMain();
     const land = putOnBattlefield(state, 'A', MOUNTAIN);
     let s = act(state, { kind: 'tapForMana', player: 'A', instanceId: land.instanceId }, registry);
@@ -461,7 +461,7 @@ describe('CR 511 / 514 — end of combat and cleanup', () => {
 // --- turn hand-off ----------------------------------------------------------------------------
 
 describe('CR 500 — turn hand-off', () => {
-  crTest('500.7', 'the turn passes to the other player after cleanup', () => {
+  crTest('500.1', 'the turn passes to the other player after cleanup', () => {
     const state = atMain();
     const first: PlayerId = state.activePlayer;
     let s = state;
@@ -470,7 +470,7 @@ describe('CR 500 — turn hand-off', () => {
     expect(s.activePlayer).not.toBe(first);
   });
 
-  crTest('505.5a', 'each player’s land drop resets as their turn begins', () => {
+  crTest('505.6b', 'each player’s land drop resets as their turn begins', () => {
     const state = atMain();
     const [land] = giveHand(state, 'A', [MOUNTAIN]);
     let s = act(state, { kind: 'playLand', player: 'A', instanceId: land!.instanceId }, registry);

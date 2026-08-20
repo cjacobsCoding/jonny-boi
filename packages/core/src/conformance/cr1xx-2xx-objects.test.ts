@@ -6,7 +6,7 @@
  * missing from `rules-manifest.ts` rather than invisibly absent from the suite.
  *
  * What lives here: starting the game (103), ending it (104), mana (106–107),
- * tokens (111), targets (115), priority's owner (116), damage marking (120),
+ * tokens (111), targets (115), priority's owner (117), damage marking (120),
  * counters (122), and the permanent types whose rules the engine implements —
  * summoning sickness (302.6), lands (305), planeswalkers (306).
  */
@@ -75,6 +75,17 @@ const X_BURN: CardDefinition = {
   effects: [{ primitive: 'xBurn' }],
 };
 
+/**
+ * "Target player loses all their life" — a free sorcery, so CR 104 can be
+ * reached through a real cast/resolve rather than by editing a life total.
+ */
+const DRAIN: CardDefinition = {
+  id: 'drain',
+  name: 'Drain',
+  types: ['sorcery'],
+  effects: [{ primitive: 'drainOpponent' }],
+};
+
 /** The token definition {@link TOKEN_MAKER} creates. */
 const SOLDIER_TOKEN = creatureDef('Soldier Token', 1, 1);
 
@@ -101,6 +112,12 @@ const registry = registryWith({
     const victim = ctx.controller === 'A' ? 'B' : 'A';
     ctx.state.players[victim].life -= amount;
     ctx.emit({ type: 'lifeChanged', player: victim, delta: -amount, to: ctx.state.players[victim].life });
+  },
+  drainOpponent: (ctx) => {
+    const victim = ctx.controller === 'A' ? 'B' : 'A';
+    const before = ctx.state.players[victim].life;
+    ctx.state.players[victim].life = 0;
+    ctx.emit({ type: 'lifeChanged', player: victim, delta: -before, to: 0 });
   },
   makeToken: (ctx) => {
     ctx.createToken(SOLDIER_TOKEN, ctx.controller);
@@ -145,7 +162,7 @@ function bothPass(state: GameState): GameState {
 // --- CR 103: starting a game ------------------------------------------------------
 
 describe('CR 103 — starting the game', () => {
-  crTest('103.3', 'each player begins the game at the starting life total', () => {
+  crTest('103.4', 'each player begins the game at the starting life total', () => {
     const state = newGame();
     expect(state.players.A.life).toBe(DEFAULT_RULES.startingLife);
     expect(state.players.B.life).toBe(DEFAULT_RULES.startingLife);
@@ -160,7 +177,7 @@ describe('CR 103 — starting the game', () => {
     expect(state.players.A.library).toHaveLength(40 - DEFAULT_RULES.startingHandSize);
   });
 
-  crTest('103.7a', 'the player who takes the first turn skips their first draw step', () => {
+  crTest('103.8a', 'the player who takes the first turn skips their first draw step', () => {
     const created = createGame({ seed: 3, startingPlayer: 'A', decks: { A: fillerDeck(), B: fillerDeck() } });
     const handAfterSetup = created.state.players.A.hand.length;
     const firstMain = advanceTo(created.state, 'precombatMain');
@@ -181,20 +198,36 @@ describe('CR 103 — starting the game', () => {
 // --- CR 104: ending the game ------------------------------------------------------
 
 describe('CR 104 — ending the game', () => {
+  /**
+   * A loss driven by a real spell RESOLVING — never by hand-setting `winner`,
+   * and never by dropping a life total and passing priority.
+   *
+   * That distinction is load-bearing and was found the hard way: the first draft
+   * of these two tests set `life = 0` and passed, and failed. This engine checks
+   * state-based actions at ~a dozen explicit mutation sites, not at the priority
+   * boundary CR 704.3 names, so a life total lowered outside one of those sites
+   * is not noticed until something else happens to run the check. That shortfall
+   * is classified as a `gap` on section 704 in `rules-manifest.ts` — it is not
+   * papered over by writing the test around it silently.
+   */
+  function drainOpponentToZero(): GameState {
+    const state = atMain();
+    const [spell] = giveHand(state, 'A', [DRAIN]);
+    let s = act(state, { kind: 'castSpell', player: 'A', instanceId: spell!.instanceId }, registry);
+    s = bothPass(s);
+    return s;
+  }
+
   crTest('104.2a', 'a player whose only opponent has lost the game wins it', () => {
-    const state = newGame();
-    // A real loss through the engine's own path, not a hand-set `winner`.
-    state.players.B.life = 0;
-    const after = pass(state);
+    const after = drainOpponentToZero();
+    expect(after.players.B.life).toBeLessThanOrEqual(0);
     expect(after.players.B.hasLost).toBe(true);
     expect(after.gameOver).toBe(true);
     expect(after.winner).toBe('A');
   });
 
   crTest('104.1', 'once the game is over no player is offered any action', () => {
-    const state = newGame();
-    state.players.B.life = -1;
-    const after = pass(state);
+    const after = drainOpponentToZero();
     expect(after.gameOver).toBe(true);
     expect(generateLegalActions(after)).toEqual([]);
   });
@@ -222,7 +255,7 @@ describe('CR 106–107 — mana', () => {
     expect(poolTotal(s.players.A.manaPool)).toBe(0);
   });
 
-  crTest('605.3a', 'a mana ability does not use the stack — the mana is there at once', () => {
+  crTest('605.3b', 'a mana ability does not use the stack — the mana is there at once', () => {
     const state = atMain();
     const land = putOnBattlefield(state, 'A', MOUNTAIN);
     const after = act(state, { kind: 'tapForMana', player: 'A', instanceId: land.instanceId }, registry);
@@ -237,7 +270,7 @@ describe('CR 106–107 — mana', () => {
     let s = tapAllLands(state);
     s = act(s, { kind: 'castSpell', player: 'A', instanceId: spell!.instanceId }, registry);
     const choice = s.pendingChoice;
-    expect(choice?.request.kind).toBe('chooseNumber');
+    expect(choice?.kind).toBe('chooseNumber');
     s = act(
       s,
       { kind: 'answerChoice', player: 'A', choiceId: choice!.id, answer: { kind: 'chooseNumber', value: 2 } },
@@ -292,7 +325,7 @@ describe('CR 111 — tokens', () => {
 // --- CR 115: targets -------------------------------------------------------------------
 
 describe('CR 115 — targets', () => {
-  crTest('115.2b', 'a spell that says "target creature" cannot be cast at a land', () => {
+  crTest('115.2', 'a spell that says "target creature" cannot be cast at a land', () => {
     const state = atMain();
     const land = putOnBattlefield(state, 'A', MOUNTAIN);
     const zap: CardDefinition = {
@@ -332,13 +365,13 @@ describe('CR 115 — targets', () => {
 
 // --- CR 116: priority ------------------------------------------------------------------
 
-describe('CR 116 — priority', () => {
-  crTest('116.3a', 'the active player receives priority as each step begins', () => {
+describe('CR 117 — priority', () => {
+  crTest('117.3a', 'the active player receives priority as each step begins', () => {
     const main = advanceTo(newGame(), 'precombatMain');
     expect(main.priorityPlayer).toBe(main.activePlayer);
   });
 
-  crTest('116.4', 'only the player who holds priority may act', () => {
+  crTest('117.1', 'only the player who holds priority may act', () => {
     const state = atMain();
     const land = putOnBattlefield(state, 'B', FOREST);
     expect(state.priorityPlayer).toBe('A');

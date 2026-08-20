@@ -163,7 +163,7 @@ describe('CR 400.7 — an object that changes zones becomes a new object', () =>
 // --- CR 401: library ------------------------------------------------------------------
 
 describe('CR 401 — library', () => {
-  crTest('401.1', 'the library is an ordered zone and a draw takes the card from the TOP', () => {
+  crTest('401.2', 'the library is an ordered zone and a draw takes the card from the TOP', () => {
     const state = atMain();
     const marker = creatureDef('Top Card', 9, 9);
     giveLibrary(state, 'A', [marker, BEAR, BEAR, BEAR, BEAR, BEAR, BEAR]);
@@ -195,7 +195,7 @@ describe('CR 401 — library', () => {
 // --- CR 404 / 608.2m: the graveyard --------------------------------------------------
 
 describe('CR 404 — graveyard', () => {
-  crTest('608.2m', 'an instant that finishes resolving is put into its owner’s graveyard', () => {
+  crTest('608.2n', 'an instant that finishes resolving is put into its owner’s graveyard', () => {
     const state = atMain();
     const [card] = giveHand(state, 'A', [PLAIN_BOLT]);
     let s = withRedMana(state, 1);
@@ -255,7 +255,7 @@ describe('CR 405 — the stack', () => {
     expect(s.players.A.graveyard.map((c) => c.def.id)).toEqual([second.id, first.id]);
   });
 
-  crTest('117.5', 'the active player receives priority again after an object resolves', () => {
+  crTest('117.3b', 'the active player receives priority again after an object resolves', () => {
     const state = atMain();
     const [card] = giveHand(state, 'A', [PLAIN_BOLT]);
     let s = withRedMana(state, 1);
