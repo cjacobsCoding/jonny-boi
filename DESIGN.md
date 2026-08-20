@@ -705,11 +705,13 @@ statement is that they are not separable from zero here, not that they are worth
 | Gauntlet, Mono-Red Aggro, 40 games/deck, seed 99 | 92/280 = **32.9%** | 79/280 = **28.2%** |
 
 > 📌 **THIS FIGURE HAS SINCE MOVED, and the move is in this table's own spirit.** The 79/280 above
-> was superseded by 81/280 as later branches landed, and CR 514.1 (the cleanup discard, §3.29) then
-> took it to **80/280 = 28.6%**. That is the CURRENT recorded baseline for seed 99. It moved because
-> the engine got MORE correct, not less: an unbounded hand was making card draw and held-back
-> reactive spells worth more than they are. §3.29 isolates the one game it cost and says which
-> matchup it came from.
+> was superseded by 81/280 as later branches landed, and CR 514.1 (the cleanup discard, §3.29) took
+> it back down. Measured against `origin/main` at `ab0e41a`, the CURRENT recorded baseline for seed
+> 99 is **79/280 = 28.2%**, and switching the rule off in the same build gives **82/280 = 29.3%** —
+> so the hand-size rule is worth **three games in 280** to Mono-Red on this gauntlet. It moved
+> because the engine got MORE correct, not less: an unbounded hand was making card draw and
+> held-back reactive spells worth more than they are. §3.29 has the isolation and names the two
+> matchups it came from.
 | `hybrid` vs `heuristic`, Mono-Red vs Boros, n=120 | **60.0%** [51.1, 68.3] | **55.8%** [46.9, 64.4] |
 | `hybrid` vs `heuristic`, UW vs Golgari, n=80 | **53.8%** [42.9, 64.3] | **48.8%** [38.1, 59.5] |
 
@@ -3206,16 +3208,23 @@ with the same decks, and nothing else moving. That is the measurement:
 
 | `maximumHandSize` | Mono-Red Aggro, 40 games/deck, seed 99 |
 |---|---|
-| **999** (the rule OFF — the engine as it was) | **81/280 = 28.9%** |
-| **7** (the rule ON — the engine as it should be) | **80/280 = 28.6%** |
+| **999** (the rule OFF — the engine as it was) | **82/280 = 29.3%** |
+| **7** (the rule ON — the engine as it should be) | **79/280 = 28.2%** |
 
-**One game, in one matchup.** Every row is identical except **Golgari Midrange, 8/40 → 7/40** — the
-one grindy midrange deck in the gauntlet, which is precisely where a hand-size limit should bite and
-where an aggro deck's opponent was quietly banking cards it could never have kept. Reproduced across
-two interleaved rounds. The rule-OFF arm reproduces the previously recorded **81/280** exactly, which
-also says that everything else that landed in between left seed 99 alone.
+**Three games, in two matchups.** Every row is identical except **Golgari Midrange 8/40 → 7/40** and
+**UW Control 16/40 → 14/40** — the two grindy decks in the gauntlet, which is precisely where a
+hand-size limit should bite and where an aggro deck's opponent was quietly banking cards it could
+never have kept. Reproduced across two interleaved rounds, and the win counts are deterministic, so
+these are exact rather than noisy.
 
-**80/280 = 28.6% is the recorded baseline for seed 99 from here on.** It moved because the engine got
+📌 **Measured twice, and the delta GREW.** Against `origin/main` at `b5752b2` the same isolation read
+**81/280 → 80/280**, one game in one matchup. The token-characteristics fix (`ab0e41a`) then gave
+every token its real colour and creature types, the grindy decks' boards got better, and the
+hand-size rule became worth three games instead of one. Both readings are true of the engine they
+were taken on; the second is the current one.
+
+**79/280 = 28.2% is the recorded baseline for seed 99 from here on** (`origin/main` at `ab0e41a`,
+which this branch reproduces byte-for-byte, every matchup row equal). It moved because the engine got
 MORE correct, not less: an unbounded hand overvalues card draw and held-back reactive spells, which
 is exactly the quantity this product exists to measure.
 

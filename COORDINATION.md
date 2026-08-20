@@ -145,14 +145,19 @@ _Append dated notes here; keep them short. Newest at top._
   CR 704.5q as a real state-based action, a REVIEW of the CR 514.1 that landed while I was building
   it, and the baseline measurement nobody had published yet.**
 
-  📊 **THE NUMBER, ISOLATED RATHER THAN ESTIMATED. CR 514.1 cost Mono-Red Aggro exactly ONE game in
-  280 on seed 99: 81/280 (28.9%) → 80/280 (28.6%).** Every matchup row is identical except **Golgari
-  Midrange, 8/40 → 7/40** — the one grindy midrange deck, which is exactly where a hand-size limit
-  should bite. It was isolated by flipping `RulesConfig.maximumHandSize` between 7 and 999 in the
-  SAME build on the SAME seed, which is only possible because the rule is a named config value and
-  not a literal; the rule-OFF arm reproduces the previously recorded 81/280 exactly, so everything
-  else that landed in between left seed 99 alone. **80/280 is the recorded baseline from here on**
-  (DESIGN §3.4a now says so, and §3.29 has the table). It moved because the engine got MORE correct.
+  📊 **THE NUMBER, ISOLATED RATHER THAN ESTIMATED. CR 514.1 costs Mono-Red Aggro THREE games in 280
+  on seed 99: 82/280 (29.3%) → 79/280 (28.2%)**, measured against `origin/main` at `ab0e41a`. Two
+  matchups move — **Golgari Midrange 8→7** and **UW Control 16→14** — the two grindy decks, which is
+  exactly where a hand-size limit should bite. It was isolated by flipping
+  `RulesConfig.maximumHandSize` between 7 and 999 in the SAME build on the SAME seed, which is only
+  possible because the rule is a named config value and not a literal. 👉 **Do this instead of a
+  second checkout whenever the thing you changed is config.**
+
+  📌 **Measured twice, and the delta GREW.** Against `b5752b2` the same isolation read 81/280 → 80/280
+  (one game, one matchup); the token-characteristics fix then gave the grindy decks their real boards
+  and it became three. **79/280 is the recorded baseline from here on** (DESIGN §3.4a and §3.29 say
+  so), and this branch reproduces `origin/main` byte-for-byte on it, every matchup row equal — my own
+  changes move nothing.
 
   🔴 **A HIDDEN-INFORMATION LEAK IN THE LANDED CR 514.1, please do not re-introduce it.** The
   discard question set `sourceInstanceId: hand[0].instanceId` — a real instance id "for the
