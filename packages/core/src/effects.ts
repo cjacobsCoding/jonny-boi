@@ -20,6 +20,7 @@ import { applyControlChange } from './internal/continuous.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {
   ChooseModesRequest,
+  ChooseValueRequest,
   ChoiceAnswer,
   ChoiceRequest,
   ConfirmRequest,
@@ -167,6 +168,16 @@ export interface EffectContext {
    * {@link EffectContext.payOrDecline}); `false` ⇒ nothing was taken.
    */
   payLifeOrDecline(request: ChoiceRequestArgs<PayLifeRequest>): boolean | undefined;
+  /**
+   * NAME a value — a colour, a creature type, a card type, a player ("As ~
+   * enters, choose a creature type"). `undefined` ⇒ parked; otherwise the named
+   * option's `value`, or `NOTHING_CHOSEN` (`''`) when nothing was named, which is
+   * a real answer and not a parked one.
+   *
+   * The caller stores the answer; see `recordChosenAsEntered` in `as-enters.ts`,
+   * which is the one writer both entry paths use.
+   */
+  chooseValue(request: ChoiceRequestArgs<ChooseValueRequest>): string | undefined;
   /**
    * Schedule further effect refs to run inside THIS resolution, immediately after
    * the current one. The composition seam for modal spells and for any effect
@@ -332,6 +343,10 @@ export function applyEffectRef(
     payLifeOrDecline(request) {
       const answer = ask({ ...request, kind: 'payLife', chooser: request.chooser ?? base.controller });
       return answer && answer.kind === 'payLife' ? answer.pay : undefined;
+    },
+    chooseValue(request) {
+      const answer = ask({ ...request, kind: 'chooseValue', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'chooseValue' ? answer.value : undefined;
     },
     enqueueEffects(refs) {
       channel?.enqueueEffects(refs);

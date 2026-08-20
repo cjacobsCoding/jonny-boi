@@ -41,6 +41,7 @@
 import type { AsEntersChoice, CardDefinition, ChoiceBearingPermanent } from './card.js';
 import type { ChoiceValueOption, ChosenValueSubject } from './choices.js';
 import { NOTHING_CHOSEN } from './choices.js';
+import type { GameEvent } from './events.js';
 import type { ManaColor } from './mana.js';
 import type { CardInstance, GameState, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
@@ -201,6 +202,35 @@ export function chosenPlayerOf(permanent: ChoiceBearingPermanent): PlayerId | un
   const chosen = permanent.chosenAsEntered;
   if (chosen === undefined || chosen === NOTHING_CHOSEN) return undefined;
   return (PLAYER_IDS as readonly string[]).includes(chosen) ? (chosen as PlayerId) : undefined;
+}
+
+/**
+ * Write the named value onto the entering permanent and announce it.
+ *
+ * The ONE writer, called by both entry paths that can ask — the engine's
+ * land-play branch and the `chooseAsEnters` primitive that runs while a
+ * permanent spell resolves. Two paths, one function, so the stored form and the
+ * announcement can never disagree about what "chose nothing" looks like.
+ *
+ * Naming NOTHING stores nothing: the field stays absent, which keeps the ordinary
+ * instance on the object shape `cloneInstance` copies cheapest, and keeps
+ * "nothing chosen" spelled exactly one way for every reader.
+ */
+export function recordChosenAsEntered(
+  permanent: CardInstance,
+  choice: AsEntersChoice,
+  value: string,
+  emit: (event: GameEvent) => void,
+): void {
+  if (value !== NOTHING_CHOSEN) permanent.chosenAsEntered = value;
+  emit({
+    type: 'chosenAsEnters',
+    instanceId: permanent.instanceId,
+    name: permanent.def.name,
+    subject: choice.subject,
+    value,
+    described: describeChosenValue(choice.subject, value),
+  });
 }
 
 /** A log/UI rendering of a named value ("white", "Goblin", "player B", "nothing"). */

@@ -1082,6 +1082,25 @@ export interface ManaAbility {
   /** Present ⇒ the modes are one mana of each colour the board makes available. */
   readonly derivedColors?: DerivedManaColors;
   /**
+   * "Add one mana of **the chosen color**" (Coldsteel Heart, Heraldic Banner,
+   * Temple of the Dragon Queen) — the colour this ability makes is the one its
+   * own permanent named as it entered
+   * ({@link CardDefinition.asEntersChoice}).
+   *
+   * Modelled exactly like {@link derivedColors} and for the same reason: the
+   * mode LIST is fixed at five entries (one per colour) because
+   * `TapForManaAction.mode` is an index into it and a list whose length moved
+   * with the game would make the same action number mean different colours to
+   * the action generator, the payment planner and the apply path. WHICH of the
+   * five is available is the per-permanent question, asked against the live
+   * instance by `manaModeBlockedReason`.
+   *
+   * A permanent that named NOTHING has no available mode and therefore produces
+   * no mana at all — the inert default, and the direction that can never play
+   * better than the real card.
+   */
+  readonly chosenColor?: boolean;
+  /**
    * Whether the derivation includes COLOURLESS. Oracle draws the line with one
    * word: Reflecting Pool adds "one mana of any **type** that a land you control
    * could produce" and can therefore make {C}; Exotic Orchard and Fellwar Stone
@@ -1110,6 +1129,15 @@ export interface ManaModeExtra {
   readonly ability: ManaAbility;
   /** For a derived-colour mode: which colour this mode would add. */
   readonly derivedColor?: ManaColor;
+  /**
+   * For a CHOSEN-colour mode ({@link ManaAbility.chosenColor}): which colour this
+   * mode would add. Kept distinct from {@link derivedColor} rather than folded
+   * into it because the availability questions are different — a derived mode
+   * asks the BOARD what other lands make, a chosen mode asks THIS PERMANENT what
+   * it named — and one field answering two questions is how a mode ends up
+   * available for the wrong reason.
+   */
+  readonly chosenColor?: ManaColor;
 }
 
 /**
@@ -1121,6 +1149,15 @@ export interface ManaModeExtra {
  * The colourless mode of a colour-only ability is simply never available.
  */
 const DERIVED_COLOR_ORDER: readonly ManaColor[] = MANA_COLORS;
+
+/**
+ * The colours a CHOSEN-colour mana ability enumerates modes for — the five a card
+ * may name, in canonical order. Colourless is absent because "choose a color"
+ * cannot name it; see {@link ManaAbility.chosenColor}.
+ */
+const CHOSEN_COLOR_ORDER: readonly ManaColor[] = Object.freeze(
+  MANA_COLORS.filter((color) => color !== 'C'),
+);
 
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */
 const NO_MANA_MODES: readonly ManaProduction[] = Object.freeze([]);
@@ -1213,6 +1250,16 @@ function flattenManaAbilities(def: CardDefinition): {
       }
       continue;
     }
+    if (ability.chosenColor === true) {
+      // The five NAMEABLE colours, never colourless: "choose a color" is one of
+      // five (CR 105.1), so a sixth mode here would be a mode no printed card
+      // offers. Same fixed-length argument as the derived branch above.
+      for (const color of CHOSEN_COLOR_ORDER) {
+        modes.push(Object.freeze({ [color]: 1 }) as ManaProduction);
+        extras.push(Object.freeze({ ability, chosenColor: color }));
+      }
+      continue;
+    }
     for (const production of ability.produces ?? []) {
       modes.push(production);
       extras.push(Object.freeze({ ability }));
@@ -1230,18 +1277,31 @@ function flattenManaAbilities(def: CardDefinition): {
  * The colours this source could contribute to ANOTHER source's derived-colour
  * ability ("any color that a land you control could produce").
  *
+ * `chosenColor` is what the permanent NAMED as it entered (`chosenColorOf` in
+ * `as-enters.ts`), passed in by the caller rather than read here so this file
+ * stays free of a dependency cycle. Omitting it — which is what every caller that
+ * has only a definition does — makes a chosen-colour source contribute NOTHING,
+ * the conservative direction that never invents mana the board cannot make.
+ *
  * Deliberately excludes derived modes. Two Reflecting Pools do not see each
  * other: the rules answer is that a derived ability reads what the other
  * permanents *could* produce, and a permanent whose own production is defined by
  * that same question contributes nothing rather than looping. Excluding it here
  * is both the faithful answer and what makes the derivation terminate.
  */
-export function fixedManaColorsOf(def: CardDefinition): readonly ManaColor[] {
+export function fixedManaColorsOf(def: CardDefinition, chosenColor?: ManaColor): readonly ManaColor[] {
   const extras = manaExtrasOf(def);
   const modes = manaModesOf(def);
   const out: ManaColor[] = [];
   for (let i = 0; i < modes.length; i++) {
     if (extras?.[i]?.derivedColor !== undefined) continue;
+    // A CHOSEN-colour mode contributes only the colour this permanent actually
+    // named. Without the instance we cannot know it, so the mode contributes
+    // nothing — a Reflecting Pool reads an unknown Coldsteel Heart as producing
+    // nothing rather than as producing all five, which is the conservative
+    // direction and the one that never invents mana that is not there.
+    const modeChosenColor = extras?.[i]?.chosenColor;
+    if (modeChosenColor !== undefined && modeChosenColor !== chosenColor) continue;
     const mode = modes[i] as ManaProduction;
     for (const color of MANA_COLORS) {
       if ((mode[color] ?? 0) > 0 && !out.includes(color)) out.push(color);

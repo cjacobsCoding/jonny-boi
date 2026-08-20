@@ -39,6 +39,7 @@ import {
   permanentTargetOption,
   validateChoiceAnswer,
 } from './choices.js';
+import { asEntersOptions, asEntersPrompt, chosenColorOf, recordChosenAsEntered } from './as-enters.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
@@ -1255,6 +1256,35 @@ function applyAnswerChoice(
     }
   }
 
+  // A NAMING answer with no resolution behind it is a land naming a value as it
+  // entered (`raiseLandEntryChoice` parked it). The value is written onto the
+  // permanent the choice named — `appliesToInstanceId`, not "whatever asked", so
+  // a source that ever names on another permanent's behalf cannot silently
+  // record it on itself — and then the SAME step function is called again, which
+  // is what lets one land ask a naming AND a tapped question (Multiversal
+  // Passage, Temple of the Dragon Queen) instead of dropping the second.
+  //
+  // A naming asked mid-RESOLUTION (the `chooseAsEnters` primitive, for a
+  // permanent spell) is deliberately not handled here: it flows through the
+  // ordinary frame path below, and the primitive writes the value itself against
+  // the instance that is entering.
+  if (choice.context === 'asEnters' && answer.kind === 'chooseValue' && !state.resolution) {
+    const entering = findOnBattlefield(state, choice.appliesToInstanceId ?? choice.sourceInstanceId);
+    const naming = entering?.def.asEntersChoice;
+    if (entering && naming) {
+      recordChosenAsEntered(entering, naming, answer.value, emit);
+      raiseLandEntryChoice(state, entering, choice.chooser, emit);
+    }
+    checkStateBasedActions(state, emit);
+    aimPendingTriggers(state, emit);
+    if (!state.pendingChoice && !state.gameOver) {
+      // The land play never surrendered priority, so its player keeps the floor.
+      state.priorityPlayer = choice.chooser;
+      state.consecutivePasses = 0;
+    }
+    return { state, events };
+  }
+
   // A LEGEND-RULE answer belongs to the state-based actions, not to a resolution
   // (CR 704.5j — the game performs the rule; the player only picks the survivor).
   // Routed by the choice's own `context` marker rather than by "there is no frame
@@ -1403,100 +1433,127 @@ function applyPlayLand(
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
-  // A shockland asks its question HERE — at land-play time, with nothing
-  // resolving. The land has entered with the unpaid default (tapped, from
-  // `entersTapped`); a payable question is parked, and the answer either charges
-  // the life and untaps the fresh entry (nothing has been able to observe it
-  // tapped: only answering is legal while the question stands) or confirms the
-  // default. A player who cannot pay is not asked — the default already IS the
-  // only outcome, so the game does not stop.
-  // A REVEAL-LAND asks the same shape of question in the same place, with a
-  // `confirm` instead of a price: "you may reveal an Island or Swamp card from
-  // your hand. If you don't, this land enters tapped." A controller holding
-  // nothing to show is not asked — the printed default is then the only
-  // outcome, and stopping the game for it would wedge the turn.
-  const revealCondition = card.def.entersTappedUnlessRevealed;
-  if (
-    revealCondition !== undefined &&
-    canRevealForUntapped(revealCondition, state.players[action.player].hand)
-  ) {
-    // Entered tapped above; the tapped event is deferred until the answer, so a
-    // replay never shows the land flickering tapped -> untapped.
-    card.tapped = false;
-    const choice = normalizeChoiceRequest(
-      {
-        kind: 'confirm',
-        chooser: action.player,
-        prompt: `Reveal ${describeRevealTypes(revealCondition.anyOfSubtypes)} from your hand, or ${card.def.name} enters tapped`,
-        // Showing a card costs nothing and unlocks an untapped land, so a pilot
-        // with nothing better to go on should take it.
-        valence: 'gain',
-      },
-      {
-        id: state.nextInstanceId++,
-        sourceInstanceId: card.instanceId,
-        sourceName: card.def.name,
-      },
-    );
-    if (choice) {
-      state.pendingChoice = choice;
-      emit({
-        type: 'choiceAsked',
-        choiceId: choice.id,
-        chooser: choice.chooser,
-        choiceKind: choice.kind,
-        prompt: choice.prompt,
-        sourceInstanceId: choice.sourceInstanceId,
-        optionCount: choiceOptionCount(choice),
-      });
-    }
-    player.landsPlayedThisTurn += 1;
-    emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
-    state.consecutivePasses = 0;
-    return { state, events };
-  }
-
-  const shockCost = card.def.entersTappedUnlessLifePaid;
-  if (shockCost !== undefined && canAffordLifeCost(state, action.player, shockCost)) {
-    // Entered tapped above, but the tapped event is deferred until the answer —
-    // emitted only if the decline confirms it, so a replay never shows a land
-    // flickering tapped→untapped.
-    card.tapped = false;
-    const choice = normalizeChoiceRequest(
-      {
-        kind: 'payLife',
-        chooser: action.player,
-        prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
-        amount: shockCost,
-        affordable: true,
-        valence: 'neutral',
-      },
-      {
-        id: state.nextInstanceId++,
-        sourceInstanceId: card.instanceId,
-        sourceName: card.def.name,
-      },
-    );
-    if (choice) {
-      state.pendingChoice = choice;
-      emit({
-        type: 'choiceAsked',
-        choiceId: choice.id,
-        chooser: choice.chooser,
-        choiceKind: choice.kind,
-        prompt: choice.prompt,
-        sourceInstanceId: choice.sourceInstanceId,
-        optionCount: choiceOptionCount(choice),
-      });
-    }
-  } else if (card.tapped) {
-    emit({ type: 'tapped', instanceId: card.instanceId });
-  }
+  raiseLandEntryChoice(state, card, action.player, emit);
   player.landsPlayedThisTurn += 1;
   emit({ type: 'landPlayed', player: action.player, instanceId: card.instanceId });
   // Playing a land is a special action: the player retains priority.
   state.consecutivePasses = 0;
   return { state, events };
+}
+
+/**
+ * Ask the NEXT question a freshly-played land still owes, or settle its tapped
+ * state when it owes none.
+ *
+ * Three printed questions can land on the same permanent as it enters, and only
+ * ONE choice can be parked at a time — Multiversal Passage names a basic land
+ * type and *then* offers to pay 2 life; Temple of the Dragon Queen offers a
+ * reveal and names a colour. So this is written as a step function that asks the
+ * first unanswered question and is CALLED AGAIN from the answer handler, rather
+ * than as three independent branches that would silently drop the second one.
+ *
+ * Order is the printed order, naming first: the naming is what the land's other
+ * abilities read, and a payment question answered first would be the only one a
+ * player ever saw on a card printing both.
+ *
+ * The land has already entered with the unpaid/unrevealed default (tapped, from
+ * `entersTapped`), and the `tapped` EVENT is deferred until every question is
+ * settled — so a replay never shows a land flickering tapped→untapped, and
+ * nothing can observe the intermediate state because answering is the only legal
+ * action while a question stands.
+ */
+function raiseLandEntryChoice(
+  state: GameState,
+  card: CardInstance,
+  player: PlayerId,
+  emit: (e: GameEvent) => void,
+): void {
+  const park = (request: ChoiceRequest, context?: PendingChoice['context']): void => {
+    const normalized = normalizeChoiceRequest(request, {
+      id: state.nextInstanceId++,
+      sourceInstanceId: card.instanceId,
+      sourceName: card.def.name,
+    });
+    if (!normalized) return;
+    // The context marker is what routes the answer, exactly as the legend rule's
+    // does: "a choice with no resolution behind it" also describes the shockland
+    // question, and the two must never be confused.
+    const choice: PendingChoice =
+      context === undefined ? normalized : { ...normalized, context, appliesToInstanceId: card.instanceId };
+    state.pendingChoice = choice;
+    emit({
+      type: 'choiceAsked',
+      choiceId: choice.id,
+      chooser: choice.chooser,
+      choiceKind: choice.kind,
+      prompt: choice.prompt,
+      sourceInstanceId: choice.sourceInstanceId,
+      optionCount: choiceOptionCount(choice),
+    });
+  };
+
+  // 1. THE NAMING — "As ~ enters, choose a color / a basic land type"
+  //    (CR 614.1c). Asked only while nothing has been named yet, which is what
+  //    makes this function safe to call again after each answer.
+  const naming = card.def.asEntersChoice;
+  if (naming !== undefined && card.chosenAsEntered === undefined) {
+    const options = asEntersOptions(state, naming, player);
+    if (options.length > 0) {
+      park({
+        kind: 'chooseValue',
+        chooser: player,
+        prompt: asEntersPrompt(card.def, naming),
+        subject: naming.subject,
+        options,
+        // Naming costs nothing and unlocks the card's own abilities; the real
+        // decision is WHICH value, which a pilot makes from the board rather
+        // than from a valence.
+        valence: 'gain',
+      }, 'asEnters');
+      if (state.pendingChoice) return;
+    }
+    // Nothing on offer (an empty menu) leaves nothing named — the inert
+    // default, reached without stopping the game. Fall through to the tapped
+    // questions below.
+  }
+
+  // 2. A REVEAL-LAND: "you may reveal an Island or Swamp card from your hand. If
+  //    you don't, this land enters tapped." A controller holding nothing to show
+  //    is not asked — the printed default is then the only outcome, and
+  //    stopping the game for it would wedge the turn.
+  const revealCondition = card.def.entersTappedUnlessRevealed;
+  if (revealCondition !== undefined && canRevealForUntapped(revealCondition, state.players[player].hand)) {
+    card.tapped = false;
+    park({
+      kind: 'confirm',
+      chooser: player,
+      prompt: `Reveal ${describeRevealTypes(revealCondition.anyOfSubtypes)} from your hand, or ${card.def.name} enters tapped`,
+      // Showing a card costs nothing and unlocks an untapped land, so a pilot
+      // with nothing better to go on should take it.
+      valence: 'gain',
+    });
+    return;
+  }
+
+  // 3. A SHOCKLAND: "you may pay N life. If you don't, it enters tapped." A
+  //    player who cannot pay is not asked — the default already IS the only
+  //    outcome, so the game does not stop.
+  const shockCost = card.def.entersTappedUnlessLifePaid;
+  if (shockCost !== undefined && canAffordLifeCost(state, player, shockCost)) {
+    card.tapped = false;
+    park({
+      kind: 'payLife',
+      chooser: player,
+      prompt: `Pay ${shockCost} life, or ${card.def.name} enters tapped`,
+      amount: shockCost,
+      affordable: true,
+      valence: 'neutral',
+    });
+    return;
+  }
+
+  // 4. Nothing left to ask — announce the entry state.
+  if (card.tapped) emit({ type: 'tapped', instanceId: card.instanceId });
 }
 
 /**
@@ -1812,6 +1869,16 @@ function manaModeBlockedReason(
       return `no land makes {${derivedColor}} for ${perm.def.name} to copy`;
     }
   }
+  // A CHOSEN-colour mode is available only for the colour THIS permanent named as
+  // it entered. A permanent that named nothing has no available mode at all, so
+  // it taps for nothing — the inert default, refused here rather than silently
+  // downgraded to "any colour".
+  const modeChosenColor = extra.chosenColor;
+  if (modeChosenColor !== undefined && chosenColorOf(perm) !== modeChosenColor) {
+    return chosenColorOf(perm) === undefined
+      ? `${perm.def.name} has not named a color`
+      : `${perm.def.name} names a different color`;
+  }
   const cost = ability.cost;
   if (cost) {
     // CR 118.4: life pays down to zero and no further.
@@ -1850,7 +1917,10 @@ function derivedManaColors(
     const mine = perm.controller === source.controller;
     if (wantOpponents ? mine : !mine) continue;
     if (!isLand(perm.def)) continue;
-    for (const color of fixedManaColorsOf(perm.def)) colors.add(color);
+    // The chosen colour is read off the INSTANCE, so a Temple of the Dragon Queen
+    // that named red contributes exactly red to a Reflecting Pool — not all five,
+    // and not nothing.
+    for (const color of fixedManaColorsOf(perm.def, chosenColorOf(perm))) colors.add(color);
   }
   return colors;
 }
