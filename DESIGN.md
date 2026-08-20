@@ -1838,12 +1838,23 @@ games unable to END while the whole suite stayed green).
    by simply not being thought of.
 
 **Two tiers.** The FAST tier (`soak.test.ts`) runs in the ordinary suite every time — one anchored
-matchup per mechanic plus a block of mixed games, every invariant on every decision. The DEEP tier
-(`soak-deep.test.ts`, `JB_SOAK_GAMES=N`, or `npm run sim -- soak --games N`) plays thousands. Both are
-sized in GAMES and report CPU: wall clock on this box is worthless (the same build has measured
-39–87 games/sec inside an hour).
+matchup per mechanic plus a block of mixed games, every invariant on every decision: **104 games,
+2,210 turns, 64,657 actions, ~17 s CPU.** The DEEP tier (`soak-deep.test.ts`, `JB_SOAK_GAMES=N`, or
+`npm run sim -- soak --games N`) plays thousands — the run that found the last defect was **5,064
+games, 106,099 turns, 3,203,620 actions, 498 s CPU**, with a 1.1% turn-cap draw rate and zero
+action-cap games. Both tiers are sized in GAMES and report CPU: wall clock on this box is worthless
+(the same build has measured 39–87 games/sec inside an hour).
 
-**What it found.** Three real defects, fixed here, and three reported:
+**What it found.** Four real defects, fixed here, and three reported. Two of the four are
+state-based-action gaps in `applyCastSpell`, and neither is reachable by any gauntlet deck — which
+is precisely why nothing before this had seen them.
+- ✅ **FIXED (core) — state-based actions did not run when a spell was CAST, only when one
+  RESOLVED.** The caster receives priority the instant a spell is announced, which is an SBA check
+  point (CR 704.3) — and casting MOVES A CARD BETWEEN ZONES, which characteristic-defining P/T reads.
+  A flashback cast takes the last instant out of a graveyard, every Tarmogoyf loses a point of
+  toughness, and one already shrunk by a Weakness is at 0 and must die; the engine handed priority
+  back to a player looking at a creature that should already be in a graveyard. Turn 8 of seed
+  1727114651 — **once in 5,064 games and 3.2 million actions.**
 - ✅ **FIXED (core) — paying a flashback LIFE cost did not end the game.** `applyCastSpell` charges
   "Flashback—{1}{B}, Pay 3 life" and never ran the state-based-action pass, so a caster who paid
   itself to exactly 0 kept holding priority and casting spells (turn 20 of seed 3856639351 — once in

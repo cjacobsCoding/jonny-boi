@@ -132,8 +132,21 @@ _Append dated notes here; keep them short. Newest at top._
   `JB_SOAK_GAMES=2000 npx vitest run packages/sim/src/soak-deep.test.ts`. Every failure prints the
   seed AND both decklists.
 
-  ✅ **THREE REAL DEFECTS, ALL FIXED HERE. Two are in `packages/ai/src/heuristic.ts` and one is in
+  ✅ **FOUR REAL DEFECTS, ALL FIXED HERE. Two are in `packages/ai/src/heuristic.ts` and two are in
   `packages/core/src/engine.ts`, so read this if you own either file.**
+
+  **(0) CORE — state-based actions did not run when a spell was CAST, only when one RESOLVED.**
+  The caster receives priority the instant a spell is announced, which is an SBA check point
+  (CR 704.3) — and it matters because **casting MOVES A CARD BETWEEN ZONES, and
+  characteristic-defining P/T reads zones.** A flashback cast takes the last instant out of a
+  graveyard, every Tarmogoyf on the board loses a point of toughness, and one already shrunk by a
+  Weakness (-2/-1) is at 0 and must die. The engine instead handed priority back to a player looking
+  at a creature that should already be in a graveyard — targetable, spendable, blockable. Found at
+  turn 8 of soak seed 1727114651: **once in 5,064 games and 3.2 million actions**, which is the whole
+  argument for a soak. One guarded `checkStateBasedActions` at the end of `applyCastSpell` (skipped
+  while a cast-time CHOICE stands — the announcement is not finished then, CR 601.2, and the answer
+  path runs the pass itself). It emits nothing when nothing dies, so **no event log and no paired-arm
+  comparison moves.** New `describe` in `packages/core/src/sba.test.ts`; it fails without the fix.
 
   **(1) CORE — paying a flashback LIFE cost did not end the game.** `applyCastSpell` charges
   "Flashback—{1}{B}, Pay 3 life" (Crippling Fatigue) and then never ran the state-based-action pass,
@@ -166,12 +179,14 @@ _Append dated notes here; keep them short. Newest at top._
   fail without the fix with the engine's own message ("Wall of Omens cannot block Black Knight",
   soak seed 1948110550). My edit is 3 small hunks + 1 import — **keep BOTH sides on conflict.**
 
-  📏 **ALL THREE FIXES ARE BASELINE-NEUTRAL, and that is MEASURED, not assumed.** I scanned all
-  eight gauntlet decks in `packages/sim/data/decks` for the cards each fix can possibly touch:
-  **zero protection creatures, zero menace / `minBlockers` creatures, zero flashback-life-cost cards
-  across every one of them.** None of the three code paths can fire in a gauntlet or A/B game, so
-  every recorded win rate in DESIGN §3.4a/§3.4e/§3.4f is untouched by this branch. (Re-run the check by
-  scanning `loadDeck(deck, pool).library` for `protectionFrom`, `"menace"` and `flashbackLifeCost`.)
+  📏 **ALL FOUR FIXES ARE BASELINE-NEUTRAL, and that is MEASURED, not assumed.** I scanned all
+  eight gauntlet decks in `packages/sim/data/decks` for every card each fix can possibly touch:
+  **zero protection creatures, zero menace / `minBlockers` creatures, zero flashback-life-cost cards,
+  zero characteristic-defining-P/T cards and zero flashback cards at all, across every one of them.**
+  None of the four code paths can fire in a gauntlet or A/B game, so every recorded win rate in
+  DESIGN §3.4a/§3.4e/§3.4f is untouched by this branch. (Re-run the check by scanning
+  `loadDeck(deck, pool).library` for `protectionFrom`, `"menace"`, `flashbackLifeCost`,
+  `characteristicPT` and `flashback`.) The full suite is green with all four in.
 
   ⚠️ **DEFECTS REPORTED, NOT FIXED — each belongs to somebody else's file.**
   1. **The rich mana-ability model has ZERO cards in the shipped pool.** `CardDefinition.manaAbilities`
@@ -208,10 +223,15 @@ _Append dated notes here; keep them short. Newest at top._
   scanning the pre-action state reports every land drop in the game as a hidden-zone leak. Both traps
   are pinned as comments beside the code that avoids them in `soak.ts`.
 
-  📊 **The run, so the number means something.** Fast tier: 104 games, 2,210 turns, 64,657
-  actions, **0 violations**, 0 timeouts, ~17 s CPU. All 32 mechanics the pool prints fired.
-  `battle-defense`, `emblem` and `mana-ability-extras` are not required because the pool prints none
-  — the soak says so out loud rather than passing quietly.
+  📊 **The runs, so the numbers mean something.**
+  - **Fast tier** (in `npm test`): 104 games, 2,210 turns, 64,657 actions, **0 violations**, 0
+    timeouts, ~17 s CPU, ~20 s of suite time. All 32 mechanics the pool prints fired.
+  - **Deep tier**, after the first three fixes: **5,064 games, 106,099 turns, 3,203,620 actions,
+    498 s CPU**, 2,520 / 2,490 / 54 (a 1.1% turn-cap draw rate), **zero action-cap games**, and
+    exactly ONE violation — defect (0) above, which this branch then fixed.
+  - `battle-defense`, `emblem` and `mana-ability-extras` are not required because the pool prints
+    none — the soak says so out loud rather than passing quietly. The rarest mechanics that DID fire:
+    madness 8 games, damage-prevention 31, legend-rule 39, control-change 126, transform-dfc 127.
 
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine
