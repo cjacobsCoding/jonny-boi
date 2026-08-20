@@ -304,4 +304,86 @@ describe('CR 406 — exile', () => {
   });
 });
 
+// --- CR 402: the hand, and its maximum ------------------------------------------
+
+describe('CR 402 — the hand zone has a maximum size', () => {
+  crTest('402.2', 'a hand over the maximum is cut back to it, and one at the maximum is not asked', () => {
+    // CR 402.2: "Each player has a maximum hand size, which is normally seven
+    // cards." The number is CONFIG, never a literal — a format that changes it is
+    // a config edit — so the test reads it from the same place the engine does.
+    const maximum = DEFAULT_RULES.maximumHandSize;
+    const over = 3;
+
+    const state = atMain();
+    giveHand(state, 'A', Array.from({ length: maximum + over }, () => MOUNTAIN));
+    giveHand(state, 'B', Array.from({ length: maximum }, () => MOUNTAIN));
+    const graveyardBefore = state.players.A.graveyard.length;
+
+    // Run A's turn out. The discard is a CHOICE, so the turn stops on it.
+    const asked = runToCleanupQuestion(state);
+    expect(asked.state.pendingChoice?.chooser).toBe('A');
+    expect(asked.state.pendingChoice?.min).toBe(over);
+    expect(asked.state.pendingChoice?.max).toBe(over);
+
+    const after = answerCleanupDiscard(asked.state);
+    expect(after.players.A.hand).toHaveLength(maximum);
+    expect(after.players.A.graveyard).toHaveLength(graveyardBefore + over);
+    // B, sitting at exactly the maximum, was never asked anything on A's turn —
+    // and never will be on it: the discard is the ACTIVE player's (CR 514.1).
+    expect(after.players.B.hand).toHaveLength(maximum);
+  });
+
+  crTest('402.2', 'a player at or under the maximum is never asked to discard at all', () => {
+    // The rule says "discards enough cards to reduce their hand size to that
+    // number", and for a legal hand that is no cards — which is not a question.
+    // Asking anyway would put a one-button prompt in front of a human every
+    // single turn, and would cost the sim a decision per turn per seat.
+    const state = atMain();
+    giveHand(state, 'A', Array.from({ length: DEFAULT_RULES.maximumHandSize }, () => MOUNTAIN));
+
+    let s = state;
+    let asked = 0;
+    for (let guard = 0; guard < 200 && s.turnNumber === state.turnNumber; guard++) {
+      s = pass(s, registry);
+      if (s.pendingChoice) asked += 1;
+    }
+    expect(s.turnNumber).toBeGreaterThan(state.turnNumber);
+    expect(asked).toBe(0);
+    expect(s.players.A.graveyard).toHaveLength(0);
+  });
+});
+
+/**
+ * Run the game forward until the CR 514.1 discard question is parked, failing
+ * loudly if it never is — a helper that gave up silently would make every
+ * assertion after it meaningless.
+ */
+function runToCleanupQuestion(state: GameState): { readonly state: GameState } {
+  let s = state;
+  for (let guard = 0; guard < 200; guard++) {
+    if (s.pendingChoice?.context === 'cleanupDiscard') return { state: s };
+    s = pass(s, registry);
+  }
+  throw new Error(`the cleanup discard was never asked (stopped at turn ${s.turnNumber} ${s.step})`);
+}
+
+/** Answer a parked cleanup discard by pitching the FIRST cards offered. */
+function answerCleanupDiscard(state: GameState): GameState {
+  const choice = state.pendingChoice;
+  if (!choice || choice.kind !== 'selectCards') throw new Error('no cleanup discard is parked');
+  return act(
+    state,
+    {
+      kind: 'answerChoice',
+      player: choice.chooser,
+      choiceId: choice.id,
+      answer: {
+        kind: 'selectCards',
+        instanceIds: choice.candidates.slice(0, choice.min).map((c) => c.instanceId),
+      },
+    },
+    registry,
+  );
+}
+
 assertFileMatchesManifest(FILE);

@@ -46,6 +46,7 @@ import {
   isTrivialChoice,
   matchesCardFilter,
   MAX_CHOICES_PER_RESOLUTION,
+  NO_ASKING_OBJECT,
   normalizeChoiceRequest,
   NOTHING_CHOSEN,
   permanentTargetOption,
@@ -137,7 +138,14 @@ import { expireFloatingReplacements, indexReplacements, replaceDraw } from './in
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
-import { applyLegendRuleChoice, checkStateBasedActions, loseGame, resolveWinner, winGame } from './internal/sba.js';
+import {
+  applyLegendRuleChoice,
+  checkStateBasedActions,
+  loseGame,
+  resolveWinner,
+  stateBasedActionsPossible,
+  winGame,
+} from './internal/sba.js';
 import {
   assignAndDealCombatDamage,
   canBlock,
@@ -438,8 +446,19 @@ function advanceStep(state: GameState, config: RulesConfig, emit: (e: GameEvent)
   const isLastStep = idx === STEP_ORDER.length - 1;
 
   if (isLastStep) {
-    // Cleanup just finished → next player's turn.
-    passTurn(state, config, emit);
+    // ANOTHER CLEANUP STEP (CR 514.3a), not the next turn — and REACHING HERE AT
+    // ALL is what says so.
+    //
+    // A cleanup step normally hands out no priority and ends the turn itself, so
+    // the only way both players can pass on an empty stack *while the step is
+    // still cleanup* is that something during that cleanup opened a priority
+    // window (today: a discarded MADNESS card, which exiles itself and offers a
+    // cast — CR 702.35a). CR 514.3a says exactly one thing happens once the
+    // stack empties and everyone passes: another cleanup step begins, with its
+    // turn-based actions performed again. So the re-entry needs no new state —
+    // the step the game is standing in IS the flag — and it terminates, because
+    // the second pass finds a legal hand and nothing left to expire.
+    performStepTurnBasedActions(state, 'cleanup', config, emit);
     return;
   }
 
@@ -587,10 +606,19 @@ function raiseCleanupDiscard(state: GameState, config: RulesConfig, emit: (e: Ga
     },
     {
       id: state.nextInstanceId++,
-      // A turn-based action has no source permanent. The first card in hand is
-      // named so the field stays a real instance id for the inspector and the
-      // wire format; nothing routes on it (the `context` marker below does).
-      sourceInstanceId: (hand[0] as CardInstance).instanceId,
+      // ⚠️ A turn-based action has no source object, and naming one anyway is a
+      // HIDDEN-INFORMATION LEAK, not a cosmetic nicety. `choiceAsked` travels to
+      // every pilot's observation feed carrying `sourceInstanceId` unredacted
+      // (`packages/sim/src/observation.ts`), so pointing it at a card in the
+      // discarding player's HAND publishes the identity of a card nobody outside
+      // that hand may know — and instance ids are minted sequentially from the
+      // pre-shuffle library (`paired-arms-config.ts` pins that), so it is a read
+      // on the decklist, not a meaningless number. The protocol's own leak scan
+      // cannot catch it either: `collectInstanceIds` only looks at keys named
+      // `instanceId`. `NO_ASKING_OBJECT` is the sentinel every source-less
+      // question uses; nothing routes on it (the `context` marker below does),
+      // and every "look this id up" path already degrades to the source NAME.
+      sourceInstanceId: NO_ASKING_OBJECT,
       sourceName: CLEANUP_DISCARD_SOURCE_NAME,
     },
   );
@@ -675,6 +703,32 @@ function onPassPriority(
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
 ): void {
+  // CR 704.3 — "whenever a player would get priority, the game checks for any of
+  // the listed conditions for state-based actions". This is the ONE place in the
+  // engine where a player is about to receive priority without a mutation having
+  // just happened, so it is the boundary the rule is really about.
+  //
+  // It is a BACKSTOP, not the primary mechanism: about a dozen mutation sites
+  // call the check themselves, and every path that exists today hits one of them
+  // — which is why this was latent rather than live. What it buys is that the
+  // next path which forgets stops being silent.
+  //
+  // `stateBasedActionsPossible` is the rule-7 gate in front of it: the full check
+  // walks the battlefield three times and can rebuild the continuous index, and
+  // this is the hottest loop the sim has. The gate is a single walk of pure
+  // property reads that allocates nothing, and it is conservative in the safe
+  // direction only (see its own note).
+  if (stateBasedActionsPossible(state)) {
+    checkStateBasedActions(state, emit);
+    // An SBA that ended the game ends the pass with it — nobody receives the
+    // priority this pass was handing over.
+    if (state.gameOver) return;
+    // A state-based action may PARK A QUESTION (the legend rule), and that
+    // chooser now holds the floor. Passing "around" it is exactly what
+    // `dispatchAction` refuses for every other action, so the pass stops here
+    // and resumes when the question is answered.
+    if (state.pendingChoice) return;
+  }
   emit({ type: 'priorityPassed', player: state.priorityPlayer });
   state.consecutivePasses += 1;
 
@@ -1579,6 +1633,7 @@ function applyAnswerChoice(
     }
     return { state, events };
   }
+
 
   // A LEGEND-RULE answer belongs to the state-based actions, not to a resolution
   // (CR 704.5j — the game performs the rule; the player only picks the survivor).

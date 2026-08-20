@@ -29,6 +29,7 @@ import type {
 import {
   applyAction,
   createGame,
+  defaultAnswerFor,
   DEFAULT_RULES,
   defaultAnswerFor,
   effectivePower,
@@ -106,6 +107,12 @@ function pass(state: GameState, reg: Registry): GameState {
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
 }
 
+
+/**
+ * Turn-runners: they pass, ANSWERING anything the game asks on the way — a turn
+ * now ends with the CR 514.1 discard question whenever a hand is over the
+ * maximum, and while it stands every other action is refused. `pass` above already answers.
+ */
 function advanceToStep(state: GameState, step: string, reg: Registry, max = 400): GameState {
   let s = state;
   let guard = 0;

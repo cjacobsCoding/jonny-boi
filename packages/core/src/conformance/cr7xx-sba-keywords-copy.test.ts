@@ -267,30 +267,57 @@ describe('CR 704 — state-based actions', () => {
     expect(onBattlefield(s, threeThree.instanceId)).toBeDefined();
   });
 
-  crTest('704.5q', 'GAP PIN — +1/+1 and -1/-1 counters are netted arithmetically, never REMOVED', () => {
+  crTest('704.5q', '+1/+1 and -1/-1 counters on one permanent are REMOVED in pairs', () => {
     // CR 704.5q: "If a permanent has both a +1/+1 counter and a -1/-1 counter on
     // it, N +1/+1 and N -1/-1 counters are removed from it," where N is the
-    // smaller of the two counts. This engine has no such state-based action —
-    // `internal/stats.ts`'s `counterShift` subtracts the two tallies, which gives
-    // the RIGHT power and toughness while leaving both counters sitting on the
-    // permanent. Nothing in the shipped pool can ask "does this have a -1/-1
-    // counter on it?", so the difference is currently unobservable in play; it
-    // stops being unobservable the moment a card removes or counts one kind.
+    // smaller of the two counts.
     //
-    // This pin asserts the CURRENT behaviour. When 704.5q is implemented it goes
-    // red — which is the signal to move section 704's manifest entry off `gap`.
+    // The arithmetic never depended on this — `counterShift` nets the tallies, so
+    // the power and toughness were always right — which is exactly why the rule
+    // was easy to leave out. What it decides is the STATE: whether the permanent
+    // still HAS a -1/-1 counter on it afterwards, which is what persist's own
+    // printed condition, undying's, and every "remove a counter" effect ask.
+    //
+    // The counters are placed directly on the permanent rather than through the
+    // counters primitive, on purpose: this is a state-based action, so it must
+    // apply to counters that arrived by ANY route.
     const state = newGame();
     const bear = putOnBattlefield(state, 'A', BEAR, {
       counters: { [PLUS_ONE_COUNTER]: 2, [MINUS_ONE_COUNTER]: 1 },
     });
-    // The arithmetic is right…
     expect(effectivePower(bear)).toBe(BEAR.power! + 1);
-    expect(effectiveToughness(bear)).toBe(BEAR.toughness! + 1);
-    // …and both counters are still physically present, which CR 704.5q forbids.
+
     const after = bothPass(state);
     const still = onBattlefield(after, bear.instanceId);
-    expect(still?.counters[PLUS_ONE_COUNTER]).toBe(2);
-    expect(still?.counters[MINUS_ONE_COUNTER]).toBe(1);
+    // One pair annihilated: one +1/+1 left, no -1/-1 at all.
+    expect(still?.counters[PLUS_ONE_COUNTER]).toBe(1);
+    expect(still?.counters[MINUS_ONE_COUNTER]).toBe(0);
+    // …and the creature is the same size it was. The rule changes the counters,
+    // never the numbers.
+    expect(effectivePower(still!)).toBe(BEAR.power! + 1);
+    expect(effectiveToughness(still!)).toBe(BEAR.toughness! + 1);
+  });
+
+  crTest('704.3', 'a condition nobody announced is caught the moment a player would get priority', () => {
+    // The invariant test above proves the engine settles every condition its own
+    // mutation sites create. This one proves the BACKSTOP: the condition is
+    // created by writing on the state directly, so no mutation site runs and
+    // nothing but the priority boundary can catch it.
+    //
+    // That is not a contrived position — it is the shape of the next branch that
+    // adds a way to change a life total and does not know to call the check. CR
+    // 704.3 says the game looks whenever a player WOULD receive priority, which
+    // makes the answer independent of how the condition got there.
+    const state = newGame();
+    state.players.B.life = 0;
+    // Nothing has noticed yet: no action has been taken.
+    expect(state.players.B.hasLost).toBe(false);
+
+    const after = pass(state, registry);
+
+    expect(after.players.B.hasLost).toBe(true);
+    expect(after.gameOver).toBe(true);
+    expect(after.winner).toBe('A');
   });
 });
 

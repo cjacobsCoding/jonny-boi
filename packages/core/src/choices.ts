@@ -510,7 +510,10 @@ interface PendingChoiceBase {
   readonly chooser: PlayerId;
   readonly prompt: string;
   readonly valence: ChoiceValence;
-  /** The spell/permanent that asked. */
+  /**
+   * The spell/permanent that asked, or {@link NO_ASKING_OBJECT} when the
+   * question comes from a GAME RULE with no object behind it.
+   */
   readonly sourceInstanceId: InstanceId;
   readonly sourceName: string;
   readonly min: number;
@@ -770,6 +773,19 @@ function normalizeCounts(request: ChoiceCountRequest, optionCount: number): { mi
 
 /** With neither bound given, a selection asks for exactly one option. */
 const DEFAULT_CHOICE_COUNT = 1;
+
+/**
+ * The `sourceInstanceId` a question raised by a GAME RULE carries — the CR 514.1
+ * cleanup discard, and anything else the turn machine has to ask that no card
+ * asked for.
+ *
+ * Negative on purpose: instance ids are minted upward from 1 as libraries are
+ * built (`paired-arms-config.ts` pins that), so this can never collide with a
+ * real card, and every "look this id up" path (`findInstance`, the UI's card
+ * lookup) already answers `undefined` for an id it does not hold and degrades to
+ * naming the choice by its {@link ChoiceSource.sourceName} instead.
+ */
+export const NO_ASKING_OBJECT: InstanceId = -1;
 
 /** Provenance stamped onto a normalised choice. */
 export interface ChoiceSource {

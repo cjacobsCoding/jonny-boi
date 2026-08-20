@@ -27,6 +27,7 @@ import {
   matchTriggers,
   triggeringPlayerFor,
   type CardDefinition,
+  type CardInstance,
   type EffectContext,
   type GameAction,
   type GameState,
@@ -109,7 +110,11 @@ function nextActionFor(state: GameState): GameAction {
     : { kind: 'passPriority', player: state.priorityPlayer };
 }
 
-/** Pass priority until `turnNumber` reaches `target` (resolving everything on the way). */
+/**
+ * Pass priority until `turnNumber` reaches `target` (resolving everything on the
+ * way), ANSWERING anything the game asks — CR 514.1's cleanup discard is a real
+ * question a turn now ends with. `pass` above already answers.
+ */
 function playThroughTurn(state: GameState, target: number, reg: EffectRegistry, max = 900): GameState {
   let s = state;
   let guard = 0;
@@ -157,7 +162,29 @@ const HOWLING_MINE_ABILITY: TriggeredAbility = {
 };
 
 function newGame(reg: EffectRegistry, seed = 7): GameState {
-  return createGame({ seed, decks: { A: deckOf(ISLAND, 60), B: deckOf(ISLAND, 60) }, registry: reg }).state;
+  const state = createGame({ seed, decks: { A: deckOf(ISLAND, 60), B: deckOf(ISLAND, 60) }, registry: reg }).state;
+  // Both opening hands are trimmed WELL UNDER the CR 402.2 maximum before the
+  // clock starts. The tests below assert that an extra-draw trigger made a hand
+  // GROW, and a hand that starts at the maximum cannot be observed growing: the
+  // CR 514.1 cleanup discard puts it straight back at the end of every turn,
+  // which is the rule working rather than the trigger failing. Trimmed cards go
+  // to the bottom of the library, so nothing is destroyed.
+  trimHandTo(state, 'A', HAND_ROOM_TO_GROW);
+  trimHandTo(state, 'B', HAND_ROOM_TO_GROW);
+  return state;
+}
+
+/** Cards each seat keeps in hand — small enough that several draws stay legal. */
+const HAND_ROOM_TO_GROW = 1;
+
+/** Put a hand's surplus on the bottom of its owner's library. */
+function trimHandTo(state: GameState, player: PlayerId, size: number): void {
+  const seat = state.players[player];
+  while (seat.hand.length > size) {
+    const card = seat.hand.pop() as CardInstance;
+    card.zone = 'library';
+    seat.library.push(card);
+  }
 }
 
 describe('the triggering player rides the resolution', () => {

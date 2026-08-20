@@ -703,6 +703,15 @@ statement is that they are not separable from zero here, not that they are worth
 | measurement | before | after |
 |---|---|---|
 | Gauntlet, Mono-Red Aggro, 40 games/deck, seed 99 | 92/280 = **32.9%** | 79/280 = **28.2%** |
+
+> 📌 **THIS FIGURE HAS SINCE MOVED, and the move is in this table's own spirit.** The 79/280 above
+> was superseded by 81/280 as later branches landed, and CR 514.1 (the cleanup discard, §3.29) took
+> it back down. Measured against `origin/main` at `ab0e41a`, the CURRENT recorded baseline for seed
+> 99 is **79/280 = 28.2%**, and switching the rule off in the same build gives **82/280 = 29.3%** —
+> so the hand-size rule is worth **three games in 280** to Mono-Red on this gauntlet. It moved
+> because the engine got MORE correct, not less: an unbounded hand was making card draw and
+> held-back reactive spells worth more than they are. §3.29 has the isolation and names the two
+> matchups it came from.
 | `hybrid` vs `heuristic`, Mono-Red vs Boros, n=120 | **60.0%** [51.1, 68.3] | **55.8%** [46.9, 64.4] |
 | `hybrid` vs `heuristic`, UW vs Golgari, n=80 | **53.8%** [42.9, 64.3] | **48.8%** [38.1, 59.5] |
 
@@ -3076,11 +3085,12 @@ priority is 117 not 116, the mana pool empties in 500.5 not 500.4, copying is 70
 sublayers are 613.4 not 613.3, `115.2b` does not exist. All were corrected against the published
 Comprehensive Rules text. An index that cites the wrong rule is confidently wrong.
 
-**The six gaps, honestly.** CR 402/514.1 — *there is no maximum hand size*; nobody ever discards at
-cleanup, which changes the value of card draw in every recorded gauntlet baseline. CR 704 — state-based
-actions are checked at ~a dozen explicit mutation sites, not at the priority boundary CR 704.3 names
-(latent: every path that exists today does hit a site), and CR 704.5q's counter annihilation is
-absent. CR 613 — there is no layer system, only additive P/T deltas and keyword ORs, which is *exact*
+**The six gaps, honestly** — ⚠️ **two of which have since been CLOSED; see §3.29.** CR 402/514.1 —
+*there was no maximum hand size*; nobody ever discarded at cleanup, which changed the value of card
+draw in every recorded gauntlet baseline (**closed**). CR 704 — state-based actions were checked at
+~a dozen explicit mutation sites, not at the priority boundary CR 704.3 names (latent: every path
+that existed then did hit a site), and CR 704.5q's counter annihilation was absent (**both closed**).
+CR 613 — there is no layer system, only additive P/T deltas and keyword ORs, which is *exact*
 for everything the engine can express and is now held there by a compile-time proof. CR 615/616 —
 no prevention effects (`feat/replacement-effects` owns this). CR 707 — no copying
 (`feat/copy-effects` owns this). Also recorded as shortfalls on otherwise-covered sections: no
@@ -3105,6 +3115,129 @@ replacement, so a countered adventure goes to the graveyard), CR 400.7 (a value 
 dies with the object), CR 601.2h (an unpayable mandatory additional cost makes the cast illegal and
 leaves nothing half-paid) and CR 310.4 (a defeated Siege's reward cast from an EMPTY mana pool,
 which is what makes "without paying" a real claim).
+
+### 3.29 State-based actions at the priority boundary, and what the hand-size rule cost — ✅ done
+
+Two CR-conformance gaps, one measurement, and a hidden-information leak found while reviewing a
+third gap that a sibling branch had just closed.
+
+#### CR 704.3 — the game looks whenever a player WOULD get priority
+
+`checkStateBasedActions` was called from about a dozen explicit mutation sites and never from
+`onPassPriority`. Every path that existed hit one of the sites, so it was **latent, not live** — but
+it is the wrong SHAPE: CR 704.3 makes the answer independent of how the board became illegal, while a
+per-site discipline makes it depend on whoever writes the next mutation path remembering. The
+interaction matrix recorded it as GAP `sba-on-priority` with a reproduction; a sibling closed the
+announcement half (`applyCastSpell`), and this closes the priority-pass half. **Both reproductions
+are now positive tests.**
+
+⚠️ **Rule 7 is the whole difficulty.** This is the single hottest loop the sim has — a 280-game
+gauntlet passes priority **125,753 times** — and the full check walks the battlefield three times and
+can rebuild the continuous index. So the call sits behind `stateBasedActionsPossible`, a gate that is
+**conservative in one direction only**: it may say yes on a board with nothing to do (one wasted
+check), and must never say no on one that has something (a silently deferred rule).
+
+**The narrowing that made it affordable.** The first gate treated any modifier at all — an anthem, an
+until-end-of-turn pump, any `state.continuous` entry — as a reason to run the full check, and let
+**6.3%** of those 125,753 passes through. The fix is a piece of reasoning the engine can afford to
+make: `PermanentModification` is **purely additive** (the rules manifest pins that as a compile-time
+proof), so a modifier that can only ADD toughness cannot kill a creature — it can only keep one
+alive. A board whose modifiers are all positive can therefore be judged on printed base plus counters,
+which is exactly what `effectiveToughness` with no aggregate computes, and being wrong in that
+direction is safe by construction. Only a modifier that can SUBTRACT toughness sends the board to the
+real check. Pass rate **6.3% → 0.1%** (7,910 extra full checks → 96).
+
+**What it costs, measured three ways, none of them the wall clock.** ⚠️ A cross-build gauntlet
+comparison on this box read anywhere from 1.02× to 1.41× for a change that allocates nothing — that
+is noise wearing a result's clothes, and it is why the evidence below is what it is:
+
+| evidence | reading |
+|---|---|
+| **Allocation** — `scavenge-probe.ts`, nursery pinned at 1 MB both bounds | ON **587 / 584**, OFF **588 / 583** — inside the documented ±2 floor, i.e. **it allocates nothing** |
+| **Paired CPU** — both engines in ONE process, 9 interleaved rounds, 8 repeats of 24 seeded games per round, min-of-N | ON **2157 ms**, OFF **2156 ms** → **1.0005×** |
+| **Direct cost** — `packages/core/bench/sba-gate-cost.ts` | **~30 ns per permanent**: 125 / 258 / 851 ns at 4 / 8 / 16 permanents. At 125,753 boundary passes on an eight-permanent board, **~30 ms across 280 games** — against a gauntlet costing roughly 1.9 s of CPU |
+
+The workload is **proved** identical rather than assumed: the two arms play the same 24 seeded
+self-play games and their digests are compared before any timing is reported.
+
+#### CR 704.5q — the counters annihilate as a STATE-BASED ACTION now
+
+`+1/+1` and `-1/-1` counters were removed in pairs inside the `addCounters` primitive, which is right
+for the one route that calls it and wrong for every other. It was **reachable**, which the gap
+register had believed it was not: **persist** returns a creature carrying a `-1/-1` counter without
+going near `addCounters` — and it wrote a NEGATIVE `+1/+1` tally, so nothing could even ask whether
+the creature had a `-1/-1` counter on it, which is persist's own printed condition. The rule now
+lives in the state-based-action pass, the primitive no longer does it at all (one implementation of
+one rule), and persist writes a real `-1/-1` counter. The arithmetic never moved; what moved is
+whether the STATE tells the truth.
+
+#### The CR 514.1 review — and the leak
+
+The cleanup discard landed on `main` from `feat/block-requirements-and-statics` while this branch was
+building its own. Reviewed against the brief that owned it:
+
+- ✅ the maximum is a **named `RulesConfig.maximumHandSize`**, not a literal seven;
+- ✅ a player **at or under** the maximum is never asked;
+- ✅ the pilot discards **by value** through the existing `'loss'` policy — now with that policy
+  written out on `answerSelectCards` and four tests behind it, including the one that matters: an
+  unbuilt board keeps its LAND and pitches the creature, a built one does the reverse;
+- ⚠️ **CR 514.3a was half-implemented.** The madness window correctly kept the turn open, but the
+  turn then simply ended. The rule says **another cleanup step begins**. It is now re-entrant, and
+  needs no new state: reaching the turn machine's step advance *while the step is still cleanup* can
+  only mean a priority window was opened during it. (The rule's two other clauses are unreachable
+  rather than unimplemented, and the manifest says why: no `TriggerEvent` watches a card leave a
+  hand, and nothing a cleanup step does can make a state-based action applicable.)
+- 🔴 **The question named a card in the discarding player's HAND as its source** — `hand[0]`, chosen
+  to keep the field a real instance id. `choiceAsked` carries `sourceInstanceId` **unredacted** into
+  every pilot's observation feed, and instance ids are minted sequentially from the pre-shuffle
+  library, so it published a read on the decklist. The protocol's own leak scan cannot catch it
+  either: `collectInstanceIds` only looks at keys named `instanceId`. It now uses
+  `NO_ASKING_OBJECT`, the sentinel a source-less question carries.
+
+**The self-play behaviour lock is the proof of exactly that.** Regenerating it moved **only the event
+LOG hashes**: every seed keeps its winner, turn count, action count, **event count** and final-state
+hash. One field inside one event changed — and putting the old value back reproduces the previous
+hashes exactly, which is how the attribution was checked rather than assumed. The unchanged event
+counts are the second measurement in there: the new CR 704.3 check **fires nothing at all** across 24
+full games, which is what a backstop should do.
+
+#### What CR 514.1 did to the recorded baseline — isolated, not estimated
+
+The rule is a **named config value**, so it can be switched off in the same build, on the same seed,
+with the same decks, and nothing else moving. That is the measurement:
+
+| `maximumHandSize` | Mono-Red Aggro, 40 games/deck, seed 99 |
+|---|---|
+| **999** (the rule OFF — the engine as it was) | **82/280 = 29.3%** |
+| **7** (the rule ON — the engine as it should be) | **79/280 = 28.2%** |
+
+**Three games, in two matchups.** Every row is identical except **Golgari Midrange 8/40 → 7/40** and
+**UW Control 16/40 → 14/40** — the two grindy decks in the gauntlet, which is precisely where a
+hand-size limit should bite and where an aggro deck's opponent was quietly banking cards it could
+never have kept. Reproduced across two interleaved rounds, and the win counts are deterministic, so
+these are exact rather than noisy.
+
+📌 **Measured twice, and the delta GREW.** Against `origin/main` at `b5752b2` the same isolation read
+**81/280 → 80/280**, one game in one matchup. The token-characteristics fix (`ab0e41a`) then gave
+every token its real colour and creature types, the grindy decks' boards got better, and the
+hand-size rule became worth three games instead of one. Both readings are true of the engine they
+were taken on; the second is the current one.
+
+**79/280 = 28.2% is the recorded baseline for seed 99 from here on** (`origin/main` at `ab0e41a`,
+which this branch reproduces byte-for-byte, every matchup row equal). It moved because the engine got
+MORE correct, not less: an unbounded hand overvalues card draw and held-back reactive spells, which
+is exactly the quantity this product exists to measure.
+
+⛔ **CR 704.5b — a SPELL-driven draw from an empty library does not lose the game — is DEFERRED by
+decision, not by omission.** It is real, and it stays recorded (`spell-draw-decking`, cited from the
+matrix). It was not taken here for one reason: it ends games earlier and therefore moves the gauntlet
+baselines again, and measuring it in the same branch as CR 514.1 would produce one number that could
+be attributed to neither. It wants its own branch and its own isolation, and the fix belongs in
+`packages/cards/src/primitives.ts` rather than in the engine.
+
+**Sabotage-checked: 11 breaks, 11 caught, 0 escapes** — including the one that first came back GREEN
+and was the useful result of the whole pass: CR 514.3a's "another cleanup step" had NO test until the
+sabotage said so.
 
 ### 3.30 Copies that are NOT CARDS — a spell copy on the stack, and a token copy — ✅ done
 §3.24 shipped copying ONTO an object that already exists: a Clone entering the battlefield swaps its
@@ -3252,7 +3385,6 @@ the object just created** ("That token gains haste" — Helm of the Host), delib
 the copy's keywords because a grant is layer 6 on THAT object and is not among the copiable values a
 second copy would take; and an **"except …" tail on a SPELL copy** (Fork's "except that the copy is
 red"), for which `CopyExceptions` has no colour field.
-
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).

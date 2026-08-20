@@ -362,7 +362,12 @@ export function cloneState(state: GameState): GameState {
   if (state.replacements !== undefined && state.replacements.length > 0) {
     next.replacements = state.replacements.map(cloneFloatingReplacement);
   }
-  if (state.madnessWindow) next.madnessWindow = { ...state.madnessWindow };
+  // Same `!== undefined` rule and the same reason as the two choice fields above:
+  // a window that was DECLINED (`null`) is a different shape from one that never
+  // opened, and only one of the two engine paths ever re-clones.
+  if (state.madnessWindow !== undefined) {
+    next.madnessWindow = state.madnessWindow ? { ...state.madnessWindow } : null;
+  }
   if (state.turnFactsA !== undefined) next.turnFactsA = state.turnFactsA;
   if (state.turnFactsB !== undefined) next.turnFactsB = state.turnFactsB;
   return next;

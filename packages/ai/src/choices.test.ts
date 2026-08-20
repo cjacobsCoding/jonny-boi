@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyAction,
+  cardOption,
   collectCardOptions,
   createGame,
   createRng,
@@ -163,6 +164,87 @@ describe('card ranking (what "my best / my worst card" means)', () => {
 
   it('scores an unknown/vanished card as zero rather than throwing', () => {
     expect(cardValue(undefined, WEIGHTS)).toBe(0);
+  });
+});
+
+// --- the cleanup discard (CR 514.1) ------------------------------------------------
+
+describe('discarding down to maximum hand size', () => {
+  /** The cleanup discard as the ENGINE raises it: a `'loss'` selection of exactly `count`. */
+  function cleanupDiscard(state: GameState, count: number): PendingChoice {
+    return {
+      ...park({
+        kind: 'selectCards',
+        chooser: 'A',
+        prompt: `Cleanup: discard ${count}`,
+        candidates: state.players.A.hand.map(cardOption),
+        min: count,
+        max: count,
+        fromZone: 'hand',
+        valence: 'loss',
+      }),
+      context: 'cleanupDiscard',
+    };
+  }
+
+  /** The instance ids the pilot chooses to pitch, unwrapped from its action. */
+  function discardAnswer(state: GameState, count: number): readonly InstanceId[] {
+    const action = answerChoiceHeuristically(state, cleanupDiscard(state, count), WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectCards') {
+      throw new Error(`expected a card selection, got ${action.kind}`);
+    }
+    return action.answer.instanceIds;
+  }
+
+  it('pitches the LEAST valuable card, not an arbitrary one', () => {
+    const state = newGame().state;
+    state.players.A.hand = [];
+    const [dragon, bear, island] = giveHand(state, 'A', [DRAGON, BEAR, ISLAND]);
+    // A pilot with plenty of lands already: the Island is the chaff.
+    for (let i = 0; i < WEIGHTS.choiceLandsWanted; i++) putOnBattlefield(state, 'A', [ISLAND]);
+
+    const answer = discardAnswer(state, 1);
+    expect(answer).toEqual([island!.instanceId]);
+    // …and emphatically not the cards it wants to cast.
+    expect(answer).not.toContain(dragon!.instanceId);
+    expect(answer).not.toContain(bear!.instanceId);
+  });
+
+  it('keeps its LAND when it is still short of mana — the board decides, not the card type', () => {
+    // The same three cards, the same question, an unbuilt board: now the land is
+    // the lifeline and the small creature is the thing to let go. A discard
+    // policy that simply ranked by card type could not tell these two apart.
+    const state = newGame().state;
+    state.players.A.hand = [];
+    const [, bear, island] = giveHand(state, 'A', [DRAGON, BEAR, ISLAND]);
+
+    const answer = discardAnswer(state, 1);
+    expect(answer).toEqual([bear!.instanceId]);
+    expect(answer).not.toContain(island!.instanceId);
+  });
+
+  it('gives up exactly the number asked for, worst first', () => {
+    const state = newGame().state;
+    state.players.A.hand = [];
+    const [dragon, bear, island] = giveHand(state, 'A', [DRAGON, BEAR, ISLAND]);
+    for (let i = 0; i < WEIGHTS.choiceLandsWanted; i++) putOnBattlefield(state, 'A', [ISLAND]);
+
+    const answer = discardAnswer(state, 2);
+    expect(answer).toHaveLength(2);
+    expect(new Set(answer)).toEqual(new Set([island!.instanceId, bear!.instanceId]));
+    expect(answer).not.toContain(dragon!.instanceId);
+  });
+
+  it('is deterministic — the same hand answers the same way every time', () => {
+    // The lab's premise is that a win-rate delta means something, which it does
+    // not if a pilot discards differently on a replay of the same game.
+    const state = newGame().state;
+    state.players.A.hand = [];
+    giveHand(state, 'A', [DRAGON, BEAR, ISLAND, BEAR, ISLAND]);
+    const first = discardAnswer(state, 2);
+    for (let i = 0; i < 5; i++) {
+      expect(discardAnswer(state, 2)).toEqual(first);
+    }
   });
 });
 

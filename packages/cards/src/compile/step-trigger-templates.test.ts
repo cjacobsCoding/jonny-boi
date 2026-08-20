@@ -278,7 +278,31 @@ function gameAtStart(reg: Registry, seed: number): GameState {
     registry: reg,
     decks: { A: deck(ISLAND), B: deck(ISLAND) },
   });
+  // Both opening hands are trimmed WELL UNDER the CR 402.2 maximum before the
+  // clock starts. Every test below asserts that an extra-draw trigger made a
+  // hand GROW, and a hand that starts at the maximum cannot be observed growing:
+  // the CR 514.1 cleanup discard puts it straight back at the end of each turn,
+  // which is the rule working, not the trigger failing. The trimmed cards go to
+  // the bottom of the library so nothing is destroyed and the deck stays legal.
+  trimHandTo(state, 'A', HAND_ROOM_TO_GROW);
+  trimHandTo(state, 'B', HAND_ROOM_TO_GROW);
   return state;
+}
+
+/**
+ * How many cards each seat keeps in its opening hand for these tests — small
+ * enough that several turns of extra draws stay below `maximumHandSize`.
+ */
+const HAND_ROOM_TO_GROW = 1;
+
+/** Put a hand's surplus on the bottom of its owner's library. */
+function trimHandTo(state: GameState, player: PlayerId, size: number): void {
+  const seat = state.players[player];
+  while (seat.hand.length > size) {
+    const card = seat.hand.pop() as CardInstance;
+    card.zone = 'library';
+    seat.library.push(card);
+  }
 }
 
 /** Compile, asserting the card is fully playable and naming what stopped it if not. */
