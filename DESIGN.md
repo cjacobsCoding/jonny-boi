@@ -1810,6 +1810,94 @@ character-indexed object (nothing had printed a label that long until the fetchl
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
 
+### 3.21 Combat damage, and what the EQUIPPED creature does — ✅ done
+The two seams the ~38-card corpus family shares, and they are one idea seen twice: **a trigger has a
+watched object, and it is not always the card it is printed on.**
+
+**`TriggerCondition.watches` is a SCOPE, not a new event.** "Whenever equipped creature deals combat
+damage to a player" is the *same game occurrence* as the creature's own printed line — a creature
+dealt combat damage to a player — watched on a different object. So the vocabulary grew by one
+optional field (`'self' | 'attachedHost'`, absent meaning `'self'`), not by an
+`equippedDealsCombatDamage` event sitting beside `combatDamageToPlayer`. Two event names for one
+occurrence is how a matcher ends up with two answers to the same question, and every existing trigger
+is byte-identical data. The scope applies uniformly to the five self-referential events, so
+`attacks`, `dies` and the combat-damage line all read it through one `watchedInstanceId` helper.
+
+Three properties, each of which fails silently if it is got wrong:
+- **The SOURCE is still the attachment.** A Sword's trigger is controlled by the Sword's controller,
+  ordered by the Sword's battlefield position, and its "~ deals 2 damage" means the Sword. Only the
+  watched object moves — which is exactly why this is a field on the condition and not a different
+  `sourceInstanceId`.
+- **Attached to nothing matches NOTHING.** A Sword lying loose on the battlefield has an ability that
+  can never fire. A fallback to "watch myself" would be the Sword swinging on its own.
+- **The answer is the CURRENT attachment.** The trigger runtime caches one `TriggerSource` per
+  permanent and rebuilds it only when the controller or the ability list changes — so a copied
+  `attachedTo` would answer with the attachment the Equipment had when it was first seen this action.
+  `TriggerSource.permanent` is therefore a LIVE reference (one narrowly-typed field), which is what
+  makes an Equipment correct when its host dies to first-strike damage between the two damage steps,
+  and when the Equipment itself leaves the battlefield (`resetInstanceForNewZone` nulls `attachedTo`).
+  `equipped-triggers.test.ts` changes the attachment between two events of ONE action, which is the
+  case a copy gets wrong and nothing else would notice.
+
+**"When equipped creature dies" (Skullclamp) fires because of the state-based-action ORDER**, and the
+order is now pinned by a test rather than assumed: the SBA fixpoint checks attachments first and
+deaths second, so a pass emits `creatureDied` while the Equipment is still attached and only the pass
+after that unattaches it. Reversing those two would make the rule compile a trigger that silently
+never fires.
+
+**The compiler.** Six new trigger rules (`combatDamageToPlayer` and `attacks`/`dies` scoped to the
+host, each with its "you may" sibling), built on the existing `mayEffects` wrapper through a shared
+`optionalTriggerFrom` that compiles only the INNER body — the `trigger-etb-you-may` shape, so a body
+that implements its own option is not asked twice. The **assembly refuses a host-watching trigger on
+a card with no "Equip {N}"/"Enchant …" line**, for the same reason it already refused a lone
+modification: attached to nothing, forever, it could never fire.
+
+**The static half now carries the payload keywords.** "Equipped creature gets +2/+2 and has
+protection from black and from green" and "gets +1/+0 and has haste and ward {1}" reach core's
+`protectionFrom`/`ward` through `parseProtectionOrWard` — the *same* parser the printed keyword line
+uses, so an Equipment and a creature cannot disagree about which forms are real. The conjunction that
+separates two keywords is the same word that separates two protection qualities, so the split is
+re-joined before parsing. "Protection from instants and from sorceries" (Sword of Wealth and Power)
+still reports: core has no check for that quality.
+
+**Both seats, because an Equipment nothing equips is inert.** Two AI defects fell out, and both were
+invisible in a win rate:
+- the equip search gated on `attachment.modifies`, so an Equipment whose whole text is a host-watching
+  trigger (Skullclamp, Sword of the Animist) scored `undefined` and was **never equipped in any game
+  ever simulated**. It now gates on `attachment`, and `attachPerHostTrigger` prices the triggers;
+- an attacker's value counted the face damage and nothing else, so a Ragavan-shaped 1/1 was priced at
+  one point and held back. `attackSaboteurTriggerValue` counts every `combatDamageToPlayer` trigger
+  connecting would set off — the creature's own AND the ones its attachments watch it with — in the
+  branch where the attack is expected to CONNECT only, since a blocked attacker collects nothing. And
+  the walker diversion now sends the *vanilla* at the planeswalker: "combat damage to a player" pays
+  nothing there, and two same-size attackers are otherwise interchangeable, which is exactly when
+  diverting the wrong one is invisible.
+
+**Measured yield:** the top-2100 corpus went **408 → 420 playable** (19.4% → 20.0%) on the same cached
+corpus. Newly playable: Sword of Fire and Ice, Sword of the Animist, Argentum Armor, Lavaspur Boots,
+Spirit Mantle, Aqueous Form, Akroma's Memorial, Vindicate, Corpse Knight, Marauding Blight-Priest,
+Poison-Tip Archer, Elas il-Kor. Skullclamp compiles too and is already a pool candidate. Gauntlet seed
+99 is **byte-identical** to the same-day `origin/main` (81/280, every matchup row equal) — the shipped
+pool contains no card of this family yet — and min-of-12 `process.cpuUsage` is 2625 ms on the branch
+vs 2702 ms on `main`, i.e. parity inside a noise band of ±15% on a box running ten agents.
+
+⛔ **Still reported, by name and by clause.** Treasure tokens (Goldvein Pick, Beamtown Beatstick,
+Sword of Wealth and Power); **proliferate** (Sword of Truth and Justice, Thrummingbird, Bloated
+Contaminator); **"that player"** — the player the damage was dealt to, which no effect can be aimed at
+yet (Sword of Feast and Famine, Fallen Shinobi, Nashi); **"that many"** — the damage amount as a
+derived value (Cold-Eyed Selkie, Lathril, Gishath, The Key to the Vault); **"to a player or
+planeswalker"** and **"or battle"**, which are wider watched-object sets (Psychic Frog, Grateful
+Apparition, Beamtown Beatstick); **"up to one target"**, an optional target chosen at announcement
+(Sword of Light and Shadow, Sword of Hearth and Home); and the narrowed equip costs ("Equip legendary
+creature {3}", "Equip {4}. This ability costs {1} less…"), bestow, reconfigure and living weapon.
+
+⚠️ **The shipped POOL still contains none of these cards**, and cannot until someone runs
+`scripts/build-expansion.ts --fetch` — the generator's scratch index is a gitignored cache and the
+committed `card-index.json` has none of the Swords in it, so the regeneration is a NETWORK step that
+must not run in a gate. Skullclamp is already in `expansion-candidates.json` and now compiles, so the
+next `--fetch` picks it up for free. Until then the family is reachable by deck import only, and
+`equipped-triggers.test.ts` plays it end to end from real printed Oracle text.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

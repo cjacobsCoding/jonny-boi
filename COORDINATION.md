@@ -116,8 +116,83 @@ throughput (games/sec) from regressing.
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
 
+| feat/combat-damage-and-equipment | worker | packages/core (triggers.ts `TriggerWatches`/`watches`/`TriggerSource.permanent`, internal/triggers-runtime.ts, index.ts +2 exports, NEW equipped-triggers.test.ts), packages/cards (compile/rules.ts 6 new TRIGGER_RULES + 3 new EFFECT_RULES + `optionalTriggerFrom`/`hostWatch`/payload-keyword parsing + 2 hint rewords, compile/compile.ts host-watch assembly guard, compile/attachments.test.ts 1 obsoleted case, NEW equipped-triggers.test.ts), packages/ai (heuristic.ts equip search + attack value + walker diversion, weights.ts +2 knobs, NEW equipment-pilot.test.ts), apps/web/src/lib/about/mechanics.ts (+2 witnesses, 1 reworded), DESIGN §3.21, COORDINATION. **No new effect primitive, no new GameEvent, no pool change.** | 🚧 PUSHED, not merged |
+
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `feat/combat-damage-and-equipment` 🚧 PUSHED — **a trigger now has a
+  WATCHED OBJECT, and it is not always the card it is printed on.** "Whenever equipped creature deals
+  combat damage to a player" is the SAME `combatDamageToPlayer` event the creature's own line is, with
+  `TriggerCondition.watches: 'attachedHost'`. One optional field, not an `equippedDealsCombatDamage`
+  event sitting next to the one that already existed — two names for one occurrence is how a matcher
+  ends up with two answers to the same question. Every trigger authored before this is byte-identical
+  data (the field is ABSENT, not `'self'`).
+
+  **Measured, same cached corpus: 408 → 420 / 2100 playable (19.4% → 20.0%).** Newly playable:
+  Sword of Fire and Ice, Sword of the Animist, Argentum Armor, Lavaspur Boots, Spirit Mantle, Aqueous
+  Form, Akroma's Memorial, Vindicate, Corpse Knight, Marauding Blight-Priest, Poison-Tip Archer, Elas
+  il-Kor. **Skullclamp compiles now too**, and is already in `expansion-candidates.json`.
+
+  ⚠️ **THREE THINGS THAT FAIL SILENTLY HERE, and what this branch did instead.**
+  1. **The SOURCE stays the attachment.** A Sword's trigger is controlled by the Sword's controller,
+     ordered by the Sword's battlefield position, and its "~ deals 2 damage" means the Sword. Only the
+     WATCHED object moves — which is why this is a field on the condition and not a different
+     `sourceInstanceId`.
+  2. **Attached to nothing matches NOTHING** — never a fallback to watching itself, which would be a
+     Sword lying loose on the battlefield swinging on its own.
+  3. **The attachment must be read LIVE.** `createTriggerCollector` caches one `TriggerSource` per
+     permanent and rebuilds it only when the controller or the ability LIST changes, so a copied
+     `attachedTo` answers with the attachment the Equipment had when it was first seen this action.
+     `TriggerSource.permanent` is a live reference (one narrowly-typed field) instead. The test that
+     matters changes the attachment between two events of ONE action; a copy gets that wrong and
+     nothing else in the suite would notice.
+
+  ✅ **"When equipped creature dies" (Skullclamp) works because of the SBA ORDER**, now pinned by a
+  test rather than assumed: the fixpoint checks attachments first and deaths second, so a pass emits
+  `creatureDied` while the Equipment is still attached and only the NEXT pass unattaches it. If anyone
+  reorders `checkStateBasedActions`, that rule compiles a trigger that silently never fires.
+
+  🧠 **TWO AI DEFECTS FELL OUT, and both were invisible in a win rate.**
+  - `bestEquipPlay` gated on `attachment.modifies`, so an Equipment whose whole text is a host-watching
+    trigger (Skullclamp, Sword of the Animist) scored `undefined` and **was never equipped in any game
+    ever simulated**. It gates on `attachment` now; `scoreEquip` prices the host-watching triggers.
+  - an attacker was priced on face damage alone, so a Ragavan-shaped 1/1 was worth one point and stayed
+    home. `attackSaboteurTriggerValue` counts the `combatDamageToPlayer` triggers connecting would set
+    off (its own AND its attachments'), in the CONNECT branch only — a blocked attacker collects
+    nothing. And the walker diversion now sends the *vanilla* at the planeswalker, because "combat
+    damage to a player" pays nothing there.
+  Each of the 7 pilot-test cases was checked to FAIL with the new terms removed.
+
+  ⚡ **Play is byte-identical and throughput is at parity.** Gauntlet seed 99 vs the same-day
+  `origin/main`: **81/280, every matchup row equal** — the shipped pool contains no card of this family
+  yet. Wall clock is worthless on this box (38.2 vs 13.8 games/sec for the SAME 280 games), so
+  throughput is min-of-12 `process.cpuUsage`: **2625 ms branch vs 2702 ms main**, inside a ±15% noise
+  band.
+
+  ⛔ **Reported, never approximated** — by clause, on the card: Treasure tokens (Goldvein Pick,
+  Beamtown Beatstick, Sword of Wealth and Power); **proliferate** (Sword of Truth and Justice,
+  Thrummingbird, Bloated Contaminator); **"that player"** — the player the damage was dealt to, which
+  no effect can be aimed at yet (Sword of Feast and Famine, Fallen Shinobi, Nashi); **"that many"** —
+  the damage amount as a derived value (Cold-Eyed Selkie, Lathril, Gishath, The Key to the Vault);
+  **"to a player or planeswalker" / "or battle"** — wider watched-object sets (Psychic Frog, Grateful
+  Apparition); **"up to one target"** (Sword of Light and Shadow, Sword of Hearth and Home); and the
+  narrowed equip costs ("Equip legendary creature {3}"), bestow, reconfigure, living weapon.
+
+  ⚠️ **THE POOL STILL HAS NONE OF THESE CARDS, and I could not fix that offline.**
+  `scripts/build-expansion.ts` needs its gitignored scratch index, and the committed `card-index.json`
+  has none of the Swords in it — so the regeneration is a `--fetch` NETWORK step that must not run in a
+  gate. Whoever has the network next: run it and the family lands in the pool for free. Until then it
+  is reachable by deck import only, and `packages/cards/src/equipped-triggers.test.ts` plays it end to
+  end from real printed Oracle text.
+
+  ⚠️ **One obsoleted test, flipped rather than deleted.** `compile/attachments.test.ts` used
+  "Enchanted creature has ward {2}" as its example of a grant the engine cannot model. It models it now
+  (payload keywords go through the same `parseProtectionOrWard` the printed keyword line uses), so the
+  case asserts what it does and the refusal moved to "protection from Demons".
+
+  ⚠️ **`apps/web/src/lib/sim/determinism.test.ts` times out at 5000 ms on a loaded box.** It
+  passes on its own every time. If you see it red in a full run, re-run that file before believing it.
 
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine
