@@ -206,17 +206,37 @@ describe('the fast soak', () => {
 });
 
 describe('applyActionInPlace stays exact on SOAK decks', () => {
-  // `match-inplace.test.ts` pins this for four curated decks and three seeds.
-  // Those decks predate transform, modal casting, madness, card grants and
-  // emblems — all of which mutate state in shapes that did not exist then. An
-  // in-place path that aliased one of them would silently rewrite every
-  // win-rate and every A/B verdict in the product.
+  /*
+   * `match-inplace.test.ts` pins this for four CURATED decks and three seeds.
+   * Those decks predate transform, modal casting, madness, card grants,
+   * planeswalkers and attachments — every one of which mutates state in a shape
+   * that did not exist when that test was written, and an in-place path that
+   * aliased one of them would silently rewrite every win-rate and every A/B
+   * verdict in the product.
+   *
+   * So the pairs below are ANCHORED on those systems specifically, not merely
+   * random: each matchup is guaranteed to contain the mechanics named in it.
+   * The mixed pair is kept as the control.
+   */
   const sim = soakSimConfig();
-  for (const seed of [11, 2027, 0xbadc0de]) {
-    it(`is bit-identical on a mixed matchup @ seed ${seed}`, () => {
-      const deckA = buildMixedDeck(index, seed);
-      const deckB = buildMixedDeck(index, seed ^ 0x27d4eb2f);
-      const seats = makeSeats(loadDeck(deckA, pool), loadDeck(deckB, pool), { pilotA: pilot, pilotB: pilot }, registry);
+  const PAIRS: ReadonlyArray<readonly [SoakMechanicId | 'mixed', SoakMechanicId | 'mixed', number]> = [
+    ['transform-dfc', 'modal-cast', 11],
+    ['madness', 'graveyard-grant', 2027],
+    ['planeswalker-loyalty', 'attachment', 0xbadc0de],
+    ['mixed', 'mixed', 4242],
+  ];
+  for (const [left, right, seed] of PAIRS) {
+    it(`is bit-identical: ${left} vs ${right} @ seed ${seed}`, () => {
+      const build = (which: SoakMechanicId | 'mixed', s: number) =>
+        which === 'mixed' ? buildMixedDeck(index, s) : buildAnchoredDeck(index, which, s);
+      const deckA = build(left, seed);
+      const deckB = build(right, seed ^ 0x27d4eb2f);
+      // A mechanic the pool cannot print is `pool-mechanics.test.ts`'s business,
+      // not this test's — but silently skipping would make a green run
+      // meaningless, so say so.
+      expect(deckA, `${left} could not be anchored — see pool-mechanics.test.ts`).toBeDefined();
+      expect(deckB, `${right} could not be anchored — see pool-mechanics.test.ts`).toBeDefined();
+      const seats = makeSeats(loadDeck(deckA!, pool), loadDeck(deckB!, pool), { pilotA: pilot, pilotB: pilot }, registry);
       expect(compareApplyPaths(seats, seed, sim, 'A')).toBeUndefined();
     });
   }
