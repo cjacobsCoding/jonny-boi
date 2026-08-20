@@ -236,6 +236,17 @@ export interface SoakMechanic {
   readonly enabledBy?: (card: CardDefinition, serialized: string) => boolean;
 }
 
+/**
+ * Whether a card is COLOURED — asked off its printed pips rather than through
+ * core's reader, because this file is a manifest and must not pull the engine's
+ * colour memo into a table that is walked once per pool card at startup.
+ */
+function isColored(card: CardDefinition): boolean {
+  const cost = card.cost as Record<string, number | undefined> | undefined;
+  if (!cost) return false;
+  return (['W', 'U', 'B', 'R', 'G'] as const).some((pip) => (cost[pip] ?? 0) > 0);
+}
+
 /** Serialize a definition once for the cheap "does it mention" probes. */
 export function serializeDefinition(card: CardDefinition): string {
   return JSON.stringify(card);
@@ -412,7 +423,32 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     printedBy: (_c, t) => t.includes('"targets"') && t.includes('"triggers"'),
   },
   { id: 'control-change', label: 'control change — a permanent changed controller', witnessKind: 'event', printedBy: (_c, t) => t.includes('gainControl') },
-  { id: 'damage-prevention', label: 'damage prevention — damage prevented rather than dealt', witnessKind: 'event', printedBy: (_c, t) => t.includes('preventDamage') || t.includes('"protectionFrom"') },
+  {
+    id: 'damage-prevention',
+    label: 'damage prevention — damage prevented rather than dealt',
+    witnessKind: 'event',
+    printedBy: (_c, t) => t.includes('preventDamage') || t.includes('"protectionFrom"'),
+    /**
+     * Protection does NOT enable its own damage half, and the reason is worth
+     * writing down because it gets worse as the pilot gets better: prevention
+     * needs a source OF THE PROTECTED QUALITY to deal damage to the protected
+     * creature, and a competent pilot spends its whole game avoiding exactly
+     * that — it will not block a pro-red creature with a red one, and red burn
+     * cannot legally target it at all. Measured on an anchored matchup, the
+     * event fired about once in twenty attempts, so the default six was a coin
+     * flip; any change to the pool re-rolled it and the suite went red for a
+     * reason that had nothing to do with the change.
+     *
+     * A SYMMETRIC coloured sweeper is the arrangement that cannot be dodged: a
+     * red "deals 2 damage to each creature" hits its OWN controller's pro-red
+     * creature, and the prevention is a consequence of casting the spell rather
+     * than of a combat decision. Packing one alongside the anchors is precisely
+     * what `enabledBy` is for (see madness, which needs a discard outlet for the
+     * same structural reason).
+     */
+    enabledBy: (card, t) =>
+      t.includes('"dealDamageToEach"') && t.includes('"creatures":true') && isColored(card),
+  },
   {
     id: 'replacement-effect',
     label: 'replacement effect — a counter/damage/draw quantity replaced (CR 614/615)',
@@ -630,6 +666,12 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   madnessDeclined: 'madness',
   cardsMilled: 'mill',
   tokenCreated: 'token',
+  // CR 704.5d - a token that has left the battlefield stopped existing. It is
+  // the SAME mechanic as the creation (a token is a token whether it is arriving
+  // or ceasing to be), so it does not get an id of its own; what it does do is
+  // make a game where tokens are made AND traded off witness `token` twice,
+  // which is the cheap end-to-end proof that the cease-to-exist rule ran.
+  tokenCeasedToExist: 'token',
   triggerPutOnStack: 'triggered-ability',
   triggerTargetsChosen: 'trigger-targets',
   controlChanged: 'control-change',

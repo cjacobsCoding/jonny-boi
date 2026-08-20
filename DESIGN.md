@@ -2924,6 +2924,107 @@ the games genuinely differ now: the maximum-hand-size rule adds a discard answer
 cleanup, which is also why a byte-identical gauntlet is not available as evidence for this branch and
 the self-play lock was re-pinned instead.
 
+### 3.29 A token keeps its printed face — colour, creature types, token-ness — ✅ done
+**Every token in the game entered COLOURLESS, with no creature type, and not knowing it was a token.**
+`makeToken` built a `CardDefinition` carrying a name and a P/T and nothing else; `colorsOfDefinition`
+reads colour off cost PIPS; a token has no mana cost. So "a 1/1 **black** Faerie Rogue creature token"
+and "a 5/5 **red** Dragon token" both arrived as colourless, typeless objects — invisible to a coloured
+anthem, to protection from a colour, to "destroy target nonblack creature", to every typal lord and to
+every `CardFilter.anyOfColors` query. The cards printing them still compiled `'complete'` and every
+test still passed. This is the project's signature failure shape — the card plays as something subtly
+different from what is printed — and it predated all recent work: **every** token card in the pool had
+it.
+
+**Measured, paired, on the same cached 2100-card corpus against the `origin/main` this merges into:
+533 → 545 playable (25.4% → 26.0%), +12 cards, 0 regressions** — the two full playable SETS were
+diffed, not just the counts. The shipped pool is 545 cards.
+
+#### The shape
+- **`CardDefinition.colors`** — the colour stated in WORDS, for an object that has no pips to read it
+  off. `colorsOfDefinition` **prefers it and falls back to pips**, so every printed card in the pool
+  still walks its cost exactly as before and nothing that worked changes. An **empty array is
+  meaningful**: `[]` is the printed word "colorless" (Third Path Iconoclast's Soldier), absent means
+  "read my pips". The reader normalises to canonical WUBRG and de-duplicates, so `['B','U']` and
+  `['U','B']` are one answer.
+- **`CardDefinition.isToken`**, beside `isEmblem` — on the DEFINITION rather than the instance, and
+  for a reason worth keeping: a token definition is MINTED by the effect that creates it and is never
+  shared with a card, and `cloneInstance` shares `def` **by reference**, so the flag cannot be dropped
+  by the field-by-field clone that has silently lost four fields on this project. There is no line to
+  forget. `packages/core/src/token-clone.test.ts` pins both that guarantee and its other half — the
+  cloned instance is still exactly the ten-property object it always was.
+- **`CardFilter.isToken`** — one tri-state for both printed words ("token" / "nontoken") rather than
+  two fields that could disagree.
+- **CR 704.5d** — a token that has left the battlefield **ceases to exist**, applied by BOTH
+  leave-the-battlefield funnels (core's `moveToZone` and the cards package's `movePermanentTo`)
+  through one shared `ceaseToExistIfToken`, and applied **after** the `zoneChange` event so every
+  "dies" / "leaves" trigger still fires exactly as it does for a card. Done at the MOVE rather than as
+  an SBA pass, because the SBA form would walk both players' graveyards, exiles, hands and libraries
+  after every resolution, every draw and every combat-damage step hunting for something that is nearly
+  never there. Without it a dead token sat in a graveyard for the rest of the game, inflating every
+  graveyard count the engine derives and standing there as a legal target for anything returning a
+  creature CARD.
+- **`parseTokenFace`** reads the printed descriptor's strictly ordered grammar — **colours, then
+  subtypes, then card types** — so "colorless Thopter artifact creature" and "blue and black Faerie"
+  are both read exactly. CR 111.3 names a token by its subtype LINE ("Faerie Rogue"), not by the last
+  word of it. A descriptor it cannot read completely **refuses the whole clause** rather than dropping
+  the part it missed.
+- **Typal anthems**, because token creature types with no consumer would be decoration: the anthem
+  rule now reads a subtype noun in both printed shapes — "Other **Goblin** creatures you control get
+  +1/+1 and have haste" and the bare "**Goblins** you control have haste". The bare form deliberately
+  adds **no** card type, because a Kindred Enchantment (Bitterblossom) genuinely IS a Faerie without
+  being a creature. Both read the closed `SEARCHABLE_SUBTYPES` table, which is now the compiler's
+  subtype vocabulary generally rather than only a search's.
+- **The Kindred card type** (CR 308), with its own graveyard type bit, because something counts card
+  types and leaving it out would make that count quietly one short.
+- **A symmetric anthem** prints no scope tail at all ("Black creatures get +1/+1"), so the tail is
+  optional — reading its absence as "you control" would be a strictly better card than the one printed.
+
+#### A second colour reader, found on the way
+`passesDestroyFilter` (the `nonblack` half of Doom Blade) walked `def.cost` **itself** rather than
+asking `colorsOfDefinition`. That second opinion about what "black" means was wrong twice over: it
+could not see a HYBRID pip, and it could not see a printed colour with no cost behind it — so Doom
+Blade happily destroyed a black Faerie token the printed card cannot even target. There is now one
+colour reader in the codebase.
+
+#### Cards un-reported
+Bitterblossom, **Bitterbloom Bearer** (whose token is the two-colour "blue and black" form) and
+Ophiomancer — the three the previous branch left reporting *specifically* because of this — plus
+Goblin Chieftain, Lyra Dawnbringer, Diregraf Captain, Blood Artist, Falkenrath Noble, Hornet Queen,
+Seraph Sanctuary, Harvester of Souls and Soul of the Harvest. Twelve cards this branch is solely responsible for, measured against the main it merges into.
+
+#### Enforced tables
+`OBSERVATION_POLICY` classifies the new `tokenCeasedToExist` as **public** — both seats watched the
+token hit the graveyard and both watch it stop existing, and its name was already announced by
+`tokenCreated`. `paired-arms-config.ts` needed no change: `makeToken` was already classified, and this
+branch adds no primitive. `internal/clone.ts` needed no new line, and now says so out loud, because
+that is the structural reason token-ness lives on the definition.
+
+#### Throughput (rule 7), measured properly
+Wall clock on this box is worthless — a dozen agents run concurrently, and the same build measured
+1422 ms and 1907 ms ten minutes apart. Paired `process.cpuUsage`, min-of-5 over the same in-process
+gauntlet (Mono-Red Aggro, 40 games, seed 99), branch and main measured back to back: **1875 ms vs
+1844 ms (1.02×)**, inside that spread — and an earlier interleaved A/B/A had the branch FASTER than
+main (1422 ms vs 1578 ms), which is what "inside the spread" means. The deterministic gauntlet output
+is **identical in six of seven matchup rows**; UW Control moves 15/40 → 14/40. That one game is a real
+behaviour change, not noise: the hero deck runs Young Pyromancer, whose Elemental tokens are now red
+Elementals that cease to exist when they die instead of accumulating in a graveyard the evaluator
+reads.
+#### Reported by name, not approximated
+- **Token COPIES** ("create a token that's a copy of target creature", "except it's a 4/4 black Zombie
+  Snake Druid with no mana cost"). This is the copy-effect system; copy effects LANDED while this branch was in
+  flight (`copy.ts`, CR 706 layer 1), so the missing half is now only the token-copy PRIMITIVE: a rule
+  that reads "create a token that's a copy of target creature", picks a source, and hands
+  `copyResultDef` to `ctx.createToken`. The trap it must not fall into is already disarmed — core
+  stamps token-ness in `createTokenInState`, so a copy built from `copiableDefOf` (which returns the
+  copied CARD and carries no token flag) is still a token.
+- **The predefined artifact tokens** (Treasure, Clue, Food) — they print no P/T in the clause and carry
+  an activated ability the token rule does not build.
+- **A token that enters TAPPED and/or ATTACKING** (mobilize, Anim Pakal, Myrel) — `createToken` has no
+  way to express either, so the whole clause reports rather than creating an untapped one.
+- **A token count that is derived** ("create X 1/1 Goblins, where X is Krenko's power").
+- **"Destroy all nontoken creatures"** (Hour of Reckoning) — `destroyAll` takes no `CardFilter` at all,
+  so the token flag has nothing to narrow there; that is a `destroyAll` gap, not a token one.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

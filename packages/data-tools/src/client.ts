@@ -156,7 +156,14 @@ export class ScryfallClient {
    * its names recorded as unresolved so the run continues.
    */
   async fetchCardsByNames(names: readonly string[]): Promise<FetchResult> {
-    const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+    // A TWO-FACED name ("Bala Ged Recovery // Bala Ged Sanctuary") is how the
+    // pool names a split/modal-DFC card, and Scryfall's collection endpoint does
+    // not accept it as an exact name - it wants either half. Asking by the FRONT
+    // half returns the whole card, both faces included, so the join by Scryfall
+    // id still lands. Without this every split card the compiler learned to
+    // build reported "unresolved" and dropped straight back out of the index,
+    // taking its art and its display row with it.
+    const unique = [...new Set(names.map((n) => frontFaceName(n)).filter(Boolean))];
     const cards: RawScryfallCard[] = [];
     const unresolved: string[] = [];
 
@@ -206,4 +213,15 @@ export class ScryfallClient {
       return null;
     }
   }
+}
+
+/**
+ * The half of a printed name Scryfall's collection endpoint can look up. A
+ * single-faced name is returned unchanged; "A // B" becomes "A", which resolves
+ * to the same card object (Scryfall keys a two-faced card by its front face).
+ */
+function frontFaceName(name: string): string {
+  const trimmed = name.trim();
+  const split = trimmed.indexOf(' // ');
+  return split > 0 ? trimmed.slice(0, split).trim() : trimmed;
 }

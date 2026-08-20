@@ -442,12 +442,22 @@ export const CURATED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'castSpell', who: 'you', spellType: 'instant' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Elemental' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Elemental', colors: ['R'], subtypes: ['Elemental'] },
+          },
+        ],
         label: 'Cast instant: make a 1/1 red Elemental',
       },
       {
         condition: { on: 'castSpell', who: 'you', spellType: 'sorcery' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Elemental' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Elemental', colors: ['R'], subtypes: ['Elemental'] },
+          },
+        ],
         label: 'Cast sorcery: make a 1/1 red Elemental',
       },
     ],

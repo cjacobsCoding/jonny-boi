@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-20T11:08:27.770Z",
+  "generatedAt": "2026-08-20T11:56:46.364Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 530,
+  "requested": 545,
   "unresolved": [],
   "cards": [
     {
@@ -2182,6 +2182,64 @@
       "faces": []
     },
     {
+      "id": "fc5d3341-cbce-49e5-93cc-8add92479dca",
+      "name": "Bad Moon",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Black creatures get +1/+1.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "gvl",
+      "collectorNumber": "48",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "normal": "https://cards.scryfall.io/normal/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "large": "https://cards.scryfall.io/large/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "png": "https://cards.scryfall.io/png/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.png?1783938752",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.jpg?1783938752",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.webp?1783938752",
+        "grid": "https://cards.scryfall.io/grid/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.webp?1783938752",
+        "display": "https://cards.scryfall.io/display/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.webp?1783938752",
+        "art": "https://cards.scryfall.io/art/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.webp?1783938752",
+        "crop": "https://cards.scryfall.io/crop/front/8/f/8f8a75da-ea3c-43e7-9d32-1c92f8ec0fd2.webp?1783938752"
+      },
+      "localImages": {
+        "normal": "bad-moon-normal.jpg",
+        "art_crop": "bad-moon-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d2075f58-b0e9-4e85-b7e6-0523a27a1d5b",
       "name": "Bala Ged Recovery // Bala Ged Sanctuary",
       "manaCost": {
@@ -3060,6 +3118,131 @@
       "faces": []
     },
     {
+      "id": "5effb651-f9e0-4c14-8192-bd0e132b8d5d",
+      "name": "Bitterbloom Bearer",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Faerie",
+          "Rogue"
+        ]
+      },
+      "rawTypeLine": "Creature — Faerie Rogue",
+      "oracleText": "Flash\nFlying\nAt the beginning of your upkeep, you lose 1 life and create a 1/1 blue and black Faerie creature token with flying.",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Flying",
+        "Flash"
+      ],
+      "set": "ecl",
+      "collectorNumber": "88",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "normal": "https://cards.scryfall.io/normal/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "large": "https://cards.scryfall.io/large/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "png": "https://cards.scryfall.io/png/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.png?1783904470",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.jpg?1783904470",
+        "thumb": "https://cards.scryfall.io/thumb/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.webp?1783904470",
+        "grid": "https://cards.scryfall.io/grid/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.webp?1783904470",
+        "display": "https://cards.scryfall.io/display/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.webp?1783904470",
+        "art": "https://cards.scryfall.io/art/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.webp?1783904470",
+        "crop": "https://cards.scryfall.io/crop/front/7/1/7127164d-f2a3-4d79-b6db-93507ff5ab47.webp?1783904470"
+      },
+      "localImages": {
+        "normal": "bitterbloom-bearer-normal.jpg",
+        "art_crop": "bitterbloom-bearer-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "fb868840-09fa-49b1-85cb-b08ad065e972",
+      "name": "Bitterblossom",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Kindred",
+          "Enchantment"
+        ],
+        "subtypes": [
+          "Faerie"
+        ]
+      },
+      "rawTypeLine": "Kindred Enchantment — Faerie",
+      "oracleText": "At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "2x2",
+      "collectorNumber": "69",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "normal": "https://cards.scryfall.io/normal/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "large": "https://cards.scryfall.io/large/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "png": "https://cards.scryfall.io/png/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.png?1783921908",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.jpg?1783921908",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.webp?1783921908",
+        "grid": "https://cards.scryfall.io/grid/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.webp?1783921908",
+        "display": "https://cards.scryfall.io/display/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.webp?1783921908",
+        "art": "https://cards.scryfall.io/art/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.webp?1783921908",
+        "crop": "https://cards.scryfall.io/crop/front/b/9/b9640cbf-b016-410e-9eff-e8924883517b.webp?1783921908"
+      },
+      "localImages": {
+        "normal": "bitterblossom-normal.jpg",
+        "art_crop": "bitterblossom-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "9456c5b6-946d-403a-8ed0-dff9f921d98c",
       "name": "Black Knight",
       "manaCost": {
@@ -3376,6 +3559,66 @@
           }
         }
       ]
+    },
+    {
+      "id": "310f141c-7f37-4729-aed6-dd9c09db448d",
+      "name": "Blood Artist",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Vampire"
+        ]
+      },
+      "rawTypeLine": "Creature — Vampire",
+      "oracleText": "Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.",
+      "power": 0,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "209",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "normal": "https://cards.scryfall.io/normal/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "large": "https://cards.scryfall.io/large/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "png": "https://cards.scryfall.io/png/front/b/5/b5275d76-2947-4219-be21-614c7421614a.png?1783903786",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/5/b5275d76-2947-4219-be21-614c7421614a.jpg?1783903786",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/5/b5275d76-2947-4219-be21-614c7421614a.webp?1783903786",
+        "grid": "https://cards.scryfall.io/grid/front/b/5/b5275d76-2947-4219-be21-614c7421614a.webp?1783903786",
+        "display": "https://cards.scryfall.io/display/front/b/5/b5275d76-2947-4219-be21-614c7421614a.webp?1783903786",
+        "art": "https://cards.scryfall.io/art/front/b/5/b5275d76-2947-4219-be21-614c7421614a.webp?1783903786",
+        "crop": "https://cards.scryfall.io/crop/front/b/5/b5275d76-2947-4219-be21-614c7421614a.webp?1783903786"
+      },
+      "localImages": {
+        "normal": "blood-artist-normal.jpg",
+        "art_crop": "blood-artist-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "67fba605-9cfa-499c-83e0-4fbd023bcfa0",
@@ -6580,6 +6823,64 @@
       "faces": []
     },
     {
+      "id": "4692740f-be90-459f-8d90-c4ae71771595",
+      "name": "Crusade",
+      "manaCost": {
+        "generic": 0,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "White creatures get +1/+1.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "ddf",
+      "collectorNumber": "27",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "normal": "https://cards.scryfall.io/normal/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "large": "https://cards.scryfall.io/large/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "png": "https://cards.scryfall.io/png/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.png?1783941765",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.jpg?1783941765",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.webp?1783941765",
+        "grid": "https://cards.scryfall.io/grid/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.webp?1783941765",
+        "display": "https://cards.scryfall.io/display/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.webp?1783941765",
+        "art": "https://cards.scryfall.io/art/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.webp?1783941765",
+        "crop": "https://cards.scryfall.io/crop/front/b/9/b99452c0-5d1c-4a73-90b6-0ec3ac0af893.webp?1783941765"
+      },
+      "localImages": {
+        "normal": "crusade-normal.jpg",
+        "art_crop": "crusade-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "a3e51a35-09df-4189-b131-08a21e6a557d",
       "name": "Cryptic Command",
       "manaCost": {
@@ -8520,6 +8821,71 @@
       "localImages": {
         "normal": "dimir-signet-normal.jpg",
         "art_crop": "dimir-signet-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "70de24d9-c585-4bf6-ac2c-c5b4b7aa298c",
+      "name": "Diregraf Captain",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Zombie",
+          "Soldier"
+        ]
+      },
+      "rawTypeLine": "Creature — Zombie Soldier",
+      "oracleText": "Deathtouch\nOther Zombie creatures you control get +1/+1.\nWhenever another Zombie you control dies, target opponent loses 1 life.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B",
+        "U"
+      ],
+      "colorIdentity": [
+        "B",
+        "U"
+      ],
+      "keywords": [
+        "Deathtouch"
+      ],
+      "set": "mic",
+      "collectorNumber": "148",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "normal": "https://cards.scryfall.io/normal/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "large": "https://cards.scryfall.io/large/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "png": "https://cards.scryfall.io/png/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.png?1783925325",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.jpg?1783925325",
+        "thumb": "https://cards.scryfall.io/thumb/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.webp?1783925325",
+        "grid": "https://cards.scryfall.io/grid/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.webp?1783925325",
+        "display": "https://cards.scryfall.io/display/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.webp?1783925325",
+        "art": "https://cards.scryfall.io/art/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.webp?1783925325",
+        "crop": "https://cards.scryfall.io/crop/front/1/5/158407ad-35a9-40e1-9762-1c0572b56ecb.webp?1783925325"
+      },
+      "localImages": {
+        "normal": "diregraf-captain-normal.jpg",
+        "art_crop": "diregraf-captain-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -12110,6 +12476,64 @@
       "faces": []
     },
     {
+      "id": "3754dce0-3e97-406f-8807-a4942a222c41",
+      "name": "Gaea's Anthem",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Enchantment"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Enchantment",
+      "oracleText": "Creatures you control get +1/+1.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "tsr",
+      "collectorNumber": "204",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "normal": "https://cards.scryfall.io/normal/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "large": "https://cards.scryfall.io/large/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "png": "https://cards.scryfall.io/png/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.png?1783927781",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.jpg?1783927781",
+        "thumb": "https://cards.scryfall.io/thumb/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.webp?1783927781",
+        "grid": "https://cards.scryfall.io/grid/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.webp?1783927781",
+        "display": "https://cards.scryfall.io/display/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.webp?1783927781",
+        "art": "https://cards.scryfall.io/art/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.webp?1783927781",
+        "crop": "https://cards.scryfall.io/crop/front/4/3/43febc63-597d-4392-b8ea-a00841148c45.webp?1783927781"
+      },
+      "localImages": {
+        "normal": "gaea-s-anthem-normal.jpg",
+        "art_crop": "gaea-s-anthem-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "496c9633-ff17-48df-9b24-1d8cbfd06126",
       "name": "Garenbrig Carver // Shield's Might",
       "manaCost": {
@@ -12804,6 +13228,68 @@
       "localImages": {
         "normal": "glimpse-the-unthinkable-normal.jpg",
         "art_crop": "glimpse-the-unthinkable-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "368b4052-174e-4458-a6e6-eaf8093aa0fe",
+      "name": "Goblin Chieftain",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Goblin"
+        ]
+      },
+      "rawTypeLine": "Creature — Goblin",
+      "oracleText": "Haste (This creature can attack and {T} as soon as it comes under your control.)\nOther Goblin creatures you control get +1/+1 and have haste.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [
+        "Haste"
+      ],
+      "set": "jmp",
+      "collectorNumber": "324",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "normal": "https://cards.scryfall.io/normal/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "large": "https://cards.scryfall.io/large/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "png": "https://cards.scryfall.io/png/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.png?1783930390",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.jpg?1783930390",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.webp?1783930390",
+        "grid": "https://cards.scryfall.io/grid/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.webp?1783930390",
+        "display": "https://cards.scryfall.io/display/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.webp?1783930390",
+        "art": "https://cards.scryfall.io/art/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.webp?1783930390",
+        "crop": "https://cards.scryfall.io/crop/front/8/9/89fcc35b-76fa-4408-8620-a1e11b2caf1f.webp?1783930390"
+      },
+      "localImages": {
+        "normal": "goblin-chieftain-normal.jpg",
+        "art_crop": "goblin-chieftain-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -14051,6 +14537,68 @@
       "faces": []
     },
     {
+      "id": "5987ce77-10ad-4871-900a-5a005fcf4955",
+      "name": "Harvester of Souls",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Demon"
+        ]
+      },
+      "rawTypeLine": "Creature — Demon",
+      "oracleText": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nWhenever another nontoken creature dies, you may draw a card.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Deathtouch"
+      ],
+      "set": "jmp",
+      "collectorNumber": "243",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "normal": "https://cards.scryfall.io/normal/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "large": "https://cards.scryfall.io/large/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "png": "https://cards.scryfall.io/png/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.png?1783930420",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "grid": "https://cards.scryfall.io/grid/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "display": "https://cards.scryfall.io/display/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "art": "https://cards.scryfall.io/art/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "crop": "https://cards.scryfall.io/crop/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420"
+      },
+      "localImages": {
+        "normal": "harvester-of-souls-normal.jpg",
+        "art_crop": "harvester-of-souls-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "28a52ba1-95da-44e1-8ac5-0dc23c902394",
       "name": "Healer's Hawk",
       "manaCost": {
@@ -14600,6 +15148,127 @@
       "localImages": {
         "normal": "holy-strength-normal.jpg",
         "art_crop": "holy-strength-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "a6450b8e-eb18-431c-9eb7-7daf107978b2",
+      "name": "Hordeling Outburst",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery",
+      "oracleText": "Create three 1/1 red Goblin creature tokens.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "a25",
+      "collectorNumber": "134",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "normal": "https://cards.scryfall.io/normal/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "large": "https://cards.scryfall.io/large/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "png": "https://cards.scryfall.io/png/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.png?1783935146",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.jpg?1783935146",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.webp?1783935146",
+        "grid": "https://cards.scryfall.io/grid/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.webp?1783935146",
+        "display": "https://cards.scryfall.io/display/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.webp?1783935146",
+        "art": "https://cards.scryfall.io/art/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.webp?1783935146",
+        "crop": "https://cards.scryfall.io/crop/front/e/4/e4138531-ef42-4c56-864e-d3525a4f2082.webp?1783935146"
+      },
+      "localImages": {
+        "normal": "hordeling-outburst-normal.jpg",
+        "art_crop": "hordeling-outburst-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "3b1f8108-6911-49e9-8f78-f950bb58cb6c",
+      "name": "Hornet Queen",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 3,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Insect"
+        ]
+      },
+      "rawTypeLine": "Creature — Insect",
+      "oracleText": "Flying, deathtouch\nWhen this creature enters, create four 1/1 green Insect creature tokens with flying and deathtouch.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Deathtouch",
+        "Flying"
+      ],
+      "set": "dsc",
+      "collectorNumber": "184",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "normal": "https://cards.scryfall.io/normal/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "large": "https://cards.scryfall.io/large/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "png": "https://cards.scryfall.io/png/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.png?1783909606",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.jpg?1783909606",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.webp?1783909606",
+        "grid": "https://cards.scryfall.io/grid/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.webp?1783909606",
+        "display": "https://cards.scryfall.io/display/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.webp?1783909606",
+        "art": "https://cards.scryfall.io/art/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.webp?1783909606",
+        "crop": "https://cards.scryfall.io/crop/front/b/2/b2af9184-df81-413b-abcf-331c4471e6d4.webp?1783909606"
+      },
+      "localImages": {
+        "normal": "hornet-queen-normal.jpg",
+        "art_crop": "hornet-queen-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -17986,6 +18655,72 @@
       "faces": []
     },
     {
+      "id": "592c91fc-6430-4c76-9460-65f047350f67",
+      "name": "Lyra Dawnbringer",
+      "manaCost": {
+        "generic": 3,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Angel",
+      "oracleText": "Flying\nFirst strike (This creature deals combat damage before creatures without first strike.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nOther Angels you control get +1/+1 and have lifelink.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Lifelink",
+        "First strike"
+      ],
+      "set": "fdn",
+      "collectorNumber": "738",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "normal": "https://cards.scryfall.io/normal/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "large": "https://cards.scryfall.io/large/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "png": "https://cards.scryfall.io/png/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.png?1783903956",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.jpg?1783903956",
+        "thumb": "https://cards.scryfall.io/thumb/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.webp?1783903956",
+        "grid": "https://cards.scryfall.io/grid/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.webp?1783903956",
+        "display": "https://cards.scryfall.io/display/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.webp?1783903956",
+        "art": "https://cards.scryfall.io/art/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.webp?1783903956",
+        "crop": "https://cards.scryfall.io/crop/front/f/9/f9fa30b6-3a33-46fd-8b32-ac1cfa41500d.webp?1783903956"
+      },
+      "localImages": {
+        "normal": "lyra-dawnbringer-normal.jpg",
+        "art_crop": "lyra-dawnbringer-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "2f292253-64d3-4cf2-881f-a3eea4fda388",
       "name": "Magma Jet",
       "manaCost": {
@@ -20727,6 +21462,67 @@
       "localImages": {
         "normal": "omen-of-the-sea-normal.jpg",
         "art_crop": "omen-of-the-sea-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "55eca80c-dcd8-4c2f-aa0f-fb0aec7b80f7",
+      "name": "Ophiomancer",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 1,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Shaman"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Shaman",
+      "oracleText": "At the beginning of each upkeep, if you control no Snakes, create a 1/1 black Snake creature token with deathtouch.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [],
+      "set": "soc",
+      "collectorNumber": "118",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "normal": "https://cards.scryfall.io/normal/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "large": "https://cards.scryfall.io/large/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "png": "https://cards.scryfall.io/png/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.png?1783903820",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.jpg?1783903820",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.webp?1783903820",
+        "grid": "https://cards.scryfall.io/grid/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.webp?1783903820",
+        "display": "https://cards.scryfall.io/display/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.webp?1783903820",
+        "art": "https://cards.scryfall.io/art/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.webp?1783903820",
+        "crop": "https://cards.scryfall.io/crop/front/b/a/baf793b6-9612-43f3-9f1b-2e53e81cb89f.webp?1783903820"
+      },
+      "localImages": {
+        "normal": "ophiomancer-normal.jpg",
+        "art_crop": "ophiomancer-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -26876,6 +27672,68 @@
       "faces": []
     },
     {
+      "id": "6b9194dd-2296-4879-ac5e-f89b18431df6",
+      "name": "Soul of the Harvest",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elemental"
+        ]
+      },
+      "rawTypeLine": "Creature — Elemental",
+      "oracleText": "Trample\nWhenever another nontoken creature you control enters, you may draw a card.",
+      "power": 6,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Trample"
+      ],
+      "set": "jmp",
+      "collectorNumber": "432",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "normal": "https://cards.scryfall.io/normal/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "large": "https://cards.scryfall.io/large/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "png": "https://cards.scryfall.io/png/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.png?1783930351",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "grid": "https://cards.scryfall.io/grid/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "display": "https://cards.scryfall.io/display/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "art": "https://cards.scryfall.io/art/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "crop": "https://cards.scryfall.io/crop/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351"
+      },
+      "localImages": {
+        "normal": "soul-of-the-harvest-normal.jpg",
+        "art_crop": "soul-of-the-harvest-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "71d83fca-e40e-4d0e-956d-d0d6da9cc472",
       "name": "Sphinx's Revelation",
       "manaCost": {
@@ -30016,6 +30874,69 @@
       "localImages": {
         "normal": "think-twice-normal.jpg",
         "art_crop": "think-twice-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "f7156897-2b02-4ecd-868d-d4d59244e9ed",
+      "name": "Third Path Iconoclast",
+      "manaCost": {
+        "generic": 0,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Monk"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Monk",
+      "oracleText": "Whenever you cast a noncreature spell, create a 1/1 colorless Soldier artifact creature token.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R",
+        "U"
+      ],
+      "colorIdentity": [
+        "R",
+        "U"
+      ],
+      "keywords": [],
+      "set": "tdc",
+      "collectorNumber": "307",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "normal": "https://cards.scryfall.io/normal/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "large": "https://cards.scryfall.io/large/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "png": "https://cards.scryfall.io/png/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.png?1783907016",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.jpg?1783907016",
+        "thumb": "https://cards.scryfall.io/thumb/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.webp?1783907016",
+        "grid": "https://cards.scryfall.io/grid/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.webp?1783907016",
+        "display": "https://cards.scryfall.io/display/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.webp?1783907016",
+        "art": "https://cards.scryfall.io/art/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.webp?1783907016",
+        "crop": "https://cards.scryfall.io/crop/front/c/a/ca29f373-7051-4cbe-bda8-e711fda4f9bb.webp?1783907016"
+      },
+      "localImages": {
+        "normal": "third-path-iconoclast-normal.jpg",
+        "art_crop": "third-path-iconoclast-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,

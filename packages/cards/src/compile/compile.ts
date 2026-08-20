@@ -458,6 +458,43 @@ function watchesTheHost(ability: TriggeredAbility): boolean {
 }
 
 /**
+ * Compile a body printed as ONE sentence joined by the word "and" - "you lose 1
+ * life **and** create a 1/1 black Faerie Rogue creature token with flying".
+ *
+ * Tried only AFTER the whole body and the sentence split have both failed, so
+ * nothing that compiles today compiles differently.
+ *
+ * **Splitting on a word cannot invent a card here, and that is the whole safety
+ * argument:** a split is accepted only when the left half is a complete rule AND
+ * the right half compiles in turn, so a cut in the wrong place simply fails.
+ * "create a 1/1 **blue and black** Faerie creature token" is exactly that case -
+ * cutting at that "and" leaves "create a 1/1 blue", which matches no rule, so
+ * the cut is abandoned and the earlier one ("you lose 1 life" / "create a 1/1
+ * blue and black Faerie creature token with flying") is the one that stands.
+ *
+ * Left-to-right and recursive, so "A and B and C" is handled by the same walk,
+ * and the first split whose halves BOTH compile wins.
+ */
+function compileConjunction(
+  clause: string,
+  ctx: RuleContext,
+): NonNullable<ReturnType<typeof applyRules>>[] | null {
+  const CONJUNCTION = ' and ';
+  let at = clause.indexOf(CONJUNCTION);
+  while (at >= 0) {
+    const left = applyRules(EFFECT_RULES, clause.slice(0, at).trim(), ctx);
+    if (left) {
+      const rest = clause.slice(at + CONJUNCTION.length).trim();
+      const whole = applyRules(EFFECT_RULES, rest, ctx);
+      const right = whole ? [whole] : compileConjunction(rest, ctx);
+      if (right) return [left, ...right];
+    }
+    at = clause.indexOf(CONJUNCTION, at + CONJUNCTION.length);
+  }
+  return null;
+}
+
+/**
  * Compile an activated ability line — the printed `COST: EFFECT` shape.
  *
  * The cost half is parsed here (it is a small closed vocabulary of symbols and
@@ -944,7 +981,12 @@ export function compileCard(card: CompilableCard): CompileResult {
             out.push(result);
           }
           return out;
-        })();
+        })() ??
+        // A body printed as ONE sentence joined by "and" - "you lose 1 life AND
+        // create a 1/1 black Faerie Rogue creature token with flying"
+        // (Bitterblossom). See {@link compileConjunction} for why splitting on a
+        // word cannot invent a card here.
+        compileConjunction(clauses[0]!, ctx);
       if (!parts) return null;
 
       const refs: EffectRef[] = [];

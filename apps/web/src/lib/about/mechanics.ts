@@ -574,8 +574,21 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       },
       {
         title: 'Tokens',
-        detail: 'Creature tokens with their own printed stats, subtypes and keywords.',
-        witness: { kind: 'primitive', id: 'createToken' },
+        detail:
+          "A token enters with the WHOLE face it is printed with, not just its size: its colour (“a 1/1 black Faerie Rogue creature token”, and the two-colour “blue and black” form), its creature types, its card types (“artifact creature token”), the printed word “colorless”, and its keywords. That is what makes a black token feel a black anthem, a red token unable to block protection from red, and a Goblin token pumped by a Goblin lord. A descriptor the compiler cannot read completely refuses the whole line rather than creating a token missing a characteristic.",
+        witness: { kind: 'rule', id: 'create-creature-token' },
+      },
+      {
+        title: 'Token-ness itself',
+        detail:
+          "A token is a TOKEN, and two rules key on it. The printed words “token” and “nontoken” narrow a trigger (“whenever another nontoken creature dies”), and CR 704.5d removes a token that has left the battlefield from the game — after its “dies” trigger has fired, so nothing is lost, but before it can sit in a graveyard forever inflating every graveyard count.",
+        witness: { kind: 'oracle', text: 'Whenever another nontoken creature dies, draw a card.', as: 'creature' },
+      },
+      {
+        title: 'Typal (“tribal”) lords',
+        detail:
+          "“Other Goblin creatures you control get +1/+1 and have haste” and the bare “Goblins you control have haste”, over a closed vocabulary of creature types. The bare form deliberately carries no card type, because a Kindred Enchantment — Bitterblossom — genuinely IS a Faerie without being a creature.",
+        witness: { kind: 'oracle', text: 'Other Goblin creatures you control get +1/+1 and have haste.', as: 'creature' },
       },
       {
         title: 'Card flow',

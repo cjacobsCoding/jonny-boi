@@ -306,6 +306,11 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   attachmentFailed: 'public',
   attachmentPutIntoGraveyard: 'public',
   tokenCreated: 'public',
+  // A token ceasing to exist (CR 704.5d) is as public as its creation was: both
+  // seats watched it hit the graveyard, and both watch it stop existing. It
+  // carries no hidden information — the name is one already announced by
+  // `tokenCreated`.
+  tokenCeasedToExist: 'public',
   // `reason` here is engine-authored from the choice KIND, never from card text.
   choiceAbandoned: 'public',
 };

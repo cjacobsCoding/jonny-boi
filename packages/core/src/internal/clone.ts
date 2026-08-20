@@ -96,6 +96,17 @@ function cloneInstance(inst: CardInstance): CardInstance {
   // boundary after it entered — and blank it INVISIBLY, because "nothing chosen"
   // is a legal state that matches nothing rather than a crash.
   if (inst.chosenAsEntered !== undefined) copy.chosenAsEntered = inst.chosenAsEntered;
+  // NOTE FOR THE NEXT FIELD, because this copy has now dropped one four times:
+  // a fact that belongs to the CARD rather than to this object's runtime state
+  // needs no line here at all. `def` is shared by reference above, so a
+  // DEFINITION field (`colors`, `subtypes`, `isToken`, `keywords`, …) survives
+  // every clone by construction and cannot be lost to a field-by-field copy.
+  //
+  // That is a real reason to prefer the definition when the new fact is about
+  // the card - token-ness is on `CardDefinition`, not here, for exactly this
+  // reason. Put a field on the INSTANCE only when it is genuinely per-object
+  // state, and then add it above with its own conditional AND its own test.
+  // `token-clone.test.ts` pins both halves of that rule.
   return copy;
 }
 

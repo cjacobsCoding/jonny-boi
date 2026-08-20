@@ -543,9 +543,21 @@ function createTokenInState(
   const instanceId = state.nextInstanceId++;
   const hasHaste = Boolean(def.keywords?.haste);
   const isCreatureToken = def.types.includes('creature');
+  // CR 111.1: token-ness is a property of HOW the object was created, not of the
+  // characteristics it was created with. Stamping it here rather than trusting
+  // the caller is what makes it true of EVERY token the engine will ever make -
+  // including one built from a definition that came from somewhere else, which is
+  // exactly what a token COPY ("create a token that's a copy of target creature")
+  // will be: `copiableDefOf` returns the copied CARD, which naturally carries no
+  // token flag, and a token copy that answered "no" to "are you a token" would be
+  // wrong for the nontoken filters and would never cease to exist.
+  //
+  // The definition is REPLACED, never written into: pool definitions are frozen
+  // and shared, and this one may be a copy of one.
+  const tokenDef: CardDefinition = def.isToken === true ? def : { ...def, isToken: true };
   const token: CardInstance = {
     instanceId,
-    def,
+    def: tokenDef,
     controller,
     owner: controller,
     zone: 'battlefield',
@@ -565,7 +577,7 @@ function createTokenInState(
   // battle token enters with its printed defense the same way.
   applyEnteringLoyalty(token, emit);
   applyEnteringDefense(token, emit);
-  emit({ type: 'tokenCreated', instanceId, controller, name: def.name });
+  emit({ type: 'tokenCreated', instanceId, controller, name: tokenDef.name });
   // A token entering is a zoneChange into the battlefield — this is what ETB
   // triggers (its own and others') observe, keeping one mechanism for "enters".
   emit({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });

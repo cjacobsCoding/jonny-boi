@@ -48,6 +48,7 @@ import {
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
+  colorsOfDefinition,
   effectiveKeywords,
   effectivePower,
   isBattle,
@@ -401,12 +402,54 @@ export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `makeToken` — create `params.count` (default 1) creature tokens under the
- * controller via engine-v2's `ctx.createToken`, so the token enters the battlefield
- * properly (summoning-sick unless it has haste) and fires ETB triggers like any
- * permanent. Token P/T, name, and keywords are all DATA from params (no magic
- * numbers): `power`/`toughness`/`name`/`keywords`. Used by cast-triggers such as
- * Young Pyromancer's "make a 1/1 red Elemental".
+ * The five colours a printed token may declare, in canonical order. Used to keep
+ * a `colors` param honest: anything outside this set is not a colour and is
+ * dropped, so a malformed param degrades to "colorless" rather than to a
+ * definition core's colour reader has to defend against.
+ */
+const TOKEN_COLORS: readonly string[] = ['W', 'U', 'B', 'R', 'G'];
+
+/**
+ * The card types a token may declare. Closed on purpose: a token's type line is
+ * printed text ("artifact creature token", "enchantment creature token"), and a
+ * type outside this set would be either meaningless (a token is never an instant)
+ * or a permanent kind with entry rules of its own (a planeswalker or battle token
+ * needs printed loyalty/defense, which the token rule does not read).
+ */
+const TOKEN_TYPES: readonly CardType[] = ['artifact', 'creature', 'enchantment', 'land'];
+
+/**
+ * `makeToken` — create `params.count` (default 1) tokens under the controller via
+ * engine-v2's `ctx.createToken`, so each enters the battlefield properly
+ * (summoning-sick unless it has haste) and fires ETB triggers like any permanent.
+ *
+ * **EVERY characteristic the printed token has is DATA from params**, and that is
+ * not a style point — it is the fix for a real infidelity. A token is printed as
+ * a whole card face ("a 1/1 **black** **Faerie Rogue** creature token **with
+ * flying**"), and for a long time this primitive built a definition with a name,
+ * a P/T and nothing else. Every token in the game therefore entered COLOURLESS
+ * and with NO CREATURE TYPE, which made it invisible to a coloured anthem, to
+ * protection from a colour, to "destroy target nonblack creature" and to every
+ * typal lord — while the card still compiled `'complete'`.
+ *
+ *   - `power` / `toughness` — the printed box.
+ *   - `name`               — the token's name; also its default creature type,
+ *                            because a "Goblin" token IS a Goblin. Pass
+ *                            `subtypes` explicitly for a multi-type token
+ *                            ("Faerie Rogue") or one whose name is not a type.
+ *   - `subtypes`           — the printed subtype line.
+ *   - `colors`             — the printed colour WORDS, `[]` for the printed word
+ *                            "colorless". A token has no mana cost, so this is
+ *                            the only place its colour can come from.
+ *   - `types`             — the printed type line; defaults to `['creature']`,
+ *                            and "artifact creature" passes `['artifact',
+ *                            'creature']`.
+ *   - `keywords`           — "with flying", "with deathtouch".
+ *
+ * The definition `id` carries the whole face rather than just the name, so two
+ * genuinely different tokens with the same name (a 1/1 white Soldier and a 1/1
+ * colourless Soldier artifact creature) are not conflated by anything keying on
+ * id — the UI's art lookup, a log line, an AI's card memo.
  */
 export const makeToken: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
@@ -414,12 +457,36 @@ export const makeToken: EffectPrimitive = (ctx) => {
   const toughness = intParam(ctx, 'toughness', 1);
   const name = strParam(ctx, 'name') ?? 'Token';
   const keywords = keywordsParam(ctx);
+  // A token's colour is printed in words and it has no mana cost, so an ABSENT
+  // param and an EMPTY one must stay distinguishable: absent means the caller
+  // said nothing (core falls back to the — nonexistent — pips and reads
+  // colourless), `[]` means the printed word "colorless". `ctx.params.colors`
+  // is therefore tested for presence before `strArrayParam` flattens it.
+  const colors =
+    ctx.params.colors === undefined
+      ? undefined
+      : strArrayParam(ctx, 'colors').filter((c) => TOKEN_COLORS.includes(c));
+  const declaredTypes = strArrayParam(ctx, 'types').filter((t): t is CardType =>
+    TOKEN_TYPES.includes(t as CardType),
+  );
+  const types: readonly CardType[] = declaredTypes.length > 0 ? declaredTypes : ['creature'];
+  // The printed subtype line, defaulting to the token's own name: "create a 1/1
+  // red Goblin creature token" makes an object that IS a Goblin, which is what a
+  // typal lord and a "sacrifice a Goblin" cost both select on.
+  const declaredSubtypes = strArrayParam(ctx, 'subtypes');
+  const subtypes = declaredSubtypes.length > 0 ? declaredSubtypes : [name];
   const def: CardDefinition = {
-    id: `token:${name}`,
+    id: `token:${[...types].join('-')}:${(colors ?? []).join('') || 'c'}:${subtypes.join('-')}:${power}/${toughness}`,
     name,
-    types: ['creature'],
+    types,
+    subtypes,
+    // No `isToken` here on purpose: core stamps it in `createTokenInState`, so
+    // token-ness is a property of HOW the object was created and is true of
+    // every token the engine makes, including ones built from a definition that
+    // came from elsewhere (a token COPY). One place, not two.
     power,
     toughness,
+    ...(colors === undefined ? {} : { colors: colors as CardDefinition['colors'] }),
     ...(isEmptyKeywords(keywords) ? {} : { keywords }),
   };
   for (let i = 0; i < count; i++) ctx.createToken(def);
@@ -714,11 +781,13 @@ const PERSIST_RETURN_PRIMITIVE = 'persistReturn';
 function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean {
   const notColor = strParam(ctx, 'notColor');
   if (notColor) {
-    // The engine's CardDefinition has no color field; derive color from the
-    // card's colored mana pips. A card is "of color X" if its cost requires X.
-    const cost = target.def.cost;
-    const requires = cost ? ((cost as Record<string, number | undefined>)[notColor] ?? 0) > 0 : false;
-    if (requires) return false; // e.g. nonblack filter rejects a card with {B} pips
+    // Asked through core's ONE colour reader, never off the cost record here.
+    // This used to walk `def.cost` directly, and that second opinion about what
+    // "black" means was wrong twice over: it could not see a HYBRID pip, and it
+    // could not see a printed colour with no cost behind it - so Doom Blade
+    // happily destroyed a "1/1 black Faerie Rogue creature token", which the
+    // printed card cannot target at all.
+    if (colorsOfDefinition(target.def).includes(notColor as ManaColor)) return false;
   }
   const maxMv = maxManaValueBound(ctx);
   if (maxMv !== undefined && manaValueOf(target.def) > maxMv) return false;

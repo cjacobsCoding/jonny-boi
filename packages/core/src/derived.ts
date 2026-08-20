@@ -70,7 +70,7 @@ function cardTypesInAllGraveyards(state: GameState): number {
       }
     }
   }
-  // Popcount over a 7-bit mask — a simple loop beats allocating anything.
+  // Popcount over a small mask — a simple loop beats allocating anything.
   let count = 0;
   while (mask !== 0) {
     count += mask & 1;

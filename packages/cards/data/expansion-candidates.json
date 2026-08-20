@@ -989,6 +989,39 @@
       "names": [
         "Sleight of Hand"
       ]
+    },
+    {
+      "role": "token characteristics — a token is printed with a COLOUR, CREATURE TYPES and keywords, and until now the engine dropped all of them. These are the cards that make those characteristics MATTER on a board: the token makers, the coloured and typal anthems that must see them, and the protection/removal that must not.",
+      "names": [
+        "Bitterblossom",
+        "Bitterbloom Bearer",
+        "Ophiomancer",
+        "Goblin Chieftain",
+        "Goblin Warchief",
+        "Lyra Dawnbringer",
+        "Diregraf Captain",
+        "Adaptive Automaton",
+        "Bad Moon",
+        "Crusade",
+        "Gaea’s Anthem",
+        "Doom Blade",
+        "Silver Knight",
+        "Paladin en-Vec",
+        "Dragon Fodder",
+        "Hordeling Outburst",
+        "Lingering Souls",
+        "Moan of the Unhallowed",
+        "Whirler Rogue",
+        "Master of Etherium",
+        "Thopter Spy Network",
+        "Hornet Queen",
+        "Blood Artist",
+        "Third Path Iconoclast",
+        "Raise the Alarm",
+        "Harvester of Souls",
+        "Soul of the Harvest",
+        "Midnight Reaper"
+      ]
     }
   ]
 }
