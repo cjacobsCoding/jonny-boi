@@ -1289,7 +1289,7 @@ Still open, roughly by how often they block a real decklist:
   what remains is *suspend*, *spectacle*, *evoke*, an **{X} in a cycling cost** (Shark Typhoon: an
   activation cost has no answer-and-charge step the way a casting cost does) and a **madness cost
   printed in words** ("Madness—Pay six {C}"). *Phyrexian costs*,
-  *fuse* (CR 702.102 — **split, aftermath, adventure and the Siege reward all landed in §3.21**;
+  *fuse* (CR 702.102 — **split, aftermath, adventure and the Siege reward all landed in §3.22**;
   what is left of that family is casting BOTH halves as one spell, and the Room/door system CR 714),
   *flashback riders that are not mana or life* ("Flashback—{1}{U}, Discard a card" — the cast
   pipeline can charge mana and life, and nothing else, so a discard or sacrifice rider reports),
@@ -1946,7 +1946,7 @@ a created token has no COLOUR.** `makeToken` builds a `CardDefinition` with no c
 or a protection-from-red. It predates this branch (every token card in the pool has it) and closing it
 needs a `colors` field on `CardDefinition` plus the colour reader honouring it — a small system, and
 one that belongs to whoever owns `makeToken`, not to a trigger branch.
-### 3.21 The second castable half — split, aftermath, adventure and the Siege reward — ✅ done
+### 3.22 The second castable half — split, aftermath, adventure and the Siege reward — ✅ done
 The coverage audit's #1 and #2 gaps were one system: *casting the second half of a split, adventure or
 Siege card* (60 card-blocks) and *the "//" card type* (38). Four printed layouts, four different cast
 paths, and — as it turned out — one model.
@@ -2018,7 +2018,7 @@ DFC both print two faces with two costs — and the compiler refuses to guess it
 ⚠️ **The committed card index predates the `layout` field, so no pool card compiles as a split card
 yet.** The fetch pipeline captures it from now on; a re-fetch of the index is what puts these layouts
 in front of a player who has not imported a decklist, and that file belongs to the pool branch.
-### 3.21 "As ~ enters, choose a…" — a value NAMED as a permanent enters, and remembered — ✅ done
+### 3.23 "As ~ enters, choose a…" — a value NAMED as a permanent enters, and remembered — ✅ done
 The replacement-effect naming of CR 614.1c: **"As Cavern of Souls enters, choose a creature type."**
 The corpus audit named it as one gap of 27 cards, but the prompt was never the hard half. **The crux
 is that the answer has to stick to the permanent and still be readable ten turns later** — by the
@@ -2146,7 +2146,7 @@ missing you-may template:
 - **Multiversal Passage's "this land is the chosen type"** — a type-changing effect that would have to
   grant the named basic land type's mana ability.
 
-### 3.22 Replacement and prevention effects — a layer the engine never had — ✅ done
+### 3.24 Replacement and prevention effects — a layer the engine never had — ✅ done
 CR 614/615/616. A replacement effect never goes on the stack and never "happens": it watches for an
 event that *would* happen and changes what happens instead. Three printed families that looked like
 three template buckets are **one system underneath**, and this ships as one layer that damage,
@@ -2292,7 +2292,7 @@ cannot see the mechanic. Closing that is a DATA edit on the §3.20 path (add the
 `expansion-candidates.json`, re-run `build-expansion.ts`, re-fetch data-tools, regenerate the web card
 index) — it needs the network and it rewrites three generated files, so it is deliberately left to
 whoever next runs that pipeline rather than done from this branch.
-### 3.24 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
+### 3.25 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
 Twelve engine systems shipped in three days (§3.13–§3.20) and the pool went 191 → 357 cards. Every one
 of them was tested **in isolation by the agent that built it**, and almost none were ever tested
 together. The gauntlet decks in `packages/sim/data/decks` are eight curated archetypes: they exercise a
@@ -2386,7 +2386,7 @@ scry 2") as leaving a dead creature on the battlefield — it does, legally, unt
 (CR 704.3 / 608.2). And scanning an observation against the state the action STARTED from reports every
 land drop in the game as a hidden-zone leak. `soak.ts` carries both traps as comments beside the code
 that avoids them.
-### 3.22 Combat damage, and what the EQUIPPED creature does — ✅ done
+### 3.26 Combat damage, and what the EQUIPPED creature does — ✅ done
 The two seams the ~38-card corpus family shares, and they are one idea seen twice: **a trigger has a
 watched object, and it is not always the card it is printed on.**
 
@@ -2515,7 +2515,7 @@ next `--fetch` picks it up for free. Until then the family is reachable by deck 
 - Every feature adds tests and leaves the full suite green.
 - Claim work on `COORDINATION.md` before starting; pick a unique `feat/<slug>` branch.
 
-### 3.24 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
+### 3.27 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
 
 Every other suite in this repo is organised BY FEATURE, each written by the agent that built that
 feature, asserting what that agent believed the rule was. That answers "do our tests pass?" It cannot

@@ -149,7 +149,7 @@ them as systems because the sweep names them that way.
 > trigger). Its `sole` of 0 was honest — every one of those 27 cards prints a second
 > line that reads the value back, which is why the readers had to ship with the naming.
 > **Re-measured offline against the cached corpus: 408 → 414 playable.** What still
-> blocks the rest is listed in DESIGN §3.21 by clause, and those lines now report as
+> blocks the rest is listed in DESIGN §3.23 by clause, and those lines now report as
 > `a "the chosen …" READER the compiler does not recognize yet` rather than as a
 > you-may template — the value IS stored; what is missing is the sentence that reads it.
 

@@ -466,6 +466,16 @@ _Append dated notes here; keep them short. Newest at top._
   - Gate on the merged tree: `npm run verify` **exit 0 — 3,836 passed, 5 skipped, 0 failed**
     (the 5 skipped are the deep tier, which is env-gated).
 
+- 2026-08-20 integrator: ✅ **RESOLVED — the §3.21 collision below is fixed.** DESIGN's sections
+  after §3.20 are now unique and in document order: **§3.21** the triggering player + intervening
+  "if" · **§3.22** the second castable half (split/aftermath/adventure/Siege) · **§3.23** the named
+  as-enters value · **§3.24** replacement and prevention · **§3.25** the full-pool soak · **§3.26**
+  combat damage and the equipped creature · **§3.27** rules conformance. Every cross-reference that
+  pointed at an ambiguous number was repointed by CONTENT, not by guess (DESIGN's fuse note →
+  §3.22; the board's Siege note → §3.22; the naming write-up → §3.23; the completion plan's
+  "what still blocks the rest" → §3.23; `soak-config.ts`'s "§3.21 ×3" → "§3.21–§3.23"). Three
+  workers each flagged this and correctly refused to renumber another branch's section unilaterally
+  — that was the right call; it needed one pass by the side that can see all of them at once.
 - 2026-08-20 worker (integrator, please read): **DESIGN has THREE sections numbered §3.21.**
   `feat/step-trigger-templates`, `feat/split-cards` and `feat/as-enters-choices` each claimed 3.21 and
   were merged without renumbering, and §3.11's open list plus three board messages already point at
@@ -668,7 +678,7 @@ _Append dated notes here; keep them short. Newest at top._
   system, and it is four printed layouts sharing one model.** A card may carry a second half that is
   really cast, plus the list of ZONES that half may be cast from, plus — for the two halves you earn
   rather than hold — a per-instance PERMISSION. Split (CR 709), aftermath (CR 702.127a), adventure
-  (CR 715) and the Siege reward (CR 310.4) are four configurations of exactly that. DESIGN §3.21 has
+  (CR 715) and the Siege reward (CR 310.4) are four configurations of exactly that. DESIGN §3.22 has
   the table.
 
   **Measured, cached 2100-card corpus, `--top 20`: 408 → 421 playable (19.4% → 20.0%).** Both headline
@@ -757,7 +767,7 @@ _Append dated notes here; keep them short. Newest at top._
   measured after merging `origin/main`.
 - 2026-08-20 worker: `feat/as-enters-choices` 🚧 PUSHED — **"As ~ enters, choose a creature type"
   (CR 614.1c): the naming is asked at the printed moment and REMEMBERED on the permanent, and four
-  different printed lines can now read it back.** DESIGN §3.21 has the full write-up.
+  different printed lines can now read it back.** DESIGN §3.23 has the full write-up.
 
   **Measured offline, PAIRED against the same cached corpus on the `origin/main` this branched from:
   408 → 414 / 2100 playable (19.4% → 19.7%).** Newly complete: Adaptive Automaton, Patchwork Banner,

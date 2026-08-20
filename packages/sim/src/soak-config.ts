@@ -401,7 +401,7 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   /*
    * --- the 2026-08-20 arrivals -------------------------------------------------
    *
-   * Four systems landed on `main` together (§3.21 ×3 and the tutor/additional-cost
+   * Four systems landed on `main` together (§3.21–§3.23 and the tutor/additional-cost
    * templates) and the SHIPPED POOL prints none of them: the compiler got wider,
    * the pool was never regenerated. They are in the inventory anyway, and that is
    * the point of a self-maintaining inventory — today the soak reports each as
