@@ -4025,19 +4025,31 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // "except by N or more creatures"). Granting evasion for a turn compiles
     // through the ordinary continuous grant.
     //
-    // What still lands here is two different things, and the hint says which:
-    //   - a block REQUIREMENT ("must be blocked if able", "all creatures able to
-    //     block ~ do so"). CR 509.1c/d resolves requirements and restrictions
-    //     TOGETHER — maximise satisfied requirements without violating any
-    //     restriction — which is a solver, not a check, and is not built;
-    //   - a restriction whose SELECTOR the engine cannot express: a power or
-    //     toughness comparison between the two creatures ("can't be blocked by
-    //     creatures with power 3 or greater", skulk), or a filtered set the
-    //     static layer deliberately cannot read (Tetsuko's "with power or
-    //     toughness 1 or less" — see `statics.ts` on printed characteristics).
+    // Block REQUIREMENTS are engine-enforced now too, so this hint no longer
+    // claims they are missing: "~ must be blocked if able" and "all creatures
+    // able to block ~ do so" are keyword flags resolved against the WHOLE
+    // declaration by `internal/block-solver.ts`, which does what CR 509.1c/d
+    // actually says — satisfy the maximum possible number of requirements without
+    // violating any restriction. So are the comparing restrictions:
+    // `KeywordFlags.blockRestriction` carries "except by creatures with haste", a
+    // power or toughness bound, and skulk's comparison against the attacker's own
+    // power, each judged against EFFECTIVE stats.
+    //
+    // What still lands here is a SELECTOR none of that can express, and the hint
+    // names the three shapes rather than a missing system:
+    //   - a static whose filter would have to read EFFECTIVE power or toughness
+    //     (Tetsuko's "creatures you control with power or toughness 1 or less",
+    //     Delney) — `statics.ts` matches PRINTED characteristics by design, which
+    //     is what keeps the continuous pass single-pass with no CR 613.8 loop;
+    //   - a comparison against ANOTHER permanent's power (Champion of Lambholt's
+    //     "power less than ~'s power"), which needs the restriction's threshold
+    //     recomputed from its source at declare-blockers time;
+    //   - a per-combat TARGETED requirement ("target creature blocks it this
+    //     combat if able" — Fighter Class), which is combat state rather than a
+    //     characteristic, and a COST to block (Archangel of Tithes).
     pattern: /\bmust be blocked\b|\bable to block\b|\bblocks? it\b|\bcan't be blocked\b|\bcan't block\b|\bmenace\b|\bskulk\b/,
     missingEngineSystem:
-      'a block REQUIREMENT, or a block restriction whose selector compares creatures',
+      'a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)',
   },
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
