@@ -727,6 +727,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'damage-then-draw',
+    description: '"~ deals N damage to any target and you draw M cards" (Sword of Fire and Ice)',
+    // The same compound as `damage-then-gain-life`, with the other half of the
+    // pair of things a saboteur trigger most often bolts onto its damage. One
+    // rule per printed compound rather than a general "clause and clause"
+    // splitter, because the two halves may not each be independently targetable
+    // and a generic splitter would quietly aim both at the same object.
+    pattern: new RegExp(
+      `^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}(?:\\.|,)? and you draw ${COUNT_TOKEN} cards?$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const damage = parseCount(match[1]);
+      const restriction = damageRestriction(match[2] ?? '');
+      const cards = parseCount(match[3]);
+      if (damage === null || cards === null || restriction === null) return null;
+      return effects(
+        { primitive: 'dealDamage', params: damageParams(damage, restriction) },
+        { primitive: 'drawCards', params: { count: cards } },
+      );
+    },
+  },
+  {
     id: 'damage-equal-to-count',
     description: '"~ deals damage to any target equal to the number of X"',
     pattern: new RegExp(
@@ -1040,6 +1063,19 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build() {
       return effects({ primitive: 'destroyTarget', params: { targets: ARTIFACT_TARGET } });
+    },
+  },
+  {
+    id: 'destroy-target-permanent',
+    description: '"Destroy target permanent"',
+    // The unrestricted form (Argentum Armor's attack trigger, Vindicate's body).
+    // It aims at core's `'permanent'` restriction rather than widening the
+    // creature one, because a card that can only ever be pointed at creatures is
+    // a strictly narrower card than the one printed.
+    pattern: /^destroy target permanent$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'destroyTarget', params: { targets: PERMANENT_TARGET } });
     },
   },
   {
@@ -1848,6 +1884,22 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
         { primitive: 'loseLife', params: { amount: lost, whichPlayer: 'opponent' } },
         { primitive: 'gainLife', params: { amount: gained } },
       );
+    },
+  },
+  {
+    id: 'each-opponent-loses-life',
+    description: '"Each opponent loses N life"',
+    // The half of the rule above without the lifegain — the body a saboteur
+    // trigger most often prints. UNTARGETED on purpose: "each opponent" names
+    // nobody, so it must not compile to the `target opponent` form, which a
+    // pilot could aim (and which would refuse to go on the stack with no legal
+    // target). `whichPlayer` is what `loseLife` reads for the untargeted case.
+    pattern: new RegExp(`^each opponent loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      return amount === null
+        ? null
+        : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
     },
   },
   {
