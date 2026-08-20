@@ -58,6 +58,7 @@ export {
 export {
   CHOICE_PRIMITIVES,
   putFromHandOnTop,
+  handToBottomThenDraw,
   reorderTopOfLibrary,
   mayShuffleLibrary,
   searchLibrary,
@@ -105,6 +106,8 @@ export {
   explainUnsupported,
   BACK_FACE_ID_SUFFIX,
   SECOND_CASTABLE_FACE_GAP,
+  FUSE_GAP,
+  ROOM_DOOR_GAP,
 } from './compile/index.js';
 
 // The compiler's own live registries, re-exported for the About view: the rule
