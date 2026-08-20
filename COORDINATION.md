@@ -203,6 +203,14 @@ _Append dated notes here; keep them short. Newest at top._
   limit already recorded in DESIGN, and it can only ever decline a payment — never make an illegal
   one.
 
+  📌 **ONE DEFERRED ITEM WITH A NAMED OWNER, not a bug today:**
+  `packages/ai/src/tree-reuse.ts` hashes a position's mana pool by COLOUR only, so a pool holding one
+  restricted {G} and one holding a free {G} hash identically. That is a transposition key, so the
+  consequence is a reused subtree from a subtly different position — unreachable right now (the
+  shipped pool contains no restricted source) and I did not touch the file because `feat/tree-reuse`
+  owns it. Whoever lands that branch should mix `restrictedTotal(pool)` (or the parcels) into the
+  hash before a restricted card reaches the pool.
+
   ⚠️ **DESIGN SECTION-NUMBER COLLISION, for the integrator:** I wrote this up as **§3.21**, and at
   least one other in-flight branch (a combat/equipped-trigger one, measuring 408 → 420 on the same
   corpus) is writing §3.21 too. Whichever lands second should simply be renumbered — the sections are
