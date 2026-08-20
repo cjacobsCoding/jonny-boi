@@ -77,6 +77,15 @@ const ATTACHMENT_KEYWORDS: ReadonlySet<string> = new Set(['enchant', 'equip']);
  * table does NOT match (a derived or conditional count, "look at the top N …")
  * produces no such primitive, so that card still reports honestly.
  */
+/**
+ * Scryfall's keyword names for a damage-SCALING replacement ability. They are
+ * modelled by the rule table (`replacement-damage-scaled`) as
+ * `CardDefinition.replacements` data rather than as a keyword flag, so the sweep
+ * must not report them a second time — see the guard's own comment for why it is
+ * keyed on the compiled outcome rather than on the word.
+ */
+const SCALING_KEYWORDS: ReadonlySet<string> = new Set(['double', 'triple']);
+
 const PRIMITIVE_BACKED_KEYWORDS: Readonly<Record<string, string>> = Object.freeze({
   scry: 'scry',
   surveil: 'surveil',
@@ -267,6 +276,8 @@ interface Assembly {
   readonly manaAbilities: import('@jonny-boi/core').ManaAbility[];
   readonly activated: ActivatedAbility[];
   readonly statics: import('@jonny-boi/core').StaticAbility[];
+  /** Printed replacement/prevention abilities (core's CR 614/615 layer). */
+  readonly replacements: import('@jonny-boi/core').ReplacementAbility[];
   keywords: KeywordFlags;
   entersTapped: boolean;
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
@@ -327,6 +338,7 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   }
   if (contribution.activated) assembly.activated.push(...contribution.activated);
   if (contribution.statics) assembly.statics.push(...contribution.statics);
+  if (contribution.replacements) assembly.replacements.push(...contribution.replacements);
   if (contribution.entersTapped) assembly.entersTapped = true;
   if (contribution.entersTappedUnless) assembly.entersTappedUnless = contribution.entersTappedUnless;
   if (contribution.entersTappedUnlessLifePaid !== undefined) {
@@ -689,6 +701,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     manaAbilities: [],
     activated: [],
     statics: [],
+    replacements: [],
     keywords: {},
     cycling: [],
     entersTapped: false,
@@ -974,6 +987,17 @@ export function compileCard(card: CompilableCard): CompileResult {
     // own `missing` entry — which is why this is keyed on the list, not on the
     // keyword's presence.
     if (isCyclingKeyword(word) && assembly.cycling.length > 0) continue;
+    // "Double" / "Triple" are Scryfall's keyword names for a DAMAGE-SCALING
+    // REPLACEMENT ability ("it deals double that damage instead" — Gratuitous
+    // Violence, Fiery Emancipation, Torbran's family). The printed line has
+    // already compiled into `assembly.replacements`, and the keyword being
+    // listed again is not a second, unmodelled ability. Same evidence-based
+    // contract as the scry/mill guard above: the skip is keyed on a compiled
+    // replacement that actually SCALES, so a card whose line the rule table did
+    // not match compiles none and still reports through its own `missing` entry.
+    if (SCALING_KEYWORDS.has(word) && assembly.replacements.some((r) => r.outcome.times !== undefined)) {
+      continue;
+    }
     if (word === 'buyback' && assembly.buyback !== undefined) continue;
     if (word === 'madness' && assembly.madness !== undefined) continue;
     // An ABILITY WORD (Revolt, Morbid, …) is a label, not an ability — CR
@@ -1093,6 +1117,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.triggers.length > 0 ? { triggers: assembly.triggers } : {}),
     ...(assembly.activated.length > 0 ? { activated: assembly.activated } : {}),
     ...(assembly.statics.length > 0 ? { statics: assembly.statics } : {}),
+    ...(assembly.replacements.length > 0 ? { replacements: assembly.replacements } : {}),
     ...(attachment ? { attachment } : {}),
   };
 
