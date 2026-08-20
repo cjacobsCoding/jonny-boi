@@ -68,12 +68,11 @@ import {
 import type { CardPool } from '@jonny-boi/cards';
 import type { EffectRegistry } from '@jonny-boi/core';
 import type { GameObserver, Observation, Pilot } from '@jonny-boi/ai';
-import { collectInstanceIds } from '@jonny-boi/protocol';
 import { loadDeck, type LoadedDeck } from './deck.js';
 import { DEFAULT_SIM_CONFIG, type SimConfig } from './config.js';
 import { runMatch, type MatchResult } from './match.js';
 import { gameSeedFor, makeSeats, onPlayFor } from './matchup.js';
-import { hiddenInstanceIds } from './observation.js';
+import { createObservationLeakScanner } from './observation.js';
 import {
   SOAK_EQUIVALENCE_SAMPLE_EVERY,
   SOAK_EVENT_WITNESS,
@@ -135,6 +134,15 @@ export interface SoakReport {
   readonly requiredMechanics: readonly SoakMechanicId[];
   /** Required mechanics that never fired. Non-empty ⇒ an inert feature. */
   readonly inertMechanics: readonly SoakMechanicId[];
+  /**
+   * How many OBSERVATIONS the redaction scan actually looked at.
+   *
+   * Reported rather than kept private because "zero leaks" and "zero looks" are
+   * the same green, and this run is the only thing standing between a pilot and
+   * the opponent's decklist. A caller that asserts no leak must also assert this
+   * is large.
+   */
+  readonly leakScanObservations: number;
   /** CPU milliseconds the run consumed (wall clock is worthless on this box). */
   readonly cpuMillis: number;
 }
@@ -756,119 +764,46 @@ function createGameWatcher(inner: Pilot): GameWatcher {
 }
 
 // ---------------------------------------------------------------------------
-// The observation-leak scan (an extension of `observation.test.ts`'s, run over
-// randomised full-pool decks rather than three curated matchups).
+// The observation-leak scan, run over randomised full-pool decks.
+//
+// The SCANNER itself lives in `observation.ts`, beside the policy table it is
+// checking — `observation.test.ts` runs the same one over mechanic-anchored
+// decks. Two copies of an anti-cheat check is two checks that can disagree, and
+// the weaker one is the one that gets believed: the copy that used to live here
+// already knew about the buyback case and the "hidden before as well as after"
+// rule while the copy in the test file knew neither, and the test file is the
+// one whose name says it owns the guarantee.
 // ---------------------------------------------------------------------------
-
-/** Field names an observation must never carry, whatever the event. */
-const FORBIDDEN_OBSERVATION_KEYS: readonly string[] = ['seed', 'prompt', 'answer', 'summary'];
 
 /**
  * A pilot that watches the observation feed and reports anything it should not
  * have been told. Wraps the soak pilot so a scanned game plays IDENTICALLY to an
  * unscanned one apart from the observer being attached.
  *
- * ⚠️ **THE SCAN'S TIMING IS THE WHOLE TEST, and it is easy to get backwards.**
- * "Is this card hidden?" must be asked of the state the action LANDED IN, not
- * the one it started from. A land played from hand is named by `landPlayed` and
- * by a `zoneChange` into the battlefield — both entirely public — and it was
- * sitting in a hand a microsecond earlier. Scanning against the pre-action state
- * therefore reports every land drop in the game as a leak. (It did, on the first
- * run of this file.) The equal and opposite mistake is scanning at the END of the
- * game: a creature bounced to hand later would retro-actively turn an honest
- * `spellCast` into a leak.
- *
- * So observations are BUFFERED as they arrive and flushed at the next decision,
- * whose `view` is exactly the post-action state — the same instant
- * `observation.test.ts` scans at with its own hand-rolled loop. The tail (the
- * final action of a game, after which nobody is asked to decide) is flushed
- * against the last state seen, which is the closest truth available and cannot
- * mask a leak that a later game state would have revealed.
+ * See {@link createObservationLeakScanner} for what "should not have been told"
+ * means precisely, and for why the flush point is the next decision rather than
+ * the moment of delivery.
  */
 function createLeakScanningPilot(
   inner: Pilot,
   report: (detail: string) => void,
-): Pilot & { flush(state: GameState | null): void } {
-  const pending: Observation[] = [];
-  /*
-   * The hidden set as it stood at the PREVIOUS decision — the other half of the
-   * buffering argument above, and the fix for its mirror-image false positive.
-   *
-   * Scanning the buffered window against the post-action state alone reports a
-   * card the table WATCHED leave a public zone. A creature dies (public
-   * `creatureDied`, naming it — everyone saw it die), and later in the same
-   * window something returns it from the graveyard to a HAND (Gravedigger). At
-   * the flush it is in a hidden zone, so the honest `creatureDied` looks like a
-   * leak. It is not: the id was public before the window and the move that hid
-   * it was itself anonymised.
-   *
-   * So an id is only a leak when it was hidden BEFORE the window as well as
-   * after it — which is exactly "the table never saw this card". A drawn card
-   * (library → hand) is hidden on both sides and is still scanned; a bounced or
-   * regrown one is not. This is strictly narrower than the buyback exemption
-   * below it and subsumes nothing: that one is about a single observation's own
-   * subject within one flush.
-   */
-  let hiddenBefore = new Set<InstanceId>();
-  const flush = (state: GameState | null): void => {
-    const hidden = state ? hiddenInstanceIds(state) : new Set<InstanceId>();
-    if (pending.length === 0) {
-      hiddenBefore = hidden;
-      return;
-    }
-    for (const observation of pending) {
-      for (const key of FORBIDDEN_OBSERVATION_KEYS) {
-        if (key in (observation as Record<string, unknown>)) {
-          report(`observation ${observation.type} carries a forbidden field "${key}"`);
-        }
-      }
-      const present = collectInstanceIds(observation);
-      /*
-       * ⚠️ A CARD THE TABLE JUST WATCHED LEAVE THE STACK IS NOT A SECRET, even
-       * when it lands in a hand.
-       *
-       * `stackResolved` names the object that resolved — face up, in front of
-       * everybody, by definition. A BUYBACK spell (Capsize, Elvish Fury) returns
-       * itself to its owner's HAND as it resolves, so its id is simultaneously
-       * "named by a public observation" and "in a hidden zone", and a naive scan
-       * calls that a leak. It is not: a spectator watching Capsize resolve knows
-       * exactly which card went back to that hand, and the id was already public
-       * on the `spellCast` that put it on the stack.
-       *
-       * Only the observation's OWN subject is exempted. Any OTHER hidden id
-       * inside a `stackResolved` would still be a leak, and every other
-       * observation type is scanned unchanged.
-       *
-       * (This is a real narrowness in the repo's stated rule, not just in this
-       * scan: `observation.test.ts` asserts the broad claim and passes only
-       * because none of its three curated matchups plays a buyback card. Adding
-       * one to `SCANNED_MATCHUPS` would fail it. Reported on the board.)
-       */
-      const publiclySeen =
-        observation.type === 'stackResolved'
-          ? (observation as { readonly instanceId?: InstanceId }).instanceId
-          : undefined;
-      for (const id of hidden) {
-        if (id === publiclySeen) continue;
-        if (!hiddenBefore.has(id)) continue;
-        if (present.has(id)) report(`observation ${observation.type} names #${id}, which is in a hidden zone`);
-      }
-    }
-    pending.length = 0;
-    hiddenBefore = hidden;
-  };
+): Pilot & { flush(state: GameState | null): void; readonly scanned: number } {
+  const scanner = createObservationLeakScanner(report);
   return {
     id: `leakscan(${inner.id})`,
     description: `${inner.description} — plus the soak's redaction scan`,
-    flush,
+    flush: (state) => scanner.flush(state),
+    get scanned() {
+      return scanner.scanned;
+    },
     chooseAction(ctx) {
-      flush(ctx.view as unknown as GameState);
+      scanner.flush(ctx.view as unknown as GameState);
       return inner.chooseAction(ctx);
     },
     createGameObserver(): GameObserver {
       return {
         observe(observation: Observation) {
-          pending.push(observation);
+          scanner.observe(observation);
         },
       };
     },
@@ -897,6 +832,8 @@ function playOne(
   readonly result: MatchResult | null;
   readonly violations: readonly SoakViolation[];
   readonly mechanics: ReadonlySet<SoakMechanicId>;
+  /** Observations the redaction scan looked at (0 when this game was not sampled). */
+  readonly scanned: number;
 } {
   const decks = `A: ${describeDeck(deckA, nameOf)}\n    B: ${describeDeck(deckB, nameOf)}`;
   const out: SoakViolation[] = [];
@@ -911,7 +848,7 @@ function playOne(
     loadedB = loadSoakDeck(deckB, options.pool);
   } catch (err) {
     push(SOAK_INVARIANTS.noException, `a generated deck is not legal: ${String(err)}`);
-    return { result: null, violations: out, mechanics: new Set() };
+    return { result: null, violations: out, mechanics: new Set(), scanned: 0 };
   }
 
   const watcher = createGameWatcher(options.pilot);
@@ -930,7 +867,7 @@ function playOne(
   } catch (err) {
     const stack = err instanceof Error ? (err.stack ?? err.message) : String(err);
     push(SOAK_INVARIANTS.noException, stack.split('\n').slice(0, 6).join(' | '));
-    return { result: null, violations: out, mechanics: watcher.mechanics };
+    return { result: null, violations: out, mechanics: watcher.mechanics, scanned: scanner?.scanned ?? 0 };
   }
 
   // The tail: observations emitted by the game's final action, which no later
@@ -954,7 +891,7 @@ function playOne(
     if (detail) push(SOAK_INVARIANTS.inPlaceEquivalence, detail, result.turns);
   }
 
-  return { result, violations: out, mechanics: watcher.mechanics };
+  return { result, violations: out, mechanics: watcher.mechanics, scanned: scanner?.scanned ?? 0 };
 }
 
 /**
@@ -1055,6 +992,7 @@ export function runSoak(options: SoakOptions): SoakReport {
   let actions = 0;
   let timeouts = 0;
   let actionCapHits = 0;
+  let leakScanObservations = 0;
   const cpuStart = process.cpuUsage();
 
   const total =
@@ -1091,6 +1029,7 @@ export function runSoak(options: SoakOptions): SoakReport {
       if (!deckA) break; // the pool cannot anchor it — reported by the inert list
       const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
       violations.push(...played.violations);
+      leakScanObservations += played.scanned;
       tally(played.mechanics);
       account(played.result);
       if (played.mechanics.has(mechanic)) break; // it fired — stop spending seeds
@@ -1105,6 +1044,7 @@ export function runSoak(options: SoakOptions): SoakReport {
     const deckB = buildMixedDeck(index, seed ^ 0x27d4eb2f);
     const played = playOne(withSampling, deckA, deckB, seed, gameIndex, sim, nameOf);
     violations.push(...played.violations);
+    leakScanObservations += played.scanned;
     tally(played.mechanics);
     account(played.result);
   }
@@ -1121,6 +1061,7 @@ export function runSoak(options: SoakOptions): SoakReport {
     mechanicGames,
     requiredMechanics: required,
     inertMechanics: required.filter((id) => (mechanicGames.get(id) ?? 0) === 0),
+    leakScanObservations,
     cpuMillis: (cpu.user + cpu.system) / 1000,
   };
 }
@@ -1148,6 +1089,9 @@ export function formatSoakReport(report: SoakReport): string {
       `A ${report.wins.A} / B ${report.wins.B} / ${report.timeouts} timeout · ` +
       `${report.cpuMillis.toFixed(0)} ms CPU`,
   );
+  // Said out loud on every run: "no leaks" and "nothing scanned" print the same
+  // green otherwise, and this is the anti-cheat guarantee.
+  lines.push(`  redaction scan: ${report.leakScanObservations} observation(s) checked`);
   if (report.actionCapHits > 0) lines.push(`  ⚠ ${report.actionCapHits} game(s) hit the ACTION cap — a game that cannot end`);
   const fired = [...report.mechanicGames.entries()].sort((a, b) => b[1] - a[1]);
   lines.push('  mechanics witnessed (games):');

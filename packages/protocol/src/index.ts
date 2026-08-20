@@ -10,7 +10,7 @@
  * server-side, before sending. `maskStateForSeat` is the single chokepoint.
  */
 
-import { PLAYER_IDS } from '@jonny-boi/core';
+import { INSTANCE_ID_FIELD_NAMES, PLAYER_IDS } from '@jonny-boi/core';
 import type {
   GameState,
   PlayerState,
@@ -305,14 +305,35 @@ export function maskStateForSpectator(state: GameState): MaskedGameView {
 // ---------------------------------------------------------------------------
 
 /**
- * Every `instanceId` reachable anywhere in a value, at any depth — the STRUCTURAL
+ * Every instance id reachable anywhere in a value, at any depth — the STRUCTURAL
  * way to ask "does this message mention that card?".
  *
  * Text scanning is the tempting version and it is wrong in both directions: a
  * substring/regex over the serialized JSON hits the digits of unrelated numbers
  * (life totals, counts, a longer id that starts with a shorter one), and it misses
- * an id that a future field carries under another name. Walking the structure and
- * collecting the values of every `instanceId` key is exact.
+ * an id that a future field carries under another name. Walking the structure is
+ * exact.
+ *
+ * ## ⚠️ IT USED TO RECOGNISE ONE KEY NAME, AND THAT WAS THE BUG
+ * This function collected the values of keys named exactly `instanceId`. The
+ * engine names cards under a dozen other keys — `sourceInstanceId`,
+ * `targetInstanceId`, `keptInstanceId`, `hostInstanceId`, `copiedInstanceId`,
+ * `source`, `target`, `targets`, `attackers`, `attackTargets`, `blocks`,
+ * `instanceIds`, `ref`, `attachedTo` — and every one of them walked straight past
+ * this scan. Two real hidden-information leaks were found through that blind
+ * spot, and neither could ever have been caught here.
+ *
+ * So the key vocabulary is no longer written down in this file. It comes from
+ * `@jonny-boi/core`'s {@link INSTANCE_ID_FIELD_NAMES}, which is DERIVED from a
+ * mapped type over every field of every `GameEvent` (plus the id fields that live
+ * on state types) — adding a field that can name a card fails core's build until
+ * somebody classifies it, and the classification extends this scan for free. See
+ * `packages/core/src/instance-ids.ts`.
+ *
+ * A pattern match on the NAME (say, "ends in `InstanceId`") was the other
+ * candidate and is strictly weaker: it would still miss `source`, `target`,
+ * `targets`, `attackers`, `blocks` and `ref`, which is most of combat and all of
+ * targeting.
  *
  * Exported because it is the assertion the masking chokepoint has to be provable
  * with, and every consumer that ships a new view field needs the same check.
@@ -320,6 +341,9 @@ export function maskStateForSpectator(state: GameState): MaskedGameView {
 export function collectInstanceIds(value: unknown): Set<number> {
   const found = new Set<number>();
   const seen = new Set<object>();
+  const add = (n: unknown): void => {
+    if (typeof n === 'number' && Number.isFinite(n)) found.add(n);
+  };
   const walk = (node: unknown): void => {
     if (node === null || typeof node !== 'object') return;
     if (seen.has(node)) return; // a cycle must not wedge the walk
@@ -329,7 +353,20 @@ export function collectInstanceIds(value: unknown): Set<number> {
       return;
     }
     for (const [key, child] of Object.entries(node)) {
-      if (key === 'instanceId' && typeof child === 'number') found.add(child);
+      if (INSTANCE_ID_FIELD_NAMES.has(key)) {
+        add(child);
+        // An id field can hold one id, a LIST of them, or a MAP KEYED BY them
+        // (`attackTargets` is attacker-id → attacked object; `blocks` is
+        // blocker-id → attacker-id). A scan that read only the values of the
+        // last shape would publish exactly half of a leak.
+        if (Array.isArray(child)) for (const item of child) add(item);
+        else if (child !== null && typeof child === 'object') {
+          for (const [nestedKey, nestedChild] of Object.entries(child as Record<string, unknown>)) {
+            add(Number(nestedKey));
+            add(nestedChild);
+          }
+        }
+      }
       walk(child);
     }
   };

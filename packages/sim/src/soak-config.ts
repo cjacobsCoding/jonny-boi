@@ -87,11 +87,19 @@ export const SOAK_MECHANIC_SEED_ATTEMPTS = 6;
 export const SOAK_EQUIVALENCE_SAMPLE_EVERY = 97;
 
 /**
- * Deep-tier games between observation-leak scans (the redaction scan). Scanning
- * attaches an observing pilot, which changes `runMatch`'s observer path, so it
- * samples rather than running always.
+ * Games between observation-leak scans (the redaction scan). **1 — every game.**
+ *
+ * It used to be 31, on the theory that attaching an observing pilot changes
+ * `runMatch`'s observer path and so should be sampled. Measured, paired in ONE
+ * process over the same 90 games (wall clock on this box is worthless — ten
+ * agents share it and the same build has read 39–108 games/sec inside an hour):
+ * scanning every game cost **6,125 ms CPU against 5,845 ms at a stride of 31**,
+ * about 5%. That is not a price worth paying for a sampled anti-cheat guarantee
+ * — a leak that only occurs on the mechanic anchored at game 7 is invisible at a
+ * stride of 31, and the two leaks this scan exists for were both exactly that
+ * shape.
  */
-export const SOAK_LEAK_SCAN_SAMPLE_EVERY = 31;
+export const SOAK_LEAK_SCAN_SAMPLE_EVERY = 1;
 
 // ---------------------------------------------------------------------------
 // Bounds a soaked game must respect. These are the "the game can still END"

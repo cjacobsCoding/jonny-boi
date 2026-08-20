@@ -5,25 +5,40 @@
  * Three claims are made about this seam, and each is worth strictly nothing as an
  * intention:
  *
- *  1. **No hidden information reaches a pilot.** Proved by playing real games with
- *     the real card pool and scanning EVERY delivered observation with
- *     `@jonny-boi/protocol`'s `collectInstanceIds` against the cards actually
- *     sitting in a hand or a library at that instant. A feed that leaked the
- *     opponent's hand would be strictly worse than no feed: the pilot would appear
- *     to infer what it was in fact told, and every measured AI result built on it
- *     would be meaningless.
+ *  1. **No card the table has not seen is ever named to a pilot.** Proved by
+ *     playing FULL-POOL, MECHANIC-ANCHORED games and checking every delivered
+ *     observation with the scanner in `observation.ts` — which asks core's
+ *     `instanceIdsNamedBy` "which cards does this name?", so it sees
+ *     `sourceInstanceId`, `attackTargets`' keys and an answer's `instanceIds` as
+ *     readily as `instanceId`. A feed that leaked the opponent's hand would be
+ *     strictly worse than no feed: the pilot would appear to infer what it was in
+ *     fact told, and every measured AI result built on it would be meaningless.
  *  2. **Nothing crosses a game boundary.** Proved by playing one game standalone
  *     and then the same game through the SAME pilot instance after other games,
  *     and demanding a byte-identical decision transcript.
  *  3. **Pilots that ignore the seam are unaffected.** Proved by playing the
  *     observing wrapper and the bare pilot over the same seeds and demanding
  *     identical transcripts.
+ *
+ * ## ⚠️ WHY THIS FILE DOES NOT USE THE GAUNTLET DECKS ANY MORE
+ * It used to scan three curated matchups (`Mono-Red Aggro` vs `UW Control` and
+ * friends). It passed for a year, and the card list is exactly why: **no curated
+ * deck plays a buyback spell**, so the one case where a public event legitimately
+ * names a card that has just landed in a hand never occurred here — it was found
+ * by the full-pool soak instead, at seed 539293510. A guarantee whose test only
+ * plays a fifth of the pool is a guarantee about that fifth.
+ *
+ * So claim 1 is now proved over the soak's generated decks, which anchor on every
+ * mechanic the pool prints (`soak-decks.ts`), and the run ASSERTS that every one
+ * of them fired. If the deck generator ever stops reaching a mechanic, this file
+ * fails rather than quietly narrowing.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   createDefaultAiRegistry,
   createRevealTrackingPilot,
+  DEFAULT_PILOT_ID,
   HEURISTIC_PILOT_ID,
   type GameObserver,
   type GameStartInfo,
@@ -50,34 +65,26 @@ import { loadDeck } from './deck.js';
 import { makeSeats, gameSeedFor, onPlayFor } from './matchup.js';
 import { runMatch } from './match.js';
 import {
-  hiddenInstanceIds,
+  createObservationLeakScanner,
   observationOf,
   OBSERVATION_POLICY,
   REDACTION_IS_UNSPELLABLE,
 } from './observation.js';
+import { SOAK_INVARIANTS, SOAK_MECHANIC_SEED_ATTEMPTS, type SoakMechanicId } from './soak-config.js';
+import { formatSoakReport, formatViolations, runSoak, type SoakReport } from './soak.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
 const ai = createDefaultAiRegistry();
 
-/**
- * Decks chosen so the scan crosses the mechanics that MOVE cards between hidden
- * and public zones — that is where a leak would live. UW Control draws and
- * counters, Mono-Green Ramp searches its library, Izzet Prowess cantrips.
- */
-const SCANNED_MATCHUPS: ReadonlyArray<readonly [string, string]> = [
-  ['Mono-Red Aggro', 'UW Control'],
-  ['Izzet Prowess', 'Mono-Green Ramp'],
-  ['Golgari Midrange', 'Orzhov Lifegain'],
-];
+/** Mixed (unanchored) games played alongside the anchored ones, as a control. */
+const SCAN_MIXED_GAMES = 12;
 
-/** Games per matchup in the leak scan. Enough to reach real mid/late boards. */
-const SCAN_GAMES = 4;
+/** The scan's own base seed — distinct from the soak's, so the two play different games. */
+const SCAN_BASE_SEED = 0xbe11e5;
+
 /** Hard action cap so a stalled board fails loudly instead of hanging. */
 const MAX_ACTIONS = 4000;
-
-/** Field names that must never survive the projection, whatever the event. */
-const FORBIDDEN_KEYS: readonly string[] = ['seed', 'prompt', 'answer', 'summary'];
 
 function deckNamed(name: string) {
   const deck = SAMPLE_DECKS.find((d) => d.name === name);
@@ -102,14 +109,11 @@ function collectKeys(value: unknown, into: Set<string> = new Set(), seen = new S
 }
 
 /**
- * Drive one real game by hand, projecting every event the instant it is emitted
- * and handing the caller the live state alongside it.
+ * Drive one real game by hand, projecting every event the instant it is emitted.
  *
- * `runMatch` deliberately does not expose its state, and the leak question is a
- * question about the state AT DELIVERY TIME — a card can be public when an event
- * mentions it and hidden a few actions later (a creature bounced to hand), so a
- * scan run at the end of the game would report leaks that never happened. This
- * local driver applies the same actions in the same order as the harness.
+ * Kept only for the policy-table coverage check below (which asks WHICH EVENT
+ * TYPES a real game emits, not what they carry). The leak scan itself runs
+ * through `runSoak`, over generated full-pool decks — see the header.
  */
 function driveGame(
   deckAName: string,
@@ -157,45 +161,84 @@ function driveGame(
   }
 }
 
-describe('observation feed — no hidden information reaches a pilot', () => {
-  it('never names a card that is in a hand or a library, over real games', () => {
-    const leaks: string[] = [];
-    let observations = 0;
-    const typesSeen = new Set<string>();
+/**
+ * THE SCAN. One soak run, every game scanned, shared by the block below.
+ *
+ * In a `beforeAll` rather than at module scope because module-scope work is
+ * COLLECTION to Vitest: the cost would be billed where it is invisible, and a
+ * throw would fail the whole FILE with a collection error instead of one named
+ * test.
+ */
+let scan: SoakReport;
 
-    for (const [a, b] of SCANNED_MATCHUPS) {
-      for (let g = 0; g < SCAN_GAMES; g++) {
-        const seed = gameSeedFor(0xbe11e5, g);
-        driveGame(a, b, seed, (observation, state, event) => {
-          observations++;
-          typesSeen.add(event.type);
-          const leaked = leakedInstanceIds(observation, hiddenInstanceIds(state));
-          if (leaked.length > 0) {
-            leaks.push(
-              `${a} vs ${b} seed ${seed}: '${observation.type}' (from '${event.type}') names hidden card(s) ${leaked.join(', ')}`,
-            );
-          }
-        });
-      }
-    }
+/**
+ * The mechanics that MOVE A CARD ACROSS THE HIDDEN/PUBLIC BOUNDARY — where a
+ * redaction bug can actually live, and precisely what the curated gauntlet decks
+ * did not play.
+ *
+ * Named individually rather than trusted to `inertMechanics` alone, because the
+ * point of this list is documentary: these are the shapes a reader should check
+ * first when changing `OBSERVATION_POLICY`. Typed as `SoakMechanicId`, so
+ * renaming one in `soak-config.ts` is a compile error here rather than a test
+ * that silently stops asserting.
+ */
+const BOUNDARY_MECHANICS: readonly SoakMechanicId[] = [
+  'buyback', // a spell that resolves back into its OWNER'S HAND — hole 2
+  'madness', // hand → exile, then cast from exile
+  'cycling', // hand → graveyard as a cost, plus a draw
+  'mill', // library → graveyard
+  'scry', // the top of a library LOOKED AT
+  'surveil', // the same look, with a graveyard destination
+  'graveyard-recursion', // graveyard → hand: the Gravedigger case
+  'tutor-route', // a search of the library itself
+  'flashback-cast', // a card cast from a public zone it was put into
+];
 
-    // A green run must be green because nothing leaked, not because nothing ran.
-    expect(observations).toBeGreaterThan(5_000);
-    expect(typesSeen.size).toBeGreaterThan(15);
-    expect(leaks.slice(0, 10)).toEqual([]);
+describe('observation feed — no card the table has not seen reaches a pilot', () => {
+  beforeAll(() => {
+    scan = runSoak({
+      pool,
+      registry,
+      pilot: ai.getPilot(DEFAULT_PILOT_ID)!,
+      // The anchored half is the point: one matchup per mechanic the pool
+      // prints. The mixed games are the control — decks nobody aimed.
+      mixedGames: SCAN_MIXED_GAMES,
+      anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS,
+      baseSeed: SCAN_BASE_SEED,
+      // EVERY game, not the soak's sampling stride: this file is the guarantee's
+      // own test, and a sampled guarantee is a sampled guarantee.
+      leakScanEvery: 1,
+      // The cloning-vs-in-place replay is `soak.test.ts`'s job and doubles the
+      // cost of a sampled game; nothing here depends on it.
+      equivalenceEvery: 0,
+    });
   });
 
-  it('never carries a card-authored or seed-bearing field, at any depth', () => {
-    const offenders: string[] = [];
-    for (const [a, b] of SCANNED_MATCHUPS) {
-      driveGame(a, b, gameSeedFor(0xbe11e5, 0), (observation) => {
-        const keys = collectKeys(observation);
-        for (const forbidden of FORBIDDEN_KEYS) {
-          if (keys.has(forbidden)) offenders.push(`'${observation.type}' carries '${forbidden}'`);
-        }
-      });
-    }
-    expect([...new Set(offenders)]).toEqual([]);
+  it('never names a card the table has never seen, over full-pool games', () => {
+    const leaks = scan.violations.filter((v) => v.invariant === SOAK_INVARIANTS.noObservationLeak);
+    expect(leaks.length, `\n${formatViolations(leaks)}\n`).toBe(0);
+  });
+
+  it('looked at enough observations for that to mean something', () => {
+    // "No leaks" and "nothing scanned" are the same green. This is the only
+    // thing standing between a pilot and the opponent's decklist, so a run that
+    // quietly scanned nothing must fail rather than reassure.
+    expect(scan.leakScanObservations, `\n${formatSoakReport(scan)}\n`).toBeGreaterThan(50_000);
+    expect(scan.games).toBeGreaterThan(SCAN_MIXED_GAMES);
+  });
+
+  it('scanned games that actually PLAY the mechanics a leak would hide in', () => {
+    // The curated-matchup failure, made impossible to reintroduce. If the deck
+    // generator stops reaching buyback, this fails — rather than the scan going
+    // quietly green over games where the interesting case cannot occur.
+    const missing = BOUNDARY_MECHANICS.filter((id) => (scan.mechanicGames.get(id) ?? 0) === 0);
+    expect(missing, `\n${formatSoakReport(scan)}\n`).toEqual([]);
+  });
+
+  it('fired EVERY mechanic the pool prints while scanning', () => {
+    // The general form of the test above: whatever ships next is scanned too,
+    // without anybody remembering to add it to a list.
+    expect(scan.inertMechanics, `\n${formatSoakReport(scan)}\n`).toEqual([]);
   });
 
   it('drops the seed from gameStart — the field that would hand over the whole shuffle', () => {
@@ -248,6 +291,98 @@ describe('observation feed — no hidden information reaches a pilot', () => {
     const answeredKeys = collectKeys(observationOf(answered));
     expect(answeredKeys.has('answer')).toBe(false);
     expect(answeredKeys.has('summary')).toBe(false);
+  });
+});
+
+/**
+ * THE SCANNER'S OWN RULES, on hand-built windows.
+ *
+ * The soak run above proves the guarantee on real games; these prove that the
+ * scanner would have SAID SO. Both are needed — a scanner that reports nothing
+ * makes any run green, and that is the failure this whole branch exists to close.
+ */
+describe('the leak scanner reports what it is supposed to report', () => {
+  const hiddenState = (handIds: readonly number[], libraryIds: readonly number[] = []): GameState =>
+    ({
+      players: {
+        A: {
+          hand: handIds.map((instanceId) => ({ instanceId })),
+          library: libraryIds.map((instanceId) => ({ instanceId })),
+        },
+        B: { hand: [], library: [] },
+      },
+    }) as unknown as GameState;
+
+  /** Run one scanner over a scripted sequence of `[observations, state]` windows. */
+  const run = (windows: ReadonlyArray<readonly [readonly Observation[], GameState]>): string[] => {
+    const reports: string[] = [];
+    const scanner = createObservationLeakScanner((d) => reports.push(d));
+    for (const [observations, state] of windows) {
+      for (const observation of observations) scanner.observe(observation);
+      scanner.flush(state);
+    }
+    return reports;
+  };
+
+  it('CATCHES a card that has only ever sat in a hand — the CR 514.1 cleanup-discard leak', () => {
+    // The exact shape of hole 1: a public-ish `choiceAsked` whose SOURCE points
+    // at a card in the discarding player's hand. Note the key is
+    // `sourceInstanceId`, which the pre-fix scan could not see at all.
+    const state = hiddenState([55]);
+    const asked = { type: 'choiceAsked', choiceId: 1, chooser: 'A', choiceKind: 'selectCards', sourceInstanceId: 55, optionCount: 1 } as unknown as Observation;
+    expect(run([[[], state], [[asked], state]])).toEqual([
+      'observation choiceAsked names #55, a card the table has never seen',
+    ]);
+  });
+
+  it('CATCHES an id hidden inside a list, a map key, and a nested object', () => {
+    const state = hiddenState([55]);
+    const cases: ReadonlyArray<readonly [string, Observation]> = [
+      ['targets list', { type: 'triggerTargetsChosen', sourceInstanceId: 1, controller: 'A', label: 'x', targets: [55] }],
+      ['attackTargets key', { type: 'attackersDeclared', attackers: [], attackTargets: { 55: 'B' } }],
+      ['blocks pair', { type: 'blockersDeclared', blocks: [{ blocker: 55, attacker: 1 }] }],
+    ] as unknown as ReadonlyArray<readonly [string, Observation]>;
+    const silent = cases.filter(([, o]) => run([[[], state], [[o], state]]).length === 0).map(([name]) => name);
+    expect(silent, 'the scanner walked straight past these').toEqual([]);
+  });
+
+  it('does NOT report a card that was on the battlefield a moment ago', () => {
+    // A land played from hand is named by two entirely public observations and
+    // was in a hand a microsecond earlier. Scanning against the PRE-action state
+    // reports every land drop in the game; this is that mistake, pinned.
+    const before = hiddenState([55]);
+    const after = hiddenState([]);
+    const played = { type: 'landPlayed', player: 'A', instanceId: 55 } as Observation;
+    expect(run([[[], before], [[played], after]])).toEqual([]);
+  });
+
+  it('does NOT report a bought-back spell, in its window OR many windows later', () => {
+    // HOLE 2, both halves. Elvish Fury is cast and resolves inside one window,
+    // landing back in its owner's hand: `stackResolved` names a card that is
+    // hidden by the time anyone looks. Then, at cleanup much later, the pump it
+    // left behind expires and names it AGAIN — with the card still in that hand.
+    // Neither tells a pilot anything: the table watched the spell be cast.
+    const inHand = hiddenState([70]);
+    const cast = { type: 'spellCast', player: 'B', instanceId: 70, name: 'Elvish Fury', castTypes: ['instant'] } as Observation;
+    const resolved = { type: 'stackResolved', instanceId: 70, name: 'Elvish Fury' } as Observation;
+    const expired = { type: 'continuousEffectExpired', targetInstanceId: 90, sourceInstanceId: 70, duration: 'endOfTurn' } as Observation;
+    expect(run([[[], inHand], [[cast, resolved], inHand], [[], inHand], [[expired], inHand]])).toEqual([]);
+  });
+
+  it('still reports ANOTHER hidden card named by an exempted observation', () => {
+    // The buyback exemption is the observation's own SUBJECT and nothing else.
+    const state = hiddenState([70, 71]);
+    const resolved = { type: 'stackResolved', instanceId: 70, name: 'Elvish Fury' } as Observation;
+    const asked = { type: 'choiceAsked', choiceId: 2, chooser: 'B', choiceKind: 'selectCards', sourceInstanceId: 71, optionCount: 1 } as unknown as Observation;
+    expect(run([[[], state], [[resolved, asked], state]])).toEqual([
+      'observation choiceAsked names #71, a card the table has never seen',
+    ]);
+  });
+
+  it('reports a forbidden field at any depth', () => {
+    const state = hiddenState([]);
+    const leaky = { type: 'choiceAsked', choiceId: 1, chooser: 'A', choiceKind: 'selectCards', prompt: 'Discard Lightning Bolt?', sourceInstanceId: 1, optionCount: 2 } as unknown as Observation;
+    expect(run([[[leaky], state]])).toEqual(['observation choiceAsked carries a forbidden field "prompt"']);
   });
 });
 

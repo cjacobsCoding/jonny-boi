@@ -215,6 +215,58 @@ describe('collectInstanceIds (structural leak scan)', () => {
     node.self = node;
     expect([...collectInstanceIds(node)]).toEqual([3]);
   });
+
+  /*
+   * ⚠️ THE HOLE THIS SCAN USED TO HAVE, PINNED.
+   *
+   * It recognised keys named exactly `instanceId`. Everything below names a card
+   * under a different key, and every one of them used to be invisible — which is
+   * how a `choiceAsked.sourceInstanceId` pointing into a player's HAND travelled
+   * to every pilot with a green anti-cheat suite.
+   *
+   * The vocabulary is not written here or in `index.ts`: it comes from core's
+   * `INSTANCE_ID_FIELD_NAMES`, which is derived from a mapped type over every
+   * field of every `GameEvent`. These cases are the check that the wiring is
+   * real, not the definition of what counts.
+   */
+  it('finds an id under EVERY name the engine spells it with', () => {
+    const cases: ReadonlyArray<readonly [string, unknown]> = [
+      ['sourceInstanceId', { sourceInstanceId: 11 }],
+      ['targetInstanceId', { targetInstanceId: 11 }],
+      ['keptInstanceId', { keptInstanceId: 11 }],
+      ['hostInstanceId', { hostInstanceId: 11 }],
+      ['copiedInstanceId', { copiedInstanceId: 11 }],
+      ['appliesToInstanceId', { appliesToInstanceId: 11 }],
+      ['source', { source: 11 }],
+      ['target', { target: 11 }],
+      ['ref', { ref: 11 }],
+      ['attachedTo', { attachedTo: 11 }],
+      ['recipientIs', { recipientIs: 11 }],
+      ['targets (array)', { targets: [11, 'A'] }],
+      ['attackers (array)', { attackers: [11] }],
+      ['instanceIds (array)', { instanceIds: [11] }],
+      ['blocks (id-keyed map)', { blocks: { 11: 12 } }],
+      ['attackTargets (id-keyed map)', { attackTargets: { 11: 'B' } }],
+      ['nested in an array of objects', { blocks: [{ blocker: 11, attacker: 12 }] }],
+      ['nested at depth', { a: [{ b: { sourceInstanceId: 11 } }] }],
+    ];
+    const missed = cases.filter(([, value]) => !collectInstanceIds(value).has(11)).map(([name]) => name);
+    expect(missed, 'these ways of naming a card are invisible to the anti-cheat scan').toEqual([]);
+  });
+
+  it('reads the KEYS of an id-keyed map, not only its values', () => {
+    // `attackTargets` is attacker-id → attacked object. A scan that read only the
+    // values would report exactly half of a leak, and read as thorough.
+    expect([...collectInstanceIds({ attackTargets: { 41: 'B' } })]).toEqual([41]);
+    expect([...collectInstanceIds({ blocks: { 41: 42 } })].sort((a, b) => a - b)).toEqual([41, 42]);
+  });
+
+  it('still ignores a number that only LOOKS like an id', () => {
+    // The widening must not become "collect every number": instance ids are
+    // minted from 1 upward, so they collide constantly with counts and totals.
+    const ids = collectInstanceIds({ life: 20, choiceId: 7, optionCount: 42, id: 3, handCount: 5, turnNumber: 9 });
+    expect([...ids]).toEqual([]);
+  });
 });
 
 describe('pendingChoice masking', () => {
@@ -229,7 +281,11 @@ describe('pendingChoice masking', () => {
     expect(choice).not.toBeNull();
     expect(isRedactedChoice(choice!)).toBe(false);
     // Thoughtseize really does show the caster the victim's hand — that is the card.
-    expect(collectInstanceIds(choice)).toEqual(new Set([901, 902]));
+    // 500 is the ASKING CARD itself (`sourceInstanceId`, sitting on the public
+    // stack). It shows up here only because the scan was widened past the single
+    // key name `instanceId`; under the old scan the Thoughtseize was invisible to
+    // it — which is the blind spot two real hidden-information leaks hid in.
+    expect(collectInstanceIds(choice)).toEqual(new Set([500, 901, 902]));
     expect(choice).toMatchObject({ prompt: 'Choose a nonland card to discard', chooser: 'A' });
   });
 
