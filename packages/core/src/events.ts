@@ -557,6 +557,64 @@ export type GameEvent =
       readonly zone: ZoneName;
     }
   | {
+      /**
+       * A COPY OF A SPELL was put onto the stack (CR 707.10) — Reverberate,
+       * Fork, Narset's Reversal. The copy is a spell like any other and can be
+       * countered and targeted as one; what it is NOT is a card.
+       *
+       * Fully public: a copy is created on the stack, where everything is
+       * visible. `copiedInstanceId` names the spell it was made from so a log,
+       * a replay and the inspector can draw the pair.
+       */
+      readonly type: 'spellCopied';
+      /** The COPY's own id — freshly minted, never the original's. */
+      readonly instanceId: InstanceId;
+      /** The spell it was copied from, still on the stack at this moment. */
+      readonly copiedInstanceId: InstanceId;
+      /** Who controls the copy, which need not be the original's controller. */
+      readonly controller: PlayerId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * CR 704.5e: a copy of a spell that leaves the stack CEASES TO EXIST —
+       * it is not a card, so no zone can hold it. Emitted INSTEAD of the
+       * `zoneChange` every other spell leaving the stack emits, which is the
+       * point: a log or a replay folding zone changes must not put this object
+       * in a graveyard, because the game never did.
+       *
+       * Emitted at both exits — a copy that finishes resolving, and a copy that
+       * is countered — so the two can never disagree about what happened to it.
+       */
+      readonly type: 'spellCopyCeasedToExist';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A TOKEN COPY of a permanent was created (CR 707.2 + CR 111) — Rite of
+       * Replication, Kiki-Jiki, Helm of the Host.
+       *
+       * Its own event rather than a flavour of `tokenCreated`, which the token
+       * also emits (it IS a token, and every enters-the-battlefield trigger must
+       * see the entry exactly as it does for any other): `tokenCreated` says a
+       * token appeared and names it, and this says which BOARD OBJECT it is a
+       * copy of. Nothing else carries that link, and without it a log cannot
+       * draw the pair and the full-pool soak has no witness that separates a
+       * token copy from any other token.
+       *
+       * Fully public — both objects are on the battlefield.
+       */
+      readonly type: 'tokenCopyCreated';
+      /** The token's own id. */
+      readonly instanceId: InstanceId;
+      /** The permanent it was copied from. */
+      readonly copiedInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      /** The name it now has — the copied card, after any "except …" tail. */
+      readonly name: string;
+    }
+  | {
       // A resolving spell/ability asked a player a question; resolution is parked
       // until it is answered. The replay/inspector needs both halves of every
       // choice, which is why asking and answering are BOTH events.

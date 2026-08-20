@@ -152,6 +152,27 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // GRAVEYARD (Echoing Deeps) is public for the same reason — a graveyard is a
   // public zone, so no variant of this event carries a secret.
   becameCopy: 'public',
+  /*
+   * THE THREE COPY-CREATION EVENTS ARE PUBLIC, and none of them is a judgement
+   * call: every object each one names is on the stack or on the battlefield.
+   *
+   * `spellCopied` names a copy created ON THE STACK from a spell that is also on
+   * the stack — both were announced out loud when they got there, and both names
+   * have been public since. `spellCopyCeasedToExist` says the copy left, which
+   * the whole table watches; withholding it would leave a pilot believing a
+   * spell is still waiting to resolve. `tokenCopyCreated` names two battlefield
+   * objects.
+   *
+   * The question to ask when classifying an event of this family is whether the
+   * OBJECT it names could be a hidden card. A copy is created from a spell on
+   * the stack, never from a card in a hand or a library, so it cannot be. A
+   * future "copy target card in a graveyard" would still be public (a graveyard
+   * is a public zone); a hypothetical "copy a card in your hand" would NOT be,
+   * and would need a redacting function here rather than this literal.
+   */
+  spellCopied: 'public',
+  spellCopyCeasedToExist: 'public',
+  tokenCopyCreated: 'public',
   stackResolved: 'public',
   // Mana in a pool is open information in paper Magic, and it is the raw material
   // for the brief's §35–37 "represented mana" reasoning.

@@ -181,6 +181,12 @@ export type SoakMechanicId =
   | 'tutor-route'
   | 'replacement-effect'
   | 'copy-effect'
+  // The two copy systems that create an object rather than copying onto one.
+  // Separate ids from `copy-effect`, and deliberately so: the as-enters copy is
+  // a REPLACEMENT on a card entering, these two are effects that MAKE a copy,
+  // and a pool that prints one of them proves nothing about the others.
+  | 'spell-copy'
+  | 'token-copy'
   // "This spell can't be countered", whose whole observable behaviour is a counter
   // effect resolving and doing NOTHING — so the prevented-counter event is the
   // only witness there is.
@@ -462,9 +468,28 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     id: 'copy-effect',
     label: 'copy effect — a permanent entered as a copy of another (CR 707, layer 1)',
     witnessKind: 'event',
-    // Declared through `CardDefinition.copyOnEnter`-style data rather than a
-    // primitive id, like the replacement layer above.
-    printedBy: (_c, t) => t.includes('"copy') || t.includes('enterAsCopy'),
+    // The DEFINITION FIELD, named exactly. It used to read `t.includes('"copy')`
+    // with a comment naming a `copyOnEnter` field that does not exist — and that
+    // loose prefix WENT WRONG the moment the copy family grew a second member:
+    // `"copySpell"` and `"createTokenCopy"` both start with `"copy`/contain
+    // `Copy`, so a Reverberate deck would have been required to emit the
+    // `becameCopy` event that only an AS-ENTERS copy can produce, and the soak
+    // would have failed on a mechanic the deck never printed. Same failure shape
+    // as this file's stale `transform-dfc` predicate: it did not start wrong, it
+    // BECAME wrong when the data underneath it grew.
+    printedBy: (_c, t) => t.includes('"copyAsEnters"'),
+  },
+  {
+    id: 'spell-copy',
+    label: 'a spell on the stack was COPIED — an object that is not a card (CR 707.10)',
+    witnessKind: 'event',
+    printedBy: (_c, t) => t.includes('"copySpell"'),
+  },
+  {
+    id: 'token-copy',
+    label: 'a TOKEN COPY of a permanent was created (CR 707.2 + CR 111)',
+    witnessKind: 'event',
+    printedBy: (_c, t) => t.includes('"createTokenCopy"'),
   },
   { id: 'graveyard-recursion', label: 'graveyard recursion — a card returned from a graveyard', witnessKind: 'event', printedBy: (_c, t) => t.includes('returnFromGraveyard') || t.includes('persistReturn') },
   {
@@ -682,6 +707,28 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   // A permanent took on another object's copiable values — the mechanic firing,
   // and public: the table watches a Clone arrive as something.
   becameCopy: 'copy-effect',
+  /*
+   * A COPY WAS PUT ON THE STACK — the mechanic firing, and the only event that
+   * proves it: the copy then resolves through the very same code an ordinary
+   * spell does, so every event AFTER this one is indistinguishable from the
+   * original's.
+   */
+  spellCopied: 'spell-copy',
+  /*
+   * CR 704.5e — the copy left the stack and stopped existing. The SAME mechanic
+   * as the creation, exactly as `tokenCeasedToExist` is the same mechanic as
+   * `tokenCreated`: what it buys is that a game which copies a spell and lets it
+   * resolve witnesses `spell-copy` TWICE, which is the cheap end-to-end proof
+   * that the no-phantom rule actually ran rather than merely compiling.
+   */
+  spellCopyCeasedToExist: 'spell-copy',
+  /*
+   * The token copy's own witness. It cannot be `tokenCreated` — EVERY token
+   * emits that, so a deck with one Bitterblossom would "prove" it makes copies.
+   * This event names the board object the token is a copy of, which nothing else
+   * carries, and that is exactly why it exists.
+   */
+  tokenCopyCreated: 'token-copy',
   replacementApplied: 'replacement-effect',
   // Bookkeeping, like `continuousEffectExpired`: a floating effect wearing off
   // proves it EXISTED, not that it ever replaced anything. An unspent fog expires

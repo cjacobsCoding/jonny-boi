@@ -1384,11 +1384,13 @@ export interface ResolutionFrame {
   card?: CardInstance;
   /**
    * Where that card goes when the resolution finishes — exile for flashback,
-   * HAND for a bought-back spell. Computed once, as the resolution begins, by
-   * `spellLeaveDestination`, so the frame that outlives the stack object still
-   * carries the one agreed answer.
+   * HAND for a bought-back spell, and `'ceaseToExist'` for a COPY of a spell,
+   * which is not a card and goes to no zone at all (CR 704.5e). Computed once,
+   * as the resolution begins, by `spellLeaveDestination`, so the frame that
+   * outlives the stack object still carries the one agreed answer — including
+   * for a copy, whose `isSpellCopy` marker dies with the stack object.
    */
-  resolvesTo?: 'battlefield' | 'graveyard' | 'exile' | 'hand';
+  resolvesTo?: 'battlefield' | 'graveyard' | 'exile' | 'hand' | 'ceaseToExist';
   /**
    * The value chosen for `{X}` when this spell was cast — carried off the stack
    * object so "deals X damage" still reads the paid-for number AFTER the spell

@@ -278,7 +278,28 @@ export {
   COPY_ID_SUFFIX,
   extraLoyaltyForCopy,
   isCopy,
+  tokenCopyDefOf,
 } from './copy.js';
+
+/**
+ * SPELL-COPY seam (`./spell-copy.ts`) -- CR 707.10, a stack object that is NOT
+ * A CARD. `makeSpellCopy` builds the copy Reverberate and Fork put on the stack:
+ * a fresh instance id, the original's copiable values, and every decision made
+ * for the original (its targets, X, kicks and announced modes). It carries
+ * `isSpellCopy`, which is what makes `spellLeaveDestination` answer
+ * `'ceaseToExist'` (CR 704.5e) at BOTH exits from the stack, so a copy can never
+ * leave a phantom card in a graveyard. The aim helpers are the other half:
+ * "you may choose new targets for the copy" is an aiming moment inside a
+ * RESOLUTION, and a modal copy re-aims each announced mode on its own.
+ */
+export {
+  makeSpellCopy,
+  spellCopyAimAt,
+  spellCopyAimRestriction,
+  spellCopyAimSlots,
+  withSpellCopyAim,
+  MODELESS_AIM_SLOT,
+} from './spell-copy.js';
 
 /**
  * MODAL-SPELL seam (`./modal.ts`): which modes of a "Choose one --" card may be

@@ -299,6 +299,43 @@ export function copyResultDef(self: CardDefinition, source: CardInstance, spec: 
 }
 
 /**
+ * The empty "except" tail. Shared and frozen so {@link tokenCopyDefOf} can force
+ * the id suffix without allocating a fresh object per token — a kicked Rite of
+ * Replication makes five in one resolution.
+ */
+const NO_COPY_EXCEPTIONS: CopyExceptions = Object.freeze({});
+
+/**
+ * The copiable values a **TOKEN COPY** of `source` is created with (CR 707.2),
+ * after the printed "except …" tail (CR 707.3).
+ *
+ * The other half of the copy family: everything above copies ONTO an object that
+ * already exists (a Clone swapping its own `def`), while "create a token that's a
+ * copy of target creature" CREATES one. What the two share is this file's single
+ * answer to "what do you get when you copy that" — {@link copiableDefOf} — so a
+ * token copy of a 1/1 wearing three counters is a **1/1**, a token copy of a
+ * transformed permanent is its FRONT face, and a token copy of a Clone is
+ * whatever the Clone copies. There is no second opinion anywhere.
+ *
+ * Always routed through {@link applyCopyExceptions}, even with nothing to apply,
+ * so the result ALWAYS carries {@link COPY_ID_SUFFIX}. That is not cosmetic: an
+ * unsuffixed id would make a token copy of Grizzly Bears indistinguishable from
+ * the pool's own row for Grizzly Bears to anything keying on `def.id`, and the
+ * object is emphatically not that card. The suffixed form is already decoded by
+ * the web app's card resolver to the COPIED card's art and display record,
+ * exactly as an as-enters copy's is.
+ *
+ * `isToken` is deliberately NOT stamped here. Token-ness is a property of HOW an
+ * object was created, and `createTokenInState` is where creation happens — one
+ * place, not two. Its own note already names this function's output as the case
+ * it exists to cover, so the blank-definition trap is disarmed before a caller
+ * can reach it.
+ */
+export function tokenCopyDefOf(source: CardInstance, except?: CopyExceptions): CardDefinition {
+  return applyCopyExceptions(copiableDefOf(source), except ?? NO_COPY_EXCEPTIONS);
+}
+
+/**
  * Make `inst` a copy of `source` (CR 707, layer 1) as it enters the battlefield.
  *
  * Everything per-object is deliberately UNTOUCHED — this is a layer-1 change to
