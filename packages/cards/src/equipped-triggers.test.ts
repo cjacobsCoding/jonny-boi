@@ -16,13 +16,17 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { CardDefinition, GameAction, GameEvent, GameState } from '@jonny-boi/core';
+import type { CardDefinition, CardInstance, GameAction, GameEvent, GameState } from '@jonny-boi/core';
 import {
   applyAction,
   createGame,
   createRng,
+  applyEffectRef,
   DEFAULT_RULES,
+  effectiveKeywords,
   generateLegalActions,
+  indexContinuous,
+  NO_MOD,
 } from '@jonny-boi/core';
 import { createHeuristicPilot } from '@jonny-boi/ai';
 import { buildRegistry } from './pool.js';
@@ -303,6 +307,73 @@ describe('the printed cards this family was measured against', () => {
     expect(wealth.missing.map((m) => m.missingEngineSystem)).toContain(
       'a ward/protection template the compiler does not recognize yet',
     );
+  });
+});
+
+describe('a GRANTED payload keyword actually reaches the board', () => {
+  /**
+   * The bug this exists for, found while widening `parseKeywordList` to the two
+   * payload keywords: `keywordsParam` kept only `=== true` values, so
+   * `protectionFrom` (a list) and `ward`/`minBlockers` (numbers) were dropped on
+   * the way into every until-end-of-turn grant. "Target creature gains
+   * protection from red until end of turn" compiled `'complete'` and did
+   * NOTHING — and the rule's own test stayed green because it asserted the
+   * compiled EFFECT REFS and never played the card.
+   *
+   * So this one plays it: the grant resolves through the real registered
+   * primitive and is read back through core's continuous layer, which is the
+   * only thing that can tell a real grant from an empty one.
+   */
+  it('grants protection from red, not an empty modification', () => {
+    const registry = buildRegistry();
+    const spell = playable(
+      scryfall({
+        name: 'Test Ward Off Red',
+        cost: { W: 1 },
+        types: ['Instant'],
+        oracleText: 'Target creature gains protection from red until end of turn.',
+      }),
+    );
+    const bear: CardDefinition = {
+      id: 'equipped:Test Bear',
+      name: 'Test Bear',
+      types: ['creature'],
+      power: 2,
+      toughness: 2,
+      cost: { G: 1 },
+    };
+    const { state } = createGame({ seed: 4, decks: { A: deckWith([bear]), B: deckWith([]) }, registry });
+    const target: CardInstance = {
+      instanceId: state.nextInstanceId++,
+      def: bear,
+      controller: 'A',
+      owner: 'A',
+      zone: 'battlefield',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+      attachedTo: null,
+    };
+    state.battlefield.push(target);
+
+    const effect = spell.effects?.[0];
+    expect(effect?.primitive).toBe('grantKeywordUntilEndOfTurn');
+    // Resolved through CORE's own `applyEffectRef`, not a hand-built context:
+    // the continuous effect has to land in the shape `indexContinuous` reads,
+    // and a stub that pushed its own shape would pass while the real spell did
+    // nothing — the exact failure this test exists to catch.
+    applyEffectRef(
+      registry,
+      effect!,
+      { state, source: target, controller: 'A' },
+      () => {},
+      [target.instanceId],
+    );
+
+    const granted = effectiveKeywords(target, indexContinuous(state).get(target.instanceId) ?? NO_MOD);
+    expect(granted.protectionFrom, 'the grant reached the board as an EMPTY modification').toEqual(['red']);
   });
 });
 
