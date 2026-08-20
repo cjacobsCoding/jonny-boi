@@ -72,6 +72,10 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return {
         text: `Protection prevents ${event.amount} damage from ${r.name(event.source)} to ${targetText(event.target, r)}.`,
       };
+    case 'counterPrevented':
+      // Same argument as `damagePrevented`: a Counterspell that visibly did
+      // nothing has to say why, or the log reads like a bug.
+      return { text: `${event.name} can't be countered.` };
     case 'lifeChanged':
       return {
         text: `${r.playerName(event.player)} ${event.delta >= 0 ? 'gains' : 'loses'} ${Math.abs(event.delta)} life (now ${event.to}).`,

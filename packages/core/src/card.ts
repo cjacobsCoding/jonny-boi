@@ -346,6 +346,20 @@ export interface CardDefinition {
    */
   readonly cantBeCountered?: boolean;
   /**
+   * **"Spells you control can't be countered"** (Chimil, the Inner Sun),
+   * **"Creature spells you control can't be countered"** (Rhythm of the Wild),
+   * **"Spells can't be countered"** (Lier, Disciple of the Drowned) — the same
+   * rule as {@link cantBeCountered}, printed on a PERMANENT that protects other
+   * cards' spells instead of its own.
+   *
+   * Not a {@link StaticAbility}: those filter permanents and contribute a
+   * P/T-and-keyword modification, and the subject here is an object on the stack.
+   * Read by `countering.ts`, whose lifetime is derived from the board on every
+   * query — so destroying the source in response really does let the counterspell
+   * through.
+   */
+  readonly spellsCantBeCountered?: import('./countering.js').UncounterableSpellsAbility;
+  /**
    * **"You have no maximum hand size."** Reliquary Tower, Spellbook, Venser's
    * Journal — a static ability of a permanent its controller controls, read by
    * the cleanup step's discard (CR 514.1).

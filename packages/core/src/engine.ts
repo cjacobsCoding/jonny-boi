@@ -225,6 +225,13 @@ export function createGame(setup: GameSetup): EngineResult {
     consecutivePasses: 0,
     seed: setup.seed,
     rngState: rng.state,
+    // Written even though nothing is asking yet, so the field's POSITION in the
+    // object is fixed from the start. See `internal/clone.ts`: `applyAction` is
+    // `applyActionInPlace` over a clone, and the two are compared as serialized
+    // text, so a key that appears at different times in the two paths makes
+    // identical states stringify differently.
+    pendingChoice: null,
+    resolution: null,
   };
 
   // Wrap emit so events are scanned for triggers (none can fire during setup

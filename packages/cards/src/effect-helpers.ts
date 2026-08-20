@@ -36,6 +36,7 @@ import {
   MANA_COLORS,
   pruneCardGrantsFor,
   discardDestination,
+  spellCanBeCountered,
   spellLeaveDestination,
   TARGET_RESTRICTION_PARAM,
 } from '@jonny-boi/core';
@@ -487,6 +488,20 @@ export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | und
 export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject): void {
   const idx = ctx.state.stack.indexOf(spell);
   if (idx < 0) return;
+  // "THIS SPELL CAN'T BE COUNTERED" (CR 701.5a) is enforced HERE and nowhere else,
+  // because this is the one function every counter path funnels through. It is
+  // deliberately not a TARGETING restriction: an uncounterable spell is a legal
+  // target, and the counterspell resolves, does nothing, and is still spent —
+  // refusing the target instead would hand the caster their card back.
+  if (!spellCanBeCountered(ctx.state, spell.card.def, spell.controller)) {
+    ctx.emit({
+      type: 'counterPrevented',
+      instanceId: spell.instanceId,
+      name: spell.card.def.name,
+      controller: spell.controller,
+    });
+    return;
+  }
   ctx.state.stack.splice(idx, 1);
   const card = spell.card;
   // COUNTERED, not resolved — the distinction the reason argument exists for: a

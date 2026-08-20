@@ -1,12 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { applyAction, createGame, DEFAULT_RULES, type GameState, type PlayerId } from './index.js';
+import {
+  applyAction,
+  createGame,
+  DEFAULT_RULES,
+  defaultAnswerFor,
+  type GameAction,
+  type GameState,
+  type PlayerId,
+} from './index.js';
 import { createEffectRegistry } from './effects.js';
 import { creatureDef, deck, deckOf, giveHand, landDef, spellDef } from './test-fixtures.js';
 
 const ISLAND = landDef('Island', 'U');
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState, registry = createEffectRegistry()): GameState {
-  const r = applyAction(state, { kind: 'passPriority', player: state.priorityPlayer }, DEFAULT_RULES, registry);
+  const question = state.pendingChoice;
+  const action: GameAction = question
+    ? {
+        kind: 'answerChoice',
+        player: question.chooser,
+        choiceId: question.id,
+        answer: defaultAnswerFor(question),
+      }
+    : { kind: 'passPriority', player: state.priorityPlayer };
+  const r = applyAction(state, action, DEFAULT_RULES, registry);
   return r.state;
 }
 
@@ -28,10 +51,9 @@ describe('state-based actions: decking', () => {
     // On B's second turn the draw fails → decking loss.
     let s = g.state;
     let guard = 0;
-    while (!s.gameOver && guard++ < 2000) {
-      const r = applyAction(s, { kind: 'passPriority', player: s.priorityPlayer });
-      s = r.state;
-    }
+    // Through the choice-aware `pass`: a hand over the maximum size parks the
+    // cleanup discard, and a loop that only ever passes priority would stall on it.
+    while (!s.gameOver && guard++ < 2000) s = pass(s);
     expect(s.gameOver).toBe(true);
     expect(s.winner).toBe('A');
     expect(s.players.B.hasLost).toBe(true);

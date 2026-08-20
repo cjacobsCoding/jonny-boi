@@ -24,6 +24,7 @@ import {
   LOYALTY_COUNTER,
   loyaltyOf,
   type CardDefinition,
+  defaultAnswerFor,
   type GameAction,
   type GameState,
 } from './index.js';
@@ -69,8 +70,31 @@ function rejectionOf(state: GameState, action: GameAction): string | undefined {
   return rejected ? (rejected as { reason: string }).reason : undefined;
 }
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState): GameState {
+  const question = state.pendingChoice;
+  if (question) {
+    return act(state, {
+      kind: 'answerChoice',
+      player: question.chooser,
+      choiceId: question.id,
+      answer: defaultAnswerFor(question),
+    });
+  }
   return act(state, { kind: 'passPriority', player: state.priorityPlayer });
+}
+
+/** Advance whole turns until the given player is active. */
+function advanceUntilActive(state: GameState, player: PlayerId, max = 800): GameState {
+  let s = state;
+  let guard = 0;
+  while (s.activePlayer !== player && !s.gameOver && guard++ < max) s = pass(s);
+  return s;
 }
 
 function advanceToStep(state: GameState, target: string, max = 400): GameState {
@@ -185,9 +209,12 @@ describe('loyalty abilities', () => {
     expect(offered.some((a) => a.kind === 'activateAbility' && a.instanceId === walker)).toBe(false);
 
     // Next turn (B's) it is still A's walker and still spent; on A's NEXT turn it works.
-    s = advanceToStep(s, 'cleanup');
-    s = advanceToStep(s, 'precombatMain'); // B's main
-    s = advanceToStep(s, 'cleanup');
+    // Driven off WHO IS ACTIVE rather than off reaching a named step twice: the
+    // cleanup step can now rest with a question parked (the discard down to
+    // maximum hand size), so "advance to cleanup, then to a main" no longer
+    // describes exactly one turn boundary.
+    s = advanceUntilActive(s, 'B');
+    s = advanceUntilActive(s, 'A');
     s = advanceToStep(s, 'precombatMain'); // A's main again
     expect(s.activePlayer).toBe('A');
     const again = act(s, { kind: 'activateAbility', player: 'A', instanceId: walker, abilityIndex: 0 });

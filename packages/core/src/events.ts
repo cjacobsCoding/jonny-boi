@@ -184,6 +184,22 @@ export type GameEvent =
       readonly amount: number;
       readonly combat: boolean;
     }
+  | {
+      /**
+       * A counter effect resolved against a spell that **can't be countered**
+       * (CR 701.5a), so nothing happened to it. The exact argument
+       * `damagePrevented` makes: a Counterspell that visibly does nothing has to be
+       * distinguishable from a bug in a replay, and silence here is what would make
+       * a real defect look like the rule working.
+       *
+       * Fully public — a spell on the stack, its name and its controller are what
+       * the whole table is already looking at.
+       */
+      readonly type: 'counterPrevented';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly controller: PlayerId;
+    }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
   | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }

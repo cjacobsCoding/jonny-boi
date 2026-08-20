@@ -118,6 +118,17 @@ export {
 } from './statics.js';
 
 /**
+ * PLAYER-facing statics — continuous abilities whose subject is a player or a
+ * spell rather than a permanent, so the anthem machinery cannot carry them:
+ * "You have no maximum hand size", "You may play lands from your graveyard",
+ * "Spells you control can't be countered". Each derives its answer from the board
+ * on every read, so its lifetime ends with its source and nothing has to expire.
+ */
+export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+export type { UncounterableSpellsAbility } from './countering.js';
+export { spellCanBeCountered } from './countering.js';
+
+/**
  * Attachment seam: one permanent attached to another. Auras and Equipment are the
  * SAME relationship — a host filter, a modification, and what the state-based
  * actions do when it is not legally attached — so a card declares
@@ -300,6 +311,7 @@ export type {
   ActivateAbilityAction,
   CastSpellAction,
   CastZone,
+  LandPlayZone,
   CycleCardAction,
   DeclareAttackersAction,
   DeclareBlockersAction,
