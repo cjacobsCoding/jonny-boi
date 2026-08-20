@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 325 cards.
+ * 345 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -87,6 +87,29 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, R: 1 },
     effects: [{ primitive: 'gainControl', params: { targets: 'creature', untap: true, haste: true } }],
+  },
+  // As this creature enters, choose a creature type.
+  // This creature is the chosen type in addition to its other types.
+  // Other creatures you control of the chosen type get +1/+1.
+  {
+    id: '53c730c6-2f8c-4af8-b400-b9d573a71e60',
+    name: 'Adaptive Automaton',
+    types: ['artifact', 'creature'],
+    cost: { generic: 3 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['construct'],
+    asEntersChoice: { subject: 'creatureType' },
+    isChosenSubtype: true,
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', ofChosenSubtype: true, excludeSource: true },
+        power: 1,
+        toughness: 1,
+        label: 'other creatures you control of the chosen type get +1/+1',
+      },
+    ],
   },
   // Flying, vigilance, lifelink
   {
@@ -373,7 +396,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Soldier' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Soldier', colors: ['W'], subtypes: ['Soldier'] },
+          },
+        ],
         label: 'Enters: create a 1/1 white soldier creature token',
       },
     ],
@@ -418,6 +446,38 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ W: 1 }, { U: 1 }],
   },
+  // Black creatures get +1/+1.
+  {
+    id: 'fc5d3341-cbce-49e5-93cc-8add92479dca',
+    name: 'Bad Moon',
+    types: ['enchantment'],
+    cost: { generic: 1, B: 1 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'any', anyOfColors: ['B'] },
+        power: 1,
+        toughness: 1,
+        label: 'black creatures get +1/+1',
+      },
+    ],
+  },
+  // Return target card from your graveyard to your hand.
+  {
+    id: 'd2075f58-b0e9-4e85-b7e6-0523a27a1d5b',
+    name: 'Bala Ged Recovery',
+    types: ['sorcery'],
+    cost: { generic: 2, G: 1 },
+    effects: [{ primitive: 'returnFromGraveyard', params: { count: 1 } }],
+    backFace: {
+      id: 'd2075f58-b0e9-4e85-b7e6-0523a27a1d5b#back',
+      name: 'Bala Ged Sanctuary',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // This land enters tapped.
   // {T}: Add {B}.
   // Cycling {B} ({B}, Discard this card: Draw a card.)
@@ -447,7 +507,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin', count: 2 } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Goblin',
+              colors: ['R'],
+              subtypes: ['Goblin'],
+              count: 2,
+            },
+          },
+        ],
         label: 'Enters: create two 1/1 red goblin creature tokens',
       },
     ],
@@ -467,6 +539,67 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         power: 1,
         toughness: 1,
         label: 'other creatures you control get +1/+1',
+      },
+    ],
+  },
+  // Flash
+  // Flying
+  // At the beginning of your upkeep, you lose 1 life and create a 1/1 blue and black Faerie creature token with flying.
+  {
+    id: '5effb651-f9e0-4c14-8192-bd0e132b8d5d',
+    name: 'Bitterbloom Bearer',
+    types: ['creature'],
+    cost: { B: 2 },
+    power: 1,
+    toughness: 1,
+    keywords: { flash: true, flying: true },
+    subtypes: ['faerie', 'rogue'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 1 } },
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Faerie',
+              colors: ['U', 'B'],
+              subtypes: ['Faerie'],
+              keywords: { flying: true },
+            },
+          },
+        ],
+        label: 'your upkeep: you lose 1 life and create a 1/1 blue and black faerie creature token with flying',
+      },
+    ],
+  },
+  // At the beginning of your upkeep, you lose 1 life and create a 1/1 black Faerie Rogue creature token with flying.
+  {
+    id: 'fb868840-09fa-49b1-85cb-b08ad065e972',
+    name: 'Bitterblossom',
+    types: ['kindred', 'enchantment'],
+    cost: { generic: 1, B: 1 },
+    subtypes: ['faerie'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 1 } },
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Faerie Rogue',
+              colors: ['B'],
+              subtypes: ['Faerie', 'Rogue'],
+              keywords: { flying: true },
+            },
+          },
+        ],
+        label: 'your upkeep: you lose 1 life and create a 1/1 black faerie rogue creature token with flying',
       },
     ],
   },
@@ -513,6 +646,27 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { R: 1 },
     xCost: 1,
     effects: [{ primitive: 'dealDamage', params: { amount: { chosenX: true } } }],
+  },
+  // Whenever this creature or another creature dies, target player loses 1 life and you gain 1 life.
+  {
+    id: '310f141c-7f37-4729-aed6-dd9c09db448d',
+    name: 'Blood Artist',
+    types: ['creature'],
+    cost: { generic: 1, B: 1 },
+    power: 0,
+    toughness: 1,
+    subtypes: ['vampire'],
+    triggers: [
+      {
+        condition: { on: 'permanentDies', who: 'any', permanentFilter: { anyOfTypes: ['creature'] } },
+        effects: [
+          { primitive: 'loseLife', params: { amount: 1, targetPlayer: true, targets: 'player' } },
+          { primitive: 'gainLife', params: { amount: 1 } },
+        ],
+        label: 'creature (any) dies: target player loses 1 life and you gain 1 life',
+        targets: 'player',
+      },
+    ],
   },
   // First strike, protection from white
   {
@@ -684,7 +838,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, G: 1 },
     flashback: { generic: 3, G: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 3, toughness: 3, name: 'Elephant' } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 3, toughness: 3, name: 'Elephant', colors: ['G'], subtypes: ['Elephant'] },
+      },
+    ],
   },
   // Counter target spell.
   {
@@ -728,7 +887,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Captain\'s Call',
     types: ['sorcery'],
     cost: { generic: 3, W: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Soldier', count: 3 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Soldier', colors: ['W'], subtypes: ['Soldier'], count: 3 },
+      },
+    ],
   },
   // This land enters tapped unless you control an Island.
   // {T}: Add {U}.
@@ -774,7 +938,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { G: 1 },
     flashback: { generic: 1, G: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Squirrel' } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Squirrel', colors: ['G'], subtypes: ['Squirrel'] },
+      },
+    ],
   },
   // Lifelink
   {
@@ -837,6 +1006,19 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Equip {1}',
       modifies: { power: 0, toughness: 0, keywords: { flying: true } },
     },
+  },
+  // This artifact enters tapped.
+  // As this artifact enters, choose a color.
+  // {T}: Add one mana of the chosen color.
+  {
+    id: '21d700e8-0255-418e-96a0-6fe05b3f836d',
+    name: 'Coldsteel Heart',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    entersTapped: true,
+    asEntersChoice: { subject: 'color' },
+    effects: [{ primitive: 'chooseAsEnters', params: {} }],
+    manaAbilities: [{ chosenColor: true, label: 'Add one mana of the chosen color' }],
   },
   // ({T}: Add {R} or {G}.)
   // This land enters tapped.
@@ -952,6 +1134,21 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         },
       ],
     },
+  },
+  // White creatures get +1/+1.
+  {
+    id: '4692740f-be90-459f-8d90-c4ae71771595',
+    name: 'Crusade',
+    types: ['enchantment'],
+    cost: { W: 2 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'any', anyOfColors: ['W'] },
+        power: 1,
+        toughness: 1,
+        label: 'white creatures get +1/+1',
+      },
+    ],
   },
   // Choose one —
   // • Return target creature card from your graveyard to your hand.
@@ -1268,6 +1465,45 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ U: 1 }, { B: 1 }],
   },
+  // Deathtouch
+  // Other Zombie creatures you control get +1/+1.
+  // Whenever another Zombie you control dies, target opponent loses 1 life.
+  {
+    id: '70de24d9-c585-4bf6-ac2c-c5b4b7aa298c',
+    name: 'Diregraf Captain',
+    types: ['creature'],
+    cost: { generic: 1, U: 1, B: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { deathtouch: true },
+    subtypes: ['zombie', 'soldier'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentDies',
+          who: 'you',
+          permanentFilter: { anyOfSubtypes: ['zombie'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'loseLife', params: { amount: 1, targetPlayer: true, targets: 'opponent' } }],
+        label: 'another zombie (you) dies: target opponent loses 1 life',
+        targets: 'opponent',
+      },
+    ],
+    statics: [
+      {
+        affects: {
+          anyOfTypes: ['creature'],
+          anyOfSubtypes: ['zombie'],
+          controller: 'you',
+          excludeSource: true,
+        },
+        power: 1,
+        toughness: 1,
+        label: 'other zombie creatures you control get +1/+1',
+      },
+    ],
+  },
   // This creature enters tapped.
   {
     id: '6048fc70-0dcc-4b54-977d-16e240225f82',
@@ -1345,7 +1581,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Dragon Fodder',
     types: ['sorcery'],
     cost: { generic: 1, R: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin', count: 2 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'], count: 2 },
+      },
+    ],
   },
   // Target player mills three cards.
   // Flashback {1}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -1488,6 +1729,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         label: 'Enters: draw a card',
       },
     ],
+  },
+  // This creature enters with X +1/+1 counters on it.
+  {
+    id: '7a51780a-fa28-4ee0-94c7-4330800ca9cb',
+    name: 'Endless One',
+    types: ['creature'],
+    power: 0,
+    toughness: 0,
+    subtypes: ['eldrazi'],
+    xCost: 1,
+    effects: [{ primitive: 'addCounters', params: { amount: { chosenX: true }, self: true } }],
   },
   // Enchant creature (Target a creature as you cast this. This card enters attached to that creature.)
   // Enchanted creature gets -2/-2.
@@ -1707,6 +1959,21 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     subtypes: ['elf', 'druid'],
     produces: ['G'],
   },
+  // Creatures you control get +1/+1.
+  {
+    id: '3754dce0-3e97-406f-8807-a4942a222c41',
+    name: 'Gaea\'s Anthem',
+    types: ['enchantment'],
+    cost: { generic: 1, G: 2 },
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you' },
+        power: 1,
+        toughness: 1,
+        label: 'creatures you control get +1/+1',
+      },
+    ],
+  },
   // Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)
   {
     id: '32fc8fa7-7e0a-4d4e-85cf-2f98b3fc6ecf',
@@ -1763,6 +2030,32 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { U: 1, B: 1 },
     effects: [{ primitive: 'mill', params: { amount: 10, targets: 'player' } }],
   },
+  // Haste (This creature can attack and {T} as soon as it comes under your control.)
+  // Other Goblin creatures you control get +1/+1 and have haste.
+  {
+    id: '368b4052-174e-4458-a6e6-eaf8093aa0fe',
+    name: 'Goblin Chieftain',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { haste: true },
+    subtypes: ['goblin'],
+    statics: [
+      {
+        affects: {
+          anyOfTypes: ['creature'],
+          anyOfSubtypes: ['goblin'],
+          controller: 'you',
+          excludeSource: true,
+        },
+        power: 1,
+        toughness: 1,
+        keywords: { haste: true },
+        label: 'other goblin creatures you control get +1/+1 and have haste',
+      },
+    ],
+  },
   // When this creature enters, create a 1/1 red Goblin creature token.
   {
     id: '8b022754-6d16-470e-b754-4df6e4f4709e',
@@ -1775,7 +2068,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     triggers: [
       {
         condition: { on: 'etb' },
-        effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'] },
+          },
+        ],
         label: 'Enters: create a 1/1 red goblin creature token',
       },
     ],
@@ -2012,6 +2310,51 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       modifies: { power: 1, toughness: 2, keywords: {} },
     },
   },
+  // Create three 1/1 red Goblin creature tokens.
+  {
+    id: 'a6450b8e-eb18-431c-9eb7-7daf107978b2',
+    name: 'Hordeling Outburst',
+    types: ['sorcery'],
+    cost: { generic: 1, R: 2 },
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'], count: 3 },
+      },
+    ],
+  },
+  // Flying, deathtouch
+  // When this creature enters, create four 1/1 green Insect creature tokens with flying and deathtouch.
+  {
+    id: '3b1f8108-6911-49e9-8f78-f950bb58cb6c',
+    name: 'Hornet Queen',
+    types: ['creature'],
+    cost: { generic: 4, G: 3 },
+    power: 2,
+    toughness: 2,
+    keywords: { flying: true, deathtouch: true },
+    subtypes: ['insect'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Insect',
+              colors: ['G'],
+              subtypes: ['Insect'],
+              count: 4,
+              keywords: { flying: true, deathtouch: true },
+            },
+          },
+        ],
+        label: 'Enters: create four 1/1 green insect creature tokens with flying and deathtouch',
+      },
+    ],
+  },
   // Kicker {W} (You may pay an additional {W} as you cast this spell.)
   // Hurloon Battle Hymn deals 4 damage to target creature or planeswalker. If this spell was kicked, you gain 4 life.
   {
@@ -2134,6 +2477,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     madness: { U: 1 },
     effects: [{ primitive: 'returnToHand', params: { targets: 'creature' } }],
   },
+  // Counter target spell unless its controller pays {1}.
+  {
+    id: '941a4b14-ea2a-4bd0-8cc2-d609f80df32c',
+    name: 'Jwari Disruption',
+    types: ['instant'],
+    cost: { generic: 1, U: 1 },
+    effects: [{ primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaid: { generic: 1 } } }],
+    backFace: {
+      id: '941a4b14-ea2a-4bd0-8cc2-d609f80df32c#back',
+      name: 'Jwari Ruins',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['U'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   {
     id: 'df7f697e-6886-4897-a024-61ae225c1b34',
     name: 'Kalonian Tusker',
@@ -2142,6 +2502,32 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 3,
     subtypes: ['beast'],
+  },
+  // Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.
+  {
+    id: '2ac1c95c-2a9d-40bc-9cad-9cadfa3f19f7',
+    name: 'Kazandu Mammoth',
+    types: ['creature'],
+    cost: { generic: 1, G: 2 },
+    power: 3,
+    toughness: 3,
+    subtypes: ['elephant'],
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
+        effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 2, toughness: 2 } }],
+        label: 'land (you) enters: ~ gets +2/+2 until end of turn',
+      },
+    ],
+    backFace: {
+      id: '2ac1c95c-2a9d-40bc-9cad-9cadfa3f19f7#back',
+      name: 'Kazandu Valley',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['G'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
   },
   // Whenever you cast an instant or sorcery spell, this creature gets +3/+0 until end of turn.
   {
@@ -2194,7 +2580,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Krenko\'s Command',
     types: ['sorcery'],
     cost: { generic: 1, R: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Goblin', count: 2 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Goblin', colors: ['R'], subtypes: ['Goblin'], count: 2 },
+      },
+    ],
   },
   // Target creature gets -3/-3 until end of turn.
   {
@@ -2319,7 +2710,15 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     effects: [
       {
         primitive: 'makeToken',
-        params: { power: 1, toughness: 1, name: 'Spirit', count: 2, keywords: { flying: true } },
+        params: {
+          power: 1,
+          toughness: 1,
+          name: 'Spirit',
+          colors: ['W'],
+          subtypes: ['Spirit'],
+          count: 2,
+          keywords: { flying: true },
+        },
       },
     ],
   },
@@ -2391,6 +2790,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ G: 1 }, { W: 1 }],
     triggers: [{ condition: { on: 'etb' }, effects: [{ primitive: 'surveil' }], label: 'Enters: surveil 1' }],
+  },
+  // Flying
+  // First strike (This creature deals combat damage before creatures without first strike.)
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  // Other Angels you control get +1/+1 and have lifelink.
+  {
+    id: '592c91fc-6430-4c76-9460-65f047350f67',
+    name: 'Lyra Dawnbringer',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { flying: true, firstStrike: true, lifelink: true },
+    subtypes: ['angel'],
+    statics: [
+      {
+        affects: { anyOfSubtypes: ['angel'], controller: 'you', excludeSource: true },
+        power: 1,
+        toughness: 1,
+        keywords: { lifelink: true },
+        label: 'other angels you control get +1/+1 and have lifelink',
+      },
+    ],
   },
   // Magma Jet deals 2 damage to any target. Scry 2.
   {
@@ -2627,7 +3050,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, B: 2 },
     flashback: { generic: 5, B: 2 },
-    effects: [{ primitive: 'makeToken', params: { power: 2, toughness: 2, name: 'Zombie', count: 2 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 2, toughness: 2, name: 'Zombie', colors: ['B'], subtypes: ['Zombie'], count: 2 },
+      },
+    ],
   },
   // Return target creature card from your graveyard to your hand.
   // Flashback {4}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
@@ -2760,6 +3188,39 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         cost: { mana: { generic: 2, U: 1 }, sacrificeSelf: true },
         effects: [{ primitive: 'scry', params: { count: 2 } }],
         label: '{2}{u}, sacrifice ~: scry 2',
+      },
+    ],
+  },
+  // At the beginning of each upkeep, if you control no Snakes, create a 1/1 black Snake creature token with deathtouch.
+  {
+    id: '55eca80c-dcd8-4c2f-aa0f-fb0aec7b80f7',
+    name: 'Ophiomancer',
+    types: ['creature'],
+    cost: { generic: 2, B: 1 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'shaman'],
+    triggers: [
+      {
+        condition: {
+          on: 'upkeep',
+          who: 'any',
+          intervening: { kind: 'controlCount', filter: { anyOfSubtypes: ['snake'] }, max: 0 },
+        },
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: {
+              power: 1,
+              toughness: 1,
+              name: 'Snake',
+              colors: ['B'],
+              subtypes: ['Snake'],
+              keywords: { deathtouch: true },
+            },
+          },
+        ],
+        label: 'each upkeep: if you control no snakes, create a 1/1 black snake creature token with deathtouch',
       },
     ],
   },
@@ -2958,7 +3419,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Raise the Alarm',
     types: ['instant'],
     cost: { generic: 1, W: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 1, toughness: 1, name: 'Soldier', count: 2 } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 1, toughness: 1, name: 'Soldier', colors: ['W'], subtypes: ['Soldier'], count: 2 },
+      },
+    ],
   },
   // This land enters tapped.
   // {T}: Add {B} or {R}.
@@ -3073,7 +3539,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 6, G: 1 },
     flashback: { generic: 3, G: 1 },
-    effects: [{ primitive: 'makeToken', params: { power: 6, toughness: 6, name: 'Wurm' } }],
+    effects: [
+      {
+        primitive: 'makeToken',
+        params: { power: 6, toughness: 6, name: 'Wurm', colors: ['G'], subtypes: ['Wurm'] },
+      },
+    ],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -3270,7 +3741,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
           effects: [
             {
               primitive: 'makeToken',
-              params: { power: 1, toughness: 1, name: 'Soldier', count: 2 },
+              params: {
+                power: 1,
+                toughness: 1,
+                name: 'Soldier',
+                colors: ['W'],
+                subtypes: ['Soldier'],
+                count: 2,
+              },
             },
           ],
         },
@@ -3555,6 +4033,23 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ R: 1 }, { G: 1 }],
   },
+  // Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.
+  {
+    id: '81b61770-2ed5-4a50-84d0-97790002fc5a',
+    name: 'Song-Mad Treachery',
+    types: ['sorcery'],
+    cost: { generic: 3, R: 2 },
+    effects: [{ primitive: 'gainControl', params: { targets: 'creature', untap: true, haste: true } }],
+    backFace: {
+      id: '81b61770-2ed5-4a50-84d0-97790002fc5a#back',
+      name: 'Song-Mad Ruins',
+      types: ['land'],
+      entersTapped: true,
+      produces: ['R'],
+      isBackFace: true,
+    },
+    backFaceCastable: true,
+  },
   // Sorin's Vengeance deals 10 damage to target player or planeswalker and you gain 10 life.
   {
     id: '75d9c036-4f0d-4b55-b0a4-096ca84748ca',
@@ -3564,6 +4059,18 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     effects: [
       { primitive: 'dealDamage', params: { amount: 10, targets: 'playerOrPlaneswalker' } },
       { primitive: 'gainLife', params: { amount: 10 } },
+    ],
+  },
+  // You gain X life and draw X cards.
+  {
+    id: '71d83fca-e40e-4d0e-956d-d0d6da9cc472',
+    name: 'Sphinx\'s Revelation',
+    types: ['instant'],
+    cost: { W: 1, U: 2 },
+    xCost: 1,
+    effects: [
+      { primitive: 'gainLife', params: { amount: { chosenX: true } } },
+      { primitive: 'drawCards', params: { count: { chosenX: true } } },
     ],
   },
   // Flying, haste
@@ -3945,7 +4452,12 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
       {
         condition: { on: 'leaves' },
-        effects: [{ primitive: 'makeToken', params: { power: 3, toughness: 3, name: 'Beast' } }],
+        effects: [
+          {
+            primitive: 'makeToken',
+            params: { power: 3, toughness: 3, name: 'Beast', colors: ['G'], subtypes: ['Beast'] },
+          },
+        ],
         label: 'Leaves: create a 3/3 green beast creature token',
       },
     ],

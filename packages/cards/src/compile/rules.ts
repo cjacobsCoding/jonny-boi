@@ -3784,7 +3784,10 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         // adjective before a type word ("Goblin creatures you control") or the
         // subtype used as the noun itself ("Goblins you control").
         `(?:((?:${SUBTYPE_ALTERNATION}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s|(${SUBTYPE_ALTERNATION})s) ` +
-        `(you control|of the chosen type|of the chosen color)(?: of the chosen (type|color))? ` +
+        // The scope tail is OPTIONAL because a SYMMETRIC anthem prints none:
+        // "Black creatures get +1/+1" (Bad Moon) pumps both teams, and reading
+        // an absent tail as "you control" would be a strictly better card.
+        `(?:(you control|of the chosen type|of the chosen color)(?: of the chosen (type|color))? )?` +
         `(?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
     build(match, ctx) {
