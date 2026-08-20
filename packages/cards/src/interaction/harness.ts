@@ -71,6 +71,20 @@ export function act(state: GameState, action: GameAction, reg: Registry): GameSt
   return result.state;
 }
 
+/**
+ * The reason the engine REJECTED an action, or `undefined` when it accepted it.
+ *
+ * The counterpart to {@link act}: a matrix cell about something being ILLEGAL is
+ * only proved by the engine refusing it, not by a menu that happens not to
+ * mention it. Both halves matter - the menu keeps a pilot honest, the rejection
+ * keeps a hand-built action honest - and this is the second half.
+ */
+export function rejectionOf(state: GameState, action: GameAction, reg: Registry): string | undefined {
+  const result = applyAction(state, action, DEFAULT_RULES, reg);
+  const rejected = result.events.find((e) => e.type === 'actionRejected');
+  return rejected ? (rejected as { reason: string }).reason : undefined;
+}
+
 /** Pass priority for whoever holds it. */
 export function pass(state: GameState, reg: Registry): GameState {
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
@@ -171,6 +185,30 @@ export function place(
   return instanceId;
 }
 
+/**
+ * Put a fresh instance of `def` on TOP of a player's library. The top is index 0
+ * (`drawCard` uses `shift`), which is the opposite end from {@link place}'s push
+ * - a test that got this backwards would look at the wrong card and still pass
+ * for the wrong reason.
+ */
+export function putOnTop(state: GameState, player: PlayerId, def: CardDefinition): InstanceId {
+  const instanceId = state.nextInstanceId++;
+  state.players[player].library.unshift({
+    instanceId,
+    def,
+    controller: player,
+    owner: player,
+    zone: 'library',
+    tapped: false,
+    summoningSick: false,
+    damageMarked: 0,
+    markedByDeathtouch: false,
+    attachedTo: null,
+    counters: {},
+  });
+  return instanceId;
+}
+
 /** The result of casting a permanent into play: the new board and its instance id. */
 export interface Resolved {
   readonly state: GameState;
@@ -232,6 +270,44 @@ export function resolvePermanent(
     throw new Error(`${def.name} did not reach the battlefield (zone: ${zoneOf(cast.state, cast.id)})`);
   }
   return cast;
+}
+
+/**
+ * PLAY a land through the engine (lands are played, never cast) and return the
+ * permanent it became. Like {@link castCard} it parks the turn machine in the
+ * player's own main phase and puts it back, and it CLEARS the land-drop counter
+ * so a test can build a position with several lands without pretending turns
+ * passed. What is being exercised is the land's own entry path - `entersTapped`,
+ * an ETB question, a landfall trigger - not the once-per-turn rule, which has
+ * its own tests.
+ */
+export function playLand(
+  state: GameState,
+  reg: Registry,
+  def: CardDefinition,
+  controller: PlayerId = 'A',
+): Resolved {
+  const handId = place(state, controller, 'hand', def);
+  const wasActive = state.activePlayer;
+  const wasPriority = state.priorityPlayer;
+  const wasStep = state.step;
+  const wasDrops = state.players[controller].landsPlayedThisTurn;
+  state.activePlayer = controller;
+  state.priorityPlayer = controller;
+  state.step = 'precombatMain';
+  state.players[controller].landsPlayedThisTurn = 0;
+  let next = act(state, { kind: 'playLand', player: controller, instanceId: handId }, reg);
+  next = settle(next, reg);
+  if (!next.pendingChoice) {
+    next.activePlayer = wasActive;
+    next.priorityPlayer = wasPriority;
+    next.step = wasStep;
+    next.players[controller].landsPlayedThisTurn = wasDrops;
+  }
+  if (!next.battlefield.some((perm) => perm.instanceId === handId)) {
+    throw new Error(`${def.name} did not reach the battlefield (zone: ${zoneOf(next, handId)})`);
+  }
+  return { state: next, id: handId };
 }
 
 /** Where an instance currently is, for a failure message. */
