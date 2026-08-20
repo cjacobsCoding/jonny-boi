@@ -424,7 +424,7 @@
       ]
     },
     {
-      "missingEngineSystem": "a block REQUIREMENT, or a block restriction whose selector compares creatures",
+      "missingEngineSystem": "a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)",
       "cards": [
         "Destined // Lead",
         "Juggernaut",
@@ -1249,7 +1249,7 @@
       "missing": [
         {
           "text": "All creatures able to block target creature this turn do so.",
-          "missingEngineSystem": "a block REQUIREMENT, or a block restriction whose selector compares creatures"
+          "missingEngineSystem": "a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)"
         }
       ]
     },
@@ -2286,7 +2286,7 @@
         },
         {
           "text": "~ can't be blocked by Walls.",
-          "missingEngineSystem": "a block REQUIREMENT, or a block restriction whose selector compares creatures"
+          "missingEngineSystem": "a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)"
         }
       ]
     },
@@ -2661,7 +2661,7 @@
         },
         {
           "text": "Creatures can't block this turn.",
-          "missingEngineSystem": "a block REQUIREMENT, or a block restriction whose selector compares creatures"
+          "missingEngineSystem": "a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)"
         }
       ]
     },
@@ -2686,10 +2686,6 @@
     {
       "name": "Petrified Wood-Kin",
       "missing": [
-        {
-          "text": "This spell can't be countered.",
-          "missingEngineSystem": "a rules template the compiler does not recognize yet"
-        },
         {
           "text": "Bloodthirst X",
           "missingEngineSystem": "a rules template the compiler does not recognize yet"
@@ -2771,7 +2767,7 @@
       "missing": [
         {
           "text": "Equipped creature can't be blocked except by Walls.",
-          "missingEngineSystem": "a block REQUIREMENT, or a block restriction whose selector compares creatures"
+          "missingEngineSystem": "a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)"
         }
       ]
     },
@@ -3099,7 +3095,7 @@
         },
         {
           "text": "~ can't be blocked except by creatures with flying or reach.",
-          "missingEngineSystem": "a block REQUIREMENT, or a block restriction whose selector compares creatures"
+          "missingEngineSystem": "a block restriction whose SELECTOR compares creatures or reads effective P/T (the CR 509.1c/d requirement solver itself is built)"
         }
       ]
     },
