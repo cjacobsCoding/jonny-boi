@@ -142,25 +142,46 @@ describe('the compiler understands the blocking restrictions', () => {
     });
   });
 
-  it('still REPORTS a block requirement rather than ignoring it', () => {
-    // "Must be blocked" is a requirement, not a restriction: CR 509.1c/d resolves
-    // the two together and the solver is not built. A card printing one must say
-    // so rather than play as if the line were not there.
+  it('COMPILES a block requirement — the solver landed (CR 509.1c/d)', () => {
+    // This case used to assert the opposite, and its note said why: "must be
+    // blocked" is a requirement rather than a restriction, and satisfying the
+    // maximum number of them without violating any restriction is a search, not a
+    // check. That search is `internal/block-solver.ts` now, so the line compiles —
+    // and `packages/core/src/block-requirements.test.ts` is what proves it really
+    // forces a block rather than merely setting a flag.
     const result = compileCard(
       record({ name: 'Taunter', oracleText: 'All creatures able to block Taunter do so.' }),
     );
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /block REQUIREMENT/i.test(gap.missingEngineSystem))).toBe(true);
+    expect(result.status).toBe('complete');
+    expect(result.definition?.keywords?.blockedByAllAble).toBe(true);
   });
 
-  it('still REPORTS a restriction that compares the two creatures', () => {
+  it('COMPILES a restriction that compares the two creatures', () => {
+    // Likewise obsoleted: `KeywordFlags.blockRestriction` carries the comparison as
+    // a payload, and `canBlock` judges it against EFFECTIVE power.
     const result = compileCard(
       record({
         name: 'Skulker',
         oracleText: "Skulker can't be blocked by creatures with power 3 or greater.",
       }),
     );
-    expect(result.status).toBe('incomplete');
+    expect(result.status).toBe('complete');
+    expect(result.definition?.keywords?.blockRestriction).toEqual({ maxBlockerPower: 2 });
+  });
+
+  it('STILL reports the restrictions whose SELECTOR this engine cannot express', () => {
+    // What is left after the solver, named rather than approximated: a static
+    // whose filter would have to read EFFECTIVE power (Tetsuko, Delney —
+    // `statics.ts` matches printed characteristics by design, to keep the
+    // continuous pass single-pass), and a comparison against ANOTHER permanent's
+    // power (Champion of Lambholt).
+    for (const oracleText of [
+      "Creatures you control with power or toughness 1 or less can't be blocked.",
+      "Creatures with power less than Champion's power can't block creatures you control.",
+    ]) {
+      const result = compileCard(record({ name: 'Champion', oracleText }));
+      expect(result.status).not.toBe('complete');
+    }
   });
 });
 

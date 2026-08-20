@@ -19,13 +19,14 @@ import {
   NO_MOD,
   type CardDefinition,
   type EffectContext,
+  defaultAnswerFor,
   type GameAction,
   type GameState,
   type InstanceId,
   type PlayerId,
 } from './index.js';
 import { createEffectRegistry, type EffectRegistry } from './effects.js';
-import { creatureDef, deckOf, landDef, passOrAnswer } from './test-fixtures.js';
+import { creatureDef, deckOf, landDef } from './test-fixtures.js';
 
 const ISLAND = landDef('Island', 'U');
 
@@ -54,27 +55,42 @@ function act(state: GameState, action: GameAction, reg: EffectRegistry): GameSta
   return r.state;
 }
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState, reg: EffectRegistry): GameState {
+  const question = state.pendingChoice;
+  if (question) {
+    return act(state, {
+      kind: 'answerChoice',
+      player: question.chooser,
+      choiceId: question.id,
+      answer: defaultAnswerFor(question),
+    }, reg);
+  }
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
 }
 
 /**
  * Turn-runner: pass until the target, ANSWERING anything the game asks on the
  * way — CR 514.1's cleanup discard is a real question a turn now ends with. See
- * `passOrAnswer` in test-fixtures for why a bare pass loop can no longer run a
- * turn out.
+ * `pass` above: it answers whatever is asked, which is what a bare pass
+ * loop can no longer do now that a turn ends with a question.
  */
 function advanceToStep(state: GameState, target: string, reg: EffectRegistry, max = 400): GameState {
   let s = state;
   let g = 0;
-  while (s.step !== target && !s.gameOver && g++ < max) s = passOrAnswer(s, DEFAULT_RULES, reg);
+  while (s.step !== target && !s.gameOver && g++ < max) s = pass(s, reg);
   return s;
 }
 
 function advanceUntilActive(state: GameState, player: PlayerId, reg: EffectRegistry, max = 800): GameState {
   let s = state;
   let g = 0;
-  while (s.activePlayer !== player && !s.gameOver && g++ < max) s = passOrAnswer(s, DEFAULT_RULES, reg);
+  while (s.activePlayer !== player && !s.gameOver && g++ < max) s = pass(s, reg);
   return s;
 }
 

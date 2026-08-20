@@ -124,12 +124,32 @@ describe('enters-tapped templates — the slowland and battleland cycles', () =>
     expect(result.status).toBe('incomplete');
   });
 
-  it('REFUSES "unless you control two or more creatures" — a condition it does not implement', () => {
+  it('COMPILES "unless you control two or more creatures" through the general condition', () => {
+    // This case used to assert a refusal. The four fixed cycles above (fastland,
+    // slowland, battleland, checkland) now sit alongside a GENERAL
+    // `controlsMatching` condition built on the shared `CardFilter`, so any
+    // "unless you control [N] [permanents]" wording it can express compiles —
+    // which is what let the Lord of the Rings lands ("unless you control a
+    // legendary creature") in. A noun outside the closed tables still reports.
     const result = compileCard(
       makeCard({
         name: 'Test Creatureland',
         typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
         oracleText: 'This land enters tapped unless you control two or more creatures.',
+      }),
+    );
+    expect(result.status).toBe('complete');
+    expect(result.definition?.entersTappedUnless).toEqual({
+      controlsMatching: { filter: { anyOfTypes: ['creature'] }, minimum: 2 },
+    });
+  });
+
+  it('STILL refuses a noun outside the closed tables', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Test Wizardland',
+        typeLine: { supertypes: [], types: ['Land'], subtypes: [] },
+        oracleText: 'This land enters tapped unless you control a Wizard.',
       }),
     );
     expect(result.status).toBe('incomplete');

@@ -27,10 +27,11 @@
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
 import type { GameEvent } from '../events.js';
-import type { KeywordFlags } from '../card.js';
+import type { BlockRestriction, KeywordFlags } from '../card.js';
 import {
   defenseOf,
   effectivePower,
+  effectiveToughness,
   effectiveKeywords,
   loyaltyOf,
   remainingToughness,
@@ -42,6 +43,7 @@ import { protectionBlocksSource } from '../protection.js';
 import { findOnBattlefield } from './zones.js';
 import type { ContinuousIndex } from './continuous.js';
 import { indexContinuous, NO_MOD } from './continuous.js';
+import { blockRequirementProblem } from './block-solver.js';
 import type { ReplacementIndex } from './replacement.js';
 import { indexReplacements, replaceDamage } from './replacement.js';
 
@@ -53,6 +55,11 @@ function kw(inst: CardInstance, index: ContinuousIndex): KeywordFlags {
 /** Effective power for an instance under the given continuous index. */
 function power(inst: CardInstance, index: ContinuousIndex): number {
   return effectivePower(inst, index.get(inst.instanceId) ?? NO_MOD);
+}
+
+/** Effective toughness for an instance under the given continuous index. */
+function toughness(inst: CardInstance, index: ContinuousIndex): number {
+  return effectiveToughness(inst, index.get(inst.instanceId) ?? NO_MOD);
 }
 
 /**
@@ -81,6 +88,61 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
   if (ak.protectionFrom !== undefined && protectionBlocksSource(ak.protectionFrom, blocker.def)) {
     return false;
   }
+  // A COMPARING restriction — "except by creatures with haste", "by creatures with
+  // power 2 or less", skulk. Last because it is the only test that reads effective
+  // P/T, so a pair already rejected by evasion never pays for it.
+  if (ak.blockRestriction !== undefined && !passesBlockRestriction(ak.blockRestriction, attacker, blocker, idx)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Whether `blocker` satisfies an attacker's comparing block restriction.
+ *
+ * Every bound is measured against EFFECTIVE power/toughness, through the index the
+ * caller already built — a 1/1 pumped to 3/3 really has stopped being a legal
+ * blocker for "except by creatures with power 2 or less", and reading the printed
+ * box would let it through.
+ */
+function passesBlockRestriction(
+  restriction: BlockRestriction,
+  attacker: CardInstance,
+  blocker: CardInstance,
+  index: ContinuousIndex,
+): boolean {
+  const required = restriction.blockerMustHaveAnyOf;
+  if (required !== undefined) {
+    const bk = kw(blocker, index);
+    let has = false;
+    for (const keyword of required) {
+      if (bk[keyword] === true) {
+        has = true;
+        break;
+      }
+    }
+    if (!has) return false;
+  }
+  const needsPower =
+    restriction.maxBlockerPower !== undefined ||
+    restriction.minBlockerPower !== undefined ||
+    restriction.blockerPowerAtMostMine === true;
+  if (needsPower) {
+    const blockerPower = power(blocker, index);
+    if (restriction.maxBlockerPower !== undefined && blockerPower > restriction.maxBlockerPower) return false;
+    if (restriction.minBlockerPower !== undefined && blockerPower < restriction.minBlockerPower) return false;
+    // SKULK: the bound is the attacker's OWN effective power, read now.
+    if (restriction.blockerPowerAtMostMine === true && blockerPower > power(attacker, index)) return false;
+  }
+  if (restriction.maxBlockerToughness !== undefined || restriction.minBlockerToughness !== undefined) {
+    const blockerToughness = toughness(blocker, index);
+    if (restriction.maxBlockerToughness !== undefined && blockerToughness > restriction.maxBlockerToughness) {
+      return false;
+    }
+    if (restriction.minBlockerToughness !== undefined && blockerToughness < restriction.minBlockerToughness) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -93,8 +155,17 @@ export function canBlock(attacker: CardInstance, blocker: CardInstance, index: C
  * three or more" — so they are folded here by taking the LARGER, which is the
  * only reading under which both restrictions hold at once.
  */
-function requiredBlockerCount(attacker: CardInstance, index: ContinuousIndex): number {
-  const k = kw(attacker, index);
+export function requiredBlockerCount(attacker: CardInstance, index: ContinuousIndex): number {
+  return minimumBlockersFor(kw(attacker, index));
+}
+
+/**
+ * The same answer as {@link requiredBlockerCount}, from a keyword set already in
+ * hand. Split out so a caller that has just read the effective keywords for
+ * another reason does not pay for the merge twice — `illegalBlockDeclaration`
+ * reads them once and asks both halves of CR 509.1 from that one read.
+ */
+function minimumBlockersFor(k: KeywordFlags): number {
   const menaceMinimum = k.menace ? MENACE_MINIMUM_BLOCKERS : 0;
   return Math.max(menaceMinimum, k.minBlockers ?? 0);
 }
@@ -112,20 +183,35 @@ const MENACE_MINIMUM_BLOCKERS = 2;
  * Every "can't be blocked except by N or more creatures" printing has that same
  * shape, which is why they share this check rather than getting a flag each.
  *
- * ⚠️ This function enforces block RESTRICTIONS only. Block REQUIREMENTS ("~ must
- * be blocked if able", "all creatures able to block ~ do so") are the other half
- * of CR 509.1c/d and are NOT implemented — satisfying the maximum number of
- * requirements without violating any restriction is a solver, not a check. Cards
- * printing a requirement are reported by the compiler rather than played with the
- * requirement silently ignored.
+ * Block REQUIREMENTS ("~ must be blocked if able", "all creatures able to block ~
+ * do so") are the OTHER half of CR 509.1c/d and are resolved here too, in
+ * `internal/block-solver.ts` — after the restrictions, because the rule is
+ * "satisfy the maximum number of requirements **without violating any
+ * restriction**", which makes the restrictions the outer constraint. The solver
+ * returns after one pass over the attackers when none of them requires anything,
+ * so an ordinary combat pays a single keyword read for it.
+ *
+ * `defenders` is the defending player's untapped creatures — everything that could
+ * have been assigned. It is only read by the requirement half; a caller with no
+ * requirement on the board can pass an empty list and change no answer.
  */
 export function illegalBlockDeclaration(
   attackers: readonly CardInstance[],
   blocks: ReadonlyArray<{ readonly blocker: InstanceId; readonly attacker: InstanceId }>,
   index: ContinuousIndex,
+  defenders: readonly CardInstance[] = [],
 ): string | undefined {
+  // ONE keyword read per attacker, used by BOTH halves. `effectiveKeywords` merges
+  // the printed set with whatever the continuous layer granted, so it is the most
+  // expensive thing this function does; the requirement pre-check rides along on
+  // the read the restriction check already needed rather than repeating it, which
+  // is what keeps the ordinary board — no requirement anywhere — at the cost it
+  // had before requirements existed.
+  let anyRequirement = false;
   for (const attacker of attackers) {
-    const required = requiredBlockerCount(attacker, index);
+    const keywords = kw(attacker, index);
+    if (keywords.mustBeBlocked === true || keywords.blockedByAllAble === true) anyRequirement = true;
+    const required = minimumBlockersFor(keywords);
     if (required === 0) continue;
     const assigned = blocks.filter((b) => b.attacker === attacker.instanceId).length;
     // Zero is fine — the rule forbids being blocked by TOO FEW, not being unblocked.
@@ -135,7 +221,14 @@ export function illegalBlockDeclaration(
         : `${attacker.def.name} can't be blocked except by ${required} or more creatures`;
     }
   }
-  return undefined;
+  // THE EMPTY CHECK, and the whole reason a rules-complete CR 509.1c/d solver can
+  // live on this path: with nothing on the board requiring a block there is
+  // nothing to maximise, and the function returns having allocated nothing and
+  // walked no defender.
+  if (!anyRequirement) return undefined;
+  // Requirements LAST: every restriction above is now known to hold, which is
+  // exactly the condition CR 509.1d maximises under.
+  return blockRequirementProblem(attackers, defenders, blocks, index);
 }
 
 /** Does this creature deal damage in the first-strike step? */

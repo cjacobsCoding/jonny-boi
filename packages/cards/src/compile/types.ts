@@ -265,6 +265,28 @@ export interface ClauseContribution {
    * card prints them as two ability lines, and either may be absent.
    */
   readonly attachmentModifies?: import('@jonny-boi/core').PermanentModification;
+  /**
+   * The printed keyword **Changeling** — "this card is every creature type"
+   * (`CardDefinition.changeling`). Not a {@link keywords} flag: it is a
+   * characteristic-defining ability that applies in every zone, and core answers
+   * it from the definition inside `hasSubtype`.
+   */
+  readonly changeling?: boolean;
+  /** "This spell can't be countered" (`CardDefinition.cantBeCountered`). */
+  readonly cantBeCountered?: boolean;
+  /**
+   * "Spells you control can't be countered" — the permanent-side printing
+   * (`CardDefinition.spellsCantBeCountered`).
+   */
+  readonly spellsCantBeCountered?: import('@jonny-boi/core').UncounterableSpellsAbility;
+  /** "You have no maximum hand size" (`CardDefinition.noMaximumHandSize`). */
+  readonly noMaximumHandSize?: boolean;
+  /**
+   * "You may play lands from your graveyard / from the top of your library"
+   * (`CardDefinition.playLandsFrom`). A list, so a card printing both zones is
+   * one field rather than two flags.
+   */
+  readonly playLandsFrom?: readonly import('@jonny-boi/core').LandPlayZone[];
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

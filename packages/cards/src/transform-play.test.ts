@@ -22,12 +22,19 @@ import { describe, expect, it } from 'vitest';
 import type {
   CardDefinition,
   CardInstance,
+  GameAction,
   GameEvent,
   GameState,
   PendingChoice,
   PlayerId,
 } from '@jonny-boi/core';
-import { applyAction, createGame, defaultAnswerFor, DEFAULT_RULES, generateLegalActions } from '@jonny-boi/core';
+import {
+  applyAction,
+  createGame,
+  DEFAULT_RULES,
+  defaultAnswerFor,
+  generateLegalActions,
+} from '@jonny-boi/core';
 import { CARD_POOL } from '../data/pool.js';
 import { buildRegistry } from './pool.js';
 import { compileCard } from './compile/index.js';
@@ -260,15 +267,13 @@ function playThroughUpkeep(
   // trigger RESOLVES, at A's next upkeep). The cap is generous but hard: a
   // wedged game fails the test rather than hanging the suite.
   //
-  // The CR 514.1 cleanup discard is answered and stepped over on the way: a
-  // turn now ends by asking the active player to discard down to their maximum
-  // hand size, and that is not the question this harness is hunting for. It is
-  // told apart by its own marker rather than by its shape, because 'a card
-  // selection from a hand' describes both of them.
+  // The cleanup step's discard down to maximum hand size (CR 514.1) parks its own
+  // question on the way, and it is answered and stepped past here rather than
+  // mistaken for the reveal — this test is about the Delver's question, not about
+  // whichever question happens to be first.
   let guard = 0;
-  while (guard++ < 400) {
+  while (!isDelverReveal(state) && guard++ < 400) {
     const parked = state.pendingChoice;
-    if (parked && parked.context !== 'cleanupDiscard') break;
     drive(
       parked
         ? {
@@ -299,6 +304,16 @@ function playThroughUpkeep(
     });
   }
   return { state, events, delverId: delver.instanceId };
+}
+
+/**
+ * Whether the parked question is DELVER'S reveal, as opposed to some other rule's
+ * (the cleanup step's discard down to maximum hand size asks one too). Keyed on
+ * the source name, which is the card that asked.
+ */
+function isDelverReveal(state: GameState): boolean {
+  const parked = state.pendingChoice;
+  return parked !== null && parked !== undefined && parked.sourceName === DELVER.name;
 }
 
 describe('Delver of Secrets plays exactly as printed', () => {
@@ -417,23 +432,21 @@ describe('Delver of Secrets plays exactly as printed', () => {
     // cards the run will draw and none for the reveal to look at.
     setLibrary(state, 'A', []);
     let guard = 0;
-    let asked: PendingChoice | null = null;
-    while (!state.gameOver && guard++ < 60 && asked === null) {
+    while (!state.gameOver && guard++ < 60 && !isDelverReveal(state)) {
       const parked = state.pendingChoice;
-      // The CR 514.1 cleanup discard is a question the TURN asks, not the
-      // trigger; it is answered and stepped over so this test still measures
-      // what it says it measures.
-      if (parked && parked.context !== 'cleanupDiscard') {
-        asked = parked;
-        break;
-      }
-      const action = parked
-        ? { kind: 'answerChoice' as const, player: parked.chooser, choiceId: parked.id, answer: defaultAnswerFor(parked) }
-        : { kind: 'passPriority' as const, player: state.priorityPlayer };
+      const action: GameAction = parked
+        ? {
+            kind: 'answerChoice',
+            player: parked.chooser,
+            choiceId: parked.id,
+            answer: defaultAnswerFor(parked),
+          }
+        : { kind: 'passPriority', player: state.priorityPlayer };
       state = applyAction(state, action, DEFAULT_RULES, registry).state;
     }
     // The game ended by decking (empty library) or ran on — either way, the
-    // trigger never parked an unanswerable question.
-    expect(asked).toBeNull();
+    // trigger never parked an unanswerable question. Other rules' questions (the
+    // cleanup discard) are answered by the loop above and are not what is asserted.
+    expect(isDelverReveal(state)).toBe(false);
   });
 });

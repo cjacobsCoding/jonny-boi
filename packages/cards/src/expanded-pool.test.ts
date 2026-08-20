@@ -31,6 +31,7 @@ import {
   createGame,
   defaultAnswerFor,
   DEFAULT_RULES,
+  defaultAnswerFor,
   effectivePower,
   effectiveToughness,
   generateLegalActions,
@@ -83,38 +84,39 @@ function act(state: GameState, action: GameAction, reg: Registry): GameState {
   return result.state;
 }
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState, reg: Registry): GameState {
+  const question = state.pendingChoice;
+  if (question) {
+    return act(
+      state,
+      {
+        kind: 'answerChoice',
+        player: question.chooser,
+        choiceId: question.id,
+        answer: defaultAnswerFor(question),
+      },
+      reg,
+    );
+  }
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
 }
 
-/**
- * Pass priority — ANSWERING the game's outstanding question first, when there
- * is one. A turn now ends with the CR 514.1 discard whenever a hand is over the
- * maximum, and while that question stands every other action is refused, so a
- * pass-only loop can no longer run a turn out. The answer is the engine's own
- * `defaultAnswerFor` — deterministic, and exactly what it auto-answers a forced
- * choice with.
- */
-function passOrAnswer(state: GameState, reg: Registry): GameState {
-  const choice = state.pendingChoice;
-  if (!choice) return pass(state, reg);
-  return act(
-    state,
-    { kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer: defaultAnswerFor(choice) },
-    reg,
-  );
-}
 
 /**
  * Turn-runners: they pass, ANSWERING anything the game asks on the way — a turn
  * now ends with the CR 514.1 discard question whenever a hand is over the
- * maximum, and while it stands every other action is refused. See
- * `passOrAnswer` in core's test fixtures.
+ * maximum, and while it stands every other action is refused. `pass` above already answers.
  */
 function advanceToStep(state: GameState, step: string, reg: Registry, max = 400): GameState {
   let s = state;
   let guard = 0;
-  while (s.step !== step && !s.gameOver && guard++ < max) s = passOrAnswer(s, reg);
+  while (s.step !== step && !s.gameOver && guard++ < max) s = pass(s, reg);
   return s;
 }
 
@@ -122,7 +124,7 @@ function advanceUntilActive(state: GameState, player: PlayerId, reg: Registry, m
   let s = state;
   let guard = 0;
   while ((s.activePlayer !== player || s.step !== 'precombatMain') && !s.gameOver && guard++ < max) {
-    s = passOrAnswer(s, reg);
+    s = pass(s, reg);
   }
   return s;
 }

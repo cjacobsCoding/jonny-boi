@@ -623,13 +623,14 @@ describe('compileCard — templated cards outside the curated pool', () => {
   });
 
   it('reports an unmodelled keyword rather than dropping the ability', () => {
-    // Menace was the example here, then ward, then indestructible — all three
-    // are implemented now (indestructible exempts destruction and lethal damage
-    // in the state-based actions, and nothing else). SKULK is the current
-    // stand-in: "can't be blocked by creatures with greater power" is a per-pair
-    // restriction whose comparison the engine does not make. The point of the
-    // test is unchanged — an ability we cannot model must be REPORTED, never
-    // silently dropped.
+    // Menace was the example here, then ward, then indestructible, then SKULK —
+    // every one of them is implemented now, and the stand-in has had to move each
+    // time. (Skulk went last: `KeywordFlags.blockRestriction` carries "can't be
+    // blocked by creatures with greater power" as a payload, compared against
+    // EFFECTIVE power in `canBlock`.) HORSEMANSHIP is the current stand-in — an
+    // evasion keyword with its own separate blocking rule that nothing here
+    // models. The point of the test has never changed: an ability we cannot model
+    // must be REPORTED, never silently dropped.
     const result = compileCard(
       makeCard({
         name: 'Sneaky Beast',
@@ -637,13 +638,30 @@ describe('compileCard — templated cards outside the curated pool', () => {
         manaCost: { generic: 2, W: 0, U: 0, B: 0, R: 0, G: 1, C: 0, other: [] },
         power: 3,
         toughness: 3,
+        oracleText: 'Horsemanship',
+        keywords: ['Horsemanship'],
+      }),
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.some((gap) => /horsemanship/i.test(gap.text))).toBe(true);
+  });
+
+  it('compiles SKULK, which IS modelled now', () => {
+    const result = compileCard(
+      makeCard({
+        name: 'Sneaky Rogue',
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Rogue'] },
+        manaCost: { generic: 1, W: 0, U: 0, B: 1, R: 0, G: 0, C: 0, other: [] },
+        power: 2,
+        toughness: 1,
         oracleText: 'Skulk',
         keywords: ['Skulk'],
       }),
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.missing.some((gap) => /skulk/i.test(gap.text))).toBe(true);
+    expect(result.status).toBe('complete');
+    expect(result.definition?.keywords?.blockRestriction).toEqual({ blockerPowerAtMostMine: true });
   });
 
   it('compiles menace, which IS modelled now', () => {

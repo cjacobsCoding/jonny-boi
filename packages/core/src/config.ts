@@ -17,14 +17,19 @@ export interface RulesConfig {
   /** Cards drawn during a normal draw step. */
   readonly cardsPerDrawStep: number;
   /**
-   * The most cards a player may still be holding as their own turn ends
-   * (CR 402.2 — "each player has a maximum hand size, which is normally seven
-   * cards"), enforced by the CR 514.1 cleanup discard.
+   * The MAXIMUM HAND SIZE the active player is discarded down to in their cleanup
+   * step (CR 514.1). A knob rather than a literal 7 for the same reason
+   * {@link startingLife} is one: a format variant changes it, and the rule must
+   * read it from one place.
    *
-   * A SEPARATE knob from {@link startingHandSize} even though both are seven in
-   * the default rules, because they are different rules — CR 103.4 draws the
-   * opening hand, CR 402.2 caps what you may keep — and a format may move one
-   * without the other.
+   * A player whose board says otherwise (`CardDefinition.noMaximumHandSize` —
+   * Reliquary Tower) has no limit at all and skips the discard entirely; that is a
+   * card ability, not a config value, so it is not expressed here.
+   *
+   * It is a SEPARATE knob from {@link startingHandSize} even though both are
+   * seven in the default rules, because they are different rules — CR 103.4
+   * draws the opening hand, CR 402.2 caps what you may keep — and a format may
+   * move one without the other.
    *
    * ⚠️ Not a cosmetic knob in a deck-tuning lab. An unbounded hand changes what
    * card draw and held-back reactive spells are worth, which is exactly the

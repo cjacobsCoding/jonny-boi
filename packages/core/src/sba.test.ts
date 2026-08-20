@@ -5,12 +5,14 @@ import {
   cloneState,
   createGame,
   DEFAULT_RULES,
+  defaultAnswerFor,
   MINUS_ONE_COUNTER,
   NO_COUNTERS,
   PLUS_ONE_COUNTER,
   stateBasedActionsPossible,
   type CardDefinition,
   type CardInstance,
+  type GameAction,
   type GameState,
   type PlayerId,
 } from './index.js';
@@ -22,21 +24,35 @@ import {
   giveGraveyard,
   giveHand,
   landDef,
-  passOrAnswer,
   spellDef,
 } from './test-fixtures.js';
 
 const ISLAND = landDef('Island', 'U');
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState, registry = createEffectRegistry()): GameState {
-  const r = applyAction(state, { kind: 'passPriority', player: state.priorityPlayer }, DEFAULT_RULES, registry);
+  const question = state.pendingChoice;
+  const action: GameAction = question
+    ? {
+        kind: 'answerChoice',
+        player: question.chooser,
+        choiceId: question.id,
+        answer: defaultAnswerFor(question),
+      }
+    : { kind: 'passPriority', player: state.priorityPlayer };
+  const r = applyAction(state, action, DEFAULT_RULES, registry);
   return r.state;
 }
 
 function advanceToStep(state: GameState, target: string, registry = createEffectRegistry(), max = 400): GameState {
   let s = state;
   let g = 0;
-  while (s.step !== target && !s.gameOver && g++ < max) s = passOrAnswer(s, DEFAULT_RULES, registry);
+  while (s.step !== target && !s.gameOver && g++ < max) s = pass(s, registry);
   return s;
 }
 
@@ -51,10 +67,9 @@ describe('state-based actions: decking', () => {
     // On B's second turn the draw fails → decking loss.
     let s = g.state;
     let guard = 0;
-    // `passOrAnswer`, not a bare pass: a turn ends with the CR 514.1 discard
-    // question once a hand is over the maximum, and while it stands every other
-    // action is refused — a pass-only loop would spin here without advancing.
-    while (!s.gameOver && guard++ < 2000) s = passOrAnswer(s);
+    // Through the choice-aware `pass`: a hand over the maximum size parks the
+    // cleanup discard, and a loop that only ever passes priority would stall on it.
+    while (!s.gameOver && guard++ < 2000) s = pass(s);
     expect(s.gameOver).toBe(true);
     expect(s.winner).toBe('A');
     expect(s.players.B.hasLost).toBe(true);

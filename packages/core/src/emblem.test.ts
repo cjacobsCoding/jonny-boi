@@ -20,6 +20,7 @@ import {
   createEffectRegistry,
   createGame,
   DEFAULT_RULES,
+  defaultAnswerFor,
   effectivePower,
   legalTargetsFor,
   type CardDefinition,
@@ -27,7 +28,7 @@ import {
   type GameState,
 } from './index.js';
 import { aggregateFor } from './internal/continuous.js';
-import { deckOf, landDef, passOrAnswer } from './test-fixtures.js';
+import { deckOf, landDef } from './test-fixtures.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 import type { GameEvent } from './events.js';
 
@@ -205,11 +206,25 @@ describe('abilities work from the command zone', () => {
     // resolve exactly as a permanent's upkeep trigger would.
     let s = state;
     let guard = 0;
-    // `passOrAnswer`, not a bare pass: a turn ends with the CR 514.1 discard
+    // The choice-aware `pass` above, not a bare priority pass: a turn ends with the CR 514.1 discard
     // question when a hand is over the maximum, and nothing else may act while
     // it stands.
     while (guard++ < 400 && fired === 0 && !s.gameOver) {
-      s = passOrAnswer(s, DEFAULT_RULES, registry);
+      // A parked question outranks priority (the cleanup discard, CR 514.1), so
+      // walking the turn means answering whatever is asked, not only passing.
+      const question = s.pendingChoice;
+      s = question
+        ? act(
+            s,
+            {
+              kind: 'answerChoice',
+              player: question.chooser,
+              choiceId: question.id,
+              answer: defaultAnswerFor(question),
+            },
+            registry,
+          )
+        : act(s, { kind: 'passPriority', player: s.priorityPlayer }, registry);
     }
     expect(fired).toBeGreaterThan(0);
   });

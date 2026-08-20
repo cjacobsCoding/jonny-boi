@@ -57,10 +57,10 @@
  */
 
 import type { CardType, EffectRef } from './card.js';
-import { colorsOfDefinition, permanentHasSubtype } from './card.js';
+import { matchesCardFilter } from './card.js';
 import type { ManaColor, ManaCost } from './mana.js';
 import type { TargetRestriction } from './targeting.js';
-import { convertedManaCost, formatManaCost } from './mana.js';
+import { formatManaCost } from './mana.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, ZoneName } from './state.js';
 import { PLAYER_IDS, playerZone } from './state.js';
 
@@ -119,95 +119,36 @@ export interface CardFilter {
    * land, most artifacts) matches no color and is excluded by any color filter.
    */
   readonly anyOfColors?: readonly ManaColor[];
+  /**
+   * Require (`true`) or forbid (`false`) the printed **Legendary** supertype —
+   * "unless you control a legendary creature" (the Lord of the Rings lands),
+   * "Legendary creatures you control get +1/+1", "target nonlegendary creature".
+   *
+   * A supertype, not a type, so it needs its own field rather than an entry in
+   * {@link anyOfTypes}: a card is a legendary CREATURE, and folding the two would
+   * make "legendary" and "creature" alternatives instead of both being required.
+   */
+  readonly legendary?: boolean;
+  /**
+   * Require (`true`) or forbid (`false`) the printed **Basic** supertype —
+   * "unless you control a basic land", "search for a nonbasic land". Same
+   * supertype argument as {@link legendary}, and the same flag the battlelands'
+   * `minBasicLands` condition already reads.
+   */
+  readonly basic?: boolean;
 }
 
 /**
- * Whether a card instance passes a filter. An absent filter matches everything.
+ * Whether a card passes a {@link CardFilter}.
  *
- * Written with explicit loops rather than `.some(...)`: static abilities
- * (`statics.ts`) run this for every permanent on the battlefield inside the
- * continuous-layering pass, which combat and every legality check drive, and a
- * closure allocated per predicate per candidate showed up in the hot path.
+ * RE-EXPORTED, not defined here. A `CardFilter` reads only PRINTED characteristics
+ * plus the subtype a permanent named as it entered, and every one of those lives in
+ * `card.ts` — so the matcher lives there too, and this module keeps the vocabulary
+ * (the interface) while `card.ts` keeps the reader. That is what lets the
+ * enters-tapped conditions in `card.ts` ask the same question without a VALUE
+ * import back into this file, which would close a runtime cycle.
  */
-export function matchesCardFilter(card: CardInstance, filter?: CardFilter): boolean {
-  if (!filter) return true;
-  const def = card.def;
-  // The helper forms are the allocation-free, case-insensitive ones — required by
-  // the statics pass that runs this for every permanent, and by subtype matching
-  // that must treat "Mountain" and "mountain" alike.
-  if (filter.anyOfTypes !== undefined && !hasAnyType(def.types, filter.anyOfTypes)) return false;
-  if (filter.noneOfTypes !== undefined && hasAnyType(def.types, filter.noneOfTypes)) return false;
-  if (filter.anyOfSubtypes !== undefined && !hasAnySubtype(card, filter.anyOfSubtypes)) return false;
-  if (filter.noneOfSubtypes !== undefined && hasAnySubtype(card, filter.noneOfSubtypes)) return false;
-  if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
-  if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
-    const mv = def.cost ? convertedManaCost(def.cost) : 0;
-    if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
-    if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
-  }
-  if (filter.minPower !== undefined || filter.maxPower !== undefined) {
-    if (!withinPrintedBox(def.power, filter.minPower, filter.maxPower)) return false;
-  }
-  if (filter.minToughness !== undefined || filter.maxToughness !== undefined) {
-    if (!withinPrintedBox(def.toughness, filter.minToughness, filter.maxToughness)) return false;
-  }
-  // Colors last: it is the only test that can touch the (memoized) pip walk, so
-  // a candidate rejected by type/subtype/name never pays for it at all.
-  if (filter.anyOfColors !== undefined && !hasAnyColor(def, filter.anyOfColors)) return false;
-  return true;
-}
-
-/**
- * Whether a printed power/toughness box falls inside an inclusive bound.
- *
- * An ABSENT box (a non-creature, or a `*` P/T that is a formula rather than a
- * number) is outside every bound — see {@link CardFilter.minPower} for why that
- * is the printed reading and not a conservative guess.
- */
-function withinPrintedBox(box: number | undefined, min?: number, max?: number): boolean {
-  if (box === undefined) return false;
-  if (min !== undefined && box < min) return false;
-  if (max !== undefined && box > max) return false;
-  return true;
-}
-
-/** Whether a definition is any of `wanted` colors. Allocation-free (see above). */
-function hasAnyColor(def: CardInstance['def'], wanted: readonly ManaColor[]): boolean {
-  const colors = colorsOfDefinition(def);
-  for (const want of wanted) {
-    for (const color of colors) {
-      if (color === want) return true;
-    }
-  }
-  return false;
-}
-
-/** Whether a type line carries any of `wanted`. Allocation-free (see above). */
-function hasAnyType(types: readonly CardType[], wanted: readonly CardType[]): boolean {
-  for (const want of wanted) {
-    for (const type of types) {
-      if (type === want) return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Whether a card carries any of `wanted` as a subtype.
- *
- * Instance-aware ({@link permanentHasSubtype}), not definition-only: a permanent
- * that named a creature type and prints "this creature is the chosen type in
- * addition to its other types" genuinely HAS that type, so a filter that read
- * only the printed line would fail to see one Adaptive Automaton from another.
- * For every card in a hand, library or graveyard the two readings are identical,
- * because nothing there has named anything.
- */
-function hasAnySubtype(card: CardInstance, wanted: readonly string[]): boolean {
-  for (const want of wanted) {
-    if (permanentHasSubtype(card, want)) return true;
-  }
-  return false;
-}
+export { matchesCardFilter };
 
 // --- options --------------------------------------------------------------------
 
@@ -573,16 +514,17 @@ interface PendingChoiceBase {
    * enter as a copy of any creature on the battlefield"). Both are raised by an
    * ENTRY PATH rather than by a resolving effect, and both are routed by this
    * marker for exactly the reason the legend rule is: "there is no frame behind
-   * it" also describes the shockland question, and the four must never be
+   * it" also describes the shockland question, and the five must never be
    * confused. They are two markers rather than one because the answers differ
    * in kind — a naming records a VALUE on the instance, a copy replaces what the
    * instance IS — and because a card can print both, in that order.
    *
-   * `'cleanupDiscard'` marks the CR 514.1 discard down to maximum hand size,
-   * raised by the TURN MACHINE — the fifth thing with no frame behind it, and
-   * the only one the turn itself is waiting on.
+   * `'cleanupDiscard'` marks the cleanup step's discard down to maximum hand size
+   * (CR 514.1) — likewise a turn-based action the GAME performs, with no
+   * resolution behind it, and the one question that parks with the TURN itself
+   * waiting on the answer.
    */
-  readonly context?: 'legendRule' | 'asEnters' | 'copyAsEnters' | 'cleanupDiscard';
+  readonly context?: 'legendRule' | 'cleanupDiscard' | 'asEnters' | 'copyAsEnters';
   /**
    * The permanent an entry-path answer applies to: the one whose
    * `chosenAsEntered` an `'asEnters'` answer is written to, and the one a

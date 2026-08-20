@@ -30,32 +30,50 @@ import type { GameState } from './state.js';
 
 /**
  * seed | winner | over/cut | turns | actions | events | eventLogHash | finalStateHash
+ *
+ * ⚠️ REGENERATED DELIBERATELY on `fix/max-hand-size-and-sba`, and the SHAPE of
+ * the move is the evidence. Every seed keeps its winner, its turn count, its
+ * action count, its EVENT COUNT and its final-state hash; only the event-log
+ * hash differs. The engine plays the identical game — one field inside one
+ * event changed.
+ *
+ * That field is the CR 514.1 discard question's `sourceInstanceId`. It used to
+ * name the first card in the discarding player's HAND; it now names no object
+ * at all (`NO_ASKING_OBJECT`), because `choiceAsked` carries that field
+ * unredacted into every pilot's observation feed and was therefore publishing
+ * the identity of a hidden card. Regenerating this table with the old value
+ * restores the previous hashes exactly, which is how the attribution was
+ * checked rather than assumed.
+ *
+ * That the event COUNTS did not move is the second measurement in here: the new
+ * CR 704.3 state-based-action check at the priority boundary fires nothing at
+ * all across 24 full games, which is exactly what a backstop should do.
  */
 const GOLDEN: readonly string[] = [
-  '1|A|over|33|902|1871|bb4aa170|339507b6',
-  '2|A|over|27|756|1620|b937a0a6|f495342b',
-  '3|B|over|38|1140|2425|3330ccec|db7cc0fc',
-  '4|B|over|26|719|1542|d1a2b239|0c8192ff',
-  '5|A|over|21|561|1153|5caed723|901c6e23',
-  '6|B|over|24|642|1346|20903e7d|c5a35b05',
-  '7|A|over|27|778|1645|add38f1e|e24a6688',
-  '8|A|over|23|650|1369|585ac15d|c0deaba8',
-  '9|A|over|19|512|1077|e104dce3|84b06ae3',
-  '10|A|over|43|1243|2657|c7c88704|2a0ff2fa',
-  '11|B|over|32|892|1902|412c5386|32049998',
-  '12|B|over|30|849|1799|f592043d|40a3b377',
-  '13|B|over|26|696|1410|ab858d16|b13f0c8e',
-  '14|B|over|32|874|1850|7ad6571e|0b625e1b',
-  '15|B|over|24|654|1381|c939905e|8c7fae94',
-  '16|B|over|20|541|1123|2feb88a6|9e5bcab3',
-  '17|B|over|34|907|1897|42fdaab8|b84fbe72',
-  '18|A|over|23|620|1276|fac7ede4|2c427f5b',
-  '19|A|over|23|631|1353|206abbec|95a7910a',
-  '20|B|over|26|714|1474|3dd66dfd|38d75fea',
-  '21|B|over|30|826|1743|1d2a2d24|04950240',
-  '22|A|over|37|1065|2262|7add57d2|581c1745',
-  '23|B|over|24|678|1414|b210221c|eb8fb2fd',
-  '24|A|over|27|753|1602|beb914c0|d8f48334',
+  '1|A|over|33|902|1863|b4dffd10|339507b6',
+  '2|A|over|27|756|1617|7738464c|f495342b',
+  '3|B|over|38|1140|2418|dac8c29b|db7cc0fc',
+  '4|B|over|26|719|1537|62540ed1|0c8192ff',
+  '5|A|over|21|561|1147|0c878a59|901c6e23',
+  '6|B|over|24|642|1342|bd451eb9|c5a35b05',
+  '7|A|over|27|778|1644|245db919|e24a6688',
+  '8|A|over|23|650|1367|c196981b|c0deaba8',
+  '9|A|over|19|512|1075|8870571b|84b06ae3',
+  '10|A|over|43|1243|2643|8d68c95b|2a0ff2fa',
+  '11|B|over|32|892|1894|56fd13f9|32049998',
+  '12|B|over|30|849|1797|013fa061|40a3b377',
+  '13|B|over|26|696|1405|89b3dbad|b13f0c8e',
+  '14|B|over|32|874|1843|af67c4bd|0b625e1b',
+  '15|B|over|24|654|1379|1225492c|8c7fae94',
+  '16|B|over|20|541|1122|7d458e36|9e5bcab3',
+  '17|B|over|34|907|1887|2717487a|b84fbe72',
+  '18|A|over|23|620|1273|6d0c1957|2c427f5b',
+  '19|A|over|23|631|1352|5c46d713|95a7910a',
+  '20|B|over|26|714|1469|2e601e8c|38d75fea',
+  '21|B|over|30|826|1738|504d87b2|04950240',
+  '22|A|over|37|1065|2254|8e9e941a|581c1745',
+  '23|B|over|24|678|1413|5e3ca4f4|eb8fb2fd',
+  '24|A|over|27|753|1598|23944d00|d8f48334',
 ];
 
 describe('self-play behaviour lock', () => {
@@ -75,27 +93,6 @@ describe('self-play behaviour lock', () => {
     expect(selfPlayLockLine(again)).toEqual(selfPlayLockLine(first));
   });
 });
-
-/**
- * The purity contract `applyAction` sells: the caller's state comes back
- * untouched. A clone optimization that starts SHARING structure with the input
- * would pass the digest test above (which only ever looks forward) and break this
- * one, so both are needed.
- */
-/**
- * `JSON.stringify` with object keys sorted at every level — a canonical form
- * that still compares every value byte for byte, but does not care which order
- * two equivalent objects happened to gain their properties in.
- */
-function sortedJson(value: unknown): string {
-  return JSON.stringify(value, (_key, held: unknown) => {
-    if (held === null || typeof held !== 'object' || Array.isArray(held)) return held;
-    const source = held as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(source).sort()) out[key] = source[key];
-    return out;
-  });
-}
 
 describe('applyAction purity', () => {
   const decks = selfPlayDecks();
@@ -144,16 +141,7 @@ describe('applyAction purity', () => {
       const pureResult = applyAction(pure, action);
       const inPlaceResult = applyActionInPlace(inPlace, action);
       expect(JSON.stringify(inPlaceResult.events)).toEqual(JSON.stringify(pureResult.events));
-      // The STATE is compared with keys sorted, and only the state. Every
-      // optional field on `GameState` — `pendingChoice`, `resolution`,
-      // `cardGrants`, `madnessWindow` — is absent until something needs it, so
-      // the in-place path (which writes into an object it has held since the
-      // game began) appends the key at the END, while the pure path gets it in
-      // `cloneState`'s canonical position. That is a difference in JavaScript
-      // insertion order, not in the game: the same fields hold the same values.
-      // Sorting is what keeps this assertion about the engine. The EVENTS above
-      // stay byte-compared, because their order genuinely is the behaviour.
-      expect(sortedJson(inPlaceResult.state)).toEqual(sortedJson(pureResult.state));
+      expect(JSON.stringify(inPlaceResult.state)).toEqual(JSON.stringify(pureResult.state));
       pure = pureResult.state;
       inPlace = inPlaceResult.state;
     }

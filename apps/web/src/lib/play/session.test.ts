@@ -299,15 +299,16 @@ function autoPilotPriority(session: GameSession): GameSession {
   const me = session.priorityPlayer;
   const state = session.state;
 
-  // 0. Answer whatever the game is waiting on. A turn now ends by asking the
-  // active player to discard down to their maximum hand size (CR 514.1), and
-  // while any question stands the engine refuses every other action — so a
-  // driver that only ever plays and passes would stall here rather than finish
-  // the game. `defaultAnswerFor` is the engine's own first legal answer.
-  const parked = session.pendingChoice;
-  if (parked) {
-    const answered = session.answerChoice(defaultAnswerFor(parked));
-    if (!answered.rejected) return answered.session;
+  // 0. A parked question outranks priority — the UI's ChoicePrompt is modal for
+  // exactly this reason, and a rule can ask one with no card involved (the
+  // cleanup step's discard down to maximum hand size, CR 514.1). Answer it with
+  // the engine's own default; a pilot that only ever passes would stall here and
+  // the "no dead-end" claim this test makes would be about a game it never
+  // finished.
+  const question = session.pendingChoice;
+  if (question) {
+    const r = session.answerChoice(defaultAnswerFor(question));
+    if (!r.rejected) return r.session;
   }
 
   // 1. Play a land if we still can this turn.

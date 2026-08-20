@@ -56,27 +56,6 @@ export type GameEvent =
     }
   | {
       /**
-       * The active player discarded down to their maximum hand size as their own
-       * cleanup step began (CR 514.1, enforcing the CR 402.2 maximum).
-       *
-       * It carries a COUNT and no instance ids, on purpose. That somebody was
-       * over the limit, and by how much, is a fact the whole table watches — the
-       * cards are counted in the open. WHICH cards went is not carried here
-       * because it does not need to be: every discarded card lands in a
-       * graveyard through its own `zoneChange`, and a graveyard is a public zone,
-       * so the identities arrive by exactly the route every other discard's do.
-       * Splitting it this way is what lets this event travel to a pilot as
-       * printed instead of needing a redaction shape of its own.
-       */
-      readonly type: 'cleanupDiscard';
-      readonly player: PlayerId;
-      /** How many cards were discarded — hand size minus the maximum. */
-      readonly count: number;
-      /** The maximum that was enforced (`RulesConfig.maximumHandSize`). */
-      readonly maximumHandSize: number;
-    }
-  | {
-      /**
        * A discarded card with madness was exiled instead, and its owner now has
        * the window to cast it for its madness cost (CR 702.35a).
        */
@@ -214,6 +193,22 @@ export type GameEvent =
       readonly target: InstanceId | PlayerId;
       readonly amount: number;
       readonly combat: boolean;
+    }
+  | {
+      /**
+       * A counter effect resolved against a spell that **can't be countered**
+       * (CR 701.5a), so nothing happened to it. The exact argument
+       * `damagePrevented` makes: a Counterspell that visibly does nothing has to be
+       * distinguishable from a bug in a replay, and silence here is what would make
+       * a real defect look like the rule working.
+       *
+       * Fully public — a spell on the stack, its name and its controller are what
+       * the whole table is already looking at.
+       */
+      readonly type: 'counterPrevented';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly controller: PlayerId;
     }
   | {
       /**

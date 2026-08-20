@@ -28,6 +28,7 @@ import type {
   GameState,
   PendingChoice,
   PlayerId,
+  RulesConfig,
 } from '@jonny-boi/core';
 import type { GameEvent } from '@jonny-boi/core';
 import {
@@ -177,8 +178,18 @@ function deck(def: CardDefinition) {
   return { cards: Array.from({ length: DECK_SIZE }, () => def) };
 }
 
+/**
+ * These tests are about WHICH SEAT a step trigger runs for, and they measure it by
+ * watching hands grow. The cleanup step's discard down to maximum hand size
+ * (CR 514.1) would erase exactly that evidence at the end of every turn — a seat
+ * that drew two extra cards is back at seven before the next assertion runs — so
+ * the limit is lifted here. It is not being avoided: `block-and-statics.test.ts`
+ * and `engine.test.ts` are where the discard itself is pinned.
+ */
+const RULES: RulesConfig = { ...DEFAULT_RULES, maximumHandSize: Number.MAX_SAFE_INTEGER };
+
 function act(state: GameState, action: Parameters<typeof applyAction>[1], reg: Registry): GameState {
-  const result = applyAction(state, action, DEFAULT_RULES, reg);
+  const result = applyAction(state, action, RULES, reg);
   const rejected = result.events.find((e) => e.type === 'actionRejected');
   if (rejected) {
     throw new Error(`unexpected rejection: ${(rejected as { reason: string }).reason}\n${dumpState(state)}`);
@@ -475,7 +486,7 @@ describe('the cards played out — both seats, every time', () => {
       // Keep it tapped: the untap step would otherwise untap it on A's turn.
       const permanent = s.battlefield.find((c) => c.instanceId === tapped.instanceId);
       if (permanent) permanent.tapped = true;
-      const result = applyAction(s, { kind: 'passPriority', player: s.priorityPlayer }, DEFAULT_RULES, reg);
+      const result = applyAction(s, { kind: 'passPriority', player: s.priorityPlayer }, RULES, reg);
       if (result.events.some((e) => e.type === 'triggerPutOnStack')) sawTrigger = true;
       s = result.state;
     }
@@ -626,10 +637,10 @@ describe('the real heuristic pilot plays the family without stalling', () => {
     let state = created.state;
     const events: GameEvent[] = [...created.events];
     for (let i = 0; i < maxActions && !state.gameOver; i++) {
-      const legal = generateLegalActions(state, DEFAULT_RULES);
+      const legal = generateLegalActions(state, RULES);
       if (legal.length === 0) break;
       const chosen = pilot.chooseAction({ view: state, legalActions: legal, rng, registry });
-      const result = applyAction(state, chosen, DEFAULT_RULES, registry);
+      const result = applyAction(state, chosen, RULES, registry);
       state = result.state;
       events.push(...result.events);
     }
@@ -682,9 +693,9 @@ describe('the real heuristic pilot plays the family without stalling', () => {
     const pilot = createHeuristicPilot();
     const rng = createRng(SEEDS.puzzleBox);
     while (s.players[holder].library.length === libraryBefore && !s.gameOver && guard++ < 200) {
-      const legal = generateLegalActions(s, DEFAULT_RULES);
+      const legal = generateLegalActions(s, RULES);
       if (legal.length === 0) break;
-      s = applyAction(s, pilot.chooseAction({ view: s, legalActions: legal, rng, registry: reg }), DEFAULT_RULES, reg)
+      s = applyAction(s, pilot.chooseAction({ view: s, legalActions: legal, rng, registry: reg }), RULES, reg)
         .state;
     }
     // Three cards went to the bottom; the Dragon is the shallowest of them,
