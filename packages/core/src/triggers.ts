@@ -236,7 +236,8 @@ export function conditionMatches(
         // on every spell would be a strictly better card than the printed one.
         if (sourceChosenAsEntered === undefined || sourceChosenAsEntered === '') return false;
         const wanted = sourceChosenAsEntered.toLowerCase();
-        if (!event.castSubtypes.some((subtype) => subtype.toLowerCase() === wanted)) return false;
+        const castSubtypes = event.castSubtypes ?? NO_CAST_SUBTYPES;
+        if (!castSubtypes.some((subtype) => subtype.toLowerCase() === wanted)) return false;
       }
       return true;
     }
@@ -286,6 +287,9 @@ export function conditionMatches(
       return false;
   }
 }
+
+/** Shared empty list for a cast event that carries no subtypes. */
+const NO_CAST_SUBTYPES: readonly string[] = Object.freeze([]);
 
 /**
  * The turn step each step-beginning trigger watches. One table so the trigger

@@ -42,8 +42,14 @@ export type GameEvent =
        * trigger matcher is a pure function of the event (`triggers.ts` has no
        * state), and because by the time a cast trigger resolves the spell may
        * already have left the stack.
+       *
+       * OPTIONAL, and read as "no subtypes" when absent: an event replayed from
+       * a log written before this field existed must still fold, and a spell
+       * with no printed subtype is the common case anyway. A trigger narrowed by
+       * a subtype therefore does not fire on an old event, which is the
+       * matches-nothing direction every other unknown value here takes.
        */
-      readonly castSubtypes: readonly string[];
+      readonly castSubtypes?: readonly string[];
       /**
        * Present (as `'graveyard'`) when this was a flashback cast, so the log,
        * the replay and the inspector can say WHICH way the spell was cast —

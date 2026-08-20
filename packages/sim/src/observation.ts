@@ -222,6 +222,25 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // game information. Kept so a belief model cannot silently mis-count plies.
   actionRejected: 'public',
   counterAdded: 'public',
+  /*
+   * THE NAMED VALUE IS PUBLIC, and this one is worth being deliberate about
+   * because it sits next to three redacted choice events.
+   *
+   * The ANSWER to a question is private to its chooser — that is why
+   * `choiceAnswered` is redacted above. But "As ~ enters, choose a creature
+   * type" is not a private answer: CR 614.1c makes it a value announced at the
+   * table as the permanent enters, and it stays visible on the card for as long
+   * as the permanent is on the battlefield (every opponent needs it to know what
+   * the lord pumps and what the land taps for). A spectator sees it, so a pilot
+   * may.
+   *
+   * What is NOT public, and is not in this event, is the option LIST the chooser
+   * was offered: for a creature type that menu is derived from the chooser's own
+   * cards, so its length would be a weak read on their decklist. It travels only
+   * inside the choice, whose `choiceAsked` observation is already redacted to an
+   * option count above.
+   */
+  chosenAsEnters: 'public',
   triggerPutOnStack: 'public',
   // Both halves of aiming a trigger happen face-up on the table: everyone sees
   // what the ability was pointed at, and everyone sees one leave the stack for
