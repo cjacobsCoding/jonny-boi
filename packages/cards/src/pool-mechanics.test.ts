@@ -104,7 +104,7 @@ const UNREPRESENTABLE: ReadonlyArray<{ readonly mechanic: string; readonly why: 
   },
   {
     mechanic: 'battles',
-    why: 'battles are Sieges — the back face is cast by a path the engine does not have — and the card index carries no printed defense number. 0 of 36 compile.',
+    why: 'the Siege cast path SHIPPED (the reward is a free cast from exile once the battle is defeated), but the committed card index predates both the printed-defense capture and the per-face data a Siege is compiled from, so a re-fetch is what unblocks these. 0 of 36 compile.',
   },
 ];
 

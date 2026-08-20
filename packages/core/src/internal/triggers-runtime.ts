@@ -21,6 +21,7 @@ import type { CardInstance, GameState, InstanceId } from '../state.js';
 import { recordTurnFacts } from '../turn-facts.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
 import { matchTriggers, orderPendingTriggers } from '../triggers.js';
+import { interveningIfHolds } from '../intervening.js';
 
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
@@ -147,13 +148,28 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
       // transform swaps it — so identity of the trigger list, not presence of
       // the entry, is what proves the cached source is still current.
       //
+      // `chosenAsEntered` joins the staleness check because it is WRITTEN AFTER
+      // the permanent is already on the battlefield (the naming is answered a
+      // moment later, by the choice the entry raised) — so a cached source
+      // captured at the instant of arrival would carry no named value, and the
+      // trigger narrowed by it would silently never fire. One string comparison,
+      // and only for permanents that have triggers at all.
+      //
       // NOTE what is deliberately NOT in this check: the permanent's ATTACHMENT.
       // An Equipment moving from one creature to another does not invalidate the
       // entry, because the entry carries the live instance (`permanent`) rather
       // than a copy of `attachedTo` — `matchTriggers` reads the current value at
       // match time. Adding `attachedTo` here would rebuild the source on every
-      // equip for no benefit.
-      if (known !== undefined && known.controller === inst.controller && known.triggers === triggers) continue;
+      // equip for no benefit, and would still be a COPY at the moment of the
+      // rebuild.
+      if (
+        known !== undefined &&
+        known.controller === inst.controller &&
+        known.triggers === triggers &&
+        known.chosenAsEntered === inst.chosenAsEntered
+      ) {
+        continue;
+      }
       (seenSources ??= new Map()).set(inst.instanceId, {
         instanceId: inst.instanceId,
         controller: inst.controller,
@@ -165,6 +181,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         // current for an Equipment whose host dies to first-strike damage
         // between the two combat-damage steps of one action.
         permanent: inst,
+        ...(inst.chosenAsEntered !== undefined ? { chosenAsEntered: inst.chosenAsEntered } : {}),
       });
       snapshot = null;
     }
@@ -185,6 +202,17 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   const resolveSubject = (instanceId: InstanceId) => {
     for (const perm of state.battlefield) {
       if (perm.instanceId === instanceId) return { controller: perm.controller, card: perm };
+    }
+    // A SPELL BEING CAST is on the stack, not in a zone — this is what a cast
+    // trigger narrowed by a creature type reads ("whenever you cast a creature
+    // spell of the chosen type"). Searched after the battlefield because that is
+    // where the overwhelming majority of lookups find their answer, and searched
+    // at all only because the alternative was widening the `spellCast` EVENT
+    // with a subtype list every replay would then carry.
+    for (const object of state.stack) {
+      if (object.kind === 'spell' && object.card.instanceId === instanceId) {
+        return { controller: object.controller, card: object.card };
+      }
     }
     for (const player of Object.values(state.players)) {
       for (const card of player.graveyard) {
@@ -211,8 +239,18 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     snapshot ??= [...seenSources.values()];
     const matched = matchTriggers(snapshot, event, resolveSubject);
     if (matched.length === 0) return;
-    if (queue === null) queue = [];
-    for (const m of matched) queue.push(m);
+    for (const m of matched) {
+      // CR 603.4's FIRST check: an ability whose intervening "if" is false does
+      // not trigger at all — it never reaches the stack, so nobody may respond
+      // to it. Done here rather than inside `matchTriggers` because the answer
+      // needs the game state and `triggers.ts` is a pure matcher.
+      if (
+        !interveningIfHolds(state, m.ability.condition.intervening, m.sourceInstanceId, m.controller, m.triggeringPlayer)
+      ) {
+        continue;
+      }
+      (queue ??= []).push(m);
+    }
   };
 
   const flush = (): number => {
@@ -233,6 +271,14 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         effects: pending.ability.effects,
         targets: [],
         label,
+        // Carried onto the stack object so the body can say "that player" — see
+        // `PendingTrigger.triggeringPlayer`. Conditional so every trigger that
+        // names no player is pushed byte-for-byte as it always was.
+        ...(pending.triggeringPlayer !== undefined ? { triggeringPlayer: pending.triggeringPlayer } : {}),
+        // Carried for CR 603.4's second check, made as the ability resolves.
+        ...(pending.ability.condition.intervening !== undefined
+          ? { intervening: pending.ability.condition.intervening }
+          : {}),
         // An ability that declares what it targets goes on the stack UNAIMED; the
         // engine asks its controller immediately afterwards (`aimPendingTriggers`),
         // which is when the rules say targets are chosen. Absent for every other

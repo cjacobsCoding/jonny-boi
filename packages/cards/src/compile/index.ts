@@ -20,6 +20,8 @@ export {
   TYPES_WITHOUT_SYSTEM,
   BACK_FACE_ID_SUFFIX,
   SECOND_CASTABLE_FACE_GAP,
+  FUSE_GAP,
+  ROOM_DOOR_GAP,
 } from './compile.js';
 export {
   EFFECT_RULES,

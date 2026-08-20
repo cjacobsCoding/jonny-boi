@@ -26,9 +26,12 @@
  * to clean up, nothing to expire, and no window in which a stale buff can survive
  * its source.
  *
- * ## The filter matches PRINTED characteristics only
+ * ## The filter matches characteristics NO STATIC CAN CHANGE
  * {@link StaticAffects} looks at controller, card types, subtypes, name and mana
- * value — characteristics that **no static in this model can change**. That is a
+ * value — plus two pieces of instance STATE that no continuous effect in this
+ * model can touch either: the counters on a permanent
+ * ({@link StaticAffects.hasCounterKind}) and the value the SOURCE named as it
+ * entered ({@link StaticAffects.ofChosenSubtype} / `ofChosenColor`). That is a
  * deliberate constraint: it means one non-iterative pass over the battlefield is
  * exact, with no layer-dependency loop to resolve (MTG's CR 613.8). A filter that
  * could read modified P/T or granted keywords would need a fixpoint; if such a card
@@ -42,8 +45,10 @@
 
 import type { CardInstance } from './state.js';
 import type { KeywordFlags } from './card.js';
+import { colorsOfDefinition, permanentHasSubtype } from './card.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
+import { chosenColorOf, chosenSubtypeOf } from './as-enters.js';
 
 /**
  * Whose permanents a static reaches, relative to the source's controller.
@@ -86,13 +91,37 @@ export interface StaticAffects extends CardFilter {
    * kind ("Creatures you control with +1/+1 counters on them can't be
    * blocked").
    *
-   * This is the ONE non-printed characteristic a static filter may read, and it
-   * is safe for the reason the doc comment above gives: counters are instance
-   * STATE, not a characteristic any static in this model can change, so reading
-   * them creates no layer-dependency loop (CR 613.8) and the single
-   * non-iterative pass over the battlefield stays exact.
+   * This is ONE of the two non-printed characteristics a static filter may read
+   * (see {@link ofChosenSubtype} for the other), and it is safe for the reason
+   * the doc comment above gives: counters are instance STATE, not a
+   * characteristic any static in this model can change, so reading them creates
+   * no layer-dependency loop (CR 613.8) and the single non-iterative pass over
+   * the battlefield stays exact.
    */
   readonly hasCounterKind?: string;
+  /**
+   * Set for the printed words "**of the chosen type**" — "creatures you control
+   * of the chosen type get +1/+1" (Adaptive Automaton, Patchwork Banner, Icon of
+   * Ancestry). The static reaches only permanents carrying the subtype its own
+   * SOURCE named as it entered (`CardInstance.chosenAsEntered`).
+   *
+   * **A source that named nothing reaches nothing.** That is the whole safety
+   * argument for the unasked-entry default: a reanimated Adaptive Automaton is
+   * an anthem over the empty set, never over every creature. Never read an
+   * absent value as "no filter".
+   *
+   * Safe against a layer loop for the same reason `hasCounterKind` is: the named
+   * value is instance state written once as the source entered, and no
+   * continuous effect in this engine can change it.
+   */
+  readonly ofChosenSubtype?: boolean;
+  /**
+   * Set for the printed words "**of the chosen color**" — "creatures you control
+   * of the chosen color get +1/+0" (Heraldic Banner), "creatures of the chosen
+   * color get +1/+1" (Gauntlet of Power). Same source-named reading, same
+   * matches-nothing rule when nothing was named, as {@link ofChosenSubtype}.
+   */
+  readonly ofChosenColor?: boolean;
 }
 
 /**
@@ -161,6 +190,18 @@ export function staticAppliesTo(ability: StaticAbility, source: CardInstance, ca
   }
   if (affects.hasCounterKind !== undefined && (candidate.counters[affects.hasCounterKind] ?? 0) <= 0) {
     return false;
+  }
+  // "of the chosen type / color" — read off the SOURCE, applied to the candidate.
+  // A source that named nothing matches nothing (see the field docs): the guard
+  // is written as an early `false` rather than as a skipped filter precisely so
+  // an unnamed value can never widen the anthem to the whole board.
+  if (affects.ofChosenSubtype === true) {
+    const named = chosenSubtypeOf(source);
+    if (named === undefined || !permanentHasSubtype(candidate, named)) return false;
+  }
+  if (affects.ofChosenColor === true) {
+    const named = chosenColorOf(source);
+    if (named === undefined || !colorsOfDefinition(candidate.def).includes(named)) return false;
   }
   return matchesCardFilter(candidate, affects);
 }

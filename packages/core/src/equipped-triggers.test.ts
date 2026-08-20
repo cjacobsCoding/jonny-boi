@@ -384,16 +384,16 @@ describe('conditionMatches — the pure half', () => {
 
   it('matches the HOST and not the source itself', () => {
     const condition = { on: 'combatDamageToPlayer', watches: 'attachedHost' } as const;
-    expect(conditionMatches(condition, damage(HOST), SOURCE, 'A', undefined, HOST)).toBe(true);
-    expect(conditionMatches(condition, damage(SOURCE), SOURCE, 'A', undefined, HOST)).toBe(false);
-    expect(conditionMatches(condition, damage(OTHER), SOURCE, 'A', undefined, HOST)).toBe(false);
+    expect(conditionMatches(condition, damage(HOST), SOURCE, 'A', undefined, undefined, HOST)).toBe(true);
+    expect(conditionMatches(condition, damage(SOURCE), SOURCE, 'A', undefined, undefined, HOST)).toBe(false);
+    expect(conditionMatches(condition, damage(OTHER), SOURCE, 'A', undefined, undefined, HOST)).toBe(false);
   });
 
   it('matches NOTHING when attached to nothing — it never falls back to itself', () => {
     const condition = { on: 'combatDamageToPlayer', watches: 'attachedHost' } as const;
     for (const attached of [null, undefined]) {
-      expect(conditionMatches(condition, damage(SOURCE), SOURCE, 'A', undefined, attached)).toBe(false);
-      expect(conditionMatches(condition, damage(HOST), SOURCE, 'A', undefined, attached)).toBe(false);
+      expect(conditionMatches(condition, damage(SOURCE), SOURCE, 'A', undefined, undefined, attached)).toBe(false);
+      expect(conditionMatches(condition, damage(HOST), SOURCE, 'A', undefined, undefined, attached)).toBe(false);
     }
   });
 
@@ -402,19 +402,19 @@ describe('conditionMatches — the pure half', () => {
     expect(conditionMatches(condition, damage(SOURCE), SOURCE, 'A')).toBe(true);
     expect(conditionMatches(condition, damage(HOST), SOURCE, 'A')).toBe(false);
     // An `attachedTo` handed to a self-watching condition is ignored, not honoured.
-    expect(conditionMatches(condition, damage(HOST), SOURCE, 'A', undefined, HOST)).toBe(false);
-    expect(conditionMatches(condition, damage(SOURCE), SOURCE, 'A', undefined, HOST)).toBe(true);
+    expect(conditionMatches(condition, damage(HOST), SOURCE, 'A', undefined, undefined, HOST)).toBe(false);
+    expect(conditionMatches(condition, damage(SOURCE), SOURCE, 'A', undefined, undefined, HOST)).toBe(true);
   });
 
   it('scopes the other self-referential events the same way', () => {
     const attacked: GameEvent = { type: 'attackersDeclared', player: 'A', attackers: [HOST] };
-    expect(conditionMatches({ on: 'attacks', watches: 'attachedHost' }, attacked, SOURCE, 'A', undefined, HOST)).toBe(
+    expect(conditionMatches({ on: 'attacks', watches: 'attachedHost' }, attacked, SOURCE, 'A', undefined, undefined, HOST)).toBe(
       true,
     );
-    expect(conditionMatches({ on: 'attacks' }, attacked, SOURCE, 'A', undefined, HOST)).toBe(false);
+    expect(conditionMatches({ on: 'attacks' }, attacked, SOURCE, 'A', undefined, undefined, HOST)).toBe(false);
 
     const died: GameEvent = { type: 'creatureDied', instanceId: HOST, name: 'Host' };
-    expect(conditionMatches({ on: 'dies', watches: 'attachedHost' }, died, SOURCE, 'A', undefined, HOST)).toBe(true);
-    expect(conditionMatches({ on: 'dies', watches: 'attachedHost' }, died, SOURCE, 'A', undefined, null)).toBe(false);
+    expect(conditionMatches({ on: 'dies', watches: 'attachedHost' }, died, SOURCE, 'A', undefined, undefined, HOST)).toBe(true);
+    expect(conditionMatches({ on: 'dies', watches: 'attachedHost' }, died, SOURCE, 'A', undefined, undefined, null)).toBe(false);
   });
 });
