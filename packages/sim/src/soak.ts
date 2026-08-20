@@ -759,7 +759,33 @@ function createLeakScanningPilot(
         }
       }
       const present = collectInstanceIds(observation);
+      /*
+       * ⚠️ A CARD THE TABLE JUST WATCHED LEAVE THE STACK IS NOT A SECRET, even
+       * when it lands in a hand.
+       *
+       * `stackResolved` names the object that resolved — face up, in front of
+       * everybody, by definition. A BUYBACK spell (Capsize, Elvish Fury) returns
+       * itself to its owner's HAND as it resolves, so its id is simultaneously
+       * "named by a public observation" and "in a hidden zone", and a naive scan
+       * calls that a leak. It is not: a spectator watching Capsize resolve knows
+       * exactly which card went back to that hand, and the id was already public
+       * on the `spellCast` that put it on the stack.
+       *
+       * Only the observation's OWN subject is exempted. Any OTHER hidden id
+       * inside a `stackResolved` would still be a leak, and every other
+       * observation type is scanned unchanged.
+       *
+       * (This is a real narrowness in the repo's stated rule, not just in this
+       * scan: `observation.test.ts` asserts the broad claim and passes only
+       * because none of its three curated matchups plays a buyback card. Adding
+       * one to `SCANNED_MATCHUPS` would fail it. Reported on the board.)
+       */
+      const publiclySeen =
+        observation.type === 'stackResolved'
+          ? (observation as { readonly instanceId?: InstanceId }).instanceId
+          : undefined;
       for (const id of hidden) {
+        if (id === publiclySeen) continue;
         if (present.has(id)) report(`observation ${observation.type} names #${id}, which is in a hidden zone`);
       }
     }

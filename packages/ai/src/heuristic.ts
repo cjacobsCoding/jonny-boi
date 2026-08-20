@@ -731,6 +731,17 @@ function scoredSpellGoals(
     const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
     if (!timingOk) continue;
     if (convertedManaCost(flashbackCost) > availableMana) continue;
+    /*
+     * A FLASHBACK COST CAN PRINT A LIFE RIDER — "Flashback—{1}{B}, Pay 3 life"
+     * (Crippling Fatigue). It is part of the cost, so core's
+     * `generateLegalActions` does not offer the cast and `applyCastSpell`
+     * rejects it. Without this gate the pilot built the action itself, the
+     * engine refused it, and after `maxConsecutiveRejectedActions` the harness
+     * passed priority — so the pilot threw away its whole turn EXACTLY when it
+     * was at low life. Found by the full-pool soak, seed 3329123684.
+     */
+    const lifeCost = def.flashbackLifeCost ?? 0;
+    if (lifeCost > 0 && view.players[me].life < lifeCost) continue;
 
     const intent = classifySpell(def);
     oppCreatures ??= creaturesControlledBy(view, opp);

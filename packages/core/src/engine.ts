@@ -2177,7 +2177,24 @@ function applyCastSpell(
   }
   // The life half of the flashback cost, charged alongside the mana. Everything
   // above is validated, so this cannot half-pay.
-  if (flashbackLife > 0) payLifeCost(state, action.player, flashbackLife, emit);
+  if (flashbackLife > 0) {
+    payLifeCost(state, action.player, flashbackLife, emit);
+    /*
+     * PAYING A COST CAN KILL YOU, AND THAT HAS TO END THE GAME HERE.
+     *
+     * "Flashback—{1}{B}, Pay 3 life" at exactly 3 life is a legal thing to do
+     * (CR 118.4 — the engine does not forbid it), and the caster then receives
+     * priority, which is when state-based actions are checked (CR 704.3) and a
+     * player at 0 or less life loses (CR 704.5a). Without this the game carried
+     * on with a corpse holding priority: the soak found a player sitting at 0
+     * life, casting spells, on turn 20 of seed 3856639351.
+     *
+     * The two sibling payment paths already do exactly this — `applyTapForMana`
+     * for a pain land's rider and the shockland's pay-life choice — so this is
+     * the third copy of one rule, not a new one.
+     */
+    checkStateBasedActions(state, emit);
+  }
 
   // Move the card to the stack, out of whichever zone it was cast from.
   removeFromZoneArray(
