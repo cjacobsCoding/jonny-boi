@@ -20,6 +20,7 @@ import type { CardType, EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
+import { permanentHasSubtype } from './card.js';
 import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
 import type { TargetRestriction } from './targeting.js';
 import type { InterveningIf } from './intervening.js';
@@ -126,6 +127,17 @@ export interface TriggerCondition {
    */
   readonly permanentFilter?: CardFilter;
   /**
+   * Set for the printed words "**of the chosen type**" on a CAST trigger —
+   * "whenever you cast a creature spell of the chosen type, draw a card"
+   * (Vanquisher's Banner), "whenever you cast a spell of the chosen type"
+   * (Chronicle of Victory).
+   *
+   * The value comes from the SOURCE (`TriggerSource.chosenAsEntered`), so it is
+   * this permanent's own naming — and a source that named nothing fires on
+   * nothing, exactly as its anthem reaches nothing.
+   */
+  readonly spellSubtypeIsChosen?: boolean;
+  /**
    * For `permanentEnters`/`permanentDies`: the printed word "**another**" — the
    * source's own arrival or death does not set it off. A distinct flag rather
    * than something inferred, for the same reason `StaticAffects.excludeSource`
@@ -219,6 +231,16 @@ export interface TriggerSource {
   readonly controller: PlayerId;
   readonly name: string;
   readonly triggers: readonly TriggeredAbility[];
+  /**
+   * What this source NAMED as it entered (`CardInstance.chosenAsEntered`), for
+   * the conditions narrowed by it — "whenever you cast a creature spell **of the
+   * chosen type**".
+   *
+   * Snapshotted onto the source rather than looked up during matching because
+   * `triggers.ts` is a pure matcher with no access to the game state, exactly as
+   * `TriggerSubject` is. Absent means nothing was named, which matches nothing.
+   */
+  readonly chosenAsEntered?: string;
 }
 
 /**
@@ -232,6 +254,7 @@ export function conditionMatches(
   sourceInstanceId: InstanceId,
   sourceController: PlayerId,
   subject?: TriggerSubject,
+  sourceChosenAsEntered?: string,
 ): boolean {
   switch (condition.on) {
     case 'etb':
@@ -249,6 +272,21 @@ export function conditionMatches(
       if (!whoMatches(condition.who, event.player, sourceController)) return false;
       if (condition.spellType && !event.castTypes.includes(condition.spellType)) return false;
       if (condition.spellTypeNoneOf?.some((type) => event.castTypes.includes(type))) return false;
+      if (condition.spellSubtypeIsChosen === true) {
+        // "…of the chosen type". A source that named NOTHING matches nothing —
+        // never everything — for the same reason `StaticAffects.ofChosenSubtype`
+        // does: an unnamed value is the inert default, and a trigger that fired
+        // on every spell would be a strictly better card than the printed one.
+        if (sourceChosenAsEntered === undefined || sourceChosenAsEntered === '') return false;
+        const wanted = sourceChosenAsEntered;
+        // The SPELL itself is the subject here — resolved from the stack by the
+        // runtime, exactly as a board-watching trigger's permanent is resolved
+        // from the battlefield. Read off the object rather than off the event
+        // because the event is the LOG, and widening a logged event's payload
+        // for one trigger's benefit would change every replay's bytes for a
+        // fact the object already carries.
+        if (!subject || !permanentHasSubtype(subject.card, wanted)) return false;
+      }
       return true;
     }
     case 'permanentEnters': {
@@ -368,6 +406,11 @@ const STEP_FOR_TRIGGER: Readonly<Record<string, Step>> = Object.freeze({
  * Passed in rather than looked up here because `triggers.ts` is a pure matcher
  * with no access to the game state; the runtime that emits the event resolves
  * the instance once per event and hands it down.
+ *
+ * It also carries the SPELL for a cast trigger narrowed by a creature type
+ * ("whenever you cast a creature spell of the chosen type") — same shape, same
+ * seam, and the reason the `spellCast` EVENT did not have to grow a subtype
+ * list that every replay would then carry.
  */
 export interface TriggerSubject {
   readonly controller: PlayerId;
@@ -437,7 +480,9 @@ export function matchTriggers(
     if (!subjectResolved) {
       subjectResolved = true;
       subject =
-        resolveSubject && event.type === 'zoneChange' ? resolveSubject(event.instanceId) : undefined;
+        resolveSubject && (event.type === 'zoneChange' || event.type === 'spellCast')
+          ? resolveSubject(event.instanceId)
+          : undefined;
     }
     return subject;
   };
@@ -450,7 +495,11 @@ export function matchTriggers(
     for (let abilityIndex = 0; abilityIndex < abilities.length; abilityIndex++) {
       const ability = abilities[abilityIndex] as TriggeredAbility;
       const watchesBoard =
-        ability.condition.on === 'permanentEnters' || ability.condition.on === 'permanentDies';
+        ability.condition.on === 'permanentEnters' ||
+        ability.condition.on === 'permanentDies' ||
+        // A cast trigger narrowed by the chosen creature type needs the SPELL
+        // object, for the same reason and through the same seam.
+        ability.condition.spellSubtypeIsChosen === true;
       if (
         !conditionMatches(
           ability.condition,
@@ -458,6 +507,7 @@ export function matchTriggers(
           src.instanceId,
           src.controller,
           watchesBoard ? subjectOf() : undefined,
+          src.chosenAsEntered,
         )
       ) {
         continue;

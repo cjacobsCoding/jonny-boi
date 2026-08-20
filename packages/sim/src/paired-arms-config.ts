@@ -103,6 +103,20 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // Surveil is the same look with a graveyard for a bottom: it reads the top N
   // and branches on what it saw.
   'surveil',
+  /*
+   * `chooseAsEnters` NAMES A VALUE as a permanent enters (a colour, a creature
+   * type, a player). It moves no card and reveals no card — but the MENU it
+   * offers for a creature type is built from every card its chooser owns,
+   * LIBRARY INCLUDED, so the swapped card can change which types are on offer
+   * and therefore which one gets named, in a game where that card is never
+   * drawn. That is precisely the divergence the identical-game claim asserts
+   * cannot happen, so the claim is withdrawn for any game that resolves one.
+   *
+   * Classified here rather than argued away, for the same reason `mayEffects`
+   * is: a wrong verdict is far more expensive than a few extra variant games,
+   * and this primitive appears on a handful of cards.
+   */
+  'chooseAsEnters',
 ]);
 
 /**

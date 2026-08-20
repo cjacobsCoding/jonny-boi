@@ -147,12 +147,26 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
       // from the immutable DEFINITION, but `inst.def` is the ACTIVE face and a
       // transform swaps it — so identity of the trigger list, not presence of
       // the entry, is what proves the cached source is still current.
-      if (known !== undefined && known.controller === inst.controller && known.triggers === triggers) continue;
+      // `chosenAsEntered` joins the staleness check because it is WRITTEN AFTER
+      // the permanent is already on the battlefield (the naming is answered a
+      // moment later, by the choice the entry raised) — so a cached source
+      // captured at the instant of arrival would carry no named value, and the
+      // trigger narrowed by it would silently never fire. One string comparison,
+      // and only for permanents that have triggers at all.
+      if (
+        known !== undefined &&
+        known.controller === inst.controller &&
+        known.triggers === triggers &&
+        known.chosenAsEntered === inst.chosenAsEntered
+      ) {
+        continue;
+      }
       (seenSources ??= new Map()).set(inst.instanceId, {
         instanceId: inst.instanceId,
         controller: inst.controller,
         name: inst.def.name,
         triggers,
+        ...(inst.chosenAsEntered !== undefined ? { chosenAsEntered: inst.chosenAsEntered } : {}),
       });
       snapshot = null;
     }
@@ -173,6 +187,17 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
   const resolveSubject = (instanceId: InstanceId) => {
     for (const perm of state.battlefield) {
       if (perm.instanceId === instanceId) return { controller: perm.controller, card: perm };
+    }
+    // A SPELL BEING CAST is on the stack, not in a zone — this is what a cast
+    // trigger narrowed by a creature type reads ("whenever you cast a creature
+    // spell of the chosen type"). Searched after the battlefield because that is
+    // where the overwhelming majority of lookups find their answer, and searched
+    // at all only because the alternative was widening the `spellCast` EVENT
+    // with a subtype list every replay would then carry.
+    for (const object of state.stack) {
+      if (object.kind === 'spell' && object.card.instanceId === instanceId) {
+        return { controller: object.controller, card: object.card };
+      }
     }
     for (const player of Object.values(state.players)) {
       for (const card of player.graveyard) {

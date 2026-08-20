@@ -1965,6 +1965,133 @@ DFC both print two faces with two costs — and the compiler refuses to guess it
 ⚠️ **The committed card index predates the `layout` field, so no pool card compiles as a split card
 yet.** The fetch pipeline captures it from now on; a re-fetch of the index is what puts these layouts
 in front of a player who has not imported a decklist, and that file belongs to the pool branch.
+### 3.21 "As ~ enters, choose a…" — a value NAMED as a permanent enters, and remembered — ✅ done
+The replacement-effect naming of CR 614.1c: **"As Cavern of Souls enters, choose a creature type."**
+The corpus audit named it as one gap of 27 cards, but the prompt was never the hard half. **The crux
+is that the answer has to stick to the permanent and still be readable ten turns later** — by the
+card's own anthem ("creatures you control **of the chosen type** get +1/+1"), by its own mana ability
+("add one mana **of the chosen color**"), by its own type line ("this creature **is the chosen type**
+in addition to its other types") and by its own cast trigger ("whenever you cast a spell **of the
+chosen type**"). A chosen value nothing can READ is a half-card, so this section is one choice kind
+plus **four readers**, not one prompt.
+
+**Measured, paired, on the same cached 2100-card corpus against the `origin/main` this branched from:
+408 → 414 playable (19.4% → 19.7%).** Six cards became fully playable — Adaptive Automaton, Patchwork
+Banner, Heraldic Banner, Coldsteel Heart, Vanquisher's Banner, Chronicle of Victory — and one more
+(Cloud Key) had its naming line implemented while its cost-reduction line still reports.
+
+#### The shape
+- **`ChooseValueChoice`** — a ninth choice kind. Not a `chooseModes`: nothing RUNS when it is
+  answered. It carries a `subject` (`color` / `creatureType` / `cardType` / `basicLandType` /
+  `player`) because the *answering policy* differs per subject and a list of one-letter strings is
+  otherwise indistinguishable from a list of seats.
+- **`CardInstance.chosenAsEntered`** — the memory, and the whole system. Copied by `cloneInstance`
+  (conditionally, like `attachedTo`), cleared by `resetInstanceForNewZone` (CR 400.7 — a permanent
+  that leaves is a new object and names again), and announced by a new **public** `chosenAsEnters`
+  event.
+- **`CardDefinition.asEntersChoice`** — one declaration read by every consumer: the engine, the AI's
+  policy, the UI and the About page.
+
+#### Where it is asked, and the ONE inert default
+The naming happens *while* the permanent is entering — the same moment "enters with N +1/+1 counters"
+applies — so it is raised by the two paths that hold a permanent mid-entry and can still park a
+question:
+- **playing a land** — `raiseLandEntryChoice` in `engine.ts`, beside the shockland's `payLife`;
+- **a permanent spell resolving** — the compiler puts the `chooseAsEnters` primitive FIRST in the
+  card's script, so it runs against `ctx.source` before `finishSpellResolution` puts it on the
+  battlefield. (The same seam `addCounters { self: true }` uses, and for the same reason.)
+
+**Every other entry path — reanimation, another card's "put it onto the battlefield", a token, a
+hand-built test instance — records NOTHING, and nothing named matches nothing.** That is the
+shockland's rule applied to a naming: the unasked default is explicit (`NOTHING_CHOSEN`), it is the
+same value on every path, and it is the one that can never grant an advantage, because *every* reader
+treats an absent value as the empty set rather than as "no filter". A reanimated Adaptive Automaton
+is an anthem over nobody, never over the whole board. `defaultAnswerFor` therefore names NOTHING
+rather than the first option — an arbitrary pick dressed up as a default would hand the degraded path
+a working creature type.
+
+⚠️ **A LAND CAN OWE TWO QUESTIONS AND ONLY ONE CAN BE PARKED.** Multiversal Passage names a basic land
+type and *then* offers to pay 2 life; Temple of the Dragon Queen offers a reveal and names a colour.
+`raiseLandEntryChoice` is therefore a STEP function — it asks the first unanswered question and is
+called again from the answer handler — rather than three independent branches, which would silently
+drop the second. The `tapped` event stays deferred until every question is settled, so a replay never
+shows a land flickering tapped→untapped.
+
+#### The four readers (this is the part that makes it a card)
+1. **`StaticAffects.ofChosenSubtype` / `ofChosenColor`** — an anthem narrowed by the source's own
+   naming. Safe against a layer loop (CR 613.8) for exactly the reason `hasCounterKind` is: the value
+   is instance STATE written once on entry, and no continuous effect in this model can change it.
+2. **`CardDefinition.isChosenSubtype`** — "this creature is the chosen type in addition to its other
+   types". Read through `permanentHasSubtype`, the instance-aware form of `hasSubtype`, which the
+   shared `CardFilter` now uses — so a lord that named Goblin genuinely IS a Goblin and the next
+   lord's filter sees it. (Two Adaptive Automatons pump each other, which is the printed behaviour.)
+3. **`ManaAbility.chosenColor`** — "{T}: Add one mana of the chosen color", modelled exactly like
+   `derivedColors`: the mode LIST is a fixed five (the mode index must mean the same thing to the
+   action generator, the planner and the apply path) and WHICH mode is available is the per-instance
+   question, answered by `manaModeBlockedReason`. A permanent that named nothing offers no mode and
+   taps for nothing.
+4. **`TriggerCondition.spellSubtypeIsChosen`** — "whenever you cast a creature spell of the chosen
+   type". The SPELL is resolved from the stack through the existing `TriggerSubject` seam rather than
+   by widening the `spellCast` EVENT with a subtype list — which matters, because the event is the
+   log, and widening it changed every replay's bytes and broke the self-play behaviour lock for a
+   fact the object already carried.
+
+#### Both seats
+- **The pilot names deliberately, and it is documented policy, not a shrug.** A pilot that named at
+  random would still play legal Magic — it would just play a Cavern of Souls that taps for nothing and
+  an Automaton that pumps nobody, and **the lab would then report "no measurable difference" about a
+  card that is in fact a lord**. `answerChooseValue` names the type that appears on the most of the
+  chooser's OWN cards (their deck's tribe), the colour their own cards demand most counted in
+  coloured PIPS (one triple-black bomb outweighs two cantrips), and the OPPONENT for a player naming.
+  It reads only the chooser's own zones — a player knows their decklist — and is deterministic, ties
+  breaking on core's fixed option order.
+- **Humans get a radio group** in `ChoicePrompt` (`chooseValue` is a scalar draft, undecided until a
+  value is clicked — deliberately distinguishable from "named nothing", which is a legal answer), with
+  the menu scrolling inside the prompt so Confirm is always reachable. Both event-log formatters print
+  the naming out loud.
+- **The option list for a creature type is DERIVED from the game**, not from a thousand-entry table:
+  the subtypes on cards the chooser owns, plus everything on the battlefield. That is information the
+  seat genuinely has, and it never touches the opponent's hidden zones.
+
+#### Enforced tables
+`OBSERVATION_POLICY` classifies `chosenAsEnters` as **public**, and the reasoning is deliberate rather
+than convenient: a choice ANSWER is private to its chooser (which is why the three choice events are
+redacted), but a value named as a permanent enters is announced at the table and stays legible on the
+card for as long as it is there. What is *not* public — the option list, whose length is a weak read
+on the chooser's decklist — never leaves the choice, whose `choiceAsked` observation is already
+redacted to a count. `paired-arms-config.ts` classifies `chooseAsEnters` as **library-reading**, and
+conservatively: it moves no card and reveals no card, but its creature-type menu is built from the
+chooser's library, so a swapped card can change what is on offer and therefore what gets named — the
+exact divergence the identical-game skip claims cannot happen.
+
+#### Throughput (rule 7): parity, measured
+The 24-game **self-play behaviour lock is byte-identical** — same winner, same turn count, same action
+count, same event-log hash and same final-state hash on every seed — so the engine plays the same
+games. Allocation, by the scavenge probe (nursery pinned at 1 MB, 40 seeded games, 29,899 actions
+either way): branch **561 / 560** vs `origin/main` **561 / 561** on paired runs, with wider single
+runs of 578 and 576 showing the run-to-run band. Parity, not a claim of improvement. Wall clock on
+this box is worthless (several agents), which is why neither number here is a time.
+
+#### Deferred, each with a named blocker
+The naming is stored and readable; these are printed lines that would READ it and have no rule, and
+they now report as `a "the chosen …" READER the compiler does not recognize yet` rather than as a
+missing you-may template:
+- **a spend restriction on produced mana** (Cavern of Souls, Secluded Courtyard, Unclaimed Territory)
+  — unchanged, and still the mana-pool system §3.11's census named: the pool records colour, not what
+  each mana may pay for;
+- **cost reduction by the named type** (Urza's Incubator, Morophon, Cloud Key) — the cast-cost
+  modification system, in flight on its own branch;
+- **counter formulas over the named type** (Door of Destinies, Banner of Kinship — "+1/+1 for each
+  charge counter") and **a replacement effect on OTHER permanents entering** (Metallic Mimic);
+- **copying a spell** (Reflections of Littjara), **an extra instance of a triggered ability**
+  (Roaming Throne), **an additional mana when a land is tapped** (Caged Sun, Gauntlet of Power,
+  Utopia Sprawl);
+- **"choose a NUMBER between 1 and 10"** (Talion) — a subject this engine could store, deliberately
+  left out of the closed subject table because no printed line can yet read it, and a naming nothing
+  consumes is exactly the half-card this contract forbids;
+- **fear** (Cover of Darkness) — an evasion keyword the engine does not model;
+- **Multiversal Passage's "this land is the chosen type"** — a type-changing effect that would have to
+  grant the named basic land type's mana ability.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B

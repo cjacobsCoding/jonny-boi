@@ -448,6 +448,35 @@ export interface CardDefinition {
    * tapped or untapped — is the whole of it, and it is exact.
    */
   readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
+  /**
+   * "**As ~ enters, choose a** creature type / a color / a player / a card type"
+   * — the replacement-effect naming made as the permanent enters (CR 614.1c).
+   *
+   * The DECLARATION lives here so one record answers every consumer: the engine
+   * (which raises the question on the entry paths that can ask), the AI (whose
+   * per-subject answering policy is chosen from `subject`), the UI (which
+   * renders the option list), and the About page. The ANSWER lives on the
+   * instance, in `CardInstance.chosenAsEntered`, which is what the card's own
+   * later abilities and other cards' filters read.
+   *
+   * Same rule as {@link entersTappedUnlessLifePaid}: a naming is a DECISION, and
+   * **every entry path that cannot ask records nothing** — which matches
+   * nothing, the direction that can never play better than the real card. See
+   * `NOTHING_CHOSEN` in `choices.ts`.
+   */
+  readonly asEntersChoice?: AsEntersChoice;
+  /**
+   * "**This creature is the chosen type in addition to its other types**"
+   * (Adaptive Automaton, Metallic Mimic, Roaming Throne) — set when the printed
+   * line makes the permanent ITSELF a member of the type it named.
+   *
+   * It reads {@link asEntersChoice}'s answer off the instance, so it is only
+   * meaningful on a definition that also declares one. Absent, or with nothing
+   * chosen, the permanent has exactly its printed subtypes — see
+   * {@link subtypesOfInstance}, which is the one accessor that folds the two
+   * together.
+   */
+  readonly isChosenSubtype?: boolean;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -903,6 +932,47 @@ export function hasSubtype(def: CardDefinition, subtype: string): boolean {
   return set.has(subtype.toLowerCase());
 }
 
+/**
+ * The minimum of a permanent that a chosen-value read needs: its active face and
+ * what it named as it entered.
+ *
+ * Declared structurally rather than as `CardInstance` because `state.ts` imports
+ * THIS file, so the dependency cannot run the other way — and because it makes
+ * the contract explicit: nothing else about the instance participates.
+ */
+export interface ChoiceBearingPermanent {
+  readonly def: CardDefinition;
+  readonly chosenAsEntered?: string;
+}
+
+/**
+ * Whether a PERMANENT has `subtype` — its printed subtypes, plus the one it
+ * named as it entered when the card says it is that type too ("this creature is
+ * the chosen type in addition to its other types",
+ * {@link CardDefinition.isChosenSubtype}).
+ *
+ * This is the instance-aware form of {@link hasSubtype}, and it is what every
+ * battlefield subtype question must use — a lord that named Goblin and is
+ * therefore a Goblin has to see itself in the next lord's filter, or two
+ * Adaptive Automatons stop pumping each other.
+ *
+ * It creates no layer-dependency loop (CR 613.8), for the same reason
+ * `StaticAffects.hasCounterKind` does not: the named value is instance STATE
+ * written once as the permanent entered, and no continuous effect in this engine
+ * can change it. The single-pass layering stays exact.
+ *
+ * Reads in the printed order and returns early, so the common permanent — one
+ * with no `isChosenSubtype` — pays exactly what {@link hasSubtype} costs today.
+ */
+export function permanentHasSubtype(permanent: ChoiceBearingPermanent, subtype: string): boolean {
+  if (hasSubtype(permanent.def, subtype)) return true;
+  if (permanent.def.isChosenSubtype !== true) return false;
+  const chosen = permanent.chosenAsEntered;
+  // Nothing named ⇒ no extra type. See `NOTHING_CHOSEN`: an unchosen value
+  // matches nothing, never everything.
+  return chosen !== undefined && chosen !== '' && chosen.toLowerCase() === subtype.toLowerCase();
+}
+
 /** Convenience predicates over a definition's type line. */
 export function hasType(def: CardDefinition, type: CardType): boolean {
   return def.types.includes(type);
@@ -1065,6 +1135,25 @@ export interface ManaAbility {
   /** Present ⇒ the modes are one mana of each colour the board makes available. */
   readonly derivedColors?: DerivedManaColors;
   /**
+   * "Add one mana of **the chosen color**" (Coldsteel Heart, Heraldic Banner,
+   * Temple of the Dragon Queen) — the colour this ability makes is the one its
+   * own permanent named as it entered
+   * ({@link CardDefinition.asEntersChoice}).
+   *
+   * Modelled exactly like {@link derivedColors} and for the same reason: the
+   * mode LIST is fixed at five entries (one per colour) because
+   * `TapForManaAction.mode` is an index into it and a list whose length moved
+   * with the game would make the same action number mean different colours to
+   * the action generator, the payment planner and the apply path. WHICH of the
+   * five is available is the per-permanent question, asked against the live
+   * instance by `manaModeBlockedReason`.
+   *
+   * A permanent that named NOTHING has no available mode and therefore produces
+   * no mana at all — the inert default, and the direction that can never play
+   * better than the real card.
+   */
+  readonly chosenColor?: boolean;
+  /**
    * Whether the derivation includes COLOURLESS. Oracle draws the line with one
    * word: Reflecting Pool adds "one mana of any **type** that a land you control
    * could produce" and can therefore make {C}; Exotic Orchard and Fellwar Stone
@@ -1093,6 +1182,15 @@ export interface ManaModeExtra {
   readonly ability: ManaAbility;
   /** For a derived-colour mode: which colour this mode would add. */
   readonly derivedColor?: ManaColor;
+  /**
+   * For a CHOSEN-colour mode ({@link ManaAbility.chosenColor}): which colour this
+   * mode would add. Kept distinct from {@link derivedColor} rather than folded
+   * into it because the availability questions are different — a derived mode
+   * asks the BOARD what other lands make, a chosen mode asks THIS PERMANENT what
+   * it named — and one field answering two questions is how a mode ends up
+   * available for the wrong reason.
+   */
+  readonly chosenColor?: ManaColor;
 }
 
 /**
@@ -1104,6 +1202,15 @@ export interface ManaModeExtra {
  * The colourless mode of a colour-only ability is simply never available.
  */
 const DERIVED_COLOR_ORDER: readonly ManaColor[] = MANA_COLORS;
+
+/**
+ * The colours a CHOSEN-colour mana ability enumerates modes for — the five a card
+ * may name, in canonical order. Colourless is absent because "choose a color"
+ * cannot name it; see {@link ManaAbility.chosenColor}.
+ */
+const CHOSEN_COLOR_ORDER: readonly ManaColor[] = Object.freeze(
+  MANA_COLORS.filter((color) => color !== 'C'),
+);
 
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */
 const NO_MANA_MODES: readonly ManaProduction[] = Object.freeze([]);
@@ -1196,6 +1303,16 @@ function flattenManaAbilities(def: CardDefinition): {
       }
       continue;
     }
+    if (ability.chosenColor === true) {
+      // The five NAMEABLE colours, never colourless: "choose a color" is one of
+      // five (CR 105.1), so a sixth mode here would be a mode no printed card
+      // offers. Same fixed-length argument as the derived branch above.
+      for (const color of CHOSEN_COLOR_ORDER) {
+        modes.push(Object.freeze({ [color]: 1 }) as ManaProduction);
+        extras.push(Object.freeze({ ability, chosenColor: color }));
+      }
+      continue;
+    }
     for (const production of ability.produces ?? []) {
       modes.push(production);
       extras.push(Object.freeze({ ability }));
@@ -1213,18 +1330,31 @@ function flattenManaAbilities(def: CardDefinition): {
  * The colours this source could contribute to ANOTHER source's derived-colour
  * ability ("any color that a land you control could produce").
  *
+ * `chosenColor` is what the permanent NAMED as it entered (`chosenColorOf` in
+ * `as-enters.ts`), passed in by the caller rather than read here so this file
+ * stays free of a dependency cycle. Omitting it — which is what every caller that
+ * has only a definition does — makes a chosen-colour source contribute NOTHING,
+ * the conservative direction that never invents mana the board cannot make.
+ *
  * Deliberately excludes derived modes. Two Reflecting Pools do not see each
  * other: the rules answer is that a derived ability reads what the other
  * permanents *could* produce, and a permanent whose own production is defined by
  * that same question contributes nothing rather than looping. Excluding it here
  * is both the faithful answer and what makes the derivation terminate.
  */
-export function fixedManaColorsOf(def: CardDefinition): readonly ManaColor[] {
+export function fixedManaColorsOf(def: CardDefinition, chosenColor?: ManaColor): readonly ManaColor[] {
   const extras = manaExtrasOf(def);
   const modes = manaModesOf(def);
   const out: ManaColor[] = [];
   for (let i = 0; i < modes.length; i++) {
     if (extras?.[i]?.derivedColor !== undefined) continue;
+    // A CHOSEN-colour mode contributes only the colour this permanent actually
+    // named. Without the instance we cannot know it, so the mode contributes
+    // nothing — a Reflecting Pool reads an unknown Coldsteel Heart as producing
+    // nothing rather than as producing all five, which is the conservative
+    // direction and the one that never invents mana that is not there.
+    const modeChosenColor = extras?.[i]?.chosenColor;
+    if (modeChosenColor !== undefined && modeChosenColor !== chosenColor) continue;
     const mode = modes[i] as ManaProduction;
     for (const color of MANA_COLORS) {
       if ((mode[color] ?? 0) > 0 && !out.includes(color)) out.push(color);
@@ -1328,6 +1458,27 @@ export function bestManaYield(def: CardDefinition): number {
  */
 export interface RevealFromHandCondition {
   readonly anyOfSubtypes: readonly string[];
+}
+
+/**
+ * What a permanent NAMES as it enters — see {@link CardDefinition.asEntersChoice}.
+ *
+ * `subject` is the printed noun ("a creature type", "a color", "a player"), and
+ * it is the whole record for every subject whose option list is a fixed, known
+ * set. `options` exists for the one printed form that names its own menu —
+ * Cloud Key's "choose artifact, creature, enchantment, instant, or sorcery" —
+ * where the card, not the rules, decides what is on offer.
+ */
+export interface AsEntersChoice {
+  readonly subject: import('./choices.js').ChosenValueSubject;
+  /**
+   * The explicit menu, when the card prints one. Absent ⇒ the canonical list for
+   * the subject (`asEntersOptions` in `as-enters.ts`), which for a creature type
+   * is derived from the game rather than hard-coded.
+   */
+  readonly options?: readonly string[];
+  /** Prompt override for the UI / log. Absent ⇒ built from `subject`. */
+  readonly prompt?: string;
 }
 
 export interface EntersUntappedCondition {

@@ -264,6 +264,26 @@ export type GameEvent =
   | { readonly type: 'actionRejected'; readonly reason: string }
   | { readonly type: 'counterAdded'; readonly instanceId: InstanceId; readonly kind: string; readonly amount: number }
   | {
+      /**
+       * A permanent NAMED a value as it entered — "As ~ enters, choose a creature
+       * type" (CR 614.1c). Its own event rather than a `choiceAnswered`, because
+       * the two are not the same fact: the ANSWER to a question is private to its
+       * chooser (and redacted as such), while the value a permanent named is
+       * ANNOUNCED AT THE TABLE and is a permanent, public characteristic of the
+       * board for as long as the card is on it.
+       *
+       * `value` is the raw stored form (a colour letter, a subtype, a seat) and
+       * `described` is it written out for a log line — carried so a reader needs
+       * neither the subject nor a lookup table to render it.
+       */
+      readonly type: 'chosenAsEnters';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly subject: import('./choices.js').ChosenValueSubject;
+      readonly value: string;
+      readonly described: string;
+    }
+  | {
       // A triggered ability matched an event and was placed on the stack.
       readonly type: 'triggerPutOnStack';
       readonly sourceInstanceId: InstanceId;

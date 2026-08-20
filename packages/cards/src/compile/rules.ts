@@ -16,6 +16,7 @@
 
 import type {
   CardType,
+  ChosenValueSubject,
   EffectRef,
   KeywordFlags,
   ManaActivationCondition,
@@ -341,6 +342,54 @@ const KEYWORD_TOKEN = `(${Object.keys(KEYWORD_FLAGS).join('|')})`;
  * control with flying") selects by a subtype or by a characteristic the static
  * filter deliberately cannot read, so those lines keep reporting.
  */
+/**
+ * The printed nouns "As ~ enters, choose …" may name, mapped to the choice
+ * SUBJECT core answers with. A CLOSED table: a noun outside it ("choose a
+ * number between 1 and 10", Talion) is a naming this engine can store but
+ * nothing can yet read, and it reports rather than compiling into a value no
+ * printed line consumes.
+ */
+const AS_ENTERS_SUBJECTS: Readonly<Record<string, ChosenValueSubject>> = Object.freeze({
+  'a creature type': 'creatureType',
+  'a color': 'color',
+  'a player': 'player',
+  'a basic land type': 'basicLandType',
+});
+
+/**
+ * The card-type words an explicit "choose artifact, creature, …" menu may list.
+ * Closed for the same reason every other type table here is: a word outside it
+ * would become a menu entry no reader could ever match.
+ */
+const CHOOSABLE_CARD_TYPES: readonly string[] = Object.freeze([
+  'artifact',
+  'creature',
+  'enchantment',
+  'instant',
+  'sorcery',
+  'land',
+  'planeswalker',
+  'battle',
+]);
+
+/**
+ * Whether the card being compiled prints an "As ~ enters, choose …" line at all.
+ *
+ * Every "of the chosen …" reader consults this before compiling, because a
+ * reader without a naming is the exact half-card shape this compiler exists to
+ * refuse: it would produce an anthem (or a mana ability) over a value nothing
+ * ever writes — a card that reports `'complete'` and then does nothing on the
+ * board. Reported, never approximated.
+ *
+ * Read off the RAW oracle text rather than off the assembly so it works whatever
+ * order the card prints its lines in (Realmwalker names its type on the second
+ * line, Banner of Kinship on the first), and so it does not depend on which
+ * clauses have been absorbed yet.
+ */
+function namesAValueAsItEnters(ctx: RuleContext): boolean {
+  return /\bas [^.]*?\benters, choose\b/i.test(ctx.card.oracleText);
+}
+
 const STATIC_NOUN_TYPES: Readonly<Record<string, CardType | null>> = Object.freeze({
   creature: 'creature',
   permanent: null,
@@ -2609,6 +2658,43 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"Whenever you cast a [TYPE] spell OF THE CHOSEN TYPE, BODY"**
+     * (Vanquisher's Banner, Chronicle of Victory) — the cast trigger narrowed by
+     * the creature type this permanent named as it entered.
+     *
+     * Ordered ABOVE the plain cast trigger, because "a creature spell of the
+     * chosen type" also matches that rule's shape once the tail is ignored — and
+     * ignoring the tail would be a card that draws off EVERY creature spell.
+     *
+     * Refused on a card with no naming line, like every other "of the chosen …"
+     * reader: a trigger over a value nothing writes never fires, and a card that
+     * reports `'complete'` and then does nothing is the failure this contract
+     * exists to prevent.
+     */
+    id: 'trigger-cast-spell-of-chosen-type',
+    description: '"Whenever you cast a [TYPE] spell of the chosen type, BODY"',
+    pattern: /^whenever you cast an? (?:([a-z ]+?) )?spell of the chosen type, (.+)$/,
+    build(match, ctx) {
+      if (!namesAValueAsItEnters(ctx)) return null;
+      const typeWord = match[1];
+      // An absent type word is "a spell of the chosen type" (Chronicle of
+      // Victory) — every card type, narrowed only by the named subtype.
+      const base: readonly TriggerCondition[] =
+        typeWord === undefined ? [{ on: 'castSpell', who: 'you' }] : (spellFiltersFor(typeWord) ?? []);
+      if (base.length === 0) return null;
+      const body = ctx.compileEffectClause(match[2] ?? '', { targetFree: true });
+      if (body === null || body.length === 0) return null;
+      return {
+        triggers: base.map((condition) => ({
+          condition: { ...condition, spellSubtypeIsChosen: true },
+          effects: body,
+          label: `Cast ${describeSpellFilter(condition)} of the chosen type: ${match[2] ?? ''}`,
+        })),
+      };
+    },
+  },
+  {
     id: 'trigger-cast-spell',
     description: '"Whenever you cast a(n) TYPE spell, BODY" (incl. prowess-style text)',
     pattern: /^whenever you cast an? ([a-z ]+?) spell, (.+)$/,
@@ -3086,11 +3172,82 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"As ~ enters, choose a creature type / a color / a player / a basic land
+     * type"** (CR 614.1c) — the naming a permanent makes on the way in.
+     *
+     * The rule contributes only the DECLARATION
+     * (`CardDefinition.asEntersChoice`); who asks it is decided by what kind of
+     * permanent this is, and the assembly (`../compile.ts`) decides that once,
+     * in one place: a land is played, so core's land-play path asks; anything
+     * else resolves, so the `chooseAsEnters` primitive is prepended to the
+     * card's script. A rule that emitted the primitive itself would have to know
+     * the card's type line, and would get it wrong for the first card that is
+     * both.
+     */
+    id: 'as-enters-choose-value',
+    description:
+      '"As ~ enters, choose a creature type / a color / a player / a basic land type" — the CR 614.1c naming, remembered on the permanent',
+    pattern: new RegExp(`^as ~ enters, choose (${Object.keys(AS_ENTERS_SUBJECTS).join('|')})$`),
+    build(match) {
+      const subject = AS_ENTERS_SUBJECTS[match[1] ?? ''];
+      if (subject === undefined) return null;
+      return { asEntersChoice: { subject } };
+    },
+  },
+  {
+    /**
+     * The EXPLICIT-MENU form — Cloud Key's "As ~ enters, choose artifact,
+     * creature, enchantment, instant, or sorcery." Here the card, not the rules,
+     * decides what may be named, so the printed list is parsed into
+     * `AsEntersChoice.options` rather than derived from the subject.
+     *
+     * Kept separate from the rule above because its shape genuinely differs:
+     * there is no "a <noun>" to look up, and folding the two would mean one
+     * pattern with a dead alternation for every card.
+     */
+    id: 'as-enters-choose-from-list',
+    description: '"As ~ enters, choose artifact, creature, enchantment, instant, or sorcery" (Cloud Key)',
+    pattern: /^as ~ enters, choose ((?:[a-z]+, )+or [a-z]+)$/,
+    build(match) {
+      const words = (match[1] ?? '')
+        // ", or" is one separator, not a comma followed by the word "or" — the
+        // printed list is "artifact, creature, …, or sorcery".
+        .split(/,\s*(?:or\s+)?|\s+or\s+/)
+        .map((word) => word.trim())
+        .filter(Boolean);
+      // A closed table, like every other type-word read in this file: a word
+      // outside it would be a menu entry no reader could ever match.
+      if (words.length === 0 || !words.every((word) => CHOOSABLE_CARD_TYPES.includes(word))) return null;
+      return { asEntersChoice: { subject: 'cardType', options: words } };
+    },
+  },
+  {
+    /**
+     * **"~ is the chosen type in addition to its other types"** (Adaptive
+     * Automaton, Metallic Mimic, Roaming Throne) — the permanent joins the type
+     * it named, so the NEXT lord's "of the chosen type" filter can see it.
+     *
+     * Refused on a card that names nothing: a type-gaining line with no naming
+     * line would silently gain nothing, which is exactly the half-card this
+     * contract forbids.
+     */
+    id: 'is-the-chosen-type',
+    description: '"~ is the chosen type in addition to its other types"',
+    pattern: /^~ is the chosen type in addition to its other types$/,
+    build(_match, ctx) {
+      if (!namesAValueAsItEnters(ctx)) return null;
+      return { isChosenSubtype: true };
+    },
+  },
+  {
     id: 'static-buff-your-creatures',
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
     pattern: new RegExp(
-      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s you control (?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s ` +
+        `(you control|of the chosen type|of the chosen color)(?: of the chosen (type|color))? ` +
+        `(?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
     build(match, ctx) {
       // Only a PERMANENT can carry a static ability. An instant/sorcery printing
@@ -3101,9 +3258,24 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[4] === undefined ? 0 : Number.parseInt(match[4], 10);
-      const toughness = match[5] === undefined ? 0 : Number.parseInt(match[5], 10);
+      const power = match[6] === undefined ? 0 : Number.parseInt(match[6], 10);
+      const toughness = match[7] === undefined ? 0 : Number.parseInt(match[7], 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      // WHOSE creatures, and NARROWED BY THE NAMED VALUE. The two tails are one
+      // group because a printed anthem says exactly one of them first: "creatures
+      // you control of the chosen type" (Patchwork Banner) narrows a friendly
+      // anthem, while "creatures of the chosen color" (Gauntlet of Power) is
+      // SYMMETRIC — it pumps the opponent's team too, and reading it as friendly
+      // would be a strictly better card than the one printed.
+      const scopeWord = match[4] ?? '';
+      const narrowWord = match[5] ?? (scopeWord.startsWith('of the chosen ') ? scopeWord.slice('of the chosen '.length) : undefined);
+      const scope: 'you' | 'any' = scopeWord === 'you control' ? 'you' : 'any';
+      if (narrowWord !== undefined && narrowWord !== 'type' && narrowWord !== 'color') return null;
+      // A card can only read a value it also NAMES. Compiling "of the chosen
+      // type" on a card with no "As ~ enters, choose…" line would be an anthem
+      // over a value nothing ever writes — silently blank rather than wrong, and
+      // silently blank is the failure this contract exists to prevent.
+      if (narrowWord !== undefined && !namesAValueAsItEnters(ctx)) return null;
       // The printed NOUN decides the filter's type. "Permanent" maps to no type
       // entry at all, because an absent filter already matches every permanent -
       // inventing a 'permanent' type word would match nothing.
@@ -3116,7 +3288,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const colorWord = match[2]?.trim();
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
-      const keywordText = match[6] ?? match[7];
+      const keywordText = match[8] ?? match[9];
       const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
       // A keyword the engine does not model reports the whole line, never a
       // half-granted anthem.
@@ -3124,8 +3296,10 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const ability: StaticAbility = {
         affects: {
           ...(nounType === null ? {} : { anyOfTypes: [nounType] }),
-          controller: 'you',
+          controller: scope,
           ...(color ? { anyOfColors: [color as never] } : {}),
+          ...(narrowWord === 'type' ? { ofChosenSubtype: true } : {}),
+          ...(narrowWord === 'color' ? { ofChosenColor: true } : {}),
           // The printed word "other": the lord pumps the team, not itself.
           ...(match[1] ? { excludeSource: true } : {}),
         },
@@ -3624,6 +3798,29 @@ export const MANA_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"{T}: Add one mana of the chosen color."** (Coldsteel Heart, Heraldic
+     * Banner, Temple of the Dragon Queen) — the colour is whatever THIS
+     * permanent named as it entered.
+     *
+     * Compiles to `ManaAbility.chosenColor`, which enumerates the five nameable
+     * colours as modes and lets the engine gate them per instance — the same
+     * shape `derivedColors` uses, so the mode index space stays a property of
+     * the definition rather than of the board.
+     *
+     * Refused on a card with no naming line, for the same reason the "of the
+     * chosen type" anthem is: a mana ability that can never produce anything is
+     * a blank, and a blank that reports `'complete'` is worse than a report.
+     */
+    id: 'mana-ability-chosen-color',
+    description: '"{T}: Add one mana of the chosen color."',
+    pattern: /^\{t\}: add one mana of the chosen color$/,
+    build(_match, ctx) {
+      if (!namesAValueAsItEnters(ctx)) return null;
+      return { manaAbilities: [{ chosenColor: true, label: 'Add one mana of the chosen color' }] };
+    },
+  },
+  {
     // COLOURS DERIVED FROM THE BOARD: Reflecting Pool, Exotic Orchard, Fellwar
     // Stone. The mode list is the five colours either way — which colours are
     // actually AVAILABLE is asked of the live board every time the ability is
@@ -3866,13 +4063,33 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'a modal template the compiler does not recognize yet',
   },
   {
+    // NAMING a value as a permanent enters IS implemented now — the choice, the
+    // memory on the instance, and three readers (an anthem, a mana ability and a
+    // cast trigger, all narrowed by "of the chosen …"). So a line that mentions
+    // the named value and still lands here is a READER with no rule, and calling
+    // it "a you may / choose template" would name the wrong blocker entirely:
+    // the value IS stored and readable, and what is missing is the printed
+    // sentence that consumes it (a cost reduction, a copy effect, an extra
+    // trigger instance, a counter formula).
+    //
+    // Checked BEFORE the generic "you may / choose" hint below, which would
+    // otherwise swallow every one of these on the word "chosen".
+    pattern: /\bthe chosen (?:type|color|colour|player|number|name)\b/,
+    missingEngineSystem:
+      'a "the chosen …" READER the compiler does not recognize yet (the named value IS stored on the permanent; this printed line has no rule that reads it)',
+  },
+  {
     // The printed word "you may" IS implemented now, as the `mayEffects`
     // wrapper: "When ~ enters, you may BODY" and "At the beginning of your
     // <step>, you may BODY" compile to a real yes/no whose no is a complete
-    // outcome. So this hint no longer claims the system is missing — that would
-    // send the next agent to rebuild it. What still lands here is a TEMPLATE:
-    // an optional clause whose BODY has no rule (a blink, a copy, a
-    // sacrifice-then-if-you-do chain), or a "choose" that is not a yes/no.
+    // outcome — and so is "As ~ enters, choose a creature type / a color / a
+    // player / a basic land type", which compiles to a naming REMEMBERED on the
+    // permanent. So this hint no longer claims either system is missing; that
+    // would send the next agent to rebuild something that exists. What still
+    // lands here is a TEMPLATE: an optional clause whose BODY has no rule (a
+    // blink, a copy, a sacrifice-then-if-you-do chain), a naming this engine
+    // could store but no printed line can yet read ("choose a number between 1
+    // and 10"), or a "choose" that is neither a yes/no nor a naming.
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
