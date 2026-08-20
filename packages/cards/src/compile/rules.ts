@@ -2627,6 +2627,30 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-draws-card',
+    description: '"Whenever you / a player / an opponent draws a card, BODY"',
+    // The draw WATCHER, not the draw step. It fires on every draw — the turn's
+    // own, a spell's, another trigger's — which is what the printed line says,
+    // and it is a different card from "at the beginning of each player's draw
+    // step" (Spiteful Visions prints BOTH, one on each line).
+    //
+    // The body reads the drawing player through the same `triggering` vocabulary
+    // every other scoped trigger body uses, so "that player loses 1 life"
+    // compiles identically whether the trigger watched a draw, a step or a life
+    // gain.
+    pattern: /^whenever (you|a player|an opponent) draws a card, (.+)$/,
+    build(match, ctx) {
+      const printed = match[1] ?? '';
+      const who: TriggerWho = printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
+      return triggerFrom(
+        ctx,
+        { on: 'drawsCard', who },
+        match[2] ?? '',
+        `${printed} draws: ${match[2] ?? ''}`,
+      );
+    },
+  },
+  {
     id: 'trigger-begin-combat',
     description: '"At the beginning of combat on your turn, BODY"',
     pattern: /^at the beginning of combat on your turn, (.+)$/,
@@ -3929,8 +3953,10 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // puts them on one creature or on a whole filtered group, a static can read
     // "with a +1/+1 counter on it", and the trigger vocabulary now covers ETB,
     // attacks, `permanentEnters`/`permanentDies` (with a controller scope, a
-    // `CardFilter` and the printed word "another"), life gain, combat damage to
-    // a player, begin-combat and the step-beginning triggers. What lands here
+    // `CardFilter` and the printed word "another"), life gain, a DRAW
+    // ("whenever a player draws a card"), combat damage to a player,
+    // begin-combat, and the step-beginning triggers in every printed scope with
+    // their intervening "if". What lands here
     // is a counters TEMPLATE with no rule — and, named so nobody re-builds
     // finished work: phasing, DOUBLING counters, proliferate
     // (needs a chooser over every permanent and player with a counter), counter
@@ -4129,6 +4155,27 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   {
     pattern: /\bdraws? (?:a|two|three|\d+) cards? and (?:you )?loses? \d+ life/,
     missingEngineSystem: 'a compound draw/lose template the compiler does not recognize yet',
+  },
+  {
+    // THE STEP-BEGINNING TRIGGER IS NOT A MISSING SYSTEM, and this hint says so
+    // because the previous wording sent readers to build one that exists.
+    //
+    // What ships: every printed scope — "your", "each player's", "each
+    // opponent's" and the bare "each" — over upkeep, draw step, first main
+    // phase, end step and combat; the optional "you may" form; the printed
+    // intervening "if" (CR 603.4, checked BOTH when the ability would trigger
+    // and again as it resolves); and the TRIGGERING PLAYER, which rides the
+    // stack object into the resolution so a body can say "that player".
+    //
+    // What lands here is therefore a BODY with no rule — not a trigger the
+    // engine cannot express. Named so nobody re-builds finished work, the bodies
+    // still missing in the corpus are: "you win/lose the game", blink (exile
+    // then return), token COPIES of a permanent, the city's blessing/ascend,
+    // amass, discover, the Ring, a delayed "at the beginning of your NEXT
+    // upkeep", and any count derived from a revealed card's mana value.
+    pattern: /^at the beginning of /,
+    missingEngineSystem:
+      'an "at the beginning of…" trigger BODY the compiler does not recognize yet (the trigger itself — every printed scope, the "you may" form, the intervening "if", and the triggering player a body points at — is implemented)',
   },
 ]);
 
