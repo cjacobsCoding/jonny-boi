@@ -16,11 +16,12 @@
  */
 
 import type { CastZone } from './actions.js';
-import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
+import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
 // Type-only, so it is erased at build time and no runtime import cycle exists
 // (`copy.ts` imports this module's `unionProtection` for real).
 import type { CopyAsEntersSpec } from './copy.js';
+import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
 // TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
 // and subtype readers, so a VALUE import here would close a runtime cycle. A
 // `CardFilter` is plain serializable data, so the type is all a printed cost
@@ -1278,8 +1279,79 @@ export interface ManaAbility {
   readonly rider?: ManaAbilityRider;
   /** "Activate only if …". */
   readonly restriction?: ManaActivationCondition;
+  /**
+   * "Spend this mana only to cast a creature spell" — a restriction carried by
+   * the MANA this ability produces, not by the source (see spend-restriction.ts).
+   *
+   * It is the one entry in this interface that outlives the activation: the other
+   * four are answered while the permanent is being tapped, and this one is
+   * answered later, by the pool, when the mana is spent.
+   */
+  readonly spendRestriction?: ManaSpendRestriction;
   /** Human-readable text for logs and the inspector. */
   readonly label?: string;
+}
+
+/**
+ * The spend-restriction descriptor of a definition — what a restricted mana asks
+ * about the spell it is being offered to pay for.
+ *
+ * Memoized per definition and per kind. Definitions are immutable and shared, so
+ * this is computed once per printed card for the whole process; a payment on a
+ * board that holds restricted mana therefore costs a WeakMap lookup rather than
+ * an allocation, and a payment on any other board never calls this at all.
+ */
+const SPEND_PURPOSE_MEMO = new WeakMap<
+  CardDefinition,
+  { cast?: ManaSpendPurpose; activate?: ManaSpendPurpose }
+>();
+
+export function spendPurposeFor(def: CardDefinition, kind: ManaSpendKind): ManaSpendPurpose {
+  let entry = SPEND_PURPOSE_MEMO.get(def);
+  if (!entry) {
+    entry = {};
+    SPEND_PURPOSE_MEMO.set(def, entry);
+  }
+  const memoized = entry[kind];
+  if (memoized) return memoized;
+  const built: ManaSpendPurpose = Object.freeze({
+    kind,
+    // Lowercased once, here, rather than on every clause comparison. `CardType`
+    // is already lowercase; `subtypes` is printed in title case.
+    types: def.types as readonly string[],
+    subtypes: Object.freeze((def.subtypes ?? []).map((subtype) => subtype.toLowerCase())),
+    legendary: def.legendary === true,
+    colors: colorsOfDefinition(def),
+  });
+  entry[kind] = built;
+  return built;
+}
+
+/**
+ * The purpose to hand {@link canPay}/{@link payCost}, **or `undefined` when the
+ * pool holds no restricted mana at all**.
+ *
+ * ⚠️ THE `undefined` RETURN IS THE POINT, exactly as it is for `manaExtrasOf`.
+ * Payment feasibility is asked for every card in hand on every decision, and on
+ * essentially every board there is nothing to restrict; the whole system must
+ * therefore cost that board one property read on the pool. Call sites read
+ * better for it too: the purpose is named at the place that knows what is being
+ * paid for, and costs nothing where there is nothing to pay for it with.
+ *
+ * ⛔ **DO NOT USE THIS FOR `planManaPayment`.** It asks the pool as it is NOW, and
+ * a planner is called before the mana exists — the restricted mana it is about to
+ * create is exactly what the plan is for. Gating on the live pool made the
+ * planner refuse to tap Ancient Ziggurat at all, because there was no purpose to
+ * check the restriction it was creating against, and the pilot then read a
+ * castable creature as uncastable. The planner takes the DEFINITION and resolves
+ * the purpose itself, lazily; see `mana-plan.ts`.
+ */
+export function spendPurposeIfRestricted(
+  pool: ManaPool,
+  def: CardDefinition,
+  kind: ManaSpendKind,
+): ManaSpendPurpose | undefined {
+  return pool.restricted === undefined ? undefined : spendPurposeFor(def, kind);
 }
 
 /**

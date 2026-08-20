@@ -155,6 +155,17 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   stackResolved: 'public',
   // Mana in a pool is open information in paper Magic, and it is the raw material
   // for the brief's §35–37 "represented mana" reasoning.
+  //
+  // ⚠️ DELIBERATE: this now also carries `spendRestriction` — the printed wording
+  // on restricted mana ("only to cast a creature spell"). It travels PUBLIC, and
+  // that is the correct classification rather than a convenient one: the
+  // restriction is printed on a permanent every seat can read, and the whole table
+  // watched that permanent be tapped. There is no seat entitlement to compute, so
+  // it satisfies this file's one rule — "only what a spectator holding no cards
+  // would know". Redacting it would ALSO be a mistake in the other direction: an
+  // opponent who sees three mana float off Ancient Ziggurat and cannot see the
+  // restriction would read the board as three mana of represented interaction,
+  // which is the exact inference §35–37 asks the pilot to make correctly.
   manaAdded: 'public',
   manaPoolEmptied: 'public',
   // Paying "unless its controller pays {3}" happens on the table, in front of

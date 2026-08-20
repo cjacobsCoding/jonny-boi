@@ -32,6 +32,7 @@ import {
   manaActivationConditionMet,
   manaExtrasOf,
   manaModesOf,
+  spendPurposeIfRestricted,
   playableFaceOf,
 } from './card.js';
 import type { ChoiceAnswer, ChoiceRequest, PendingChoice, ResolutionFrame, TargetOption } from './choices.js';
@@ -51,7 +52,13 @@ import {
   validateChoiceAnswer,
 } from './choices.js';
 import { interveningIfHolds } from './intervening.js';
-import { asEntersOptions, asEntersPrompt, chosenColorOf, recordChosenAsEntered } from './as-enters.js';
+import {
+  asEntersOptions,
+  asEntersPrompt,
+  chosenColorOf,
+  chosenSubtypeOf,
+  recordChosenAsEntered,
+} from './as-enters.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
 import type { ChoiceChannel, EffectRegistry } from './effects.js';
@@ -71,6 +78,8 @@ import {
 } from './mana.js';
 import type { ManaTapPlan } from './mana-plan.js';
 import { planManaPayment } from './mana-plan.js';
+import type { ManaSpendRestriction } from './spend-restriction.js';
+import { resolveSpendRestriction, restrictionNamesChosenSubtype } from './spend-restriction.js';
 import type {
   CardInstance,
   GameState,
@@ -2148,7 +2157,10 @@ function manaModeBlockedReason(
     if (cost.life !== undefined && cost.life > 0 && player.life < cost.life) {
       return 'you do not have enough life to pay that cost';
     }
-    if (cost.mana && !canPay(player.manaPool, cost.mana)) {
+    if (
+      cost.mana &&
+      !canPay(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, perm.def, 'activate'))
+    ) {
       return `insufficient mana to activate ${perm.def.name}`;
     }
   }
@@ -2273,6 +2285,11 @@ function payManaCostFromBoard(
     if (!source || source.tapped) return false;
     tapPermanentForMana(state, source, player, tap.production, emit);
   }
+  // NO SPEND PURPOSE, deliberately. This pays a cost DEMANDED BY A RESOLVING
+  // EFFECT ("unless its controller pays {3}") — it is neither casting a spell nor
+  // activating an ability, so no printed spend restriction in this engine permits
+  // it, and `payCost` refuses restricted mana for exactly that reason. An
+  // Ancient Ziggurat mana cannot pay a Mana Leak tax, and it does not here.
   const result = payCost(state.players[player].manaPool, cost);
   if (!result.ok) return false;
   state.players[player].manaPool = result.pool;
@@ -2280,21 +2297,38 @@ function payManaCostFromBoard(
   return true;
 }
 
-/** Tap a source and add its production to its controller's pool, with events. */
+/**
+ * Tap a source and add its production to its controller's pool, with events.
+ *
+ * `restriction` is what the ability printed about the MANA ("Spend this mana only
+ * to cast a creature spell"); `undefined` for every ordinary source, in which
+ * case the pool stays the plain six-colour record the hot path short-circuits on.
+ */
 function tapPermanentForMana(
   state: GameState,
   source: CardInstance,
   player: PlayerId,
   production: ManaProduction,
   emit: (e: GameEvent) => void,
+  restriction?: ManaSpendRestriction,
 ): void {
   source.tapped = true;
   emit({ type: 'tapped', instanceId: source.instanceId });
   const owner = state.players[player];
-  owner.manaPool = addProduction(owner.manaPool, production);
+  owner.manaPool = addProduction(owner.manaPool, production, restriction);
   for (const color of MANA_COLORS) {
     const amount = production[color] ?? 0;
-    if (amount > 0) emit({ type: 'manaAdded', player, color, amount });
+    if (amount <= 0) continue;
+    // The restriction rides the event because mana in a pool is PUBLIC in this
+    // engine (see `sim/observation.ts`), so a restriction on public mana is
+    // public too: it was printed on a permanent everyone can read, and the whole
+    // table watched that permanent be tapped. Emitting the plain event shape when
+    // there is none keeps every existing log line byte-identical.
+    emit(
+      restriction === undefined
+        ? { type: 'manaAdded', player, color, amount }
+        : { type: 'manaAdded', player, color, amount, spendRestriction: restriction.label },
+    );
   }
 }
 
@@ -2337,7 +2371,15 @@ function applyTapForMana(
       // Paid BEFORE the production is added, which is what makes a filter land a
       // filter rather than a free two mana: the input leaves the pool, then the
       // output arrives.
-      const paid = payCost(player.manaPool, cost.mana);
+      const paid = payCost(
+        player.manaPool,
+        cost.mana,
+        // A mana ability IS an ability, so a restricted mana that may "activate
+        // abilities of artifacts" can legally fund an artifact filter land — and
+        // one that may only cast creature spells cannot. Same question, same
+        // helper, as every other activation.
+        spendPurposeIfRestricted(player.manaPool, source.def, 'activate'),
+      );
       if (!paid.ok) return rejectWith(prevState, paid.reason);
       player.manaPool = paid.pool;
       emit({ type: 'manaCostPaid', player: action.player, cost: { ...cost.mana } });
@@ -2348,7 +2390,14 @@ function applyTapForMana(
     }
   }
 
-  tapPermanentForMana(state, source, action.player, production, emit);
+  tapPermanentForMana(
+    state,
+    source,
+    action.player,
+    production,
+    emit,
+    spendRestrictionMadeBy(source, extra?.ability.spendRestriction),
+  );
 
   // The RIDER runs as part of the ability's own resolution, AFTER the mana is
   // added — a pain land's damage is not a cost you may decline, and it is damage
@@ -2377,6 +2426,25 @@ function applyTapForMana(
   if (damage > 0 || (extra?.ability.cost?.life ?? 0) > 0) checkStateBasedActions(state, emit);
   // Mana abilities don't use the stack and don't reset priority passing.
   return { state, events };
+}
+
+/**
+ * The concrete restriction a tap of `source` puts on the mana it makes.
+ *
+ * For every card but the "…of the chosen type" three this is the printed
+ * restriction itself, returned by identity — the shared frozen object, no
+ * allocation. Cavern of Souls and friends name a creature type as they enter,
+ * and core's as-enters seam already stores that answer on the INSTANCE
+ * (`chosenAsEntered`), so the value is read from there rather than tracked a
+ * second time; substituting it here means the pool only ever holds concrete
+ * restrictions and no payment path has to find the permanent again.
+ */
+function spendRestrictionMadeBy(
+  source: CardInstance,
+  printed: ManaSpendRestriction | undefined,
+): ManaSpendRestriction | undefined {
+  if (printed === undefined || !restrictionNamesChosenSubtype(printed)) return printed;
+  return resolveSpendRestriction(printed, chosenSubtypeOf(source));
 }
 
 function applyCastSpell(
@@ -2545,8 +2613,15 @@ function applyCastSpell(
         ? madnessCost
         : castDef.cost;
   if (cost) {
-    if (!canPay(player.manaPool, cost)) return rejectWith(prevState, 'insufficient mana to cast this spell');
-    const result = payCost(player.manaPool, cost);
+    // WHAT the mana is being spent on, for any restricted mana in the pool. The
+    // face being CAST is the object a restriction reads (a modal DFC's back face
+    // is its own spell with its own types), which is why `castDef` is passed
+    // rather than the card's printed front.
+    const purpose = spendPurposeIfRestricted(player.manaPool, castDef, 'cast');
+    if (!canPay(player.manaPool, cost, purpose)) {
+      return rejectWith(prevState, 'insufficient mana to cast this spell');
+    }
+    const result = payCost(player.manaPool, cost, purpose);
     if (!result.ok) return rejectWith(prevState, result.reason);
     player.manaPool = result.pool;
   }
@@ -3328,8 +3403,14 @@ function applyCycleCard(
   const index = action.abilityIndex ?? 0;
   const ability = card.def.cycling?.[index];
   if (!ability) return rejectWith(prevState, 'that card has no such cycling ability');
-  if (!canPay(player.manaPool, ability.cost)) return rejectWith(prevState, 'insufficient mana to cycle this card');
-  const paid = payCost(player.manaPool, ability.cost);
+  // Cycling is an ACTIVATED ability of a card in your hand (CR 702.29a), so
+  // restricted mana that may activate abilities of that kind of source may fund
+  // it and mana that may only cast spells may not.
+  const cyclePurpose = spendPurposeIfRestricted(player.manaPool, card.def, 'activate');
+  if (!canPay(player.manaPool, ability.cost, cyclePurpose)) {
+    return rejectWith(prevState, 'insufficient mana to cycle this card');
+  }
+  const paid = payCost(player.manaPool, ability.cost, cyclePurpose);
   if (!paid.ok) return rejectWith(prevState, paid.reason);
   player.manaPool = paid.pool;
 
@@ -3425,7 +3506,11 @@ function applyActivateAbility(
   const player = state.players[action.player];
   const cost = ability.cost;
   if (cost.mana) {
-    const paid = payCost(player.manaPool, cost.mana);
+    const paid = payCost(
+      player.manaPool,
+      cost.mana,
+      spendPurposeIfRestricted(player.manaPool, source.def, 'activate'),
+    );
     if (!paid.ok) return rejectWith(prevState, paid.reason);
     player.manaPool = paid.pool;
   }
@@ -3524,7 +3609,12 @@ function unpayableActivationReason(
     // to a state-based action before the ability ever resolved.
     return 'you do not have enough life to pay that cost';
   }
-  if (cost.mana && !canPay(player.manaPool, cost.mana)) return 'insufficient mana for that ability';
+  if (
+    cost.mana &&
+    !canPay(player.manaPool, cost.mana, spendPurposeIfRestricted(player.manaPool, source.def, 'activate'))
+  ) {
+    return 'insufficient mana for that ability';
+  }
   if (cost.loyalty !== undefined) {
     // A loyalty cost only means anything on a planeswalker carrying loyalty
     // counters; anything else declaring one is malformed data, refused loudly.
@@ -3729,7 +3819,13 @@ function madnessActionsFor(state: GameState): GameAction[] {
   pushManaTapActions(state, me, actions);
   const card = instanceIn(player.exile, window.instanceId);
   const cost = card?.def.madness;
-  if (!card || cost === undefined || !canPay(player.manaPool, cost)) return actions;
+  if (
+    !card ||
+    cost === undefined ||
+    !canPay(player.manaPool, cost, spendPurposeIfRestricted(player.manaPool, card.def, 'cast'))
+  ) {
+    return actions;
+  }
   const restriction = targetRestrictionOf(card.def);
   if (restriction === undefined) {
     actions.push({ kind: 'castSpell', player: me, instanceId: card.instanceId, fromZone: 'exile' });
@@ -3905,7 +4001,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     if (flashbackCost === undefined || isLand(card.def)) continue;
     const timing = castTiming(card.def);
     if (timing !== 'instant' && !sorcerySpeedWindow) continue;
-    if (!canPay(player.manaPool, flashbackCost)) continue;
+    if (
+      !canPay(
+        player.manaPool,
+        flashbackCost,
+        spendPurposeIfRestricted(player.manaPool, card.def, 'cast'),
+      )
+    ) {
+      continue;
+    }
     // A flashback cost may print a mandatory life rider ("Flashback—{1}{U}, Pay
     // 3 life"). It is part of the cost, so a caster who cannot pay it is not
     // offered the cast — the same gate `applyCastSpell` enforces.
@@ -3964,7 +4068,15 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
     const cycling = card.def.cycling;
     if (!cycling || cycling.length === 0) continue;
     for (let index = 0; index < cycling.length; index++) {
-      if (!canPay(player.manaPool, cycling[index]!.cost)) continue;
+      if (
+        !canPay(
+          player.manaPool,
+          cycling[index]!.cost,
+          spendPurposeIfRestricted(player.manaPool, card.def, 'activate'),
+        )
+      ) {
+        continue;
+      }
       actions.push({ kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index });
     }
   }
@@ -4072,8 +4184,15 @@ function pushCastOffers(
   if (timing !== 'instant' && !sorcerySpeedWindow) return;
   // `free` is a permission that says "without paying its mana cost" (a Siege
   // reward, CR 310.4). Otherwise the face's own printed cost - which is also
-  // exactly what an AFTERMATH half cast from the graveyard pays.
-  if (options?.free !== true && def.cost && !canPay(pool, def.cost)) return;
+  // exactly what an AFTERMATH half cast from the graveyard pays, and which any
+  // restricted mana in the pool is only allowed to fund if this face qualifies.
+  if (
+    options?.free !== true &&
+    def.cost &&
+    !canPay(pool, def.cost, spendPurposeIfRestricted(pool, def, 'cast'))
+  ) {
+    return;
+  }
   // A modal spell with nothing it could legally announce cannot be cast — the
   // same judgement `applyCastSpell` makes, from the same helper.
   if (!modalSpellIsCastable(state, def, me)) return;
