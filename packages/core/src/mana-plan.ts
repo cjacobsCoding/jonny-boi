@@ -210,8 +210,34 @@ export function planManaPayment(
   player: PlayerId,
   cost: ManaCost,
   legalActions: readonly GameAction[],
-  purpose?: ManaSpendPurpose,
+  spendFor?: CardDefinition,
+  spendKind: ManaSpendKind = 'cast',
 ): ManaTapPlan[] | undefined {
+  // ⚠️ THE PURPOSE IS TAKEN AS A DEFINITION, NOT AS A BUILT `ManaSpendPurpose`,
+  // AND IT IS RESOLVED LAZILY. Both halves matter.
+  //
+  // Lazily, because this is the hottest function in the engine and the purpose is
+  // only ever READ when some mana in play carries a restriction — which is almost
+  // never. `resolvePurpose` is called from exactly two places below, each already
+  // behind a `!== undefined` test, so an ordinary board pays two extra unread
+  // arguments and nothing else.
+  //
+  // As a definition, because the caller CANNOT decide in advance whether the
+  // purpose will be needed. `spendPurposeIfRestricted` asks the pool, and at
+  // planning time the pool is usually EMPTY — the restricted mana has not been
+  // made yet; making it is what the plan is for. Gating on the live pool made the
+  // planner refuse to tap Ancient Ziggurat at all, because the restriction it was
+  // about to create had nowhere to be checked against. That bug is why this
+  // signature takes the card and not the answer.
+  let purpose: ManaSpendPurpose | undefined;
+  let purposeResolved = spendFor === undefined;
+  const resolvePurpose = (): ManaSpendPurpose | undefined => {
+    if (!purposeResolved) {
+      purpose = spendPurposeFor(spendFor as CardDefinition, spendKind);
+      purposeResolved = true;
+    }
+    return purpose;
+  };
   // ALLOCATION NOTE. This is the hottest function in the sim profile (8.7% of self
   // time), and it is dominated by the cheap cases rather than the hard ones: the
   // recorded corpus of real games is 44% "no untapped sources at all". So both
@@ -221,7 +247,7 @@ export function planManaPayment(
   // `canPay` is the authority on "done"; the distance heuristic only orders taps.
   // Checked against the LIVE pool: `canPay` only reads, so the copy can wait until
   // we know we are going to mutate one.
-  if (canPay(current, cost, purpose)) return [];
+  if (canPay(current, cost, current.restricted === undefined ? undefined : resolvePurpose())) return [];
 
   // Nothing to tap ⇒ nothing can change ⇒ unpayable. Returning here skips the
   // grouping pass entirely for nearly half of all calls. Indexed rather than
@@ -301,7 +327,7 @@ export function planManaPayment(
     // chains — and it can only ever decline a payment, never make an illegal one.
     const spendRestriction = manaSpendRestrictionOf(lastExtras, mode);
     if (spendRestriction !== undefined) {
-      if (!restrictionAllows(spendRestriction, purpose)) continue;
+      if (!restrictionAllows(spendRestriction, resolvePurpose())) continue;
       anyRestricted = true;
     }
 
@@ -359,7 +385,11 @@ export function planManaPayment(
   // overwhelming majority of boards — `usableMana` returns `pool[color]` after one
   // property read in that case.
   if (current.restricted === undefined) densifyInto(current, s.pool, 0);
-  else for (let i = 0; i < COLOR_COUNT; i++) s.pool[i] = usableMana(current, MANA_COLORS[i] as ManaColor, purpose);
+  else {
+    for (let i = 0; i < COLOR_COUNT; i++) {
+      s.pool[i] = usableMana(current, MANA_COLORS[i] as ManaColor, resolvePurpose());
+    }
+  }
   const genericOwed = cost.generic ?? 0;
   // `canPay` is the authority on "done" and reads a `ManaPool`, so one mutable pool
   // object tracks the dense running total for it. It is this function's own copy.
@@ -375,7 +405,7 @@ export function planManaPayment(
   // each be "affordable" on their own and lethal together.
   let lifeLeft = view.players[player].life;
 
-  while (!canPay(pool, cost, purpose)) {
+  while (!canPay(pool, cost, anyRestricted ? resolvePurpose() : undefined)) {
     // At least one pip is still owed (canPay said so). Flooring at 1 matters when
     // the heuristic can't see the shortfall — a hybrid symbol reads as satisfied
     // by either colour — so a useful tap is still accepted instead of the planner
@@ -412,7 +442,7 @@ export function planManaPayment(
           const color = MANA_COLORS[i] as ManaColor;
           const have = afterCost
             ? anyRestricted
-              ? usableMana(afterCost, color, purpose)
+              ? usableMana(afterCost, color, resolvePurpose())
               : afterCost[color]
             : (s.pool[i] as number);
           const add = s.production[at + i] as number;
@@ -489,7 +519,7 @@ export function planManaPayment(
       pool = paid.pool;
       for (let i = 0; i < COLOR_COUNT; i++) {
         const color = MANA_COLORS[i] as ManaColor;
-        s.pool[i] = anyRestricted ? usableMana(pool, color, purpose) : pool[color];
+        s.pool[i] = anyRestricted ? usableMana(pool, color, resolvePurpose()) : pool[color];
       }
     }
     if (anyRestricted) {
@@ -503,7 +533,7 @@ export function planManaPayment(
         s.tapRestriction[bestTap],
       );
       for (let i = 0; i < COLOR_COUNT; i++) {
-        s.pool[i] = usableMana(pool, MANA_COLORS[i] as ManaColor, purpose);
+        s.pool[i] = usableMana(pool, MANA_COLORS[i] as ManaColor, resolvePurpose());
       }
     } else {
       for (let i = 0; i < COLOR_COUNT; i++) {

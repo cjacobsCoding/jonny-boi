@@ -66,7 +66,6 @@ import {
   manaColorsOffered,
   manaModesOf,
   planManaPayment,
-  spendPurposeIfRestricted,
 } from '@jonny-boi/core';
 import { cardValue } from './card-value.js';
 import type { PilotView } from './pilot.js';
@@ -440,15 +439,12 @@ function bestUnlockedValue(
     if (!couldPay(query.pips, i, query.capWithLand, query.availableWithLand)) continue;
     const spell = spells[i] as CardInstance;
     const cost = spell.def.cost as ManaCost;
-    // What the mana would be spent ON, so a board holding restricted mana is not
-    // told a spell is unlocked by a land whose mana could never pay for it.
-    // `undefined` (and free) whenever no restricted mana is floating.
-    const purpose = spendPurposeIfRestricted(view.players[me].manaPool, spell.def, 'cast');
 
     let already = query.payableNow[i];
     if (already === undefined) {
       already = couldPay(query.pips, i, query.colorCap, query.availableMana)
-        ? planManaPayment(view as unknown as GameState, me, cost, legalActions, purpose) !== undefined
+        ? planManaPayment(view as unknown as GameState, me, cost, legalActions, spell.def, 'cast') !==
+          undefined
         : false;
       query.payableNow[i] = already;
     }
@@ -461,7 +457,15 @@ function bestUnlockedValue(
         actionsWithLand.push({ kind: 'tapForMana', player: me, instanceId: land.instanceId, mode });
       }
     }
-    if (planManaPayment(withLand, me, cost, actionsWithLand as GameAction[], purpose) === undefined) continue;
+    // The DEFINITION, not a prebuilt purpose: the restricted mana this land would
+    // make does not exist yet, so a purpose gated on the live pool would be
+    // `undefined` and the land would look like it unlocks nothing.
+    if (
+      planManaPayment(withLand, me, cost, actionsWithLand as GameAction[], spell.def, 'cast') ===
+      undefined
+    ) {
+      continue;
+    }
     best = value;
   }
   return best;

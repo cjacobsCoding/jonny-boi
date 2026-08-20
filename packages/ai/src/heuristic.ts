@@ -66,7 +66,6 @@ import {
   loyaltyOf,
   MANA_COLORS,
   planManaPayment,
-  spendPurposeIfRestricted,
   restrictionOfEffects,
   modalSpecOf,
   modeCountsFor,
@@ -286,7 +285,8 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
       me,
       cost,
       legalActions,
-      spendPurposeIfRestricted(view.players[me].manaPool, exiled!.def, 'cast'),
+      exiled!.def,
+      'cast',
     );
     const next = plan?.[0];
     if (next) {
@@ -555,7 +555,8 @@ function bestEquipPlay(
         me,
         mana,
         legalActions,
-        spendPurposeIfRestricted(view.players[me].manaPool, perm.def, 'activate'),
+        perm.def,
+        'activate',
       );
       if (!plan) continue; // cannot fund it this turn
       const action: GameAction =
@@ -661,7 +662,8 @@ function bestSpellGoal(
       me,
       goal.cost,
       ctx.legalActions,
-      spendPurposeIfRestricted(ctx.view.players[me].manaPool, goal.card.def, 'cast'),
+      goal.card.def,
+      'cast',
     );
     if (plan) return { goal, plan };
   }
@@ -1356,7 +1358,8 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
         me,
         ability.cost,
         ctx.legalActions,
-        spendPurposeIfRestricted(view.players[me].manaPool, card.def, 'activate'),
+        card.def,
+        'activate',
       );
       if (!plan) continue;
       best = {
@@ -2337,7 +2340,8 @@ function collectPriorityCandidates(
       me,
       goal.cost,
       legalActions,
-      spendPurposeIfRestricted(view.players[me].manaPool, goal.card.def, 'cast'),
+      goal.card.def,
+      'cast',
     );
     if (!plan) continue; // cannot be funded from this board — not an option at all
     const plies: GameAction[] = [];
@@ -2402,7 +2406,8 @@ function bestEquipMacro(
         me,
         mana,
         legalActions,
-        spendPurposeIfRestricted(view.players[me].manaPool, perm.def, 'activate'),
+        perm.def,
+        'activate',
       );
       if (!plan) continue;
       const plies: GameAction[] = [];

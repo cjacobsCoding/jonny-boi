@@ -13,9 +13,12 @@
  *   - an ACTIVATION RESTRICTION           (the Verge cycle, Nimbus Maze, Mox Opal)
  *   - COLOURS DERIVED FROM THE BOARD      (Reflecting Pool, Exotic Orchard)
  *
- * The fifth — a SPEND RESTRICTION ("spend this mana only to cast…") — is NOT
- * shipped, because it colours the mana rather than the source: the POOL would
- * have to carry it. Cavern of Souls therefore still reports, by name.
+ * The fifth — a SPEND RESTRICTION ("spend this mana only to cast…") — is now real
+ * too, and it is the one that needed a different kind of work: it colours the
+ * MANA rather than the source, so the POOL carries it (core's
+ * spend-restriction.ts) and every payment path asks. Cavern of Souls still
+ * reports, but for the RIGHT reason now — the creature type it remembers, chosen
+ * as it enters, which is a separate system.
  *
  * That distinction is the point of this file. A gap named wrongly is worse than a
  * gap named loudly — it sends the next contributor to write rule-table data
@@ -263,7 +266,12 @@ describe('what the mana model still does NOT have is reported by name', () => {
     return result.missing.map((m) => m.missingEngineSystem).join(' | ');
   }
 
-  it('Cavern of Souls names the SPEND RESTRICTION gap — the POOL would have to carry it', () => {
+  it('Cavern of Souls names the CHOSEN TYPE — the pool carries the restriction now', () => {
+    // The spend restriction itself is implemented (core's spend-restriction.ts and
+    // `spend-restriction.test.ts`). What Cavern still needs is a creature type
+    // REMEMBERED on the permanent, chosen as it enters — a different system, and
+    // the hint has to say so rather than sending the next contributor to rebuild
+    // a pool that already carries restrictions.
     const gap = gapsOf(
       makeCard({
         name: 'Cavern of Souls',
@@ -272,7 +280,23 @@ describe('what the mana model still does NOT have is reported by name', () => {
           'As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type.',
       }),
     );
-    expect(gap).toContain('SPEND RESTRICTION');
+    expect(gap).toContain('CHOSEN AS THE PERMANENT ENTERS');
+    expect(gap).not.toContain('a SPEND RESTRICTION on produced mana');
+  });
+
+  it('Gwenna names a spend-restriction WORDING gap, not a missing system', () => {
+    // "Add two mana in any combination of colors" is a production payload no rule
+    // reads yet. The restriction half is fine, so claiming "the pool cannot carry
+    // a restriction" here would be a lie about the engine.
+    const gap = gapsOf(
+      makeCard({
+        name: 'Gwenna, Eyes of Gaea',
+        typeLine: { supertypes: ['Legendary'], types: ['Creature'], subtypes: ['Elf'] },
+        oracleText:
+          '{T}: Add two mana in any combination of colors. Spend this mana only to cast creature spells or activate abilities of creature sources.',
+      }),
+    );
+    expect(gap).toContain('restricted mana itself is implemented');
   });
 
   it('Springleaf Drum names the cost component that is missing, not a vague template', () => {

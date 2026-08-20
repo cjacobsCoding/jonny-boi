@@ -19,7 +19,6 @@
  */
 import {
   planManaPayment,
-  spendPurposeIfRestricted,
   type CardInstance,
   type CastZone,
   type GameAction,
@@ -67,7 +66,8 @@ export function castSequence(
         player,
         cost,
         legalActions,
-        spendPurposeIfRestricted(view.players[player].manaPool, card.def, 'cast'),
+        card.def,
+        'cast',
       )
     : [];
   if (!plan) return null;
@@ -108,8 +108,7 @@ export function castableWithTaps(
   for (const card of hand) {
     const cost = card.def.cost;
     if (!cost) continue;
-    const purpose = spendPurposeIfRestricted(view.players[player].manaPool, card.def, 'cast');
-    if (planManaPayment(view, player, cost, legalActions, purpose)) out.add(card.instanceId);
+    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast')) out.add(card.instanceId);
   }
   return out;
 }
@@ -138,8 +137,7 @@ export function graveyardCastableWithTaps(
     if (cost === undefined) continue;
     const instantSpeed = card.def.timing === 'instant' || card.def.types.includes('instant');
     if (!instantSpeed && !sorceryWindowOpen) continue;
-    const purpose = spendPurposeIfRestricted(view.players[player].manaPool, card.def, 'cast');
-    if (planManaPayment(view, player, cost, legalActions, purpose)) out.add(card.instanceId);
+    if (planManaPayment(view, player, cost, legalActions, card.def, 'cast')) out.add(card.instanceId);
   }
   return out;
 }

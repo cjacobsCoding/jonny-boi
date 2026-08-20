@@ -1084,6 +1084,14 @@ export function spendPurposeFor(def: CardDefinition, kind: ManaSpendKind): ManaS
  * therefore cost that board one property read on the pool. Call sites read
  * better for it too: the purpose is named at the place that knows what is being
  * paid for, and costs nothing where there is nothing to pay for it with.
+ *
+ * ⛔ **DO NOT USE THIS FOR `planManaPayment`.** It asks the pool as it is NOW, and
+ * a planner is called before the mana exists — the restricted mana it is about to
+ * create is exactly what the plan is for. Gating on the live pool made the
+ * planner refuse to tap Ancient Ziggurat at all, because there was no purpose to
+ * check the restriction it was creating against, and the pilot then read a
+ * castable creature as uncastable. The planner takes the DEFINITION and resolves
+ * the purpose itself, lazily; see `mana-plan.ts`.
  */
 export function spendPurposeIfRestricted(
   pool: ManaPool,

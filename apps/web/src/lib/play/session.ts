@@ -850,7 +850,8 @@ export class GameSession {
       player,
       cost,
       this.legalActions(),
-      spendPurposeIfRestricted(this.state.players[player].manaPool, def, kind),
+      def,
+      kind,
     );
     return plan && plan.length > 0 ? (plan[0] as ManaTapPlan) : null;
   }
@@ -877,7 +878,8 @@ export class GameSession {
         player,
         cost,
         this.legalActions(),
-        spendPurposeIfRestricted(this.state.players[player].manaPool, def, kind),
+        def,
+        kind,
       ) !== undefined
     );
   }
