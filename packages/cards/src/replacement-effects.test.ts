@@ -415,68 +415,75 @@ describe('the shipped definitions really change a board', () => {
 
 // --- whole games ------------------------------------------------------------------
 
-function deckWith(key: readonly CardDefinition[], filler: CardDefinition, copies = 8): {
-  cards: readonly CardDefinition[];
-} {
-  const cards: CardDefinition[] = [];
-  for (let i = 0; i < copies; i++) cards.push(...key);
-  while (cards.length < 40) cards.push(filler);
-  return { cards };
-}
-
-/**
- * Play a real game, taking any legal action that casts `cardName` the moment one
- * is offered and otherwise deferring to the heuristic pilot — the same shape the
- * counters-template suite uses, and for the same reason: a pilot-only game
- * proves the pilot's taste as much as the card's wiring.
- */
-function playGameCasting(
-  cardName: string,
-  decks: { A: { cards: readonly CardDefinition[] }; B: { cards: readonly CardDefinition[] } },
-  seed: number,
-  maxActions = 900,
-): { state: GameState; events: readonly GameEvent[] } {
-  const registry = buildRegistry();
-  const pilot = createHeuristicPilot();
-  const rng = createRng(seed);
-  const created = createGame({ seed, decks, registry });
-  let state = created.state;
-  const events: GameEvent[] = [...created.events];
-  for (let i = 0; i < maxActions && !state.gameOver; i++) {
-    const legal = generateLegalActions(state, DEFAULT_RULES);
-    if (legal.length === 0) break;
-    const named = legal.find((action) => {
-      if (action.kind !== 'castSpell' && action.kind !== 'activateAbility') return false;
-      const source = [...state.battlefield, ...state.players.A.hand, ...state.players.B.hand].find(
-        (c) => c.instanceId === action.instanceId,
-      );
-      return source?.def.name === cardName;
-    });
-    const chosen = named ?? pilot.chooseAction({ view: state, legalActions: legal, rng, registry });
-    const result = applyAction(state, chosen, DEFAULT_RULES, registry);
-    state = result.state;
-    events.push(...result.events);
-  }
-  return { state, events };
-}
-
 describe('a fog cast in a real game really stops combat damage', () => {
-  it('prevents the damage, logs why, and wears off in cleanup', () => {
-    const fog = playable(FOG);
-    const bear = { ...GREEN_BEAR, id: 'fog-bear', name: 'Fog Bear' };
-    const decks = {
-      A: deckWith([fog, bear], FOREST, 6),
-      B: deckWith([bear], FOREST, 6),
+  it('is cast at declare-blockers, prevents the swing, and wears off in cleanup', () => {
+    const registry = buildRegistry();
+    const state = freshState();
+    const attacker = put(state, { ...GREEN_BEAR, id: 'fog-ogre', name: 'Ogre', power: 6, toughness: 6 }, 'A');
+    put(state, FOREST, 'B');
+    const fogCard: CardInstance = {
+      instanceId: state.nextInstanceId++,
+      def: playable(FOG),
+      controller: 'B',
+      owner: 'B',
+      zone: 'hand',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: 0,
+      markedByDeathtouch: false,
+      counters: {},
+      attachedTo: null,
     };
-    const { events } = playGameCasting('Fog', decks, 31);
-    const cast = events.filter((e) => e.type === 'spellCast' && e.name === 'Fog');
-    expect(cast.length, 'the pilot never got to cast a Fog').toBeGreaterThan(0);
-    // The fog registered a real prevention effect, and something wore it off.
-    const expired = events.filter((e) => e.type === 'replacementExpired');
-    expect(expired.length).toBeGreaterThan(0);
-    // And while it stood, a combat hit was prevented rather than dealt.
-    const prevented = events.filter((e) => e.type === 'damagePrevented' && e.combat);
-    expect(prevented.length, 'a fog resolved but no combat damage was prevented').toBeGreaterThan(0);
+    state.players.B.hand.push(fogCard);
+    state.players.B.life = 20;
+
+    state.step = 'declareAttackers';
+    state.activePlayer = 'A';
+    state.priorityPlayer = 'A';
+    state.combat = { attackers: [], blocks: {}, attackersDeclared: false, blockersDeclared: false };
+
+    let current = applyAction(
+      state,
+      { kind: 'declareAttackers', player: 'A', attackers: [attacker.instanceId] },
+      DEFAULT_RULES,
+      registry,
+    ).state;
+
+    // Drive the real engine with the real pilot from here: it must find the Fog
+    // on its own, in the window where the Fog is worth casting.
+    const pilot = createHeuristicPilot();
+    const rng = createRng(17);
+    const events: GameEvent[] = [];
+    for (let i = 0; i < 60 && current.step !== 'postcombatMain' && !current.gameOver; i++) {
+      const legal = generateLegalActions(current, DEFAULT_RULES);
+      if (legal.length === 0) break;
+      const chosen = pilot.chooseAction({ view: current, legalActions: legal, rng, registry });
+      const result = applyAction(current, chosen, DEFAULT_RULES, registry);
+      current = result.state;
+      events.push(...result.events);
+    }
+
+    // PRECONDITION: the pilot really cast it. Without this the life assertion
+    // below would also pass on a build where the Fog was never castable at all.
+    expect(
+      events.some((e) => e.type === 'spellCast' && e.name === 'Fog'),
+      'the pilot never cast the Fog',
+    ).toBe(true);
+    // The swing did nothing, and the log says why.
+    expect(current.players.B.life).toBe(20);
+    expect(events.filter((e) => e.type === 'damagePrevented' && e.combat).length).toBeGreaterThan(0);
+    expect(events.filter((e) => e.type === 'damageDealt' && e.combat).length).toBe(0);
+    // The prevention effect is REAL state while it stands…
+    expect((current.replacements ?? []).length).toBe(1);
+    // …and wears off in cleanup.
+    let cleaned = current;
+    for (let i = 0; i < 200 && cleaned.turnNumber === current.turnNumber && !cleaned.gameOver; i++) {
+      const legal = generateLegalActions(cleaned, DEFAULT_RULES);
+      if (legal.length === 0) break;
+      const chosen = pilot.chooseAction({ view: cleaned, legalActions: legal, rng, registry });
+      cleaned = applyAction(cleaned, chosen, DEFAULT_RULES, registry).state;
+    }
+    expect(cleaned.replacements ?? []).toHaveLength(0);
   });
 });
 
