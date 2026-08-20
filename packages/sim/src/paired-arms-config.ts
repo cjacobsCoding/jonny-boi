@@ -67,13 +67,38 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   'mayEffects',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
-  // Reads the whole library to choose a card.
+  /*
+   * Reads the whole library to choose a card — and now also ROUTES what it
+   * finds to more than one destination (Cultivate's "one onto the battlefield
+   * and the other into your hand"). The routing rides a `route` param on the
+   * same primitive id, so this one classification still covers every printed
+   * shape of the search; there is nothing new for the decklist scan to miss.
+   *
+   * ⚠️ A MANDATORY ADDITIONAL CAST COST (`CardDefinition.additionalCost`, the
+   * "As an additional cost … sacrifice a creature" family) deliberately has NO
+   * entry here and needs none: it is COST DATA, not an effect ref, it carries no
+   * nested effects for `allEffectRefs` to walk, and the zones it reads — the
+   * battlefield and its controller's own hand — are ones the runner already
+   * tracks precisely (every card that reached either emitted a `drawCard` or a
+   * `zoneChange` naming its instance id). If a future additional cost ever reads
+   * a LIBRARY, it must withdraw the skip, and the place to do that is here.
+   */
   'searchLibrary',
   // Reads the top card and BRANCHES on what it is — the filter miss is the
   // dangerous case: it looked, learned, and moved nothing.
   'revealTopCard',
   // Writes a card into the library, moving the slot we reason about.
   'putFromHandOnTop',
+  /*
+   * Teferi's Puzzle Box: writes the WHOLE HAND into the library (at the bottom)
+   * and then draws that many cards. Classified with `putFromHandOnTop` and for
+   * the same reason — it moves cards into the library, so the slot the runner
+   * reasons about is no longer the slot it started from. The bottoming ORDER is
+   * chosen by a pilot looking at a hand the swap may have changed, which is the
+   * second, independent reason: the two arms can pick different orders from the
+   * same visible moves.
+   */
+  'handToBottomThenDraw',
   // A shuffle permutes both arms identically, but the *question* ("may I shuffle?")
   // is answered by a pilot valuing a library it can see. Classified conservatively.
   'mayShuffleLibrary',
@@ -93,6 +118,20 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   // Surveil is the same look with a graveyard for a bottom: it reads the top N
   // and branches on what it saw.
   'surveil',
+  /*
+   * `chooseAsEnters` NAMES A VALUE as a permanent enters (a colour, a creature
+   * type, a player). It moves no card and reveals no card — but the MENU it
+   * offers for a creature type is built from every card its chooser owns,
+   * LIBRARY INCLUDED, so the swapped card can change which types are on offer
+   * and therefore which one gets named, in a game where that card is never
+   * drawn. That is precisely the divergence the identical-game claim asserts
+   * cannot happen, so the claim is withdrawn for any game that resolves one.
+   *
+   * Classified here rather than argued away, for the same reason `mayEffects`
+   * is: a wrong verdict is far more expensive than a few extra variant games,
+   * and this primitive appears on a handful of cards.
+   */
+  'chooseAsEnters',
 ]);
 
 /**

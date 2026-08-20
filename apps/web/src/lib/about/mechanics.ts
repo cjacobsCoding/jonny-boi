@@ -17,7 +17,14 @@
  * bugs; a capabilities page that lies is the worst kind).
  */
 
-import { hasCastableBackFace, modalSpecOf, playableFaceOf } from '@jonny-boi/core';
+import {
+  backFaceCastZonesOf,
+  castPermissionFor,
+  hasCastableBackFace,
+  isSplitCard,
+  modalSpecOf,
+  playableFaceOf,
+} from '@jonny-boi/core';
 import {
   CARD_POOL,
   CHOICE_PRIMITIVES,
@@ -341,16 +348,40 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'enters-tapped-unless-revealed' },
       },
       {
+        title: '"As ~ enters, choose a creature type / a color"',
+        detail:
+          'The naming a permanent makes on the way in (CR 614.1c), asked at the printed moment — while a land is being played, or while a permanent spell is resolving and the card is not yet on the battlefield. The answer is REMEMBERED on that permanent for as long as it is there, which is the whole point: Adaptive Automaton becomes the type it named and pumps the others of it, Coldsteel Heart taps for the colour it named, and Chronicle of Victory draws off the type it named. A permanent that enters where nobody can be asked — reanimated, put onto the battlefield by another card, copied as a token — names NOTHING, and nothing named matches nothing.',
+        witness: { kind: 'primitive', id: 'chooseAsEnters' },
+      },
+      {
+        title: '"Of the chosen type / color" — reading a named value back',
+        detail:
+          'The three readers that make a naming worth making: an anthem narrowed to the named type or colour ("creatures you control of the chosen type get +1/+1"), a mana ability that adds the named colour, and a cast trigger that fires only on the named type. Each is refused at compile time on a card that never names anything, because an anthem over a value nothing writes is a card that reports as playable and then does nothing.',
+        witness: { kind: 'rule', id: 'as-enters-choose-value' },
+      },
+      {
         title: 'Optional triggers ("you may")',
         detail:
           'The printed "you may" is a genuine yes/no asked as the ability resolves, and declining is a complete outcome — never auto-answered to make a card compile, because a forced yes is a different card. Reclamation-Sage-style entries, the Mage cycle\'s tutors and Farhaven Elf all play both ways.',
         witness: { kind: 'primitive', id: 'mayEffects' },
       },
       {
-        title: 'Step-beginning triggers',
+        title: 'Step-beginning triggers, in every printed scope',
         detail:
-          'Upkeep, draw step, first main phase and end step all carry triggers ("At the beginning of your end step, untap all lands you control"). "Each player\'s <step>" still reports: the engine cannot yet aim a body at the player whose step it is, and firing it for the source\'s controller would be a different card.',
+          'Upkeep, draw step, first main phase, end step and combat all carry triggers, and so do the shared forms — "each player\'s", "each opponent\'s" and the bare "each". The player whose step it is rides the ability into its resolution, so a body can say "that player": Howling Mine, Kami of the Crescent Moon, Dictate of Kruphix, Font of Mythos and Teferi\'s Puzzle Box all draw for the RIGHT seat instead of for their controller.',
         witness: { kind: 'rule', id: 'trigger-step-begins' },
+      },
+      {
+        title: 'The intervening "if"',
+        detail:
+          'A trigger\'s printed condition ("…, if this artifact is untapped, …", "…, if you control six or more lands, …") is checked at BOTH moments the rules require: a false condition stops the ability going on the stack at all, and one that lapses before it resolves removes it doing nothing. A power bound reads EFFECTIVE power, so counters and anthems count. A condition the compiler cannot read makes its card report — never a body compiled as though the condition were not printed.',
+        witness: { kind: 'oracle', text: 'At the beginning of your upkeep, if you control six or more lands, create a 5/5 red Dragon creature token with flying.', as: 'creature' },
+      },
+      {
+        title: '"That player" / "each player" bodies',
+        detail:
+          'A trigger body can happen to somebody other than its controller through one shared vocabulary — "each player draws a card and loses 1 life" (Stormfist Crusader), "each opponent loses 1 life", and the "that player" forms a scoped trigger points at. "Whenever a player draws a card" watches every draw in the game, which is what makes Spiteful Visions and Scrawling Crawler real cards.',
+        witness: { kind: 'rule', id: 'trigger-draws-card' },
       },
       {
         title: 'Board-watching triggers',
@@ -373,8 +404,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Modal double-faced cards',
         detail:
-          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield. Split and adventure cards still report — they are two halves of one object, not two faces.',
+          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield.',
         witness: { kind: 'engine', api: 'hasCastableBackFace' },
+      },
+      {
+        title: 'Split cards (Fire // Ice)',
+        detail:
+          'One card, two halves, either castable for its own cost. While it sits in a hand, graveyard or library it is NEITHER half: CR 709.4 gives it the combined name, the union of the type lines and a mana value equal to the sum of both — which is what a discard filter or a "mana value 3 or less" clause reads. Casting one puts THAT half on the stack, and the card reverts to the combined object on the way out.',
+        witness: { kind: 'engine', api: 'isSplitCard' },
+      },
+      {
+        title: 'Aftermath (Dusk // Dawn)',
+        detail:
+          'The second half of an aftermath card is castable ONLY from your graveyard (CR 702.127a), never from your hand, and it pays its own printed cost rather than a flashback cost it does not print. It is exiled after it resolves — the same one answer that exiles a flashback spell, so the two can never disagree.',
+        witness: { kind: 'engine', api: 'backFaceCastZonesOf' },
+      },
+      {
+        title: 'Adventures (Bonecrusher Giant // Stomp)',
+        detail:
+          'Cast the adventure half as an instant or sorcery and, when it RESOLVES, the card is exiled instead of being buried — with permission for its owner to cast the creature half from exile later (CR 715.3d). Countered, it goes to the graveyard like anything else and the creature is gone. The permission names one face, dies with the object if the card ever leaves exile (CR 400.7), and a Town // Adventure card whose primary half is a land is PLAYED from exile as your land drop.',
+        witness: { kind: 'engine', api: 'castPermissionFor' },
       },
       {
         title: 'Gaining control of a permanent',
@@ -414,7 +463,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Battles (Sieges)',
         detail:
-          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. ⚠️ Printed Sieges still import as unplayable: their reward is casting the back face, which needs the modal double-faced system.",
+          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. A defeated SIEGE is exiled rather than buried, and its controller may then cast its reward half from exile without paying its mana cost (CR 310.4).",
         witness: { kind: 'primitive', id: 'createEmblem' },
       },
       {
@@ -471,8 +520,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Ramp & sacrifice-fetch',
         detail:
-          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder).',
+          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder, Burnished Hart, the Landscape cycle).',
         witness: { kind: 'rule', id: 'search-basic-land-to-battlefield' },
+      },
+      {
+        title: 'Tutors',
+        detail:
+          'Search your library for a card and take it to your hand, onto the battlefield (tapped or not) or into your graveyard — unrestricted (Diabolic Tutor) or narrowed by card type, a type union ("an instant or sorcery card"), colour ("a blue instant card"), mana value, power or toughness. The restriction is never dropped: a printed word the filter cannot express keeps the card reported rather than compiling a tutor that fetches more than it should — or one that could never find anything at all.',
+        witness: { kind: 'rule', id: 'search-any-card' },
+      },
+      {
+        title: 'Multi-destination searches',
+        detail:
+          'Cultivate and Kodama’s Reach: "search your library for up to two basic land cards, put one onto the battlefield tapped and the other into your hand". You choose which land goes where — the order you pick them IS the routing — and a library holding only one basic still works, because "up to two" is a maximum.',
+        witness: { kind: 'rule', id: 'search-two-basics-split-destination' },
+      },
+      {
+        title: 'Additional costs to cast',
+        detail:
+          '"As an additional cost to cast this spell, sacrifice a creature" (Village Rites) or "…discard a card" (Thrill of Possibility). It is a real cost, not a rider: you choose which permanent or card pays, the sacrifice/discard happens as the spell is cast, and a spell whose cost you cannot pay is not offered and cannot be cast at all — never a free spell.',
+        witness: { kind: 'rule', id: 'additional-cast-cost' },
       },
       {
         title: 'Mill',
@@ -587,12 +654,18 @@ export function mechanicsSummary(): MechanicsSummary {
  * a deleted seam becomes a compile error here, not a silently-passing witness.
  */
 const CORE_ENGINE_API = {
-  /** A card declares a second, CASTABLE face (a modal DFC). */
+  /** A card declares a second, CASTABLE face (a modal DFC, a split half). */
   hasCastableBackFace,
   /** Which face a cast/play action names. */
   playableFaceOf,
   /** A card's printed modal header + modes. */
   modalSpecOf,
+  /** The definition is a SPLIT card's combined object, not a castable spell. */
+  isSplitCard,
+  /** Which zones a castable back half may be cast FROM (aftermath, a Siege). */
+  backFaceCastZonesOf,
+  /** Permission to cast a card out of exile (an adventure, a defeated Siege). */
+  castPermissionFor,
 } as const;
 
 /** A minimal real-shaped card wrapped around a witness's Oracle text. */

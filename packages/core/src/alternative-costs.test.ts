@@ -348,7 +348,10 @@ describe('buyback — an additional cost that changes where the spell goes', () 
     const boughtBack = {
       kind: 'spell',
       instanceId: 1,
-      card: {} as never,
+      // A stand-in card, but one with a DEFINITION: `spellLeaveDestination`
+      // reads the face on the stack to spot an Adventure (CR 715.3d), so a
+      // literal with no `def` is not a spell the function can be asked about.
+      card: { def: { name: 'Buyback Instant', types: ['instant'] } } as never,
       controller: 'A',
       resolvesTo: 'graveyard',
       targets: [],

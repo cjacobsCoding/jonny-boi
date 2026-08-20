@@ -97,6 +97,9 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
           event.amount === 1 ? '' : 's'
         }.`,
       };
+    case 'chosenAsEnters':
+      // Public, and printed as such — see the same case in `play/play-format.ts`.
+      return { text: `${event.name} names ${event.described}.`, tone: 'trigger' };
     case 'continuousEffectAdded':
       return { text: `${name(event.targetInstanceId)} gets a temporary effect.` };
     // Mana left floating when a step ended: the pilot tapped a source and never
