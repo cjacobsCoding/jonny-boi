@@ -11,7 +11,7 @@ import {
   type PlayerId,
 } from './index.js';
 import { createEffectRegistry } from './effects.js';
-import { creatureDef, deck, deckOf, giveHand, landDef, spellDef } from './test-fixtures.js';
+import { creatureDef, deck, deckOf, giveHand, landDef, passOrAnswer, spellDef } from './test-fixtures.js';
 
 const FOREST = landDef('Forest', 'G');
 const ISLAND = landDef('Island', 'U');
@@ -34,10 +34,15 @@ function pass(state: GameState): GameState {
   return act(state, { kind: 'passPriority', player: state.priorityPlayer });
 }
 
+/**
+ * Turn-runner: pass until the target step, ANSWERING anything the game asks on
+ * the way — CR 514.1's cleanup discard is a real question a turn now ends with.
+ * See `passOrAnswer` in test-fixtures.
+ */
 function advanceToStep(state: GameState, target: string, maxPasses = 300): GameState {
   let s = state;
   let guard = 0;
-  while (s.step !== target && !s.gameOver && guard++ < maxPasses) s = pass(s);
+  while (s.step !== target && !s.gameOver && guard++ < maxPasses) s = passOrAnswer(s);
   return s;
 }
 
@@ -45,7 +50,7 @@ function advanceToStep(state: GameState, target: string, maxPasses = 300): GameS
 function advanceUntilActive(state: GameState, player: PlayerId, maxPasses = 600): GameState {
   let s = state;
   let guard = 0;
-  while (s.activePlayer !== player && !s.gameOver && guard++ < maxPasses) s = pass(s);
+  while (s.activePlayer !== player && !s.gameOver && guard++ < maxPasses) s = passOrAnswer(s);
   return s;
 }
 

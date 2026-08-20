@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyAction, createGame, DEFAULT_RULES, type GameState, type PlayerId } from './index.js';
 import { createEffectRegistry } from './effects.js';
-import { creatureDef, deck, deckOf, giveHand, landDef, spellDef } from './test-fixtures.js';
+import { creatureDef, deck, deckOf, giveHand, landDef, passOrAnswer, spellDef } from './test-fixtures.js';
 
 const ISLAND = landDef('Island', 'U');
 
@@ -13,7 +13,7 @@ function pass(state: GameState, registry = createEffectRegistry()): GameState {
 function advanceToStep(state: GameState, target: string, registry = createEffectRegistry(), max = 400): GameState {
   let s = state;
   let g = 0;
-  while (s.step !== target && !s.gameOver && g++ < max) s = pass(s, registry);
+  while (s.step !== target && !s.gameOver && g++ < max) s = passOrAnswer(s, DEFAULT_RULES, registry);
   return s;
 }
 
@@ -28,10 +28,10 @@ describe('state-based actions: decking', () => {
     // On B's second turn the draw fails → decking loss.
     let s = g.state;
     let guard = 0;
-    while (!s.gameOver && guard++ < 2000) {
-      const r = applyAction(s, { kind: 'passPriority', player: s.priorityPlayer });
-      s = r.state;
-    }
+    // `passOrAnswer`, not a bare pass: a turn ends with the CR 514.1 discard
+    // question once a hand is over the maximum, and while it stands every other
+    // action is refused — a pass-only loop would spin here without advancing.
+    while (!s.gameOver && guard++ < 2000) s = passOrAnswer(s);
     expect(s.gameOver).toBe(true);
     expect(s.winner).toBe('A');
     expect(s.players.B.hasLost).toBe(true);

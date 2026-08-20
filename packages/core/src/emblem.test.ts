@@ -27,7 +27,7 @@ import {
   type GameState,
 } from './index.js';
 import { aggregateFor } from './internal/continuous.js';
-import { deckOf, landDef } from './test-fixtures.js';
+import { deckOf, landDef, passOrAnswer } from './test-fixtures.js';
 import type { CardInstance, InstanceId, PlayerId } from './state.js';
 import type { GameEvent } from './events.js';
 
@@ -205,8 +205,11 @@ describe('abilities work from the command zone', () => {
     // resolve exactly as a permanent's upkeep trigger would.
     let s = state;
     let guard = 0;
+    // `passOrAnswer`, not a bare pass: a turn ends with the CR 514.1 discard
+    // question when a hand is over the maximum, and nothing else may act while
+    // it stands.
     while (guard++ < 400 && fired === 0 && !s.gameOver) {
-      s = act(s, { kind: 'passPriority', player: s.priorityPlayer }, registry);
+      s = passOrAnswer(s, DEFAULT_RULES, registry);
     }
     expect(fired).toBeGreaterThan(0);
   });

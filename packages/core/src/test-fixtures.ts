@@ -9,6 +9,8 @@ import type { CardDefinition, KeywordFlags } from './card.js';
 import type { DeckList } from './engine.js';
 import { applyAction, applyActionInPlace, createGame, generateLegalActions } from './engine.js';
 import type { GameAction } from './actions.js';
+import { defaultAnswerFor } from './choices.js';
+import type { EffectRegistry } from './effects.js';
 import type { GameEvent } from './events.js';
 import type { RulesConfig } from './config.js';
 import { DEFAULT_RULES } from './config.js';
@@ -109,6 +111,39 @@ export function giveGraveyard(state: GameState, player: PlayerId, defs: readonly
 export function giveLibrary(state: GameState, player: PlayerId, defs: readonly CardDefinition[]): CardInstance[] {
   state.players[player].library = [];
   return placeInZone(state, player, 'library', defs, (inst) => state.players[player].library.push(inst));
+}
+
+/**
+ * Pass priority for whoever holds it — ANSWERING the game's outstanding question
+ * first, when there is one.
+ *
+ * ## Why a turn-runner needs this
+ * A loop that only passes priority can no longer run a turn out. CR 514.1's
+ * discard down to maximum hand size is a real question the active player owes as
+ * their own turn ends, and while it stands `applyAction` refuses every action but
+ * its answer — so a bare `passPriority` loop stops advancing and spins against
+ * its own guard. That is the correct engine behaviour and the wrong test helper.
+ *
+ * The answer used is the engine's own {@link defaultAnswerFor} — "the first legal
+ * answer" — which is deterministic, needs no pilot, and is exactly what the
+ * engine itself auto-answers a forced choice with. For a cleanup discard that
+ * means pitching from the front of the hand, which is a fine thing for a test
+ * that is running the clock and does not care.
+ *
+ * ⚠️ A test that is ABOUT a choice must still drive the answer itself. This is a
+ * turn-runner, not a choice-maker: use it to get from here to a later step, not
+ * to answer the question under test.
+ */
+export function passOrAnswer(
+  state: GameState,
+  config: RulesConfig = DEFAULT_RULES,
+  registry?: EffectRegistry,
+): GameState {
+  const choice = state.pendingChoice;
+  const action: GameAction = choice
+    ? { kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer: defaultAnswerFor(choice) }
+    : { kind: 'passPriority', player: state.priorityPlayer };
+  return applyAction(state, action, config, registry).state;
 }
 
 /** Shared instance-minting for the zone-stuffing test helpers above. */
