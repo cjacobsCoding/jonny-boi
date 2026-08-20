@@ -239,7 +239,7 @@ describe('compiling mandatory additional costs', () => {
     expect(result.definition.additionalCost).toEqual({
       kind: 'sacrifice',
       filter: { anyOfTypes: ['creature'] },
-      label: 'Sacrifice creature',
+      label: 'Sacrifice a creature',
     });
   });
 

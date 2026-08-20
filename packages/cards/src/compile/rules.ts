@@ -2821,20 +2821,28 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // "Exile" and "pay N life" additional costs are outside the table on purpose:
     // core's `AdditionalCastCost` performs a sacrifice or a discard, and a cost
     // it cannot perform must never look implemented.
+    //
+    // The LABEL is the printed phrase itself, capitalized — not a sentence
+    // rebuilt from the parsed pieces. A rebuilt label drifts from the card ("a
+    // creature" becomes "creature"), and it is what the hotseat prompt and the
+    // log show the player, so it should read the way the card reads.
     pattern: new RegExp(
-      `^as an additional cost to cast this spell, (sacrifice|discard) (?:${COUNT_TOKEN} )?([a-z ]+?)s?$`,
+      `^as an additional cost to cast this spell, ((sacrifice|discard) (?:${COUNT_TOKEN} )?[a-z ]+?s?)$`,
     ),
     build(match) {
-      const kind = match[1] === 'discard' ? 'discard' : 'sacrifice';
-      const count = match[2] === undefined ? 1 : parseCount(match[2]);
+      const phrase = match[1] ?? '';
+      const kind = match[2] === 'discard' ? 'discard' : 'sacrifice';
+      const count = match[3] === undefined ? 1 : parseCount(match[3]);
       if (count === null || count <= 0) return null;
-      const noun = (match[3] ?? '').trim();
+      // What is left of the phrase once the verb and the count are removed.
+      const noun = phrase
+        .slice((match[2] ?? '').length)
+        .replace(match[3] === undefined ? '' : ` ${match[3]}`, '')
+        .replace(/s$/, '')
+        .trim();
       const filter = kind === 'discard' ? discardCostFilterFor(noun) : sacrificeCostFilterFor(noun);
       if (filter === null) return null;
-      const label =
-        kind === 'discard'
-          ? `Discard ${count === 1 ? 'a card' : `${count} cards`}`
-          : `Sacrifice ${count === 1 ? noun : `${count} ${noun}s`}`;
+      const label = phrase.charAt(0).toUpperCase() + phrase.slice(1);
       return {
         additionalCost: {
           kind,
