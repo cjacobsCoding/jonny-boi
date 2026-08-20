@@ -183,7 +183,7 @@ function copierFor(state: GameState, instanceId: InstanceId): CardInstance | und
 }
 
 /**
- * **The copy-target ruler (CR 706.2).** What a permanent with these PRINTED
+ * **The copy-target ruler (CR 707.2).** What a permanent with these PRINTED
  * characteristics is worth to be.
  *
  * Deliberately not `cardValue`, and the difference is the whole point of the
@@ -221,7 +221,7 @@ export function copyTargetValue(def: CardDefinition, weights: HeuristicWeights):
 }
 
 /**
- * Answer an AS-ENTERS COPY question (CR 706): "you may have ~ enter as a copy
+ * Answer an AS-ENTERS COPY question (CR 707): "you may have ~ enter as a copy
  * of …". Two decisions, and the generic valence path would get both wrong.
  *
  * 1. **WHICH to copy** — the best candidate by {@link copyTargetValue}, scored

@@ -146,7 +146,7 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   // Transforming happens on the battlefield in front of everyone (CR 712.8);
   // both face names are public the moment the permanent flips.
   transformed: 'public',
-  // A copy is chosen and applied ON THE TABLE (CR 706): which permanent became
+  // A copy is chosen and applied ON THE TABLE (CR 707): which permanent became
   // a copy, the card it printed as, the card it now is, and the visible object
   // it was copied from are all things a spectator sees. Copying from a
   // GRAVEYARD (Echoing Deeps) is public for the same reason — a graveyard is a

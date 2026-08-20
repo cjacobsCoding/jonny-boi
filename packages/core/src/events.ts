@@ -517,7 +517,7 @@ export type GameEvent =
     }
   | {
       /**
-       * A permanent ENTERED AS A COPY of another object (CR 706, layer 1) —
+       * A permanent ENTERED AS A COPY of another object (CR 707, layer 1) —
        * the printed "you may have ~ enter as a copy of …" replacement. Like
        * `transformed` this is deliberately NOT a `zoneChange`: the copy is
        * applied as the permanent enters, and the entry itself is announced by

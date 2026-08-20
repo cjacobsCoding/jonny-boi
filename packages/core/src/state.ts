@@ -101,7 +101,7 @@ export interface CardInstance {
    */
   printedDef?: CardDefinition | null;
   /**
-   * While this permanent is a **COPY** of something else (CR 706 — layer 1, the
+   * While this permanent is a **COPY** of something else (CR 707 — layer 1, the
    * bottom of the layer system), the definition it would be if the copy ended:
    * its own printed card. `null`/absent means "this is really what it says it
    * is", which is every instance in the game except a Clone that has made its
@@ -118,7 +118,7 @@ export interface CardInstance {
    * of a transforming DFC that then transforms needs both answers at once, and
    * one field can only give one of them. The leave-the-battlefield reset
    * (`resetInstanceForNewZone`) restores this one first — a bounced Clone is a
-   * Clone in hand, never the Bear it was copying (CR 706.2 / CR 400.7).
+   * Clone in hand, never the Bear it was copying (CR 707.2 / CR 400.7).
    *
    * OPTIONAL and written only when a permanent actually becomes a copy, for the
    * same object-shape/throughput reason as {@link CardInstance.attachedTo} —
@@ -412,7 +412,7 @@ export interface SpellStackObject {
    */
   readonly castFrom?: 'hand' | 'graveyard' | 'exile';
   /**
-   * Set once the as-enters COPY question (`CardDefinition.copyAsEnters`, CR 706)
+   * Set once the as-enters COPY question (`CardDefinition.copyAsEnters`, CR 707)
    * has been answered for this spell — including when it was answered "no".
    *
    * It has to live on the STACK OBJECT rather than on the instance because a
@@ -421,6 +421,29 @@ export interface SpellStackObject {
    * re-entry after the answer would ask again, forever.
    */
   readonly copyAsEntersDecided?: boolean;
+  /**
+   * **CR 707.10 — this stack object is a COPY OF A SPELL, and it is not a card.**
+   *
+   * A copy is put onto the stack by an effect rather than cast, and the object
+   * it puts there has no card behind it: {@link CardInstance} is still the
+   * carrier (every characteristic read in the engine routes through a
+   * definition, so a second carrier shape would be a second code path), but the
+   * instance was MINTED by the copying effect and belongs to no zone.
+   *
+   * That is why the flag exists rather than another `resolvesTo` value: where a
+   * spell goes is asked through {@link spellLeaveDestination},
+   * and this is the ONE fact that outranks every answer it can give. A copy of a
+   * flashback cast is not exiled, a copy of a bought-back spell does not return
+   * to a hand, and a copy that is countered does not reach a graveyard — CR
+   * 704.5e: **a copy of a spell in any zone other than the stack ceases to
+   * exist.** Leaving it in any of those zones would put a phantom CARD where
+   * delirium, flashback, Tarmogoyf and every graveyard count would see it.
+   *
+   * `true` or absent, never `false`: absence is the answer for every spell ever
+   * cast, and a two-valued field would add a property to the object the clone
+   * allocates at every action boundary.
+   */
+  readonly isSpellCopy?: true;
 }
 
 /**
@@ -437,12 +460,24 @@ export type SpellLeaveReason = 'resolve' | 'counter';
  * exiled instead of going to the graveyard, and that applies even when it is
  * COUNTERED (CR 702.34a: "…if it would leave the stack, exile it instead") —
  * countering is precisely a way of leaving the stack.
+ *
+ * `'ceaseToExist'` is the fourth answer and it names an object that goes to NO
+ * ZONE AT ALL (CR 704.5e) — see {@link SpellStackObject.isSpellCopy}. Every
+ * caller must handle it explicitly, which is why it is in the return type rather
+ * than expressed by a caller-side `if`: the two exits from the stack live in two
+ * packages, and a rule enforced in one of them is a rule that depends on how the
+ * spell happened to leave.
  */
 export function spellLeaveDestination(
   spell: SpellStackObject,
   reason: SpellLeaveReason,
-): 'graveyard' | 'exile' | 'hand' {
-  // Flashback first: exiling a card cast from the graveyard applies however it
+): 'graveyard' | 'exile' | 'hand' | 'ceaseToExist' {
+  // CR 704.5e OUTRANKS EVERY OTHER ANSWER, so it is asked first. A copy of a
+  // spell is not a card: there is no card to exile for flashback, none to hand
+  // back for buyback, and none to put in a graveyard when it is countered. Any
+  // of those would leave a phantom card in a zone the rest of the engine counts.
+  if (spell.isSpellCopy === true) return 'ceaseToExist';
+  // Flashback next: exiling a card cast from the graveyard applies however it
   // leaves the stack, so it outranks everything else here. It is also what
   // AFTERMATH (CR 702.127a) rides — its second half is cast only from the
   // graveyard and is exiled after it resolves, which is the same sentence.

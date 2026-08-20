@@ -4267,7 +4267,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'copy-as-enters',
     description:
-      '"You may have ~ enter [tapped] as a copy of <selector>[, except <clauses>]" (Clone, Sculpting Steel, Spark Double, Vesuva, Echoing Deeps) - CR 706',
+      '"You may have ~ enter [tapped] as a copy of <selector>[, except <clauses>]" (Clone, Sculpting Steel, Spark Double, Vesuva, Echoing Deeps) - CR 707',
     // Placed above `enters-tapped` because Vesuva's line contains the word
     // "tapped" and this rule owns the whole clause, tapped-ness included.
     pattern: /^you may have ~ enter( tapped)? as a copy of (.+?)(?:, except (.+))?$/,
@@ -4979,7 +4979,7 @@ const BLOCKER_QUALITY_KEYWORDS: Readonly<Record<string, BooleanKeywordName>> = O
 
 /**
  * ---------------------------------------------------------------------------
- * COPY EFFECTS — "You may have ~ enter as a copy of …" (CR 706)
+ * COPY EFFECTS — "You may have ~ enter as a copy of …" (CR 707)
  * ---------------------------------------------------------------------------
  *
  * Two CLOSED tables and two parsers, for the same reason every other closed
@@ -6055,7 +6055,7 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     //  - a "you may choose NEW TARGETS for the copy" moment. Aiming happens at
     //    cast time or as a trigger goes on the stack; nothing aims an object the
     //    engine itself just created.
-    //  - the copy carrying the original's X, kicks and chosen modes (CR 706.10),
+    //  - the copy carrying the original's X, kicks and chosen modes (CR 707.10),
     //    which live on the stack object being copied.
     //
     // A TOKEN copy needs the first of those plus a token whose definition is

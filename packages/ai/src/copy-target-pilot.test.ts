@@ -1,5 +1,5 @@
 /**
- * The pilot has to CHOOSE WELL when a Clone enters (CR 706).
+ * The pilot has to CHOOSE WELL when a Clone enters (CR 707).
  *
  * This is the wiring that keeps a copy card from being noise. A copy effect is
  * one of the few cards whose entire value is a single decision, so a pilot that
@@ -13,7 +13,7 @@
  *  1. **Ranking by the BOARD instead of by the COPIABLE values.** The generic
  *     `selectCards` path scores candidates with `cardValue`, which reads
  *     EFFECTIVE stats — counters, anthems, until-EOT pumps. None of that comes
- *     along (CR 706.2 gives you the printed card), so a pilot ranking that way
+ *     along (CR 707.2 gives you the printed card), so a pilot ranking that way
  *     copies the 1/1 wearing three +1/+1 counters over the printed 4/4 beside
  *     it and ends up a 1/1. This is the test that would have caught it.
  *  2. **Declining.** `min: 0` makes "no thanks" legal, and a Clone that declines

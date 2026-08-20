@@ -1,5 +1,5 @@
 /**
- * COPY EFFECTS (CR 706) — the layer-1 seam.
+ * COPY EFFECTS (CR 707) — the layer-1 seam.
  *
  * The one claim every test here exists to defend: **a copy is applied in LAYER
  * 1, beneath everything**, so what the copy actually IS on the battlefield is
@@ -14,7 +14,7 @@
  *  - **layer order**: the copier keeps its OWN +1/+1 counters and its own
  *    until-EOT pump, and the anthem on the board applies to the copy — all on
  *    top of the copied 1/1 body, never merged into it;
- *  - **copiable values (CR 706.2)**: you copy the printed card. A 1/1 with three
+ *  - **copiable values (CR 707.2)**: you copy the printed card. A 1/1 with three
  *    counters is copied as a 1/1; a TRANSFORMED permanent is copied by its FRONT
  *    face; a permanent that is itself a copy is copied by what it copies;
  *  - the "except …" tail (extra types/subtypes/keywords, a name, legendary on
@@ -210,7 +210,7 @@ function castAndCopy(
   return { state: next, permanent: permanent as CardInstance, events };
 }
 
-describe('copiableDefOf — CR 706.2, what you actually copy', () => {
+describe('copiableDefOf — CR 707.2, what you actually copy', () => {
   it('is the printed card for an ordinary permanent, counters and all', () => {
     const state = mainPhase();
     const bear = place(state, BEAR, 'A');
@@ -240,7 +240,7 @@ describe('copiableDefOf — CR 706.2, what you actually copy', () => {
   });
 });
 
-describe('applyCopyExceptions — the printed "except …" tail (CR 706.3)', () => {
+describe('applyCopyExceptions — the printed "except …" tail (CR 707.3)', () => {
   it('adds types and subtypes without losing the copied ones', () => {
     const result = applyCopyExceptions(BEAR, { addTypes: ['artifact'], addSubtypes: ['Illusion'] });
     expect(result.types).toEqual(['creature', 'artifact']);

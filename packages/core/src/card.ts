@@ -689,7 +689,7 @@ export interface CardDefinition {
   /**
    * "**You may have ~ enter as a copy of** any creature on the battlefield"
    * (Clone, Phantasmal Image, Spark Double, Sakashima, Vesuva) — the as-enters
-   * COPY replacement (CR 614.1c + CR 706.9), declared as data.
+   * COPY replacement (CR 614.1c + CR 707.9), declared as data.
    *
    * It sits here beside `entersTapped*` and {@link asEntersChoice} because it is
    * the same family of thing: a replacement applied AS the permanent enters,

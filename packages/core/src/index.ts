@@ -257,13 +257,13 @@ export type { FaceUp } from './transform.js';
 export { transformPermanent, faceUpOf, transformTargetOf } from './transform.js';
 
 /**
- * COPY-EFFECT seam (`./copy.ts`) -- CR 706, the bottom of the layer system.
+ * COPY-EFFECT seam (`./copy.ts`) -- CR 707, the bottom of the layer system.
  * "You may have ~ enter as a copy of any creature on the battlefield" is
  * declared as data (`CardDefinition.copyAsEnters`) and applied by swapping the
  * instance's `def` in LAYER 1, so counters (7d), anthems (7c) and until-EOT
  * pumps all apply on top of the copied characteristics with no second code
  * path. `copiableDefOf` is the single answer to "what would copying this give
- * you" (CR 706.2 -- the printed front face, never the pumped board state), and
+ * you" (CR 707.2 -- the printed front face, never the pumped board state), and
  * `copyResultDef` is its pure preview, used by the AI to rank copy targets.
  */
 export type { CopyAsEntersSpec, CopyExceptions, CopySourceZone } from './copy.js';

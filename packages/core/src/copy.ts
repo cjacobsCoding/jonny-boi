@@ -1,5 +1,5 @@
 /**
- * COPY EFFECTS (CR 706) — "you may have ~ enter as a copy of …".
+ * COPY EFFECTS (CR 707) — "you may have ~ enter as a copy of …".
  *
  * A copy effect is the one modification in Magic that changes what an object
  * *is* rather than what it *has*, and CR 613.2 puts it in **LAYER 1 — beneath
@@ -30,7 +30,7 @@
  *
  * The way back is {@link CardInstance.uncopiedDef} — the instance's OWN printed
  * card, restored by `resetInstanceForNewZone` when the permanent leaves the
- * battlefield (CR 706.2: the copy effect applies to the permanent, and a
+ * battlefield (CR 707.2: the copy effect applies to the permanent, and a
  * permanent that changes zones is a new object).
  *
  * ⚠️ It is a SEPARATE field from `printedDef`, and that is not redundancy.
@@ -40,7 +40,7 @@
  * still holds Clone — two different questions with two different answers, and
  * one field could only answer one of them.
  *
- * ## COPIABLE VALUES (CR 706.2) — the trap this system lives or dies on
+ * ## COPIABLE VALUES (CR 707.2) — the trap this system lives or dies on
  * What you copy is **the printed card**, as modified by other copy effects and
  * by "as … enters" choices — and by NOTHING else. Not counters, not anthems,
  * not until-end-of-turn pumps, not marked damage, not the face that happens to
@@ -84,7 +84,7 @@ export type CopySourceZone = 'battlefield' | 'graveyard';
 export const COPY_ID_SUFFIX = '#copy';
 
 /**
- * The printed "**except** …" tail of a copy effect (CR 706.3): the copiable
+ * The printed "**except** …" tail of a copy effect (CR 707.3): the copiable
  * values of the copy are the copied ones as modified by the copy effect itself.
  *
  * Data, never a per-card branch. Each field is one printed clause:
@@ -137,7 +137,7 @@ export interface CopyExceptions {
 
 /**
  * The printed "**you may have ~ enter as a copy of …**" replacement effect
- * (CR 614.1c + CR 706.9), declared as data on the card.
+ * (CR 614.1c + CR 707.9), declared as data on the card.
  *
  * It lives on the DEFINITION rather than in `effects` on purpose: it is an
  * as-enters REPLACEMENT, in exactly the family the engine already models with
@@ -162,12 +162,12 @@ export interface CopyAsEntersSpec {
 }
 
 /**
- * **CR 706.2 — the copiable values of an object.** What another object gets
+ * **CR 707.2 — the copiable values of an object.** What another object gets
  * when it copies this one: the printed card, as modified by copy effects and
  * as-enters choices, and by nothing else.
  *
  * Three cases, and the ORDER of the two tests matters:
- *  1. a TRANSFORMED permanent is copied by its front face (CR 706.2 explicitly:
+ *  1. a TRANSFORMED permanent is copied by its front face (CR 707.2 explicitly:
  *     "the copiable values are the values of the front face"), which is
  *     `printedDef`;
  *  2. a permanent that is itself a COPY is copied by what it copies — which is
@@ -194,7 +194,7 @@ export function copiableDefOf(inst: {
   return inst.def;
 }
 
-/** Whether this permanent is currently a copy of something else (CR 706). */
+/** Whether this permanent is currently a copy of something else (CR 707). */
 export function isCopy(inst: { readonly uncopiedDef?: CardDefinition | null }): boolean {
   return inst.uncopiedDef != null;
 }
@@ -246,7 +246,7 @@ function addKeywordsTo(
 }
 
 /**
- * **CR 706.3** — apply the printed "except …" tail to a set of copiable values,
+ * **CR 707.3** — apply the printed "except …" tail to a set of copiable values,
  * producing the definition the copy actually has.
  *
  * PURE: it never touches an instance and never reads the game state, so a
@@ -294,12 +294,12 @@ export function applyCopyExceptions(
  * a UI can preview one without mutating a thing.
  */
 export function copyResultDef(self: CardDefinition, source: CardInstance, spec: CopyAsEntersSpec): CardDefinition {
-  void self; // the copying card contributes nothing but its spec (CR 706.3)
+  void self; // the copying card contributes nothing but its spec (CR 707.3)
   return applyCopyExceptions(copiableDefOf(source), spec.except);
 }
 
 /**
- * Make `inst` a copy of `source` (CR 706, layer 1) as it enters the battlefield.
+ * Make `inst` a copy of `source` (CR 707, layer 1) as it enters the battlefield.
  *
  * Everything per-object is deliberately UNTOUCHED — this is a layer-1 change to
  * what the permanent is, not a zone change and not a reset. The one thing it
@@ -325,7 +325,7 @@ export function applyCopyAsEnters(
   inst.uncopiedDef = own;
   inst.def = result;
   // A copy is a copy of the copiable (front-face) values, so the copy is
-  // front-face-up whatever the thing it copied was showing (CR 706.2).
+  // front-face-up whatever the thing it copied was showing (CR 707.2).
   if (inst.printedDef != null) inst.printedDef = null;
   const extra = spec.except?.extraCounters;
   if (extra !== undefined) {

@@ -1,5 +1,5 @@
 /**
- * The COPY rule table (CR 706) — what compiles, what reports, and why.
+ * The COPY rule table (CR 707) — what compiles, what reports, and why.
  *
  * The contract this file defends is the one the whole compiler rests on: a copy
  * card's identity is *what it may copy* and *how the copy differs*, so a
@@ -118,7 +118,7 @@ describe('the selector — WHICH objects may be copied', () => {
   });
 });
 
-describe('the "except …" tail — how the copy differs (CR 706.3)', () => {
+describe('the "except …" tail — how the copy differs (CR 707.3)', () => {
   it('adds a card TYPE ("it is an artifact in addition to its other types")', () => {
     const result = compiled({
       name: 'Metamorph Test',

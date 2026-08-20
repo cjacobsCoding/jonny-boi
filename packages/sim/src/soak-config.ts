@@ -460,7 +460,7 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
   },
   {
     id: 'copy-effect',
-    label: 'copy effect — a permanent entered as a copy of another (CR 706, layer 1)',
+    label: 'copy effect — a permanent entered as a copy of another (CR 707, layer 1)',
     witnessKind: 'event',
     // Declared through `CardDefinition.copyOnEnter`-style data rather than a
     // primitive id, like the replacement layer above.

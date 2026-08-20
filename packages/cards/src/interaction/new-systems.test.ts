@@ -617,20 +617,20 @@ describe('CELL: replacement effects x protection x indestructible (three ways da
 
 // --- COPY EFFECTS x transform x counters x the legend rule -------------------------
 
-describe('CELL: copy effects x transform x counters x the legend rule (CR 706.2)', () => {
+describe('CELL: copy effects x transform x counters x the legend rule (CR 707.2)', () => {
   it('copying a TRANSFORMED permanent copies its FRONT face, and copies nothing else about it', () => {
     const reg = buildRegistry();
     let state = boardAtMain(reg);
     const delver = resolvePermanent(state, reg, poolCard('Delver of Secrets'), 'A');
     state = delver.state;
     // Load the original with everything that must NOT be copied: counters and
-    // marked damage are per-object state, not copiable values (CR 706.2).
+    // marked damage are per-object state, not copiable values (CR 707.2).
     state = castCard(state, reg, counterSpell('matrix-copy-counters', 3), 'A', [delver.id]).state;
     transformPermanent(state, delver.id, () => {});
     onBattlefield(state, delver.id).damageMarked = 1;
     expect(onBattlefield(state, delver.id).def.name).toBe('Insectile Aberration');
 
-    // CR 706.2 in one call: the copiable values of a transformed permanent are
+    // CR 707.2 in one call: the copiable values of a transformed permanent are
     // its FRONT face's. A clone that read `def` would come in as a 3/2 flier.
     const copiable = copiableDefOf(onBattlefield(state, delver.id));
     expect(copiable.name).toBe('Delver of Secrets');

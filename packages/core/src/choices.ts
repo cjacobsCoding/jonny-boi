@@ -524,7 +524,7 @@ interface PendingChoiceBase {
    * ordinary choice, so all existing states and tests read unchanged.
    *
    * `'asEnters'` marks the CR 614.1c NAMING ("As ~ enters, choose a creature
-   * type"), and `'copyAsEnters'` the CR 706 as-enters COPY ("you may have ~
+   * type"), and `'copyAsEnters'` the CR 707 as-enters COPY ("you may have ~
    * enter as a copy of any creature on the battlefield"). Both are raised by an
    * ENTRY PATH rather than by a resolving effect, and both are routed by this
    * marker for exactly the reason the legend rule is: "there is no frame behind

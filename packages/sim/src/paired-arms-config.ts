@@ -172,7 +172,7 @@ export const CONTROL_CHANGING_PRIMITIVES: ReadonlySet<string> = new Set<string>(
  *
  * `peekCouldReadHeroLibrary` answers "could this source have read the hero's
  * library?" by looking the source's instance id up in the pre-shuffle decklist
- * and scanning THAT card's effect refs. A COPY effect (CR 706) makes that scan
+ * and scanning THAT card's effect refs. A COPY effect (CR 707) makes that scan
  * read the wrong card: a Clone whose `def` is now somebody's Temple has an ETB
  * scry that its own decklist row does not print, so the scan would answer "no
  * library read" for an ability that just read one. The verdict would be wrong,

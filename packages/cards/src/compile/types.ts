@@ -163,7 +163,7 @@ export interface ClauseContribution {
   /**
    * The printed "you may have ~ enter as a copy of …" replacement — which
    * objects may be copied, and the "except …" tail
-   * (`CardDefinition.copyAsEnters`, CR 706). One clause, one field, because the
+   * (`CardDefinition.copyAsEnters`, CR 707). One clause, one field, because the
    * whole clause is one replacement effect.
    */
   readonly copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;

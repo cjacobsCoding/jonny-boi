@@ -203,7 +203,7 @@ const SYSTEMS: readonly System[] = [
   },
   {
     id: 'copies',
-    title: 'copy effects (CR 706, layer 1)',
+    title: 'copy effects (CR 707, layer 1)',
     api: ['copiableDefOf', 'isCopy', 'copyResultDef', 'copyCandidates'],
     // NO POOL CARD.
   },
@@ -519,7 +519,7 @@ copies x walkers              | untested  | copying a planeswalker: loyalty is n
 copies x battles              | untested  | the same question for a battle's printed defense
 copies x legend               | covered   | new-systems: legendary IS a copiable value, so a clone of a legend makes a duplicate the rule then answers
 copies x emblems              | n/a       | an emblem is not an object on the battlefield and nothing can copy one
-copies x transform            | covered   | new-systems: a transformed permanent is copied by its FRONT face (CR 706.2)
+copies x transform            | covered   | new-systems: a transformed permanent is copied by its FRONT face (CR 707.2)
 copies x modal                | n/a       | modes are chosen while announcing a spell; a copy is applied as a permanent enters
 copies x nonhand              | untested  | a copy source in a GRAVEYARD (CopySourceZone allows it) reached by a graveyard-casting card
 copies x protection           | untested  | protection IS a copiable value, so a clone of a protected creature is protected too
@@ -527,7 +527,7 @@ copies x indestructible       | untested  | the same for indestructible - the co
 copies x castcosts            | n/a       | what a copy costs is its own printed cost; the copy happens as it enters
 copies x altcosts             | n/a       | an alternative cost is a route to the stack; the copy is applied on the way in
 copies x library              | n/a       | a copy is applied on the battlefield; scry and surveil touch hidden zones
-copies x counters             | covered   | new-systems: counters are NOT copiable values (CR 706.2) and stay with the original
+copies x counters             | covered   | new-systems: counters are NOT copiable values (CR 707.2) and stay with the original
 copies x cda                  | untested  | copying a star box copies the FORMULA, so the copy recomputes from its own controller's board
 copies x turnfacts            | n/a       | a copy is a characteristic swap, not an event a turn fact remembers
 copies x mana                 | untested  | copying a land with a mana ability, including a derived-colour one that must read the COPY's board
@@ -536,7 +536,7 @@ copies x statics              | untested  | copying an anthem source doubles the
 copies x triggers             | untested  | a copy has the copied card's triggers, so an ETB the ORIGINAL prints fires for the copy as it enters
 copies x steptriggers         | untested  | copying a permanent with a step trigger; the trigger collector reads the ACTIVE def, which is now the copy's
 copies x splitcards           | n/a       | a split card is never a permanent, so an as-enters copy can never point at one (CR 715.2)
-copies x asenters             | untested  | an as-enters CHOICE is a copiable value (CR 706.2), so a clone of a lord copies the type it named
+copies x asenters             | untested  | an as-enters CHOICE is a copiable value (CR 707.2), so a clone of a lord copies the type it named
 copies x addcosts             | n/a       | the cost is paid while casting; the copy is applied as the permanent enters
 copies x replacements         | untested  | copying a permanent that declares a replacement ability; both copies then index into the replacement layer
 `;

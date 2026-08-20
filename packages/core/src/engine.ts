@@ -717,7 +717,7 @@ function resolveTopOfStack(
 
   const card = top.card;
 
-  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 706), asked before anything else
+  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 707), asked before anything else
   // happens to this spell — before `stackResolved`, before a single effect runs,
   // and above all before the permanent is on the battlefield, because the copied
   // card is what decides its `entersTapped`, its summoning sickness, its
@@ -1586,7 +1586,7 @@ function applyAnswerChoice(
     return { state, events };
   }
 
-  // AN AS-ENTERS COPY answer (CR 614.1c + CR 706) belongs to the ENTRY PATH that
+  // AN AS-ENTERS COPY answer (CR 614.1c + CR 707) belongs to the ENTRY PATH that
   // raised it, not to a resolution. Routed by its own `context` marker for the
   // same reason the legend rule is: "no frame behind it" also describes the
   // shockland question below. Two entry paths raised it and each is finished
@@ -1846,7 +1846,7 @@ function applyPlayLand(
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
-  // THE AS-ENTERS COPY (CR 706 - Vesuva, Echoing Deeps) is asked HERE, once,
+  // THE AS-ENTERS COPY (CR 707 - Vesuva, Echoing Deeps) is asked HERE, once,
   // ahead of the entry ladder rather than as another rung of it. It is not a
   // rung because it does not answer a question ABOUT this land -- it decides
   // WHICH LAND the ladder is then asking about: a Vesuva that copies Cavern of

@@ -78,7 +78,7 @@ function cloneInstance(inst: CardInstance): CardInstance {
   if (inst.printedDef != null) copy.printedDef = inst.printedDef;
   // Same conditional-copy rule, with the sharpest stakes of the lot — the exact
   // bug the transform branch hit with `printedDef`, one layer down. `def` may be
-  // a COPY effect's result (CR 706, layer 1) and `uncopiedDef` is the only
+  // a COPY effect's result (CR 707, layer 1) and `uncopiedDef` is the only
   // record of what the card really is. Drop it here and a Clone silently
   // REVERTS to its own printed 0/0 body at the very next action boundary: the
   // copy looks right for exactly one action and then stops being the creature it
@@ -227,6 +227,14 @@ function cloneStackObject(o: StackObject): StackObject {
     // resolution is re-entered — and a DECLINE leaves nothing on the instance to
     // notice, so the spell would never finish resolving. Same shape, same rule.
     ...(o.copyAsEntersDecided !== undefined ? { copyAsEntersDecided: o.copyAsEntersDecided } : {}),
+    // Dropping this one has the sharpest consequence of any field in this
+    // object: `spellLeaveDestination` would stop answering `'ceaseToExist'`
+    // (CR 704.5e) at the very next action boundary, and the copy of a spell —
+    // which is NOT A CARD — would come to rest in a GRAVEYARD as a phantom card
+    // that delirium, flashback and Tarmogoyf all count. The copy looks right for
+    // exactly one action and then leaves litter behind it. `clone.test.ts` pins
+    // the field; `spell-copy.test.ts` pins the phantom it prevents.
+    ...(o.isSpellCopy !== undefined ? { isSpellCopy: o.isSpellCopy } : {}),
   };
 }
 
