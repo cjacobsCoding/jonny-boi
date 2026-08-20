@@ -504,12 +504,16 @@ describe('"When ~ enters, you may ..." - the optional ETB trigger', () => {
   it('REFUSES a tutor whose subtype is outside the closed table (never a tutor that finds nothing)', () => {
     const result = compileCard(
       makeCard({
-        name: 'Test Zombie Matron',
+        // "Zombie" joined the closed subtype table when typal lords landed, so
+        // the refusal is now demonstrated with a type that is still outside it.
+        // The rule under test is unchanged: a word the filter cannot express
+        // reports, rather than compiling to a tutor that can never find.
+        name: 'Test Kavu Matron',
         typeLine: { supertypes: [], types: ['Creature'], subtypes: [] },
         power: 1,
         toughness: 1,
         oracleText:
-          'When this creature enters, you may search your library for a Zombie card, reveal that card, put it into your hand, then shuffle.',
+          'When this creature enters, you may search your library for a Kavu card, reveal that card, put it into your hand, then shuffle.',
       }),
     );
     expect(result.status).toBe('incomplete');

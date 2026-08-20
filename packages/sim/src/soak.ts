@@ -790,9 +790,32 @@ function createLeakScanningPilot(
   report: (detail: string) => void,
 ): Pilot & { flush(state: GameState | null): void } {
   const pending: Observation[] = [];
+  /*
+   * The hidden set as it stood at the PREVIOUS decision — the other half of the
+   * buffering argument above, and the fix for its mirror-image false positive.
+   *
+   * Scanning the buffered window against the post-action state alone reports a
+   * card the table WATCHED leave a public zone. A creature dies (public
+   * `creatureDied`, naming it — everyone saw it die), and later in the same
+   * window something returns it from the graveyard to a HAND (Gravedigger). At
+   * the flush it is in a hidden zone, so the honest `creatureDied` looks like a
+   * leak. It is not: the id was public before the window and the move that hid
+   * it was itself anonymised.
+   *
+   * So an id is only a leak when it was hidden BEFORE the window as well as
+   * after it — which is exactly "the table never saw this card". A drawn card
+   * (library → hand) is hidden on both sides and is still scanned; a bounced or
+   * regrown one is not. This is strictly narrower than the buyback exemption
+   * below it and subsumes nothing: that one is about a single observation's own
+   * subject within one flush.
+   */
+  let hiddenBefore = new Set<InstanceId>();
   const flush = (state: GameState | null): void => {
-    if (pending.length === 0) return;
     const hidden = state ? hiddenInstanceIds(state) : new Set<InstanceId>();
+    if (pending.length === 0) {
+      hiddenBefore = hidden;
+      return;
+    }
     for (const observation of pending) {
       for (const key of FORBIDDEN_OBSERVATION_KEYS) {
         if (key in (observation as Record<string, unknown>)) {
@@ -827,10 +850,12 @@ function createLeakScanningPilot(
           : undefined;
       for (const id of hidden) {
         if (id === publiclySeen) continue;
+        if (!hiddenBefore.has(id)) continue;
         if (present.has(id)) report(`observation ${observation.type} names #${id}, which is in a hidden zone`);
       }
     }
     pending.length = 0;
+    hiddenBefore = hidden;
   };
   return {
     id: `leakscan(${inner.id})`,

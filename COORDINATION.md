@@ -125,12 +125,15 @@ throughput (games/sec) from regressing.
 | feat/as-enters-choices | worker | packages/core (NEW as-enters.ts + as-enters.test.ts; card/choices/state/statics/triggers/effects/events/engine/index, internal clone+zones+triggers-runtime), packages/cards (choice-primitives `chooseAsEnters`, compile rules/compile/types + NEW as-enters-cards.test.ts), packages/ai (choices.ts + NEW as-enters-pilot.test.ts), packages/sim (observation +1, paired-arms +1), apps/web (play/choice-view + ChoicePrompt + styles.css + play-format + replay-format + about/mechanics + 2 tests), DESIGN §3.21, COORDINATION | 🚧 PUSHED, not merged |
 | feat/tutor-and-sacrifice-templates | worker | packages/core (card.ts `AdditionalCastCost`, state.ts stack field, engine.ts cast gate + cost question + payment, index.ts export, internal/clone.ts +1 field, NEW additional-cast-cost.test.ts), packages/cards (choice-primitives searchLibrary `route`/graveyard, compile/{rules,compile,types}.ts, NEW tutors-and-additional-costs.test.ts, 1 reworded template-gaps case), packages/ai (choices.ts tutor-reach policy + weights.ts +2 entries + choices.test additions), packages/sim/src/paired-arms-config.ts (COMMENT only), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 | test/interaction-matrix | worker | **NEW files only** — `packages/cards/src/interaction/` (harness.ts + 8 pair suites + interaction-matrix.test.ts) — plus THREE product fixes: `packages/core/src/internal/continuous.ts` (new `anyContinuousModification`), `packages/core/src/protection.ts` + `targeting.ts` (fast-path gate), `packages/cards/src/effect-helpers.ts` (`movePermanentTo` calls the shared reset), `packages/core/src/index.ts` (+1 export), TESTING.md, COORDINATION.md | 🚧 PUSHED, not merged |
-| feat/replacement-effects | worker | packages/core (NEW replacement.ts + internal/replacement.ts + replacement.test.ts; card.ts `replacements`, state.ts `replacements`, events.ts +2, effects.ts `addReplacementEffect`, turn-facts.ts +1 fact, engine.ts draw+cleanup, index.ts exports, internal/{clone,combat,sba}.ts), packages/cards (primitives.ts damage/counters/draws + NEW `preventDamage`, compile/{rules,compile,types}.ts, NEW replacement-effects.test.ts), packages/ai (heuristic.ts fog intent + incoming damage, tactical.ts attacker re-pricing, weights.ts +2, effect-value.ts +1, NEW replacement-pilot.test.ts), packages/sim (observation +2, paired-arms +1), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.22, COORDINATION | 🚧 PUSHED, not merged |
+| feat/replacement-effects | worker | packages/core (NEW replacement.ts + internal/replacement.ts + replacement.test.ts; card.ts `replacements`, state.ts `replacements`, events.ts +2, effects.ts `addReplacementEffect`, turn-facts.ts +1 fact, engine.ts draw+cleanup, index.ts exports, internal/{clone,combat,sba}.ts), packages/cards (primitives.ts damage/counters/draws + NEW `preventDamage`, compile/{rules,compile,types}.ts, NEW replacement-effects.test.ts), packages/ai (heuristic.ts fog intent + incoming damage, tactical.ts attacker re-pricing, weights.ts +2, effect-value.ts +1, NEW replacement-pilot.test.ts), packages/sim (observation +2, paired-arms +1), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.29, COORDINATION | 🚧 PUSHED, not merged |
 
 | test/rules-conformance | worker | packages/core/src/conformance (NEW: manifest-types.ts, rules-manifest.ts, manifest.test.ts, cr7xx-sba-keywords-copy.test.ts + 4 salvaged cr*.test.ts and harness.ts), TESTING.md, DESIGN §3.21, COORDINATION.md. **No engine, compiler or pool change — collides with nobody.** | 🚧 PUSHED, not merged |
 
-| feat/combat-damage-and-equipment | worker | packages/core (triggers.ts `TriggerWatches`/`watches`/`TriggerSource.permanent`, internal/triggers-runtime.ts, index.ts +2 exports, NEW equipped-triggers.test.ts), packages/cards (compile/rules.ts 6 new TRIGGER_RULES + 3 new EFFECT_RULES + `optionalTriggerFrom`/`hostWatch`/payload-keyword parsing + 2 hint rewords, compile/compile.ts host-watch assembly guard, compile/attachments.test.ts 1 obsoleted case, NEW equipped-triggers.test.ts), packages/ai (heuristic.ts equip search + attack value + walker diversion, weights.ts +2 knobs, NEW equipment-pilot.test.ts), apps/web/src/lib/about/mechanics.ts (+2 witnesses, 1 reworded), DESIGN §3.22, COORDINATION. **No new effect primitive, no new GameEvent, no pool change.** | 🚧 PUSHED, not merged |
+| feat/combat-damage-and-equipment | worker | packages/core (triggers.ts `TriggerWatches`/`watches`/`TriggerSource.permanent`, internal/triggers-runtime.ts, index.ts +2 exports, NEW equipped-triggers.test.ts), packages/cards (compile/rules.ts 6 new TRIGGER_RULES + 3 new EFFECT_RULES + `optionalTriggerFrom`/`hostWatch`/payload-keyword parsing + 2 hint rewords, compile/compile.ts host-watch assembly guard, compile/attachments.test.ts 1 obsoleted case, NEW equipped-triggers.test.ts), packages/ai (heuristic.ts equip search + attack value + walker diversion, weights.ts +2 knobs, NEW equipment-pilot.test.ts), apps/web/src/lib/about/mechanics.ts (+2 witnesses, 1 reworded), DESIGN §3.29, COORDINATION. **No new effect primitive, no new GameEvent, no pool change.** | 🚧 PUSHED, not merged |
 | feat/block-requirements-and-statics | worker | packages/core (NEW block-solver.ts + countering.ts + player-statics.ts + block-requirements.test.ts + bench/block-requirement-cost.ts; card/actions/choices/config/engine/events/index, internal combat+continuous+stats+clone, conformance/rules-manifest, selfplay-lock re-pinned, 6 test helpers), packages/cards (compile rules/compile/types + effect-helpers + NEW block-and-statics.test.ts + 3 reworded tests), packages/ai (heuristic/weights + NEW block-requirements-pilot.test.ts), packages/sim (soak-config +3 classifications, observation +1), apps/web (about/mechanics +6 witnesses, play-format +1), DESIGN §3.25 | 🚧 PUSHED, not merged — **contains the fix for main's currently RED build** (soak-config) |
+| feat/pool-expansion-2 | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts + data/expansion-report.json; scripts/build-expansion.ts front-face lookup; src/pool-mechanics.test.ts REWRITTEN inventory + 12 new play tests, src/pool.test.ts counts, src/expanded-pool.test.ts mana cap, src/attachment-cards-in-pool.test.ts +4 PRINTED rows), packages/data-tools (src/normalize.ts + types.ts per-face defense/loyalty + adventurer cost, src/verify.ts + index.ts `frontFaceName`, src/normalize.test.ts +5, GENERATED data/card-index.json + data/starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/core (engine.ts `unpayableAdditionalCostReason` EXPORTED + index.ts +1 export — no behaviour change), packages/ai (heuristic.ts: additional-cost goal filter + `equipIsAnUpgrade`; equipment-pilot.test.ts +3; NEW additional-cost-pilot.test.ts), packages/sim/src/soak-config.ts (ONE predicate), DESIGN §3.20, COORDINATION. **No compiler rule, NO meta deck touched; gauntlet seed 99 byte-identical.** | 🚧 PUSHED, not merged |
+
+| fix/token-characteristics | worker | packages/core (card/choices/events/index/derived, internal/zones + clone COMMENT ONLY, NEW token-clone.test.ts), packages/cards (primitives, effect-helpers, compile/rules + compile/compile, data/pool.ts + REGENERATED data/expanded-pool.ts & expansion-report & expansion-candidates, NEW token-characteristics.test.ts + 4 updated tests), packages/data-tools (src/client.ts + regenerated data/), packages/sim/src/observation.ts (+1 classification), apps/web (about/mechanics.ts + regenerated src/data/card-index.json), DESIGN 3.29 | PUSHED, not merged |
 
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 
@@ -213,6 +216,250 @@ _Append dated notes here; keep them short. Newest at top._
   `engine.ts`, `internal/sba.ts` and `internal/clone.ts`, so it conflicts with anything else in
   those files — but everything it adds to the cleanup step is layered ON TOP of main's
   implementation, not a second copy of it.
+- 2026-08-20 worker: `fix/token-characteristics` 🚧 PUSHED — **every token in the game was entering
+  COLOURLESS, with no creature type, and not knowing it was a token.** `makeToken` built a
+  `CardDefinition` with a name and a P/T and nothing else, `colorsOfDefinition` reads colour off cost
+  PIPS, and a token has no mana cost — so "a 1/1 **black** Faerie Rogue creature token" and "a 5/5
+  **red** Dragon token" both arrived invisible to a coloured anthem, to protection from a colour, to
+  "destroy target nonblack creature", to every typal lord and to every `CardFilter.anyOfColors` query.
+  The cards compiled `'complete'`, the tests passed, and the token then played as a different object
+  from the one printed. **Every token card in the pool had it**, and it predates all recent work.
+
+  **Measured, paired, same cached 2100-card corpus, against the `origin/main` this merges into: 533
+  → 545 playable (25.4% → 26.0%), +12 cards, 0 regressions** — I diffed the two full playable SETS,
+  not just the counts. The shipped pool is **545** cards (main's 42 candidate groups plus mine,
+  REGENERATED rather than text-merged; see below).
+
+  🎨 **WHAT A TOKEN LOSES NOW: nothing it is printed with.** `CardDefinition.colors` (the colour
+  stated in WORDS), `subtypes` (its creature types), `types` ("artifact creature token"), `keywords`,
+  and `isToken`. Two details worth copying rather than re-deriving:
+  1. **`colorsOfDefinition` PREFERS the explicit field and falls back to pips**, so every printed card
+     still walks its cost exactly as before — nothing that worked changes. An **empty array is
+     meaningful**: `[]` is the printed word "colorless", absent means "read my pips". Do not merge the
+     two sources; the words win, and that is what devoid and colour indicators need too.
+  2. **CR 111.3 names a token by its subtype LINE** ("Faerie Rogue"), not by the last word of it. The
+     old rule took the last word, so two different tokens could share a name.
+
+  🧬 **`isToken` IS ON THE DEFINITION, beside `isEmblem` — and that is the interesting part.** A token
+  definition is MINTED by the effect that creates it and is never shared with a card, and
+  `cloneInstance` shares `def` **BY REFERENCE** — so the flag **cannot be dropped by the field-by-field
+  clone that has now silently lost four fields on this project** (`awaitingTargets`, `xValue`,
+  `printedDef`, `chosenAsEntered`). There is no line to forget. `internal/clone.ts` needed no new line
+  and now SAYS SO, with the rule spelled out for the next branch: put a fact on the DEFINITION when it
+  is about the card, on the instance only when it is genuinely per-object state — and then add it with
+  its own conditional AND its own test. `packages/core/src/token-clone.test.ts` pins both halves,
+  including that the ordinary cloned instance is still exactly the ten-property object it always was.
+
+  ⚰️ **CR 704.5d SHIPS: a token that has left the battlefield ceases to exist.** Applied by BOTH
+  leave-the-battlefield funnels — core's `moveToZone` and the cards package's `movePermanentTo` —
+  through one shared `ceaseToExistIfToken`, because a rule implemented in one funnel and not the other
+  is a rule that depends on which primitive killed the creature. It runs **after** the `zoneChange`
+  event, so every "dies" trigger still fires exactly as it does for a card. Done at the MOVE, not as an
+  SBA pass: the SBA form would walk both graveyards, exiles, hands and libraries after every
+  resolution, every draw and every combat-damage step looking for something nearly never there.
+  Without it a dead token sat in a graveyard for the rest of the game, inflating every graveyard count
+  the engine derives and standing as a legal target for anything returning a creature CARD.
+
+  🔍 **A SECOND COLOUR READER, found on the way — worth knowing about because the shape recurs.**
+  `passesDestroyFilter` (Doom Blade's `nonblack`) walked `def.cost` **itself** instead of asking
+  `colorsOfDefinition`. That second opinion was wrong twice: it could not see a HYBRID pip, and it
+  could not see a printed colour with no cost behind it. **If you need a card's colour, call
+  `colorsOfDefinition`. There is now exactly one reader.**
+
+  🧷 **REUSED, NOT RENAMED.** `colors` is the name `data-tools` already uses for a card's printed
+  colours; `isToken` mirrors `isEmblem`; `CardFilter.isToken` is one tri-state for BOTH printed words
+  ("token" / "nontoken") rather than two fields that could disagree; the typal anthem reads the
+  existing closed `SEARCHABLE_SUBTYPES` table (now documented as the compiler's subtype vocabulary
+  generally, not only a search's) and the existing instance-aware `permanentHasSubtype` from
+  `feat/as-enters-choices`.
+
+  🃏 **CARDS UN-REPORTED (23 joined the pool):** Bitterblossom, **Bitterbloom Bearer** (the two-colour
+  "blue and black" token) and Ophiomancer — the three the step-trigger branch left reporting
+  *specifically* because of this — plus Goblin Chieftain, Lyra Dawnbringer, Diregraf Captain, Blood
+  Artist, Falkenrath Noble, Hornet Queen, Seraph Sanctuary, Harvester of Souls, Soul of the Harvest,
+  Bad Moon, Crusade, Adaptive Automaton, Paladin en-Vec, Third Path Iconoclast and more token makers
+  across colours. Three compiler extensions were needed and each is small: a **typal anthem** noun
+  (both printed shapes; the bare "Goblins you control" adds NO card type, because a Kindred
+  Enchantment genuinely IS a Faerie without being a creature), the **Kindred card type** (CR 308, with
+  its graveyard type bit), and an **"A and B" trigger body** — accepted only when BOTH halves are
+  complete rules of their own, which is what makes splitting on a word safe (cutting "1/1 **blue and
+  black** Faerie" leaves "create a 1/1 blue", which matches nothing, so that cut is abandoned).
+
+  🧪 **13/13 SABOTAGES RED, and the first pass is the part worth reading: 3 of 10 SURVIVED.** Each
+  survivor named a real gap rather than a flaky test:
+  - the token-face REFUSAL branches were never exercised — my two refusal cases failed the *pattern*,
+    not `parseTokenFace`. Two descriptors that actually reach it now do.
+  - the typal anthem was pinned only through GENERATED pool data, so breaking the RULE changed
+    nothing. **If your test plays a pool card, it does not test the compiler.** Both layers are pinned
+    now.
+  - `CardFilter.isToken` had **no consumer at all** — an inert field, which this project's contract
+    forbids. The enters/dies trigger rule now reads the printed word, which brings Harvester of Souls
+    and Soul of the Harvest into the pool and makes the filter load-bearing.
+
+  ⚠️ **A DATA-PIPELINE BUG THIS EXPOSED, which will bite anyone who regenerates the pool:
+  `fetchCardsByNames` cannot resolve a TWO-FACED name.** Regenerating after `feat/split-cards` landed
+  brought modal DFCs into the pool for the first time, and their printed names carry `//`, which
+  Scryfall's collection endpoint will not accept as an exact name. Every one of them reported
+  "unresolved" and fell straight back out of the committed card index, taking its art and its display
+  row with it — and it surfaced as five unrelated-looking test failures. Fixed by asking for the FRONT
+  half, which returns the whole card. **Modal DFCs are consequently REPRESENTED in the pool now** and
+  have left `pool-mechanics.test.ts`'s unrepresentable list.
+
+  ⚡ **Rule 7, measured properly.** Wall clock on this box is worthless — the SAME build measured
+  1422 ms and 1907 ms ten minutes apart. Paired `process.cpuUsage`, min-of-5 over the same in-process
+  gauntlet (Mono-Red Aggro, 40 games, seed 99), the two measured back to back: branch **1875 ms** vs
+  main **1844 ms** (1.02x), inside that spread — and an earlier interleaved A/B/A had the branch
+  FASTER than main (1422 vs 1578 ms), which is what "inside the spread" means. Deterministic gauntlet
+  output is **identical in six of seven matchup rows**; UW Control moves 15/40 → 14/40. That single
+  game is a REAL behaviour change, not noise: the hero deck runs Young Pyromancer, and its Elemental
+  tokens are now red Elementals that cease to exist when they die instead of piling up in a graveyard
+  the evaluator reads.
+
+  ⚠ **GENERATED DATA MUST BE REGENERATED ACROSS A MERGE, NEVER TEXT-MERGED — and git will not tell
+  you.** Merging a main that had re-run the pool generator produced an `expansion-candidates.json`
+  carrying MY 30 groups and none of main's 42, with **no conflict reported**, and the same for
+  `expanded-pool.ts` and both card indexes. It looked like a clean merge and would have silently
+  reverted ~150 pool cards. What works: take main's generated files WHOLESALE
+  (`git checkout origin/main -- <them>`), re-append your own candidate group, then re-run
+  `build-expansion.ts --fetch`, its emit pass, `npm run fetch -w @jonny-boi/data-tools` and
+  `apps/web/scripts/build-card-index.mjs`. A textual merge of two generator runs is not what either
+  run would have produced. **Check `git diff origin/main --stat -- packages/cards/data` after every
+  merge.**
+
+  ⚠ **THE SOAK FOUND A REAL DEFECT IN ITSELF on the wider pool, and it is fixed here.** Its leak scan
+  buffers observations and tests them against the POST-action state, which reports the mirror image of
+  the buyback false positive its own comment describes: a creature dies (public `creatureDied`, naming
+  it — the whole table saw it), then Gravedigger returns it from the graveyard to a HAND later in the
+  same window, and the honest observation is reported as a leak. An id is only a leak when it was
+  hidden BEFORE the window as well as after — which is exactly "the table never saw this card". A
+  DRAWN card is hidden on both sides and is still scanned. Sabotage-checked: making `drawCard` public
+  still reports it.
+
+  📌 **Two existing REFUSAL tests flipped to assert what ships**, because they were documentation of
+  exactly the gap this branch closed: `counters-templates.test.ts`'s "REFUSES the nontoken variant —
+  instances carry no token flag", and `you-may-and-triggers.test.ts`'s tutor refusal, which used
+  "Zombie" as its out-of-table subtype (Zombie joined the table with the typal lords; the refusal is
+  now shown with Kavu, and the rule under test is unchanged).
+
+  ⛔ **REPORTED BY NAME, never approximated:** **token COPIES** ("create a token that's a copy of
+  target creature"). Copy effects LANDED while this branch was in flight, so the missing half is now
+  only the token-copy PRIMITIVE — a rule that picks a source and hands `copyResultDef` to
+  `ctx.createToken`. **The trap is already disarmed**: core stamps token-ness in `createTokenInState`,
+  so a copy built from `copiableDefOf` (which returns the copied CARD and carries no token flag) is
+  still a token, ceases to exist, and answers the nontoken filters. Also: the predefined artifact tokens (Treasure/Clue/Food — no P/T in the clause
+  and an activated ability the rule does not build), a token that enters TAPPED or ATTACKING
+  (`createToken` cannot express either), a DERIVED token count ("create X 1/1 Goblins, where X is
+  Krenko's power"), and "Destroy all nontoken creatures" — which is a `destroyAll` gap (it takes no
+  `CardFilter` at all), not a token one.
+
+  Files owned: `packages/core` (`card.ts`, `choices.ts`, `events.ts`, `index.ts`, `derived.ts`,
+  `internal/zones.ts`, `internal/clone.ts` comment-only, NEW `token-clone.test.ts`), `packages/cards`
+  (`primitives.ts`, `effect-helpers.ts`, `compile/rules.ts`, `compile/compile.ts`, `data/pool.ts`,
+  regenerated `data/expanded-pool.ts` + `data/expansion-report.json` + `data/expansion-candidates.json`,
+  NEW `token-characteristics.test.ts`, plus `pool.test.ts` / `pool-mechanics.test.ts` /
+  `counters-templates.test.ts` / `compile/you-may-and-triggers.test.ts`), `packages/data-tools`
+  (`src/client.ts` + regenerated `data/`), `packages/sim/src/observation.ts` (one classification),
+  `apps/web` (`src/lib/about/mechanics.ts` + regenerated `src/data/card-index.json`), DESIGN §3.29,
+  COORDINATION.md.
+- 2026-08-20 worker: `feat/pool-expansion-2` 🚧 PUSHED — **the shipped pool is 357 → 530 cards, and
+  every one of the eleven blind mechanics now prints a card a player can see without importing a
+  decklist.** Pool + fetch pipeline only: **no compiler rule, no engine change, and NO meta deck
+  touched**. Gauntlet seed 99 is **byte-identical** to the same-box `origin/main` this branch merged
+  (`b5752b2`): **80/280**, rows 12·13·17·7·9·7·15, every one equal.
+  ⚠️ **The recorded 81/280 is now 80/280 and that game is NOT mine** — a baseline worktree at
+  `b5752b2` with no pool change reads 80/280 as well, so it belongs to
+  `feat/block-requirements-and-statics`. Whoever re-records §3.4a should use 80/280.
+
+  🔑 **THE THING TO KNOW: three of the eleven were blocked in the FETCH PATH, not by the compiler.**
+  Every sibling branch signed off with "whoever next runs the pipeline gets these free." They were
+  not free — re-running the old pipeline would have produced almost none of them.
+  1. **`/cards/collection` does NOT resolve a combined `"A // B"` name.** `{ name: 'Fire // Ice' }`
+     comes back in `not_found`; `{ name: 'Fire' }` returns the whole `Fire // Ice` record. Every
+     split and aftermath candidate had been failing to resolve, silently, for as long as the list had
+     them. **`frontFaceName` (data-tools `verify.ts`) is now the ONE place that answer lives** — the
+     expansion fetch and the regenerated `starter-cards.json` both go through it. The starter list is
+     a list of things to ASK SCRYFALL FOR, so it carries front-face names; the index keeps the card's
+     real name and `invariants.test.ts` already matches either half.
+  2. **A Siege's printed defense is on `card_faces[0].defense`, not at the card level.**
+     `Invasion of Gobakhan` reports `defense: undefined` on the card and `'3'` on the battle face.
+     Capturing the field was not enough — every battle in Magic normalized to `null` anyway, which is
+     why "a re-fetch unblocks battles" turned out to be false. The same front-face fallback now
+     covers `loyalty` (a transforming walker prints its number on a face too). **This is the third
+     time a missing normalizer field has masqueraded as a compiler gap** (after `layout`): if you are
+     measuring coverage, check the normalizer is not dropping the field your detector reads.
+  3. **CR 715.2 — an ADVENTURER's mana cost is the CREATURE's, not the two halves summed.** Scryfall
+     prints `"{B} // {2}{B}"` and reports `cmc: 1`; summing it produced a cost that contradicted the
+     card's own mana value and tripped the index's pip↔mana-value invariant on all eighteen
+     adventurers at once. A SPLIT card is the opposite (CR 709.4 — the sum IS the cost, and Scryfall's
+     `cmc` agrees), so the fix is narrowed to that one layout.
+
+  ✅ **Newly visible, per mechanic (before → after):** split 0→5 · aftermath 0→3 · adventure 0→18 ·
+  modal DFCs 0→21 (the ten Pathways + eleven spell//land halves) · as-enters naming 0→8 · mandatory
+  additional costs 0→9 · two-destination search 0→2 (Cultivate, Kodama's Reach) · **the mana-ability
+  model 0→50** (ten pain lands, ten filter lands, ten Talismans, ten Signets, Mox Opal, Ancient Tomb,
+  Reflecting Pool…) · battles 0→3 (Invasion of Moag / Belenon / Dominaria) · intervening "if" 0→3 ·
+  step triggers 1→12 · **equipment with a TRIGGERED ability 0→4** (Sword of Fire and Ice, Skullclamp,
+  Sword of the Animist, Argentum Armor) · **damage prevention 0→4** (Fog, Holy Day, Darkness,
+  Moment's Peace) · **replacement effects 0→2** (Hardened Scales, Torbran).
+  `pool-mechanics.test.ts` went from 22 inventory entries + 11 play tests to **35 + 26** — every one
+  of those mechanics is now PLAYED in a seeded game, not merely present in the data.
+
+  📌 **The last three rows are yours, `feat/replacement-effects` and `feat/combat-damage-and-equipment`.**
+  Re-running the SAME candidate list on the merged compiler admitted fifteen more cards with no edit
+  at all. That is the argument for running this pipeline after every compiler branch rather than once
+  every four merges — the generator's output is committed, so a compiler that got smarter is
+  invisible until someone re-runs it.
+
+  ⛔ **Still no honest card — only two left, both measured against every printed card carrying the
+  mechanic:** **multikicker 0/19** (12 blocked on the counters template alone) and **emblems 0/90**
+  (the loyalty ULTIMATE is the bigger blocker — 108 unreadable loyalty clauses against 77 unreadable
+  emblem bodies). Other measured counts for whoever picks up a template family: battles **3/36**,
+  modal DFCs **22/98**, split **5/124** (28 Rooms, 17 FUSE), aftermath **3/27**, adventure **18/152**,
+  prevention **11/123**, equipment-with-a-trigger **13/145**, replacement-on-counters **3/17**,
+  replacement-on-damage **4/32**.
+
+  🃏 **Cards that would be GAUNTLET-WORTHY and were deliberately left out** (adding one moves every
+  recorded A/B verdict — a separate, measured decision, and not a pool run's to make): the ten
+  **Signets**, ten **Talismans** and ten **pain lands** (a real mana base for all seven two-colour
+  gauntlet decks), **Cultivate / Kodama's Reach / Birds of Paradise / Sylvan Caryatid** (Mono-Green
+  Ramp's actual ramp package), **Village Rites / Thrill of Possibility** (Rakdos Goblins card flow),
+  **Corpse Knight / Marauding Blight-Priest / Kambal** (Orzhov Lifegain's drain payoff),
+  **Poison-Tip Archer / Elas il-Kor** (Golgari Midrange), **Skullclamp / Sword of Fire and Ice /
+  Lightning Greaves** (aggro equipment), **Fog** (a real answer for Mono-Green), and **Foulmire
+  Knight / Rimrock Knight** (two-for-one adventure bodies).
+
+  🐞 **THREE DEFECTS THE BIGGER POOL FOUND, NONE OF THEM IN THE POOL.** `test/full-pool-soak` builds
+  its theme decks FROM the shipped pool, so tripling the pool is also a much wider soak — and it broke
+  three ways, all pre-existing, all invisible while the pool had no card that could reach them.
+  1. **The pilot proposed a spell it could not cast, and then proposed it again forever.**
+     `scoredSpellGoals` gated on land/timing/mana/targets but not on a MANDATORY additional cost, so
+     Altar's Reap with an empty board became a `castSpell` the engine rejected — and, since nothing
+     about the board changed, the same cast on the next priority, and the next. Three soak games
+     burned the 6000-action cap without ending. Now filtered at that function's ONE exit through
+     core's own **`unpayableAdditionalCostReason`** (newly exported from `@jonny-boi/core` for
+     exactly this), so both consumers inherit it and there is still one reader of the rule.
+     ⚠️ **If you add a pilot path that builds its own cast action, it needs this gate too.**
+  2. **A FREE equip cost was an infinite loop.** `bestEquipHost` excludes the current host, which
+     stops re-equipping the same body — but with two hosts and Equip {0} the pilot moved the
+     Equipment A→B, found A was again the best non-host, and moved it back, forever, at no cost.
+     `equipIsAnUpgrade` now requires the destination to STRICTLY beat the host it is on. Lightning
+     Greaves was in all three capped games.
+  3. **The soak's own `transform-dfc` predicate was `hasKey('backFace')`** — and four layouts hang a
+     second half off that field (split, aftermath, adventure, modal DFC), none of which transforms.
+     The theme deck for the mechanic was drafted almost entirely from cards that cannot flip and the
+     soak reported it INERT while Delver of Secrets was never dealt in. Narrowed to "a back face that
+     is not separately castable". It did not start wrong; it BECAME wrong when the pool grew.
+
+  📊 **Corpus coverage does not move: 533/2100 (25.4%) on `origin/main` at `b5752b2` and 533/2100
+  here**, measured in two worktrees on the same box — and 524/524 against the earlier `78e3299`, so
+  the claim has now held across two baselines. This branch adds no compiler rule.
+
+  ⚠️ Three stale-guard fixes fell out, all worth knowing: `expanded-pool.test.ts`'s "no mana source
+  taps for more than 2" now takes an exception list BY NAME (Gilded Lotus and Thran Dynamo genuinely
+  print three) rather than a raised ceiling, because raising the number would have retired the guard;
+  `attachment-cards-in-pool.test.ts` gained seven rows AND now expands a LIST-valued keyword one entry
+  per value, so a Sword of Fire and Ice granting protection from the wrong colour fails instead of
+  passing on the bare keyword name; and `pool.test.ts`'s pool-size constants moved 325 → 498 compiled.
 
 - 2026-08-20 worker: `test/interaction-matrix` 🚧 PUSHED — **the interactions between the
   shipped systems are now an executable matrix, and finding three real defects took nine
@@ -592,7 +839,7 @@ _Append dated notes here; keep them short. Newest at top._
 - 2026-08-20 worker: `feat/replacement-effects` 🚧 PUSHED — **replacement and prevention effects
   (CR 614/615/616), a layer the engine had never had.** Three template buckets that are ONE system
   underneath: counter multipliers, damage scaling, and prevention/fogs — plus draw replacement, which
-  is the same machinery watching a third event. Full write-up in DESIGN §3.22.
+  is the same machinery watching a third event. Full write-up in DESIGN §3.29.
 
   **Measured PAIRED against the same-day `origin/main` (`068be3d`), same cached corpus: 485 → 501 of
   2100 playable (23.1% → 23.9%), +16 cards.** (The same +16 against the pre-merge main this branch
@@ -1254,7 +1501,7 @@ _Append dated notes here; keep them short. Newest at top._
   system, and it is four printed layouts sharing one model.** A card may carry a second half that is
   really cast, plus the list of ZONES that half may be cast from, plus — for the two halves you earn
   rather than hold — a per-instance PERMISSION. Split (CR 709), aftermath (CR 702.127a), adventure
-  (CR 715) and the Siege reward (CR 310.4) are four configurations of exactly that. DESIGN §3.22 has
+  (CR 715) and the Siege reward (CR 310.4) are four configurations of exactly that. DESIGN §3.29 has
   the table.
 
   **Measured, cached 2100-card corpus, `--top 20`: 408 → 421 playable (19.4% → 20.0%).** Both headline

@@ -411,6 +411,12 @@ export {
 // Madness (CR 702.35): the discard replacement and the window it opens.
 export { discardDestination, declineMadness } from './madness.js';
 
+// CR 704.5d, exported because the cards package owns the OTHER
+// leave-the-battlefield funnel (`movePermanentTo`) and both must apply it — a
+// token that ceases to exist only when core's mover was used would depend on
+// which primitive killed it.
+export { ceaseToExistIfToken } from './internal/zones.js';
+
 // Events
 export type { GameEvent, EventLog } from './events.js';
 export { createEventLog, eventsOfType } from './events.js';
@@ -531,6 +537,11 @@ export {
   generateLegalActions,
   choiceActionsFor,
   canAffordManaCost,
+  // CR 601.2h. Exported because a PILOT builds its cast actions itself rather
+  // than picking one off the menu, so it needs the same reader the offer loop
+  // and the cast path already use — three opinions about "can this be paid" is
+  // exactly how a spell becomes offerable and un-castable.
+  unpayableAdditionalCostReason,
 } from './engine.js';
 /**
  * Deep-copy the mutable parts of a state (card definitions stay shared). Paired

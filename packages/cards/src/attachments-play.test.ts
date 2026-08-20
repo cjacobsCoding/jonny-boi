@@ -229,8 +229,15 @@ describe('the heuristic pilot really equips', () => {
     expect(equipment!.attachedTo).not.toBeNull();
     const host = game.state.battlefield.find((c) => c.instanceId === equipment!.attachedTo);
     expect(host!.controller).toBe(equipment!.controller);
+    // The deck plays several Bonesplitters and the pilot may stack more than one
+    // on its best body — a real line, and not what this test is about. Count
+    // what is on THIS host instead of assuming exactly one.
+    const onThisHost = game.state.battlefield.filter(
+      (c) => c.def.name === 'Bonesplitter' && c.attachedTo === host!.instanceId,
+    ).length;
+    expect(onThisHost).toBeGreaterThan(0);
     const mod = indexContinuous(game.state).get(host!.instanceId) ?? NO_MOD;
-    expect(effectivePower(host!, mod)).toBe((host!.def.power ?? 0) + 2);
+    expect(effectivePower(host!, mod)).toBe((host!.def.power ?? 0) + 2 * onThisHost);
   });
 
   it('does NOT re-equip the creature it is already on (the mana-burning loop)', () => {

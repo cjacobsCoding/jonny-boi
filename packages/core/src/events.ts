@@ -544,6 +544,19 @@ export type GameEvent =
       readonly name: string;
     }
   | {
+      // CR 704.5d: a token that has left the battlefield CEASES TO EXIST. It is
+      // emitted immediately after the `zoneChange` that moved it, so a "dies" /
+      // "leaves the battlefield" trigger still sees the move exactly as it does
+      // for a card — and so a log or a replay folding zone changes is told why
+      // the object it just put in a graveyard is not there.
+      readonly type: 'tokenCeasedToExist';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      // The zone it reached before ceasing to exist (graveyard, exile, hand,
+      // library) — the printed destination, which is what a log line reads.
+      readonly zone: ZoneName;
+    }
+  | {
       // A resolving spell/ability asked a player a question; resolution is parked
       // until it is answered. The replay/inspector needs both halves of every
       // choice, which is why asking and answering are BOTH events.

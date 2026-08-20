@@ -764,17 +764,27 @@ describe('every compiled card resolves in a real game', () => {
     // to be how an any-colour source had to be authored). Assert the shape data
     // directly: no compiled source may add more than the printed maximum.
     const PRINTED_MAX_PER_TAP = 2; // Sol Ring / Palladium Myr style {C}{C}
+    // The exceptions are BY NAME rather than a raised ceiling, because raising
+    // the number to fit the biggest rock would retire the guard: "taps for
+    // three" has to stay a failure for every card that does not print it.
+    const PRINTS_THREE = new Map<string, number>([
+      ['Gilded Lotus', 3], // "{T}: Add three mana of any one color."
+      ['Thran Dynamo', 3], // "{T}: Add {C}{C}{C}."
+    ]);
     for (const card of EXPANDED_CARD_POOL) {
       const modes = manaModesOf(card);
       if (modes.length === 0) continue;
+      const cap = PRINTS_THREE.get(card.name) ?? PRINTED_MAX_PER_TAP;
       for (const mode of modes) {
         const total = Object.values(mode).reduce((sum, n) => sum + (n ?? 0), 0);
-        expect(total, `${card.name} mode adds ${total} mana`).toBeLessThanOrEqual(
-          PRINTED_MAX_PER_TAP,
-        );
+        expect(total, `${card.name} mode adds ${total} mana`).toBeLessThanOrEqual(cap);
         expect(total, `${card.name} has an empty mana mode`).toBeGreaterThan(0);
       }
     }
+    // And the allowlist is not allowed to rot: a name that leaves the pool has
+    // to leave the list with it, or the next big rock inherits its exemption.
+    const poolNames = new Set(EXPANDED_CARD_POOL.map((card) => card.name));
+    expect([...PRINTS_THREE.keys()].filter((name) => !poolNames.has(name))).toEqual([]);
   });
 });
 
