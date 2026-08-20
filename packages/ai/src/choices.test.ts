@@ -319,6 +319,35 @@ describe('the tutor policy (what a library search actually fetches)', () => {
     expect(state.players.A.hand.find((c) => c.instanceId === action.answer.instanceIds[0])?.def.name).toBe('Dragon');
   });
 
+  it('leaves a Ponder-style REORDER alone — every card goes back, so nothing is being acquired', () => {
+    // The floor equalling the ceiling is what makes it a reorder and not a
+    // search: this is "in what order do these go back", not "which do I take".
+    const state = newGame().state;
+    state.players.A.hand = [];
+    const looked = giveHand(state, 'A', [BEAR, DRAGON]);
+    state.players.A.hand = [];
+    for (const card of looked) card.zone = 'library';
+    state.players.A.library = [...looked, ...state.players.A.library];
+    const choice = park({
+      kind: 'selectCards',
+      chooser: 'A',
+      prompt: 'Put the top 2 card(s) of your library back in any order',
+      candidates: looked.map((card) => ({ instanceId: card.instanceId, name: card.def.name })),
+      min: 2,
+      max: 2,
+      ordered: true,
+      valence: 'gain',
+      fromZone: 'library',
+    });
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectCards') throw new Error('wrong shape');
+    const ordered = action.answer.instanceIds.map(
+      (id) => state.players.A.library.find((c) => c.instanceId === id)!.def.name,
+    );
+    // Unchanged by the tutor policy: the best card is still put on top.
+    expect(ordered).toEqual(['Dragon', 'Bear']);
+  });
+
   it('pays a COST with the worst qualifying permanent, not the best', () => {
     const state = newGame().state;
     state.players.A.hand = [];

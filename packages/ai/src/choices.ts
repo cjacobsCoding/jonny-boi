@@ -165,10 +165,17 @@ function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights:
   // order (first = the position that comes up soonest — top of library, drawn
   // first), so the good card is the one we see again first.
   const context = cardValueContext(state);
-  // A search of MY OWN library is the only selection where every candidate is a
-  // card I would have to cast later; nothing else in this function can be, so
-  // the reach test is computed once and applied only there.
-  const reach = choice.fromZone === 'library' && choice.valence === 'gain' ? castingReach(state, choice.chooser, weights) : undefined;
+  // The reach test is computed once, and ONLY for a genuine library SEARCH — the
+  // one selection where every candidate is a card the pilot would have to cast
+  // later. The other two library questions are deliberately excluded, because
+  // their candidates are not being acquired at all:
+  //   - a SCRY/SURVEIL look (`keepOnTop`) decides where cards already on top go;
+  //   - a REORDER (Ponder's "put them back in any order") puts every card back,
+  //     which is why its floor equals its ceiling. A search's floor is ZERO —
+  //     a search may always fail to find — and that is what tells them apart.
+  const isLibrarySearch =
+    choice.fromZone === 'library' && choice.valence === 'gain' && choice.keepOnTop !== true && choice.min === 0;
+  const reach = isLibrarySearch ? castingReach(state, choice.chooser, weights) : undefined;
   const scored = choice.candidates.map((option, index) => {
     const card = findInstance(state, option.instanceId);
     const base = cardValue(card, weights, context);
