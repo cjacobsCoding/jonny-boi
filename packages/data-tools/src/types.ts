@@ -136,6 +136,19 @@ export interface NormalizedCard {
   imageUris: ScryfallImageUris;
   /** Local cache paths for downloaded images, populated by the art downloader. */
   localImages: LocalImagePaths;
+  /**
+   * Scryfall's `layout` verbatim — `'normal'`, `'transform'`, `'modal_dfc'`,
+   * `'split'`, `'adventure'`, … . It is the ONLY unambiguous statement of what
+   * a multi-faced record MEANS: a split card and a modal DFC both print two
+   * faces with two costs, and only the layout says whether they are two halves
+   * of one object (CR 709) or two faces of one card (CR 712). The compiler
+   * refuses to guess it from the name or the type line.
+   *
+   * Optional because the committed index predates the field; a record without
+   * it falls back to the narrower keyword/face-shape detection the compiler
+   * already had.
+   */
+  layout?: string;
   /** True when this card had `card_faces[]` (DFC / split / adventure / etc.). */
   isDoubleFaced: boolean;
   /** Per-face data when double-faced; empty otherwise. */

@@ -135,7 +135,7 @@ describe('the compiler plays both faces or reports the card', () => {
     expect(result.definition.backFace!.cost).toBeUndefined();
   });
 
-  it('a SPLIT card still reports — two castable halves are not two faces', () => {
+  it('a SPLIT card with no per-face data still reports — there is nothing to compile', () => {
     const split: CompilableCard = {
       id: 'split-test',
       name: 'Fire // Ice',
@@ -146,6 +146,10 @@ describe('the compiler plays both faces or reports the card', () => {
       toughness: null,
       keywords: [],
     };
+    // Split cards SHIP (see `compile/split-cards.test.ts`) — but only from a
+    // record that carries `layout: 'split'` and its two faces. This one carries
+    // the combined name and nothing else, so both halves would have to be
+    // guessed, and the compiler reports rather than guessing.
     const result = compileCard(split);
     expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(SECOND_CASTABLE_FACE_GAP);

@@ -20,6 +20,7 @@ import { applyControlChange } from './internal/continuous.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {
   ChooseModesRequest,
+  ChooseValueRequest,
   ChoiceAnswer,
   ChoiceRequest,
   ConfirmRequest,
@@ -64,6 +65,23 @@ export interface EffectContext {
    * through {@link kicked}.
    */
   readonly kickCount?: number;
+  /**
+   * For a TRIGGERED ability: the player the event that set it off was about —
+   * whose step began, who drew the card, who controlled the permanent that
+   * entered or died. This is what a body's printed "**that player**" / "**them**"
+   * points at.
+   *
+   * It is NOT `controller`, and the difference is the whole reason the field
+   * exists: an "at the beginning of EACH player's draw step" ability resolves
+   * under its source's controller on both players' turns, so a body reading
+   * `controller` would make Howling Mine draw its own controller a card every
+   * turn instead of drawing whoever's draw step it is.
+   *
+   * `undefined` for spells and for triggers whose event names no player — a
+   * primitive asked for the triggering player then falls back to the controller,
+   * matching how every other player param degrades.
+   */
+  readonly triggeringPlayer?: PlayerId;
   /** Append an event to the log. */
   emit(event: GameEvent): void;
   /**
@@ -167,6 +185,16 @@ export interface EffectContext {
    * {@link EffectContext.payOrDecline}); `false` ⇒ nothing was taken.
    */
   payLifeOrDecline(request: ChoiceRequestArgs<PayLifeRequest>): boolean | undefined;
+  /**
+   * NAME a value — a colour, a creature type, a card type, a player ("As ~
+   * enters, choose a creature type"). `undefined` ⇒ parked; otherwise the named
+   * option's `value`, or `NOTHING_CHOSEN` (`''`) when nothing was named, which is
+   * a real answer and not a parked one.
+   *
+   * The caller stores the answer; see `recordChosenAsEntered` in `as-enters.ts`,
+   * which is the one writer both entry paths use.
+   */
+  chooseValue(request: ChoiceRequestArgs<ChooseValueRequest>): string | undefined;
   /**
    * Schedule further effect refs to run inside THIS resolution, immediately after
    * the current one. The composition seam for modal spells and for any effect
@@ -295,6 +323,7 @@ export function applyEffectRef(
     xValue: base.xValue,
     kicked: base.kicked,
     kickCount: base.kickCount,
+    triggeringPlayer: base.triggeringPlayer,
     emit,
     addContinuousEffect(mod) {
       return addContinuousEffectToState(base.state, base.source.instanceId, base.controller, mod, emit);
@@ -333,6 +362,10 @@ export function applyEffectRef(
       const answer = ask({ ...request, kind: 'payLife', chooser: request.chooser ?? base.controller });
       return answer && answer.kind === 'payLife' ? answer.pay : undefined;
     },
+    chooseValue(request) {
+      const answer = ask({ ...request, kind: 'chooseValue', chooser: request.chooser ?? base.controller });
+      return answer && answer.kind === 'chooseValue' ? answer.value : undefined;
+    },
     enqueueEffects(refs) {
       channel?.enqueueEffects(refs);
     },
@@ -348,7 +381,7 @@ export function applyEffectRef(
 /** The parts of an `EffectContext` the caller supplies; the rest are wired here. */
 export type EffectContextBase = Pick<
   EffectContext,
-  'state' | 'source' | 'controller' | 'xValue' | 'kicked' | 'kickCount'
+  'state' | 'source' | 'controller' | 'xValue' | 'kicked' | 'kickCount' | 'triggeringPlayer'
 >;
 
 /**

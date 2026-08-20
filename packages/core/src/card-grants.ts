@@ -68,6 +68,50 @@ export interface CardGrant {
    * a pointless grant target, and the printed cost is the conservative pick).
    */
   readonly flashback?: ManaCost;
+  /**
+   * PERMISSION TO CAST THIS CARD from {@link zone}, naming which face — the
+   * shape shared by the two "you may cast it later" effects the rules print:
+   *
+   *  - an ADVENTURE (CR 715.3d): the adventure spell exiles its own card on
+   *    resolution and its owner may then cast the CREATURE half (`'front'`)
+   *    from exile;
+   *  - a defeated SIEGE (CR 310.4): the battle is exiled and its controller may
+   *    cast the reward half (`'back'`) from exile, without paying its cost.
+   *
+   * It is a GRANT rather than a field on the instance for one reason that is
+   * worth keeping: CR 400.7 says the permission dies with the object, and the
+   * grant list already prunes itself at every zone-move chokepoint. A card that
+   * leaves exile and comes back is a new object with no permission, for free.
+   *
+   * The grant's {@link duration} is `'permanent'` for both — an adventure waits
+   * in exile indefinitely — so it survives the cleanup step's expiry sweep.
+   */
+  readonly castFace?: import('./actions.js').CastFace;
+  /** The granted cast pays no mana cost (a Siege reward — CR 310.4). */
+  readonly castFree?: boolean;
+}
+
+/**
+ * The permission `card` currently has to be cast from the zone it is sitting
+ * in, or `undefined`. THE accessor, exactly as {@link flashbackCostOf} is for
+ * flashback: `generateLegalActions` offers by it and `applyCastSpell` accepts
+ * by it, so a hostile client cannot cast an exiled card the offer loop would
+ * never have shown.
+ */
+export function castPermissionFor(
+  state: GameState,
+  card: CardInstance,
+): { readonly face: import('./actions.js').CastFace; readonly free: boolean } | undefined {
+  const grants = state.cardGrants;
+  if (grants === undefined || grants.length === 0) return undefined;
+  for (let i = 0; i < grants.length; i++) {
+    const grant = grants[i] as CardGrant;
+    if (grant.castFace === undefined) continue;
+    if (grant.targetInstanceId !== card.instanceId) continue;
+    if (grant.zone !== card.zone) continue;
+    return { face: grant.castFace, free: grant.castFree === true };
+  }
+  return undefined;
 }
 
 /**
@@ -111,6 +155,8 @@ export interface CardGrantRequest {
   readonly zone: ZoneName;
   readonly duration?: ContinuousDuration;
   readonly flashback?: ManaCost;
+  readonly castFace?: import('./actions.js').CastFace;
+  readonly castFree?: boolean;
 }
 
 /**
@@ -131,6 +177,8 @@ export function addCardGrant(
     duration: request.duration ?? 'endOfTurn',
     zone: request.zone,
     ...(request.flashback !== undefined ? { flashback: { ...request.flashback } } : {}),
+    ...(request.castFace !== undefined ? { castFace: request.castFace } : {}),
+    ...(request.castFree === true ? { castFree: true } : {}),
   };
   (state.cardGrants ??= []).push(grant);
   emit({

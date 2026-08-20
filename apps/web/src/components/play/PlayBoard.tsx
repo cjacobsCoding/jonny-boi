@@ -174,14 +174,14 @@ export function PlayBoard({
     if (!cast) return;
     // `fromZone` rides the option: a flashback cast names its graveyard source
     // (and pays the flashback cost inside castWithAutoTap); hand casts omit it.
-    run(() => session.castWithAutoTap(cast.instanceId, targets, cast.fromZone ?? 'hand'));
+    run(() => session.castWithAutoTap(cast.instanceId, targets, cast.fromZone ?? 'hand', cast.face));
   };
 
   const onCastClick = (opt: CastOption): void => {
     if (opt.needsTarget) {
       setPendingCast(opt);
     } else {
-      run(() => session.castWithAutoTap(opt.instanceId, [], opt.fromZone ?? 'hand'));
+      run(() => session.castWithAutoTap(opt.instanceId, [], opt.fromZone ?? 'hand', opt.face));
     }
   };
 
@@ -197,9 +197,13 @@ export function PlayBoard({
    * menu, because picking one for the player would silently throw away the
    * choice the printed card exists to offer.
    */
-  const onHandCardClick = (id: InstanceId, land: boolean, cast: CastOption | undefined): void => {
+  const onHandCardClick = (id: InstanceId, land: boolean, casts: readonly CastOption[]): void => {
     const cycles = cycleOptions.filter((o) => o.instanceId === id);
-    const ways = (land ? 1 : 0) + (cast ? 1 : 0) + cycles.length;
+    // A SPLIT card is two ways to cast one instance, so the count is the number
+    // of cast options rather than "is there one?" — otherwise clicking a split
+    // card would silently cast its left half and throw away the choice the card
+    // exists to offer.
+    const ways = (land ? 1 : 0) + casts.length + cycles.length;
     if (ways > 1) {
       setHandChoice(id);
       return;
@@ -212,7 +216,7 @@ export function PlayBoard({
       run(() => session.playLand(id));
       return;
     }
-    if (cast) onCastClick(cast);
+    if (casts[0]) onCastClick(casts[0]);
   };
 
   /**
@@ -501,15 +505,20 @@ export function PlayBoard({
         <div className="play-hand" aria-label={`${view.self.name} hand`}>
           {(view.self.hand ?? []).map((c) => {
             const land = playableLands.includes(c.instanceId);
-            const cast = castOptions.find((o) => o.instanceId === c.instanceId);
+            // A split card contributes ONE option per half; the badge summarises
+            // them and the menu below lists them by name.
+            const casts = castOptions.filter((o) => o.instanceId === c.instanceId);
+            const cast = casts[0];
             const cycles = cycleOptions.filter((o) => o.instanceId === c.instanceId);
-            const actionable = isViewersPriority && (land || !!cast || cycles.length > 0);
+            const actionable = isViewersPriority && (land || casts.length > 0 || cycles.length > 0);
             const badge = c.isLand
               ? cycles.length > 0
                 ? 'Land · cycling'
                 : 'Land'
-              : cast?.affordableNow
-                ? 'castable'
+              : casts.some((o) => o.affordableNow)
+                ? casts.length > 1
+                  ? 'castable · 2 halves'
+                  : 'castable'
                 : cast
                   ? 'tap mana'
                   : cycles.length > 0
@@ -522,7 +531,7 @@ export function PlayBoard({
                 name={c.name}
                 badge={badge}
                 disabled={!actionable}
-                onClick={actionable ? () => onHandCardClick(c.instanceId, land, cast) : undefined}
+                onClick={actionable ? () => onHandCardClick(c.instanceId, land, casts) : undefined}
               />
             );
           })}
@@ -619,9 +628,12 @@ export function PlayBoard({
               )}
               {castOptions
                 .filter((o) => o.instanceId === handChoice)
-                .map((o) => (
+                .map((o, _index, all) => (
                   <button
-                    key={`cast:${o.instanceId}`}
+                    // Keyed by FACE as well as instance: a split card puts two
+                    // buttons here for one card, and two identical React keys
+                    // would collapse them into one.
+                    key={`cast:${o.instanceId}:${o.face ?? 'front'}`}
                     type="button"
                     className="btn"
                     onClick={() => {
@@ -629,7 +641,7 @@ export function PlayBoard({
                       onCastClick(o);
                     }}
                   >
-                    Cast it
+                    {all.length > 1 ? `Cast ${o.name}` : 'Cast it'}
                   </button>
                 ))}
               {cycleOptions
