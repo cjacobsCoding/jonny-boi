@@ -414,6 +414,11 @@ function assembleAttachment(assembly: Assembly): AttachmentSpec | undefined {
   };
 }
 
+/** Whether an ability watches the permanent its source is ATTACHED TO. */
+function watchesTheHost(ability: TriggeredAbility): boolean {
+  return ability.condition.watches === 'attachedHost';
+}
+
 /**
  * Compile an activated ability line — the printed `COST: EFFECT` shape.
  *
@@ -1043,6 +1048,18 @@ export function compileCard(card: CompilableCard): CompileResult {
   if (attachment === undefined && assembly.attachmentModifies !== undefined) {
     assembly.missing.push({
       text: 'enchanted/equipped creature gets …',
+      missingEngineSystem: 'auras and equipment attachment (no "Enchant …" or "Equip {N}" line to attach it)',
+    });
+  }
+  // The same argument, for the OTHER thing an attachment line can print. A
+  // trigger that watches "equipped creature" fires on the permanent this one is
+  // attached to — so on a card with no "Equip {N}"/"Enchant …" line it is
+  // attached to nothing, forever, and can never fire. Reported for the same
+  // reason a lone modification is: a permanent that sits there doing nothing is
+  // the "looks implemented, isn't" failure this compiler exists to prevent.
+  if (attachment === undefined && assembly.triggers.some(watchesTheHost)) {
+    assembly.missing.push({
+      text: 'whenever enchanted/equipped creature …',
       missingEngineSystem: 'auras and equipment attachment (no "Enchant …" or "Equip {N}" line to attach it)',
     });
   }

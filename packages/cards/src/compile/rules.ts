@@ -1016,6 +1016,29 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'damage-then-draw',
+    description: '"~ deals N damage to any target and you draw M cards" (Sword of Fire and Ice)',
+    // The same compound as `damage-then-gain-life`, with the other half of the
+    // pair of things a saboteur trigger most often bolts onto its damage. One
+    // rule per printed compound rather than a general "clause and clause"
+    // splitter, because the two halves may not each be independently targetable
+    // and a generic splitter would quietly aim both at the same object.
+    pattern: new RegExp(
+      `^~ deals ${COUNT_TOKEN} damage to ${DAMAGE_TARGET_PHRASE}(?:\\.|,)? and you draw ${COUNT_TOKEN} cards?$`,
+    ),
+    needsChosenTarget: true,
+    build(match) {
+      const damage = parseCount(match[1]);
+      const restriction = damageRestriction(match[2] ?? '');
+      const cards = parseCount(match[3]);
+      if (damage === null || cards === null || restriction === null) return null;
+      return effects(
+        { primitive: 'dealDamage', params: damageParams(damage, restriction) },
+        { primitive: 'drawCards', params: { count: cards } },
+      );
+    },
+  },
+  {
     id: 'damage-equal-to-count',
     description: '"~ deals damage to any target equal to the number of X"',
     pattern: new RegExp(
@@ -1441,6 +1464,19 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build() {
       return effects({ primitive: 'destroyTarget', params: { targets: ARTIFACT_TARGET } });
+    },
+  },
+  {
+    id: 'destroy-target-permanent',
+    description: '"Destroy target permanent"',
+    // The unrestricted form (Argentum Armor's attack trigger, Vindicate's body).
+    // It aims at core's `'permanent'` restriction rather than widening the
+    // creature one, because a card that can only ever be pointed at creatures is
+    // a strictly narrower card than the one printed.
+    pattern: /^destroy target permanent$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'destroyTarget', params: { targets: PERMANENT_TARGET } });
     },
   },
   {
@@ -2258,6 +2294,47 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'draw-then-discard',
+    description: '"Draw N cards. If you do, discard a card" (Mask of Memory)',
+    // "If you do" is the printed acknowledgement that the whole clause hangs off
+    // an OPTION — it is the body of a "you may", and that option is all-or-
+    // nothing, so taking it means both halves happen. Outside a "you may" the
+    // phrase is vacuous (the draw always happens), which is the same effects in
+    // the same order, so one rule serves both printings.
+    pattern: new RegExp(`^draw ${COUNT_TOKEN} cards?\\. if you do, discard ${COUNT_TOKEN} cards?$`),
+    build(match) {
+      const drawn = parseCount(match[1]);
+      const discarded = parseCount(match[2]);
+      if (drawn === null || discarded === null) return null;
+      return effects(
+        { primitive: 'drawCards', params: { count: drawn } },
+        // "discard a card" naming no player is the CONTROLLER's own discard,
+        // chosen by them — `discardCard`'s default victim is the TARGETED player,
+        // which this clause does not have.
+        {
+          primitive: 'discardCard',
+          params: { who: 'controller', ...(discarded === 1 ? {} : { count: discarded }) },
+        },
+      );
+    },
+  },
+  {
+    id: 'each-opponent-loses-life',
+    description: '"Each opponent loses N life"',
+    // The half of the rule above without the lifegain — the body a saboteur
+    // trigger most often prints. UNTARGETED on purpose: "each opponent" names
+    // nobody, so it must not compile to the `target opponent` form, which a
+    // pilot could aim (and which would refuse to go on the stack with no legal
+    // target). `whichPlayer` is what `loseLife` reads for the untargeted case.
+    pattern: new RegExp(`^each opponent loses ${COUNT_TOKEN} life$`),
+    build(match) {
+      const amount = parseCount(match[1]!);
+      return amount === null
+        ? null
+        : effects({ primitive: 'loseLife', params: { amount, whichPlayer: 'opponent' } });
+    },
+  },
+  {
     id: 'gain-life-and-draw',
     description: '"You gain N life and draw a card" (Moldervine Reclamation\'s death trigger)',
     // The compound the sentence splitter cannot split: one printed sentence
@@ -2781,6 +2858,55 @@ function mayEffectsFrom(body: string, compiled: readonly EffectRef[]): readonly 
 }
 
 /**
+ * Build the OPTIONAL ("you may BODY") form of a trigger whose plain form is
+ * built by {@link triggerFrom}.
+ *
+ * A separate builder rather than a branch inside `triggerFrom`, because the two
+ * forms compile DIFFERENT TEXT: the plain rule compiles the whole body, and this
+ * one compiles only what follows "you may" and wraps it in the `mayEffects`
+ * question. Compiling the whole "you may …" string and then wrapping it would
+ * ask twice on the bodies that implement their own option.
+ *
+ * Rules built with this must be ordered AFTER their plain sibling, for the
+ * reason spelled out on `trigger-etb-you-may`: a body that implements its own
+ * "you may" (Eternal Witness's optional graveyard return) plays better on the
+ * rule that knows about it, and this is the general fallback for every other.
+ */
+function optionalTriggerFrom(
+  ctx: RuleContext,
+  condition: TriggeredAbility['condition'],
+  innerBody: string,
+  label: string,
+): ClauseContribution | null {
+  const compiled = ctx.compileTriggerBody(innerBody);
+  if (compiled === null) return null;
+  const effects = mayEffectsFrom(innerBody, compiled.effects);
+  if (effects === null || effects.length === 0) return null;
+  return {
+    triggers: [
+      {
+        condition,
+        effects,
+        label,
+        ...(compiled.targets ? { targets: compiled.targets } : {}),
+      },
+    ],
+  };
+}
+
+/**
+ * The condition an Equipment's/Aura's "**equipped/enchanted creature** …" line
+ * means: the same event, watched on the permanent this one is attached to.
+ *
+ * A helper rather than an inline object literal at each call site so the two
+ * printed families (combat damage and attacking) cannot end up with two
+ * different spellings of the same scope.
+ */
+function hostWatch(on: TriggerCondition['on']): TriggerCondition {
+  return { on, watches: 'attachedHost' };
+}
+
+/**
  * The printed step names that begin a triggered ability, mapped to the
  * {@link TriggerCondition} event each one means. Closed: a step the engine's
  * turn structure does not have must REPORT, never compile to a trigger that can
@@ -3208,6 +3334,98 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         match[1] ?? '',
         `Combat damage to a player: ${match[1] ?? ''}`,
       );
+    },
+  },
+  {
+    id: 'trigger-combat-damage-to-player-you-may',
+    description: '"Whenever ~ deals combat damage to a player, you may BODY"',
+    // AFTER the plain rule — see `optionalTriggerFrom`.
+    pattern: /^whenever ~ deals combat damage to a player, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        { on: 'combatDamageToPlayer' },
+        body,
+        `Combat damage to a player: you may ${body}`,
+      );
+    },
+  },
+  {
+    // The Equipment/Aura copy of the line above. The SAME condition with the
+    // watched object moved to the host — see core's `TriggerWatches` for why
+    // that is a scope rather than an `equippedDealsCombatDamage` event of its
+    // own. The compiler emits it for any card printing the words; the ASSEMBLY
+    // refuses it on a card with no "Equip {N}"/"Enchant …" line, because a
+    // trigger nothing can ever attach is a trigger that can never fire.
+    id: 'trigger-equipped-combat-damage-to-player',
+    description: '"Whenever equipped/enchanted creature deals combat damage to a player, BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature deals combat damage to a player, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(
+        ctx,
+        hostWatch('combatDamageToPlayer'),
+        body,
+        `Equipped creature deals combat damage to a player: ${body}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-equipped-combat-damage-to-player-you-may',
+    description: '"Whenever equipped/enchanted creature deals combat damage to a player, you may BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature deals combat damage to a player, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        hostWatch('combatDamageToPlayer'),
+        body,
+        `Equipped creature deals combat damage to a player: you may ${body}`,
+      );
+    },
+  },
+  {
+    // The third printed shape of the same scope — Skullclamp's whole card, and
+    // the second half of every "protective" Aura. It fires as printed BECAUSE
+    // the state-based actions settle attachments and deaths in that order: a
+    // pass emits `creatureDied` while the host is still on the battlefield and
+    // the Equipment still attached, and only the NEXT pass unattaches it. Core's
+    // `equipped-triggers.test.ts` pins that ordering, because reversing it would
+    // make this rule compile a trigger that silently never fires.
+    id: 'trigger-equipped-dies',
+    description: '"When/whenever equipped/enchanted creature dies, BODY"',
+    pattern: /^(?:when|whenever) (?:equipped|enchanted) creature dies, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(ctx, hostWatch('dies'), body, `Equipped creature dies: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-dies-you-may',
+    description: '"When/whenever equipped/enchanted creature dies, you may BODY"',
+    pattern: /^(?:when|whenever) (?:equipped|enchanted) creature dies, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, hostWatch('dies'), body, `Equipped creature dies: you may ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-attacks',
+    description: '"Whenever equipped/enchanted creature attacks, BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature attacks, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(ctx, hostWatch('attacks'), body, `Equipped creature attacks: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-attacks-you-may',
+    description: '"Whenever equipped/enchanted creature attacks, you may BODY"',
+    pattern: /^whenever (?:equipped|enchanted) creature attacks, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, hostWatch('attacks'), body, `Equipped creature attacks: you may ${body}`);
     },
   },
   {
@@ -4202,20 +4420,61 @@ const EQUIP_TARGET: TargetRestriction = 'creatureYouControl';
  * not model — so a partially-understood line is reported rather than compiled into
  * a card that is missing an ability.
  */
-function parseKeywordList(text: string): Record<string, boolean> | null {
-  const words = text
-    .split(/,| and /)
-    .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
-    .filter((word) => word.length > 0);
+function parseKeywordList(text: string): KeywordFlags | null {
+  const words = joinPayloadKeywords(
+    text
+      .split(/,| and /)
+      .map((word) => word.trim().replace(LEADING_GRANT_VERB, ''))
+      .filter((word) => word.length > 0),
+  );
   if (words.length === 0) return null;
-  const flags: Record<string, boolean> = {};
+  const flags: Record<string, unknown> = {};
   for (const word of words) {
     const field = KEYWORD_FLAGS[word] ?? KEYWORD_PHRASES[word];
-    if (!field) return null;
-    flags[field] = true;
+    if (field) {
+      flags[field] = true;
+      continue;
+    }
+    // The two PAYLOAD keywords — "ward {1}", "protection from black and from
+    // green" — carry a value rather than a boolean, and core already models
+    // both. They go through the same parser the printed keyword LINE uses
+    // (`parseProtectionOrWard`) so an Equipment and a creature cannot end up
+    // disagreeing about which forms are real: a quality outside the closed
+    // table ("protection from instants") still returns null and the whole
+    // line keeps reporting.
+    const payload = parseProtectionOrWard(word);
+    if (payload === null) return null;
+    Object.assign(flags, payload);
   }
-  return flags;
+  return flags as KeywordFlags;
 }
+
+/**
+ * Re-join the conjuncts of a printed protection list that the keyword split
+ * broke apart.
+ *
+ * "protection from black and from green" is ONE ability, but the conjunction
+ * that separates two keywords is the same word that separates two protection
+ * qualities — so the split yields `['protection from black', 'from green']`.
+ * Any run of "from …" fragments belongs to the protection phrase before it;
+ * putting them back is what lets {@link parseProtectionOrWard} see the whole
+ * printed line, which is the only thing that knows how to read it.
+ */
+function joinPayloadKeywords(words: readonly string[]): string[] {
+  const joined: string[] = [];
+  for (const word of words) {
+    const previous = joined[joined.length - 1];
+    if (previous !== undefined && PROTECTION_CONTINUATION.test(word) && previous.startsWith('protection from ')) {
+      joined[joined.length - 1] = `${previous} and ${word}`;
+      continue;
+    }
+    joined.push(word);
+  }
+  return joined;
+}
+
+/** A trailing "from …" fragment of a multi-quality protection line. */
+const PROTECTION_CONTINUATION = /^from /;
 
 /**
  * A printed conjunction repeats the verb ("can't be blocked AND HAS shroud"), so
@@ -4907,9 +5166,20 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // Attachment IS implemented now (core's `attachments.ts` + the
     // `enchant-permanent` / `attachment-modification` / `equip-cost` rules), so
     // this hint no longer claims the whole system is missing — that would send the
-    // next agent to build something that exists. What still lands here is a
-    // template: "Enchant player", "Equip only to a Human", bestow, reconfigure,
-    // and anything that moves an attachment other than a plain Equip.
+    // next agent to build something that exists.
+    //
+    // Nor is the attachment's TRIGGERED half missing any more: "Whenever
+    // equipped/enchanted creature deals combat damage to a player, BODY" and
+    // "… attacks, BODY" compile, scoped to the host by core's
+    // `TriggerCondition.watches` — so a card of that shape reports on its BODY,
+    // not on the trigger. Its static half now carries the payload keywords too
+    // ("gets +2/+2 and has protection from black and from green", "ward {1}").
+    //
+    // What still lands here is a template that changes HOW a thing attaches:
+    // "Enchant player", a narrowed equip ("Equip legendary creature {3}",
+    // "Equip only to a Human", an equip whose cost scales), a second attach
+    // ability ("{B}{B}: Attach ~ to target creature you control"), bestow,
+    // reconfigure, living weapon, and "whenever ~ becomes unattached".
     pattern: /\bequip\b|\battach\b|\benchant\b/,
     missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
   },
@@ -4994,10 +5264,16 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
     // COMPILE now (source-aware targeting: all four protection halves plus the
-    // ward pay-or-counter trigger are engine-enforced). What still lands here
-    // is a TEMPLATE outside the closed tables: a ward cost that is not plain
-    // generic mana ("Ward-Pay 3 life", "Ward {X}"), or a protection quality
-    // with no engine meaning ("protection from Demons", "from instants").
+    // ward pay-or-counter trigger are engine-enforced), and so does the GRANTED
+    // form on an attachment — "Equipped creature gets +2/+2 and has protection
+    // from black and from green", "gets +1/+0 and has haste and ward {1}" —
+    // which reads the same closed tables through `parseProtectionOrWard`.
+    // What still lands here is a TEMPLATE outside those tables: a ward cost
+    // that is not plain generic mana ("Ward—Pay 3 life", "Ward {X}"), a
+    // protection quality with no engine meaning ("protection from Demons",
+    // "from instants and from sorceries" — Sword of Wealth and Power), or
+    // "hexproof from <quality>", which is protection's shape with only the
+    // targeting half.
     pattern: /\bward\b|\bprotection from\b/,
     missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },

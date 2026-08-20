@@ -112,6 +112,15 @@ export interface HeuristicWeights {
   /** Extra score per keyword granted (flying/trample/lifelink all change a race
    *  more than a stat point does, so this is worth more than one stat). */
   readonly attachPerKeyword: number;
+  /** Extra score per TRIGGERED ability the attachment gives its HOST — a Sword's
+   *  "whenever equipped creature deals combat damage to a player, …".
+   *
+   *  This is the knob that makes such an Equipment worth picking up at all. The
+   *  equip score was computed from the P/T and keyword grant alone, so an
+   *  Equipment whose whole text is a host-watching trigger scored `undefined`
+   *  and was equipped by nobody, ever: a card in the pool that no game played.
+   *  Priced above a keyword because a saboteur trigger pays out every combat. */
+  readonly attachPerHostTrigger: number;
 
   // --- generic / fallback --------------------------------------------------
   /** Score for any other castable spell we don't specifically understand. Above
@@ -145,6 +154,18 @@ export interface HeuristicWeights {
   /** How much a point of damage to the opponent's face is worth when weighing an
    *  attack (aggression). */
   readonly faceDamageValue: number;
+  /** What CONNECTING is worth beyond the damage, per triggered ability that fires
+   *  on combat damage to a player — the attacker's own "whenever ~ deals combat
+   *  damage to a player, …" and the ones its Equipment gives it.
+   *
+   *  Such a creature attacks for a reason the face-damage term cannot see: a 1/1
+   *  Ragavan-shaped body is priced at one point of damage and held back, while
+   *  the card is played precisely to get it through. Counted only where the
+   *  attack is expected to CONNECT (the no-profitable-block branch) — a trigger
+   *  that fires on damage to a player pays nothing when the attacker is
+   *  blocked, so paying for it there would be a pilot attacking into removal
+   *  for a benefit it is not going to get. */
+  readonly attackSaboteurTriggerValue: number;
   /** How much losing our own creature in a trade costs us (by its power+toughness),
    *  per stat point — discourages suiciding good creatures into bad blocks. */
   readonly ownCreatureLossPerStat: number;
@@ -383,6 +404,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   attachBaseScore: 30,
   attachPerStat: 4,
   attachPerKeyword: 6,
+  // A host-watching trigger repeats every combat, so it is worth more than the
+  // one-off a keyword grant is — and it is the ONLY term that can make a
+  // trigger-only Equipment (Skullclamp, Sword of the Animist) worth equipping.
+  attachPerHostTrigger: 10,
 
   // generic / fallback
   genericSpellScore: 25,
@@ -396,6 +421,10 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // attacking
   attackValueThreshold: 1,
   faceDamageValue: 1,
+  // One connection is worth about three points of face damage: enough that a
+  // small saboteur body clears the threshold on its own, not so much that it
+  // outweighs the rest of the attack evaluation.
+  attackSaboteurTriggerValue: 3,
   ownCreatureLossPerStat: 1,
   killEnemyPerStat: 1,
   // A walker at N loyalty prices like a creature with ~2N stats on the table

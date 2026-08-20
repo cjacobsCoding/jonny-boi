@@ -214,8 +214,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Auras & Equipment',
         detail:
-          'One attachment relationship covers both: an Aura dies when its host is illegal (CR 704.5m), Equipment falls off and stays (CR 704.5n), and grants layer with anthems and pumps.',
+          'One attachment relationship covers both: an Aura dies when its host is illegal (CR 704.5m), Equipment falls off and stays (CR 704.5n), and grants layer with anthems and pumps. What it grants is the full printed line — "Equipped creature gets +2/+2 and has protection from black and from green", "gets +1/+0 and has haste and ward {1}" — including the two keywords that carry a value.',
         witness: { kind: 'primitive', id: 'attachToTarget' },
+      },
+      {
+        title: 'What the EQUIPPED creature does',
+        detail:
+          'An Equipment or Aura may watch its HOST rather than itself: "whenever equipped creature deals combat damage to a player", "whenever equipped creature attacks", "when equipped creature dies". It is the same trigger the creature\'s own printed line uses, scoped to whatever the attachment is on right now — so it follows the Sword when the Sword moves, and fires for nobody while the Sword is lying loose. The ability still belongs to the Equipment: its "~ deals 2 damage" means the Sword (Sword of Fire and Ice, Argentum Armor, Skullclamp).',
+        witness: { kind: 'rule', id: 'trigger-equipped-combat-damage-to-player' },
+      },
+      {
+        title: 'Connecting with an attacker',
+        detail:
+          '"Whenever ~ deals combat damage to a player" fires on the hit itself, never on damage to a creature or a planeswalker, and the AI treats it as a reason to attack — and as a reason NOT to send that creature at a planeswalker, where the trigger would pay nothing. Optional bodies are a real question: "you may draw two cards" is asked, and the no is a complete outcome.',
+        witness: {
+          kind: 'oracle',
+          text: 'Whenever ~ deals combat damage to a player, you may draw a card.',
+          as: 'creature',
+        },
       },
       {
         title: 'Targeting restrictions',

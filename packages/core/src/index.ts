@@ -245,11 +245,13 @@ export type {
   TriggerCondition,
   TriggerEvent,
   TriggerWho,
+  TriggerWatches,
   PendingTrigger,
   TriggerSource,
   TriggerSubject,
 } from './triggers.js';
 export {
+  DEFAULT_TRIGGER_WATCHES,
   conditionMatches,
   matchTriggers,
   orderPendingTriggers,
