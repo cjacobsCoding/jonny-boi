@@ -184,6 +184,43 @@ export type GameEvent =
       readonly amount: number;
       readonly combat: boolean;
     }
+  | {
+      /**
+       * A REPLACEMENT effect changed an event before it happened (CR 614) — a
+       * damage doubler, a counter multiplier, a prevention shield eating part of
+       * a hit. Its own event for exactly the reason `damagePrevented` has one: a
+       * replay or the inspector must be able to show WHY four counters went onto
+       * a creature the card said to put one on, and "it just happened" is
+       * indistinguishable from a bug.
+       *
+       * `from`/`to` are the quantity before and after THIS one effect, so a
+       * chain of two doublers reads as two events with matching seams rather
+       * than one lossy summary — which is also what makes the CR 616.1 ordering
+       * decision auditable from the log alone.
+       */
+      readonly type: 'replacementApplied';
+      /** The permanent (or resolving spell) the replacement effect comes from. */
+      readonly source: InstanceId;
+      /** Which event family was replaced. */
+      readonly event: 'damage' | 'counters' | 'draw';
+      readonly from: number;
+      readonly to: number;
+      /** How much of `from` this effect PREVENTED (0 for a pure multiplier). */
+      readonly prevented: number;
+      /** The printed line, when the card carried one. Never read by the rules. */
+      readonly label?: string;
+    }
+  | {
+      /**
+       * A floating replacement/prevention effect wore off in cleanup — the fog
+       * that guarded this turn's combat, or an unspent shield. Mirrors
+       * `continuousEffectExpired`, so the two lifetimes read the same way in a
+       * log.
+       */
+      readonly type: 'replacementExpired';
+      readonly id: number;
+      readonly source: InstanceId;
+    }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
   | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }
