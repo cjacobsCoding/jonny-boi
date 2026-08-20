@@ -2012,13 +2012,16 @@ adventure **18/152**, damage prevention **11/123**, equipment-with-a-trigger **1
 on counters **3/17**, replacement on damage **4/32**.
 
 ⚡ **Rule 7 / §3.4a: the gauntlet at seed 99 is byte-identical to the same-box `origin/main`** this
-branch merged — every matchup row equal. **No meta deck was touched**, deliberately: adding a card to
-a gauntlet deck moves every recorded A/B baseline and is a separate, measured decision. The
+branch merged (`b5752b2`) — **80/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 15, every one equal. ⚠️ The
+recorded 81/280 moved to 80/280 while this branch was out, and it is **not this branch's**: a
+baseline worktree at `b5752b2` with no pool change reads 80/280 too, so the one game belongs to
+`feat/block-requirements-and-statics`. **No meta deck was touched here**, deliberately: adding a card
+to a gauntlet deck moves every recorded A/B baseline and is a separate, measured decision. The
 pool-only cards that WOULD be gauntlet-worthy are named on the coordination board.
 
-📊 **The corpus number does not move, and that is the honest result: 524 / 2100 (25.0%) on the
-`origin/main` this branched from and 524 / 2100 here**, measured on the same cached corpus in two
-worktrees on the same box. This section adds no compiler rule, and the three fetch-path fixes do not
+📊 **The corpus number does not move, and that is the honest result: 533 / 2100 (25.4%) on
+`origin/main` at `b5752b2` and 533 / 2100 here**, measured on the same cached corpus in two worktrees
+on the same box (and 524 / 524 against the earlier `78e3299`, so it has held across two baselines). This section adds no compiler rule, and the three fetch-path fixes do not
 reach the audit's population (the top-2100 modern corpus holds exactly one battle, itself blocked on
 a "you may" template, and nine adventurers whose compile status the cost fix does not change). The
 width is in the SHIPPED POOL: **357 → 530 cards, 325 → 498 compiled**, and every card in it still
