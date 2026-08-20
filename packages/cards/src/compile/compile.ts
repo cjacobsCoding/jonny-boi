@@ -55,6 +55,7 @@ import {
 import { mergeKeywordGrant } from '@jonny-boi/core';
 import type { KeywordFlags } from '@jonny-boi/core';
 import { frontFaceName, normalizeClause, parseManaSymbols, prepareOracle, splitSentences } from './text.js';
+import { AS_ENTERS_PRIMITIVE } from '../choice-primitives.js';
 
 /**
  * Scryfall's keyword names for the two printed attachment abilities. They are
@@ -272,6 +273,10 @@ interface Assembly {
   entersTappedUnless?: import('@jonny-boi/core').EntersUntappedCondition;
   entersTappedUnlessLifePaid?: number;
   entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
+  /** The printed "As ~ enters, choose a…" naming, once some line prints it. */
+  asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
+  /** "~ is the chosen type in addition to its other types". */
+  isChosenSubtype?: boolean;
   /** The printed "Kicker {COST}", once some line prints it. */
   kicker?: ManaCost;
   /** The printed "Multikicker {COST}" — an additional cost paid any number of times. */
@@ -335,6 +340,8 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
   if (contribution.entersTappedUnlessRevealed !== undefined) {
     assembly.entersTappedUnlessRevealed = contribution.entersTappedUnlessRevealed;
   }
+  if (contribution.asEntersChoice !== undefined) assembly.asEntersChoice = contribution.asEntersChoice;
+  if (contribution.isChosenSubtype) assembly.isChosenSubtype = true;
   if (contribution.kicker) assembly.kicker = contribution.kicker;
   if (contribution.multikicker) assembly.multikicker = contribution.multikicker;
   if (contribution.modal) assembly.modal = contribution.modal;
@@ -1035,6 +1042,26 @@ export function compileCard(card: CompilableCard): CompileResult {
         ]
       : [];
 
+  /**
+   * The card's resolution script, with the "As ~ enters, choose a…" NAMING
+   * prepended when this permanent is one the engine cannot ask at play time.
+   *
+   * A LAND is played, not cast, so its script never runs at all — core's
+   * `raiseLandEntryChoice` asks there instead, from the same `asEntersChoice`
+   * declaration. Every other permanent resolves, so the naming is the first
+   * thing its resolution does: the card is `ctx.source` and not yet on the
+   * battlefield at that moment, which is exactly the printed timing (CR 614.1c),
+   * the same moment "enters with N +1/+1 counters" applies.
+   *
+   * Prepended HERE rather than by the rule that matched the line, because the
+   * printed naming can appear on any line (Realmwalker prints it second) and it
+   * must run before every other effect regardless.
+   */
+  const entryScript: EffectRef[] =
+    assembly.asEntersChoice !== undefined && !types.includes('land')
+      ? [{ primitive: AS_ENTERS_PRIMITIVE, params: {} }, ...assembly.effects]
+      : assembly.effects;
+
   const definition: CardDefinition = {
     id: card.id,
     // A double-faced card is played as its front face; the back is a separate
@@ -1070,6 +1097,8 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.entersTappedUnlessLifePaid !== undefined
       ? { entersTappedUnlessLifePaid: assembly.entersTappedUnlessLifePaid }
       : {}),
+    ...(assembly.asEntersChoice !== undefined ? { asEntersChoice: assembly.asEntersChoice } : {}),
+    ...(assembly.isChosenSubtype ? { isChosenSubtype: true } : {}),
     ...(xCount > 0 ? { xCost: xCount } : {}),
     ...(assembly.kicker ? { kicker: assembly.kicker } : {}),
     ...(assembly.multikicker ? { multikicker: assembly.multikicker } : {}),
@@ -1082,7 +1111,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.flashbackLifeCost !== undefined
       ? { flashbackLifeCost: assembly.flashbackLifeCost }
       : {}),
-    ...(assembly.effects.length > 0 ? { effects: assembly.effects } : {}),
+    ...(entryScript.length > 0 ? { effects: entryScript } : {}),
     ...(richManaAbilities.length > 0
       ? { manaAbilities: richManaAbilities }
       : manaModes.length > 0

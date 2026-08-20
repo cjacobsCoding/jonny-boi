@@ -39,11 +39,15 @@ import type {
   CardType,
 } from '@jonny-boi/core';
 import {
+  NOTHING_CHOSEN,
+  asEntersOptions,
+  asEntersPrompt,
   collectCardOptions,
   formatManaCost,
   isCreature,
   isPlayerTarget,
   matchesCardFilter,
+  recordChosenAsEntered,
   transformPermanent,
 } from '@jonny-boi/core';
 import type { StackObject } from '@jonny-boi/core';
@@ -950,7 +954,58 @@ export const pileSplitSacrifice: EffectPrimitive = (ctx) => {
   }
 };
 
+/**
+ * **"As ~ enters, choose a creature type / a color / a player"** (CR 614.1c) —
+ * the naming a PERMANENT SPELL makes on the way to the battlefield.
+ *
+ * ## Why this is a resolution primitive and not an engine branch
+ * A land is PLAYED, so the engine holds it mid-entry and asks there
+ * (`raiseLandEntryChoice`). A permanent SPELL resolves, and the resolution frame
+ * is already the mechanism for asking a question mid-entry — the same mechanism
+ * "enters with N +1/+1 counters" uses, and for the same reason: while the spell
+ * resolves, the card is `ctx.source` and is not yet on the battlefield. So the
+ * compiler puts this primitive FIRST in the card's script and the naming happens
+ * at exactly the printed moment, with no second question mechanism to keep in
+ * step with the first.
+ *
+ * ## It takes no params
+ * What to ask is `ctx.source.def.asEntersChoice`, the one declaration every
+ * consumer reads — the engine's land path, the AI's answering policy, the UI and
+ * the About page. A params copy would be a second place for the subject to be
+ * written, and the two would disagree the first time a compiler rule changed.
+ *
+ * ## Naming nothing is a real answer
+ * An empty menu (nothing to name) and an explicit `NOTHING_CHOSEN` both record
+ * nothing, which every reader treats as matching nothing. That is the same inert
+ * default an entry path that cannot ask at all produces — one spelling, every
+ * path.
+ */
+export const AS_ENTERS_PRIMITIVE = 'chooseAsEnters';
+
+export const chooseAsEnters: EffectPrimitive = (ctx) => {
+  const entering = ctx.source;
+  const naming = entering.def.asEntersChoice;
+  if (!naming) return;
+  // Re-entry guard: the frame re-runs this ref from the top for every later
+  // question the same resolution asks, and a permanent names once per entry.
+  if (entering.chosenAsEntered !== undefined) return;
+  const options = asEntersOptions(ctx.state, naming, ctx.controller);
+  if (options.length === 0) {
+    recordChosenAsEntered(entering, naming, NOTHING_CHOSEN, ctx.emit);
+    return;
+  }
+  const named = ctx.chooseValue({
+    prompt: asEntersPrompt(entering.def, naming),
+    subject: naming.subject,
+    options,
+    valence: 'gain',
+  });
+  if (named === undefined) return; // parked — nothing mutated, replayed on the answer
+  recordChosenAsEntered(entering, naming, named, ctx.emit);
+};
+
 export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
+  [AS_ENTERS_PRIMITIVE]: chooseAsEnters,
   putFromHandOnTop,
   reorderTopOfLibrary,
   mayShuffleLibrary,

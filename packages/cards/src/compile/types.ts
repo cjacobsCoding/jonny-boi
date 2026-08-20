@@ -161,6 +161,14 @@ export interface ClauseContribution {
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
+   * "As ~ enters, choose a…" — the CR 614.1c naming this card makes as it
+   * enters. Only the DECLARATION: who raises the question is decided once, by
+   * the assembly, from whether the card is a land.
+   */
+  readonly asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
+  /** "~ is the chosen type in addition to its other types". */
+  readonly isChosenSubtype?: boolean;
+  /**
    * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
    * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N
    * life" rider as {@link flashbackLifeCost}, so all three printed forms of
