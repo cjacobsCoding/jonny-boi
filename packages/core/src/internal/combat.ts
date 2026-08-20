@@ -156,7 +156,16 @@ function passesBlockRestriction(
  * only reading under which both restrictions hold at once.
  */
 export function requiredBlockerCount(attacker: CardInstance, index: ContinuousIndex): number {
-  const k = kw(attacker, index);
+  return minimumBlockersFor(kw(attacker, index));
+}
+
+/**
+ * The same answer as {@link requiredBlockerCount}, from a keyword set already in
+ * hand. Split out so a caller that has just read the effective keywords for
+ * another reason does not pay for the merge twice — `illegalBlockDeclaration`
+ * reads them once and asks both halves of CR 509.1 from that one read.
+ */
+function minimumBlockersFor(k: KeywordFlags): number {
   const menaceMinimum = k.menace ? MENACE_MINIMUM_BLOCKERS : 0;
   return Math.max(menaceMinimum, k.minBlockers ?? 0);
 }
@@ -192,8 +201,17 @@ export function illegalBlockDeclaration(
   index: ContinuousIndex,
   defenders: readonly CardInstance[] = [],
 ): string | undefined {
+  // ONE keyword read per attacker, used by BOTH halves. `effectiveKeywords` merges
+  // the printed set with whatever the continuous layer granted, so it is the most
+  // expensive thing this function does; the requirement pre-check rides along on
+  // the read the restriction check already needed rather than repeating it, which
+  // is what keeps the ordinary board — no requirement anywhere — at the cost it
+  // had before requirements existed.
+  let anyRequirement = false;
   for (const attacker of attackers) {
-    const required = requiredBlockerCount(attacker, index);
+    const keywords = kw(attacker, index);
+    if (keywords.mustBeBlocked === true || keywords.blockedByAllAble === true) anyRequirement = true;
+    const required = minimumBlockersFor(keywords);
     if (required === 0) continue;
     const assigned = blocks.filter((b) => b.attacker === attacker.instanceId).length;
     // Zero is fine — the rule forbids being blocked by TOO FEW, not being unblocked.
@@ -203,6 +221,11 @@ export function illegalBlockDeclaration(
         : `${attacker.def.name} can't be blocked except by ${required} or more creatures`;
     }
   }
+  // THE EMPTY CHECK, and the whole reason a rules-complete CR 509.1c/d solver can
+  // live on this path: with nothing on the board requiring a block there is
+  // nothing to maximise, and the function returns having allocated nothing and
+  // walked no defender.
+  if (!anyRequirement) return undefined;
   // Requirements LAST: every restriction above is now known to hold, which is
   // exactly the condition CR 509.1d maximises under.
   return blockRequirementProblem(attackers, defenders, blocks, index);
