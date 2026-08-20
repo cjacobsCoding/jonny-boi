@@ -210,14 +210,79 @@ export const mayShuffleLibrary: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * Where ONE card a search found goes: the zone, and (for the battlefield)
+ * whether it arrives tapped. The unit of {@link searchLibrary}'s `route` param
+ * and of its single-destination default alike, so both forms move a card by the
+ * same code with no second opinion about what `tapped` means.
+ */
+interface SearchStep {
+  readonly destination: 'hand' | 'battlefield' | 'graveyard';
+  readonly tapped?: boolean;
+}
+
+/**
+ * The three zones a printed library search may put a found card into. A CLOSED
+ * table for the same reason the subtype table is closed: an unrecognised zone
+ * word must report, never silently become "hand" — a tutor that fetched to the
+ * wrong zone is a strictly different card. (`'exile'` is absent because no
+ * search template compiled here prints it.)
+ */
+const SEARCH_DESTINATIONS: ReadonlySet<string> = new Set(['hand', 'battlefield', 'graveyard']);
+
+/** The single destination a non-routed search uses, defaulting to hand. */
+function plainDestination(ctx: EffectContext): SearchStep['destination'] {
+  const word = strParam(ctx, 'destination');
+  return word !== undefined && SEARCH_DESTINATIONS.has(word)
+    ? (word as SearchStep['destination'])
+    : 'hand';
+}
+
+/**
+ * Read the multi-destination `route` param, or `undefined` for a plain search.
+ *
+ * A malformed entry collapses the whole route to `undefined` rather than being
+ * dropped: a partially-understood routing would put a card somewhere the printed
+ * card never says, and the compiler is the only thing that writes this param.
+ */
+function routeParam(ctx: EffectContext, count: number): readonly SearchStep[] | undefined {
+  const raw = ctx.params.route;
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const steps: SearchStep[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) return undefined;
+    const destination = (entry as { destination?: unknown }).destination;
+    if (typeof destination !== 'string' || !SEARCH_DESTINATIONS.has(destination)) return undefined;
+    const tapped = (entry as { tapped?: unknown }).tapped === true;
+    steps.push({ destination: destination as SearchStep['destination'], ...(tapped ? { tapped } : {}) });
+  }
+  // `count` stays the printed maximum: a route longer than the card says it may
+  // find would let the search fetch an extra card.
+  return steps.length <= count ? steps : steps.slice(0, count);
+}
+
+/**
  * `searchLibrary` — "search your library for a card, put it into <zone>, then
  * shuffle" (Path to Exile's compensation; any tutor).
  *
  * Params: `who` (whose library — see {@link playerParam}), `optional` (ask a
  * yes/no first, which is what "**may** search" means), `filter` + `nameAnyOf`
  * (what may be found — the two together express "a basic land card"),
- * `count` (how many, default 1), `destination` (`'hand'` by default or
- * `'battlefield'`) and `tapped` (for "…onto the battlefield tapped").
+ * `count` (how many, default 1), `destination` (`'hand'` by default,
+ * `'battlefield'` or `'graveyard'`) and `tapped` (for "…onto the battlefield
+ * tapped").
+ *
+ * `route` is the MULTI-DESTINATION form — Cultivate's "put one onto the
+ * battlefield tapped **and the other into your hand**". It is an ordered list of
+ * `{ destination, tapped? }` steps, one per card the search may find, and the
+ * selection becomes `ordered`, so the ANSWER'S ORDER IS THE ROUTING: the first
+ * card chosen takes the first step, the second the second. That is deliberate
+ * and not a shortcut — routing is a real decision (which basic you keep in hand
+ * matters), and expressing it as the order of the one selection the card already
+ * makes means it is answered by the same `selectCards` a UI, an AI and a network
+ * peer all already know how to answer, instead of a second bespoke question.
+ * A library with FEWER matches than steps simply leaves the trailing steps
+ * unused — "up to two" is a maximum, and a search may always fail to find.
+ * `route` supersedes `destination`/`tapped` when present.
  *
  * `requiresTargetInZone` gates the search on the targeted card having actually
  * ended up in that zone — the honest way to tie a compensation clause to the
@@ -242,29 +307,38 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
     if (yes === undefined) return; // parked
     if (!yes) return; // declined — no search, and therefore no shuffle
   }
+  const route = routeParam(ctx, count);
   const candidates = restrictToNames(ctx, collectCardOptions(ctx.state, 'library', { controller: who, filter: filterParam(ctx) }));
   const chosen = ctx.chooseCards({
     chooser: who,
-    prompt: `Search your library for ${count} card(s)`,
+    prompt: route
+      ? `Search your library for up to ${route.length} card(s), in the order they are routed`
+      : `Search your library for ${count} card(s)`,
     candidates,
     // A search may always FAIL to find, so the floor is zero.
     min: 0,
-    max: count,
+    max: route ? route.length : count,
+    // A ROUTED search's answer order IS which card goes where (see above), so
+    // the selection is ordered; a plain search's is not, and stays byte-for-byte
+    // the request every existing tutor has always made.
+    ...(route ? { ordered: true } : {}),
     valence: 'gain',
     fromZone: 'library',
   });
   if (!chosen) return; // parked
 
-  const destination = strParam(ctx, 'destination') === 'battlefield' ? 'battlefield' : 'hand';
-  const tapped = boolParam(ctx, 'tapped', false);
+  const stepFor = (index: number): SearchStep =>
+    route ? (route[index] as SearchStep) : { destination: plainDestination(ctx), tapped: boolParam(ctx, 'tapped', false) };
 
   // A fetched SHOCKLAND asks its "you may pay 2 life" here, mid-resolution,
   // BEFORE anything moves (the ask-first contract): the engine has already
   // charged the life by the time `paid` comes back true. Only a battlefield
   // destination raises it — a card searched to hand pays nothing.
   const shockPaid = new Map<InstanceId, boolean>();
-  if (destination === 'battlefield') {
-    for (const id of chosen) {
+  for (let index = 0; index < chosen.length; index++) {
+    if (stepFor(index).destination !== 'battlefield') continue;
+    {
+      const id = chosen[index] as InstanceId;
       const found = ctx.state.players[who].library.find((c) => c.instanceId === id);
       const shockCost = found?.def.entersTappedUnlessLifePaid;
       if (shockCost === undefined) continue;
@@ -279,14 +353,17 @@ export const searchLibrary: EffectPrimitive = (ctx) => {
     }
   }
 
-  for (const id of chosen) {
-    if (destination === 'battlefield') {
+  for (let index = 0; index < chosen.length; index++) {
+    const id = chosen[index] as InstanceId;
+    const step = stepFor(index);
+    if (step.destination === 'battlefield') {
       // `putOntoBattlefield` consults `entersTapped`, whose answer for a
       // shockland is the unpaid default (tapped); a paid entry overrides it.
-      const enters = shockPaid.get(id) === true ? { tapped: false, ignoreEntersTapped: true } : { tapped };
+      const enters =
+        shockPaid.get(id) === true ? { tapped: false, ignoreEntersTapped: true } : { tapped: step.tapped === true };
       putOntoBattlefield(ctx, who, id, 'library', enters);
     } else {
-      moveOwnedCard(ctx, who, id, 'library', 'hand');
+      moveOwnedCard(ctx, who, id, 'library', step.destination);
     }
   }
   // Searching a library shuffles it, found or not.

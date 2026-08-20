@@ -451,7 +451,8 @@ const SEARCH_BOUND_PHRASE = `(${Object.keys(SEARCH_BOUND_FIELDS).join('|')})`;
  * what the filter can say.
  *
  * `noun` is the word before "card" — a card type or a {@link SEARCHABLE_SUBTYPES}
- * subtype. The three bound arguments are the optional "with X N [or less |
+ * subtype; `color` is the optional printed colour adjective before it ("a
+ * **blue** instant card"). The three bound arguments are the optional "with X N [or less |
  * or greater]" tail; **no** direction word means an EXACT value (Tribute Mage's
  * "with mana value 2"), which is both bounds set to the same number.
  */
@@ -460,8 +461,16 @@ function searchFilterFrom(
   characteristic?: string,
   amount?: string,
   direction?: string,
+  color?: string,
 ): Record<string, unknown> | null {
   const filter: Record<string, unknown> = {};
+  if (color !== undefined && color.length > 0) {
+    const letter = COLOR_WORDS[color];
+    // A colour word outside the five is not a colour — report the line rather
+    // than silently fetching from a wider pool than the card prints.
+    if (!letter) return null;
+    filter.anyOfColors = [letter];
+  }
   const type = SPELL_TYPE_WORDS[noun];
   if (type) {
     filter.anyOfTypes = [type];
@@ -484,6 +493,41 @@ function searchFilterFrom(
   }
   return filter;
 }
+
+/**
+ * Turn a printed list of land types ("Swamp, Forest, or Island", "Mountain or
+ * Plains") into the individual words, or `null` when any of them is not a land
+ * type. The list may be any length — Farseek prints four.
+ */
+function landTypeList(text: string): readonly string[] | null {
+  const words = text
+    .split(/,\s*(?:or\s+)?|\s+or\s+/)
+    .map((word) => word.trim().toLowerCase())
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+  return words.every((word) => LAND_SUBTYPES.has(word)) ? words : null;
+}
+
+/**
+ * The BASIC land cards a printed type list names, BY NAME — the same way "a
+ * basic land card" is written everywhere else in this table (`CardFilter` has
+ * no supertype field; see `restrictToNames` in ../choice-primitives.ts).
+ *
+ * The name of a basic land IS its land type, which is what makes this exact
+ * rather than a heuristic: a card named "Swamp" is a basic Swamp.
+ */
+function basicNamesFor(types: readonly string[]): readonly string[] {
+  const wanted = new Set(types);
+  return BASIC_LAND_NAMES.filter((name) => wanted.has(name.toLowerCase()));
+}
+
+/**
+ * The optional colour adjective a search may print — "a **blue** instant card"
+ * (Merchant Scroll), "a **green** creature card" (Green Sun's Zenith). Written
+ * as its own capture rather than folded into the noun so an unrecognised
+ * adjective reports instead of being read as a subtype.
+ */
+const SEARCH_COLOR_PHRASE = `(?:(${Object.keys(COLOR_WORDS).join('|')}) )?`;
 
 /**
  * The printed restrictions a "you choose a ___ card from it" discard may carry,
@@ -1757,13 +1801,19 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // "tapped" and the optional trailing shuffle both printed forms carry.
     // Selection is by SUBTYPE, so this finds a dual land with those land types
     // exactly as the printed card does — not just a basic.
+    // The list may be any length: a fetchland prints two, Farseek prints four
+    // ("a Plains, Island, Swamp, or Mountain card"). `landTypeList` refuses any
+    // word that is not a land type, so "a basic Swamp … card" falls through to
+    // the basic-types rule instead of being read as a subtype search — those are
+    // genuinely different cards (this one finds a DUAL), and the printed word
+    // "basic" is the only thing that tells them apart.
     pattern:
-      /^search your library for an? ([a-z]+)(?: or ([a-z]+))? card, put it onto the battlefield( tapped)?(?:, then shuffle)?$/,
+      /^search your library for an? ([a-z]+(?:,? (?:or )?[a-z]+)*) card, put it onto the battlefield( tapped)?(?:, then shuffle)?$/,
     build(match) {
-      const subtypes = [match[1], match[2]].filter((s): s is string => Boolean(s));
+      const subtypes = landTypeList(match[1] ?? '');
       // Only LAND subtypes are safe here: a non-land search would need the card
       // to be castable, which this template does not express.
-      if (!subtypes.every((subtype) => LAND_SUBTYPES.has(subtype))) return null;
+      if (!subtypes) return null;
       return effects({
         primitive: 'searchLibrary',
         params: {
@@ -1771,7 +1821,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
           count: 1,
           filter: { anyOfTypes: ['land'], anyOfSubtypes: subtypes },
           destination: 'battlefield',
-          ...(match[3] ? { tapped: true } : {}),
+          ...(match[2] ? { tapped: true } : {}),
         },
       });
     },
@@ -1907,6 +1957,131 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'search-any-card-to-hand',
+    description: '"Search your library for a card, put that card into your hand, then shuffle" (Diabolic Tutor, Grim Tutor)',
+    // The UNRESTRICTED tutor: no noun before "card", so no filter at all. It is
+    // its own rule rather than an optional capture on the filtered one because
+    // "for a card" and "for a creature card" are different sentences, and a
+    // pattern loose enough to match both would also match "for a basic land
+    // card" and quietly drop the restriction.
+    pattern: /^search your library for a card, put (?:it|that card) into your hand, then shuffle$/,
+    build() {
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count: 1, destination: 'hand' },
+      });
+    },
+  },
+  {
+    id: 'search-basic-types-to-battlefield',
+    description:
+      '"Search your library for a basic Swamp, Forest, or Island card, put it onto the battlefield tapped, then shuffle" (the Landscape cycle)',
+    // "a **basic** Swamp card" is a Swamp with the basic supertype, which is
+    // exactly the five basics BY NAME — the same way every other basic-land
+    // search in this table is written (`CardFilter` has no supertype field).
+    // Contrast the fetchland rule above, whose list omits "basic" and therefore
+    // finds a DUAL land as well. Dropping the word would print a better card.
+    pattern:
+      /^search your library for a basic ([a-z]+(?:,? (?:or )?[a-z]+)*) card, put (?:it|that card) onto the battlefield( tapped)?(?:, then shuffle)?$/,
+    build(match) {
+      const types = landTypeList(match[1] ?? '');
+      if (!types) return null;
+      const names = basicNamesFor(types);
+      if (names.length === 0) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: LAND_FILTER,
+          nameAnyOf: names,
+          destination: 'battlefield',
+          ...(match[2] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'search-basic-lands-to-battlefield-plural',
+    description:
+      '"Search your library for up to two basic land cards, put them onto the battlefield tapped, then shuffle" (Explosive Vegetation, Migration Path, Burnished Hart, the Harrow body)',
+    // "UP TO N" is a maximum, and `searchLibrary` already implements exactly
+    // that: its selection floor is zero, because a search may always fail to
+    // find. So a library holding one basic (or none) plays this correctly with
+    // no special case — which is the whole reason the count is a parameter and
+    // not N copies of a one-card rule.
+    pattern: new RegExp(
+      `^search your library for up to ${COUNT_TOKEN} basic land cards, put them onto the battlefield( tapped)?, then shuffle$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count,
+          filter: LAND_FILTER,
+          nameAnyOf: BASIC_LAND_NAMES,
+          destination: 'battlefield',
+          ...(match[2] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'search-two-basics-split-destination',
+    description:
+      '"Search your library for up to two basic land cards, reveal those cards, put one onto the battlefield tapped and the other into your hand, then shuffle" (Cultivate, Kodamas Reach)',
+    // The MULTI-DESTINATION search: the two found cards go to two DIFFERENT
+    // zones, and which one goes where is a real decision. It compiles to
+    // `searchLibrary`'s `route` param — an ordered list of steps, one per card
+    // the search may find — so the answer's order IS the routing and no second
+    // question has to be invented (see the primitive).
+    //
+    // Written as one whole-line idiom rather than two clauses because the second
+    // half is meaningless without the first: "put one onto the battlefield" does
+    // not say what "one" is.
+    pattern:
+      /^search your library for up to two basic land cards, reveal those cards, put one onto the battlefield( tapped)? and the other into your hand, then shuffle$/,
+    build(match) {
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 2,
+          filter: LAND_FILTER,
+          nameAnyOf: BASIC_LAND_NAMES,
+          route: [
+            { destination: 'battlefield', ...(match[1] ? { tapped: true } : {}) },
+            { destination: 'hand' },
+          ],
+        },
+      });
+    },
+  },
+  {
+    id: 'search-cards-to-graveyard',
+    description: '"Search your library for up to three creature cards, put them into your graveyard, then shuffle" (Buried Alive)',
+    // A tutor whose destination is the GRAVEYARD — the same primitive, the same
+    // filter vocabulary, one more destination. It only reaches a zone
+    // `searchLibrary`'s closed destination table names, so a wording that put a
+    // card anywhere else still reports.
+    pattern: new RegExp(
+      `^search your library for up to ${COUNT_TOKEN} ([a-z]+) cards, put them into your graveyard, then shuffle$`,
+    ),
+    build(match) {
+      const count = parseCount(match[1]);
+      if (count === null || count <= 0) return null;
+      const filter = searchFilterFrom(match[2] ?? '');
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count, filter, destination: 'graveyard' },
+      });
+    },
+  },
+  {
     id: 'search-to-hand-by-filter',
     description:
       '"Search your library for a TYPE card [with CHARACTERISTIC N [or less|or greater]], reveal it, put it into your hand, then shuffle" (the Mage cycle, Goblin Matron, Recruiter of the Guard, Fierce Empath)',
@@ -1919,11 +2094,17 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // mana value 1 or less" would fetch the best card in the deck instead of the
     // best cheap one, i.e. a strictly better card. `searchFilterFrom` refuses
     // anything it cannot express, so the line reports rather than over-fetches.
+    //
+    // The colour adjective and the reveal are both OPTIONAL halves of the same
+    // template: "a **blue** instant card" (Merchant Scroll) narrows the search,
+    // and a card printing no "reveal" ("…for a Goblin card, put it into your
+    // hand, then shuffle") is mechanically identical — the reveal is
+    // information, and no engine state can observe it.
     pattern: new RegExp(
-      `^search your library for an? ([a-z]+) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, reveal (?:it|that card), put (?:it|that card) into your hand, then shuffle$`,
+      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) into your hand, then shuffle$`,
     ),
     build(match) {
-      const filter = searchFilterFrom(match[1] ?? '', match[2], match[3], match[4]);
+      const filter = searchFilterFrom(match[2] ?? '', match[3], match[4], match[5], match[1]);
       if (filter === null) return null;
       return effects({
         primitive: 'searchLibrary',
