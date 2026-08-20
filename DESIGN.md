@@ -2623,7 +2623,12 @@ unsupported hint now names the SHAPE that is missing rather than claiming the wh
 - **"Each opponent's maximum hand size is reduced by seven"** (Jin-Gitaxias) — the mirror of the flag
   this section added, and a different field: it lowers a limit rather than removing one.
 
-**Measured yield:** the top-2100 corpus went **408 → 417 playable** on the same cached corpus, via the
+**Measured yield:** **+9 playable cards** on the cached 2100-card corpus, measured PAIRED against a
+same-box `origin/main` worktree — **510 → 519 / 2100** at main's current tip, and the SAME +9 against
+two earlier baselines while this branch was out (408 → 417, then 485 → 494), which is what a paired
+measurement is for. **Zero regressions:** the two playable sets were dumped and diffed, not counted.
+The nine are Supreme Verdict, Reliquary Tower, Spellbook, Crucible of Worlds, Ramunap Excavator,
+Universal Automaton, Changeling Outcast, Gingerbrute and Abandoned Air Temple. It comes from the
 solver plus ten rule-table entries — and the +9 UNDERSTATES what closed, which is worth reading before
 anyone judges the work by it. Five whole template buckets are now empty (`This spell can't be
 countered` 14, `Changeling` 9, `You may play lands from …` 12, `~ enters tapped unless you control …`
@@ -2632,8 +2637,28 @@ Dovin's Veto still needs "counter target noncreature spell", Abrupt Decay still 
 nonland permanent with mana value 3 or less", Minas Tirith still needs an "activate only if you
 attacked with two or more creatures" condition. A blocked card is only playable when its LAST gap
 closes, so a branch that clears a bucket cleanly can still move the headline by single digits — and
-the next branch to close filtered targeting will collect the rest of this one's yield. The full
-before/after is in COORDINATION.
+the next branch to close filtered targeting will collect the rest of this one's yield.
+
+**Throughput (rule 7), measured with `process.cpuUsage` and paired against the same `origin/main`
+worktree — wall clock on this box is worthless and was not used.** The solver is the one thing here
+that could have cost anything, so it was measured directly
+(`packages/core/bench/block-requirement-cost.ts`, five interleaved rounds, best-of):
+
+| `illegalBlockDeclaration`, 4 attackers / 5 blockers | cost per call |
+| --- | --- |
+| `origin/main` — no requirement half at all | 70 ns |
+| this branch — ordinary board, nothing requires a block | **133 ns** |
+| this branch — one "must be blocked" on the board | 4.9 µs |
+
+The inert path costs **+63 ns per call**, about 16 ns per attacker for two boolean reads, and the
+call happens ONCE per declare-blockers action — roughly **+2 µs per game**. It is that cheap because
+the empty check rides the keyword read the RESTRICTION check already had to make: one
+`effectiveKeywords` per attacker answers both halves of CR 509.1, which is what the fused loop in
+`illegalBlockDeclaration` buys. Allocation is at parity too — **582 scavenges over 30,600 actions vs
+562 over 29,899** on `origin/main` (0.0190 vs 0.0188 per action). The action counts differ because
+the games genuinely differ now: the maximum-hand-size rule adds a discard answer per over-full
+cleanup, which is also why a byte-identical gauntlet is not available as evidence for this branch and
+the self-play lock was re-pinned instead.
 
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
