@@ -131,7 +131,22 @@ const REPRESENTED: ReadonlyArray<{
     mechanic: 'equipment (an Equip cost that attaches)',
     present: (c) => ((c as { subtypes?: readonly string[] }).subtypes ?? []).includes('equipment'),
   },
+  { mechanic: 'equipment with a TRIGGERED ability', present: isTriggeringEquipment },
+  {
+    mechanic: 'damage prevention (the Fog family)',
+    present: (_c, t) => t.includes('"preventDamage"'),
+  },
+  {
+    mechanic: 'replacement effects (CR 614/615 — counter and damage multipliers)',
+    present: (c) => (c as { replacements?: readonly unknown[] }).replacements !== undefined,
+  },
 ];
+
+/** Equipment that does more than modify: it watches its host and triggers. */
+function isTriggeringEquipment(card: CardDefinition): boolean {
+  const c = card as { subtypes?: readonly string[]; triggers?: readonly unknown[] };
+  return (c.subtypes ?? []).includes('equipment') && (c.triggers ?? []).length > 0;
+}
 
 /** The zones a card's back half may be cast from, when it names any. */
 function castZonesOf(card: CardDefinition): readonly string[] | undefined {
@@ -169,23 +184,11 @@ function isModalDfcDefinition(card: CardDefinition): boolean {
 const UNREPRESENTABLE: ReadonlyArray<{ readonly mechanic: string; readonly why: string }> = [
   {
     mechanic: 'multikicker',
-    why: 'every printed multikicker card spends the kick COUNT (a +1/+1 counter, a token, damage "for each time it was kicked"), and the derived-count templates for those clauses do not exist. 0 of 19 compile (re-measured 2026-08-20: 12 of the 19 are blocked on the counters template alone).',
+    why: 'every printed multikicker card spends the kick COUNT (a +1/+1 counter, a token, damage "for each time it was kicked"), and the derived-count templates for those clauses do not exist. Re-measured 2026-08-20 against every printed multikicker card: 0 of 19 compile, 12 of them blocked on the counters template alone.',
   },
   {
     mechanic: 'emblems',
-    why: 'the emblem rule compiles the wrapper, but no printed emblem BODY does — they are all triggered abilities on an emblem, which is its own template family. 0 of 90 compile (re-measured 2026-08-20: the loyalty ULTIMATE that makes the emblem is itself the bigger blocker, 108 unreadable loyalty clauses across the 90).',
-  },
-  {
-    mechanic: 'equipment with a TRIGGERED ability',
-    why: 'plain Equipment is in the pool (20 of them attach and pump), but the Swords, Skullclamp and the living weapons all hang a trigger off the equipped creature, and "whenever equipped creature deals combat damage / dies / becomes equipped" is a trigger SUBJECT the compiler cannot resolve. Measured 2026-08-20 over every printed Equipment carrying such a line: 0 of 145 compile.',
-  },
-  {
-    mechanic: 'damage prevention (the Fog family)',
-    why: 'nothing in core can prevent damage — there is no replacement/prevention layer at all, only the damage that is dealt. Measured 2026-08-20 over every printed card reading "prevent all combat damage": 0 of 123 compile, 109 of them on the plain rules table.',
-  },
-  {
-    mechanic: 'replacement effects on counters and on damage',
-    why: '"if one or more +1/+1 counters would be put on…" (Hardened Scales, Doubling Season) and "if a source would deal damage…" (Torbran) are the same missing layer as prevention: an effect that MODIFIES an event before it happens, where the engine only has effects that happen. Measured 2026-08-20: 0 of 17 and 0 of 32 compile.',
+    why: 'the emblem rule compiles the wrapper, but no printed emblem BODY does, and the loyalty ULTIMATE that would make the emblem is the bigger blocker. Re-measured 2026-08-20 against every printed card that makes an emblem: 0 of 90 compile, with 108 unreadable loyalty clauses across them and 77 unreadable emblem bodies.',
   },
 ];
 
@@ -203,11 +206,6 @@ describe('pool mechanic coverage — a feature nobody can see is not shipped', (
     const probes: Record<string, (t: string, c: CardDefinition) => boolean> = {
       multikicker: (_t, c) => (c as { multikicker?: unknown }).multikicker !== undefined,
       emblems: (t) => t.includes('"emblem"'),
-      'equipment with a TRIGGERED ability': (_t, c) =>
-        ((c as { subtypes?: readonly string[] }).subtypes ?? []).includes('equipment') &&
-        ((c as { triggers?: readonly unknown[] }).triggers ?? []).length > 0,
-      'damage prevention (the Fog family)': (t) => t.includes('preventDamage'),
-      'replacement effects on counters and on damage': (t) => t.includes('"replacement"'),
     };
     for (const { mechanic, why } of UNREPRESENTABLE) {
       expect(why.length, `${mechanic} needs a reason`).toBeGreaterThan(40);
@@ -354,6 +352,9 @@ const SEEDS = {
   battle: 220,
   interveningIf: 221,
   equipment: 222,
+  equipmentTrigger: 223,
+  prevention: 224,
+  replacement: 225,
 } as const;
 
 describe('the pool PLAYS every mechanic it claims', () => {
@@ -829,6 +830,90 @@ describe('the pool PLAYS every mechanic it claims', () => {
     expect(effectivePower(bear, indexContinuous(s).get(bear.instanceId))).toBe(4);
     expect(s.battlefield.find((c) => c.instanceId === axeId)?.attachedTo).toBe(bearId);
   });
+
+  // --- and the three that main's compiler unblocked while this branch was out ---
+
+  it('equipment that TRIGGERS — Skullclamp draws two when the creature it is on dies', () => {
+    const { s: opened, reg } = openGame(SEEDS.equipmentTrigger);
+    let s = opened;
+    // A 1/1: Skullclamp's own +1/-1 is what kills it, which is the card.
+    const runtId = place(
+      s,
+      { id: 'runt', name: 'Runt', types: ['creature'], power: 1, toughness: 1 },
+      'A',
+    );
+    const clampId = place(s, getByName('Skullclamp'), 'A');
+    const handBefore = s.players.A.hand.length;
+
+    s = act(
+      s,
+      { kind: 'activateAbility', player: 'A', instanceId: clampId, abilityIndex: 0, targets: [runtId] },
+      reg,
+    );
+    s = settle(s, reg);
+
+    // The equipped creature is a 2/0, dies to a state-based action, and the
+    // Equipment's own trigger — watching its HOST, not itself — pays out.
+    expect(s.battlefield.some((c) => c.instanceId === runtId)).toBe(false);
+    expect(s.players.A.hand.length).toBe(handBefore + 2);
+    // The Equipment survives its host and is unattached.
+    expect(s.battlefield.find((c) => c.instanceId === clampId)?.attachedTo).toBeUndefined();
+  });
+
+  it('damage prevention — Fog makes the whole attack deal nothing, and the creatures live', () => {
+    const { s: opened, reg } = openGame(SEEDS.prevention);
+    let s = opened;
+    const attackerId = place(
+      s,
+      { id: 'ogre', name: 'Ogre', types: ['creature'], power: 4, toughness: 4 },
+      'A',
+    );
+    s.battlefield.find((c) => c.instanceId === attackerId)!.summoningSick = false;
+    const fogId = giveHand(s, 'B', getByName('Fog'));
+
+    // B casts Fog in A's main phase, before the attack — "this turn" is the
+    // whole point: prevention is a shield that outlives the spell.
+    s = act(s, { kind: 'passPriority', player: 'A' }, reg);
+    s.players.B.manaPool = { W: 0, U: 0, B: 0, R: 0, G: 9, C: 0 };
+    s = act(s, { kind: 'castSpell', player: 'B', instanceId: fogId }, reg);
+    s = settle(s, reg);
+
+    let guard = 0;
+    while (s.step !== 'declareAttackers' && !s.gameOver && guard++ < 40) s = pass(s, reg);
+    s = act(s, { kind: 'declareAttackers', player: 'A', attackers: [attackerId] }, reg);
+    guard = 0;
+    while (s.step !== 'endStep' && !s.gameOver && guard++ < 60) s = pass(s, reg);
+
+    // 4 power got through unblocked and dealt exactly nothing.
+    expect(s.players.B.life).toBe(20);
+  });
+
+  it('a replacement effect — Hardened Scales makes every +1/+1 counter land as two', () => {
+    const { s: opened, reg } = openGame(SEEDS.replacement);
+    let s = opened;
+    const dragonDef = getByName('Sprite Dragon');
+    const dragonId = giveHand(s, 'A', dragonDef);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: dragonId }, reg);
+    s = settle(s, reg);
+
+    floodMana(s);
+    const scalesId = giveHand(s, 'A', getByName('Hardened Scales'));
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: scalesId }, reg);
+    s = settle(s, reg);
+    // Casting Hardened Scales is itself a noncreature spell, so the Dragon grows
+    // — but Scales was still ON THE STACK when that counter was put on, so the
+    // replacement did not exist yet and exactly one counter landed.
+    expect(s.battlefield.find((c) => c.instanceId === dragonId)?.counters['+1/+1']).toBe(1);
+
+    floodMana(s);
+    const boltId = giveHand(s, 'A', getByName('Lightning Bolt'));
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: boltId, targets: ['B'] }, reg);
+    s = settle(s, reg);
+
+    // Now Scales IS on the battlefield: the same one-counter trigger lands as
+    // two. CR 614 — the event is modified before it happens, not corrected after.
+    expect(s.battlefield.find((c) => c.instanceId === dragonId)?.counters['+1/+1']).toBe(3);
+  });
 });
 
 describe('every pool card compiles complete from its printed text', () => {
@@ -841,6 +926,6 @@ describe('every pool card compiles complete from its printed text', () => {
       return record ? compileCard(record as never).status !== 'complete' : false;
     });
     expect(incomplete.map((c) => c.name)).toEqual([]);
-    expect(CARD_POOL.length).toBeGreaterThanOrEqual(515);
+    expect(CARD_POOL.length).toBeGreaterThanOrEqual(530);
   });
 });

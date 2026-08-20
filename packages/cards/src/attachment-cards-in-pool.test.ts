@@ -155,6 +155,9 @@ describe('each shipped attachment says what its printed line says', () => {
     // An aura on the FRONT face of a modal DFC — the land back face changes
     // nothing about what the aura does once it is on a creature.
     ['Glasswing Grace', 2, 2, ['flying', 'lifelink']], // "+2/+2 and has flying and lifelink."
+    ['Aqueous Form', 0, 0, ['unblockable']], // "Enchanted creature can't be blocked."
+    ['Elephant Guide', 3, 3, []], // "Enchanted creature gets +3/+3."
+    ['Spirit Mantle', 1, 1, ['protectionFrom:creatures']], // "+1/+1 and protection from creatures."
     // Equipment
     ['Bone Saw', 1, 0, []], // "Equipped creature gets +1/+0."
     ['Bonesplitter', 2, 0, []], // "Equipped creature gets +2/+0."
@@ -178,6 +181,12 @@ describe('each shipped attachment says what its printed line says', () => {
     ['Basilisk Collar', 0, 0, ['deathtouch', 'lifelink']], // "has deathtouch and lifelink."
     ['Lightning Greaves', 0, 0, ['haste', 'shroud']], // "has haste and shroud."
     ['Swiftfoot Boots', 0, 0, ['hexproof', 'haste']], // "has hexproof and haste."
+    // Equipment whose real text is a TRIGGER — the modification is only half the
+    // card, and transcribing it here is what proves the other half did not eat it.
+    ['Argentum Armor', 6, 6, []], // "Equipped creature gets +6/+6." (+ an attack trigger)
+    ['Skullclamp', 1, -1, []], // "Equipped creature gets +1/-1." (+ a dies trigger)
+    ['Sword of the Animist', 1, 1, []], // "Equipped creature gets +1/+1." (+ an attack trigger)
+    ['Sword of Fire and Ice', 2, 2, ['protectionFrom:red', 'protectionFrom:blue']],
   ];
 
   it('covers every attachment in the pool — a new card cannot slip in unread', () => {
@@ -195,9 +204,15 @@ describe('each shipped attachment says what its printed line says', () => {
       expect(modifies, `${name} grants nothing`).toBeDefined();
       expect(modifies!.power ?? 0).toBe(power);
       expect(modifies!.toughness ?? 0).toBe(toughness);
+      // A LIST-valued keyword (`protectionFrom: ['red', 'blue']`) is expanded
+      // one entry per value, so the table transcribes WHICH protection the card
+      // prints. Reading it as a bare `protectionFrom` would pass a Sword of Fire
+      // and Ice that granted protection from white.
       const granted = Object.entries(modifies!.keywords ?? {})
-        .filter(([, on]) => on)
-        .map(([keyword]) => keyword)
+        .filter(([, on]) => (Array.isArray(on) ? on.length > 0 : on))
+        .flatMap(([keyword, on]) =>
+          Array.isArray(on) ? on.map((value) => `${keyword}:${String(value)}`) : [keyword],
+        )
         .sort();
       expect(granted).toEqual([...keywords].sort());
     });
