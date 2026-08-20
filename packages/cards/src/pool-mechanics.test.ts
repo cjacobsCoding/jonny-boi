@@ -63,6 +63,13 @@ const REPRESENTED: ReadonlyArray<{
   { mechanic: 'flashback ({X} in the flashback cost)', present: (c) => (c as { flashbackXCost?: unknown }).flashbackXCost !== undefined },
   { mechanic: 'flashback (granted by another card)', present: (_c, t) => t.includes('grantFlashback') },
   { mechanic: 'transforming double-faced cards', present: (c) => (c as { backFace?: unknown }).backFace !== undefined },
+  // MODAL double-faced cards left the unrepresentable list the moment the pool
+  // was regenerated after the split/adventure/Siege cast path landed: both faces
+  // compile, so Bala Ged Recovery and its cycle are pool cards now.
+  {
+    mechanic: 'modal double-faced cards (either face cast outright)',
+    present: (c) => (c as { backFaceCastable?: boolean }).backFaceCastable === true,
+  },
   { mechanic: 'modal spells (modes chosen at cast)', present: (c) => (c as { modal?: unknown }).modal !== undefined },
   { mechanic: '{X} costs', present: (c) => (c as { xCost?: unknown }).xCost !== undefined },
   { mechanic: 'kicker', present: (c) => (c as { kicker?: unknown }).kicker !== undefined },
@@ -99,10 +106,6 @@ const UNREPRESENTABLE: ReadonlyArray<{ readonly mechanic: string; readonly why: 
     why: 'the emblem rule compiles the wrapper, but no printed emblem BODY does — they are all triggered abilities on an emblem, which is its own template family. 0 of 90 compile.',
   },
   {
-    mechanic: 'modal double-faced cards',
-    why: 'both faces must compile, and every MDFC pairs a spell with a land whose "enters tapped unless you pay 3 life" clause has no template. 0 of 100 compile.',
-  },
-  {
     mechanic: 'battles',
     why: 'the Siege cast path SHIPPED (the reward is a free cast from exile once the battle is defeated), but the committed card index predates both the printed-defense capture and the per-face data a Siege is compiled from, so a re-fetch is what unblocks these. 0 of 36 compile.',
   },
@@ -122,7 +125,6 @@ describe('pool mechanic coverage — a feature nobody can see is not shipped', (
     const probes: Record<string, (t: string, c: CardDefinition) => boolean> = {
       multikicker: (_t, c) => (c as { multikicker?: unknown }).multikicker !== undefined,
       emblems: (t) => t.includes('"emblem"'),
-      'modal double-faced cards': (_t, c) => (c as { backFaceCastable?: boolean }).backFaceCastable === true,
       battles: (_t, c) => c.types.includes('battle'),
     };
     for (const { mechanic, why } of UNREPRESENTABLE) {

@@ -1,13 +1,8 @@
 {
-  "generatedAt": "2026-08-20T10:32:26.254Z",
+  "generatedAt": "2026-08-20T10:48:57.724Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
   "requested": 380,
-  "unresolved": [
-    "Bala Ged Recovery // Bala Ged Sanctuary",
-    "Jwari Disruption // Jwari Ruins",
-    "Kazandu Mammoth // Kazandu Valley",
-    "Song-Mad Treachery // Song-Mad Ruins"
-  ],
+  "unresolved": [],
   "cards": [
     {
       "id": "f9db72dc-9a5b-48a4-a86e-7464d9a2166a",
@@ -1395,6 +1390,124 @@
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
+    },
+    {
+      "id": "d2075f58-b0e9-4e85-b7e6-0523a27a1d5b",
+      "name": "Bala Ged Recovery // Bala Ged Sanctuary",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery",
+          "//",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery // Land",
+      "oracleText": "Return target card from your graveyard to your hand.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [],
+      "set": "znr",
+      "collectorNumber": "180",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+        "normal": "https://cards.scryfall.io/normal/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+        "large": "https://cards.scryfall.io/large/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347"
+      },
+      "localImages": {
+        "normal": "bala-ged-recovery-bala-ged-sanctuary-normal.jpg",
+        "art_crop": "bala-ged-recovery-bala-ged-sanctuary-art_crop.jpg"
+      },
+      "layout": "modal_dfc",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Bala Ged Recovery",
+          "manaCost": {
+            "generic": 2,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 1,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Sorcery"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Sorcery",
+          "oracleText": "Return target card from your graveyard to your hand.",
+          "power": null,
+          "toughness": null,
+          "colors": [
+            "G"
+          ],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+            "normal": "https://cards.scryfall.io/normal/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+            "large": "https://cards.scryfall.io/large/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+            "art_crop": "https://cards.scryfall.io/art_crop/front/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347"
+          }
+        },
+        {
+          "name": "Bala Ged Sanctuary",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Land"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Land",
+          "oracleText": "This land enters tapped.\n{T}: Add {G}.",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/back/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+            "normal": "https://cards.scryfall.io/normal/back/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+            "large": "https://cards.scryfall.io/large/back/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347",
+            "art_crop": "https://cards.scryfall.io/art_crop/back/c/5/c5cb3052-358d-44a7-8cfd-cd31b236494a.jpg?1783929347"
+          }
+        }
+      ]
     },
     {
       "id": "326ba371-124c-4949-a048-3a0c8962e567",
@@ -9120,6 +9233,124 @@
       "faces": []
     },
     {
+      "id": "941a4b14-ea2a-4bd0-8cc2-d609f80df32c",
+      "name": "Jwari Disruption // Jwari Ruins",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant",
+          "//",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant // Land",
+      "oracleText": "Counter target spell unless its controller pays {1}.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "U"
+      ],
+      "colorIdentity": [
+        "U"
+      ],
+      "keywords": [],
+      "set": "znr",
+      "collectorNumber": "64",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+        "normal": "https://cards.scryfall.io/normal/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+        "large": "https://cards.scryfall.io/large/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400"
+      },
+      "localImages": {
+        "normal": "jwari-disruption-jwari-ruins-normal.jpg",
+        "art_crop": "jwari-disruption-jwari-ruins-art_crop.jpg"
+      },
+      "layout": "modal_dfc",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Jwari Disruption",
+          "manaCost": {
+            "generic": 1,
+            "W": 0,
+            "U": 1,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Instant"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Instant",
+          "oracleText": "Counter target spell unless its controller pays {1}.",
+          "power": null,
+          "toughness": null,
+          "colors": [
+            "U"
+          ],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+            "normal": "https://cards.scryfall.io/normal/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+            "large": "https://cards.scryfall.io/large/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+            "art_crop": "https://cards.scryfall.io/art_crop/front/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400"
+          }
+        },
+        {
+          "name": "Jwari Ruins",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Land"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Land",
+          "oracleText": "This land enters tapped.\n{T}: Add {U}.",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/back/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+            "normal": "https://cards.scryfall.io/normal/back/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+            "large": "https://cards.scryfall.io/large/back/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400",
+            "art_crop": "https://cards.scryfall.io/art_crop/back/3/0/301750a7-d1fd-435e-bfa8-9d2fb22ad627.jpg?1783929400"
+          }
+        }
+      ]
+    },
+    {
       "id": "df7f697e-6886-4897-a024-61ae225c1b34",
       "name": "Kalonian Tusker",
       "manaCost": {
@@ -9171,6 +9402,130 @@
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
+    },
+    {
+      "id": "2ac1c95c-2a9d-40bc-9cad-9cadfa3f19f7",
+      "name": "Kazandu Mammoth // Kazandu Valley",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elephant",
+          "//",
+          "Land"
+        ]
+      },
+      "rawTypeLine": "Creature — Elephant // Land",
+      "oracleText": "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Landfall"
+      ],
+      "set": "znr",
+      "collectorNumber": "189",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+        "normal": "https://cards.scryfall.io/normal/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+        "large": "https://cards.scryfall.io/large/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346"
+      },
+      "localImages": {
+        "normal": "kazandu-mammoth-kazandu-valley-normal.jpg",
+        "art_crop": "kazandu-mammoth-kazandu-valley-art_crop.jpg"
+      },
+      "layout": "modal_dfc",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Kazandu Mammoth",
+          "manaCost": {
+            "generic": 1,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 2,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Creature"
+            ],
+            "subtypes": [
+              "Elephant"
+            ]
+          },
+          "rawTypeLine": "Creature — Elephant",
+          "oracleText": "Landfall — Whenever a land you control enters, this creature gets +2/+2 until end of turn.",
+          "power": 3,
+          "toughness": 3,
+          "colors": [
+            "G"
+          ],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+            "normal": "https://cards.scryfall.io/normal/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+            "large": "https://cards.scryfall.io/large/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+            "art_crop": "https://cards.scryfall.io/art_crop/front/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346"
+          }
+        },
+        {
+          "name": "Kazandu Valley",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Land"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Land",
+          "oracleText": "This land enters tapped.\n{T}: Add {G}.",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/back/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+            "normal": "https://cards.scryfall.io/normal/back/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+            "large": "https://cards.scryfall.io/large/back/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346",
+            "art_crop": "https://cards.scryfall.io/art_crop/back/2/f/2f632537-63bf-4490-86e6-e6067b9c1a3b.jpg?1783929346"
+          }
+        }
+      ]
     },
     {
       "id": "eac8c196-8477-4b79-9875-21afa1e61708",
@@ -15718,6 +16073,124 @@
       "layout": "normal",
       "isDoubleFaced": false,
       "faces": []
+    },
+    {
+      "id": "81b61770-2ed5-4a50-84d0-97790002fc5a",
+      "name": "Song-Mad Treachery // Song-Mad Ruins",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 2,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Sorcery",
+          "//",
+          "Land"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Sorcery // Land",
+      "oracleText": "Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R"
+      ],
+      "colorIdentity": [
+        "R"
+      ],
+      "keywords": [],
+      "set": "znr",
+      "collectorNumber": "165",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+        "normal": "https://cards.scryfall.io/normal/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+        "large": "https://cards.scryfall.io/large/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353"
+      },
+      "localImages": {
+        "normal": "song-mad-treachery-song-mad-ruins-normal.jpg",
+        "art_crop": "song-mad-treachery-song-mad-ruins-art_crop.jpg"
+      },
+      "layout": "modal_dfc",
+      "isDoubleFaced": true,
+      "faces": [
+        {
+          "name": "Song-Mad Treachery",
+          "manaCost": {
+            "generic": 3,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 2,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Sorcery"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Sorcery",
+          "oracleText": "Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn.",
+          "power": null,
+          "toughness": null,
+          "colors": [
+            "R"
+          ],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+            "normal": "https://cards.scryfall.io/normal/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+            "large": "https://cards.scryfall.io/large/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+            "art_crop": "https://cards.scryfall.io/art_crop/front/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353"
+          }
+        },
+        {
+          "name": "Song-Mad Ruins",
+          "manaCost": {
+            "generic": 0,
+            "W": 0,
+            "U": 0,
+            "B": 0,
+            "R": 0,
+            "G": 0,
+            "C": 0,
+            "other": []
+          },
+          "typeLine": {
+            "supertypes": [],
+            "types": [
+              "Land"
+            ],
+            "subtypes": []
+          },
+          "rawTypeLine": "Land",
+          "oracleText": "This land enters tapped.\n{T}: Add {R}.",
+          "power": null,
+          "toughness": null,
+          "colors": [],
+          "imageUris": {
+            "small": "https://cards.scryfall.io/small/back/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+            "normal": "https://cards.scryfall.io/normal/back/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+            "large": "https://cards.scryfall.io/large/back/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353",
+            "art_crop": "https://cards.scryfall.io/art_crop/back/7/8/782ca27f-9f18-476c-b582-89c06fb2e322.jpg?1783929353"
+          }
+        }
+      ]
     },
     {
       "id": "75d9c036-4f0d-4b55-b0a4-096ca84748ca",
