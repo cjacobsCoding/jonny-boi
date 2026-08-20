@@ -170,6 +170,18 @@ _Append dated notes here; keep them short. Newest at top._
   throughput is min-of-12 `process.cpuUsage`: **2625 ms branch vs 2702 ms main**, inside a ±15% noise
   band.
 
+
+  🐛 **A DEFECT THIS EXPOSED, and it is not mine — it is the whole of a shipped rule.**
+  `keywordsParam` (packages/cards/src/effect-helpers.ts), which EVERY until-end-of-turn keyword grant
+  reads through, kept only `=== true` values. The three payload keywords are not booleans
+  (`protectionFrom` is a list, `ward`/`minBlockers` are numbers), so **"target creature gains
+  protection from red until end of turn" has been compiling `'complete'` and doing nothing at all**
+  since that rule landed. `ward-protection.test.ts` was green because it asserted the compiled EFFECT
+  REFS and never played the card. Fixed here, with a test that resolves the grant through core's
+  `applyEffectRef` and reads it back through `indexContinuous` — a hand-built context passes while the
+  real spell does nothing, which is the same mistake one layer up. If you own a grant-shaped
+  primitive, check what your test actually proves.
+
   ⛔ **Reported, never approximated** — by clause, on the card: Treasure tokens (Goldvein Pick,
   Beamtown Beatstick, Sword of Wealth and Power); **proliferate** (Sword of Truth and Justice,
   Thrummingbird, Bloated Contaminator); **"that player"** — the player the damage was dealt to, which

@@ -1881,6 +1881,18 @@ candidate. Gauntlet seed 99 is **byte-identical** to the same-day `origin/main` 
 pool contains no card of this family yet — and min-of-12 `process.cpuUsage` is 2625 ms on the branch
 vs 2702 ms on `main`, i.e. parity inside a noise band of ±15% on a box running ten agents.
 
+
+⚠️ **A DEFECT THIS EXPOSED, worth more than the feature.** `keywordsParam` — the reader every
+until-end-of-turn keyword grant goes through — kept only `=== true` values, so the three PAYLOAD
+keywords were silently dropped on the way in: `protectionFrom` is a list, `ward` and `minBlockers` are
+numbers. **"Target creature gains protection from red until end of turn" has been compiling
+`'complete'` and doing nothing at all**, since the day that rule landed. Its test asserted the compiled
+EFFECT REFS and never played the card, which is exactly why the suite stayed green. Widening
+`parseKeywordList` to the payload keywords would have routed three more rule-table entries through the
+same hole, so the reader is fixed here and the new test resolves the grant through core's own
+`applyEffectRef` and reads it back through `indexContinuous` — a hand-built context passes while the
+real spell does nothing, which is the shape of the original mistake.
+
 ⛔ **Still reported, by name and by clause.** Treasure tokens (Goldvein Pick, Beamtown Beatstick,
 Sword of Wealth and Power); **proliferate** (Sword of Truth and Justice, Thrummingbird, Bloated
 Contaminator); **"that player"** — the player the damage was dealt to, which no effect can be aimed at
