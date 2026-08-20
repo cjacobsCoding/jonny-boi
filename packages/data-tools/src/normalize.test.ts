@@ -93,6 +93,49 @@ describe('normalizeCard — double-faced card', () => {
   });
 });
 
+describe('normalizeCard — a printed number that lives on the FACE', () => {
+  /**
+   * A Siege is the shape that caught this: Scryfall reports no top-level
+   * `defense` and puts `'3'` on the battle face. Capturing the field but
+   * reading only the top level normalized every battle in the game to `null`,
+   * so the compiler kept reporting "no printed starting-defense number" on a
+   * freshly fetched record. A transforming planeswalker has the same shape.
+   */
+  it('reads a battle defense off the front face', () => {
+    const siege = normalizeCard({
+      name: 'Invasion of Gobakhan // Lightshield Array',
+      layout: 'transform',
+      card_faces: [
+        { name: 'Invasion of Gobakhan', type_line: 'Battle — Siege', defense: '3' },
+        { name: 'Lightshield Array', type_line: 'Enchantment' },
+      ],
+    } as RawScryfallCard);
+    expect(siege.defense).toBe(3);
+  });
+
+  it('reads a transforming walker loyalty off the front face', () => {
+    const walker = normalizeCard({
+      name: 'Arlinn, the Pack Hope // Arlinn, the Moon Fury',
+      layout: 'transform',
+      card_faces: [
+        { name: 'Arlinn, the Pack Hope', type_line: 'Legendary Planeswalker', loyalty: '4' },
+        { name: 'Arlinn, the Moon Fury', type_line: 'Legendary Planeswalker' },
+      ],
+    } as RawScryfallCard);
+    expect(walker.loyalty).toBe(4);
+  });
+
+  it('still prefers the top-level number when the card prints one', () => {
+    const walker = normalizeCard({
+      name: 'Liliana of the Veil',
+      type_line: 'Legendary Planeswalker — Liliana',
+      loyalty: '3',
+    } as RawScryfallCard);
+    expect(walker.loyalty).toBe(3);
+    expect(walker.defense).toBeNull();
+  });
+});
+
 describe('normalizeCard — robustness', () => {
   it('produces a usable sparse record from a near-empty card', () => {
     const card = normalizeCard({ name: 'Mystery Card' } as RawScryfallCard);

@@ -69,10 +69,19 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
     toughness: parseStat(raw.toughness ?? frontFace?.toughness),
     // Planeswalkers: printed starting loyalty. `parseStat` already returns null
     // for a non-numeric box ("X"), which is exactly "variable - not compilable".
-    loyalty: parseStat(raw.loyalty),
-    // Battles: printed starting defense. Same parse and the same meaning for a
+    // The front-face fallback is the one the cost/type/text lines above already
+    // take, and for the same reason: a TRANSFORMING walker prints its number on
+    // a face and carries nothing at the top level.
+    loyalty: parseStat(raw.loyalty ?? frontFace?.loyalty),
+    // Battles: printed starting defense. Same parse, and the same meaning for a
     // non-numeric box as loyalty's — "variable, not compilable".
-    defense: parseStat(raw.defense),
+    //
+    // ⚠️ MEASURED, and the reason a Siege still did not compile after `defense`
+    // was captured: Scryfall puts a Siege's defense on `card_faces[0]`, NOT at
+    // the top level (`Invasion of Gobakhan` → `defense: undefined` on the card,
+    // `'3'` on the battle face). Reading only the top level captured the field
+    // and normalized every battle in the game to `null` anyway.
+    defense: parseStat(raw.defense ?? frontFace?.defense),
     colors: raw.colors ?? frontFace?.colors ?? [],
     colorIdentity: raw.color_identity ?? [],
     keywords: raw.keywords ?? [],
