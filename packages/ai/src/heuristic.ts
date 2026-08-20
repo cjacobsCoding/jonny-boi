@@ -1548,8 +1548,19 @@ function planWalkerAttack(
   // Only divert when the object is worth more than the face damage given up.
   if (targetWorth < weights.faceDamageValue * targetNeed) return undefined;
 
-  // Fewest attackers: biggest first until the need is covered.
-  const byPowerDesc = [...attackers].sort((a, b) => power(b, index) - power(a, index));
+  // Fewest attackers: biggest first until the need is covered — and among equals,
+  // the one with the LEAST to lose by being diverted.
+  //
+  // "Whenever ~ deals combat damage to a PLAYER" pays nothing when its creature
+  // is sent at a planeswalker, so diverting the saboteur and leaving the vanilla
+  // to hit the face throws the trigger away for free. Two attackers of the same
+  // size are otherwise interchangeable here, which is exactly the case where
+  // getting this backwards is invisible.
+  const byPowerDesc = [...attackers].sort((a, b) => {
+    const byPower = power(b, index) - power(a, index);
+    if (byPower !== 0) return byPower;
+    return saboteurTriggerCount(a, view) - saboteurTriggerCount(b, view);
+  });
   const assigned: Record<InstanceId, InstanceId | PlayerId> = {};
   let covered = 0;
   for (const attacker of byPowerDesc) {
