@@ -2606,6 +2606,31 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    // The third printed shape of the same scope — Skullclamp's whole card, and
+    // the second half of every "protective" Aura. It fires as printed BECAUSE
+    // the state-based actions settle attachments and deaths in that order: a
+    // pass emits `creatureDied` while the host is still on the battlefield and
+    // the Equipment still attached, and only the NEXT pass unattaches it. Core's
+    // `equipped-triggers.test.ts` pins that ordering, because reversing it would
+    // make this rule compile a trigger that silently never fires.
+    id: 'trigger-equipped-dies',
+    description: '"When/whenever equipped/enchanted creature dies, BODY"',
+    pattern: /^(?:when|whenever) (?:equipped|enchanted) creature dies, (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return triggerFrom(ctx, hostWatch('dies'), body, `Equipped creature dies: ${body}`);
+    },
+  },
+  {
+    id: 'trigger-equipped-dies-you-may',
+    description: '"When/whenever equipped/enchanted creature dies, you may BODY"',
+    pattern: /^(?:when|whenever) (?:equipped|enchanted) creature dies, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, hostWatch('dies'), body, `Equipped creature dies: you may ${body}`);
+    },
+  },
+  {
     id: 'trigger-equipped-attacks',
     description: '"Whenever equipped/enchanted creature attacks, BODY"',
     pattern: /^whenever (?:equipped|enchanted) creature attacks, (.+)$/,
@@ -3908,9 +3933,20 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // Attachment IS implemented now (core's `attachments.ts` + the
     // `enchant-permanent` / `attachment-modification` / `equip-cost` rules), so
     // this hint no longer claims the whole system is missing — that would send the
-    // next agent to build something that exists. What still lands here is a
-    // template: "Enchant player", "Equip only to a Human", bestow, reconfigure,
-    // and anything that moves an attachment other than a plain Equip.
+    // next agent to build something that exists.
+    //
+    // Nor is the attachment's TRIGGERED half missing any more: "Whenever
+    // equipped/enchanted creature deals combat damage to a player, BODY" and
+    // "… attacks, BODY" compile, scoped to the host by core's
+    // `TriggerCondition.watches` — so a card of that shape reports on its BODY,
+    // not on the trigger. Its static half now carries the payload keywords too
+    // ("gets +2/+2 and has protection from black and from green", "ward {1}").
+    //
+    // What still lands here is a template that changes HOW a thing attaches:
+    // "Enchant player", a narrowed equip ("Equip legendary creature {3}",
+    // "Equip only to a Human", an equip whose cost scales), a second attach
+    // ability ("{B}{B}: Attach ~ to target creature you control"), bestow,
+    // reconfigure, living weapon, and "whenever ~ becomes unattached".
     pattern: /\bequip\b|\battach\b|\benchant\b/,
     missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
   },
@@ -3984,10 +4020,16 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
   {
     // Plain `Ward {N}` and `Protection from [color/artifacts/creatures/...]`
     // COMPILE now (source-aware targeting: all four protection halves plus the
-    // ward pay-or-counter trigger are engine-enforced). What still lands here
-    // is a TEMPLATE outside the closed tables: a ward cost that is not plain
-    // generic mana ("Ward-Pay 3 life", "Ward {X}"), or a protection quality
-    // with no engine meaning ("protection from Demons", "from instants").
+    // ward pay-or-counter trigger are engine-enforced), and so does the GRANTED
+    // form on an attachment — "Equipped creature gets +2/+2 and has protection
+    // from black and from green", "gets +1/+0 and has haste and ward {1}" —
+    // which reads the same closed tables through `parseProtectionOrWard`.
+    // What still lands here is a TEMPLATE outside those tables: a ward cost
+    // that is not plain generic mana ("Ward—Pay 3 life", "Ward {X}"), a
+    // protection quality with no engine meaning ("protection from Demons",
+    // "from instants and from sorceries" — Sword of Wealth and Power), or
+    // "hexproof from <quality>", which is protection's shape with only the
+    // targeting half.
     pattern: /\bward\b|\bprotection from\b/,
     missingEngineSystem: 'a ward/protection template the compiler does not recognize yet',
   },

@@ -294,6 +294,82 @@ describe('the attached-host watch reads the CURRENT attachment', () => {
   });
 });
 
+describe('"whenever equipped creature dies" and the state-based-action order', () => {
+  /**
+   * Skullclamp's whole card, and the reason the compiler is allowed to emit a
+   * `dies` trigger scoped to the host at all.
+   *
+   * The ability reads the attachment AT THE MOMENT OF DEATH, and whether that
+   * still exists is decided by the order of two state-based actions: the
+   * attachment check (which unattaches an Equipment whose host is gone) and the
+   * death check (which emits `creatureDied`). They settle in SEPARATE passes of
+   * the SBA fixpoint — the death is emitted while the host is still attached,
+   * and the pass after that unattaches — so the trigger fires. Reversing them
+   * would make this card silently do nothing, which is exactly the failure a
+   * win rate never reports.
+   */
+  const CLAMP: CardDefinition = {
+    ...SWORD,
+    id: 'test:clamp',
+    name: 'Test Clamp',
+    triggers: [
+      {
+        condition: { on: 'dies', watches: 'attachedHost' },
+        effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+        label: 'Equipped creature dies: draw two cards',
+      },
+    ],
+  };
+
+  it('fires when the host dies in combat', () => {
+    const g = createGame({ seed: 9, decks: { A: deckOf(ISLAND, 40), B: deckOf(ISLAND, 40) } });
+    let state = g.state;
+    const host = instance(state.nextInstanceId++, creatureDef('Host', 1, 1), 'A');
+    const clamp = instance(state.nextInstanceId++, CLAMP, 'A');
+    const killer = instance(state.nextInstanceId++, creatureDef('Killer', 3, 3), 'B');
+    state.battlefield.push(host, clamp, killer);
+    clamp.attachedTo = host.instanceId;
+    let guard = 0;
+    while (state.step !== 'declareAttackers' && !state.gameOver && guard++ < 300) {
+      state = act(state, { kind: 'passPriority', player: state.priorityPlayer }).state;
+    }
+
+    const after = swingBlocked(state, host.instanceId, killer.instanceId);
+    expect(triggerLabels(after.events)).toEqual(['Equipped creature dies: draw two cards']);
+    // …and the Equipment is unattached by the time the dust settles. Read off the
+    // RETURNED state: `applyAction` works on a clone, so the local instance is
+    // the pre-action object and would answer for a board that no longer exists.
+    expect(find(after.state, clamp.instanceId).attachedTo ?? null).toBeNull();
+  });
+
+  /** Attack with one creature, block it with one, and run through damage. */
+  function swingBlocked(
+    state: GameState,
+    attacker: InstanceId,
+    blocker: InstanceId,
+  ): { state: GameState; events: readonly GameEvent[] } {
+    const declared = act(state, { kind: 'declareAttackers', player: 'A', attackers: [attacker] });
+    let s = declared.state;
+    const seen: GameEvent[] = [...declared.events];
+    let guard = 0;
+    while (s.step !== 'declareBlockers' && !s.gameOver && guard++ < 300) {
+      const r = act(s, { kind: 'passPriority', player: s.priorityPlayer });
+      s = r.state;
+      seen.push(...r.events);
+    }
+    const blocked = act(s, { kind: 'declareBlockers', player: 'B', blocks: [{ blocker, attacker }] });
+    s = blocked.state;
+    seen.push(...blocked.events);
+    guard = 0;
+    while (s.step !== 'postcombatMain' && !s.gameOver && guard++ < 300) {
+      const r = act(s, { kind: 'passPriority', player: s.priorityPlayer });
+      s = r.state;
+      seen.push(...r.events);
+    }
+    return { state: s, events: seen };
+  }
+});
+
 describe('conditionMatches — the pure half', () => {
   const SOURCE = 1 as InstanceId;
   const HOST = 2 as InstanceId;
