@@ -459,7 +459,14 @@ const LAND_SUBTYPES: ReadonlySet<string> = new Set([
  * that is not in here keeps reporting instead.
  *
  * Everything listed is checked case-insensitively against the printed subtypes
- * the compiler emits (`matchesCardFilter` → `hasSubtype`).
+ * the compiler emits (`matchesCardFilter` → `permanentHasSubtype`).
+ *
+ * It is now the compiler's subtype vocabulary generally, not only a search's:
+ * the TYPAL anthem ("Goblins you control have haste", "Other Goblin creatures
+ * you control get +1/+1") reads the same table, for the same reason — a lord
+ * whose subtype nothing recognises would compile to a filter matching nothing,
+ * which is an anthem that silently pumps no one. One table, so a subtype the
+ * compiler can find in a library is also one it can pump on the battlefield.
  */
 const SEARCHABLE_SUBTYPES: ReadonlySet<string> = new Set([
   // Land types (the fetchlands and the basic-land searches).
@@ -471,11 +478,53 @@ const SEARCHABLE_SUBTYPES: ReadonlySet<string> = new Set([
   // Artifact/enchantment types.
   'equipment',
   'aura',
-  // Creature types named by the tutors in the most-played corpus.
+  // Creature types named by the tutors and the typal lords in the most-played
+  // corpus. Extended one printed card at a time - see the doc comment.
   'goblin',
   'dragon',
   'demon',
+  'faerie',
+  'zombie',
+  'soldier',
+  'spirit',
+  'elemental',
+  'merfolk',
+  'elf',
+  'human',
+  'warrior',
+  'wizard',
+  'knight',
+  'vampire',
+  'sliver',
+  'construct',
+  'thopter',
+  'myr',
+  'servo',
+  'rogue',
+  'snake',
+  'squirrel',
+  'beast',
+  'wurm',
+  'insect',
+  'angel',
+  'cat',
+  'shaman',
+  'druid',
+  'cleric',
+  'goat',
+  'saproling',
+  'plant',
+  'bird',
+  'horror',
 ]);
+
+/**
+ * {@link SEARCHABLE_SUBTYPES} as a regex alternation, longest first so a pattern
+ * cannot match a prefix of a longer type and leave the rest of the word behind.
+ */
+const SUBTYPE_ALTERNATION = [...SEARCHABLE_SUBTYPES]
+  .sort((a, b) => b.length - a.length)
+  .join('|');
 
 /**
  * The numeric restriction a search may print — "with mana value 1 or less",
@@ -656,6 +705,126 @@ const DISCARD_RESTRICTION_TOKEN = Object.keys(DISCARD_RESTRICTIONS).join('|');
 /** The filter implementing a printed discard restriction, or null if unexpressible. */
 function discardFilterFor(word: string): (typeof DISCARD_RESTRICTIONS)[string] | null {
   return DISCARD_RESTRICTIONS[word.trim().toLowerCase()] ?? null;
+}
+
+/**
+ * The card types a printed token type line may name, in the engine's vocabulary.
+ * A CLOSED table: "artifact creature token" and "enchantment creature token" are
+ * real printings, but a planeswalker or battle token needs printed loyalty or
+ * defense that the token clause never states, so one is refused rather than
+ * created without it.
+ */
+const TOKEN_TYPE_WORDS: Readonly<Record<string, CardType>> = Object.freeze({
+  artifact: 'artifact',
+  creature: 'creature',
+  enchantment: 'enchantment',
+  land: 'land',
+});
+
+/** The printed word for "no colour at all" — a real, distinct declaration. */
+const COLORLESS_WORD = 'colorless';
+
+/** Everything a printed token clause declares about the object it creates. */
+interface TokenFace {
+  /** The token's name: its subtype line, as CR 111.3 names a token. */
+  readonly name: string;
+  /** The printed colours; EMPTY for the printed word "colorless". */
+  readonly colors: readonly ManaColor[];
+  /** The printed subtypes, as printed ("Faerie", "Rogue"). */
+  readonly subtypes: readonly string[];
+  /** The printed card types, always including `creature` for this rule. */
+  readonly types: readonly CardType[];
+}
+
+/**
+ * Read a printed token descriptor — everything between the P/T and the word
+ * "token" — into the whole face: "black faerie rogue creature" →
+ * `{ name: 'Faerie Rogue', colors: ['B'], subtypes: ['Faerie','Rogue'],
+ * types: ['creature'] }`.
+ *
+ * The printed grammar is strictly ordered, which is what makes this readable
+ * without a parser: **colours, then subtypes, then card types.** So the colours
+ * are taken from the FRONT while the words are colour words (joined by the
+ * printed "and", as in "blue and black"), the card types are taken from the BACK
+ * while the words are type words, and whatever is left in the middle is the
+ * subtype line.
+ *
+ * Returns `null` — refusing the whole clause — for anything it cannot read
+ * completely:
+ *
+ *  - **No colour word.** A token's colour exists ONLY in this sentence, so a
+ *    descriptor that does not state one cannot be compiled into a coloured
+ *    object; guessing colourless is exactly the infidelity this rule is fixing.
+ *    (It also correctly refuses "a TAPPED 1/1 blue Fish creature token", whose
+ *    descriptor starts with a word that is not a colour — entering tapped is a
+ *    characteristic the primitive cannot express either.)
+ *  - **No subtype.** Every printed creature token names its creature type, and a
+ *    typeless one would be invisible to every typal effect in the game.
+ *  - **A type line without `creature`.** The predefined artifact tokens
+ *    (Treasure, Clue, Food) print no P/T here and carry an activated ability
+ *    this rule does not build; they stay reported.
+ */
+function parseTokenFace(descriptor: string): TokenFace | null {
+  const words = descriptor
+    .trim()
+    .split(/[ ,]+/)
+    .filter((word) => word.length > 0);
+  if (words.length === 0) return null;
+
+  // --- colours, from the front -------------------------------------------------
+  const colors: ManaColor[] = [];
+  let colorless = false;
+  let head = 0;
+  while (head < words.length) {
+    const word = words[head] as string;
+    // The printed conjunction between two colour words ("blue and black"). Only
+    // accepted BETWEEN colours, never as the first word, so it cannot smuggle a
+    // non-colour descriptor past the check below.
+    if (word === 'and' && colors.length > 0) {
+      head++;
+      continue;
+    }
+    if (word === COLORLESS_WORD) {
+      colorless = true;
+      head++;
+      continue;
+    }
+    const color = COLOR_WORDS[word];
+    if (color === undefined) break;
+    if (!colors.includes(color)) colors.push(color);
+    head++;
+  }
+  // "colorless" and a colour word in one descriptor is not a printing anything
+  // makes; reading it either way would be a guess.
+  if (colorless && colors.length > 0) return null;
+  if (!colorless && colors.length === 0) return null;
+
+  // --- card types, from the back -----------------------------------------------
+  const types: CardType[] = [];
+  let tail = words.length;
+  while (tail > head) {
+    const type = TOKEN_TYPE_WORDS[words[tail - 1] as string];
+    if (type === undefined) break;
+    // Unshifted so the emitted type line keeps its PRINTED order ("artifact
+    // creature"), which is how a reviewer compares it to the card.
+    types.unshift(type);
+    tail--;
+  }
+  if (!types.includes('creature')) return null;
+
+  // --- what is left in the middle is the subtype line --------------------------
+  const subtypes = words.slice(head, tail).map(capitalizeWord);
+  if (subtypes.length === 0) return null;
+
+  // CR 111.3: a token's name is its subtype line ("Faerie Rogue"), not the last
+  // word of it — naming it "Rogue" would make two different tokens share a name
+  // and read wrong in every log line.
+  return { name: subtypes.join(' '), colors, subtypes, types };
+}
+
+/** "goblin" → "Goblin". Subtypes are stored as printed (matching is case-folded). */
+function capitalizeWord(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 /** Build a `KeywordFlags` object from a printed keyword word. */
@@ -1848,28 +2017,48 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    /**
+     * **"Create N X/Y COLOR [SUBTYPES] [artifact] creature token(s) [with
+     * KEYWORDS]"** - the whole printed token face, not just its size.
+     *
+     * A token has no mana cost and no card behind it, so every characteristic it
+     * has is in THIS sentence. The rule used to read only the P/T and the last
+     * descriptor word, which meant "a 1/1 **black** **Faerie Rogue** creature
+     * token" entered as a colourless creature named Faerie with no creature type
+     * at all - invisible to a black anthem, to protection from black, to "destroy
+     * target nonblack creature" and to every typal lord, while the card compiled
+     * `'complete'`. See {@link parseTokenFace} for the descriptor grammar.
+     *
+     * A descriptor this rule cannot read COMPLETELY refuses the whole line rather
+     * than dropping the part it did not understand - a token missing a printed
+     * characteristic is a different card, which is precisely the failure this
+     * rule shipped with.
+     */
     id: 'create-creature-token',
-    description: '"Create N X/Y [color] [subtype] creature token(s) [with KEYWORD]"',
-    pattern: new RegExp(
-      `^create ${COUNT_TOKEN} (\\d+)\\/(\\d+) ([a-z ]*?)creature tokens?(?: with ${KEYWORD_TOKEN})?$`,
-    ),
+    description: '"Create N X/Y COLOR [SUBTYPES] [artifact] creature token(s) [with KEYWORDS]"',
+    pattern: new RegExp(`^create ${COUNT_TOKEN} (\\d+)\\/(\\d+) ([a-z][a-z ]*?) tokens?(?: with (.+))?$`),
     build(match) {
       const count = parseCount(match[1]);
       const power = Number.parseInt(match[2] ?? '', 10);
       const toughness = Number.parseInt(match[3] ?? '', 10);
       if (count === null || !Number.isFinite(power) || !Number.isFinite(toughness)) return null;
-      // The descriptor is "<colors> <subtypes> " — the last word is the creature
-      // type that names the token (e.g. "red elemental" → "Elemental").
-      const descriptor = (match[4] ?? '').trim();
-      const words = descriptor.split(' ').filter((w) => w.length > 0);
-      const typeWord = words[words.length - 1] ?? 'token';
-      const name = typeWord.charAt(0).toUpperCase() + typeWord.slice(1);
+      const face = parseTokenFace(match[4] ?? '');
+      if (face === null) return null;
+      const params: Record<string, unknown> = {
+        power,
+        toughness,
+        name: face.name,
+        colors: face.colors,
+        subtypes: face.subtypes,
+      };
+      // Written only when the token is more than a plain creature, so the
+      // overwhelmingly common emitted record stays as short as it reads.
+      if (face.types.length !== 1) params.types = face.types;
       // `count` is omitted when it is the primitive's default of one, keeping the
       // emitted data minimal and identical to the hand-authored pool's style.
-      const params: Record<string, unknown> = { power, toughness, name };
       if (count !== TOKEN_DEFAULT_COUNT) params.count = count;
       if (match[5]) {
-        const keywords = keywordFlag(match[5]);
+        const keywords = parseKeywordList(match[5]);
         if (!keywords) return null;
         params.keywords = keywords;
       }
@@ -3590,7 +3779,11 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     description:
       '"[Other] creatures you control get +X/+Y [and have KEYWORD]" / "…have KEYWORD" (Glorious Anthem, Fervor) — a continuous static, core\'s anthem layer',
     pattern: new RegExp(
-      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s ` +
+      `^(other )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?` +
+        // The NOUN, in the two printed shapes a typal anthem takes: an
+        // adjective before a type word ("Goblin creatures you control") or the
+        // subtype used as the noun itself ("Goblins you control").
+        `(?:((?:${SUBTYPE_ALTERNATION}) )?(${Object.keys(STATIC_NOUN_TYPES).join('|')})s|(${SUBTYPE_ALTERNATION})s) ` +
         `(you control|of the chosen type|of the chosen color)(?: of the chosen (type|color))? ` +
         `(?:get ([+-]\\d+)\\/([+-]\\d+)(?: and (?:have|gain) (.+))?|(?:have|gain) (.+))$`,
     ),
@@ -3603,8 +3796,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
         (type) => !/^(instant|sorcery)$/i.test(type),
       );
       if (!isPermanent) return null;
-      const power = match[6] === undefined ? 0 : Number.parseInt(match[6], 10);
-      const toughness = match[7] === undefined ? 0 : Number.parseInt(match[7], 10);
+      const power = match[8] === undefined ? 0 : Number.parseInt(match[8], 10);
+      const toughness = match[9] === undefined ? 0 : Number.parseInt(match[9], 10);
       if (!Number.isFinite(power) || !Number.isFinite(toughness)) return null;
       // WHOSE creatures, and NARROWED BY THE NAMED VALUE. The two tails are one
       // group because a printed anthem says exactly one of them first: "creatures
@@ -3612,8 +3805,8 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // anthem, while "creatures of the chosen color" (Gauntlet of Power) is
       // SYMMETRIC — it pumps the opponent's team too, and reading it as friendly
       // would be a strictly better card than the one printed.
-      const scopeWord = match[4] ?? '';
-      const narrowWord = match[5] ?? (scopeWord.startsWith('of the chosen ') ? scopeWord.slice('of the chosen '.length) : undefined);
+      const scopeWord = match[6] ?? '';
+      const narrowWord = match[7] ?? (scopeWord.startsWith('of the chosen ') ? scopeWord.slice('of the chosen '.length) : undefined);
       const scope: 'you' | 'any' = scopeWord === 'you control' ? 'you' : 'any';
       if (narrowWord !== undefined && narrowWord !== 'type' && narrowWord !== 'color') return null;
       // A card can only read a value it also NAMES. Compiling "of the chosen
@@ -3624,7 +3817,17 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       // The printed NOUN decides the filter's type. "Permanent" maps to no type
       // entry at all, because an absent filter already matches every permanent -
       // inventing a 'permanent' type word would match nothing.
-      const nounType = STATIC_NOUN_TYPES[match[3] ?? ''];
+      //
+      // TYPAL form: the printed subtype is the whole filter when it stands alone
+      // ("Goblins you control have haste" - Goblin Warchief), and narrows the
+      // type word when it modifies one ("Other Goblin creatures you control get
+      // +1/+1" - Goblin Chieftain). The bare form deliberately adds NO card
+      // type: a Kindred enchantment ("Kindred Enchantment - Faerie", Bitterblossom)
+      // genuinely IS a Faerie without being a creature, so "Faeries you control"
+      // reaches it exactly as printed.
+      const subtypeWord = (match[3] ?? match[5])?.trim();
+      const bareSubtype = match[5] !== undefined;
+      const nounType = bareSubtype ? null : STATIC_NOUN_TYPES[match[4] ?? ''];
       if (nounType === undefined) return null;
       // "WHITE creatures you control get +1/+1" — the printed colour narrows the
       // filter, which core's shared `CardFilter` can express now
@@ -3633,7 +3836,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const colorWord = match[2]?.trim();
       const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
       if (colorWord !== undefined && color === undefined) return null;
-      const keywordText = match[8] ?? match[9];
+      const keywordText = match[10] ?? match[11];
       const keywords = keywordText === undefined ? undefined : parseKeywordList(keywordText);
       // A keyword the engine does not model reports the whole line, never a
       // half-granted anthem.
@@ -3641,6 +3844,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
       const ability: StaticAbility = {
         affects: {
           ...(nounType === null ? {} : { anyOfTypes: [nounType] }),
+          ...(subtypeWord === undefined ? {} : { anyOfSubtypes: [subtypeWord] }),
           controller: scope,
           ...(color ? { anyOfColors: [color as never] } : {}),
           ...(narrowWord === 'type' ? { ofChosenSubtype: true } : {}),

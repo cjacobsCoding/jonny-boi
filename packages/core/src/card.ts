@@ -33,7 +33,19 @@ export type CardType =
   | 'artifact'
   | 'enchantment'
   | 'planeswalker'
-  | 'battle';
+  | 'battle'
+  // KINDRED (formerly Tribal, CR 308): a card type that carries CREATURE TYPES
+  // onto a noncreature card - "Kindred Enchantment - Faerie" (Bitterblossom) is
+  // a Faerie without being a creature, so a typal anthem over "Faeries you
+  // control" reaches it. The subtypes do that work on their own; the type is
+  // here because it is a distinct CARD TYPE and something counts those (a
+  // Tarmogoyf reading card types among graveyards), so leaving it out would
+  // make that count quietly one short.
+  //
+  // It confers nothing else: `isPermanentType` deliberately does NOT list it,
+  // because a Kindred card is a permanent (or not) by its OTHER type, exactly as
+  // the rules say.
+  | 'kindred';
 
 /**
  * Keyword ability flags the combat/turn systems read as data. Core implements the
