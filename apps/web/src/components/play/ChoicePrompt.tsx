@@ -8,6 +8,7 @@ import {
   orderBadge,
   pickCount,
   setChooseNumber,
+  setChosenValue,
   setConfirm,
   setPayLife,
   setPayMana,
@@ -123,6 +124,13 @@ export function ChoicePrompt({
               labels={{ yes: `Pay ${choice.amount} life`, no: 'Enter tapped' }}
               yesDisabled={!choice.affordable}
               onSet={(pay) => setDraft((d) => setPayLife(d, pay))}
+            />
+          )}
+          {choice.kind === 'chooseValue' && (
+            <NameableValueOptions
+              choice={choice}
+              chosen={draft.kind === 'chooseValue' ? draft.value : null}
+              onSet={(value) => setDraft((d) => setChosenValue(d, value))}
             />
           )}
           {choice.kind === 'chooseNumber' && (
@@ -261,6 +269,51 @@ function ModeOptions({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The values a permanent may NAME as it enters — "As Cavern of Souls enters,
+ * choose a creature type."
+ *
+ * A radio group, not a multi-select: exactly one value is named, and naming it
+ * is not optional (there is no "choose none" button on this prompt, because
+ * declining is the engine's floor for a seat that cannot answer, never a move a
+ * human should be offered).
+ *
+ * The list can be long — a creature-type menu is as long as the deck is varied —
+ * so it scrolls inside the prompt rather than pushing the Confirm button off the
+ * card. The engine never raises this question with an empty menu (it settles
+ * that case itself), but the empty branch is rendered anyway: a hand-built or
+ * replayed state must show a readable dialog, not an empty box with a dead
+ * button.
+ */
+function NameableValueOptions({
+  choice,
+  chosen,
+  onSet,
+}: {
+  choice: Extract<PendingChoice, { kind: 'chooseValue' }>;
+  chosen: string | null;
+  onSet: (value: string) => void;
+}): ReactElement {
+  if (choice.options.length === 0) {
+    return <p className="choice-prompt__empty">There is nothing to name.</p>;
+  }
+  return (
+    <div className="choice-prompt__list choice-prompt__list--scroll">
+      {choice.options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={`choice-option${chosen === option.value ? ' choice-option--selected' : ''}`}
+          aria-pressed={chosen === option.value}
+          onClick={() => onSet(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }

@@ -15,8 +15,14 @@
  * just a definition whose `types` includes `'creature'`.
  */
 
+import type { CastZone } from './actions.js';
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
+// TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
+// and subtype readers, so a VALUE import here would close a runtime cycle. A
+// `CardFilter` is plain serializable data, so the type is all a printed cost
+// needs in order to say what qualifies (see `AdditionalCastCost`).
+import type { CardFilter } from './choices.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
 export type CardType =
@@ -447,6 +453,35 @@ export interface CardDefinition {
    * tapped or untapped — is the whole of it, and it is exact.
    */
   readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
+  /**
+   * "**As ~ enters, choose a** creature type / a color / a player / a card type"
+   * — the replacement-effect naming made as the permanent enters (CR 614.1c).
+   *
+   * The DECLARATION lives here so one record answers every consumer: the engine
+   * (which raises the question on the entry paths that can ask), the AI (whose
+   * per-subject answering policy is chosen from `subject`), the UI (which
+   * renders the option list), and the About page. The ANSWER lives on the
+   * instance, in `CardInstance.chosenAsEntered`, which is what the card's own
+   * later abilities and other cards' filters read.
+   *
+   * Same rule as {@link entersTappedUnlessLifePaid}: a naming is a DECISION, and
+   * **every entry path that cannot ask records nothing** — which matches
+   * nothing, the direction that can never play better than the real card. See
+   * `NOTHING_CHOSEN` in `choices.ts`.
+   */
+  readonly asEntersChoice?: AsEntersChoice;
+  /**
+   * "**This creature is the chosen type in addition to its other types**"
+   * (Adaptive Automaton, Metallic Mimic, Roaming Throne) — set when the printed
+   * line makes the permanent ITSELF a member of the type it named.
+   *
+   * It reads {@link asEntersChoice}'s answer off the instance, so it is only
+   * meaningful on a definition that also declares one. Absent, or with nothing
+   * chosen, the permanent has exactly its printed subtypes — see
+   * {@link subtypesOfInstance}, which is the one accessor that folds the two
+   * together.
+   */
+  readonly isChosenSubtype?: boolean;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -521,6 +556,26 @@ export interface CardDefinition {
    * put into the graveyard like any other countered spell.
    */
   readonly buyback?: ManaCost;
+  /**
+   * A MANDATORY ADDITIONAL COST paid as this spell is cast — "As an additional
+   * cost to cast this spell, sacrifice a creature" (Village Rites), "…discard a
+   * card" (Thrill of Possibility).
+   *
+   * It is NOT the optional-cost shape {@link kicker} and {@link buyback} have,
+   * and the difference is the whole point of a separate field: an optional cost
+   * may be declined, so a caster who cannot pay simply casts the spell without
+   * it. This one may not. CR 601.2h makes an unpayable cost an ILLEGAL CAST —
+   * so a Village Rites with no creature is not offered and is rejected if a
+   * hand-built action tries it, exactly as a spell with no legal target is.
+   * Treating it as declinable would print a strictly better card: a free
+   * two-card draw.
+   *
+   * Paying it is a real sacrifice/discard performed by the engine as the answer
+   * is accepted, through the same zone-change funnel every other one uses —
+   * which is what makes a dies/leaves-the-battlefield trigger and the madness
+   * discard replacement see it, because in the rules they genuinely do.
+   */
+  readonly additionalCost?: AdditionalCastCost;
   /**
    * MADNESS — "If you discard this card, exile it instead of putting it into
    * your graveyard. When you do, you may cast it for its madness cost" (CR
@@ -605,6 +660,58 @@ export interface CardDefinition {
    * back face counts as the turn's land play like any other land.
    */
   readonly backFaceCastable?: boolean;
+  /**
+   * The FIRST castable half of a SPLIT card (CR 709) — "Fire" of "Fire // Ice".
+   *
+   * A split card is ONE card with TWO halves, and the object that sits in a
+   * hand, graveyard or library is neither half: CR 709.4 gives it the COMBINED
+   * characteristics (both names, the union of the type lines and colours, and a
+   * mana value equal to the sum). So for a split card THIS definition carries
+   * those combined characteristics and is not itself castable, while the two
+   * halves hang off it as {@link frontFace} and {@link backFace}.
+   *
+   * That is the whole difference from a modal DFC, whose front face IS one of
+   * the castable halves (CR 712.8a gives an MDFC in a non-battlefield zone only
+   * its front face's characteristics). `playableFaceOf` reads this field, so
+   * every cast path asks one function which object it is actually casting and
+   * no caller has to know which layout it is holding.
+   *
+   * Absent on every other card, including modal DFCs — reading it is how the
+   * engine tells the two layouts apart.
+   */
+  readonly frontFace?: CardDefinition;
+  /**
+   * The zones the CASTABLE BACK half may be cast from. Absent means `['hand']`,
+   * which is a modal DFC and the left-to-right half of an ordinary split card.
+   *
+   * `['graveyard']` is AFTERMATH (CR 702.127a: "cast this spell only from your
+   * graveyard") — the second half of Dusk // Dawn is not castable from hand at
+   * all, and offering it there would be a strictly better card than printed.
+   * `['exile']` is a SIEGE's reward half, which becomes castable only once the
+   * battle is defeated and exiled (see {@link backFaceFreeCast}); the exile
+   * offer additionally requires the per-instance permission a defeated Siege
+   * grants, so an exiled Siege that was never defeated is not castable.
+   */
+  readonly backFaceCastZones?: readonly CastZone[];
+  /**
+   * The back half is cast WITHOUT PAYING ITS MANA COST — a Siege's reward (CR
+   * 310.4: "exile it, then you may cast it transformed without paying its mana
+   * cost"). Data rather than a special case at the cast seam, so the one cast
+   * path charges what the card says and nothing else.
+   */
+  readonly backFaceFreeCast?: boolean;
+  /**
+   * Marks THIS definition as an ADVENTURE — the instant/sorcery half of an
+   * adventurer card (CR 715), printed on the back face beside the creature.
+   *
+   * It is the whole of what makes an adventure different from any other spell:
+   * when it RESOLVES the card is exiled instead of being put into its owner's
+   * graveyard, and its owner may then cast the creature half from exile (CR
+   * 715.3d). Countered, it goes to the graveyard like anything else — which is
+   * why the exile lives in `spellLeaveDestination`'s `reason` and not in a flag
+   * each exit reads for itself.
+   */
+  readonly adventure?: boolean;
   /**
    * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
    * data: what it may be attached to, what it does to its host while attached, and
@@ -755,6 +862,33 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
 }
 
 /**
+ * A mandatory additional cost printed on a spell — see
+ * {@link CardDefinition.additionalCost}.
+ *
+ * `kind` says which zone the payment comes out of and what the move MEANS:
+ * `'sacrifice'` takes permanents its controller controls off the battlefield,
+ * `'discard'` takes cards out of its controller's hand. Both are expressed with
+ * the shared {@link CardFilter} vocabulary rather than a private one, so
+ * "sacrifice an artifact **or creature**" is the same data an edict, a search
+ * and an anthem are narrowed by.
+ *
+ * `count` is how many (default 1). There is deliberately NO "you may" variant
+ * here: an optional additional cost is a different decision (it may be declined,
+ * so it can never make a cast illegal) and belongs in its own field when a card
+ * that prints one is implemented.
+ */
+export interface AdditionalCastCost {
+  /** Which zone the payment leaves, and what the move means. */
+  readonly kind: 'sacrifice' | 'discard';
+  /** How many cards/permanents (default 1). */
+  readonly count?: number;
+  /** What qualifies. Absent means "any card in that zone". */
+  readonly filter?: CardFilter;
+  /** Printed text, for the prompt and the log. */
+  readonly label: string;
+}
+
+/**
  * What activating an ability costs. Every field is optional and they combine —
  * a fetchland pays all three of tap, life, and sacrifice.
  *
@@ -848,6 +982,47 @@ export function hasSubtype(def: CardDefinition, subtype: string): boolean {
     SUBTYPE_SET_MEMO.set(def, set);
   }
   return set.has(subtype.toLowerCase());
+}
+
+/**
+ * The minimum of a permanent that a chosen-value read needs: its active face and
+ * what it named as it entered.
+ *
+ * Declared structurally rather than as `CardInstance` because `state.ts` imports
+ * THIS file, so the dependency cannot run the other way — and because it makes
+ * the contract explicit: nothing else about the instance participates.
+ */
+export interface ChoiceBearingPermanent {
+  readonly def: CardDefinition;
+  readonly chosenAsEntered?: string;
+}
+
+/**
+ * Whether a PERMANENT has `subtype` — its printed subtypes, plus the one it
+ * named as it entered when the card says it is that type too ("this creature is
+ * the chosen type in addition to its other types",
+ * {@link CardDefinition.isChosenSubtype}).
+ *
+ * This is the instance-aware form of {@link hasSubtype}, and it is what every
+ * battlefield subtype question must use — a lord that named Goblin and is
+ * therefore a Goblin has to see itself in the next lord's filter, or two
+ * Adaptive Automatons stop pumping each other.
+ *
+ * It creates no layer-dependency loop (CR 613.8), for the same reason
+ * `StaticAffects.hasCounterKind` does not: the named value is instance STATE
+ * written once as the permanent entered, and no continuous effect in this engine
+ * can change it. The single-pass layering stays exact.
+ *
+ * Reads in the printed order and returns early, so the common permanent — one
+ * with no `isChosenSubtype` — pays exactly what {@link hasSubtype} costs today.
+ */
+export function permanentHasSubtype(permanent: ChoiceBearingPermanent, subtype: string): boolean {
+  if (hasSubtype(permanent.def, subtype)) return true;
+  if (permanent.def.isChosenSubtype !== true) return false;
+  const chosen = permanent.chosenAsEntered;
+  // Nothing named ⇒ no extra type. See `NOTHING_CHOSEN`: an unchosen value
+  // matches nothing, never everything.
+  return chosen !== undefined && chosen !== '' && chosen.toLowerCase() === subtype.toLowerCase();
 }
 
 /** Convenience predicates over a definition's type line. */
@@ -1012,6 +1187,25 @@ export interface ManaAbility {
   /** Present ⇒ the modes are one mana of each colour the board makes available. */
   readonly derivedColors?: DerivedManaColors;
   /**
+   * "Add one mana of **the chosen color**" (Coldsteel Heart, Heraldic Banner,
+   * Temple of the Dragon Queen) — the colour this ability makes is the one its
+   * own permanent named as it entered
+   * ({@link CardDefinition.asEntersChoice}).
+   *
+   * Modelled exactly like {@link derivedColors} and for the same reason: the
+   * mode LIST is fixed at five entries (one per colour) because
+   * `TapForManaAction.mode` is an index into it and a list whose length moved
+   * with the game would make the same action number mean different colours to
+   * the action generator, the payment planner and the apply path. WHICH of the
+   * five is available is the per-permanent question, asked against the live
+   * instance by `manaModeBlockedReason`.
+   *
+   * A permanent that named NOTHING has no available mode and therefore produces
+   * no mana at all — the inert default, and the direction that can never play
+   * better than the real card.
+   */
+  readonly chosenColor?: boolean;
+  /**
    * Whether the derivation includes COLOURLESS. Oracle draws the line with one
    * word: Reflecting Pool adds "one mana of any **type** that a land you control
    * could produce" and can therefore make {C}; Exotic Orchard and Fellwar Stone
@@ -1040,6 +1234,15 @@ export interface ManaModeExtra {
   readonly ability: ManaAbility;
   /** For a derived-colour mode: which colour this mode would add. */
   readonly derivedColor?: ManaColor;
+  /**
+   * For a CHOSEN-colour mode ({@link ManaAbility.chosenColor}): which colour this
+   * mode would add. Kept distinct from {@link derivedColor} rather than folded
+   * into it because the availability questions are different — a derived mode
+   * asks the BOARD what other lands make, a chosen mode asks THIS PERMANENT what
+   * it named — and one field answering two questions is how a mode ends up
+   * available for the wrong reason.
+   */
+  readonly chosenColor?: ManaColor;
 }
 
 /**
@@ -1051,6 +1254,15 @@ export interface ManaModeExtra {
  * The colourless mode of a colour-only ability is simply never available.
  */
 const DERIVED_COLOR_ORDER: readonly ManaColor[] = MANA_COLORS;
+
+/**
+ * The colours a CHOSEN-colour mana ability enumerates modes for — the five a card
+ * may name, in canonical order. Colourless is absent because "choose a color"
+ * cannot name it; see {@link ManaAbility.chosenColor}.
+ */
+const CHOSEN_COLOR_ORDER: readonly ManaColor[] = Object.freeze(
+  MANA_COLORS.filter((color) => color !== 'C'),
+);
 
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */
 const NO_MANA_MODES: readonly ManaProduction[] = Object.freeze([]);
@@ -1143,6 +1355,16 @@ function flattenManaAbilities(def: CardDefinition): {
       }
       continue;
     }
+    if (ability.chosenColor === true) {
+      // The five NAMEABLE colours, never colourless: "choose a color" is one of
+      // five (CR 105.1), so a sixth mode here would be a mode no printed card
+      // offers. Same fixed-length argument as the derived branch above.
+      for (const color of CHOSEN_COLOR_ORDER) {
+        modes.push(Object.freeze({ [color]: 1 }) as ManaProduction);
+        extras.push(Object.freeze({ ability, chosenColor: color }));
+      }
+      continue;
+    }
     for (const production of ability.produces ?? []) {
       modes.push(production);
       extras.push(Object.freeze({ ability }));
@@ -1160,18 +1382,31 @@ function flattenManaAbilities(def: CardDefinition): {
  * The colours this source could contribute to ANOTHER source's derived-colour
  * ability ("any color that a land you control could produce").
  *
+ * `chosenColor` is what the permanent NAMED as it entered (`chosenColorOf` in
+ * `as-enters.ts`), passed in by the caller rather than read here so this file
+ * stays free of a dependency cycle. Omitting it — which is what every caller that
+ * has only a definition does — makes a chosen-colour source contribute NOTHING,
+ * the conservative direction that never invents mana the board cannot make.
+ *
  * Deliberately excludes derived modes. Two Reflecting Pools do not see each
  * other: the rules answer is that a derived ability reads what the other
  * permanents *could* produce, and a permanent whose own production is defined by
  * that same question contributes nothing rather than looping. Excluding it here
  * is both the faithful answer and what makes the derivation terminate.
  */
-export function fixedManaColorsOf(def: CardDefinition): readonly ManaColor[] {
+export function fixedManaColorsOf(def: CardDefinition, chosenColor?: ManaColor): readonly ManaColor[] {
   const extras = manaExtrasOf(def);
   const modes = manaModesOf(def);
   const out: ManaColor[] = [];
   for (let i = 0; i < modes.length; i++) {
     if (extras?.[i]?.derivedColor !== undefined) continue;
+    // A CHOSEN-colour mode contributes only the colour this permanent actually
+    // named. Without the instance we cannot know it, so the mode contributes
+    // nothing — a Reflecting Pool reads an unknown Coldsteel Heart as producing
+    // nothing rather than as producing all five, which is the conservative
+    // direction and the one that never invents mana that is not there.
+    const modeChosenColor = extras?.[i]?.chosenColor;
+    if (modeChosenColor !== undefined && modeChosenColor !== chosenColor) continue;
     const mode = modes[i] as ManaProduction;
     for (const color of MANA_COLORS) {
       if ((mode[color] ?? 0) > 0 && !out.includes(color)) out.push(color);
@@ -1275,6 +1510,27 @@ export function bestManaYield(def: CardDefinition): number {
  */
 export interface RevealFromHandCondition {
   readonly anyOfSubtypes: readonly string[];
+}
+
+/**
+ * What a permanent NAMES as it enters — see {@link CardDefinition.asEntersChoice}.
+ *
+ * `subject` is the printed noun ("a creature type", "a color", "a player"), and
+ * it is the whole record for every subject whose option list is a fixed, known
+ * set. `options` exists for the one printed form that names its own menu —
+ * Cloud Key's "choose artifact, creature, enchantment, instant, or sorcery" —
+ * where the card, not the rules, decides what is on offer.
+ */
+export interface AsEntersChoice {
+  readonly subject: import('./choices.js').ChosenValueSubject;
+  /**
+   * The explicit menu, when the card prints one. Absent ⇒ the canonical list for
+   * the subject (`asEntersOptions` in `as-enters.ts`), which for a creature type
+   * is derived from the game rather than hard-coded.
+   */
+  readonly options?: readonly string[];
+  /** Prompt override for the UI / log. Absent ⇒ built from `subject`. */
+  readonly prompt?: string;
 }
 
 export interface EntersUntappedCondition {
@@ -1419,9 +1675,35 @@ function conditionMet(
  * casting the 3/2 Aberration half of a Delver directly.
  */
 export function playableFaceOf(def: CardDefinition, face: 'front' | 'back' | undefined): CardDefinition | undefined {
-  if (face !== 'back') return def;
+  // A SPLIT card's own definition is the CR 709.4 combined object, which is
+  // never cast: `'front'` on one means its LEFT half. Every other layout is its
+  // own front face, so this is one property read for all of them.
+  if (face !== 'back') return def.frontFace ?? def;
   if (def.backFaceCastable !== true) return undefined;
   return def.backFace;
+}
+
+/**
+ * The zones a card's castable BACK half may be cast from — `['hand']` unless
+ * the definition says otherwise. THE accessor: the offer loop and the accept
+ * path both ask it, so aftermath's graveyard-only restriction and a Siege
+ * reward's exile-only one cannot be enforced in one place and forgotten in the
+ * other.
+ */
+export function backFaceCastZonesOf(def: CardDefinition): readonly CastZone[] {
+  return def.backFaceCastZones ?? DEFAULT_BACK_FACE_CAST_ZONES;
+}
+
+/** The zones a back half is castable from when its definition does not say. */
+const DEFAULT_BACK_FACE_CAST_ZONES: readonly CastZone[] = ['hand'];
+
+/**
+ * Whether this definition is a SPLIT card's combined object rather than a
+ * castable spell — the question "is what I am holding itself a thing I can
+ * cast?", asked by name so no caller re-derives it from `frontFace != null`.
+ */
+export function isSplitCard(def: CardDefinition): boolean {
+  return def.frontFace !== undefined;
 }
 
 /**
