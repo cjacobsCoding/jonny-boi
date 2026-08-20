@@ -115,9 +115,63 @@ throughput (games/sec) from regressing.
 | feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
+| feat/tutor-and-sacrifice-templates | worker | packages/core (card.ts `AdditionalCastCost`, state.ts stack field, engine.ts cast gate + cost question + payment, index.ts export, internal/clone.ts +1 field, NEW additional-cast-cost.test.ts), packages/cards (choice-primitives searchLibrary `route`/graveyard, compile/{rules,compile,types}.ts, NEW tutors-and-additional-costs.test.ts, 1 reworded template-gaps case), packages/ai (choices.ts tutor-reach policy + weights.ts +2 entries + choices.test additions), packages/sim/src/paired-arms-config.ts (COMMENT only), apps/web/src/lib/about/mechanics.ts (+3 witnesses), DESIGN §3.11, COORDINATION | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-19 worker: `feat/tutor-and-sacrifice-templates` 🚧 PUSHED — **the tutor family is closed for
+  every destination the search primitive can reach, and a spell can now print a cost you must pay to
+  cast it.** Measured offline against the same cached 2100-card corpus, same-day `origin/main`
+  baseline: **408 → 444 playable (19.4% → 21.1%), +36 cards.** Suite 3676 → 3719 passed, 0 failed.
+
+  ✅ **Tutors.** `searchLibrary` gained a closed `SEARCH_DESTINATIONS` table (hand / battlefield /
+  graveyard) and a `route` param; the rule table gained the unrestricted tutor, typed + union +
+  colour + bounded filters, N-long land-type lists, the "basic X, Y, or Z" form, "up to N", the
+  graveyard destination and the split-destination Cultivate shape. Also: "Sacrifice a land." as a
+  RESOLUTION effect (it was only ever a cost before).
+
+  ✅ **`CardDefinition.additionalCost`** — "As an additional cost to cast this spell, sacrifice a
+  creature / discard a card".
+
+  ⚠️ **THE THING TO KNOW: a mandatory additional cost is NOT a kicker, and the difference is the
+  whole feature.** An optional cost may be declined, so a caster who cannot pay it casts the spell
+  WITHOUT it. This one cannot: CR 601.2h makes an unpayable cost an ILLEGAL CAST. So Village Rites
+  with an empty board is **not offered by `generateLegalActions` AND rejected by the cast path**, both
+  from one `unpayableAdditionalCostReason` — three opinions about "can this be paid" is exactly how a
+  spell becomes offerable and un-castable. Modelling it as declinable would have shipped a free
+  two-card draw. It rides the EXISTING `askCostChoices` pipeline (after X/kicker/multikicker/buyback,
+  the printed announcement order) rather than a rival cost system, and the payment goes through the
+  same `moveToZone` funnel every other sacrifice and discard uses — which is why **paying Thrill of
+  Possibility with a madness card EXILES it**. New stack field `additionalCostPaid`, copied in
+  `internal/clone.ts` (without it the question re-asks and the caster pays twice).
+
+  🧠 **The AI weighs the fetch.** A tutor answered on raw card value fetches the deck's bomb on
+  turn two and sits on it — noise in every verdict. `choices.ts` discounts a searched card out of
+  casting reach (`tutorReachableManaLead` / `tutorUncastablePenalty`); a DISCOUNT, not a ban, so an
+  unreachable card is still fetched when nothing else qualifies. Paying a cost reads the same one
+  ranking from the other end (worst qualifying permanent).
+
+  ⚠️ **Touching `packages/sim` only as a COMMENT.** No new primitive was added, so
+  `LIBRARY_READING_PRIMITIVES` needed no entry — but the reasoning is now written there: an
+  additional cost is COST DATA with no nested effect refs for `allEffectRefs` to walk, and the zones
+  it reads (battlefield, own hand) are ones the paired-arm runner already tracks precisely. If a
+  future additional cost ever reads a LIBRARY it must withdraw the skip, and that comment says so.
+
+  ⛔ **Deliberately NOT done, so nobody re-does it:** the shipped POOL still prints none of these
+  cards. `packages/cards/data/expanded-pool.ts` + `apps/web/src/data/card-index.json` are owned by
+  `feat/pool-expansion` (in flight), so adding Cultivate/Village Rites/the Landscapes would have been
+  a collision. They reach players through the deck IMPORTER today; whoever next regenerates the pool
+  gets ~30 new candidates for free.
+
+  ⚠️ Still reported by name (each measured, none approximated): "a nonlegendary card" (no
+  supertype field), **"with mana value X or less"** (X is a cast-time value no `CardFilter` reads —
+  this is what blocks Green Sun's Zenith and Chord of Calling), a union mixing a type with a subtype
+  (the filter ANDs them, so it could never find), "shuffle and put that card on top" (Sterling Grove),
+  a rider on the find (Fabled Passage's "then if you control four or more lands, untap that land"), a
+  derived count (Harvest Season), and on the cost side: a CHOICE of payments ("sacrifice an artifact
+  **or** discard a card"), an OPTIONAL one ("you may sacrifice one or more creatures"), exile/pay-life
+  costs, and any value derived from what was sacrificed (Fling, Life's Legacy, Neoform).
 
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine

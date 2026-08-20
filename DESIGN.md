@@ -1331,6 +1331,60 @@ Still open, roughly by how often they block a real decklist:
   "**nontoken**" filters (instances carry no token flag), once-per-turn trigger limiters, granting a
   triggered ability until end of turn, and counter-removal activation costs (`ActivationCost` has no
   counter component).
+- ✅ *the tutor family + mandatory additional cast costs* — the two halves of "pay something to go
+  get something", closed together because the cards that print them are the same cards
+  (Diabolic Intent, Harrow, Eldritch Evolution all print both).
+  **THE TUTORS.** One primitive (`searchLibrary`) already read a library; what it lacked was
+  destinations and rule-table entries. It now takes a found card to **hand, the battlefield (tapped
+  or not) or the graveyard** through one closed `SEARCH_DESTINATIONS` table, and the rules reach it
+  for: the unrestricted tutor ("for a card"), any card TYPE, a **type/subtype union** ("an instant or
+  sorcery card"), a **colour** ("a blue instant card" — `CardFilter.anyOfColors`), the printed
+  mana-value/power/toughness bounds, a **land-type list of any length** (Farseek prints four, and
+  because it omits the word "basic" it finds a DUAL — the rule that reads it is deliberately separate
+  from the one that reads "a **basic** Swamp, Forest, or Island card", which selects the basics BY
+  NAME), and **"up to N"** counts.
+  The interesting one is the **MULTI-DESTINATION search** — Cultivate's "put one onto the battlefield
+  tapped **and the other into your hand**". It compiles to a `route` param: an ordered list of steps,
+  one per card the search may find, and **the answer's ORDER is the routing**. That is not a
+  shortcut; it means the decision is answered by the same `selectCards` a UI, an AI and a network
+  peer already know, instead of a second bespoke question — and a library holding fewer matches than
+  steps simply leaves the trailing steps unused, because "up to two" is a maximum and a search may
+  always fail to find. Both are played in real games in
+  `packages/cards/src/tutors-and-additional-costs.test.ts`, including the zero-match case.
+  **THE ADDITIONAL COST.** `CardDefinition.additionalCost` — "As an additional cost to cast this
+  spell, sacrifice a creature / discard a card" — and the reason it is NOT another `kicker` is the
+  whole feature: **an optional cost may be declined, so a caster who cannot pay it casts the spell
+  without it; this one cannot.** CR 601.2h makes an unpayable cost an ILLEGAL CAST, so a Village Rites
+  with an empty board is **not offered by `generateLegalActions` and is rejected by the cast path**,
+  from the ONE shared `unpayableAdditionalCostReason` — three opinions about "can this be paid" is
+  exactly how a spell becomes offerable and un-castable. Treating it as declinable would have printed
+  a free two-card draw.
+  It rides the EXISTING cast-question pipeline (`askCostChoices`, after X → kicker → multikicker →
+  buyback, which is the printed announcement order), the payment is performed by the engine as the
+  answer is accepted — through the SAME `moveToZone` funnel every other sacrifice and discard uses,
+  which is why **discarding a madness card to pay for Thrill of Possibility exiles it** rather than
+  burying it — and the answer rides the stack object as `additionalCostPaid` (a new
+  `internal/clone.ts` field; without it the question re-asks and the caster pays twice).
+  🧠 **The AI is not inert.** A tutor answered on raw card value alone fetches the deck's biggest bomb
+  on turn two and sits on it — noise in every A/B verdict, which is the one thing a search must not
+  be. `packages/ai/src/choices.ts` now discounts a searched card the pilot could not cast within
+  `tutorReachableManaLead` of its current lands by `tutorUncastablePenalty` — a DISCOUNT, not a ban,
+  so an unreachable card is still fetched when it is the only thing that qualifies. Paying a cost is
+  the same one ranking read from the other end: the pilot gives up its WORST qualifying permanent.
+  **Measured** on the cached 2100-card corpus, same-day `origin/main` baseline: **408 → 444 / 2100
+  playable (19.4% → 21.1%)**.
+  ⚠️ Still reported, by name: a search whose restriction no `CardFilter` can say (**"a nonlegendary
+  card"** — there is no supertype field; **"with mana value X or less"** — X is a cast-time value no
+  filter reads, which is what blocks Green Sun's Zenith and Chord of Calling; "an artifact card with a
+  mana ability"), a **union mixing a type with a subtype** (the filter would AND them, so it could
+  never find, and mixing is refused rather than guessed), a destination outside the closed table
+  ("shuffle and **put that card on top**" — Sterling Grove), a **rider on the find** ("then if you
+  control four or more lands, untap that land" — Fabled Passage), a **derived count**
+  ("up to X basic lands, where X is the number of tapped creatures you control" — Harvest Season),
+  and, on the cost side, an additional cost that is a **choice of payments** ("sacrifice an artifact
+  **or** discard a card", "discard a card **or** pay 3 life"), an **optional** one ("you may sacrifice
+  one or more creatures"), a cost the engine cannot perform (exile, pay life), and any value
+  **derived from what was sacrificed** (Fling, Life's Legacy, Eldritch Evolution, Neoform).
 ### 3.12 Scan a deck from a photo — ✅ done
 Lay the deck out, take one photo, get a decklist — entirely on-device, no upload.
 
