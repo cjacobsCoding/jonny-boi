@@ -141,6 +141,89 @@ describe('the printed token descriptor', () => {
     expect(params.types).toEqual(['artifact', 'creature']);
   });
 
+  it('REFUSES a descriptor that states no colour, rather than guessing colourless', () => {
+    // The P/T and the word "token" are both there, so the PATTERN matches - this
+    // is `parseTokenFace` itself declining. A supertype the token model cannot
+    // express sits where the colour word belongs, and compiling it would create
+    // a nonlegendary COLOURLESS Wurm: a different object, silently.
+    const legendary = compileCard(
+      makeCard({
+        name: 'Legend Maker',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'Create a 4/4 legendary green Wurm creature token.',
+      }),
+    );
+    expect(legendary.status).toBe('incomplete');
+    expect(legendary.definition.effects ?? []).toEqual([]);
+
+    // Colour read, but NO creature type left in the middle: a typeless token is
+    // invisible to every typal effect in the game, so the line reports instead.
+    const typeless = compileCard(
+      makeCard({
+        name: 'Typeless Maker',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'Create a 4/4 black creature token.',
+      }),
+    );
+    expect(typeless.status).toBe('incomplete');
+    expect(typeless.definition.effects ?? []).toEqual([]);
+  });
+
+  it('compiles a TYPAL anthem to a subtype filter, in both printed shapes', () => {
+    // Goblin Chieftain: the subtype as an adjective on a type word.
+    const chieftain = compileCard(
+      makeCard({
+        name: 'Goblin Chieftain',
+        manaCost: { generic: 1, W: 0, U: 0, B: 0, R: 2, G: 0, C: 0, other: [] },
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Goblin'] },
+        power: 2,
+        toughness: 2,
+        keywords: ['Haste'],
+        oracleText: 'Haste\nOther Goblin creatures you control get +1/+1 and have haste.',
+      }),
+    );
+    expect(chieftain.status, JSON.stringify(chieftain.missing)).toBe('complete');
+    expect(chieftain.definition.statics?.[0]?.affects).toMatchObject({
+      anyOfTypes: ['creature'],
+      anyOfSubtypes: ['goblin'],
+      controller: 'you',
+      excludeSource: true,
+    });
+
+    // The bare form deliberately carries NO card type: a Kindred Enchantment
+    // ("Kindred Enchantment - Faerie") genuinely IS a Faerie without being a
+    // creature, so "Faeries you control" must reach it exactly as printed.
+    const bare = compileCard(
+      makeCard({
+        name: 'Faerie Lord',
+        typeLine: { supertypes: [], types: ['Enchantment'], subtypes: [] },
+        oracleText: 'Faeries you control have flying.',
+      }),
+    );
+    expect(bare.status, JSON.stringify(bare.missing)).toBe('complete');
+    expect(bare.definition.statics?.[0]?.affects).toMatchObject({ anyOfSubtypes: ['faerie'] });
+    expect(bare.definition.statics?.[0]?.affects.anyOfTypes).toBeUndefined();
+  });
+
+  it('reads the printed word "nontoken", which nothing could express before', () => {
+    const reaper = compileCard(
+      makeCard({
+        name: 'Harvester of Souls',
+        manaCost: { generic: 4, W: 0, U: 0, B: 2, R: 0, G: 0, C: 0, other: [] },
+        typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Demon'] },
+        power: 5,
+        toughness: 5,
+        keywords: ['Deathtouch'],
+        oracleText: 'Deathtouch\nWhenever another nontoken creature dies, draw a card.',
+      }),
+    );
+    expect(reaper.status, JSON.stringify(reaper.missing)).toBe('complete');
+    expect(reaper.definition.triggers?.[0]?.condition.permanentFilter).toMatchObject({
+      anyOfTypes: ['creature'],
+      isToken: false,
+    });
+  });
+
   it('REFUSES a descriptor it cannot read completely rather than dropping the part it missed', () => {
     // "tapped" is a characteristic `makeToken` cannot express, and the descriptor
     // then states no colour this rule can read. Compiling it would create an
@@ -202,6 +285,8 @@ const MOAN = poolCard('Moan of the Unhallowed');
 const RAISE_THE_ALARM = poolCard('Raise the Alarm');
 /** Makes a 1/1 COLOURLESS Soldier artifact creature token on a noncreature cast. */
 const ICONOCLAST = poolCard('Third Path Iconoclast');
+/** "Whenever another NONTOKEN creature dies, draw a card." */
+const HARVESTER = poolCard('Harvester of Souls');
 
 function act(state: GameState, action: GameAction, reg: Registry): GameState {
   const result = applyAction(state, action, DEFAULT_RULES, reg);
@@ -379,8 +464,45 @@ function castAndResolveAt(
     { kind: 'castSpell', player: 'A', instanceId: spell.instanceId, targets: [target] },
     reg,
   );
-  while (next.stack.length > 0 && !next.gameOver) next = pass(next, reg);
+  // Pass until the stack is EMPTY AND stays empty: a death trigger reaches the
+  // stack only when a player would next receive priority, so a loop that stops
+  // the moment the stack empties settles the spell and never the trigger it set
+  // off - which is precisely the kind of silence these tests exist to catch.
+  let guard = 0;
+  while (!next.gameOver && guard++ < 40) {
+    // A "you may" trigger parks a question; answering YES is the branch these
+    // tests are about (a watcher that declined would look exactly like one that
+    // never fired).
+    if (next.pendingChoice) {
+      const choice = next.pendingChoice;
+      next = act(
+        next,
+        { kind: 'answerChoice', player: choice.chooser, choiceId: choice.id, answer: { kind: 'confirm', yes: true } },
+        reg,
+      );
+      continue;
+    }
+    if (next.stack.length === 0) {
+      const step = next.step;
+      const probe = pass(next, reg);
+      next = probe;
+      if (probe.stack.length === 0 && probe.step !== step) break;
+      if (probe.stack.length === 0 && probe.step === step && probe.consecutivePasses === 0) break;
+      continue;
+    }
+    next = pass(next, reg);
+  }
   return next;
+}
+
+/** Cast `def` at `target` from a COPY of the state, and settle the stack. */
+function destroyWith(
+  state: GameState,
+  reg: Registry,
+  def: CardDefinition,
+  target: number,
+): GameState {
+  return castAndResolveAt(state, reg, def, target);
 }
 
 describe('protection reads a token colour', () => {
@@ -455,6 +577,29 @@ describe('a token enters with its printed CREATURE TYPES', () => {
         effectiveKeywords(soldier, aggregateFor(state, soldier.instanceId)).haste ?? false,
       ).toBe(false);
     }
+  });
+});
+
+describe('the printed word "nontoken" reaches the board', () => {
+  it("a token's death does NOT trigger a nontoken watcher, and a real creature's does", () => {
+    const reg = buildRegistry();
+    let state = board(reg, 6);
+    // "Whenever another nontoken creature dies, draw a card."
+    place(state, HARVESTER, 'A');
+    state = castAndResolve(state, reg, DRAGON_FODDER);
+    const goblin = tokensNamed(state, 'Goblin')[0]!;
+    const bear = place(state, SILVER_KNIGHT, 'A');
+
+    // Kill the TOKEN: the watcher must not see it.
+    const beforeToken = state.players.A.hand.length;
+    const afterToken = destroyWith(state, reg, DOOM_BLADE, goblin.instanceId);
+    expect(afterToken.battlefield.some((c) => c.instanceId === goblin.instanceId)).toBe(false);
+    expect(afterToken.players.A.hand.length).toBe(beforeToken);
+
+    // Kill a printed CARD of the same colour restriction: the watcher draws.
+    const afterCard = destroyWith(state, reg, DOOM_BLADE, bear.instanceId);
+    expect(afterCard.battlefield.some((c) => c.instanceId === bear.instanceId)).toBe(false);
+    expect(afterCard.players.A.hand.length).toBe(beforeToken + 1);
   });
 });
 

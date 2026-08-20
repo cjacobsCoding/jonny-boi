@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 346 cards.
+ * 348 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -2252,6 +2252,39 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { ward: 2 },
     subtypes: ['beast'],
   },
+  // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
+  // Whenever another nontoken creature dies, you may draw a card.
+  {
+    id: '5987ce77-10ad-4871-900a-5a005fcf4955',
+    name: 'Harvester of Souls',
+    types: ['creature'],
+    cost: { generic: 4, B: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { deathtouch: true },
+    subtypes: ['demon'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentDies',
+          who: 'any',
+          permanentFilter: { anyOfTypes: ['creature'], isToken: false },
+          excludeSelf: true,
+        },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may draw a card',
+              valence: 'gain',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          },
+        ],
+        label: 'another nontoken creature (any) dies: you may draw a card',
+      },
+    ],
+  },
   // Flying
   // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
   {
@@ -4059,6 +4092,39 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     effects: [
       { primitive: 'dealDamage', params: { amount: 10, targets: 'playerOrPlaneswalker' } },
       { primitive: 'gainLife', params: { amount: 10 } },
+    ],
+  },
+  // Trample
+  // Whenever another nontoken creature you control enters, you may draw a card.
+  {
+    id: '6b9194dd-2296-4879-ac5e-f89b18431df6',
+    name: 'Soul of the Harvest',
+    types: ['creature'],
+    cost: { generic: 4, G: 2 },
+    power: 6,
+    toughness: 6,
+    keywords: { trample: true },
+    subtypes: ['elemental'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'], isToken: false },
+          excludeSelf: true,
+        },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may draw a card',
+              valence: 'gain',
+              effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+            },
+          },
+        ],
+        label: 'another nontoken creature (you) enters: you may draw a card',
+      },
     ],
   },
   // You gain X life and draw X cards.

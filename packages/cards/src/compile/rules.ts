@@ -3098,7 +3098,12 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     // name printed in front of it (CR 207.2c).
     pattern: new RegExp(
       `^(?:landfall — |constellation — )?whenever ` +
-        `(?:(~ or another) creature|(another )?(?:an? )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?([a-z]+)` +
+        `(?:(~ or another) creature|(another )?(?:an? )?((?:${Object.keys(COLOR_WORDS).join('|')}) )?` +
+        // The printed words "token" / "nontoken" (Midnight Reaper's "whenever a
+        // NONTOKEN creature you control dies"). Dropping the word would fire the
+        // trigger on every token death too, which on a go-wide board is a
+        // completely different card.
+        `(nontoken |token )?([a-z]+)` +
         `( you control| an opponent controls| your opponents control)?)` +
         `(?: with ${SEARCH_BOUND_PHRASE} (\\d+) or (less|greater))? (enters|dies), (.+)$`,
     ),
@@ -3106,8 +3111,8 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
       // "~ or another creature dies" (Cordial Vampire) says EVERY creature's
       // death, this permanent's own included — so no scope and no self-exclusion.
       const selfOrAnother = match[1] !== undefined;
-      const noun = selfOrAnother ? 'creature' : (match[4] ?? '');
-      const filter = searchFilterFrom(noun, match[6], match[7], match[8]);
+      const noun = selfOrAnother ? 'creature' : (match[5] ?? '');
+      const filter = searchFilterFrom(noun, match[7], match[8], match[9]);
       if (filter === null) return null;
       const colorWord = match[3]?.trim();
       if (colorWord !== undefined) {
@@ -3115,11 +3120,15 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         if (color === undefined) return null;
         filter.anyOfColors = [color];
       }
-      const tail = (match[5] ?? '').trim();
+      // "nontoken" / "token": one tri-state on the shared `CardFilter`, absent
+      // when the card prints neither word.
+      const tokenWord = match[4]?.trim();
+      if (tokenWord !== undefined) filter.isToken = tokenWord === 'token';
+      const tail = (match[6] ?? '').trim();
       const who = selfOrAnother || tail === '' ? 'any' : tail === 'you control' ? 'you' : 'opponent';
       const another = !selfOrAnother && (match[2] ?? '').trim() === 'another';
-      const event = match[9] === 'enters' ? 'permanentEnters' : 'permanentDies';
-      const body = match[10] ?? '';
+      const event = match[10] === 'enters' ? 'permanentEnters' : 'permanentDies';
+      const body = match[11] ?? '';
       const optional = body.startsWith('you may ');
       const inner = optional ? body.slice('you may '.length) : body;
       const compiled = ctx.compileTriggerBody(inner);
@@ -3136,7 +3145,7 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
               ...(another ? { excludeSelf: true } : {}),
             },
             effects: effectRefs,
-            label: `${another ? 'another ' : ''}${noun} (${who}) ${match[9]}: ${body}`,
+            label: `${another ? 'another ' : ''}${tokenWord ? `${tokenWord} ` : ''}${noun} (${who}) ${match[10]}: ${body}`,
             ...(compiled.targets ? { targets: compiled.targets } : {}),
           },
         ],

@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-20T10:19:10.035Z",
+  "generatedAt": "2026-08-20T10:32:26.254Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 378,
+  "requested": 380,
   "unresolved": [
     "Bala Ged Recovery // Bala Ged Sanctuary",
     "Jwari Disruption // Jwari Ruins",
@@ -9291,6 +9291,68 @@
       "faces": []
     },
     {
+      "id": "5987ce77-10ad-4871-900a-5a005fcf4955",
+      "name": "Harvester of Souls",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Demon"
+        ]
+      },
+      "rawTypeLine": "Creature — Demon",
+      "oracleText": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nWhenever another nontoken creature dies, you may draw a card.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B"
+      ],
+      "colorIdentity": [
+        "B"
+      ],
+      "keywords": [
+        "Deathtouch"
+      ],
+      "set": "jmp",
+      "collectorNumber": "243",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "normal": "https://cards.scryfall.io/normal/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "large": "https://cards.scryfall.io/large/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "png": "https://cards.scryfall.io/png/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.png?1783930420",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.jpg?1783930420",
+        "thumb": "https://cards.scryfall.io/thumb/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "grid": "https://cards.scryfall.io/grid/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "display": "https://cards.scryfall.io/display/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "art": "https://cards.scryfall.io/art/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420",
+        "crop": "https://cards.scryfall.io/crop/front/8/7/870ebc0b-b748-4a21-b939-a48811451bba.webp?1783930420"
+      },
+      "localImages": {
+        "normal": "harvester-of-souls-normal.jpg",
+        "art_crop": "harvester-of-souls-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "28a52ba1-95da-44e1-8ac5-0dc23c902394",
       "name": "Healer's Hawk",
       "manaCost": {
@@ -17782,6 +17844,68 @@
       "localImages": {
         "normal": "sorin-s-vengeance-normal.jpg",
         "art_crop": "sorin-s-vengeance-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6b9194dd-2296-4879-ac5e-f89b18431df6",
+      "name": "Soul of the Harvest",
+      "manaCost": {
+        "generic": 4,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Elemental"
+        ]
+      },
+      "rawTypeLine": "Creature — Elemental",
+      "oracleText": "Trample\nWhenever another nontoken creature you control enters, you may draw a card.",
+      "power": 6,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Trample"
+      ],
+      "set": "jmp",
+      "collectorNumber": "432",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "normal": "https://cards.scryfall.io/normal/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "large": "https://cards.scryfall.io/large/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "png": "https://cards.scryfall.io/png/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.png?1783930351",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.jpg?1783930351",
+        "thumb": "https://cards.scryfall.io/thumb/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "grid": "https://cards.scryfall.io/grid/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "display": "https://cards.scryfall.io/display/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "art": "https://cards.scryfall.io/art/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351",
+        "crop": "https://cards.scryfall.io/crop/front/d/7/d7ce9104-0ad3-4d3d-bb2c-c456c25030f6.webp?1783930351"
+      },
+      "localImages": {
+        "normal": "soul-of-the-harvest-normal.jpg",
+        "art_crop": "soul-of-the-harvest-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
