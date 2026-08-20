@@ -614,12 +614,19 @@ function answerSelectTargets(
   choice: SelectTargetsChoice,
   weights: HeuristicWeights,
 ): ChoiceAnswer {
-  // TWO things park a `selectTargets` question, and they are aimed by different
-  // data. A spell being CAST is aiming one announced MODE (its effects are on
-  // the card, indexed by which pick is still unaimed); a trigger going on the
-  // stack is aiming its own ability. Checked in that order because a modal cast
-  // can be sitting on the stack while nothing is triggering, and the pilot must
-  // price the mode it is actually being asked about.
+  // THREE things park a `selectTargets` question, and they are aimed by
+  // different data. A spell being CAST is aiming one announced MODE (its effects
+  // are on the card, indexed by which pick is still unaimed); a trigger going on
+  // the stack is aiming its own ability; and a RESOLUTION may be asking "you may
+  // choose new targets for the copy" (CR 707.10), where what is being aimed is
+  // neither of those — it is a copy the engine is in the middle of creating.
+  //
+  // Checked in this order because a modal cast can be sitting on the stack while
+  // nothing is triggering, and the pilot must price the thing it is actually
+  // being asked about. Getting this wrong is not a subtle loss: with no effects
+  // to price, every candidate scores zero and the pilot degrades to the FIRST
+  // offered one — which for a copy of a Lightning Bolt is very often its own
+  // face.
   const casting = state.stack.find(
     (object): object is Extract<typeof object, { kind: 'spell' }> =>
       object.kind === 'spell' && object.awaitingCastChoice === 'modeTarget',
@@ -629,7 +636,7 @@ function answerSelectTargets(
     (object): object is Extract<typeof object, { kind: 'trigger' }> =>
       object.kind === 'trigger' && object.awaitingTargets !== undefined,
   );
-  const effects = castingEffects ?? aiming?.effects ?? [];
+  const effects = castingEffects ?? aiming?.effects ?? spellCopyBeingAimed(state) ?? [];
   const base = casting
     ? castValueContext(state, choice.chooser, weights)
     : resolutionValueContext(state, choice.chooser, weights, cardValueContext(state));
@@ -644,6 +651,39 @@ function answerSelectTargets(
   const worstFirst = choice.valence === 'loss';
   scored.sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value) || a.index - b.index);
   return { kind: 'selectTargets', targets: scored.slice(0, choice.max).map((s) => s.ref) };
+}
+
+/**
+ * The primitive that asks "you may choose new targets for the copy". Named once
+ * rather than written as a bare string, and read by exactly one function — the
+ * same discipline `EFFECT_VALUE`'s keys keep.
+ */
+const COPY_SPELL_PRIMITIVE = 'copySpell';
+
+/**
+ * The effects a COPY OF A SPELL is about to run — what "you may choose new
+ * targets for the copy" (CR 707.10) is really aiming.
+ *
+ * The copy itself is NOT on the stack yet: `copySpell` builds it as a local
+ * value and pushes only once every question has an answer, because a parked
+ * question re-runs the whole effect ref. So the pilot cannot find it there. What
+ * it CAN find is the object the copy is a copy OF, and that is still on the
+ * stack: the resolving spell's own target names it.
+ *
+ * Read entirely from public state — the suspended resolution frame, which is a
+ * field on `GameState` precisely because it must survive a clone and a replay.
+ * A frame running anything else returns `undefined`, so this cannot capture a
+ * question that belongs to somebody else.
+ */
+function spellCopyBeingAimed(state: GameState): readonly EffectRef[] | undefined {
+  const frame = state.resolution;
+  if (!frame) return undefined;
+  const running = frame.effects[frame.next];
+  if (running?.primitive !== COPY_SPELL_PRIMITIVE) return undefined;
+  const aimedAt = (frame.effectTargets?.[frame.next] ?? frame.targets)[0];
+  if (aimedAt === undefined || aimedAt === 'A' || aimedAt === 'B') return undefined;
+  const original = state.stack.find((object) => object.kind === 'spell' && object.instanceId === aimedAt);
+  return original?.kind === 'spell' ? original.card.def.effects : undefined;
 }
 
 /**
