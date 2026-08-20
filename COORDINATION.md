@@ -201,15 +201,16 @@ _Append dated notes here; keep them short. Newest at top._
   have".
 
   📊 **RULE 7 (wall clock here is worthless — six agents):** the gauntlet is **byte-identical** to the
-  branch point — `npm run sim -- gauntlet "Mono-Red Aggro" --games 40 --seed 99` reproduces the same
-  per-deck lines and the same total on both sides. The three new loops (an exile walk in
+  branch point. `npm run sim -- gauntlet "Mono-Red Aggro" --games 40 --seed 99`, run against a
+  separate same-box `origin/main` worktree (1dd5b90) and against this branch, gives the SAME SEVEN
+  per-deck lines — 12/13/17/8/9/7/15 — for the same **81/280 = 28.9%**. Not "within noise": equal. The three new loops (an exile walk in
   `generateLegalActions`, an exile walk in the land loop, an exile walk in the pilot) are each behind
   **`hasCardGrants(state)`**, the same empty check every other card-grant reader starts with, so a
   game that never exiles anything under permission walks no exile zone at all; and the pilot's
   half-walk allocates NOTHING for a card with one half (`castableHalvesInHand` returns a one-element
   literal and builds the synthetic instance only for a card that actually prints two halves).
 
-  GATE: full suite **{SUITE} passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0,
+  GATE: full suite **3680 passed / 0 failed**, `npm run verify` exit 0, `npm run build` exit 0,
   measured after merging `origin/main`.
 
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
