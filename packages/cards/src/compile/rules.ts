@@ -471,14 +471,24 @@ function searchFilterFrom(
     if (!letter) return null;
     filter.anyOfColors = [letter];
   }
-  const type = SPELL_TYPE_WORDS[noun];
-  if (type) {
-    filter.anyOfTypes = [type];
-  } else if (SEARCHABLE_SUBTYPES.has(noun)) {
-    filter.anyOfSubtypes = [noun];
-  } else {
-    return null; // not a restriction this filter can express — report the line
+  // A printed UNION ("an instant or sorcery card", "an Aura or Equipment card")
+  // is a list of nouns that must all be the same KIND: `CardFilter` ANDs
+  // `anyOfTypes` with `anyOfSubtypes`, so a mixed union ("an artifact or Goblin
+  // card") would compile into a search for something that is BOTH — a tutor that
+  // can never find. Mixed unions therefore report.
+  const nouns = noun.split(' or ').map((word) => word.trim()).filter((word) => word.length > 0);
+  if (nouns.length === 0) return null;
+  const types: CardType[] = [];
+  const subtypes: string[] = [];
+  for (const word of nouns) {
+    const type = SPELL_TYPE_WORDS[word];
+    if (type) types.push(type);
+    else if (SEARCHABLE_SUBTYPES.has(word)) subtypes.push(word);
+    else return null; // not a restriction this filter can express — report the line
   }
+  if (types.length > 0 && subtypes.length > 0) return null;
+  if (types.length > 0) filter.anyOfTypes = types;
+  else filter.anyOfSubtypes = subtypes;
 
   if (characteristic === undefined) return filter;
   const fields = SEARCH_BOUND_FIELDS[characteristic];
@@ -1854,7 +1864,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // genuinely different cards (this one finds a DUAL), and the printed word
     // "basic" is the only thing that tells them apart.
     pattern:
-      /^search your library for an? ([a-z]+(?:,? (?:or )?[a-z]+)*) card, put it onto the battlefield( tapped)?(?:, then shuffle)?$/,
+      /^search your library for an? ([a-z]+(?:,? (?:or )?[a-z]+)*) card, put (?:it|that card) onto the battlefield( tapped)?(?:, then shuffle)?$/,
     build(match) {
       const subtypes = landTypeList(match[1] ?? '');
       // Only LAND subtypes are safe here: a non-land search would need the card
@@ -2003,18 +2013,78 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
-    id: 'search-any-card-to-hand',
-    description: '"Search your library for a card, put that card into your hand, then shuffle" (Diabolic Tutor, Grim Tutor)',
+    id: 'search-any-card',
+    description:
+      '"Search your library for a card, put that card into your hand/graveyard, then shuffle" (Diabolic Tutor, Grim Tutor, Vile Entomber)',
     // The UNRESTRICTED tutor: no noun before "card", so no filter at all. It is
     // its own rule rather than an optional capture on the filtered one because
     // "for a card" and "for a creature card" are different sentences, and a
     // pattern loose enough to match both would also match "for a basic land
     // card" and quietly drop the restriction.
-    pattern: /^search your library for a card, put (?:it|that card) into your hand, then shuffle$/,
-    build() {
+    pattern: /^search your library for a card, put (?:it|that card) into your (hand|graveyard), then shuffle$/,
+    build(match) {
       return effects({
         primitive: 'searchLibrary',
-        params: { who: 'controller', count: 1, destination: 'hand' },
+        params: { who: 'controller', count: 1, destination: match[1] === 'graveyard' ? 'graveyard' : 'hand' },
+      });
+    },
+  },
+  {
+    id: 'search-to-battlefield-by-filter',
+    description:
+      '"Search your library for a land card, put it onto the battlefield tapped, then shuffle" (Urza’s Cave, Wood Elves)',
+    // The battlefield sibling of `search-to-hand-by-filter`, sharing its noun
+    // parser so "an Aura or Equipment card" cannot mean one thing when fetched to
+    // hand and another when put onto the battlefield. The land-type list above
+    // still runs FIRST, so a multi-type fetchland keeps its own rule.
+    pattern: new RegExp(
+      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) onto the battlefield( tapped)?, then shuffle$`,
+    ),
+    build(match) {
+      const filter = searchFilterFrom(match[2] ?? '', match[3], match[4], match[5], match[1]);
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter,
+          destination: 'battlefield',
+          ...(match[6] ? { tapped: true } : {}),
+        },
+      });
+    },
+  },
+  {
+    id: 'search-to-graveyard-by-filter',
+    description: '"Search your library for a creature card, put it into your graveyard, then shuffle" (the entomb family)',
+    pattern: new RegExp(
+      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) into your graveyard, then shuffle$`,
+    ),
+    build(match) {
+      const filter = searchFilterFrom(match[2] ?? '', match[3], match[4], match[5], match[1]);
+      if (filter === null) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: { who: 'controller', count: 1, filter, destination: 'graveyard' },
+      });
+    },
+  },
+  {
+    id: 'sacrifice-a-permanent-you-control',
+    description: '"Sacrifice a land." — a sacrifice as a RESOLUTION effect, not as a cost (Roiling Regrowth)',
+    // The controller chooses which of their own permanents to give up, which is
+    // the same question an edict asks of a victim — so it is the same primitive
+    // pointed at `'controller'` rather than a second sacrifice implementation.
+    // A board with nothing that qualifies sacrifices nothing, exactly as the
+    // printed card does.
+    pattern: /^sacrifice an? (creature|land|artifact|enchantment|permanent)$/,
+    build(match) {
+      const kind = match[1]!;
+      const filter = kind === 'permanent' ? undefined : { anyOfTypes: [kind as CardType] };
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: { who: 'controller', ...(filter ? { filter } : {}) },
       });
     },
   },

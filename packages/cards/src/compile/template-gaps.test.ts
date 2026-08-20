@@ -259,12 +259,35 @@ describe('template gaps — the compiler recognizes the closed wordings', () => 
 });
 
 describe('template gaps — the neighbouring wordings still refuse honestly', () => {
-  it('REFUSES a non-basic library search (a real tutor is not this template)', () => {
+  it('COMPILES a typed search onto the battlefield now that the tutor family is closed', () => {
+    // This test used to pin the refusal: only the BASIC-land form of the search
+    // existed, so "a creature card … onto the battlefield" had no rule. The
+    // tutor family (`search-to-battlefield-by-filter`) closed it, and the honest
+    // assertion is now the compiled search rather than the missing one.
     const result = compileCard(
       makeCard({
         name: 'Test Tutor',
         typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
         oracleText: 'Search your library for a creature card, put it onto the battlefield, then shuffle.',
+      }),
+    );
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.effects?.[0]?.params).toMatchObject({
+      filter: { anyOfTypes: ['creature'] },
+      destination: 'battlefield',
+    });
+  });
+
+  it('STILL REFUSES a search whose noun is outside the closed subtype table', () => {
+    // The contract that replaced the blanket refusal above: the tutor compiles
+    // only when the printed word names something `CardFilter` can select. A
+    // "Clue card" search would otherwise compile into a filter matching nothing
+    // — a tutor that can never find, which is strictly worse than reporting.
+    const result = compileCard(
+      makeCard({
+        name: 'Test Clue Tutor',
+        typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+        oracleText: 'Search your library for a Clue card, put it onto the battlefield, then shuffle.',
       }),
     );
     expect(result.status).toBe('incomplete');
