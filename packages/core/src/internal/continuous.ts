@@ -61,8 +61,9 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
-import type { KeywordFlags } from '../card.js';
+import type { BooleanKeywordName, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
+import { intersectBlockRestrictions } from './stats.js';
 import type { GameEvent } from '../events.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 import { characteristicValue } from '../derived.js';
@@ -172,17 +173,21 @@ const KEYWORD_KEYS = [
   'unblockable',
   'cantBlock',
   'indestructible',
+  'mustBeBlocked',
+  'blockedByAllAble',
 ] as const;
 
 /**
- * The boolean-valued keys of `KeywordFlags`. The three payload keywords
- * (`protectionFrom`, `ward`, `minBlockers`) are excluded BY TYPE rather than by
- * memory: they are folded by their own merge rules in {@link grantInto}, since
- * "set it to true" is not what granting one of them means.
+ * The boolean-valued keys of `KeywordFlags`. The FOUR payload keywords
+ * (`protectionFrom`, `ward`, `minBlockers`, `blockRestriction`) are excluded BY
+ * TYPE rather than by memory: they are folded by their own merge rules in
+ * {@link grantInto}, since "set it to true" is not what granting one of them
+ * means.
+ *
+ * Imported from `card.ts` rather than restated here, so the interface and this
+ * proof cannot be edited apart.
  */
-type BooleanKeywordKey = {
-  [K in keyof KeywordFlags]-?: boolean extends NonNullable<KeywordFlags[K]> ? K : never;
-}[keyof KeywordFlags];
+type BooleanKeywordKey = BooleanKeywordName;
 
 /**
  * COMPILE-TIME PROOF that {@link KEYWORD_KEYS} is exactly the boolean keyword
@@ -252,6 +257,17 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
       agg.keywords.minBlockers ?? 0,
       grant.minBlockers,
     );
+  }
+  // The fourth payload: a comparing block restriction. Merged field by field to
+  // the STRICTEST of each, through the same function `mergeKeywordGrant` uses, so
+  // a granted "except by creatures with haste" and a printed "power 2 or less"
+  // are both in force rather than one replacing the other.
+  if (grant.blockRestriction !== undefined) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    const merged = intersectBlockRestrictions(agg.keywords.blockRestriction, grant.blockRestriction);
+    if (merged !== undefined) {
+      (agg.keywords as { blockRestriction?: KeywordFlags['blockRestriction'] }).blockRestriction = merged;
+    }
   }
 }
 

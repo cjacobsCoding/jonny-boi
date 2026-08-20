@@ -60,6 +60,8 @@ export type {
   CastTiming,
   EffectRef,
   KeywordFlags,
+  BooleanKeywordName,
+  BlockRestriction,
   ManaAbility,
   ManaAbilityCost,
   ManaAbilityRider,
@@ -125,6 +127,15 @@ export {
  * on every read, so its lifetime ends with its source and nothing has to expire.
  */
 export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+
+/**
+ * BLOCK REQUIREMENTS (CR 509.1c/d). `forcedBlockAssignment` is the seam an AI uses
+ * so it never proposes a declaration the engine would refuse: it returns the
+ * creatures whose block was not a free choice (or `undefined` when nothing on the
+ * board requires anything), and the pilot assigns the rest as it likes.
+ */
+export type { BlockAssignment } from './internal/block-solver.js';
+export { forcedBlockAssignment } from './internal/block-solver.js';
 export type { UncounterableSpellsAbility } from './countering.js';
 export { spellCanBeCountered } from './countering.js';
 

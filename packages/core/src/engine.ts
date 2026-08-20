@@ -3278,11 +3278,25 @@ function applyDeclareBlockers(
     if (!canBlock(a, b, cont)) return rejectWith(prevState, `${b.def.name} cannot block ${a.def.name}`);
   }
 
-  // Declaration-level restrictions (menace), which no per-pair check can see.
+  // Declaration-level restrictions (menace) AND requirements ("must be blocked if
+  // able"), neither of which a per-pair check can see. The requirement half needs
+  // every creature the defender COULD have blocked with, not only the ones they
+  // did — "if able" is a question about the whole board.
   const attackingCreatures = state.combat.attackers
     .map((id) => findOnBattlefield(state, id))
     .filter((c): c is CardInstance => c !== undefined);
-  const declarationProblem = illegalBlockDeclaration(attackingCreatures, action.blocks, cont);
+  const availableBlockers: CardInstance[] = [];
+  for (const permanent of state.battlefield) {
+    if (permanent.controller !== action.player) continue;
+    if (!isCreature(permanent.def)) continue;
+    availableBlockers.push(permanent);
+  }
+  const declarationProblem = illegalBlockDeclaration(
+    attackingCreatures,
+    action.blocks,
+    cont,
+    availableBlockers,
+  );
   if (declarationProblem) return rejectWith(prevState, declarationProblem);
 
   const blocks: Record<InstanceId, InstanceId> = {};

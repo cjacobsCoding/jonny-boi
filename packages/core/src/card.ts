@@ -37,6 +37,56 @@ export type CardType =
  * pure-combat keywords; broader-system keywords are present as flags so `cards`
  * can author them now, with engine hooks landing later.
  */
+/**
+ * The boolean-valued keys of {@link KeywordFlags} — every keyword whose whole
+ * meaning is "on or off", as a name.
+ *
+ * Derived from the interface rather than listed, so it cannot fall behind it.
+ * `internal/continuous.ts` builds its grant list against this same type (that is
+ * what makes its exhaustiveness proof a proof), and {@link BlockRestriction} uses
+ * it to name the keyword a blocker must have.
+ */
+export type BooleanKeywordName = {
+  [K in keyof KeywordFlags]-?: boolean extends NonNullable<KeywordFlags[K]> ? K : never;
+}[keyof KeywordFlags];
+
+/**
+ * A block restriction that COMPARES the attacker and the blocker, or reads the
+ * blocker's characteristics — the half of "can't be blocked by …" that no single
+ * flag can express.
+ *
+ * Every bound is judged against EFFECTIVE power/toughness (through the continuous
+ * index `canBlock` already threads), never printed: a 1/1 pumped to 3/3 by an
+ * anthem really has stopped being a legal blocker for "except by creatures with
+ * power 2 or less", and reading the printed box would let it through.
+ *
+ * An absent field is no restriction. Two restrictions merge by taking the
+ * STRICTEST of each field (see {@link KeywordFlags.blockRestriction}).
+ */
+export interface BlockRestriction {
+  /**
+   * "…except by creatures with haste" (Gingerbrute). The blocker must have at
+   * least ONE of these keywords. Named by {@link BooleanKeywordName}, so a
+   * keyword that does not exist cannot be written here.
+   */
+  readonly blockerMustHaveAnyOf?: readonly BooleanKeywordName[];
+  /** "can't be blocked by creatures with power N or greater" ⇒ `maxBlockerPower = N - 1`. */
+  readonly maxBlockerPower?: number;
+  /** "can't be blocked by creatures with power N or less" ⇒ `minBlockerPower = N + 1`. */
+  readonly minBlockerPower?: number;
+  /** "…with toughness N or greater" ⇒ `maxBlockerToughness = N - 1`. */
+  readonly maxBlockerToughness?: number;
+  /** "…with toughness N or less" ⇒ `minBlockerToughness = N + 1`. */
+  readonly minBlockerToughness?: number;
+  /**
+   * **Skulk** (CR 702.118a) — "can't be blocked by creatures with greater power".
+   * A flag rather than a number because the bound is the ATTACKER'S OWN effective
+   * power, read at declare-blockers time: a skulking creature pumped this turn is
+   * harder to block, exactly as printed.
+   */
+  readonly blockerPowerAtMostMine?: boolean;
+}
+
 export interface KeywordFlags {
   readonly flying?: boolean;
   readonly vigilance?: boolean;
@@ -89,6 +139,48 @@ export interface KeywordFlags {
    * creature carrying both is judged by the stricter one.
    */
   readonly minBlockers?: number;
+  /**
+   * **"~ must be blocked if able"** — a block REQUIREMENT (CR 509.1c), the other
+   * half of the declare-blockers rules from every flag above it.
+   *
+   * A restriction says what the defender MAY NOT do and can be judged pair by
+   * pair; a requirement says what they MUST do and can only be judged against the
+   * whole declaration, because "if able" depends on what every other creature is
+   * doing. `illegalBlockDeclaration` therefore resolves requirements and
+   * restrictions TOGETHER (CR 509.1d — satisfy the maximum possible number of
+   * requirements without violating any restriction), which is why this is not a
+   * `canBlock` check.
+   *
+   * "Must be blocked" is satisfied by ONE blocker; {@link blockedByAllAble} is
+   * the stronger printing that demands every creature that could.
+   */
+  readonly mustBeBlocked?: boolean;
+  /**
+   * **"All creatures able to block ~ do so"** — the Lure requirement. Strictly
+   * stronger than {@link mustBeBlocked}: it generates one requirement PER creature
+   * that could block, so a defender who blocks with only some of them has
+   * satisfied fewer requirements than they could and the declaration is illegal.
+   *
+   * Both flags are read by the same declaration-level solver, and a creature
+   * carrying both is judged by this one (satisfying every per-creature
+   * requirement necessarily satisfies "at least one").
+   */
+  readonly blockedByAllAble?: boolean;
+  /**
+   * A block RESTRICTION whose selector describes the BLOCKER — "except by
+   * creatures with haste" (Gingerbrute), "can't be blocked by creatures with
+   * power 2 or less", skulk's "can't be blocked by creatures with greater power".
+   *
+   * NOT a boolean flag: the payload IS the restriction, so the keyword-merge paths
+   * fold two of them by taking the STRICTEST of each bound rather than OR-ing —
+   * the only reading under which both printed restrictions hold at once, and the
+   * same argument `protectionFrom` (union) and `ward` (sum) each make.
+   *
+   * Judged per pair in `canBlock`, because it compares exactly two creatures, and
+   * against EFFECTIVE power/toughness — a creature pumped past the bound really
+   * can no longer block.
+   */
+  readonly blockRestriction?: BlockRestriction;
   /**
    * Indestructible — "damage and effects that say 'destroy' don't destroy this"
    * (CR 702.12b).
