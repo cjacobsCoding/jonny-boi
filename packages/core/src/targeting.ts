@@ -30,12 +30,13 @@
  * object, pumps target their own source, and policing those here would break them.
  */
 
-import type { CardDefinition, EffectRef } from './card.js';
+import type { CardDefinition, EffectRef, KeywordFlags } from './card.js';
 import { hasType, isCreature } from './card.js';
 import { isBattle, isPlaneswalker } from './card.js';
 import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
 import { PLAYER_IDS } from './state.js';
-import { indexContinuous, NO_MOD } from './internal/continuous.js';
+import type { ContinuousIndex } from './internal/continuous.js';
+import { anyContinuousModification, indexContinuous, NO_MOD } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { protectionBlocksSource } from './protection.js';
 
@@ -298,27 +299,23 @@ function isTargetableBy(
   permanent: CardInstance,
   caster: PlayerId | undefined,
   source?: CardDefinition,
+  /**
+   * The index to judge granted keywords against, from {@link keywordIndexFor}:
+   * `null` means "nothing on this board modifies a keyword, read the printed
+   * set". Passed in so a menu builder pays for ONE index across every candidate
+   * instead of one per candidate; omit it for a single ad-hoc check.
+   */
+  index?: ContinuousIndex | null,
 ): boolean {
+  const mods = index === undefined ? keywordIndexFor(state) : index;
   // PERFORMANCE: this runs for every candidate target of every castable spell on
-  // the engine's hottest loop, and `indexContinuous` walks the whole effect list.
-  // The overwhelmingly common board has no continuous effects and no printed
-  // hexproof/protection, so those are checked cheaply first and the index is
-  // built only when a grant could actually exist.
-  const printed = permanent.def.keywords;
-  if (state.continuous.length === 0) {
-    if (printed?.shroud === true) return false;
-    if (printed?.hexproof === true && (caster === undefined || caster !== permanent.controller)) {
-      return false;
-    }
-    if (printed?.protectionFrom !== undefined && protectionBlocksSource(printed.protectionFrom, source)) {
-      return false;
-    }
-    return true;
-  }
-  const keywords = effectiveKeywords(
-    permanent,
-    indexContinuous(state).get(permanent.instanceId) ?? NO_MOD,
-  );
+  // the engine's hottest loop. On the overwhelmingly common board — no anthem, no
+  // attachment, no until-EOT effect — `mods` is null and the printed set is read
+  // with no aggregation and no allocation at all.
+  const keywords =
+    mods === null
+      ? (permanent.def.keywords ?? NO_KEYWORDS)
+      : effectiveKeywords(permanent, mods.get(permanent.instanceId) ?? NO_MOD);
   if (keywords.shroud === true) return false;
   if (keywords.hexproof === true && (caster === undefined || caster !== permanent.controller)) {
     return false;
@@ -327,6 +324,26 @@ function isTargetableBy(
     return false;
   }
   return true;
+}
+
+/** The empty printed keyword set, shared so the fast path allocates nothing. */
+const NO_KEYWORDS: KeywordFlags = Object.freeze({});
+
+/**
+ * The continuous index targeting must judge keywords against, or `null` when
+ * nothing on the board can modify one.
+ *
+ * ⚠️ The gate is {@link anyContinuousModification} and NOT `state.continuous.length`.
+ * Layer 3 — an Aura/Equipment's grant to its host, an anthem, an emblem — is
+ * derived from the battlefield and never appears in that list, so keying the fast
+ * path on it let an opponent's burn spell target a creature holding Mask of
+ * Avacyn's granted hexproof. Costed at the module's own bar: on a board with no
+ * modifier at all the check short-circuits over property reads and allocates
+ * nothing, and when there IS one this builds the index ONCE for the whole menu
+ * where the old code rebuilt it per candidate.
+ */
+function keywordIndexFor(state: GameState): ContinuousIndex | null {
+  return anyContinuousModification(state) ? indexContinuous(state) : null;
 }
 
 /**
@@ -359,6 +376,10 @@ export function legalTargetsFor(
     return out;
   }
   const targets: (InstanceId | PlayerId)[] = [];
+  // ONE index for the whole menu. Every `isTargetableBy` below is handed it, so a
+  // board carrying an anthem or an Equipment pays for the aggregation once rather
+  // than once per candidate (which is what the previous shape did).
+  const keywordIndex = keywordIndexFor(state);
   if (restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker') {
     targets.push(...PLAYER_IDS);
   }
@@ -382,14 +403,14 @@ export function legalTargetsFor(
         isCreature(permanent.def) ||
         (walkersToo && isPlaneswalker(permanent.def)) ||
         (battlesToo && isBattle(permanent.def));
-      if (kindOk && isTargetableBy(state, permanent, controller, source)) {
+      if (kindOk && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
   }
   if (restriction === 'playerOrPlaneswalker') {
     for (const permanent of state.battlefield) {
-      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source)) {
+      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
@@ -399,7 +420,7 @@ export function legalTargetsFor(
       if (
         permanent.controller === controller &&
         isCreature(permanent.def) &&
-        isTargetableBy(state, permanent, controller, source)
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
       ) {
         targets.push(permanent.instanceId);
       }
@@ -407,14 +428,14 @@ export function legalTargetsFor(
   }
   if (restriction === 'artifact') {
     for (const permanent of state.battlefield) {
-      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source)) {
+      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
   }
   if (restriction === 'permanent') {
     for (const permanent of state.battlefield) {
-      if (isTargetableBy(state, permanent, controller, source)) targets.push(permanent.instanceId);
+      if (isTargetableBy(state, permanent, controller, source, keywordIndex)) targets.push(permanent.instanceId);
     }
   }
   return targets;
