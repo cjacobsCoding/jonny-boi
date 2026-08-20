@@ -96,6 +96,63 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 | `suggest-adaptive.test.ts` | Successive halving, futility/rank cuts, the cross-run record |
 | `paired-arms.test.ts` | Shared base arm, provably-identical games, **and slicing an arm across workers changing nothing** |
 | `harness.test.ts` (`RunOptions.range`) | A run split into slices reassembles into exactly the whole |
+| `soak.test.ts` | **THE FULL-POOL SOAK, fast tier** — randomised legal decks from the whole 357-card pool, every invariant on every settled state, and every mechanic the pool prints required to FIRE |
+| `soak-deep.test.ts` | The same soak at thousands of games. Skipped unless `JB_SOAK_GAMES` is set (below) |
+
+### The full-pool soak
+
+`npm test` covers each system where it lives. The soak covers what happens when they meet.
+
+Twelve systems shipped in three days — planeswalkers, battles, the legend rule, emblems, transform,
+modal casting, flashback + graveyard grants, protection/ward, indestructible, {X}/kicker,
+cycling/buyback/madness, scry/surveil, counters, CDA P/T, turn facts, the mana-ability model — and
+**each was tested only in isolation, by the agent that built it.** The eight curated gauntlet decks
+never put a planeswalker, an Equipment, a protection creature, a modal spell and a flashback spell in
+the same game. The soak builds decks that do, from the whole pool, seeded.
+
+```bash
+npm test                                                   # the FAST tier runs here, always
+
+JB_SOAK_GAMES=2000 npx vitest run packages/sim/src/soak-deep.test.ts     # the DEEP tier
+npm run sim -- soak --games 2000 --seed 20548                            # the same run, from the CLI
+```
+
+> On a loaded box the Vitest worker pool sometimes times out fetching a module before any test runs
+> (`[vitest-worker]: Timeout calling "fetch"`). That is the runner, not the soak — **use the CLI form
+> for long runs**; it needs `npm run build` first, and it exits non-zero on any finding.
+
+**What it asserts** (`packages/sim/src/soak-config.ts` → `SOAK_INVARIANTS`, one constant per claim):
+every action a pilot submits is legal; **the engine never rejects an action it offered**; no game
+reaches the action cap; no stack object survives a turn; state-based actions leave no 0-toughness
+creature, 0-loyalty walker or 0-defense battle; an instance is in exactly one zone and says so; life,
+counters and mana pools stay in range; no card in a hidden zone reaches an observation;
+`applyActionInPlace` stays bit-identical to `applyAction`; no pool card resolves an unregistered
+effect as a silent no-op.
+
+**And it fails when a mechanic never fires.** `SOAK_MECHANICS` is an inventory; the run FAILS if a
+mechanic the pool prints was not witnessed in any game — a soak that never casts a flashback spell
+proves nothing about flashback. It is the sim-side twin of `packages/cards/src/pool-mechanics.test.ts`
+(which fails when a mechanic loses its last CARD). Witnesses are labelled `action`, `event` or `state`
+so the weaker claim reads as the weaker claim.
+
+**A new engine event breaks the build.** `SOAK_EVENT_WITNESS` is a mapped type over
+`GameEvent['type']`, the same idiom as `OBSERVATION_POLICY` — so the next system to ship has to say
+whether the soak should now require it, instead of quietly going untested.
+
+**Every failure reproduces.** Decks and games are pure functions of a seed, and a violation prints the
+seed **and both decklists**; paste them into a test.
+
+**Never gate a soak on wall clock.** Ten agents share this box and the same build has measured
+39–87 games/sec inside an hour. The tiers are sized in GAMES and the cost signal is
+`process.cpuUsage`.
+
+Two traps the soak itself fell into first, both worth knowing before you add an invariant:
+1. **State-based actions are not checked mid-resolution** (CR 704.3, 608.2). Magma Jet deals 2 damage
+   and then asks a scry question; the dead creature legally stays on the battlefield until that
+   question is answered. Assert SBAs only when `pendingChoice` and `resolution` are both null.
+2. **A leak scan must ask the state the action LANDED IN.** A land played from hand is named by
+   `landPlayed` and by a public `zoneChange`, and it was in a hand a moment earlier — scanning against
+   the pre-action state reports every land drop in the game as a leak.
 
 ### Web app — `apps/web`
 | Suite | What it guards |

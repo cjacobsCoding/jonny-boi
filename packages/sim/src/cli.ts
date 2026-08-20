@@ -679,13 +679,10 @@ function cmdSoak(flags: Flags): number {
     },
   });
 
-  console.log(`
-${formatSoakReport(report)}`);
+  console.log(`\n${formatSoakReport(report)}`);
   const failed =
     report.violations.length > 0 || report.actionCapHits > 0 || report.inertMechanics.length > 0;
-  console.log(failed ? '
-SOAK FAILED — see above.' : '
-Soak clean.');
+  console.log(failed ? '\nSOAK FAILED — see above.' : '\nSoak clean.');
   return failed ? 1 : 0;
 }
 

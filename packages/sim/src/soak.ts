@@ -646,6 +646,23 @@ function createGameWatcher(inner: Pilot): GameWatcher {
         // an engine defect, not a pilot one.
         if (lastState) record(SOAK_INVARIANTS.noRejectedActions, `the engine rejected an offered action: ${event.reason}`, lastState, '-');
         break;
+      case 'effectUnsupported':
+        /*
+         * The engine no-ops an effect whose primitive nothing registered and
+         * says so. Every card in the shipped pool compiles `'complete'`, so this
+         * event in a soak means a pool card is silently playing as LESS than it
+         * prints — which is worse than a crash, because the games still finish
+         * and the statistics still look fine.
+         */
+        if (lastState) {
+          record(
+            SOAK_INVARIANTS.noUnsupportedEffect,
+            `"${event.primitive}" is unregistered — a pool card resolved as a no-op`,
+            lastState,
+            '-',
+          );
+        }
+        break;
       case 'counterAdded':
         // Loyalty and defense have their own events; crediting those kinds here
         // would let a planeswalker entering play satisfy the +1/+1 requirement.

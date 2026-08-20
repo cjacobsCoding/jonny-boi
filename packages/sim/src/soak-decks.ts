@@ -445,12 +445,12 @@ function normalizeEntries(
   const merged = new Map<string, number>();
   for (const entry of entries) merged.set(entry.cardId, (merged.get(entry.cardId) ?? 0) + entry.count);
   let total = 0;
-  const out: DeckEntry[] = [];
+  const capped = new Map<string, number>();
   for (const [cardId, count] of merged) {
-    const capped = basicIds.has(cardId) ? count : Math.min(count, SOAK_MAX_COPIES);
-    if (capped <= 0) continue;
-    out.push({ cardId, count: capped });
-    total += capped;
+    const kept = basicIds.has(cardId) ? count : Math.min(count, SOAK_MAX_COPIES);
+    if (kept <= 0) continue;
+    capped.set(cardId, kept);
+    total += kept;
   }
   if (total < SOAK_DECK_SIZE) {
     // The cap took slots away; give them back as basics of the deck's own
@@ -458,13 +458,9 @@ function normalizeEntries(
     const fill =
       [...colors].map((color) => index.basics[color]).find((def) => def !== undefined)
       ?? Object.values(index.basics)[0];
-    if (fill) {
-      const existing = out.find((e) => e.cardId === fill.id);
-      if (existing) existing.count += SOAK_DECK_SIZE - total;
-      else out.push({ cardId: fill.id, count: SOAK_DECK_SIZE - total });
-    }
+    if (fill) capped.set(fill.id, (capped.get(fill.id) ?? 0) + (SOAK_DECK_SIZE - total));
   }
-  return out;
+  return [...capped].map(([cardId, count]) => ({ cardId, count }));
 }
 
 /** Assemble a `SoakDeck` from a spell map, a colour set and a land budget. */

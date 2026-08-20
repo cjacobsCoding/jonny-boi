@@ -429,6 +429,17 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   manaCostPaid: null,
   stackResolved: null,
   effectApplied: null,
+  /*
+   * NOT a mechanic — the opposite. `effectUnsupported` is the engine saying a
+   * card referenced a primitive no registry provides, which it then no-ops
+   * (DESIGN §1.6 robustness: a safe default and a clear signal, never a crash).
+   * Every card in the shipped pool compiles `'complete'`, so in a soak it must
+   * NEVER fire: one means a pool card is quietly playing as less than it prints,
+   * and a quietly weakened card biases every A/B verdict built on it. The soak
+   * asserts that as an invariant (`SOAK_INVARIANTS.noUnsupportedEffect`) rather
+   * than tallying it as an occurrence.
+   */
+  effectUnsupported: null,
   lifeChanged: null,
   creatureDied: null,
   playerLost: null,
@@ -522,6 +533,7 @@ export const SOAK_INVARIANTS = {
   noException: 'the engine never throws',
   legalActionsOnly: 'every action a pilot submits came from generateLegalActions',
   noRejectedActions: 'the engine never rejects an action it offered',
+  noUnsupportedEffect: 'no pool card resolves an effect the registry cannot provide',
   gameCanEnd: 'a game never reaches the action cap',
   stackEmpties: 'the stack empties before the turn ends',
   stackDepth: 'the stack never runs away',

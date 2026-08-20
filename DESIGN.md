@@ -1810,6 +1810,64 @@ character-indexed object (nothing had printed a label that long until the fetchl
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
 
+### 3.21 The full-pool soak — proving the shipped systems work TOGETHER — ✅ done
+Twelve engine systems shipped in three days (§3.13–§3.20) and the pool went 191 → 357 cards. Every one
+of them was tested **in isolation by the agent that built it**, and almost none were ever tested
+together. The gauntlet decks in `packages/sim/data/decks` are eight curated archetypes: they exercise a
+fraction of the pool and essentially none of the collisions. No test in the repo had ever put a
+planeswalker, an Equipment, a protection creature, a modal spell and a flashback spell in one game.
+
+The soak does. `packages/sim/src/soak*.ts` plays thousands of seeded games with **randomised-but-legal**
+decks drawn from the whole pool, deliberately mixing mechanic families, and asserts INVARIANTS — not
+"it finished", which is the exact check this repo has been burned by (a combat-declaration bug once made
+games unable to END while the whole suite stayed green).
+
+**Three things it does that the existing suites do not.**
+1. **Invariants on every settled state** (`SOAK_INVARIANTS`): every action a pilot submits is legal;
+   the engine never REJECTS an action it offered; no game reaches the action cap; no stack object
+   survives a turn; state-based actions leave no dead creature, 0-loyalty walker or 0-defense battle;
+   an instance is in exactly one zone; no card in a hidden zone leaks into an observation;
+   `applyActionInPlace` stays bit-identical to `applyAction`; and no pool card resolves an
+   `effectUnsupported` no-op.
+2. **Occurrence, not coverage.** `SOAK_MECHANICS` is an inventory and the run **fails when a mechanic
+   the pool prints never fires** — the sim-side twin of `pool-mechanics.test.ts`, which fails when a
+   mechanic loses its last card. Between them, "shipped but unreachable" has nowhere to hide. Witnesses
+   are labelled `action` / `event` / `state` so a weaker claim reads as a weaker claim.
+3. **A NEW ENGINE EVENT BREAKS THE BUILD.** `SOAK_EVENT_WITNESS` is a mapped type over
+   `GameEvent['type']` (the `OBSERVATION_POLICY` idiom), so the next system to ship cannot go untested
+   by simply not being thought of.
+
+**Two tiers.** The FAST tier (`soak.test.ts`) runs in the ordinary suite every time — one anchored
+matchup per mechanic plus a block of mixed games, every invariant on every decision. The DEEP tier
+(`soak-deep.test.ts`, `JB_SOAK_GAMES=N`, or `npm run sim -- soak --games N`) plays thousands. Both are
+sized in GAMES and report CPU: wall clock on this box is worthless (the same build has measured
+39–87 games/sec inside an hour).
+
+**What it found, first run.** Three engine-shaped reports, of which one was real:
+- ✅ **FIXED — the pilot proposed blocks the rules forbid.** `canBlockByEvasion` in
+  `packages/ai/src/heuristic.ts` mirrored core's `canBlock` **minus its protection clause**
+  (CR 702.16e), so a white creature kept being assigned to block a Black Knight. One illegal pair
+  invalidates the WHOLE `declareBlockers` action, so the engine refused it and the harness passed
+  priority after three rejections — **the defender took the entire attack unblocked, every combat.**
+  Nothing isolated could see it: the protection tests never asked a pilot to block, and the pilot tests
+  never put a protection creature on the other side. `needsMultipleBlockers` was reading `def.keywords`
+  bare in the same function, so a GRANTED menace was invisible too. Both fixed; both regression tests
+  fail without the fix, with the engine's own message.
+- ⚠️ **REPORTED — the rich mana-ability model has no card in the pool.** §3.11's `manaAbilities`
+  (a tap cost, a rider, an activation restriction, board-derived colours) is matched by **0 of 357**
+  pool cards, so nothing a player can see exercises it. That is rule 10's inert feature; it needs a
+  pool regeneration, not an engine change.
+- ⚠️ **REPORTED — no maximum hand size.** `RulesConfig` has no `maxHandSize` and the cleanup step
+  performs no discard (CR 514.1), so hands grow without bound. Adding it would move every recorded
+  win-rate baseline in §3.4a, so it is a decision, not a patch.
+
+**And two false alarms worth writing down, because both are the harness's own recorded failure shape.**
+Asserting state-based actions on a state that is MID-RESOLUTION reports Magma Jet ("2 damage, then
+scry 2") as leaving a dead creature on the battlefield — it does, legally, until the scry is answered
+(CR 704.3 / 608.2). And scanning an observation against the state the action STARTED from reports every
+land drop in the game as a hidden-zone leak. `soak.ts` carries both traps as comments beside the code
+that avoids them.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

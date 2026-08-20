@@ -115,9 +115,66 @@ throughput (games/sec) from regressing.
 | feat/pool-expansion | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts, data/expansion-report.json; src/primitives.ts addCounters fix; src/fidelity.test.ts, src/pool.test.ts, src/expanded-pool.test.ts; NEW src/pool-mechanics.test.ts), packages/data-tools/data (card-index.json + starter-cards.json, re-fetched), apps/web/src/data/card-index.json (regenerated), DESIGN §3.20, COORDINATION. **No compiler rule, no engine change beyond the one-line counters fix.** | 🚧 PUSHED, not merged |
 | feat/alternative-costs | worker | packages/core (NEW madness.ts + alternative-costs.test.ts; card/state/actions/events/choices/engine/index, internal zones+clone, flashback.test call sites), packages/cards (compile rules 4 new STATIC_RULES + 1 hint reword, compile/compile.ts assembly + cycling keyword-sweep guard, compile/types.ts, effect-helpers discard funnel + counter reason, NEW alternative-costs.test.ts), packages/ai (heuristic cycling policy + madness decision, weights 3 entries, mcts/search-stats action-kind switches, NEW alternative-costs-pilot.test.ts), packages/sim (paired-arms effect scan + observation 3 events), apps/web (play/session cycle+exile casts, PlayBoard hand menu + madness prompt, about/mechanics 4 witnesses), DESIGN §3.18 + §3.11 open-list, COORDINATION | 🚧 PUSHED, not merged |
 | fix/ai-sees-continuous-effects | worker | packages/ai (NEW board-stats.ts + bare-stats.test.ts; heuristic/evaluator/mcts/tactical/effect-value/card-value/choices + tactical.test), packages/sim/src/pilot-quality.test.ts (3 new guards), DESIGN §3.4a/§3.4f/§3.11, COORDINATION | 🚧 PUSHED, not merged — **re-measures every recorded heuristic baseline** |
+| test/full-pool-soak | worker | packages/sim (NEW soak.ts + soak-config.ts + soak-decks.ts + soak.test.ts + soak-deep.test.ts; cli.ts `soak` command; index.ts exports), packages/ai (heuristic.ts — 3 small hunks in `canBlockByEvasion`/`needsMultipleBlockers` + 1 import; indestructible-blocking-pilot.test.ts +3 cases), DESIGN §3.21, TESTING.md, COORDINATION. **No engine change, no pool change, no meta-deck change — every recorded baseline is unmoved.** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `test/full-pool-soak` 🚧 PUSHED — **a soak harness that plays the WHOLE
+  357-card pool against itself and asserts invariants, plus the defects it found.** Twelve systems
+  shipped in three days and every one was tested in isolation by the agent that built it; the eight
+  gauntlet decks never put a walker, an Equipment, a protection creature, a modal spell and a
+  flashback spell in one game. `packages/sim/src/soak*.ts` builds randomised-but-legal decks from the
+  whole pool that do. DESIGN §3.21 and TESTING.md have the full write-up.
+
+  **Run it:** the FAST tier is in `npm test` already (≈104 games, every invariant on every decision,
+  every pool mechanic required to FIRE). Deep: `npm run sim -- soak --games 2000`, or
+  `JB_SOAK_GAMES=2000 npx vitest run packages/sim/src/soak-deep.test.ts`. Every failure prints the
+  seed AND both decklists.
+
+  ✅ **ONE REAL DEFECT, FIXED HERE — and it is in `packages/ai/src/heuristic.ts`, so read this if you
+  own that file.** `canBlockByEvasion` mirrored core's `canBlock` **minus its protection clause**
+  (CR 702.16e): a white creature kept being assigned to block a Black Knight. One illegal pair
+  invalidates the WHOLE `declareBlockers` action — so the engine refused the declaration, the harness
+  passed priority after `maxConsecutiveRejectedActions`, and **the defender took the entire attack
+  unblocked, every combat of the game.** Same function, one clause over: `needsMultipleBlockers` read
+  `attacker.def.keywords` bare, so a GRANTED menace was invisible while the rules path read the
+  granted set — the identical shape `fix/ai-sees-continuous-effects` closed elsewhere, which
+  `bare-stats.test.ts` cannot catch because it guards core ACCESSOR calls, not `.def.keywords` reads.
+  Both fixed; three regression cases added to `indestructible-blocking-pilot.test.ts`, and all three
+  fail without the fix with the engine's own message ("Wall of Omens cannot block Black Knight",
+  soak seed 1948110550). My edit is 3 small hunks + 1 import — **keep BOTH sides on conflict.**
+
+  ⚠️ **TWO DEFECTS REPORTED, NOT FIXED — both belong to somebody else's file.**
+  1. **The rich mana-ability model has ZERO cards in the shipped pool.** `CardDefinition.manaAbilities`
+     (tap cost / rider / activation restriction / board-derived colours) matches **0 of 357** pool
+     cards — measured, not guessed. The system is real and tested; nothing a player can see prints
+     it. That is the inert-feature rule, and the fix is a POOL regeneration (pain lands, filter lands,
+     Reflecting Pool) by whoever owns `packages/cards/data`, not an engine change. The soak already
+     watches for it and will require an occurrence the moment one card appears.
+  2. **There is no maximum hand size.** `RulesConfig` has no `maxHandSize` and the cleanup step
+     performs no discard (CR 514.1), so a hand grows without bound. This is a CORE rules gap, it moves
+     every recorded win-rate baseline in DESIGN §3.4a, and it also removes the natural discard outlet
+     madness needs — so it is a decision for the integrator, not a patch from me.
+  3. Minor, and I deliberately did not touch it because several branches edit that copy: **the shared
+     `FIDELITY_CAVEAT`** (`packages/sim/src/config.ts`, mirrored in `apps/web/src/lib/lab-config.ts`
+     and duplicated in `cli.ts`'s usage) still tells the user that "flashback GRANTED by another card"
+     and "modes chosen at cast time" are unimplemented. Both shipped. The soak fires
+     `graveyard-grant` in 10 games and `modal-cast` in 28, so this is measured, not inferred.
+
+  🧪 **AND TWO FALSE ALARMS I WROTE MYSELF, because they are this repo's recorded failure shape
+  and the next person will hit them.** (a) Asserting state-based actions on a MID-RESOLUTION state
+  reports Magma Jet ("2 damage, then scry 2") as leaving a dead creature on the battlefield — it does,
+  legally, until the scry is answered (CR 704.3 / 608.2). `rules-audit.test.ts` documents that
+  discipline in its own doc-comment and does **not** implement it; it survives only because its
+  curated decks never line the case up. (b) A redaction scan must ask the state the action LANDED in:
+  scanning the pre-action state reports every land drop in the game as a hidden-zone leak. Both traps
+  are pinned as comments beside the code that avoids them in `soak.ts`.
+
+  📊 **The run, so the number means something.** Fast tier: 104 games, 2,210 turns, 64,657
+  actions, **0 violations**, 0 timeouts, ~17 s CPU. All 32 mechanics the pool prints fired.
+  `battle-defense`, `emblem` and `mana-ability-extras` are not required because the pool prints none
+  — the soak says so out loud rather than passing quietly.
 
 - 2026-08-19 worker: `feat/pool-expansion` 🚧 PUSHED — **the shipped pool is 191 → 309 cards, and
   every mechanic the compiler can build now has a card a player can actually see.** Sixteen engine
