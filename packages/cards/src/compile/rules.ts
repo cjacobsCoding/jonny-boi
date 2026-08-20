@@ -15,6 +15,7 @@
  */
 
 import type {
+  CardFilter,
   CardType,
   ChosenValueSubject,
   EffectRef,
@@ -24,8 +25,10 @@ import type {
   ManaCost,
   ManaProduction,
   ProtectionQuality,
+  ReplacementApplies,
   SpellMode,
   StaticAbility,
+  StaticControllerScope,
   TargetRestriction,
   InterveningIf,
   TriggerCondition,
@@ -799,6 +802,100 @@ function manaSymbols(text: string): readonly ManaColor[] | null {
   return colors;
 }
 
+
+/**
+ * REPLACEMENT AND PREVENTION EFFECTS (core's CR 614/615 layer) — the printed
+ * vocabulary, as data tables, shared by the four rules that read it.
+ *
+ * The whole family is "if <EVENT> would happen, <MODIFIED EVENT> happens
+ * instead", and only three things vary between printed cards: WHOSE source,
+ * WHOSE recipient, and WHAT the modification is. Each is a closed table, so a
+ * wording outside them reports rather than being widened into a different card —
+ * Torbran's "an opponent or a permanent an opponent controls" and Fiery
+ * Emancipation's "a permanent or player" are two different cards, and the table
+ * is what keeps them that way.
+ */
+
+/** The printed phrase naming WHOSE source a damage replacement watches. */
+const REPLACEMENT_SOURCE_SCOPES: Readonly<Record<string, StaticControllerScope>> = Object.freeze({
+  'a source you control': 'you',
+  'a source an opponent controls': 'opponent',
+  'a source': 'any',
+  'a creature you control': 'you',
+});
+
+/** The printed source phrases that also narrow the source by TYPE. */
+const REPLACEMENT_SOURCE_TYPES: Readonly<Record<string, CardType | null>> = Object.freeze({
+  'a source you control': null,
+  'a source an opponent controls': null,
+  'a source': null,
+  'a creature you control': 'creature',
+});
+
+/**
+ * The printed phrase naming WHO/WHAT a replacement's event happens to.
+ * `kind: 'player'` is the tail that says a permanent can never be the recipient
+ * ("…would deal damage to an opponent" — Solphim's clause is about players).
+ */
+const REPLACEMENT_RECIPIENTS: Readonly<
+  Record<string, { readonly controller: StaticControllerScope; readonly kind?: 'player' | 'permanent' }>
+> = Object.freeze({
+  'a permanent or player': { controller: 'any' },
+  'an opponent or a permanent an opponent controls': { controller: 'opponent' },
+  'you or a permanent you control': { controller: 'you' },
+  'an opponent': { controller: 'opponent', kind: 'player' },
+  'a creature you control': { controller: 'you', kind: 'permanent' },
+});
+
+/** The alternation of every recipient phrase, longest first so none is truncated. */
+const REPLACEMENT_RECIPIENT_TOKEN = `(${Object.keys(REPLACEMENT_RECIPIENTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/** The alternation of every source phrase, longest first so none is truncated. */
+const REPLACEMENT_SOURCE_TOKEN = `(${Object.keys(REPLACEMENT_SOURCE_SCOPES)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * The printed multiplier words. "That much damage plus N" is captured
+ * separately, because adding and scaling are different arithmetic and folding
+ * them onto one field would make Torbran and Gratuitous Violence the same card.
+ */
+const REPLACEMENT_MULTIPLIERS: Readonly<Record<string, number>> = Object.freeze({
+  double: 2,
+  triple: 3,
+  twice: 2,
+  'three times': 3,
+});
+
+
+/**
+ * The printed NOUN PHRASE a counter replacement watches, mapped to the filter
+ * that selects it. `null` means "no filter at all", which is what "a permanent
+ * you control" says — inventing a `'permanent'` type word would match nothing.
+ */
+const REPLACEMENT_COUNTER_SUBJECTS: Readonly<Record<string, CardFilter | null>> = Object.freeze({
+  'a creature': { anyOfTypes: ['creature'] },
+  'a permanent': null,
+  'an artifact or creature': { anyOfTypes: ['artifact', 'creature'] },
+});
+
+/** The alternation of the multiplier words, longest first. */
+const REPLACEMENT_MULTIPLIER_TOKEN = `(${Object.keys(REPLACEMENT_MULTIPLIERS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/**
+ * Whether the card being compiled can carry a printed replacement ability at
+ * all. Only a PERMANENT radiates one; an instant or sorcery printing the same
+ * shape is a one-shot that creates a floating effect instead (the fog rules in
+ * EFFECT_RULES), and compiling it as a static would make a Fog permanent.
+ */
+function cardIsPermanent(ctx: RuleContext): boolean {
+  return ctx.card.typeLine.types.every((type) => !/^(instant|sorcery)$/i.test(type));
+}
+
 // --- effect rules ---------------------------------------------------------------
 // Matched against a spell's resolution clause AND against a trigger's body (the
 // same templates mean the same thing in both places — one mechanism, DESIGN §1.3).
@@ -842,6 +939,47 @@ function modeLabel(body: string, cardName: string): string {
 }
 
 export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    /**
+     * THE FOG. "Prevent all combat damage that would be dealt this turn" (Fog,
+     * Darkness, Holy Day, Dawn Charm's first mode), and its relatives "Prevent
+     * all damage that would be dealt to you this turn" (Riot Control) and
+     * "Prevent all combat damage that would be dealt to you this turn".
+     *
+     * A ONE-SHOT: the spell registers a floating prevention effect that expires
+     * in cleanup. The same sentence WITHOUT "this turn", printed on a permanent,
+     * is a static instead (`replacement-prevent-all-static`) — the tail is what
+     * separates a Fog from a Dolmen Gate, and getting it wrong in either
+     * direction is a different card.
+     */
+    id: 'prevent-all-damage-this-turn',
+    description:
+      '"Prevent all [combat] damage that would be dealt [to you] this turn" (Fog, Darkness, Riot Control)',
+    pattern:
+      /^prevent all (combat |noncombat )?damage that would be dealt(?: to (you|creatures you control|attacking creatures you control))? this turn$/,
+    build(match) {
+      const combatWord = match[1]?.trim();
+      const who = match[2];
+      return {
+        effects: [
+          {
+            primitive: 'preventDamage',
+            params: {
+              ...(combatWord === 'combat' ? { combat: true } : {}),
+              ...(combatWord === 'noncombat' ? { combat: false } : {}),
+              ...(who === undefined ? {} : { scope: 'you' }),
+              ...(who === 'you' ? { recipientKind: 'player' } : {}),
+              ...(who === 'creatures you control' || who === 'attacking creatures you control'
+                ? { recipientKind: 'permanent' }
+                : {}),
+              ...(who === 'attacking creatures you control' ? { attacking: true } : {}),
+              label: match[0],
+            },
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'damage-any-target',
     description:
@@ -3109,6 +3247,266 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
 /** Card-level static properties printed as their own ability line. */
 export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   {
+    /**
+     * "If one or more +1/+1 counters would be put on a creature you control,
+     * THAT MANY PLUS ONE / TWICE THAT MANY are put on it instead" — Hardened
+     * Scales, Conclave Mentor, Corpsejack Menace, Branching Evolution, Ozolith,
+     * Kami of Whispered Hopes; and the effect-first wording Doubling Season
+     * prints ("If an effect would put one or more counters on a permanent you
+     * control, it puts twice that many of those counters on that permanent
+     * instead").
+     *
+     * The COUNTER KIND is captured, not assumed: a card that says "+1/+1
+     * counters" must not multiply a -1/-1 counter, and the two wordings that say
+     * "one or more COUNTERS" (Winding Constrictor, Doubling Season) really do
+     * mean every kind. Core's layer takes the kind and matches on it.
+     */
+    id: 'replacement-counters-multiplied',
+    description:
+      '"If one or more [+1/+1] counters would be put on a creature/permanent you control, that many plus N / twice that many are put on it instead" (Hardened Scales, Corpsejack Menace, Doubling Season)',
+    pattern: new RegExp(
+      `^if (?:one or more (\\+1/\\+1 )?counters would be put on|an effect would put one or more (\\+1/\\+1 )?counters on) ` +
+        `(a creature|a permanent|an artifact or creature) you control, ` +
+        `(?:it puts )?(?:that many plus ${COUNT_TOKEN}|${REPLACEMENT_MULTIPLIER_TOKEN} that many) ` +
+        `(?:\\+1/\\+1 counters|of each of those kinds of counters|of those counters|counters) ` +
+        `(?:are put on |on )?(?:it|that creature|that permanent|that artifact or creature)(?: instead)?$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const kindPrinted = match[1] ?? match[2];
+      const nounPhrase = match[3] ?? '';
+      const plus = match[4] === undefined ? undefined : parseCount(match[4]);
+      // A "plus X" with no fixed value is not a number this layer can add.
+      if (match[4] !== undefined && plus === null) return null;
+      const times = match[5] === undefined ? undefined : REPLACEMENT_MULTIPLIERS[match[5]];
+      if (match[5] !== undefined && times === undefined) return null;
+      if (plus === undefined && times === undefined) return null;
+      const recipientFilter = REPLACEMENT_COUNTER_SUBJECTS[nounPhrase];
+      if (recipientFilter === undefined) return null;
+      return {
+        replacements: [
+          {
+            event: 'counters',
+            applies: {
+              recipientController: 'you',
+              ...(recipientFilter === null ? {} : { recipientFilter }),
+              // The printed "+1/+1" narrows the watched kind; its absence really
+              // does mean every kind (Doubling Season, Winding Constrictor).
+              ...(kindPrinted !== undefined ? { counterKind: PLUS_ONE_COUNTER } : {}),
+            },
+            outcome: {
+              ...(plus !== null && plus !== undefined ? { plus } : {}),
+              ...(times !== undefined ? { times } : {}),
+            },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
+     * "If a [red] source you control would deal [noncombat] damage to RECIPIENT,
+     * it deals DOUBLE that damage / that much damage PLUS N instead" — Torbran,
+     * Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
+     * Tyrant, Dictate of the Twin Gods, Gisela's first clause.
+     *
+     * Both halves of the source phrase are captured because both are real: a
+     * COLOUR word ("a red source") narrows it through the same `anyOfColors`
+     * filter protection reads, and "a creature you control" narrows it by type.
+     * "A source" with no controller tail is the symmetric card and is NOT
+     * quietly read as "yours".
+     */
+    id: 'replacement-damage-scaled',
+    description:
+      '"If a [red] source you control would deal [noncombat] damage to X, it deals double/triple that damage / that much damage plus N instead" (Torbran, Gratuitous Violence, Fiery Emancipation)',
+    pattern: new RegExp(
+      `^if (?:a (${Object.keys(COLOR_WORDS).join('|')}) source(?: you control)?|${REPLACEMENT_SOURCE_TOKEN}) ` +
+        `would deal (noncombat |combat )?damage to ${REPLACEMENT_RECIPIENT_TOKEN}, ` +
+        `(?:it|that source) deals (?:${REPLACEMENT_MULTIPLIER_TOKEN} that damage|that much damage plus ${COUNT_TOKEN})` +
+        `(?: to (?:that permanent or player|that player or permanent|that player|that permanent|it))? instead$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const colorWord = match[1];
+      const sourcePhrase = match[2];
+      const combatWord = match[3]?.trim();
+      const recipientPhrase = match[4] ?? '';
+      const multiplierWord = match[5];
+      const plusToken = match[6];
+
+      // A colour phrase always prints "you control" on the cards that use it;
+      // the plain-source table covers the rest. Exactly one of the two matched.
+      const sourceController: StaticControllerScope =
+        colorWord !== undefined ? 'you' : REPLACEMENT_SOURCE_SCOPES[sourcePhrase ?? ''] ?? 'any';
+      const sourceType =
+        sourcePhrase === undefined ? null : REPLACEMENT_SOURCE_TYPES[sourcePhrase] ?? null;
+      const color = colorWord === undefined ? undefined : COLOR_WORDS[colorWord];
+      if (colorWord !== undefined && color === undefined) return null;
+
+      const recipient = REPLACEMENT_RECIPIENTS[recipientPhrase];
+      if (recipient === undefined) return null;
+
+      const times = multiplierWord === undefined ? undefined : REPLACEMENT_MULTIPLIERS[multiplierWord];
+      if (multiplierWord !== undefined && times === undefined) return null;
+      const plus = plusToken === undefined ? undefined : parseCount(plusToken);
+      if (plusToken !== undefined && plus === null) return null;
+
+      const sourceFilter =
+        color !== undefined || sourceType !== null
+          ? {
+              ...(sourceType !== null ? { anyOfTypes: [sourceType] } : {}),
+              ...(color !== undefined ? { anyOfColors: [color as never] } : {}),
+            }
+          : undefined;
+
+      return {
+        replacements: [
+          {
+            event: 'damage',
+            applies: {
+              ...(sourceController === 'any' ? {} : { sourceController }),
+              ...(sourceFilter !== undefined ? { sourceFilter } : {}),
+              ...(combatWord === 'noncombat' ? { combat: false } : {}),
+              ...(combatWord === 'combat' ? { combat: true } : {}),
+              ...(recipient.controller === 'any' ? {} : { recipientController: recipient.controller }),
+              ...(recipient.kind !== undefined ? { recipientKind: recipient.kind } : {}),
+            },
+            outcome: {
+              ...(times !== undefined ? { times } : {}),
+              ...(plus !== null && plus !== undefined ? { plus } : {}),
+            },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
+     * "If a source would deal damage to you or a permanent you control, PREVENT
+     * HALF that damage, rounded up" — Gisela's second clause. Its own rule
+     * rather than a mode of the one above because halving is prevention, not
+     * scaling: it produces a `damagePrevented` amount the log has to report, and
+     * the rounding direction is printed and must not be guessed.
+     */
+    id: 'replacement-damage-prevent-half',
+    description: '"If a source would deal damage to X, prevent half that damage, rounded up" (Gisela)',
+    pattern: new RegExp(
+      `^if ${REPLACEMENT_SOURCE_TOKEN} would deal (noncombat |combat )?damage to ${REPLACEMENT_RECIPIENT_TOKEN}, ` +
+        `prevent half that damage, rounded up$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const sourceController = REPLACEMENT_SOURCE_SCOPES[match[1] ?? ''] ?? 'any';
+      const sourceType = REPLACEMENT_SOURCE_TYPES[match[1] ?? ''] ?? null;
+      const combatWord = match[2]?.trim();
+      const recipient = REPLACEMENT_RECIPIENTS[match[3] ?? ''];
+      if (recipient === undefined) return null;
+      return {
+        replacements: [
+          {
+            event: 'damage',
+            applies: {
+              ...(sourceController === 'any' ? {} : { sourceController }),
+              ...(sourceType !== null ? { sourceFilter: { anyOfTypes: [sourceType] } } : {}),
+              ...(combatWord === 'noncombat' ? { combat: false } : {}),
+              ...(combatWord === 'combat' ? { combat: true } : {}),
+              ...(recipient.controller === 'any' ? {} : { recipientController: recipient.controller }),
+              ...(recipient.kind !== undefined ? { recipientKind: recipient.kind } : {}),
+            },
+            outcome: { preventHalfRoundedUp: true },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
+     * "Prevent all [combat|noncombat] damage that would be dealt to [ATTACKING |
+     * OTHER] creatures you control / to you" printed on a PERMANENT — Dolmen
+     * Gate, Iroas, Crystal Barricade.
+     *
+     * The identical sentence on an INSTANT ends "this turn" and is a one-shot
+     * (the fog rule in EFFECT_RULES). The two are kept apart by that tail and by
+     * the permanent check, because compiling a Fog as a static would make it
+     * prevent damage for the rest of the game.
+     */
+    id: 'replacement-prevent-all-static',
+    description:
+      '"Prevent all [combat] damage that would be dealt to [attacking|other] creatures you control / to you" on a permanent (Dolmen Gate, Iroas)',
+    pattern:
+      /^prevent all (combat |noncombat )?damage that would be dealt to (attacking creatures you control|other creatures you control|creatures you control|you)$/,
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const combatWord = match[1]?.trim();
+      const who = match[2] ?? '';
+      const applies: ReplacementApplies = {
+        ...(combatWord === 'combat' ? { combat: true } : {}),
+        ...(combatWord === 'noncombat' ? { combat: false } : {}),
+        recipientController: 'you',
+        ...(who === 'you'
+          ? { recipientKind: 'player' as const }
+          : {
+              recipientKind: 'permanent' as const,
+              recipientFilter: { anyOfTypes: ['creature' as CardType] },
+              ...(who === 'attacking creatures you control' ? { recipientAttacking: true } : {}),
+              ...(who === 'other creatures you control' ? { excludeSource: true } : {}),
+            }),
+      };
+      return { replacements: [{ event: 'damage', applies, outcome: { preventAll: true }, label: match[0] }] };
+    },
+  },
+  {
+    /**
+     * "If you would draw a card [except the first one you draw in each of your
+     * draw steps], draw two cards instead" (Teferi's Ageless Insight,
+     * Alhammarret's Archive) and "…while your library has no cards in it, you
+     * WIN THE GAME instead" (Laboratory Maniac).
+     *
+     * The printed exception is implemented EXACTLY, not approximated: core
+     * records the `drewInOwnDrawStep` turn fact as the draw-step draw happens,
+     * so the second and every later draw in that step really is replaced.
+     */
+    id: 'replacement-draw',
+    description:
+      '"If you would draw a card [except the first one each draw step], draw two cards instead" / "…while your library has no cards in it, you win the game instead"',
+    pattern: new RegExp(
+      `^if you would draw a card(?: (except the first one you draw in each of your draw steps|while your library has no cards in it))?, ` +
+        `(?:draw ${COUNT_TOKEN} cards instead|you win the game instead)$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const clause = match[1];
+      const winsGame = match[2] === undefined;
+      // "Draw two cards instead" is a MULTIPLIER of the one-card draw it
+      // replaces, so anything below two would be a card that draws fewer than it
+      // printed — refused rather than compiled.
+      const drawCount = winsGame ? 0 : parseCount(match[2]);
+      if (!winsGame && (drawCount === null || drawCount < 2)) return null;
+      // "You win the game instead" is only buildable when the condition gating
+      // it is one core can read; an unconditional form is not a printed card.
+      if (winsGame && clause !== 'while your library has no cards in it') return null;
+      return {
+        replacements: [
+          {
+            event: 'draw',
+            applies: {
+              recipientController: 'you',
+              ...(clause === 'except the first one you draw in each of your draw steps'
+                ? { exceptFirstDrawEachDrawStep: true }
+                : {}),
+              ...(clause === 'while your library has no cards in it' ? { requiresEmptyLibrary: true } : {}),
+            },
+            outcome: winsGame ? { winGame: true } : { times: drawCount as number },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
     id: 'multikicker-cost',
     description:
       '"Multikicker {COST}" — an additional cost payable ANY NUMBER of times; the engine asks for a count at cast time, bounded by what the board can fund',
@@ -4665,6 +5063,66 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an {X} or derived-value template the compiler does not recognize yet',
   },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'an activated-ability template the compiler does not recognize yet' },
+  // --- replacement & prevention: the LAYER SHIPPED, so these name the residual ---
+  //
+  // Core now has a real CR 614/615 layer (`packages/core/src/replacement.ts`) that
+  // damage, counters and draws all consult, and STATIC_RULES compiles the four
+  // families that change a QUANTITY or prevent an event. So these hints do not
+  // claim the system is missing — that would send the next contributor to rebuild
+  // something that exists. What they name is the residual: a replacement whose
+  // OUTCOME is a different kind of thing (a different zone, different objects, a
+  // whole substituted action), which is genuinely a different vocabulary.
+  //
+  // Order matters: the first matching hint wins, so these sit above the generic
+  // ones below.
+  {
+    // "…twice that many of those TOKENS are created instead" (Doubling Season,
+    // Parallel Lives, Anointed Procession). The layer scales a NUMBER; creating
+    // extra objects is a different outcome, and token creation is not one of the
+    // three events the layer watches.
+    pattern: /would (?:create|be created).*\binstead\b|creates? (?:twice|three times) that many/,
+    missingEngineSystem:
+      'a TOKEN-count replacement (the CR 614 layer scales damage, counters and draws; creating extra objects is a different outcome)',
+  },
+  {
+    // "If a card would be put into a graveyard from anywhere, exile it instead"
+    // (Rest in Peace, Dauthi Voidwalker, Liesa) — a ZONE-CHANGE replacement.
+    pattern: /would (?:die|be put into (?:a|an|its owner's|an opponent's) graveyard).*\binstead\b/,
+    missingEngineSystem:
+      'a ZONE-CHANGE replacement ("if it would die, exile it instead" — the CR 614 layer changes quantities, not destinations)',
+  },
+  {
+    // "prevent that damage AND …" (Vigor, The Mindskinner, Deflecting Palm) — the
+    // prevention itself is implemented; what is missing is a RIDER that fires on
+    // how much was prevented.
+    pattern: /prevent (?:that|the next|all) [^.]*\b(?:and|\.)\s*(?:put|~|each|you|that)/,
+    missingEngineSystem:
+      'a prevention RIDER ("prevent that damage AND put a +1/+1 counter on it for each 1 prevented") — prevention itself is implemented',
+  },
+  {
+    // "The next time a SOURCE OF YOUR CHOICE would deal damage…" (Deflecting
+    // Palm) — a shield bound to a source the player names, which nothing asks.
+    pattern: /a source of your choice/,
+    missingEngineSystem:
+      'a prevention shield bound to a SOURCE OF YOUR CHOICE (choosing a source is a question nothing asks)',
+  },
+  {
+    // "If you would GAIN LIFE, you gain twice that much instead" (Alhammarret's
+    // Archive, Rhox Faithmender) and "if an opponent would LOSE LIFE…"
+    // (Bloodletter of Aclazotz). One more event kind on the same layer, not a
+    // new system — named honestly so whoever adds it knows the size of the job.
+    pattern: /if (?:you|an opponent|a player) would (?:gain|lose) life/,
+    missingEngineSystem:
+      'a LIFE-CHANGE event on the replacement layer (the layer watches damage, counters and draws; life gain/loss is one more event kind)',
+  },
+  {
+    // "instead that player skips that draw and you draw a card" (Notion Thief),
+    // "you may instead choose land or nonland and reveal…" (Abundance). The draw
+    // event is watched; substituting a whole different ACTION for it is not.
+    pattern: /would draw a card.*\binstead\b/,
+    missingEngineSystem:
+      'a draw replacement whose result is a different ACTION (skip-and-redirect, reveal-until — the layer scales a draw, it does not substitute one)',
+  },
   // --- below here: patterns that only refine the DEFAULT explanation. Nothing
   // above changes; these exist so "this card didn't compile" names a buildable
   // engine feature instead of shrugging. They are ordered specific → general,

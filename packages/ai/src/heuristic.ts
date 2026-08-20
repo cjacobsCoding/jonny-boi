@@ -58,7 +58,9 @@ import {
   convertedManaCost,
   hasCardGrants,
   hasCastableBackFace,
+  indexReplacements,
   playableFaceOf,
+  projectDamage,
   isCreature,
   isLand,
   flashbackCostOf,
@@ -124,6 +126,14 @@ const PRIMITIVE = Object.freeze({
   drawCards: 'drawCards',
   /** Library search. Recognised so a fetchland's ability can be identified. */
   searchLibrary: 'searchLibrary',
+  /**
+   * THE FOG — "prevent all combat damage that would be dealt this turn". Missing
+   * from this list it would classify as a "generic spell", and a generic spell is
+   * cast in a main phase for a flat score, which is the one moment a fog is worth
+   * exactly nothing. It has to be recognised to be held, and held to be worth
+   * anything at all.
+   */
+  preventDamage: 'preventDamage',
 });
 
 /** What we think a spell *does*, derived from its effect primitives. */
@@ -172,6 +182,14 @@ type SpellIntent =
    * rather than a primitive id, so no rename can silently blank it.
    */
   | { readonly kind: 'modal' }
+  /**
+   * A FOG — a one-shot prevention effect (core's CR 615 layer). Its value is not
+   * a property of the card at all: it is exactly the damage it stops, which is
+   * zero in a main phase and the whole game in front of a lethal attack. So the
+   * intent carries only what the printed line RESTRICTS, and the scorer asks the
+   * board what that is worth right now.
+   */
+  | { readonly kind: 'fog'; readonly combatOnly: boolean; readonly protectsMeOnly: boolean }
   | { readonly kind: 'other' };
 
 /** Build the heuristic pilot with the given (tunable) weights. */
@@ -1060,6 +1078,20 @@ function scoreSpell(
         reason: explain ? `counter ${target.card.def.name}` : NO_REASON,
       };
     }
+    case 'fog': {
+      const score = fogValue(view, otherPlayer(opp), intent, weights, index);
+      // A fog with nothing to prevent is NOT cast — that is the whole discipline
+      // of the card, and a pilot that fires it in its own main phase has thrown
+      // it away. Returning undefined leaves it in hand for the attack.
+      if (score <= 0) return undefined;
+      return {
+        score,
+        card,
+        cost,
+        targets: [],
+        reason: explain ? `fog the attack with ${card.def.name}` : NO_REASON,
+      };
+    }
     case 'sweeper': {
       const net = sweeperValue(view, otherPlayer(opp), weights, index);
       if (net <= 0) return undefined; // our own board would pay for it — hold it
@@ -1208,6 +1240,54 @@ function counterTarget(view: PilotView, me: PlayerId) {
  * nothing to sweep — or one that costs us more than it costs them — scores zero or
  * less and is held, instead of being fired into an empty board for value nobody got.
  */
+/**
+ * WHAT A FOG IS WORTH RIGHT NOW — which is the only honest way to price one.
+ *
+ * A prevention spell has no intrinsic value: it is worth exactly the damage it
+ * stops, and that number is zero at every moment except one. So this asks the
+ * board three questions, in the order that lets the answer be "nothing" as
+ * cheaply as possible:
+ *
+ *  1. **Is there an attack to fog?** Attackers must be DECLARED. A fog cast
+ *     before blockers are declared, or on our own turn, prevents nothing —
+ *     `combat.attackersDeclared` is the engine's own answer to "has the swing
+ *     happened yet", and it is what keeps this from being cast on curve like a
+ *     three-drop.
+ *  2. **Is it aimed at us?** A prevention that only guards our own seat is worth
+ *     nothing while WE are the attacker.
+ *  3. **How much would actually land?** The incoming total is read through the
+ *     SAME replacement projection the rest of the pilot uses, so a fog held
+ *     against a Gratuitous Violence board is priced against the doubled swing —
+ *     and a swing already prevented by a Dolmen Gate prices the second fog at
+ *     nothing, correctly.
+ *
+ * Lethal is the whole game and is scored as such; anything short of it is priced
+ * per point of life saved, so a fog against a two-power poke stays in hand while
+ * a fog against a real attack gets cast.
+ */
+function fogValue(
+  view: PilotView,
+  me: PlayerId,
+  intent: Extract<SpellIntent, { kind: 'fog' }>,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): number {
+  const combat = view.combat;
+  if (!combat || !combat.attackersDeclared || combat.attackers.length === 0) return 0;
+  // The defending player is the one being attacked; a fog does nothing for the
+  // attacker, and one that guards only its own controller does nothing at all.
+  if (view.activePlayer === me) return 0;
+  if (intent.protectsMeOnly && defendingPlayer(view) !== me) return 0;
+  const incoming = totalIncomingDamage(view, combat.attackers, index);
+  if (incoming <= 0) return 0;
+  const life = view.players[me].life;
+  if (incoming >= life) return weights.lethalBurnScore;
+  // A fog is a whole card, so a poke is not worth one — unless we are already in
+  // the red, where every point is worth spending a card on.
+  if (incoming < weights.fogMinimumDamagePrevented && life > weights.desperateLifeThreshold) return 0;
+  return incoming * weights.fogValuePerDamagePrevented;
+}
+
 function sweeperValue(
   view: PilotView,
   me: PlayerId,
@@ -1740,11 +1820,17 @@ function chooseBlock(
   }
 
   // Declaring zero blocks via an empty `declareBlockers` would leave combat.blocks
-  // empty and get us re-offered the same choice forever. When we don't block, pass
-  // priority instead — that lets combat damage resolve and the step advance.
-  if (blocks.length === 0) {
-    return emit(ctx, passAction(view), 'no profitable block — taking the hit', weights.passScore);
-  }
+  // empty and get us re-offered the same choice forever, so no block declaration
+  // is made. What happens INSTEAD is a fall-through, not a pass.
+  //
+  // ⚠️ This used to `return` a pass, and that short-circuit made every
+  // instant-speed response in the declare-blockers step unreachable for a pilot
+  // that had decided not to block — a fog, a combat trick, a burn spell to
+  // finish the turn. "Nothing is worth blocking" is an answer to WHICH BLOCKS,
+  // not to what to do with priority; the priority logic below ends in the same
+  // pass when nothing is worth casting, so the loop-avoidance is unchanged and
+  // only the considered options grow.
+  if (blocks.length === 0) return undefined;
   const action: GameAction = { kind: 'declareBlockers', player: me, blocks };
   if (!ctx.trace) return emit(ctx, action, NO_REASON);
   const reason = facingLethal
@@ -1881,6 +1967,16 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
       return { kind: 'counter' };
     }
     if (ref.primitive === PRIMITIVE.destroyAll) return { kind: 'sweeper' };
+    if (ref.primitive === PRIMITIVE.preventDamage) {
+      return {
+        kind: 'fog',
+        combatOnly: ref.params?.combat === true,
+        // "…dealt to YOU this turn" (Riot Control) guards one seat; a plain fog
+        // (Fog, Darkness) stops the whole combat damage step for everybody, which
+        // on this side of the table is the same thing when we are being attacked.
+        protectsMeOnly: stringParam(ref.params, 'scope', 'any') === 'you',
+      };
+    }
     if (ref.primitive === PRIMITIVE.pumpUntilEndOfTurn) {
       const power = numberParam(ref.params, 'power', 0);
       const toughness = numberParam(ref.params, 'toughness', 0);
@@ -2020,10 +2116,27 @@ function totalIncomingDamage(
   attackerIds: readonly InstanceId[],
   index: ContinuousIndex,
 ): number {
+  // The replacement layer (CR 614/615), asked ONCE for the whole swing: a
+  // Gratuitous Violence on their side makes every attacker hit twice as hard,
+  // and a Fog already on the stack makes the whole attack worth nothing. A
+  // blocking decision made on printed power in front of either is a decision
+  // made about a different board.
+  //
+  // PROJECTED, never applied — `projectDamage` writes nothing, so a pilot
+  // weighing its options cannot spend the prevention shield it is weighing.
+  // Inert when nothing replaces anything: one `.length` read.
+  const replacements = indexReplacements(view as GameState);
+  const defender = defendingPlayer(view);
   let total = 0;
   for (const id of attackerIds) {
     const a = findInstance(view, id);
-    if (a) total += power(a, index);
+    if (!a) continue;
+    const printed = power(a, index);
+    total +=
+      replacements.length === 0
+        ? printed
+        : projectDamage(view as GameState, replacements, a, a.controller, undefined, defender, printed, true)
+            .amount;
   }
   return total;
 }

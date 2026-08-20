@@ -61,6 +61,24 @@ export interface HeuristicWeights {
   readonly burnFaceLifeReference: number;
   /** Score for burn that is *lethal* to the opponent right now — take the win. */
   readonly lethalBurnScore: number;
+  /**
+   * What one point of PREVENTED combat damage is worth when deciding whether to
+   * cast a fog. Deliberately per-damage rather than a flat score: a fog is worth
+   * exactly what it stops, so a two-power poke should leave it in hand while a
+   * real attack gets it cast. A swing that would KILL is not priced here at all
+   * — it takes {@link lethalBurnScore}, because surviving is the whole game.
+   */
+  readonly fogValuePerDamagePrevented: number;
+  /**
+   * The least damage a fog must prevent to be worth the CARD it costs. Below it
+   * the pilot holds the fog — two points of life at a healthy total is not worth
+   * a card, and a pilot that fires prevention at every poke has thrown it away
+   * before the attack that mattered. Ignored when the pilot is already at or
+   * below {@link desperateLifeThreshold}, where every point does matter, and
+   * irrelevant against a LETHAL swing, which is priced at
+   * {@link lethalBurnScore} instead.
+   */
+  readonly fogMinimumDamagePrevented: number;
 
   // --- developing the board ------------------------------------------------
   /** Base score for casting a creature to develop the board. */
@@ -343,6 +361,11 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   burnFacePerDamage: 6,
   burnFaceLifeReference: 24,
   lethalBurnScore: 1000,
+  // A fog is priced between a cheap creature and a removal spell per point it
+  // saves: six damage prevented (~48) outbids developing a two-drop (~44) and
+  // stays below killing a real threat, which is the trade a fog actually is.
+  fogValuePerDamagePrevented: 8,
+  fogMinimumDamagePrevented: 3,
 
   // develop
   castCreatureBaseScore: 40,
