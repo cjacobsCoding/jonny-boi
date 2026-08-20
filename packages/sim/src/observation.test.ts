@@ -47,7 +47,7 @@ import {
   type OpponentReveals,
   type Pilot,
 } from '@jonny-boi/ai';
-import { collectInstanceIds, leakedInstanceIds } from '@jonny-boi/protocol';
+import { collectInstanceIds } from '@jonny-boi/protocol';
 import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import {
   applyAction,
