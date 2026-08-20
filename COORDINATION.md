@@ -134,7 +134,7 @@ throughput (games/sec) from regressing.
 _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-20 worker: `test/interaction-matrix` 🚧 PUSHED — **the interactions between the
-  shipped systems is now an executable matrix, and finding three real defects took nine
+  shipped systems are now an executable matrix, and finding three real defects took nine
   pair suites.** **300 cells** — every unordered pair of **25 systems**, stated exactly
   once: **49 covered here · 9 covered by an existing suite · 1 GAP cell · 96
   not-applicable · 145 untested-and-said-so.** `packages/cards/src/interaction/interaction-matrix.test.ts`
