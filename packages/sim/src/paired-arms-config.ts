@@ -67,7 +67,22 @@ export const LIBRARY_READING_PRIMITIVES: ReadonlySet<string> = new Set([
   'mayEffects',
   // Reads the top of a library and rearranges it.
   'reorderTopOfLibrary',
-  // Reads the whole library to choose a card.
+  /*
+   * Reads the whole library to choose a card — and now also ROUTES what it
+   * finds to more than one destination (Cultivate's "one onto the battlefield
+   * and the other into your hand"). The routing rides a `route` param on the
+   * same primitive id, so this one classification still covers every printed
+   * shape of the search; there is nothing new for the decklist scan to miss.
+   *
+   * ⚠️ A MANDATORY ADDITIONAL CAST COST (`CardDefinition.additionalCost`, the
+   * "As an additional cost … sacrifice a creature" family) deliberately has NO
+   * entry here and needs none: it is COST DATA, not an effect ref, it carries no
+   * nested effects for `allEffectRefs` to walk, and the zones it reads — the
+   * battlefield and its controller's own hand — are ones the runner already
+   * tracks precisely (every card that reached either emitted a `drawCard` or a
+   * `zoneChange` naming its instance id). If a future additional cost ever reads
+   * a LIBRARY, it must withdraw the skip, and the place to do that is here.
+   */
   'searchLibrary',
   // Reads the top card and BRANCHES on what it is — the filter miss is the
   // dangerous case: it looked, learned, and moved nothing.

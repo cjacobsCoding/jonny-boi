@@ -240,6 +240,105 @@ describe('the scry / surveil keep-on-top policy', () => {
   });
 });
 
+// --- the tutor / cost policy -------------------------------------------------------------
+
+describe('the tutor policy (what a library search actually fetches)', () => {
+  /** A "search your library" question over `defs`, with A controlling `lands` lands. */
+  function tutorChoice(defs: readonly CardDefinition[], lands: number) {
+    const state = newGame().state;
+    state.players.A.hand = [];
+    if (lands > 0) putOnBattlefield(state, 'A', Array.from({ length: lands }, () => ISLAND));
+    const inDeck = giveHand(state, 'A', defs);
+    state.players.A.hand = [];
+    for (const card of inDeck) card.zone = 'library';
+    state.players.A.library = [...inDeck, ...state.players.A.library];
+    const choice = park({
+      kind: 'selectCards',
+      chooser: 'A',
+      prompt: 'Search your library for 1 card(s)',
+      candidates: inDeck.map((card) => ({ instanceId: card.instanceId, name: card.def.name })),
+      min: 0,
+      max: 1,
+      valence: 'gain',
+      fromZone: 'library',
+    });
+    return { state, choice };
+  }
+
+  function fetched(state: GameState, choice: PendingChoice): string[] {
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectCards') throw new Error('wrong shape');
+    return action.answer.instanceIds.map((id) => state.players.A.library.find((c) => c.instanceId === id)!.def.name);
+  }
+
+  it('fetches the card it can actually CAST, not the biggest bomb in the deck', () => {
+    // One land in play: the Dragon costs {6} and is dead for five turns.
+    const { state, choice } = tutorChoice([BEAR, DRAGON], 1);
+    expect(fetched(state, choice)).toEqual(['Bear']);
+  });
+
+  it('…and fetches the bomb once the mana is there — the same two cards, the opposite answer', () => {
+    const { state, choice } = tutorChoice([BEAR, DRAGON], 6);
+    expect(fetched(state, choice)).toEqual(['Dragon']);
+  });
+
+  it('reaches ONE mana past the board, because the land drop is mana it is about to have', () => {
+    const fiveDrop = creatureDef('Wurm', 5, 5, { cost: { generic: 5 } });
+    // Four lands + the turn's land drop == {5}, so the Wurm is in reach.
+    const { state, choice } = tutorChoice([BEAR, fiveDrop], 5 - WEIGHTS.tutorReachableManaLead);
+    expect(fetched(state, choice)).toEqual(['Wurm']);
+  });
+
+  it('still fetches the BEST card when nothing is in reach — an unreachable card beats no card', () => {
+    const { state, choice } = tutorChoice([DRAGON, creatureDef('Titan', 8, 8, { cost: { generic: 8 } })], 0);
+    expect(fetched(state, choice)).toEqual(['Titan']);
+  });
+
+  it('never penalises a LAND — playing one costs no mana', () => {
+    const { state, choice } = tutorChoice([ISLAND, DRAGON], 0);
+    expect(fetched(state, choice)).toEqual(['Island']);
+  });
+
+  it('the reach test applies ONLY to a library search — a hand selection is unaffected', () => {
+    const state = newGame().state;
+    state.players.A.hand = [];
+    const held = giveHand(state, 'A', [BEAR, DRAGON]);
+    const choice = park({
+      kind: 'selectCards',
+      chooser: 'A',
+      prompt: 'Choose a card in your hand',
+      candidates: held.map((card) => ({ instanceId: card.instanceId, name: card.def.name })),
+      min: 1,
+      max: 1,
+      valence: 'gain',
+      fromZone: 'hand',
+    });
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectCards') throw new Error('wrong shape');
+    // Uncastable or not, the Dragon is the better card in hand and stays the pick.
+    expect(state.players.A.hand.find((c) => c.instanceId === action.answer.instanceIds[0])?.def.name).toBe('Dragon');
+  });
+
+  it('pays a COST with the worst qualifying permanent, not the best', () => {
+    const state = newGame().state;
+    state.players.A.hand = [];
+    const board = putOnBattlefield(state, 'A', [BEAR, DRAGON]);
+    const choice = park({
+      kind: 'selectCards',
+      chooser: 'A',
+      prompt: 'Village Rites: Sacrifice creature',
+      candidates: board.map((card) => ({ instanceId: card.instanceId, name: card.def.name })),
+      min: 1,
+      max: 1,
+      valence: 'loss',
+      fromZone: 'battlefield',
+    });
+    const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'selectCards') throw new Error('wrong shape');
+    expect(state.battlefield.find((c) => c.instanceId === action.answer.instanceIds[0])?.def.name).toBe('Bear');
+  });
+});
+
 // --- answering each kind ----------------------------------------------------------------
 
 describe('the heuristic answers every choice kind sensibly', () => {

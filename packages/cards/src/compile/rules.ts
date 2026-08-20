@@ -3977,17 +3977,31 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // outcome. So this hint no longer claims the system is missing — that would
     // send the next agent to rebuild it. What still lands here is a TEMPLATE:
     // an optional clause whose BODY has no rule (a blink, a copy, a
-    // sacrifice-then-if-you-do chain), or a "choose" that is not a yes/no.
+    // sacrifice-then-if-you-do chain), a "choose" that is not a yes/no, or an
+    // ADDITIONAL COST offering a CHOICE of payments ("discard a card or pay 3
+    // life") — the mandatory single-payment forms compile (see the sacrifice
+    // hint below).
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
   {
-    // Searches to the BATTLEFIELD (basic lands, fetchland subtypes) and to HAND
-    // filtered by type, subtype, mana value, power or toughness all compile.
+    // THE TUTOR FAMILY IS CLOSED for every destination the primitive can reach.
+    // Searches to HAND, to the BATTLEFIELD (tapped or not) and to the GRAVEYARD
+    // compile, filtered by type, a type/subtype UNION ("an instant or sorcery
+    // card"), colour, mana value, power or toughness — as do the unrestricted
+    // tutor ("for a card"), a printed land-type list of any length (Farseek's
+    // four), the "basic X, Y, or Z" form, "up to N" counts, and the
+    // MULTI-DESTINATION route ("put one onto the battlefield tapped and the
+    // other into your hand").
+    //
     // What still lands here is a search whose restriction the shared
-    // `CardFilter` cannot say ("a card with the same mana value as this", "an
-    // artifact card with a mana ability"), a subtype outside the closed
-    // `SEARCHABLE_SUBTYPES` table, or a destination other than hand/battlefield.
+    // `CardFilter` cannot say ("a nonlegendary card", "an artifact card with a
+    // mana ability", "with mana value X or less" — X is a cast-time value no
+    // filter reads), a word outside the closed `SEARCHABLE_SUBTYPES` table, a
+    // union mixing a type with a subtype (the filter would AND them, so it could
+    // never find), a destination other than hand/battlefield/graveyard ("shuffle
+    // and put that card on top"), or a rider on the find ("then if you control
+    // four or more lands, untap that land").
     pattern: /\bsearch your library\b|\bsearch their library\b/,
     missingEngineSystem: 'a library-search template the compiler does not recognize yet',
   },
@@ -4045,10 +4059,19 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an aura/equipment template the compiler does not recognize yet',
   },
   {
-    // "Target player sacrifices a creature" (the edict shape) and "sacrifice ~"
-    // as an activation cost both compile now, so what lands here is some OTHER
-    // sacrifice shape: a sacrifice as an additional cast cost, "sacrifice
-    // another creature", "at the beginning of your upkeep, sacrifice ~", …
+    // Four sacrifice shapes compile now: the edict ("target player sacrifices a
+    // creature"), "Sacrifice ~" as an ACTIVATION cost, "Sacrifice a land" as a
+    // RESOLUTION effect, and the MANDATORY ADDITIONAL CAST COST ("As an
+    // additional cost to cast this spell, sacrifice a creature" — a cost that
+    // makes the cast illegal when it cannot be paid, CR 601.2h).
+    //
+    // So what lands here is some OTHER sacrifice shape: "sacrifice another
+    // creature" as a cost (nothing asks which OTHER permanent), an additional
+    // cost that is a choice between two payments ("sacrifice an artifact or
+    // discard a card") or an optional one ("you may sacrifice one or more"),
+    // "at the beginning of your upkeep, sacrifice ~", a sacrifice whose noun is
+    // outside the closed cost table, or a value derived from what was
+    // sacrificed (Fling's "damage equal to the sacrificed creature's power").
     pattern: /\bsacrifice\b/,
     missingEngineSystem: 'a sacrifice template the compiler does not recognize yet',
   },
