@@ -180,7 +180,11 @@ export type SoakMechanicId =
   | 'intervening-if'
   | 'tutor-route'
   | 'replacement-effect'
-  | 'copy-effect';
+  | 'copy-effect'
+  // "This spell can't be countered", whose whole observable behaviour is a counter
+  // effect resolving and doing NOTHING — so the prevented-counter event is the
+  // only witness there is.
+  | 'uncounterable';
 
 /**
  * How a mechanic is proved to have HAPPENED.
@@ -338,6 +342,12 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     label: 'blocking restrictions — menace / defender / can’t-block live in combat',
     witnessKind: 'state',
     printedBy: (_c, t) => /"(menace|defender|cantBlock)":\s*true|"minBlockers":\s*\d/.test(t),
+  },
+  {
+    id: 'uncounterable',
+    label: "can't be countered — a counter effect resolved and did nothing",
+    witnessKind: 'event',
+    printedBy: (_c, t) => /"cantBeCountered":\s*true|"spellsCantBeCountered":/.test(t),
   },
   { id: 'x-cost', label: '{X} costs — an X announced and paid', witnessKind: 'event', printedBy: hasKey('xCost') },
   { id: 'kicker', label: 'kicker — the optional cost offered at cast', witnessKind: 'event', printedBy: hasKey('kicker') },
@@ -635,6 +645,10 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   // proves it EXISTED, not that it ever replaced anything. An unspent fog expires
   // exactly like a spent one, so requiring this would witness the wrong thing.
   replacementExpired: null,
+  // The counter that resolved and did nothing. An EVENT witness rather than a
+  // state one for the reason the event exists at all: the rule's whole visible
+  // behaviour is a spell surviving something that should have killed it.
+  counterPrevented: 'uncounterable',
   permanentAttached: 'attachment',
   gainLife: 'lifegain',
 };

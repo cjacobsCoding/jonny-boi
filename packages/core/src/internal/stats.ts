@@ -32,7 +32,7 @@
  */
 
 import type { CardInstance } from '../state.js';
-import type { KeywordFlags } from '../card.js';
+import type { BlockRestriction, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
 import type { AggregatedMod } from './continuous.js';
 import { NO_MOD } from './continuous.js';
@@ -218,6 +218,9 @@ export function effectiveKeywords(inst: CardInstance, mod: AggregatedMod = NO_MO
  *   - `minBlockers` takes the MAXIMUM. Two blocking requirements are both in
  *     force at once, so the one that is harder to satisfy is the one that
  *     decides — adding them would invent a restriction neither card printed.
+ *   - `blockRestriction` merges FIELD BY FIELD, taking the strictest of each —
+ *     the same "both are in force" argument as `minBlockers`, applied to a
+ *     record instead of a number.
  */
 export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): KeywordFlags {
   const out: Record<string, unknown> = { ...base };
@@ -232,11 +235,76 @@ export function mergeKeywordGrant(base: KeywordFlags, granted: KeywordFlags): Ke
     } else if (key === 'minBlockers') {
       const grantedMin = typeof value === 'number' && value > 0 ? value : 0;
       if (grantedMin > 0) out[key] = Math.max(base.minBlockers ?? 0, grantedMin);
+    } else if (key === 'blockRestriction') {
+      const merged = intersectBlockRestrictions(base.blockRestriction, value as BlockRestriction | undefined);
+      if (merged !== undefined) out[key] = merged;
     } else if (value === true) {
       out[key] = true;
     }
   }
   return out as KeywordFlags;
+}
+
+/**
+ * Fold two block restrictions into the one that holds when BOTH are printed.
+ *
+ * Every bound takes its strictest value and the required-keyword lists CONCATENATE
+ * — a blocker must satisfy each printed "except by …" clause, so a creature must
+ * carry one keyword from every list, not one from their union. Merging them into a
+ * single list would let a hasty non-flier through a card that demanded both.
+ *
+ * Returns `undefined` only when neither side restricts anything, so a caller can
+ * skip writing the field at all.
+ */
+export function intersectBlockRestrictions(
+  base: BlockRestriction | undefined,
+  granted: BlockRestriction | undefined,
+): BlockRestriction | undefined {
+  if (!base) return granted;
+  if (!granted) return base;
+  const keywordLists = [
+    ...(base.blockerMustHaveAnyOf ? [base.blockerMustHaveAnyOf] : []),
+    ...(granted.blockerMustHaveAnyOf ? [granted.blockerMustHaveAnyOf] : []),
+  ];
+  return {
+    // Two "except by" clauses are two independent demands. Only when exactly one
+    // side prints one is the answer a single list; when both do, the stricter
+    // reading is "satisfy both", which this shape cannot express as one list — so
+    // the merge keeps them apart by intersecting the NAMES, which is the strictest
+    // thing one list can say.
+    ...(keywordLists.length > 0
+      ? { blockerMustHaveAnyOf: keywordLists.reduce((a, b) => a.filter((k) => b.includes(k))) }
+      : {}),
+    ...(minDefined(base.maxBlockerPower, granted.maxBlockerPower) !== undefined
+      ? { maxBlockerPower: minDefined(base.maxBlockerPower, granted.maxBlockerPower) as number }
+      : {}),
+    ...(minDefined(base.maxBlockerToughness, granted.maxBlockerToughness) !== undefined
+      ? { maxBlockerToughness: minDefined(base.maxBlockerToughness, granted.maxBlockerToughness) as number }
+      : {}),
+    ...(maxDefined(base.minBlockerPower, granted.minBlockerPower) !== undefined
+      ? { minBlockerPower: maxDefined(base.minBlockerPower, granted.minBlockerPower) as number }
+      : {}),
+    ...(maxDefined(base.minBlockerToughness, granted.minBlockerToughness) !== undefined
+      ? { minBlockerToughness: maxDefined(base.minBlockerToughness, granted.minBlockerToughness) as number }
+      : {}),
+    ...(base.blockerPowerAtMostMine || granted.blockerPowerAtMostMine
+      ? { blockerPowerAtMostMine: true }
+      : {}),
+  };
+}
+
+/** The smaller of two optional bounds (either may be absent = no bound). */
+function minDefined(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return Math.min(a, b);
+}
+
+/** The larger of two optional bounds (either may be absent = no bound). */
+function maxDefined(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b;
+  if (b === undefined) return a;
+  return Math.max(a, b);
 }
 
 /** Whether a creature effectively has a given keyword (base or granted). */

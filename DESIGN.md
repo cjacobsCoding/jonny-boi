@@ -2753,6 +2753,174 @@ must not run in a gate. Skullclamp is already in `expansion-candidates.json` and
 next `--fetch` picks it up for free. Until then the family is reachable by deck import only, and
 `equipped-triggers.test.ts` plays it end to end from real printed Oracle text.
 
+### 3.25 Block requirements + four rules statics — ✅ done
+The half of declare-blockers §3.17 deliberately left, and the four standalone rules statics the
+coverage audit listed as separate template buckets. One lesson runs through both: **a rule that only
+sometimes fires is worse than a rule that reports itself missing**, because the first one lies in a
+statistic and the second one shows up in a backlog.
+
+**CR 509.1c/d is a SOLVER, and the previous branch was right to say so.** A block RESTRICTION says
+what the defender may not do, and two creatures are all it needs to look at. A block REQUIREMENT says
+what they MUST do, and the rule is "satisfy the **maximum possible number** of requirements without
+violating any restriction" — a statement about *every legal declaration*, not about this one. So
+`internal/block-solver.ts` compares the declaration in hand against the best one available:
+
+- **It is inert when nothing requires anything.** One pass over the attackers reading a keyword, no
+  allocation, no board walk, no map — the same empty-check discipline `isLegalTarget` and
+  `manaExtrasOf` use. Every ordinary combat in a sim pays exactly that and nothing more.
+- **The search is small by construction.** Only the defender's creatures that could block a
+  requirement-carrying attacker are enumerated; everything else contributes nothing to any
+  requirement and is never considered. The state is the vector of "creatures committed to attacker A
+  so far, **capped at the minimum A needs**" — 1 for almost every creature, at most a small printed
+  count (menace is 2, Pathrazer of Ulamog 3). A rolling DP over the involved creatures gets the exact
+  maximum.
+- **The scoring trick that keeps the state that small:** a creature assigned to an attacker that has
+  not yet met its minimum scores nothing *yet*, and the whole group scores together the moment the
+  minimum is reached. That is precisely what "able to block" means once restrictions are accounted
+  for, and it means the state never has to remember counts beyond the minimum.
+- **The one bound is written down.** The state space is `2^n` for `n` attackers that each simply
+  require a blocker, capped at `1 << 20`; past the cap the solver maximises over the attackers that
+  fit and the rest require nothing. Reaching it takes twenty simultaneous requirement-carrying
+  attackers, which no card in this pool can print — nothing grants a requirement to a group, and the
+  compiler is the gate on what may print one. A limit nobody wrote down is a limit nobody can check.
+
+**"If able" is real, and it is where the two halves meet.** An attacker nobody can legally block
+generates no requirement at all; a **menacing lure facing one untapped creature** requires nothing,
+because that creature could not legally block it in any declaration. An implementation that checked
+the requirement without the restriction would demand an illegal declaration and wedge the combat —
+which is why requirements are resolved AFTER restrictions, in the same function, and why that exact
+case has its own test.
+
+**Comparing restrictions are a payload, not a flag.** `KeywordFlags.blockRestriction` carries
+"except by creatures with haste" (Gingerbrute), a power or toughness bound, and skulk's comparison
+against the attacker's OWN power. It is the fourth payload keyword and merges like the other three —
+field by field to the strictest of each, because two printed restrictions are both in force. Every
+bound reads EFFECTIVE stats through the index `canBlock` already threads: a 1/1 pumped by an anthem
+really has stopped being a legal blocker for "power 2 or less", and a skulking creature pumped this
+turn really is harder to block.
+
+**The AI blocks through core's own solver.** `forcedBlockAssignment` returns the creatures whose
+block was not a free choice, and the pilot assigns the rest as it likes — so the pilot and the engine
+cannot disagree about what the rule demands. It matters more here than anywhere else in combat: a
+declaration that satisfies fewer requirements than it could is rejected **wholesale**, so a pilot
+that picked its favourites first and noticed the lure second would lose every block in the action and
+be re-offered the same decision. And **a lure is a threat, not a gift** — `blockRequirementThreatValue`
+adds to a creature's effective power when the pilot ranks removal targets, so it kills the 1/1 lure
+over the 4/4 bear (and still prefers a 9/9, pinned so a later tuning pass has to decide that
+deliberately).
+
+**Four rules statics, each proven twice — once that it compiles, once that the game plays differently.**
+That second test is the whole point: a rules static is exactly the shape of feature that can compile
+`'complete'` and then do nothing.
+
+- **Changeling** is a definition flag, not a keyword flag, because it is a characteristic-defining
+  ability that applies in EVERY zone — a Changeling Outcast in a graveyard is a Zombie there. It is
+  answered inside `hasSubtype`, the one funnel every subtype question already goes through, so lords,
+  typal searches, the checkland condition and "non-Goblin" exclusions all see it without knowing the
+  keyword exists. The non-creature subtype vocabulary is an EXCLUSION list, because that is the half
+  that is closed: every set prints new creature types, and an inclusion list would silently stop a
+  changeling being a Cephalid the day Cephalids mattered.
+- **"This spell can't be countered"** is enforced where a spell actually leaves the stack, never as a
+  targeting restriction. The classic wrong implementation makes the spell an illegal target, which
+  hands the caster their counterspell back; the printed rule lets Counterspell target Supreme
+  Verdict, resolve, and do nothing. One enforcement point means the plain counterspell, "unless its
+  controller pays", every modal counter mode and the ward trigger all inherit it. The permanent-side
+  printing ("creature spells you control can't be countered") lives in `countering.ts` beside it,
+  with its lifetime derived from the board, so destroying the source in response really does work.
+- **"You have no maximum hand size"** could not ship as a flag, because ⚠️ **the engine had no maximum
+  hand size to lift** — CR 514.1 did not exist. It does now: the cleanup step discards down to
+  `RulesConfig.maximumHandSize`, and **the active player chooses which cards to keep**, through the
+  same `selectCards` machinery every other "choose N cards" uses (so the pilots, hotseat and online
+  already know how to answer it). The turn waits on that answer — accepting it is what calls
+  `passTurn` — so nothing ever observes a hand over the limit.
+- **"You may play lands from your graveyard"** is `CardDefinition.playLandsFrom`, a list of zones
+  rather than a boolean, so Courser of Kruphix's "from the top of your library" is the same field with
+  a different value. Playing a land from anywhere is still a LAND PLAY: it costs the turn's land drop,
+  needs an empty stack and a main phase, which is why it is a field on the existing action rather than
+  a second action kind. The permission is re-derived from the board at play time and never trusted
+  from the action, so a hostile client cannot ask its way into its own graveyard.
+- Plus the **general enters-tapped condition**: `controlsMatching` over the shared `CardFilter`
+  subsumes "unless you control a legendary creature" (the LOTR lands), "a basic land" and "three or
+  more other Swamps" in one entry. `CardFilter` grew `legendary` and `basic` — printed SUPERTYPES,
+  layer-safe, and reusable by every other filter consumer.
+
+⚠️ **THREE THINGS FOR WHOEVER TOUCHES THIS NEXT.**
+1. **The maximum-hand-size rule MOVES EVERY RECORDED BASELINE.** Decks that hoarded cards now discard,
+   so the self-play behaviour lock is re-pinned (`packages/core/bench/selfplay-digests.ts`) and any
+   gauntlet number measured before this is not comparable. It is a fidelity fix, not a tuning choice,
+   but it is not free and it is not silent.
+2. **A test helper that only ever passes priority now wedges.** Eleven of them did. A parked question
+   outranks priority, so a loop that walks turns has to ANSWER — `defaultAnswerFor(state.pendingChoice)`
+   — not only pass. Every helper in the suite does now, which also makes them robust against the legend
+   rule and shocklands, both of which could already have hit them.
+3. **`cloneState` now always writes `pendingChoice`/`resolution`, even as `null`.** `applyAction` is
+   `applyActionInPlace` over a clone, and `selfplay-lock.test.ts` compares the two as SERIALIZED TEXT,
+   so the paths must agree on key ORDER. A conditional key diverges the moment a choice survives an
+   action boundary — the pure path re-inserts it mid-object while the in-place path appends it — and
+   the two states stringify differently while being identical. `createGame` carries the same fields in
+   the same place for the same reason. It costs no allocation, and it closed a trap that had been
+   waiting for the first rule to park a question during self-play.
+
+⛔ **Deliberately NOT built, each with its blocker named.** The compiler reports them, and the
+unsupported hint now names the SHAPE that is missing rather than claiming the whole system is:
+- **Tetsuko Umezawa** and **Delney, Streetwise Lookout** — a static whose filter would have to read
+  EFFECTIVE power or toughness. `statics.ts` matches PRINTED characteristics by design; that is what
+  keeps the continuous pass single-pass with no CR 613.8 layer loop, and an effective-P/T filter needs
+  a fixpoint.
+- **Champion of Lambholt** — a restriction whose threshold is ANOTHER permanent's power, recomputed
+  from its source at declare-blockers time.
+- **Fighter Class** ("up to one target creature blocks it this combat if able") — a per-combat
+  TARGETED requirement, which is combat state rather than a characteristic.
+- **Archangel of Tithes** — a COST to block, which neither a restriction nor a requirement can express.
+- **Void Winnower** ("your opponents can't block with creatures with even mana values") and **Odric**.
+- **Access Tunnel / Secret Tunnel** — a filtered or two-target aim core's `TargetRestriction` cannot
+  express (still §3.17's blocker, unchanged).
+- **Typal anthem nouns** — "Other Squirrels you control have menace" needs the anthem rule's noun to
+  accept a creature SUBTYPE, and the compiler's subtype tables are closed on purpose (an unrecognised
+  word compiled as a subtype is a lord that buffs nothing, silently). It is the natural next step for
+  making changeling visible in play, and it is a rule-table edit rather than engine work.
+- **"Spells you control can't be countered THIS TURN"** (Veil of Summer) — a duration on a static.
+- **"Each opponent's maximum hand size is reduced by seven"** (Jin-Gitaxias) — the mirror of the flag
+  this section added, and a different field: it lowers a limit rather than removing one.
+
+**Measured yield:** **+9 playable cards** on the cached 2100-card corpus, measured PAIRED against a
+same-box `origin/main` worktree — and the SAME +9 against FOUR successive main baselines as this
+branch merged forward: **408 → 417**, **485 → 494**, **510 → 519**, **524 → 533 / 2100**. Four
+sibling branches landed in between and each moved the baseline; the delta did not, which is what a
+paired measurement is for. **Zero regressions:** the two playable sets were dumped and diffed, not counted.
+The nine are Supreme Verdict, Reliquary Tower, Spellbook, Crucible of Worlds, Ramunap Excavator,
+Universal Automaton, Changeling Outcast, Gingerbrute and Abandoned Air Temple. It comes from the
+solver plus ten rule-table entries — and the +9 UNDERSTATES what closed, which is worth reading before
+anyone judges the work by it. Five whole template buckets are now empty (`This spell can't be
+countered` 14, `Changeling` 9, `You may play lands from …` 12, `~ enters tapped unless you control …`
+9, `You have no maximum hand size` 8 — 52 card-blocks), but most of those cards carry a SECOND gap:
+Dovin's Veto still needs "counter target noncreature spell", Abrupt Decay still needs "destroy target
+nonland permanent with mana value 3 or less", Minas Tirith still needs an "activate only if you
+attacked with two or more creatures" condition. A blocked card is only playable when its LAST gap
+closes, so a branch that clears a bucket cleanly can still move the headline by single digits — and
+the next branch to close filtered targeting will collect the rest of this one's yield.
+
+**Throughput (rule 7), measured with `process.cpuUsage` and paired against the same `origin/main`
+worktree — wall clock on this box is worthless and was not used.** The solver is the one thing here
+that could have cost anything, so it was measured directly
+(`packages/core/bench/block-requirement-cost.ts`, five interleaved rounds, best-of):
+
+| `illegalBlockDeclaration`, 4 attackers / 5 blockers | cost per call |
+| --- | --- |
+| `origin/main` — no requirement half at all | 70 ns |
+| this branch — ordinary board, nothing requires a block | **133 ns** |
+| this branch — one "must be blocked" on the board | 4.9 µs |
+
+The inert path costs **+63 ns per call**, about 16 ns per attacker for two boolean reads, and the
+call happens ONCE per declare-blockers action — roughly **+2 µs per game**. It is that cheap because
+the empty check rides the keyword read the RESTRICTION check already had to make: one
+`effectiveKeywords` per attacker answers both halves of CR 509.1, which is what the fused loop in
+`illegalBlockDeclaration` buys. Allocation is at parity too — **582 scavenges over 30,600 actions vs
+562 over 29,899** on `origin/main` (0.0190 vs 0.0188 per action). The action counts differ because
+the games genuinely differ now: the maximum-hand-size rule adds a discard answer per over-full
+cleanup, which is also why a byte-identical gauntlet is not available as evidence for this branch and
+the self-play lock was re-pinned instead.
+
 ## 4. Ways this project is distinctive (keep extending)
 - **Iterative, statistically-grounded deck tuning** — not just "play vs humans," but a controlled A/B
   lab: swap one card, run the gauntlet, get a significance-tested verdict.

@@ -24,7 +24,19 @@ export interface PassPriorityAction {
  */
 export type CastFace = 'front' | 'back';
 
-/** Play a land from hand (sorcery-speed, one per turn, empty stack). */
+/**
+ * Where a land play may come from.
+ *
+ * It is {@link CastZone} plus exactly one value, and that is deliberate: a
+ * consumer that already knows where a SPELL may be cast from learns nothing new
+ * for `'hand'`, `'graveyard'` and `'exile'`. The extra value is `'libraryTop'`,
+ * which has no cast equivalent because nothing is cast off the top of a library —
+ * Courser of Kruphix plays the TOP CARD specifically rather than any card in the
+ * library, and that one-card permission is a different thing from a zone.
+ */
+export type LandPlayZone = CastZone | 'libraryTop';
+
+/** Play a land (sorcery-speed, one per turn, empty stack). */
 export interface PlayLandAction {
   readonly kind: 'playLand';
   readonly player: PlayerId;
@@ -36,14 +48,28 @@ export interface PlayLandAction {
    */
   readonly face?: CastFace;
   /**
-   * The zone the land is played FROM. Omitted means `'hand'`, which is every
-   * land play in the game bar one: an ADVENTURER card whose primary half is a
-   * land ("Then exile this card. You may play the land later from exile.") is
-   * played out of exile, under the same permission that lets a Bonecrusher
-   * Giant be CAST from there. Named with the same field and the same values as
-   * {@link CastSpellAction.fromZone} so a consumer learns one vocabulary.
+   * Where the land is being played from. Omitted (the overwhelming default) means
+   * the HAND, which is every land play in the game bar three:
+   *   - `'exile'` — an ADVENTURER card whose primary half is a land ("Then exile
+   *     this card. You may play the land later from exile"), validated by the same
+   *     accessor the cast path uses so neither can be tricked into playing a card
+   *     that was merely exiled;
+   *   - `'graveyard'` — Crucible of Worlds / Ramunap Excavator;
+   *   - `'libraryTop'` — Courser of Kruphix / Oracle of Mul Daya, which play the
+   *     TOP CARD specifically rather than any card in the library.
+   *
+   * The last two must be unlocked by a permanent its controller controls declaring
+   * `CardDefinition.playLandsFrom`, and the engine RE-DERIVES that permission from
+   * the board at play time rather than trusting the action — so a hostile client
+   * naming a zone nothing grants is rejected.
+   *
+   * Playing a land from anywhere is still a LAND PLAY (CR 305.1): it costs the
+   * turn's land drop, needs an empty stack and a main phase, and is not a spell.
+   * That is why this is a field on the land action rather than a second action kind
+   * — every one of those rules would otherwise have a second implementation to keep
+   * in step.
    */
-  readonly fromZone?: CastZone;
+  readonly fromZone?: LandPlayZone;
 }
 
 /** Tap a mana source for mana (adds to the controller's pool). */

@@ -74,6 +74,8 @@ export type {
   CastTiming,
   EffectRef,
   KeywordFlags,
+  BooleanKeywordName,
+  BlockRestriction,
   ManaAbility,
   ManaAbilityCost,
   ManaAbilityRider,
@@ -154,6 +156,26 @@ export {
   staticIsInert,
   modificationIsInert,
 } from './statics.js';
+
+/**
+ * PLAYER-facing statics — continuous abilities whose subject is a player or a
+ * spell rather than a permanent, so the anthem machinery cannot carry them:
+ * "You have no maximum hand size", "You may play lands from your graveyard",
+ * "Spells you control can't be countered". Each derives its answer from the board
+ * on every read, so its lifetime ends with its source and nothing has to expire.
+ */
+export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+
+/**
+ * BLOCK REQUIREMENTS (CR 509.1c/d). `forcedBlockAssignment` is the seam an AI uses
+ * so it never proposes a declaration the engine would refuse: it returns the
+ * creatures whose block was not a free choice (or `undefined` when nothing on the
+ * board requires anything), and the pilot assigns the rest as it likes.
+ */
+export type { BlockAssignment } from './internal/block-solver.js';
+export { forcedBlockAssignment } from './internal/block-solver.js';
+export type { UncounterableSpellsAbility } from './countering.js';
+export { spellCanBeCountered } from './countering.js';
 
 /**
  * Attachment seam: one permanent attached to another. Auras and Equipment are the
@@ -416,6 +438,7 @@ export type {
   ActivateAbilityAction,
   CastSpellAction,
   CastZone,
+  LandPlayZone,
   CycleCardAction,
   DeclareAttackersAction,
   DeclareBlockersAction,

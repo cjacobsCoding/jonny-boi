@@ -56,6 +56,7 @@ import {
   castPermissionFor,
   castTiming,
   convertedManaCost,
+  forcedBlockAssignment,
   hasCardGrants,
   hasCastableBackFace,
   indexReplacements,
@@ -866,7 +867,7 @@ function scoredSpellGoals(
       // understands, so a restricted card the scorer classifies as 'other' (and
       // would therefore cast with no target at all) still gets a legal target
       // instead of being rejected by the engine and retried forever.
-      const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
+      const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
       if (legal) scored.push(half.face === undefined ? legal : { ...legal, face: half.face });
       }
   }
@@ -891,7 +892,7 @@ function scoredSpellGoals(
       ) {
         oppCreatures ??= creaturesControlledBy(view, opp);
         const goal = scoreSpell(view, opp, oppCreatures, half, classifySpell(half.def), weights, explain, index);
-        const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
+        const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
         if (legal) {
           scored.push({
             ...legal,
@@ -934,7 +935,7 @@ function scoredSpellGoals(
     const intent = classifySpell(def);
     oppCreatures ??= creaturesControlledBy(view, opp);
     const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
-    const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
+    const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
     if (legal) {
       scored.push({
         ...legal,
@@ -963,7 +964,7 @@ function scoredSpellGoals(
       const half = castDef === card.def ? card : { ...card, def: castDef };
       oppCreatures ??= creaturesControlledBy(view, opp);
       const goal = scoreSpell(view, opp, oppCreatures, half, classifySpell(castDef), weights, explain, index);
-      const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
+      const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
       if (legal) {
         scored.push({
           ...legal,
@@ -1021,6 +1022,7 @@ function withLegalTargets(
   opp: PlayerId,
   goal: SpellGoal,
   index: ContinuousIndex,
+  weights: HeuristicWeights,
 ): SpellGoal | undefined {
   // A MODAL spell is aimed per mode at cast time, never as a whole card, and
   // the engine rejects a modal cast that carries a target — so the goal keeps
@@ -1036,7 +1038,7 @@ function withLegalTargets(
     if (!isLegalTarget(state, restriction, target, goal.card.controller, goal.card.def)) continue;
     return goal.targets.length === 1 ? goal : { ...goal, targets: [target] };
   }
-  const fallback = defaultLegalTarget(view, opp, restriction, index, goal.card.def);
+  const fallback = defaultLegalTarget(view, opp, restriction, index, weights, goal.card.def);
   return fallback === undefined ? undefined : { ...goal, targets: [fallback] };
 }
 
@@ -1051,6 +1053,7 @@ function defaultLegalTarget(
   opp: PlayerId,
   restriction: TargetRestriction,
   index: ContinuousIndex,
+  weights: HeuristicWeights,
   source?: CardDefinition,
 ): InstanceId | PlayerId | undefined {
   if (restriction === 'player' || restriction === 'playerOrPlaneswalker') return opp;
@@ -1065,7 +1068,7 @@ function defaultLegalTarget(
   const legal = creaturesControlledBy(view, opp).filter((creature) =>
     isLegalTarget(state, probe, creature.instanceId, undefined, source),
   );
-  const biggest = biggestThreat(legal, index);
+  const biggest = biggestThreat(legal, index, weights);
   if (biggest) return biggest.instanceId;
   if (restriction === 'creatureOrPlaneswalker') {
     return walkersControlledBy(view, opp)[0]?.instanceId;
@@ -1110,7 +1113,7 @@ function scoreSpell(
       // (Scanned in place: the old `filter(...)` built a throwaway array per
       // candidate spell, and `biggestThreat` only ever wanted the maximum.)
       const target = intent.canTargetCreature
-        ? biggestThreatWithin(oppCreatures, intent.amount, index)
+        ? biggestThreatWithin(oppCreatures, intent.amount, index, weights)
         : undefined;
       const killScore = target
         ? weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index)
@@ -1164,7 +1167,7 @@ function scoreSpell(
       const reachable = intent.exiles
         ? oppCreatures
         : oppCreatures.filter((c) => !isIndestructible(c, index));
-      const target = biggestThreat(reachable, index);
+      const target = biggestThreat(reachable, index, weights);
       if (!target) return undefined; // no target → don't waste removal
       return {
         score: weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index),
@@ -1179,7 +1182,7 @@ function scoreSpell(
     case 'shrink': {
       // Shrink-removal kills exactly what its toughness reduction can finish off,
       // so it is scored and targeted like burn: the biggest thing it can kill.
-      const target = biggestThreatWithin(oppCreatures, intent.toughness, index);
+      const target = biggestThreatWithin(oppCreatures, intent.toughness, index, weights);
       if (!target) return undefined; // it would shrink something that survives — hold it
       return {
         score: weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index),
@@ -1246,7 +1249,7 @@ function scoreSpell(
       // enter attached to nothing and (for an Aura) die on the spot.
       const me = otherPlayer(opp);
       const hosts = intent.helpful ? creaturesControlledBy(view, me) : oppCreatures;
-      const host = biggestThreat(hosts, index);
+      const host = biggestThreat(hosts, index, weights);
       if (!host) return undefined;
       return {
         score: attachmentScore(intent, weights),
@@ -2011,6 +2014,21 @@ function chooseBlock(
     .filter((c): c is CardInstance => c !== undefined)
     .sort((a, b) => power(b, index) - power(a, index));
 
+  // BLOCK REQUIREMENTS FIRST (CR 509.1c/d). These are not a preference — a
+  // declaration that satisfies fewer requirements than it could is REJECTED
+  // WHOLESALE, so a pilot that picked its favourite blocks first and then noticed
+  // the lure would lose every one of them. Core's own solver answers it, so the
+  // pilot and the engine cannot disagree about what the rule demands; it returns
+  // `undefined` after one keyword pass when nothing on the board requires
+  // anything, which is every ordinary combat.
+  const forced = forcedBlockAssignment(attackers, availableBlockers, index);
+  if (forced) {
+    for (const assignment of forced) {
+      blocks.push(assignment);
+      used.add(assignment.blocker);
+    }
+  }
+
   for (const attacker of attackers) {
     const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights, index);
     if (blocker) {
@@ -2033,8 +2051,9 @@ function chooseBlock(
   if (blocks.length === 0) return undefined;
   const action: GameAction = { kind: 'declareBlockers', player: me, blocks };
   if (!ctx.trace) return emit(ctx, action, NO_REASON);
-  const reason = facingLethal
-    ? `block to avoid lethal (${incomingDamage} incoming vs ${myLife} life)`
+  const reason =
+    facingLethal ? `block to avoid lethal (${incomingDamage} incoming vs ${myLife} life)`
+    : forced ? `block ${blocks.length} attacker(s) — ${forced.length} forced by a block requirement`
     : `block ${blocks.length} attacker(s) for value`;
   return emit(ctx, action, reason);
 }
@@ -2277,6 +2296,7 @@ function biggestThreatWithin(
   creatures: readonly CardInstance[],
   amount: number,
   index: ContinuousIndex,
+  weights: HeuristicWeights,
 ): CardInstance | undefined {
   let best: CardInstance | undefined;
   for (const c of creatures) {
@@ -2285,17 +2305,40 @@ function biggestThreatWithin(
       best = c;
       continue;
     }
-    const cp = power(c, index);
-    const bp = power(best, index);
+    const cp = threatRank(c, index, weights);
+    const bp = threatRank(best, index, weights);
     if (cp > bp || (cp === bp && toughness(c, index) > toughness(best, index))) best = c;
   }
   return best;
 }
 
-/** The biggest threat among creatures: highest power, then toughness. */
+/**
+ * How threatening a creature is, in POWER UNITS — its effective power plus what a
+ * printed block requirement is worth.
+ *
+ * A LURE IS A THREAT, NOT A GIFT. "Must be blocked if able" does not make the
+ * creature easier to deal with; it takes the defender's blockers away from every
+ * other attacker, so a 1/1 carrying one can be the card that decides the combat.
+ * A pilot ranking removal targets by body size alone points its removal at the
+ * biggest body and then loses to the attack the lure enabled.
+ *
+ * Adding to POWER rather than replacing the comparison keeps the existing
+ * power-then-toughness ordering byte-for-byte unchanged on every board where
+ * nothing requires a block — which is every board this pool could build before
+ * requirements existed.
+ */
+function threatRank(creature: CardInstance, index: ContinuousIndex, weights: HeuristicWeights): number {
+  return (
+    power(creature, index) +
+    (hasBlockRequirement(creature, index) ? weights.blockRequirementThreatValue : 0)
+  );
+}
+
+/** The biggest threat among creatures: highest threat rank, then toughness. */
 function biggestThreat(
   creatures: readonly CardInstance[],
   index: ContinuousIndex,
+  weights: HeuristicWeights,
 ): CardInstance | undefined {
   let best: CardInstance | undefined;
   for (const c of creatures) {
@@ -2303,8 +2346,8 @@ function biggestThreat(
       best = c;
       continue;
     }
-    const cp = power(c, index);
-    const bp = power(best, index);
+    const cp = threatRank(c, index, weights);
+    const bp = threatRank(best, index, weights);
     if (cp > bp || (cp === bp && toughness(c, index) > toughness(best, index))) best = c;
   }
   return best;
@@ -2395,7 +2438,46 @@ function canBlockByEvasion(
    * cannot block Black Knight".
    */
   if (ak.protectionFrom !== undefined && protectionBlocksSource(ak.protectionFrom, blocker.def)) return false;
+  // A COMPARING restriction — "except by creatures with haste", a power or
+  // toughness bound, skulk. Mirrored here for the same reason the evasion tests
+  // are: a pilot that proposed one of these blocks would have its WHOLE
+  // declaration rejected, losing every other block in the same action.
+  const restriction = ak.blockRestriction;
+  if (restriction !== undefined) {
+    const required = restriction.blockerMustHaveAnyOf;
+    if (required !== undefined && !required.some((keyword) => bk[keyword] === true)) return false;
+    const blockerPower = power(blocker, index);
+    if (restriction.maxBlockerPower !== undefined && blockerPower > restriction.maxBlockerPower) return false;
+    if (restriction.minBlockerPower !== undefined && blockerPower < restriction.minBlockerPower) return false;
+    if (restriction.blockerPowerAtMostMine === true && blockerPower > power(attacker, index)) return false;
+    const blockerToughness = toughness(blocker, index);
+    if (
+      restriction.maxBlockerToughness !== undefined &&
+      blockerToughness > restriction.maxBlockerToughness
+    ) {
+      return false;
+    }
+    if (
+      restriction.minBlockerToughness !== undefined &&
+      blockerToughness < restriction.minBlockerToughness
+    ) {
+      return false;
+    }
+  }
   return true;
+}
+
+/**
+ * Whether this creature carries a block REQUIREMENT — "must be blocked if able" /
+ * "all creatures able to block it do so".
+ *
+ * Read EFFECTIVE, because both are grantable (Irresistible Prey hands one out for
+ * a turn) and a pilot reading the printed box would miss exactly the case the
+ * card was played for.
+ */
+function hasBlockRequirement(creature: CardInstance, index: ContinuousIndex): boolean {
+  const keywords = keywordsOf(creature, index);
+  return keywords.mustBeBlocked === true || keywords.blockedByAllAble === true;
 }
 
 /**

@@ -196,6 +196,22 @@ export type GameEvent =
     }
   | {
       /**
+       * A counter effect resolved against a spell that **can't be countered**
+       * (CR 701.5a), so nothing happened to it. The exact argument
+       * `damagePrevented` makes: a Counterspell that visibly does nothing has to be
+       * distinguishable from a bug in a replay, and silence here is what would make
+       * a real defect look like the rule working.
+       *
+       * Fully public — a spell on the stack, its name and its controller are what
+       * the whole table is already looking at.
+       */
+      readonly type: 'counterPrevented';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly controller: PlayerId;
+    }
+  | {
+      /**
        * A REPLACEMENT effect changed an event before it happened (CR 614) — a
        * damage doubler, a counter multiplier, a prevention shield eating part of
        * a hit. Its own event for exactly the reason `damagePrevented` has one: a

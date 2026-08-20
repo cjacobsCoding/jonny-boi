@@ -25,6 +25,7 @@ import {
   manaModesOf,
   poolTotal,
   type CardDefinition,
+  defaultAnswerFor,
   type GameAction,
   type GameState,
   type InstanceId,
@@ -90,7 +91,22 @@ function rejectionOf(state: GameState, action: GameAction, reg: EffectRegistry):
   return rejected ? (rejected as { reason: string }).reason : undefined;
 }
 
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState, reg: EffectRegistry): GameState {
+  const question = state.pendingChoice;
+  if (question) {
+    return act(state, {
+      kind: 'answerChoice',
+      player: question.chooser,
+      choiceId: question.id,
+      answer: defaultAnswerFor(question),
+    }, reg);
+  }
   return act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
 }
 
