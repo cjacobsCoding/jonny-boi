@@ -131,9 +131,110 @@ throughput (games/sec) from regressing.
 
 | feat/combat-damage-and-equipment | worker | packages/core (triggers.ts `TriggerWatches`/`watches`/`TriggerSource.permanent`, internal/triggers-runtime.ts, index.ts +2 exports, NEW equipped-triggers.test.ts), packages/cards (compile/rules.ts 6 new TRIGGER_RULES + 3 new EFFECT_RULES + `optionalTriggerFrom`/`hostWatch`/payload-keyword parsing + 2 hint rewords, compile/compile.ts host-watch assembly guard, compile/attachments.test.ts 1 obsoleted case, NEW equipped-triggers.test.ts), packages/ai (heuristic.ts equip search + attack value + walker diversion, weights.ts +2 knobs, NEW equipment-pilot.test.ts), apps/web/src/lib/about/mechanics.ts (+2 witnesses, 1 reworded), DESIGN §3.22, COORDINATION. **No new effect primitive, no new GameEvent, no pool change.** | 🚧 PUSHED, not merged |
 | feat/block-requirements-and-statics | worker | packages/core (NEW block-solver.ts + countering.ts + player-statics.ts + block-requirements.test.ts + bench/block-requirement-cost.ts; card/actions/choices/config/engine/events/index, internal combat+continuous+stats+clone, conformance/rules-manifest, selfplay-lock re-pinned, 6 test helpers), packages/cards (compile rules/compile/types + effect-helpers + NEW block-and-statics.test.ts + 3 reworded tests), packages/ai (heuristic/weights + NEW block-requirements-pilot.test.ts), packages/sim (soak-config +3 classifications, observation +1), apps/web (about/mechanics +6 witnesses, play-format +1), DESIGN §3.25 | 🚧 PUSHED, not merged — **contains the fix for main's currently RED build** (soak-config) |
+| feat/pool-expansion-2 | worker | packages/cards (data/expansion-candidates.json + GENERATED data/expanded-pool.ts + data/expansion-report.json; scripts/build-expansion.ts front-face lookup; src/pool-mechanics.test.ts REWRITTEN inventory + 12 new play tests, src/pool.test.ts counts, src/expanded-pool.test.ts mana cap, src/attachment-cards-in-pool.test.ts +4 PRINTED rows), packages/data-tools (src/normalize.ts + types.ts per-face defense/loyalty + adventurer cost, src/verify.ts + index.ts `frontFaceName`, src/normalize.test.ts +5, GENERATED data/card-index.json + data/starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/core (engine.ts `unpayableAdditionalCostReason` EXPORTED + index.ts +1 export — no behaviour change), packages/ai (heuristic.ts: additional-cost goal filter + `equipIsAnUpgrade`; equipment-pilot.test.ts +3; NEW additional-cost-pilot.test.ts), packages/sim/src/soak-config.ts (ONE predicate), DESIGN §3.20, COORDINATION. **No compiler rule, NO meta deck touched; gauntlet seed 99 byte-identical.** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `feat/pool-expansion-2` 🚧 PUSHED — **the shipped pool is 357 → 530 cards, and
+  every one of the eleven blind mechanics now prints a card a player can see without importing a
+  decklist.** Pool + fetch pipeline only: **no compiler rule, no engine change, and NO meta deck
+  touched**. Gauntlet seed 99 is **byte-identical** to the same-box `origin/main` this branch merged
+  (`b5752b2`): **80/280**, rows 12·13·17·7·9·7·15, every one equal.
+  ⚠️ **The recorded 81/280 is now 80/280 and that game is NOT mine** — a baseline worktree at
+  `b5752b2` with no pool change reads 80/280 as well, so it belongs to
+  `feat/block-requirements-and-statics`. Whoever re-records §3.4a should use 80/280.
+
+  🔑 **THE THING TO KNOW: three of the eleven were blocked in the FETCH PATH, not by the compiler.**
+  Every sibling branch signed off with "whoever next runs the pipeline gets these free." They were
+  not free — re-running the old pipeline would have produced almost none of them.
+  1. **`/cards/collection` does NOT resolve a combined `"A // B"` name.** `{ name: 'Fire // Ice' }`
+     comes back in `not_found`; `{ name: 'Fire' }` returns the whole `Fire // Ice` record. Every
+     split and aftermath candidate had been failing to resolve, silently, for as long as the list had
+     them. **`frontFaceName` (data-tools `verify.ts`) is now the ONE place that answer lives** — the
+     expansion fetch and the regenerated `starter-cards.json` both go through it. The starter list is
+     a list of things to ASK SCRYFALL FOR, so it carries front-face names; the index keeps the card's
+     real name and `invariants.test.ts` already matches either half.
+  2. **A Siege's printed defense is on `card_faces[0].defense`, not at the card level.**
+     `Invasion of Gobakhan` reports `defense: undefined` on the card and `'3'` on the battle face.
+     Capturing the field was not enough — every battle in Magic normalized to `null` anyway, which is
+     why "a re-fetch unblocks battles" turned out to be false. The same front-face fallback now
+     covers `loyalty` (a transforming walker prints its number on a face too). **This is the third
+     time a missing normalizer field has masqueraded as a compiler gap** (after `layout`): if you are
+     measuring coverage, check the normalizer is not dropping the field your detector reads.
+  3. **CR 715.2 — an ADVENTURER's mana cost is the CREATURE's, not the two halves summed.** Scryfall
+     prints `"{B} // {2}{B}"` and reports `cmc: 1`; summing it produced a cost that contradicted the
+     card's own mana value and tripped the index's pip↔mana-value invariant on all eighteen
+     adventurers at once. A SPLIT card is the opposite (CR 709.4 — the sum IS the cost, and Scryfall's
+     `cmc` agrees), so the fix is narrowed to that one layout.
+
+  ✅ **Newly visible, per mechanic (before → after):** split 0→5 · aftermath 0→3 · adventure 0→18 ·
+  modal DFCs 0→21 (the ten Pathways + eleven spell//land halves) · as-enters naming 0→8 · mandatory
+  additional costs 0→9 · two-destination search 0→2 (Cultivate, Kodama's Reach) · **the mana-ability
+  model 0→50** (ten pain lands, ten filter lands, ten Talismans, ten Signets, Mox Opal, Ancient Tomb,
+  Reflecting Pool…) · battles 0→3 (Invasion of Moag / Belenon / Dominaria) · intervening "if" 0→3 ·
+  step triggers 1→12 · **equipment with a TRIGGERED ability 0→4** (Sword of Fire and Ice, Skullclamp,
+  Sword of the Animist, Argentum Armor) · **damage prevention 0→4** (Fog, Holy Day, Darkness,
+  Moment's Peace) · **replacement effects 0→2** (Hardened Scales, Torbran).
+  `pool-mechanics.test.ts` went from 22 inventory entries + 11 play tests to **35 + 26** — every one
+  of those mechanics is now PLAYED in a seeded game, not merely present in the data.
+
+  📌 **The last three rows are yours, `feat/replacement-effects` and `feat/combat-damage-and-equipment`.**
+  Re-running the SAME candidate list on the merged compiler admitted fifteen more cards with no edit
+  at all. That is the argument for running this pipeline after every compiler branch rather than once
+  every four merges — the generator's output is committed, so a compiler that got smarter is
+  invisible until someone re-runs it.
+
+  ⛔ **Still no honest card — only two left, both measured against every printed card carrying the
+  mechanic:** **multikicker 0/19** (12 blocked on the counters template alone) and **emblems 0/90**
+  (the loyalty ULTIMATE is the bigger blocker — 108 unreadable loyalty clauses against 77 unreadable
+  emblem bodies). Other measured counts for whoever picks up a template family: battles **3/36**,
+  modal DFCs **22/98**, split **5/124** (28 Rooms, 17 FUSE), aftermath **3/27**, adventure **18/152**,
+  prevention **11/123**, equipment-with-a-trigger **13/145**, replacement-on-counters **3/17**,
+  replacement-on-damage **4/32**.
+
+  🃏 **Cards that would be GAUNTLET-WORTHY and were deliberately left out** (adding one moves every
+  recorded A/B verdict — a separate, measured decision, and not a pool run's to make): the ten
+  **Signets**, ten **Talismans** and ten **pain lands** (a real mana base for all seven two-colour
+  gauntlet decks), **Cultivate / Kodama's Reach / Birds of Paradise / Sylvan Caryatid** (Mono-Green
+  Ramp's actual ramp package), **Village Rites / Thrill of Possibility** (Rakdos Goblins card flow),
+  **Corpse Knight / Marauding Blight-Priest / Kambal** (Orzhov Lifegain's drain payoff),
+  **Poison-Tip Archer / Elas il-Kor** (Golgari Midrange), **Skullclamp / Sword of Fire and Ice /
+  Lightning Greaves** (aggro equipment), **Fog** (a real answer for Mono-Green), and **Foulmire
+  Knight / Rimrock Knight** (two-for-one adventure bodies).
+
+  🐞 **THREE DEFECTS THE BIGGER POOL FOUND, NONE OF THEM IN THE POOL.** `test/full-pool-soak` builds
+  its theme decks FROM the shipped pool, so tripling the pool is also a much wider soak — and it broke
+  three ways, all pre-existing, all invisible while the pool had no card that could reach them.
+  1. **The pilot proposed a spell it could not cast, and then proposed it again forever.**
+     `scoredSpellGoals` gated on land/timing/mana/targets but not on a MANDATORY additional cost, so
+     Altar's Reap with an empty board became a `castSpell` the engine rejected — and, since nothing
+     about the board changed, the same cast on the next priority, and the next. Three soak games
+     burned the 6000-action cap without ending. Now filtered at that function's ONE exit through
+     core's own **`unpayableAdditionalCostReason`** (newly exported from `@jonny-boi/core` for
+     exactly this), so both consumers inherit it and there is still one reader of the rule.
+     ⚠️ **If you add a pilot path that builds its own cast action, it needs this gate too.**
+  2. **A FREE equip cost was an infinite loop.** `bestEquipHost` excludes the current host, which
+     stops re-equipping the same body — but with two hosts and Equip {0} the pilot moved the
+     Equipment A→B, found A was again the best non-host, and moved it back, forever, at no cost.
+     `equipIsAnUpgrade` now requires the destination to STRICTLY beat the host it is on. Lightning
+     Greaves was in all three capped games.
+  3. **The soak's own `transform-dfc` predicate was `hasKey('backFace')`** — and four layouts hang a
+     second half off that field (split, aftermath, adventure, modal DFC), none of which transforms.
+     The theme deck for the mechanic was drafted almost entirely from cards that cannot flip and the
+     soak reported it INERT while Delver of Secrets was never dealt in. Narrowed to "a back face that
+     is not separately castable". It did not start wrong; it BECAME wrong when the pool grew.
+
+  📊 **Corpus coverage does not move: 533/2100 (25.4%) on `origin/main` at `b5752b2` and 533/2100
+  here**, measured in two worktrees on the same box — and 524/524 against the earlier `78e3299`, so
+  the claim has now held across two baselines. This branch adds no compiler rule.
+
+  ⚠️ Three stale-guard fixes fell out, all worth knowing: `expanded-pool.test.ts`'s "no mana source
+  taps for more than 2" now takes an exception list BY NAME (Gilded Lotus and Thran Dynamo genuinely
+  print three) rather than a raised ceiling, because raising the number would have retired the guard;
+  `attachment-cards-in-pool.test.ts` gained seven rows AND now expands a LIST-valued keyword one entry
+  per value, so a Sword of Fire and Ice granting protection from the wrong colour fails instead of
+  passing on the bare keyword name; and `pool.test.ts`'s pool-size constants moved 325 → 498 compiled.
 
 - 2026-08-20 worker: `test/interaction-matrix` 🚧 PUSHED — **the interactions between the
   shipped systems are now an executable matrix, and finding three real defects took nine

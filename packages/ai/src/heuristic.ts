@@ -79,6 +79,7 @@ import {
   modalSpecOf,
   modeCountsFor,
   targetRestrictionOf,
+  unpayableAdditionalCostReason,
   DEFAULT_TRIGGER_WATCHES,
 } from '@jonny-boi/core';
 import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
@@ -622,6 +623,7 @@ function bestEquipPlay(
 
       const score = scoreEquip(perm.def, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
+      if (!equipIsAnUpgrade(view, perm, score, weights, index)) continue;
       const plan = planManaPayment(
         view as GameState,
         me,
@@ -649,6 +651,35 @@ function bestEquipPlay(
     }
   }
   return best;
+}
+
+/**
+ * Whether MOVING an already-attached attachment onto `host` is an improvement.
+ *
+ * ⚠️ THE GUARD THAT KEEPS AN EQUIP {0} FROM LOOPING FOREVER. {@link bestEquipHost}
+ * excludes the creature the Equipment is already on, which stops it re-equipping
+ * the same body — but with TWO hosts and a free equip cost (Lightning Greaves)
+ * the pilot moves it A → B, then finds A is the best non-host and moves it back,
+ * forever, at no cost and with nothing else on the menu ever winning. The
+ * full-pool soak caught it as three games that burned the 6000-action cap
+ * without ending, all three holding Lightning Greaves.
+ *
+ * Requiring the destination to STRICTLY beat the current host makes the move
+ * monotone in `scoreEquip`, so the cycle cannot close. An unattached Equipment
+ * is unaffected: there is no host to beat.
+ */
+function equipIsAnUpgrade(
+  view: PilotView,
+  perm: CardInstance,
+  score: number,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): boolean {
+  if (perm.attachedTo === undefined || perm.attachedTo === null) return true;
+  const current = findInstance(view, perm.attachedTo);
+  if (!current) return true;
+  const currentScore = scoreEquip(perm.def, current, weights, index);
+  return currentScore === undefined || score > currentScore;
 }
 
 /** The target restriction every printed `Equip {N}` aims with (CR 301.5c). */
@@ -947,7 +978,30 @@ function scoredSpellGoals(
   }
 
   scored.sort((a, b) => b.score - a.score);
-  return scored;
+  /*
+   * CR 601.2h: a MANDATORY additional cost this board cannot pay makes the cast
+   * ILLEGAL — not cost-free. Filtered here, at the one exit, so both consumers
+   * inherit it: `bestSpellGoal` and the search policy.
+   *
+   * Without it the pilot builds a `castSpell` the engine refuses, and — because
+   * nothing about the board changed — proposes the SAME cast on the next
+   * priority, and the next. That is the "spin forever" this function's own
+   * header warns about, and the full-pool soak caught it the moment the pool
+   * gained a card with one: Altar's Reap and Harrow with nothing to sacrifice
+   * burned the 6000-action cap without the game ending.
+   *
+   * The reader is core's, not a second opinion: `generateLegalActions` withholds
+   * the offer and `applyCastSpell` rejects the action from this same function.
+   */
+  return scored.filter(
+    (goal) =>
+      unpayableAdditionalCostReason(
+        view as GameState,
+        goal.card.def,
+        me,
+        goal.card.instanceId,
+      ) === undefined,
+  );
 }
 
 /**
@@ -2848,6 +2902,7 @@ function bestEquipMacro(
       if (!host) continue;
       const score = scoreEquip(perm.def, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
+      if (!equipIsAnUpgrade(view, perm, score, weights, index)) continue;
       const plan = planManaPayment(
         view as GameState,
         me,

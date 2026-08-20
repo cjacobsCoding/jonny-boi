@@ -1943,6 +1943,121 @@ character-indexed object (nothing had printed a label that long until the fetchl
 that broke `npm run build` while `npm run verify` stayed green, because verify lints and tests but
 never type-checks.
 
+#### The second run — pool **357 → 530**, and the three FETCH-PATH bugs that were hiding most of it
+Six more engine systems shipped after the first run (the split/aftermath/adventure/Siege second face,
+the as-enters naming, the intervening "if" and the step-trigger family, mandatory additional costs and
+multi-destination searches, the mana-ability model, and — while this branch was out — replacement
+effects and equipped-creature triggers), and every one of those branches signed off with "whoever next
+runs the pipeline gets these free." **They were not free.** Eleven systems printed ZERO pool cards,
+and three of them were blocked in the FETCH PATH rather than by the compiler, so re-running the
+generator on the old pipeline would have produced almost none of them.
+
+⚠️ **`/cards/collection` does NOT resolve a combined `"A // B"` name.** Posting
+`{ name: 'Fire // Ice' }` comes back in `not_found`; posting `{ name: 'Fire' }` returns the whole
+`Fire // Ice` record. Every split and aftermath candidate was failing to resolve, silently.
+`frontFaceName` (data-tools `verify.ts`) is now the one place that answer lives, and both the expansion
+fetch and the regenerated `starter-cards.json` go through it — the starter list is a list of things to
+ASK SCRYFALL FOR, so it carries front-face names while the index keeps the card's real name.
+
+⚠️ **A Siege's printed defense is on `card_faces[0].defense`, not at the card level.** §3.15 captured
+`defense` and the split-card work said a re-fetch would unblock battles; it did not, because
+`normalizeCard` read only `raw.defense` and every battle in Magic therefore normalized to `null`
+anyway. The front-face fallback the cost/type/text lines already took now covers `defense` and
+`loyalty` too. This is the same shape as the missing `layout` field that turned out to be twelve of
+the split-card branch's thirteen cards: **if you are measuring coverage, check the normalizer is not
+dropping the field your detector reads.**
+
+⚠️ **CR 715.2 — an ADVENTURER's mana cost is the creature's, not the two halves added up.** Scryfall
+prints `"{B} // {2}{B}"` at the top level for Foulmire Knight and reports `cmc: 1`; summing the string
+produced a four-pip cost that contradicted the card's own mana value and tripped the index's
+pip↔mana-value invariant on every adventurer at once. A SPLIT card is the opposite — CR 709.4 makes
+the combined object's cost the SUM and Scryfall's `cmc` agrees — so the fix is narrowed to the one
+layout where the printed top-level string is not the card's cost.
+
+**Every one of the eleven now has real cards. The count is the compiler's verdict, not a judgement:**
+
+| mechanic | before | after | representative cards |
+|---|---:|---:|---|
+| split cards (CR 709.4) | 0 | 5 | Assault // Battery, Integrity // Intervention, Road // Ruin, Spring // Mind, Start // Finish |
+| aftermath | 0 | 3 | Road // Ruin, Spring // Mind, Start // Finish |
+| adventure | 0 | 18 | Foulmire Knight, Order of Midnight, Rimrock Knight, Beanstalk Giant, Merfolk Secretkeeper… |
+| modal DFCs | 0 | 21 | the ten Pathway lands, plus Bala Ged Recovery, Jwari Disruption, Kazandu Mammoth… |
+| "as ~ enters, choose a…" | 0 | 8 | Adaptive Automaton, Patchwork Banner, Heraldic Banner, Vanquisher's Banner, Coldsteel Heart… |
+| mandatory additional costs | 0 | 9 | Village Rites, Thrill of Possibility, Bone Splinters, Altar's Reap, Cathartic Reunion… |
+| a search with TWO destinations | 0 | 2 | Cultivate, Kodama's Reach |
+| the mana-ability model | 0 | 50 | ten pain lands, ten filter lands, ten Talismans, ten Signets, Mox Opal, Ancient Tomb, Reflecting Pool… |
+| battles (Sieges) | 0 | 3 | Invasion of Moag, Invasion of Belenon, Invasion of Dominaria |
+| the printed intervening "if" | 0 | 3 | Howling Mine, Dragonmaster Outcast, Colossal Majesty |
+| "at the beginning of…" step triggers | 1 | 12 | Underworld Dreams, Font of Mythos, Temple Bell, Kami of the Crescent Moon… |
+| equipment with a TRIGGERED ability | 0 | 4 | Sword of Fire and Ice, Skullclamp, Sword of the Animist, Argentum Armor |
+| damage prevention (the Fog family) | 0 | 4 | Fog, Holy Day, Darkness, Moment's Peace |
+| replacement effects (CR 614/615) | 0 | 2 | Hardened Scales, Torbran, Thane of Red Fell |
+
+The last three rows are the ones this branch did NOT expect to close: `feat/replacement-effects` and
+`feat/combat-damage-and-equipment` merged to `main` while it was out, and re-running the same
+candidate list on the merged compiler admitted fifteen more cards with no edit at all. That is the
+pipeline working as designed — **names in, `'complete'` verdicts out** — and it is the argument for
+re-running it after every compiler branch rather than once every four.
+
+**Still no honest card, both MEASURED by compiling every printed card that carries the mechanic:**
+**multikicker** 0/19 (12 of the 19 blocked on the counters template alone) and **emblems** 0/90 — and
+for emblems the loyalty ULTIMATE that would make the emblem is the bigger blocker, 108 unreadable
+loyalty clauses across those 90 against 77 unreadable emblem bodies. Everything else the inventory
+audits now has a card **and a seeded game proving it plays**: `pool-mechanics.test.ts` grew from 22
+inventory entries and 11 play tests to 35 and 26.
+
+The other measured counts, for whoever picks up the next template family: battles **3/36**, modal DFCs
+**22/98**, split cards **5/124** (28 of the residual are Rooms and 17 are FUSE), aftermath **3/27**,
+adventure **18/152**, damage prevention **11/123**, equipment-with-a-trigger **13/145**, replacement
+on counters **3/17**, replacement on damage **4/32**.
+
+⚡ **Rule 7 / §3.4a: the gauntlet at seed 99 is byte-identical to the same-box `origin/main`** this
+branch merged (`b5752b2`) — **80/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 15, every one equal. ⚠️ The
+recorded 81/280 moved to 80/280 while this branch was out, and it is **not this branch's**: a
+baseline worktree at `b5752b2` with no pool change reads 80/280 too, so the one game belongs to
+`feat/block-requirements-and-statics`. **No meta deck was touched here**, deliberately: adding a card
+to a gauntlet deck moves every recorded A/B baseline and is a separate, measured decision. The
+pool-only cards that WOULD be gauntlet-worthy are named on the coordination board.
+
+📊 **The corpus number does not move, and that is the honest result: 533 / 2100 (25.4%) on
+`origin/main` at `b5752b2` and 533 / 2100 here**, measured on the same cached corpus in two worktrees
+on the same box (and 524 / 524 against the earlier `78e3299`, so it has held across two baselines). This section adds no compiler rule, and the three fetch-path fixes do not
+reach the audit's population (the top-2100 modern corpus holds exactly one battle, itself blocked on
+a "you may" template, and nine adventurers whose compile status the cost fix does not change). The
+width is in the SHIPPED POOL: **357 → 530 cards, 325 → 498 compiled**, and every card in it still
+round-trips through the compiler from its printed text.
+
+#### Three defects the bigger pool found, none of them in the pool
+`test/full-pool-soak` builds its theme decks FROM the shipped pool, so tripling the pool is also a
+much wider soak — and it broke three ways, all of them pre-existing and all of them invisible while
+the pool had no card that could reach them.
+
+⚠️ **THE PILOT PROPOSED A SPELL IT COULD NOT CAST, AND THEN PROPOSED IT AGAIN FOREVER.** The
+heuristic builds its cast actions itself rather than picking one off `generateLegalActions` — it has
+to, because it taps for mana first and the cast is not on the menu until the mana is floating. That
+makes every legality gate core applies at the OFFER a gate the pilot must apply too, and the
+mandatory additional cost (CR 601.2h) was missing: Altar's Reap with an empty board became a
+`castSpell` the engine rejected, nothing about the board changed, and the same cast came back on the
+next priority. Three soak games burned the 6000-action cap without ending. Goals are now filtered at
+`scoredSpellGoals`' single exit through core's own `unpayableAdditionalCostReason` (exported for
+this), so both consumers inherit it and there is still exactly ONE reader of the rule.
+
+⚠️ **A FREE EQUIP COST WAS AN INFINITE LOOP.** `bestEquipHost` excludes the creature the Equipment is
+already on, which stops it re-equipping the same body — but with TWO hosts and Equip {0} the pilot
+moved it A → B, found A was again the best non-host, and moved it back, at no cost, with nothing else
+on the menu ever outscoring it. `equipIsAnUpgrade` requires the destination to STRICTLY beat the host
+it is on, which makes the move monotone in `scoreEquip` so the cycle cannot close. Lightning Greaves
+was in all three capped games.
+
+⚠️ **THE SOAK'S OWN `transform-dfc` PREDICATE WENT STALE THE MOMENT THE POOL GREW.** It was
+`hasKey('backFace')` — and FOUR printed layouts hang a second half off that field (split, aftermath,
+adventure, modal DFC), none of which ever transforms. The theme deck for the mechanic was therefore
+drafted almost entirely out of cards that cannot flip, and the soak reported transform-dfc INERT
+while its one real card, Delver of Secrets, was never dealt into a game. A transforming DFC is the
+one whose back face is **not separately castable**. Same failure shape as every other stale
+predicate in this repo: it did not start wrong, it *became* wrong when the data underneath it grew.
+
+
 ### 3.21 The triggering player + the intervening "if" — the "At the beginning of…" family — ✅ done
 The biggest template cluster in the coverage audit (~65 corpus cards) had ONE thing standing in front
 of it, and it was not a template: **a trigger's resolution did not know which player set it off.**

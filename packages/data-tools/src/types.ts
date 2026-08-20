@@ -51,6 +51,14 @@ export interface RawScryfallCardFace {
   oracle_text?: string;
   power?: string;
   toughness?: string;
+  /**
+   * A transforming planeswalker's / battle's printed number lives on the FACE,
+   * not at the card level — Scryfall reports `defense: undefined` for
+   * `Invasion of Gobakhan` and `'3'` on its battle face. The normalizer falls
+   * back to the front face for exactly that reason.
+   */
+  loyalty?: string;
+  defense?: string;
   colors?: string[];
   image_uris?: ScryfallImageUris;
 }
