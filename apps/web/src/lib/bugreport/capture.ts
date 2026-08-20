@@ -18,6 +18,7 @@ import {
   captureFailureNote,
   captureOptionsFor,
   isOffScreen,
+  prunableChildIndices,
   withTimeout,
 } from './capture-policy.js';
 
@@ -32,10 +33,48 @@ export interface Capture {
   readonly note: string;
 }
 
-/** The overlay's own chrome, and images the viewport does not show. */
-function shouldSkip(node: Node): boolean {
+/**
+ * The elements the rasteriser can skip: the tail of the document that renders
+ * entirely below the fold. Measured once, in one layout pass, because calling
+ * getBoundingClientRect from inside the rasteriser's filter would do it
+ * thousands of times while the DOM is being cloned.
+ */
+function belowFoldTail(prune: boolean): Set<Element> {
+  const skip = new Set<Element>();
+  if (!prune) return skip;
+  const viewportHeight = window.innerHeight;
+
+  const anchorTop = (element: Element): number | null => {
+    // The reporter's own chrome is removed from the clone anyway, and something
+    // that occupies no space draws nothing — neither may anchor the run.
+    if (element.hasAttribute(CAPTURE_IGNORE_ATTR)) return null;
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return null;
+    return rect.top;
+  };
+
+  const prunePastFold = (parent: Element): void => {
+    const children = Array.from(parent.children);
+    if (children.length === 0) return;
+    const tops = children.map(anchorTop);
+    const dropped = new Set(prunableChildIndices(tops, viewportHeight));
+    for (const index of dropped) skip.add(children[index]!);
+    // Recurse into everything KEPT — including the boxless children after the
+    // last anchor, which are kept precisely because they still draw something.
+    for (let i = 0; i < children.length; i += 1) {
+      if (!dropped.has(i)) prunePastFold(children[i]!);
+    }
+  };
+
+  prunePastFold(document.body);
+  return skip;
+}
+
+/** The overlay's own chrome, the below-fold tail, and scrolled-past images. */
+function shouldSkip(node: Node, tail: ReadonlySet<Element>): boolean {
   if (!(node instanceof Element)) return false;
   if (node.hasAttribute(CAPTURE_IGNORE_ATTR)) return true;
+  if (tail.has(node)) return true;
   if (!(node instanceof HTMLImageElement)) return false;
   return isOffScreen(node.getBoundingClientRect(), {
     width: window.innerWidth,
@@ -49,7 +88,8 @@ function shouldSkip(node: Node): boolean {
  * typed description, the state dump and the console ring is still worth far more
  * than no report at all (rule 6).
  */
-export async function captureViewport(): Promise<Capture> {
+export async function captureViewport(prune = true): Promise<Capture> {
+  const tail = belowFoldTail(prune);
   const options = captureOptionsFor(
     { width: window.innerWidth, height: window.innerHeight },
     { x: window.scrollX, y: window.scrollY },
@@ -70,7 +110,7 @@ export async function captureViewport(): Promise<Capture> {
         // Cross-origin card art is fetched and inlined by the library; a miss
         // leaves a gap in the image rather than failing the capture.
         cacheBust: false,
-        filter: (node) => !shouldSkip(node),
+        filter: (node) => !shouldSkip(node, tail),
       }),
       CAPTURE_TIMEOUT_MS,
       'page rasterisation',
