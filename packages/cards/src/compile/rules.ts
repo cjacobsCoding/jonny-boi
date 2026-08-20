@@ -4242,6 +4242,66 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     missingEngineSystem: 'an {X} or derived-value template the compiler does not recognize yet',
   },
   { pattern: /\bactivated abilit|\{t\}:|\{\d+\}[,:]/, missingEngineSystem: 'an activated-ability template the compiler does not recognize yet' },
+  // --- replacement & prevention: the LAYER SHIPPED, so these name the residual ---
+  //
+  // Core now has a real CR 614/615 layer (`packages/core/src/replacement.ts`) that
+  // damage, counters and draws all consult, and STATIC_RULES compiles the four
+  // families that change a QUANTITY or prevent an event. So these hints do not
+  // claim the system is missing — that would send the next contributor to rebuild
+  // something that exists. What they name is the residual: a replacement whose
+  // OUTCOME is a different kind of thing (a different zone, different objects, a
+  // whole substituted action), which is genuinely a different vocabulary.
+  //
+  // Order matters: the first matching hint wins, so these sit above the generic
+  // ones below.
+  {
+    // "…twice that many of those TOKENS are created instead" (Doubling Season,
+    // Parallel Lives, Anointed Procession). The layer scales a NUMBER; creating
+    // extra objects is a different outcome, and token creation is not one of the
+    // three events the layer watches.
+    pattern: /would (?:create|be created).*\binstead\b|creates? (?:twice|three times) that many/,
+    missingEngineSystem:
+      'a TOKEN-count replacement (the CR 614 layer scales damage, counters and draws; creating extra objects is a different outcome)',
+  },
+  {
+    // "If a card would be put into a graveyard from anywhere, exile it instead"
+    // (Rest in Peace, Dauthi Voidwalker, Liesa) — a ZONE-CHANGE replacement.
+    pattern: /would (?:die|be put into (?:a|an|its owner's|an opponent's) graveyard).*\binstead\b/,
+    missingEngineSystem:
+      'a ZONE-CHANGE replacement ("if it would die, exile it instead" — the CR 614 layer changes quantities, not destinations)',
+  },
+  {
+    // "prevent that damage AND …" (Vigor, The Mindskinner, Deflecting Palm) — the
+    // prevention itself is implemented; what is missing is a RIDER that fires on
+    // how much was prevented.
+    pattern: /prevent (?:that|the next|all) [^.]*\b(?:and|\.)\s*(?:put|~|each|you|that)/,
+    missingEngineSystem:
+      'a prevention RIDER ("prevent that damage AND put a +1/+1 counter on it for each 1 prevented") — prevention itself is implemented',
+  },
+  {
+    // "The next time a SOURCE OF YOUR CHOICE would deal damage…" (Deflecting
+    // Palm) — a shield bound to a source the player names, which nothing asks.
+    pattern: /a source of your choice/,
+    missingEngineSystem:
+      'a prevention shield bound to a SOURCE OF YOUR CHOICE (choosing a source is a question nothing asks)',
+  },
+  {
+    // "If you would GAIN LIFE, you gain twice that much instead" (Alhammarret's
+    // Archive, Rhox Faithmender) and "if an opponent would LOSE LIFE…"
+    // (Bloodletter of Aclazotz). One more event kind on the same layer, not a
+    // new system — named honestly so whoever adds it knows the size of the job.
+    pattern: /if (?:you|an opponent|a player) would (?:gain|lose) life/,
+    missingEngineSystem:
+      'a LIFE-CHANGE event on the replacement layer (the layer watches damage, counters and draws; life gain/loss is one more event kind)',
+  },
+  {
+    // "instead that player skips that draw and you draw a card" (Notion Thief),
+    // "you may instead choose land or nonland and reveal…" (Abundance). The draw
+    // event is watched; substituting a whole different ACTION for it is not.
+    pattern: /would draw a card.*\binstead\b/,
+    missingEngineSystem:
+      'a draw replacement whose result is a different ACTION (skip-and-redirect, reveal-until — the layer scales a draw, it does not substitute one)',
+  },
   // --- below here: patterns that only refine the DEFAULT explanation. Nothing
   // above changes; these exist so "this card didn't compile" names a buildable
   // engine feature instead of shrugging. They are ordered specific → general,
