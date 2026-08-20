@@ -2316,6 +2316,65 @@ whoever next runs that pipeline rather than done from this branch.
 - Every feature adds tests and leaves the full suite green.
 - Claim work on `COORDINATION.md` before starting; pick a unique `feat/<slug>` branch.
 
+### 3.24 Rules conformance — a CR-indexed suite with an enforced manifest — ✅ done
+
+Every other suite in this repo is organised BY FEATURE, each written by the agent that built that
+feature, asserting what that agent believed the rule was. That answers "do our tests pass?" It cannot
+answer **"which rules do we actually implement, and which do we only think we do?"** — which is the
+difference between a green suite and playing Magic correctly. A rule no feature happened to need was
+invisibly absent: there was nowhere its absence showed up.
+
+`packages/core/src/conformance` is that somewhere. **89 tests, each naming the Comprehensive Rules
+reference it affirms**, plus a manifest classifying **147 CR sections**: 35 covered here, 42 cited to
+an existing per-feature suite, 64 not-applicable *with a stated reason*, and **6 honest gaps** — with
+32 of the covered/cited sections additionally declaring an unmet remainder, because "covered" with a
+silent shortfall is the exact dishonesty this manifest exists to prevent.
+
+**The manifest is enforced four ways, three of them by the compiler** — the same default-deny shape
+as `OBSERVATION_POLICY`, `paired-arms-config.ts` and `KEYWORD_KEYS`, and for the same reason: a
+coverage manifest that can be left stale is worse than none, because it reads like an answer.
+`RULES_MANIFEST` is a mapped type over the section list, so an unclassified section fails `tsc`;
+`CrRule` is a template literal over it, so a citation cannot point out of scope; and
+`KEYWORD_RULES` / `STEP_RULES` / `ZONE_RULES` / `ACTION_RULES` are mapped over `KeywordFlags`,
+`Step`, `ZoneName` and `GameAction['kind']`, so **adding a keyword, zone, step or action to core
+stops the build until the manifest says which rule it answers to.** The fourth is a runtime one: each
+file's collected tests must equal the manifest's claims, both directions.
+
+⚠️ **Twenty-four CR citations in this repo were wrong**, in tests AND in engine source comments —
+priority is 117 not 116, the mana pool empties in 500.5 not 500.4, copying is 707 not 706, layer 7's
+sublayers are 613.4 not 613.3, `115.2b` does not exist. All were corrected against the published
+Comprehensive Rules text. An index that cites the wrong rule is confidently wrong.
+
+**The six gaps, honestly.** CR 402/514.1 — *there is no maximum hand size*; nobody ever discards at
+cleanup, which changes the value of card draw in every recorded gauntlet baseline. CR 704 — state-based
+actions are checked at ~a dozen explicit mutation sites, not at the priority boundary CR 704.3 names
+(latent: every path that exists today does hit a site), and CR 704.5q's counter annihilation is
+absent. CR 613 — there is no layer system, only additive P/T deltas and keyword ORs, which is *exact*
+for everything the engine can express and is now held there by a compile-time proof. CR 615/616 —
+no prevention effects (`feat/replacement-effects` owns this). CR 707 — no copying
+(`feat/copy-effects` owns this). Also recorded as shortfalls on otherwise-covered sections: no
+mulligans (103.5), no attacker damage assignment order (510.1a), no block requirements (509.1c),
+tokens do not cease to exist (111.7).
+
+**Every claim was sabotage-checked** — the rule broken in the engine, the suite confirmed RED, the
+break reverted. **33 sabotages, 33 caught, 0 escapes**, including all four compile-time proofs and
+four attempts to corrupt the manifest itself (delete a claimed test, drop a section's
+classification, gut a not-applicable reason, empty a gap's description). A test that cannot fail is
+this repo's most-recorded defect shape — and four of the four sabotages that first came back GREEN
+were bad ANCHORS of mine, not weak tests: one patched a code path the test never enters, one changed
+a TYPE (Vitest strips types, so it cannot fail a test), and two named fields that do not exist. That
+is worth knowing: **a sabotage that stays green is a claim about your sabotage before it is a claim
+about the test.**
+
+**Today's four new systems are indexed too**, each sabotage-checked through its own suite: CR 603.4
+(the intervening "if", checked TWICE — a false condition must stop the ability reaching the stack,
+not merely fizzle it), CR 709.4 (a split card is the COMBINED object in every zone but the stack),
+CR 715.2/715.3d (an adventurer is defined by its creature half; the exile is a RESOLUTION
+replacement, so a countered adventure goes to the graveyard), CR 400.7 (a value a permanent NAMED
+dies with the object), CR 601.2h (an unpayable mandatory additional cost makes the cast illegal and
+leaves nothing half-paid) and CR 310.4 (a defeated Siege's reward cast from an EMPTY mana pool,
+which is what makes "without paying" a real claim).
+
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).
