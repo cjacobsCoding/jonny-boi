@@ -421,6 +421,21 @@ export { ceaseToExistIfToken } from './internal/zones.js';
 export type { GameEvent, EventLog } from './events.js';
 export { createEventLog, eventsOfType } from './events.js';
 
+/**
+ * WHERE AN INSTANCE ID CAN HIDE — the enforced answer to "does this value name a
+ * card?", which is the question the hidden-information guarantee is proved with
+ * (`packages/sim/src/observation.ts`, `@jonny-boi/protocol`'s masking scan).
+ * Exported because a guarantee whose checker lives inside one consumer is a
+ * guarantee only that consumer has.
+ */
+export type { InstanceIdShape } from './instance-ids.js';
+export {
+  CHOICE_ANSWER_ID_FIELDS,
+  EVENT_ID_FIELDS,
+  INSTANCE_ID_FIELD_NAMES,
+  instanceIdsNamedBy,
+} from './instance-ids.js';
+
 // Effect registry seam
 export type {
   EffectContext,

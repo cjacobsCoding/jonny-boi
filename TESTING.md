@@ -166,6 +166,7 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 | `targeting.test.ts` | A spell may only point at what it is printed to point at |
 | `choices.test.ts` / `choice-cards.test.ts` | Player choice during resolution |
 | `rng.test.ts` | Seeded RNG determinism (the whole sim rests on this) |
+| `instance-ids.test.ts` | **Where an instance id can hide** — the enforced answer to "does this value name a card?", checked against core's own source |
 
 ### Cards — `packages/cards`
 | Suite | What it guards |
@@ -203,6 +204,51 @@ The pure, deterministic MTG engine. Everything here runs without DOM or network.
 | `harness.test.ts` (`RunOptions.range`) | A run split into slices reassembles into exactly the whole |
 | `soak.test.ts` | **THE FULL-POOL SOAK, fast tier** — randomised legal decks from the whole 357-card pool, every invariant on every settled state, and every mechanic the pool prints required to FIRE |
 | `soak-deep.test.ts` | The same soak at thousands of games. Skipped unless `JB_SOAK_GAMES` is set (below) |
+| `observation.test.ts` | **The hidden-information guarantee** — the pilot feed, scanned over mechanic-anchored full-pool games (below) |
+| `masking.test.ts` | The same guarantee on the ONLINE side: every `maskStateForSeat` / spectator view over full-pool games |
+
+### The hidden-information guarantee
+
+Two independent chokepoints promise the same thing, and both are proved here rather than asserted:
+`packages/sim/src/observation.ts` (what a **pilot** may learn) and `@jonny-boi/protocol`'s
+`maskStateForSeat` (what an **online client** may be sent — where a leak is a cheating vector, not
+just a biased pilot).
+
+**What is actually promised** — and the loose version of this sentence is itself a bug, because it
+reads true and is not:
+
+> An observation names a card only if that card was on **public display at the instant the
+> observation was produced**. Equivalently: the feed never reveals the identity of a card the table
+> has not seen. It may say a card everybody watched is now somewhere hidden; it may never say what an
+> unseen card is.
+
+Two things that look like leaks and are not, both live: a **buyback** spell resolves back into its
+owner's hand, so `stackResolved` names a card that is hidden by the time anyone looks (it was on the
+stack when it was named, and the pump it leaves behind names it AGAIN at cleanup, turns later); and a
+card the table watched leave a public zone — a creature that died and was regrown into a hand.
+Dropping those ids would leave a pilot knowing *less* than a spectator, which corrupts the
+represented-mana reasoning the feed exists for.
+
+**"Which cards does this name?" is not a key-name guess.** The scan asks core's `instanceIdsNamedBy`,
+driven by `EVENT_ID_FIELDS` in `packages/core/src/instance-ids.ts` — a **mapped type over every field
+of every `GameEvent`**, so adding a field (including an *optional* one, which is the shape that hid
+last time) fails the build until somebody says whether it can name a card. The scan used to collect
+keys named exactly `instanceId`; the engine names cards under `sourceInstanceId`, `targetInstanceId`,
+`keptInstanceId`, `hostInstanceId`, `copiedInstanceId`, `source`, `target`, `targets`, `attackers`,
+`attackTargets`, `blocks`, `instanceIds`, `ref` and `attachedTo`, and **every one of those walked
+straight past it**. Two real leaks were found through that blind spot and neither could ever have been
+caught by the test that claimed to own the guarantee. `INSTANCE_ID_FIELD_NAMES` (what the structural
+walker in `@jonny-boi/protocol` scans by) is derived from the same table, and
+`packages/core/src/instance-ids.test.ts` re-derives it by reading core's own source — so an id field
+on a *state* type fails a test even though no event changed.
+
+**And it runs over decks that play the mechanics.** `observation.test.ts` used to scan three curated
+gauntlet matchups. It passed on every build since it was written, and the card list is exactly why:
+no curated deck plays a
+buyback spell, so the interesting case never occurred. It now runs `runSoak` over the soak's
+**mechanic-anchored** generated decks with the leak scan on **every** game, and asserts that every
+mechanic the pool prints actually fired — if the generator stops reaching buyback, this fails rather
+than quietly narrowing. `masking.test.ts` does the same for the online side.
 
 ### The full-pool soak
 
@@ -235,7 +281,9 @@ npm run sim -- soak --games 2000                                         # the s
 every action a pilot submits is legal; **the engine never rejects an action it offered**; no game
 reaches the action cap; no stack object survives a turn; state-based actions leave no 0-toughness
 creature, 0-loyalty walker or 0-defense battle; an instance is in exactly one zone and says so; life,
-counters and mana pools stay in range; no card in a hidden zone reaches an observation;
+counters and mana pools stay in range; no card the table has never seen reaches an observation
+(scanned on EVERY game — measured at 6,125 ms CPU against 5,845 ms at the old 1-in-31 stride, paired
+in one process over the same 90 games);
 `applyActionInPlace` stays bit-identical to `applyAction`; no pool card resolves an unregistered
 effect as a silent no-op.
 
@@ -262,7 +310,15 @@ Two traps the soak itself fell into first, both worth knowing before you add an 
    question is answered. Assert SBAs only when `pendingChoice` and `resolution` are both null.
 2. **A leak scan must ask the state the action LANDED IN.** A land played from hand is named by
    `landPlayed` and by a public `zoneChange`, and it was in a hand a moment earlier — scanning against
-   the pre-action state reports every land drop in the game as a leak.
+   the pre-action state reports every land drop in the game as a leak. The equal and opposite mistake
+   is scanning at the END of the game: a creature bounced to hand later retro-actively turns an honest
+   `spellCast` into one.
+3. **"Hidden before the window as well as after" is not enough either.** That is a one-window
+   approximation and a bought-back spell walks straight through it: Elvish Fury resolves into its
+   owner's hand and the pump it left behind expires at CLEANUP, naming it many windows later with the
+   card still sitting in that hand. The scan tracks the ids that have **never once** been out of a
+   hand or a library — which is what the promise above actually says — and needs no exemption list as
+   a result.
 
 ### Web app — `apps/web`
 | Suite | What it guards |
@@ -297,6 +353,12 @@ Two traps the soak itself fell into first, both worth knowing before you add an 
 
 ### Data tools — `packages/data-tools`, `packages/protocol`
 Scryfall fetch/normalize/parse pipeline, and the masked-view protocol.
+
+`packages/protocol/src/index.test.ts` pins masking on hand-built fixtures — including that
+`collectInstanceIds` finds an id under **every** name the engine spells it with, and reads the KEYS of
+an id-keyed map (`attackTargets`, `blocks`) and not only its values. It is fixtures only, by design:
+protocol cannot depend on the card pool, so the full-pool proof lives in
+`packages/sim/src/masking.test.ts`.
 
 ---
 
