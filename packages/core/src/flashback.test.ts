@@ -334,6 +334,46 @@ describe('a flashback cost that also costs LIFE', () => {
     expect(rejection(state, flashbackCastOf(state, 'A', card!.instanceId), reg)).toMatch(/life/);
   });
 
+  /**
+   * The card that proves the payment's OWN state-based-action pass is load-bearing.
+   *
+   * `applyCastSpell` runs the pass twice: once right after the life is charged,
+   * and once at the very end of the announcement. The second one alone is enough
+   * for an ordinary pay-life flashback — so without this card the first call
+   * would be untested, and an untested call is a call somebody deletes. Add
+   * `{X}` to the flashback cost and the announcement PARKS a `chooseNumber`
+   * question, which skips the end-of-announcement pass (CR 601.2 — the
+   * announcement is not finished and nobody has priority yet). Only the pass
+   * beside the payment can settle a caster who has just paid itself to death.
+   */
+  const FLASHBACK_PAY_LIFE_X: CardDefinition = {
+    ...FLASHBACK_PAY_LIFE,
+    id: 'fb-pay-life-x',
+    name: 'Costlier Thought',
+    flashbackXCost: 1,
+  };
+
+  it('ENDS THE GAME even when a cast-time question is still outstanding', () => {
+    const { reg } = makeRegistry();
+    const state = gameAtMain(reg);
+    const [card] = giveGraveyard(state, 'A', [FLASHBACK_PAY_LIFE_X]);
+    // MORE than the flashback cost, deliberately: with exactly the cost, the
+    // largest affordable X is 0, the question has one legal answer, and the
+    // engine settles it without ever parking it — which would quietly turn this
+    // back into the previous test.
+    state.players.A.manaPool = { W: 0, U: 1, B: 0, R: 0, G: 0, C: 5 };
+    state.players.A.life = LIFE_RIDER;
+
+    const after = act(state, flashbackCastOf(state, 'A', card!.instanceId), reg);
+    expect(after.pendingChoice?.kind, 'the X question must still be outstanding').toBe('chooseNumber');
+    expect(after.players.A.life).toBe(0);
+    expect(
+      after.players.A.hasLost,
+      'the caster paid itself to death while announcing, and the game carried on',
+    ).toBe(true);
+    expect(after.gameOver).toBe(true);
+  });
+
   it('ENDS THE GAME when the payment takes its caster to zero', () => {
     const { reg } = makeRegistry();
     const state = gameAtMain(reg);
