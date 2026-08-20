@@ -195,6 +195,12 @@ const SYSTEMS: readonly System[] = [
     api: ['generateLegalActions'],
     // NO POOL CARD.
   },
+  {
+    id: 'replacements',
+    title: 'replacement + prevention effects (CR 614/615/616)',
+    api: ['replacementsOf', 'indexReplacements', 'replaceDamage', 'replaceCounters', 'replaceDraw'],
+    // NO POOL CARD.
+  },
 ];
 
 /**
@@ -312,7 +318,7 @@ nonhand x castcosts      | elsewhere | cast-cost.test.ts: flashbackXCost reads t
 nonhand x altcosts       | covered   | graveyard-and-alt-costs: flashback exiles however it leaves; buyback returns to hand only on resolve (CR 702.34a / 702.27a)
 nonhand x library        | untested  | a flashback spell that scries; nothing in the pool prints both
 nonhand x counters       | untested  | a flashback spell that puts counters on a permanent
-nonhand x cda            | gap       | sba-on-priority: a flashback cast empties a graveyard TYPE at cast time and the shrink is not judged until the spell resolves. CR 704.3
+nonhand x cda            | covered   | graveyard-and-alt-costs: a flashback cast empties a graveyard card TYPE at cast time and the shrink is judged before anyone responds (CR 704.3)
 nonhand x turnfacts      | untested  | a permanent leaving to fund a graveyard cast; the exile of a flashback card is not a battlefield departure
 nonhand x mana           | untested  | funding a flashback cost from a source with a rider or a restriction
 nonhand x attachments    | untested  | an Aura with flashback; none is printed
@@ -376,7 +382,7 @@ counters x attachments   | covered   | layers-counters-cda + transform-and-trigg
 counters x statics       | covered   | layers-counters-cda: an anthem, counters and a pump on one creature read the sum
 counters x triggers      | covered   | transform-and-triggers: a trigger that adds a counter to itself, on an ENGINE-created permanent
 
-cda x turnfacts          | n/a       | both read game state at resolution, but through different vocabularies with no shared input
+cda x turnfacts          | gap       | sba-on-priority: a star box that shrinks on a NON-cast path keeps standing with lethal damage until the next resolution. CR 704.3
 cda x mana               | n/a       | a star box is a P/T; a mana ability produces mana
 cda x attachments        | covered   | layers-counters-cda: an Equipment on a star box adds to the formula base
 cda x statics            | covered   | layers-counters-cda: an anthem on a star box adds to the formula base
@@ -480,6 +486,29 @@ addcosts x triggers           | untested  | a dies-trigger firing off the creatu
 addcosts x steptriggers       | n/a       | a step trigger is an ability, not a cast, so it never owes a casting cost
 addcosts x splitcards         | untested  | an additional cost printed on one half of a split card
 addcosts x asenters           | n/a       | the cost is paid while casting; the value is named as the permanent enters, a resolution later
+replacements x walkers        | untested  | a damage multiplier against a planeswalker: the replacement fires on the damage, the loyalty removal follows it
+replacements x battles        | untested  | the same question for defense counters, which damage strips by CR 120.3d
+replacements x legend         | n/a       | the legend rule is a state-based action; nothing about it is a replaceable event
+replacements x emblems        | untested  | an emblem carrying a replacement ability; the command zone is discovered by the continuous layer, not by the replacement index
+replacements x transform      | untested  | a face whose replacement ability differs from the other face's
+replacements x modal          | untested  | a mode that creates a prevention shield, aimed at cast alongside another mode
+replacements x nonhand        | n/a       | where a spell was cast from does not change what its damage is replaced by
+replacements x protection     | covered   | new-systems: protection prevents the damage outright, so a multiplier has nothing to double
+replacements x indestructible | covered   | new-systems: replacement changes the AMOUNT of damage, never whether lethal damage destroys
+replacements x castcosts      | untested  | {X} damage doubled - the X is chosen at cast and the replacement applies as the damage is dealt
+replacements x altcosts       | n/a       | an alternative cost is a route to the stack; a replacement acts on an event
+replacements x library        | untested  | a DRAW replacement over scry/surveil's draw half, and over an empty library
+replacements x counters       | covered   | new-systems: a doubler feeds the doubled count into CR 704.5q annihilation and the layer stack
+replacements x cda            | untested  | doubled damage judged against a star box that can shrink before state-based actions run
+replacements x turnfacts      | n/a       | a replacement acts on an event; a turn fact remembers one afterwards
+replacements x mana           | n/a       | mana production is not one of the three replaceable event kinds
+replacements x attachments    | untested  | an Aura or Equipment granting a prevention shield to its host
+replacements x statics        | untested  | a permanent carrying both; the two indexes are built separately and must agree about who is affected
+replacements x triggers       | untested  | a replaced event must still emit what a trigger watches - a prevented damage is not damage dealt
+replacements x steptriggers   | n/a       | a step trigger fires off the turn machine, which raises no replaceable event
+replacements x splitcards     | n/a       | a split card is a casting question; a replacement acts on damage, counters or draws
+replacements x asenters       | untested  | "enters with N counters" IS a replacement (CR 614.1c) and a counter doubler must see it
+replacements x addcosts       | n/a       | the cost is paid while casting; a replacement acts on an event a spell causes
 `;
 
 /**
@@ -509,18 +538,18 @@ const GAPS: readonly Gap[] = [
     cr: 'CR 704.3',
     repro: 'graveyard-and-alt-costs.test.ts',
     what:
-      'State-based actions are never checked when a player would RECEIVE PRIORITY. ' +
-      '`onPassPriority`, `advanceToStepWithPriority` and `grantPriority` do not call ' +
-      '`checkStateBasedActions`; the engine runs them only after a resolution, after combat ' +
-      'damage, after the draw step and at cleanup. A board that becomes illegal without a ' +
-      'resolution stays illegal until the next one. Reachable with two shipped cards: put ' +
-      'lethal-but-not-yet damage on a Tarmogoyf, then flash back the graveyard\'s only sorcery ' +
-      '- the card moves to the STACK as part of casting it, the star box shrinks, and the ' +
-      'creature stands there with lethal damage while the opponent takes priority.',
+      'NARROWED, not closed. CR 704.3 checks state-based actions whenever a player WOULD RECEIVE ' +
+      'PRIORITY. A sibling has since closed the announcement half - `applyCastSpell` now runs the ' +
+      'pass after a cast is announced, which is what a flashback cast emptying a graveyard card ' +
+      'TYPE out from under a Tarmogoyf needed, and that cell is now covered positively. What ' +
+      'remains: `onPassPriority`, `advanceToStepWithPriority` and `grantPriority` still never call ' +
+      '`checkStateBasedActions`, so a board that becomes illegal on any path that is NOT a cast, a ' +
+      'resolution, combat damage, the draw step or cleanup stays illegal until the next resolution.',
     whyNotFixedHere:
-      'the honest fix adds an SBA pass to the engine\'s hottest loop, and wall clock on this ' +
-      'box is worthless (the same build measured 39-87 games/sec within an hour), so it needs ' +
-      'a paired CPU-time measurement by whoever owns the hot path.',
+      'the remaining half puts an SBA pass on the engine\'s hottest loop (every priority pass, ' +
+      'every step change), and wall clock on this box is worthless - the same build reads 39-87 ' +
+      'games/sec within an hour - so it needs a paired CPU-time measurement by whoever owns the ' +
+      'hot path. The reproduction pins the honest current behaviour meanwhile.',
   },
   {
     id: 'spell-draw-decking',

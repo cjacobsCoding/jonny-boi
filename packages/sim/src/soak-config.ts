@@ -595,6 +595,15 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
   damagePrevented: 'damage-prevention',
   permanentAttached: 'attachment',
   gainLife: 'lifegain',
+  // --- CR 614/615 replacement + prevention (merged 2026-08-20). --------------
+  // `null`, and the reason is the point this map exists to force somebody to
+  // state: the soak REQUIRES a mechanic only when the shipped pool can print it,
+  // and no card in the pool declares `replacements` yet. Prevention already has
+  // its own witness through `damagePrevented`, which the layer emits, so a
+  // replaced-and-prevented shield is still counted. Give these an id the day a
+  // pool card carries a replacement ability.
+  replacementApplied: null,
+  replacementExpired: null,
 };
 
 // ---------------------------------------------------------------------------

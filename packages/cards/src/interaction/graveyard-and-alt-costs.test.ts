@@ -213,7 +213,7 @@ describe('CELL: cycling x madness x the discard funnel (CR 702.35)', () => {
 });
 
 describe('CELL: non-hand casting x characteristic-defining P/T', () => {
-  it('GAP: a flashback cast empties a graveyard TYPE at cast time and the shrink is not judged until it resolves (CR 704.3)', () => {
+  it('a flashback cast empties a graveyard TYPE at cast time, and the shrink is judged BEFORE anyone responds (CR 704.3)', () => {
     const reg = buildRegistry();
     let state = boardAtMain(reg);
     // Graveyard: an instant, a land, and the ONLY sorcery - Call of the Herd.
@@ -227,26 +227,52 @@ describe('CELL: non-hand casting x characteristic-defining P/T', () => {
     // Three damage - survivable at 3/4.
     state = boltAt(state, reg, goyf.id, 'B');
     expect(onBattlefield(state, goyf.id).damageMarked).toBe(3);
+    expect(isOnBattlefield(state, goyf.id)).toBe(true);
 
     // Casting Call of the Herd from the graveyard moves it to the STACK as part
-    // of casting it (CR 400.7 / 601.2a) - no resolution yet, and the sorcery type
-    // is gone from every graveyard, so the Goyf is a 2/3 with 3 damage on it.
+    // of casting it (CR 400.7 / 601.2a) - no resolution yet. The sorcery type is
+    // gone from every graveyard, so the Goyf is a 2/3 with 3 damage on it, and
+    // CR 704.3 checks state-based actions the instant the caster would receive
+    // priority. It must already be dead.
     fund(state, 'A');
     state = act(state, castOffer(state, call, 'graveyard')!, reg);
     expect(zoneOf(state, call)).toBe('stack');
+    expect(isOnBattlefield(state, goyf.id)).toBe(false);
+
+    // ...and the spell it paid for is still on the stack, which is the half a
+    // naive "run the SBAs later" fix would get wrong.
+    expect(state.stack.some((o) => o.instanceId === call)).toBe(true);
+  });
+
+  it('GAP: the SAME shrink caused WITHOUT a cast still waits for the next resolution (CR 704.3)', () => {
+    const reg = buildRegistry();
+    let state = boardAtMain(reg);
+    place(state, 'A', 'graveyard', poolCard('Lightning Bolt'));
+    place(state, 'A', 'graveyard', poolCard('Island'));
+    const sorcery = place(state, 'A', 'graveyard', poolCard('Call of the Herd'));
+    const goyf = resolvePermanent(state, reg, poolCard('Tarmogoyf'), 'A');
+    state = goyf.state;
+    state = boltAt(state, reg, goyf.id, 'B');
+    expect(onBattlefield(state, goyf.id).damageMarked).toBe(3);
+
+    // Take the card out of the graveyard by a route that is NOT an action -
+    // standing in for the effects that move cards between hidden zones during a
+    // resolution someone else started.
+    state.players.A.graveyard = state.players.A.graveyard.filter((c) => c.instanceId !== sorcery);
     expect(statsOf(state, goyf.id)).toEqual({ power: 2, toughness: 3 });
 
-    // ⛔ RECORDED GAP `sba-on-priority`: CR 704.3 checks state-based actions
-    // whenever a player would receive priority, and B is about to receive it to
-    // respond to this spell. The engine checks them only after a RESOLUTION,
-    // after combat damage, after the draw step and at cleanup, so the creature is
-    // still standing here with lethal damage marked - and B may legally block
-    // with it, target it, or trade with it during a window it should not exist in.
+    // HONEST CURRENT BEHAVIOUR - recorded GAP `sba-on-priority`, now NARROWED.
+    // A sibling closed the announcement half (the cell above): `applyCastSpell`
+    // runs the pass after the announcement. `onPassPriority`,
+    // `advanceToStepWithPriority` and `grantPriority` still do not, so a board
+    // that becomes illegal on any OTHER path stays illegal until the next
+    // resolution.
+    state = act(state, { kind: 'passPriority', player: state.priorityPlayer }, reg);
     expect(isOnBattlefield(state, goyf.id)).toBe(true);
+    expect(onBattlefield(state, goyf.id).damageMarked).toBe(3);
 
-    // It dies the moment the spell finishes resolving, which is what makes this a
-    // WINDOW rather than a permanently wrong board.
-    state = settle(state, reg);
+    // It dies the moment ANY resolution happens - a window, not a wrong board.
+    state = settle(castCard(state, reg, poolCard('Shock'), 'A', ['B']).state, reg);
     expect(isOnBattlefield(state, goyf.id)).toBe(false);
   });
 });

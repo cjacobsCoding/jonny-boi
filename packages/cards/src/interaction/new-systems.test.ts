@@ -29,6 +29,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   chosenSubtypeOf,
+  MINUS_ONE_COUNTER,
+  PLUS_ONE_COUNTER,
   effectivePower,
   effectiveToughness,
   indexContinuous,
@@ -129,6 +131,80 @@ const HOWLING_MINE = compiled(
     oracleText: "At the beginning of each player's draw step, that player draws an additional card.",
   }),
 );
+
+/** A 4/4 - survives a bolt, dies to a doubled one. */
+const OGRE: CardDefinition = {
+  id: 'matrix-rep-ogre',
+  name: 'Matrix Replacement Ogre',
+  types: ['creature'],
+  cost: { generic: 3, R: 1 },
+  power: 4,
+  toughness: 4,
+};
+
+/** "If one or more +1/+1 counters would be put on a creature you control, twice that many are put instead." */
+const COUNTER_DOUBLER: CardDefinition = {
+  id: 'matrix-counter-doubler',
+  name: 'Matrix Counter Doubler',
+  types: ['enchantment'],
+  cost: { generic: 2 },
+  replacements: [
+    {
+      event: 'counters',
+      // `counterKind` is NOT decoration: without it the same ability doubles the
+      // -1/-1 counters an opponent puts on your creatures too, which is a
+      // strictly worse card than the one printed. Every printed doubler names
+      // the kind, and this is the field that carries it.
+      applies: {
+        recipientController: 'you',
+        recipientFilter: { anyOfTypes: ['creature'] },
+        counterKind: PLUS_ONE_COUNTER,
+      },
+      outcome: { times: 2 },
+      label: 'double the +1/+1 counters put on your creatures',
+    },
+  ],
+};
+
+/** "If a source would deal damage to a permanent or player, it deals double that damage instead." */
+const DAMAGE_DOUBLER: CardDefinition = {
+  id: 'matrix-damage-doubler',
+  name: 'Matrix Damage Doubler',
+  types: ['enchantment'],
+  cost: { generic: 3 },
+  replacements: [
+    {
+      event: 'damage',
+      applies: { sourceController: 'you' },
+      outcome: { times: 2 },
+      label: 'your sources deal double damage',
+    },
+  ],
+};
+
+/** "Put N +1/+1 counters on target creature" - the REAL registered primitive. */
+function counterSpell(id: string, amount: number): CardDefinition {
+  return {
+    id,
+    name: id,
+    types: ['sorcery'],
+    timing: 'sorcery',
+    cost: { generic: 1 },
+    effects: [{ primitive: 'addCounters', params: { amount, targets: 'creature' } }],
+  };
+}
+
+/** Lightning Bolt from `caster`'s hand at a permanent, resolved. */
+function boltAt(state: GameState, reg: Registry, target: InstanceId, caster: 'A' | 'B'): GameState {
+  const bolt = place(state, caster, 'hand', poolCard('Lightning Bolt'));
+  fund(state, caster);
+  const before = state.priorityPlayer;
+  state.priorityPlayer = caster;
+  let next = act(state, { kind: 'castSpell', player: caster, instanceId: bolt, targets: [target] }, reg);
+  next = settle(next, reg);
+  if (!next.pendingChoice) next.priorityPlayer = before;
+  return next;
+}
 
 function statsOf(state: GameState, id: InstanceId): { power: number; toughness: number } {
   const inst = onBattlefield(state, id);
@@ -452,6 +528,77 @@ describe('CELL: step triggers x the intervening "if" (CR 603.4)', () => {
 
     // An absent condition holds, which is what every ordinary trigger means.
     expect(interveningIfHolds(state, undefined, mine.id, 'A')).toBe(true);
+  });
+});
+
+// --- REPLACEMENT EFFECTS x counters, damage, protection, indestructible ------------
+
+describe('CELL: replacement effects x counters x annihilation x the star box', () => {
+  it('a counter DOUBLER feeds the doubled count through annihilation and the layer stack', () => {
+    const reg = buildRegistry();
+    let state = boardAtMain(reg);
+    const bear = resolvePermanent(state, reg, BEAR, 'A');
+    state = bear.state;
+
+    // Hardened-Scales-shaped: "If one or more +1/+1 counters would be put on a
+    // creature you control, that many plus one are put instead" - here a
+    // doubler, so the arithmetic is unambiguous.
+    const doubler = resolvePermanent(state, reg, COUNTER_DOUBLER, 'A');
+    state = doubler.state;
+
+    state = castCard(state, reg, counterSpell('matrix-rep-plus-two', 2), 'A', [bear.id]).state;
+    // 2 asked for, 4 put on (CR 614 applies BEFORE the counters exist), and the
+    // layer stack then reads the real number.
+    expect(onBattlefield(state, bear.id).counters[PLUS_ONE_COUNTER]).toBe(4);
+    expect(statsOf(state, bear.id)).toEqual({ power: 6, toughness: 6 });
+
+    // ...and the -1/-1 counters are NOT doubled, because the ability names its
+    // kind. Three go on, and CR 704.5q annihilates them against the DOUBLED
+    // total rather than the asked-for one: 4 - 3 = one +1/+1 counter left.
+    state = castCard(state, reg, counterSpell('matrix-rep-minus-three', -3), 'A', [bear.id]).state;
+    const counters = onBattlefield(state, bear.id).counters;
+    expect(counters[PLUS_ONE_COUNTER]).toBe(1);
+    expect(counters[MINUS_ONE_COUNTER] ?? 0).toBe(0);
+    expect(statsOf(state, bear.id)).toEqual({ power: 3, toughness: 3 });
+  });
+});
+
+describe('CELL: replacement effects x protection x indestructible (three ways damage stops)', () => {
+  it('protection PREVENTS the damage before a multiplier can touch it', () => {
+    const reg = buildRegistry();
+    let state = boardAtMain(reg);
+    // Silver Knight has protection from red; the multiplier doubles red damage.
+    const knight = resolvePermanent(state, reg, poolCard('Silver Knight'), 'A');
+    state = knight.state;
+    const doubler = resolvePermanent(state, reg, DAMAGE_DOUBLER, 'B');
+    state = doubler.state;
+
+    state = boltAt(state, reg, knight.id, 'B');
+    // Not 6, not 3 - ZERO. Protection is a prevention shield of its own
+    // (CR 702.16e) and a doubled zero is still zero.
+    expect(onBattlefield(state, knight.id).damageMarked).toBe(0);
+    expect(isOnBattlefield(state, knight.id)).toBe(true);
+  });
+
+  it('a DOUBLED bolt is lethal to a plain body and still cannot destroy an indestructible one', () => {
+    const reg = buildRegistry();
+    let state = boardAtMain(reg);
+    const doubler = resolvePermanent(state, reg, DAMAGE_DOUBLER, 'B');
+    state = doubler.state;
+
+    // 3 doubled to 6 kills a 4/4 that 3 would not have.
+    const ogre = resolvePermanent(state, reg, OGRE, 'A');
+    state = ogre.state;
+    state = boltAt(state, reg, ogre.id, 'B');
+    expect(isOnBattlefield(state, ogre.id)).toBe(false);
+
+    // The same 6 is still DESTRUCTION, so CR 702.12b exempts it: Zetalpa takes
+    // the damage and lives. Replacement changes the AMOUNT, never the rule.
+    const zetalpa = resolvePermanent(state, reg, poolCard('Zetalpa, Primal Dawn'), 'A');
+    state = zetalpa.state;
+    state = boltAt(state, reg, zetalpa.id, 'B');
+    expect(onBattlefield(state, zetalpa.id).damageMarked).toBe(6);
+    expect(isOnBattlefield(state, zetalpa.id)).toBe(true);
   });
 });
 
