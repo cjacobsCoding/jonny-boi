@@ -178,6 +178,26 @@ function selectionSize(choice: { min: number; max: number; valence: PendingChoic
  *    other `'loss'` selection: give up the WORST qualifying card. That is the
  *    tail of the same one sorted list, so there is exactly one ranking in this
  *    file and a card cannot be "best" for one question and "worst" for another.
+ *  - **THE CLEANUP DISCARD** (CR 514.1, `context: 'cleanupDiscard'`) is that same
+ *    COST policy, deliberately and with no branch of its own. "Discard down to
+ *    seven" asks the one question this file already answers — *which of these do
+ *    I least want to keep?* — and the discard is a `'loss'` selection of an exact
+ *    count, so the tail of the ranking IS the answer. Three properties of
+ *    `cardValue` are what make that a real policy rather than a shrug:
+ *      * a LAND is priced by the board, not in the abstract
+ *        (`choiceLandShortValue` while the pilot is still short of lands,
+ *        `choiceLandValue` once its mana is built), so an unbuilt pilot pitches a
+ *        spell and a flooded one pitches the land — which is the actual decision
+ *        a human makes at end of turn;
+ *      * a CREATURE is priced by its effective stats through the board's
+ *        continuous index, so the anthem that makes a 1/1 a real card is seen;
+ *      * a SPELL is priced by mana value, so the uncastable seven-drop goes
+ *        before the one-mana trick.
+ *    ⚠️ What it deliberately does NOT model is what a card is worth NEXT turn: a
+ *    reactive instant held for the opponent's turn prices the same as a sorcery,
+ *    and a second copy of a card prices the same as the first. Improving that is
+ *    a `cardValue` change (one ranking, every consumer), never a second opinion
+ *    written here.
  *  - **A SCRY/SURVEIL look** — a per-card verdict, not a count; see below.
  */
 function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights: HeuristicWeights): ChoiceAnswer {

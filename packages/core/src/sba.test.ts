@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { applyAction, createGame, DEFAULT_RULES, type GameState, type PlayerId } from './index.js';
+import {
+  applyAction,
+  checkStateBasedActions,
+  cloneState,
+  createGame,
+  DEFAULT_RULES,
+  MINUS_ONE_COUNTER,
+  NO_COUNTERS,
+  PLUS_ONE_COUNTER,
+  stateBasedActionsPossible,
+  type CardDefinition,
+  type CardInstance,
+  type GameState,
+  type PlayerId,
+} from './index.js';
 import { createEffectRegistry } from './effects.js';
 import { creatureDef, deck, deckOf, giveHand, landDef, passOrAnswer, spellDef } from './test-fixtures.js';
 
@@ -105,5 +119,119 @@ describe('state-based actions: zero-toughness death', () => {
     s = pass(s, registry);
     expect(s.battlefield.some((c) => c.def.id === 'Bear')).toBe(false);
     expect(s.players.A.graveyard.some((c) => c.def.id === 'Bear')).toBe(true);
+  });
+});
+
+// --- CR 704.3: the priority boundary, and the cheap gate in front of it ----------
+
+describe('state-based actions at the priority boundary (CR 704.3)', () => {
+  /** A settled position: A's precombat main, both hands emptied, nothing in play. */
+  function quiet(seed = 41): GameState {
+    const g = createGame({ seed, startingPlayer: 'A', decks: { A: deckOf(ISLAND, 40), B: deckOf(ISLAND, 40) } });
+    const s = advanceToStep(g.state, 'precombatMain');
+    s.players.A.hand = [];
+    s.players.B.hand = [];
+    return s;
+  }
+
+  /** Put a creature straight onto the battlefield as a test POSITION. */
+  function place(state: GameState, def: CardDefinition, controller: PlayerId, damage = 0): CardInstance {
+    const inst: CardInstance = {
+      instanceId: state.nextInstanceId++,
+      def,
+      controller,
+      owner: controller,
+      zone: 'battlefield',
+      tapped: false,
+      summoningSick: false,
+      damageMarked: damage,
+      markedByDeathtouch: false,
+      attachedTo: null,
+      counters: NO_COUNTERS,
+    };
+    state.battlefield.push(inst);
+    return inst;
+  }
+
+  it('catches a life total that no mutation site announced', () => {
+    // The reproduction the conformance suite filed: the condition is written
+    // straight onto the state, so none of the dozen explicit call sites runs and
+    // only the boundary can catch it.
+    const s = quiet();
+    s.players.B.life = 0;
+    const after = pass(s);
+    expect(after.players.B.hasLost).toBe(true);
+    expect(after.gameOver).toBe(true);
+    expect(after.winner).toBe('A');
+  });
+
+  it('catches a creature that was killed with no mutation site behind it', () => {
+    const s = quiet();
+    const bear = place(s, creatureDef('Bear', 2, 2), 'B');
+    bear.damageMarked = 2;
+    const after = pass(s);
+    expect(after.battlefield.some((c) => c.instanceId === bear.instanceId)).toBe(false);
+    expect(after.players.B.graveyard.some((c) => c.instanceId === bear.instanceId)).toBe(true);
+  });
+
+  /**
+   * THE GATE'S ONE CONTRACT, asserted in the only direction that matters.
+   *
+   * `stateBasedActionsPossible` is allowed to say YES on a board with nothing to
+   * do — that costs one wasted check. It must never say NO on a board where the
+   * real check would act, because that silently defers a state-based action,
+   * which is the exact defect the boundary check exists to prevent.
+   */
+  it('the cheap gate never says "nothing to do" on a board that has something to do', () => {
+    const positions: ReadonlyArray<readonly [string, (s: GameState) => void]> = [
+      ['a player at zero life', (s) => { s.players.B.life = 0; }],
+      ['a player at negative life', (s) => { s.players.A.life = -3; }],
+      ['a player already flagged as lost', (s) => { s.players.B.hasLost = true; }],
+      ['lethal damage marked', (s) => { place(s, creatureDef('Bear', 2, 2), 'A', 2); }],
+      ['deathtouch damage below lethal', (s) => {
+        const bear = place(s, creatureDef('Bear', 2, 2), 'A', 1);
+        bear.markedByDeathtouch = true;
+      }],
+      ['a printed zero-toughness creature', (s) => { place(s, creatureDef('Nothing', 1, 0), 'A'); }],
+      ['a creature shrunk below zero by counters', (s) => {
+        const bear = place(s, creatureDef('Bear', 2, 2), 'A');
+        bear.counters = { [MINUS_ONE_COUNTER]: 2 };
+      }],
+      ['both counter kinds on one permanent (CR 704.5q)', (s) => {
+        const bear = place(s, creatureDef('Bear', 2, 2), 'A');
+        bear.counters = { [PLUS_ONE_COUNTER]: 2, [MINUS_ONE_COUNTER]: 1 };
+      }],
+      ['two legendary permanents with the same name', (s) => {
+        const legend: CardDefinition = { ...creatureDef('Hero', 2, 2), legendary: true };
+        place(s, legend, 'A');
+        place(s, legend, 'A');
+      }],
+    ];
+    for (const [what, arrange] of positions) {
+      const s = quiet();
+      arrange(s);
+      // The REAL check is what decides whether there was something to do: run it
+      // on a copy and see whether the board moved. Asking the gate to agree with
+      // a hand-written list of conditions would be a second opinion; asking it to
+      // agree with the rule it guards is the contract.
+      const copy = cloneState(s);
+      // The WHOLE state, not : the inspector view does not carry
+      // counters, and CR 704.5q moves nothing else.
+      const before = JSON.stringify(copy);
+      checkStateBasedActions(copy, () => {});
+      const acted = JSON.stringify(copy) !== before;
+      expect(acted, `${what}: the real check did nothing, so this position proves nothing`).toBe(true);
+      expect(stateBasedActionsPossible(s), `${what}: the gate skipped a live condition`).toBe(true);
+    }
+  });
+
+  it('says no on a settled board, so the hot path pays one walk and nothing else', () => {
+    // Not a correctness claim — a false YES is harmless — but the whole reason
+    // the gate exists. If this ever flips, the boundary check is running the full
+    // pass on every priority pass of every sim game.
+    const s = quiet();
+    place(s, creatureDef('Bear', 2, 2), 'A');
+    place(s, creatureDef('Wall', 0, 4), 'B', 1);
+    expect(stateBasedActionsPossible(s)).toBe(false);
   });
 });
