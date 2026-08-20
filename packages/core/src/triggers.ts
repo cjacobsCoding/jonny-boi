@@ -20,6 +20,7 @@ import type { CardType, EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
+import { permanentHasSubtype } from './card.js';
 import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
 import type { TargetRestriction } from './targeting.js';
 
@@ -235,9 +236,14 @@ export function conditionMatches(
         // does: an unnamed value is the inert default, and a trigger that fired
         // on every spell would be a strictly better card than the printed one.
         if (sourceChosenAsEntered === undefined || sourceChosenAsEntered === '') return false;
-        const wanted = sourceChosenAsEntered.toLowerCase();
-        const castSubtypes = event.castSubtypes ?? NO_CAST_SUBTYPES;
-        if (!castSubtypes.some((subtype) => subtype.toLowerCase() === wanted)) return false;
+        const wanted = sourceChosenAsEntered;
+        // The SPELL itself is the subject here — resolved from the stack by the
+        // runtime, exactly as a board-watching trigger's permanent is resolved
+        // from the battlefield. Read off the object rather than off the event
+        // because the event is the LOG, and widening a logged event's payload
+        // for one trigger's benefit would change every replay's bytes for a
+        // fact the object already carries.
+        if (!subject || !permanentHasSubtype(subject.card, wanted)) return false;
       }
       return true;
     }
@@ -288,9 +294,6 @@ export function conditionMatches(
   }
 }
 
-/** Shared empty list for a cast event that carries no subtypes. */
-const NO_CAST_SUBTYPES: readonly string[] = Object.freeze([]);
-
 /**
  * The turn step each step-beginning trigger watches. One table so the trigger
  * name and the step it means cannot drift apart, and so adding a step trigger is
@@ -314,6 +317,11 @@ const STEP_FOR_TRIGGER: Readonly<Record<string, Step>> = Object.freeze({
  * Passed in rather than looked up here because `triggers.ts` is a pure matcher
  * with no access to the game state; the runtime that emits the event resolves
  * the instance once per event and hands it down.
+ *
+ * It also carries the SPELL for a cast trigger narrowed by a creature type
+ * ("whenever you cast a creature spell of the chosen type") — same shape, same
+ * seam, and the reason the `spellCast` EVENT did not have to grow a subtype
+ * list that every replay would then carry.
  */
 export interface TriggerSubject {
   readonly controller: PlayerId;
@@ -383,7 +391,9 @@ export function matchTriggers(
     if (!subjectResolved) {
       subjectResolved = true;
       subject =
-        resolveSubject && event.type === 'zoneChange' ? resolveSubject(event.instanceId) : undefined;
+        resolveSubject && (event.type === 'zoneChange' || event.type === 'spellCast')
+          ? resolveSubject(event.instanceId)
+          : undefined;
     }
     return subject;
   };
@@ -396,7 +406,11 @@ export function matchTriggers(
     for (let abilityIndex = 0; abilityIndex < abilities.length; abilityIndex++) {
       const ability = abilities[abilityIndex] as TriggeredAbility;
       const watchesBoard =
-        ability.condition.on === 'permanentEnters' || ability.condition.on === 'permanentDies';
+        ability.condition.on === 'permanentEnters' ||
+        ability.condition.on === 'permanentDies' ||
+        // A cast trigger narrowed by the chosen creature type needs the SPELL
+        // object, for the same reason and through the same seam.
+        ability.condition.spellSubtypeIsChosen === true;
       if (
         !conditionMatches(
           ability.condition,

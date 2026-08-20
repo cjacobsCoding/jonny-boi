@@ -187,6 +187,17 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     for (const perm of state.battlefield) {
       if (perm.instanceId === instanceId) return { controller: perm.controller, card: perm };
     }
+    // A SPELL BEING CAST is on the stack, not in a zone — this is what a cast
+    // trigger narrowed by a creature type reads ("whenever you cast a creature
+    // spell of the chosen type"). Searched after the battlefield because that is
+    // where the overwhelming majority of lookups find their answer, and searched
+    // at all only because the alternative was widening the `spellCast` EVENT
+    // with a subtype list every replay would then carry.
+    for (const object of state.stack) {
+      if (object.kind === 'spell' && object.card.instanceId === instanceId) {
+        return { controller: object.controller, card: object.card };
+      }
+    }
     for (const player of Object.values(state.players)) {
       for (const card of player.graveyard) {
         if (card.instanceId === instanceId) return { controller: card.controller, card };

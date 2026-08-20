@@ -2297,7 +2297,6 @@ function applyCastSpell(
     instanceId: card.instanceId,
     name: castDef.name,
     castTypes: [...castDef.types],
-    castSubtypes: castDef.subtypes ? [...castDef.subtypes] : [],
     ...(fromZone === 'hand' ? {} : { fromZone }),
   });
   // Ward (CR 702.21): targeting an opponent's warded permanent triggers the
