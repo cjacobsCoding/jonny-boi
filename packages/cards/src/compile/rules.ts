@@ -517,8 +517,15 @@ function landTypeList(text: string): readonly string[] | null {
  * rather than a heuristic: a card named "Swamp" is a basic Swamp.
  */
 function basicNamesFor(types: readonly string[]): readonly string[] {
-  const wanted = new Set(types);
-  return BASIC_LAND_NAMES.filter((name) => wanted.has(name.toLowerCase()));
+  const byType = new Map(BASIC_LAND_NAMES.map((name) => [name.toLowerCase(), name]));
+  // PRINTED order, not the pool's: the params a card carries should read the way
+  // the card reads, which is what makes a diff of two compiled cards legible.
+  const names: string[] = [];
+  for (const type of types) {
+    const name = byType.get(type);
+    if (name !== undefined && !names.includes(name)) names.push(name);
+  }
+  return names;
 }
 
 /**
