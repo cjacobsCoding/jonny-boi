@@ -229,6 +229,14 @@ _Append dated notes here; keep them short. Newest at top._
   copy THAT spell", a follow-up sentence about the token just created ("That token gains haste"), and
   an "except …" tail on a SPELL copy (Fork's "except that the copy is red").
 
+  ✅ **RE-GATED AFTER MERGING `origin/main` at `b01cedf`** (CR 704.3 at the priority boundary,
+  CR 704.5q, the CR 514.1 cleanup discard): `npm run verify` exit 0, `npm run build` exit 0,
+  **4981 passed / 0 failed**, gauntlet at seed 99 STILL 79/280 with the same seven rows. The doc
+  conflicts in DESIGN and this file were resolved keeping BOTH sides. And the generated pool data
+  was checked BY NAME rather than by count, because that merge text-merges silently:
+  `starter-cards.json`, `expanded-pool.ts` and both card indexes are strict SUPERSETS of
+  `origin/main`’s — 545 → 553 with nothing of main’s dropped.
+
 
 - 2026-08-20 worker: `fix/max-hand-size-and-sba` 🚧 PUSHED — **CR 704.3 at the priority boundary,
   CR 704.5q as a real state-based action, a REVIEW of the CR 514.1 that landed while I was building

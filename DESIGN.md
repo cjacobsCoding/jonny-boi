@@ -3385,6 +3385,18 @@ the object just created** ("That token gains haste" — Helm of the Host), delib
 the copy's keywords because a grant is layer 6 on THAT object and is not among the copiable values a
 second copy would take; and an **"except …" tail on a SPELL copy** (Fork's "except that the copy is
 red"), for which `CopyExceptions` has no colour field.
+
+**Re-gated after merging `origin/main` at `b01cedf`** (which brought CR 704.3 at the priority
+boundary, CR 704.5q and the CR 514.1 cleanup discard). `npm run verify` exit 0, `npm run build`
+exit 0, **4981 passed / 0 failed**, and the gauntlet at seed 99 is STILL byte-identical —
+**79/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 14. The corpus measurement is unmoved by the merge and
+is properly paired: main’s compiler is untouched since the branch point (the only file it changed
+under `packages/cards/src/compile` is a test), so its playable set is still exactly the 545 captured
+there, and the merged branch’s 550 differs from it by **five additions and zero removals**. Every
+generated pool artefact was diffed against `origin/main` by NAME rather than by count —
+`starter-cards.json`, `expanded-pool.ts` and both card indexes are strict supersets, so the merge
+dropped nothing of main’s.
+
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).
