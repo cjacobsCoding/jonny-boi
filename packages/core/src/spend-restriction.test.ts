@@ -386,6 +386,22 @@ describe('payment spends the restricted mana first', () => {
     expect(paid.pool.C).toBe(1);
   });
 
+  it('a source that makes THREE restricted mana at once funds three pips of one spell', () => {
+    // Somberwald Sage. One tap, one parcel of three; the parcel drains across the
+    // whole payment rather than one mana of it being spendable and two stranded.
+    const s = newGame();
+    const sage = place(s, SAGE, 'A');
+    const bear = putInHand(s, BEAR, 'A');
+    const main = advanceToStep(s, 'precombatMain');
+    let state = act(main, { kind: 'tapForMana', player: 'A', instanceId: sage, mode: 0 });
+    expect(state.players.A.manaPool.G).toBe(3);
+    expect(restrictedTotal(state.players.A.manaPool)).toBe(3);
+    state = act(state, { kind: 'castSpell', player: 'A', instanceId: bear });
+    // {1}{G} paid, one restricted mana left over — and still restricted.
+    expect(poolTotal(state.players.A.manaPool)).toBe(1);
+    expect(restrictedTotal(state.players.A.manaPool)).toBe(1);
+  });
+
   it('a partly-spendable parcel keeps its remainder', () => {
     const pool = {
       ...emptyPool(),
