@@ -1371,8 +1371,8 @@ Still open, roughly by how often they block a real decklist:
   `tutorReachableManaLead` of its current lands by `tutorUncastablePenalty` — a DISCOUNT, not a ban,
   so an unreachable card is still fetched when it is the only thing that qualifies. Paying a cost is
   the same one ranking read from the other end: the pilot gives up its WORST qualifying permanent.
-  **Measured** on the cached 2100-card corpus, same-day `origin/main` baseline: **408 → 444 / 2100
-  playable (19.4% → 21.1%)**.
+  **Measured** on the cached 2100-card corpus, same-day `origin/main` baseline: **408 → 446 / 2100
+  playable (19.4% → 21.2%)**.
   ⚠️ Still reported, by name: a search whose restriction no `CardFilter` can say (**"a nonlegendary
   card"** — there is no supertype field; **"with mana value X or less"** — X is a cast-time value no
   filter reads, which is what blocks Green Sun's Zenith and Chord of Calling; "an artifact card with a
