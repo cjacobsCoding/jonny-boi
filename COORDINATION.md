@@ -278,7 +278,8 @@ _Append dated notes here; keep them short. Newest at top._
 
 - 2026-08-20 worker: `feat/block-requirements-and-statics` 🚧 PUSHED — **CR 509.1c/d block
   requirements (the half §3.17 deliberately left) + four standalone rules statics. Paired against a
-  same-box `origin/main` worktree: 510 → 519 / 2100 playable, +9, ZERO regressions** (the two
+  same-box `origin/main` worktree: 524 → 533 / 2100 playable, +9, ZERO regressions** — and the same
+  +9 against every main this branch merged forward through (408→417, 485→494, 510→519, 524→533), (the two
   playable sets were dumped and diffed, not counted). Suite **4082 passed, 0 failed**;
   `npm run verify` 0; `npm run build` 0. DESIGN §3.25 has the full write-up.
 

@@ -2772,9 +2772,10 @@ unsupported hint now names the SHAPE that is missing rather than claiming the wh
   this section added, and a different field: it lowers a limit rather than removing one.
 
 **Measured yield:** **+9 playable cards** on the cached 2100-card corpus, measured PAIRED against a
-same-box `origin/main` worktree — **510 → 519 / 2100** at main's current tip, and the SAME +9 against
-two earlier baselines while this branch was out (408 → 417, then 485 → 494), which is what a paired
-measurement is for. **Zero regressions:** the two playable sets were dumped and diffed, not counted.
+same-box `origin/main` worktree — and the SAME +9 against FOUR successive main baselines as this
+branch merged forward: **408 → 417**, **485 → 494**, **510 → 519**, **524 → 533 / 2100**. Four
+sibling branches landed in between and each moved the baseline; the delta did not, which is what a
+paired measurement is for. **Zero regressions:** the two playable sets were dumped and diffed, not counted.
 The nine are Supreme Verdict, Reliquary Tower, Spellbook, Crucible of Worlds, Ramunap Excavator,
 Universal Automaton, Changeling Outcast, Gingerbrute and Abandoned Air Temple. It comes from the
 solver plus ten rule-table entries — and the +9 UNDERSTATES what closed, which is worth reading before
