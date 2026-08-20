@@ -18,6 +18,11 @@
 import type { CastZone } from './actions.js';
 import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
 import { MANA_COLORS } from './mana.js';
+// TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
+// and subtype readers, so a VALUE import here would close a runtime cycle. A
+// `CardFilter` is plain serializable data, so the type is all a printed cost
+// needs in order to say what qualifies (see `AdditionalCastCost`).
+import type { CardFilter } from './choices.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
 export type CardType =
@@ -552,6 +557,26 @@ export interface CardDefinition {
    */
   readonly buyback?: ManaCost;
   /**
+   * A MANDATORY ADDITIONAL COST paid as this spell is cast — "As an additional
+   * cost to cast this spell, sacrifice a creature" (Village Rites), "…discard a
+   * card" (Thrill of Possibility).
+   *
+   * It is NOT the optional-cost shape {@link kicker} and {@link buyback} have,
+   * and the difference is the whole point of a separate field: an optional cost
+   * may be declined, so a caster who cannot pay simply casts the spell without
+   * it. This one may not. CR 601.2h makes an unpayable cost an ILLEGAL CAST —
+   * so a Village Rites with no creature is not offered and is rejected if a
+   * hand-built action tries it, exactly as a spell with no legal target is.
+   * Treating it as declinable would print a strictly better card: a free
+   * two-card draw.
+   *
+   * Paying it is a real sacrifice/discard performed by the engine as the answer
+   * is accepted, through the same zone-change funnel every other one uses —
+   * which is what makes a dies/leaves-the-battlefield trigger and the madness
+   * discard replacement see it, because in the rules they genuinely do.
+   */
+  readonly additionalCost?: AdditionalCastCost;
+  /**
    * MADNESS — "If you discard this card, exile it instead of putting it into
    * your graveyard. When you do, you may cast it for its madness cost" (CR
    * 702.35). The value is that cost.
@@ -834,6 +859,33 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   const frozen = Object.freeze(colors);
   COLORS_MEMO.set(def, frozen);
   return frozen;
+}
+
+/**
+ * A mandatory additional cost printed on a spell — see
+ * {@link CardDefinition.additionalCost}.
+ *
+ * `kind` says which zone the payment comes out of and what the move MEANS:
+ * `'sacrifice'` takes permanents its controller controls off the battlefield,
+ * `'discard'` takes cards out of its controller's hand. Both are expressed with
+ * the shared {@link CardFilter} vocabulary rather than a private one, so
+ * "sacrifice an artifact **or creature**" is the same data an edict, a search
+ * and an anthem are narrowed by.
+ *
+ * `count` is how many (default 1). There is deliberately NO "you may" variant
+ * here: an optional additional cost is a different decision (it may be declined,
+ * so it can never make a cast illegal) and belongs in its own field when a card
+ * that prints one is implemented.
+ */
+export interface AdditionalCastCost {
+  /** Which zone the payment leaves, and what the move means. */
+  readonly kind: 'sacrifice' | 'discard';
+  /** How many cards/permanents (default 1). */
+  readonly count?: number;
+  /** What qualifies. Absent means "any card in that zone". */
+  readonly filter?: CardFilter;
+  /** Printed text, for the prompt and the log. */
+  readonly label: string;
 }
 
 /**

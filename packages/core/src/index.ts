@@ -50,6 +50,7 @@ export {
 // Card model seam
 export type {
   ActivatedAbility,
+  AdditionalCastCost,
   CyclingAbility,
   ActivationCost,
   EntersUntappedCondition,
