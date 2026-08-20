@@ -171,6 +171,25 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    * kept card moves library → library and is anonymised by the same rule.
    */
   cardsLookedAt: 'public',
+  /*
+   * THE CLEANUP DISCARD (CR 514.1) is public as printed, and it is public
+   * BECAUSE of what it does not carry.
+   *
+   * That a player was over their maximum hand size, and by how many, is watched
+   * by the whole table: hand size is open information (CR 402.1 — a player may
+   * count another player's hand), and the discard happens face-up. So the count
+   * is a spectator fact.
+   *
+   * WHICH cards went is the same kind of secret `drawCard` protects — a card
+   * leaving a hand is a card whose identity nobody outside that hand knew — and
+   * this event does not carry it. The identities travel on their own, as one
+   * `zoneChange` per discarded card, and land in a GRAVEYARD, which the
+   * `zoneChange` rule above already resolves as a public destination. That is
+   * the right answer for a discard (a graveyard is a public zone; everybody sees
+   * what was pitched) and it is reached by the existing rule rather than by a
+   * second opinion written here.
+   */
+  cleanupDiscard: 'public',
   abilityActivated: 'public',
   /*
    * CYCLING is public as printed, and the name it carries is not a leak: the

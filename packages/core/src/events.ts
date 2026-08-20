@@ -56,6 +56,27 @@ export type GameEvent =
     }
   | {
       /**
+       * The active player discarded down to their maximum hand size as their own
+       * cleanup step began (CR 514.1, enforcing the CR 402.2 maximum).
+       *
+       * It carries a COUNT and no instance ids, on purpose. That somebody was
+       * over the limit, and by how much, is a fact the whole table watches — the
+       * cards are counted in the open. WHICH cards went is not carried here
+       * because it does not need to be: every discarded card lands in a
+       * graveyard through its own `zoneChange`, and a graveyard is a public zone,
+       * so the identities arrive by exactly the route every other discard's do.
+       * Splitting it this way is what lets this event travel to a pilot as
+       * printed instead of needing a redaction shape of its own.
+       */
+      readonly type: 'cleanupDiscard';
+      readonly player: PlayerId;
+      /** How many cards were discarded — hand size minus the maximum. */
+      readonly count: number;
+      /** The maximum that was enforced (`RulesConfig.maximumHandSize`). */
+      readonly maximumHandSize: number;
+    }
+  | {
+      /**
        * A discarded card with madness was exiled instead, and its owner now has
        * the window to cast it for its madness cost (CR 702.35a).
        */

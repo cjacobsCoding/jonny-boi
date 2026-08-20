@@ -45,6 +45,7 @@ import {
   isTrivialChoice,
   matchesCardFilter,
   MAX_CHOICES_PER_RESOLUTION,
+  NO_ASKING_OBJECT,
   normalizeChoiceRequest,
   NOTHING_CHOSEN,
   permanentTargetOption,
@@ -126,7 +127,13 @@ import { clearTurnFacts } from './turn-facts.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { findOnBattlefield, moveToZone, resetInstanceForNewZone } from './internal/zones.js';
-import { applyLegendRuleChoice, checkStateBasedActions, loseGame, resolveWinner } from './internal/sba.js';
+import {
+  applyLegendRuleChoice,
+  checkStateBasedActions,
+  loseGame,
+  resolveWinner,
+  stateBasedActionsPossible,
+} from './internal/sba.js';
 import {
   assignAndDealCombatDamage,
   canBlock,
@@ -380,8 +387,15 @@ function advanceStep(state: GameState, config: RulesConfig, emit: (e: GameEvent)
   const isLastStep = idx === STEP_ORDER.length - 1;
 
   if (isLastStep) {
-    // Cleanup just finished → next player's turn.
-    passTurn(state, config, emit);
+    // ANOTHER CLEANUP STEP (CR 514.3a), not the next turn — and reaching here at
+    // all is what says so. A cleanup step normally hands out no priority and
+    // ends the turn itself (`performCleanupStep` below), so the only way both
+    // players can pass on an empty stack *while the step is still cleanup* is
+    // that something during that cleanup opened a priority window. CR 514.3a
+    // says exactly one thing happens once the stack empties and everyone
+    // passes: another cleanup step begins. The re-entry is therefore free of
+    // any new state — the step the game is standing in IS the flag.
+    performCleanupStep(state, config, emit);
     return;
   }
 
@@ -427,24 +441,7 @@ function performStepTurnBasedActions(
       break;
     }
     case 'cleanup': {
-      enterStep(state, step, emit);
-      // "Until end of turn" continuous effects end here (emits an expiry event per
-      // effect for the inspector/sim-log), then marked damage clears. Order matters
-      // only for observability; expiry before damage-clear mirrors MTG cleanup.
-      expireContinuousEffects(state, 'endOfTurn', emit);
-      pruneOrphanContinuousEffects(state);
-      // A grant made to a card in a graveyard wears off on the same clock
-      // (Snapcaster's "until end of turn"), through its own list — see
-      // `card-grants.ts` for why it is not part of the continuous layer.
-      expireCardGrants(state, 'endOfTurn', emit);
-      for (const inst of state.battlefield) {
-        inst.damageMarked = 0;
-        inst.markedByDeathtouch = false;
-      }
-      emptyManaPools(state, emit);
-      checkStateBasedActions(state, emit);
-      // Cleanup normally grants no priority; advance straight to next turn.
-      passTurn(state, config, emit);
+      performCleanupStep(state, config, emit);
       break;
     }
     default: {
@@ -453,6 +450,229 @@ function performStepTurnBasedActions(
       break;
     }
   }
+}
+
+/**
+ * The CLEANUP STEP (CR 514), in the two halves the rule prints, in that order:
+ *
+ *  1. **CR 514.1** — the active player discards down to their maximum hand size
+ *     ({@link RulesConfig.maximumHandSize}). It is a turn-based action that uses
+ *     no stack, but WHICH cards go is the player's choice, so it parks a question
+ *     and this function returns; {@link finishCleanupStep} is called again by the
+ *     answer. A player already at or under the maximum is never asked.
+ *  2. **CR 514.2** — damage marked on permanents is removed and every "until end
+ *     of turn" effect ends, simultaneously.
+ *
+ * Split this way because half the step happens on the far side of a player
+ * decision. The split is invisible on the overwhelmingly common path (nobody is
+ * over the limit, so the two halves run back to back in one call) and the event
+ * log for such a turn is byte-identical to the one this engine has always
+ * produced.
+ */
+function performCleanupStep(state: GameState, config: RulesConfig, emit: (e: GameEvent) => void): void {
+  enterStep(state, 'cleanup', emit);
+  // CR 514.1 FIRST — before damage clears and before "until end of turn" ends,
+  // which is the printed order. Nothing about the hand depends on either, so on
+  // this engine the order is a fidelity statement rather than an observable one;
+  // it is written the way the rule is written so it stays right if that changes.
+  if (raiseCleanupDiscard(state, config, emit)) return;
+  finishCleanupStep(state, config, emit);
+}
+
+/**
+ * The rest of the cleanup step, once the CR 514.1 discard is settled: CR 514.2's
+ * simultaneous damage removal and end-of-turn expiry, and then CR 514.3's
+ * decision about whether the turn simply ends.
+ *
+ * Called from {@link performCleanupStep} and from the discard's answer handler,
+ * so both routes run exactly the same code in exactly the same order.
+ */
+function finishCleanupStep(state: GameState, config: RulesConfig, emit: (e: GameEvent) => void): void {
+  // "Until end of turn" continuous effects end here (emits an expiry event per
+  // effect for the inspector/sim-log), then marked damage clears. Order matters
+  // only for observability; expiry before damage-clear mirrors MTG cleanup.
+  expireContinuousEffects(state, 'endOfTurn', emit);
+  pruneOrphanContinuousEffects(state);
+  // A grant made to a card in a graveyard wears off on the same clock
+  // (Snapcaster's "until end of turn"), through its own list — see
+  // `card-grants.ts` for why it is not part of the continuous layer.
+  expireCardGrants(state, 'endOfTurn', emit);
+  for (const inst of state.battlefield) {
+    inst.damageMarked = 0;
+    inst.markedByDeathtouch = false;
+  }
+  emptyManaPools(state, emit);
+  checkStateBasedActions(state, emit);
+  if (state.gameOver) return;
+  // CR 514.3 — normally NO player receives priority during cleanup, and the turn
+  // simply ends. CR 514.3a is the exception, and {@link cleanupNeedsPriority}
+  // decides it; when it holds, the floor is handed out and `advanceStep` starts
+  // another cleanup step once the stack empties and both players pass.
+  if (cleanupNeedsPriority(state)) {
+    grantPriority(state);
+    return;
+  }
+  passTurn(state, config, emit);
+}
+
+/**
+ * CR 514.3a — whether this cleanup step has to hand out priority instead of
+ * ending the turn: "if any state-based actions would be performed, or if any
+ * triggered abilities are waiting to be put onto the stack, those state-based
+ * actions are performed, then those triggered abilities are put onto the stack,
+ * then the active player gets priority."
+ *
+ * ⚠️ The rule is 514.3a. Several places in this repo cite "CR 514.2" for it; 514.2
+ * is the damage removal, and the conformance suite's correction table has the
+ * rest of that family.
+ *
+ * Two of the three clauses are answered by the shape of this engine rather than
+ * by a scan, and that is worth being explicit about because it is what keeps the
+ * common path free:
+ *
+ *  - **Triggered abilities waiting.** Nothing a cleanup step does can fire one.
+ *    Its turn-based actions are a discard, damage removal and effect expiry, and
+ *    `TriggerEvent` has no member any of those match — there is no "whenever you
+ *    discard", no "whenever a card is put into a graveyard from anywhere", and
+ *    `dies`/`leaves` are battlefield triggers. Adding such an event to
+ *    `triggers.ts` is exactly the moment to revisit this function; the rules
+ *    manifest's mapped types make that addition impossible to make silently.
+ *  - **State-based actions.** The check has just run, immediately above, and
+ *    nothing the cleanup performs can make one applicable: no life total moves,
+ *    no toughness moves, no permanent changes zones and no duplicate legend
+ *    appears.
+ *
+ * What IS reachable is the third thing a cleanup discard can start: a discarded
+ * card with MADNESS is exiled instead (CR 702.35a), and its controller now has a
+ * window to cast it. In paper that is a triggered ability, which is squarely a
+ * CR 514.3a case; this engine models it as `state.madnessWindow` rather than as a
+ * trigger, so it is asked for by name here. A non-empty stack is checked with it
+ * for completeness — an object cannot survive into a cleanup step today, but "the
+ * stack is empty" is the rule's own condition and reading it costs one integer
+ * comparison.
+ */
+function cleanupNeedsPriority(state: GameState): boolean {
+  return state.madnessWindow != null || state.stack.length > 0;
+}
+
+/**
+ * CR 514.1 / CR 402.2 — ask the ACTIVE player which cards to discard down to
+ * {@link RulesConfig.maximumHandSize}. Returns true when a question was parked,
+ * which tells the caller the rest of the cleanup step waits for the answer.
+ *
+ * Only the active player is asked, and only during their own cleanup: the rule is
+ * about the turn ending, not about both hands. A player at or under the maximum
+ * is never asked at all, which is both the rule ("discards enough cards to reduce
+ * their hand size to that number" — zero cards is not a question) and the reason
+ * the overwhelming majority of cleanup steps still cost nothing but one integer
+ * comparison.
+ */
+function raiseCleanupDiscard(state: GameState, config: RulesConfig, emit: (e: GameEvent) => void): boolean {
+  const maximum = config.maximumHandSize;
+  const player = state.players[state.activePlayer];
+  const excess = player.hand.length - maximum;
+  if (excess <= 0) return false;
+  // A question already parked belongs to somebody else; do not stack two. This
+  // is not reachable from the turn machine today (a step only advances on an
+  // empty stack with nothing outstanding), and it errs by simply not discarding
+  // rather than by silently dropping the game's outstanding decision.
+  if (state.pendingChoice) return false;
+  // A seat that has already lost is not asked to make decisions — the same rule
+  // `aimPendingTriggers` applies to a targeting question.
+  if (state.gameOver || player.hasLost) return false;
+
+  const choice = normalizeChoiceRequest(
+    {
+      kind: 'selectCards',
+      chooser: state.activePlayer,
+      prompt: `Cleanup: discard ${excess} card${excess === 1 ? '' : 's'} (maximum hand size ${maximum})`,
+      candidates: player.hand.map(cardOption),
+      min: excess,
+      max: excess,
+      fromZone: 'hand',
+      // Being selected is being GIVEN UP, which is what steers a pilot to the
+      // tail of its own value ranking — see `packages/ai/src/choices.ts`.
+      valence: 'loss',
+    },
+    {
+      id: state.nextInstanceId++,
+      // No card asked this: it is a game rule (CR 514.1) performed by the turn
+      // machine, so there is no object to name.
+      sourceInstanceId: NO_ASKING_OBJECT,
+      sourceName: CLEANUP_DISCARD_SOURCE_NAME,
+    },
+  );
+  if (!choice) return false;
+  // Exactly the auto-answer rule every other engine-raised question uses: a
+  // choice with one legal answer (discarding a hand that is entirely excess) is
+  // theatre, and stopping the game to collect the only possible reply would make
+  // every hotseat and online turn ask a question with one button on it.
+  if (isTrivialChoice(choice)) {
+    const answer = defaultAnswerFor(choice);
+    emit({
+      type: 'choiceAutoAnswered',
+      choiceId: choice.id,
+      chooser: choice.chooser,
+      choiceKind: choice.kind,
+      answer,
+      reason: 'only one legal discard',
+    });
+    applyCleanupDiscard(state, config, answer.kind === 'selectCards' ? answer.instanceIds : [], emit);
+    return false;
+  }
+  state.pendingChoice = { ...choice, context: 'cleanupDiscard' };
+  state.priorityPlayer = choice.chooser;
+  state.consecutivePasses = 0;
+  emit({
+    type: 'choiceAsked',
+    choiceId: choice.id,
+    chooser: choice.chooser,
+    choiceKind: choice.kind,
+    prompt: choice.prompt,
+    sourceInstanceId: choice.sourceInstanceId,
+    optionCount: choiceOptionCount(choice),
+  });
+  return true;
+}
+
+/** What the CR 514.1 question names itself as, since no card asked it. */
+const CLEANUP_DISCARD_SOURCE_NAME = 'the cleanup step';
+
+/**
+ * Perform the chosen CR 514.1 discards. Each card leaves through `moveToZone`,
+ * the same funnel every other discard uses — which is what makes a discarded
+ * MADNESS card exile itself and open its window (CR 702.35a) here exactly as it
+ * does when a Thoughtseize takes it.
+ */
+function applyCleanupDiscard(
+  state: GameState,
+  config: RulesConfig,
+  instanceIds: readonly InstanceId[],
+  emit: (e: GameEvent) => void,
+): void {
+  const player = state.players[state.activePlayer];
+  // Resolved to instances BEFORE anything moves: `moveToZone` splices the hand,
+  // so looking each id up as we go would search a list that is changing under us.
+  // A card that is no longer in hand is skipped rather than reported (only
+  // reachable from a hand-built state), so the count is what actually happened.
+  const going: CardInstance[] = [];
+  for (const id of instanceIds) {
+    const card = player.hand.find((c) => c.instanceId === id);
+    if (card) going.push(card);
+  }
+  if (going.length === 0) return;
+  // The summary leads, so a log reads "A discarded 2" and then the two cards
+  // arriving in the graveyard, rather than the other way round.
+  emit({
+    type: 'cleanupDiscard',
+    player: state.activePlayer,
+    count: going.length,
+    maximumHandSize: config.maximumHandSize,
+  });
+  // No `toPlayer`: a discarded card goes to its OWNER's graveyard, which is what
+  // `moveToZone` defaults to — and is not necessarily the discarding seat's, if a
+  // card ever changes hands.
+  for (const card of going) moveToZone(state, card, 'graveyard', emit);
 }
 
 /** Grant the active player priority with a fresh pass counter. */
@@ -507,6 +727,32 @@ function onPassPriority(
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
 ): void {
+  // CR 704.3 — "whenever a player would get priority, the game checks for any of
+  // the listed conditions for state-based actions". This is the ONE place in the
+  // engine where a player is about to receive priority without a mutation having
+  // just happened, so it is the boundary the rule is really about.
+  //
+  // It is a BACKSTOP, not the primary mechanism: about a dozen mutation sites
+  // call the check themselves, and every path that exists today hits one of them
+  // — which is why this was latent rather than live. What it buys is that the
+  // next path which forgets stops being silent.
+  //
+  // `stateBasedActionsPossible` is the rule-7 gate in front of it: the full check
+  // walks the battlefield three times and can rebuild the continuous index, and
+  // this is the hottest loop the sim has. The gate is a single walk of pure
+  // property reads that allocates nothing, and it is conservative in the safe
+  // direction only (see its own note).
+  if (stateBasedActionsPossible(state)) {
+    checkStateBasedActions(state, emit);
+    // An SBA that ended the game ends the pass with it — nobody receives the
+    // priority this pass was handing over.
+    if (state.gameOver) return;
+    // A state-based action may PARK A QUESTION (the legend rule), and that
+    // chooser now holds the floor. Passing "around" it is exactly what
+    // `dispatchAction` refuses for every other action, so the pass stops here
+    // and resumes when the question is answered.
+    if (state.pendingChoice) return;
+  }
   emit({ type: 'priorityPassed', player: state.priorityPlayer });
   state.consecutivePasses += 1;
 
@@ -1126,7 +1372,7 @@ function dispatchAction(
   }
   switch (action.kind) {
     case 'answerChoice':
-      return applyAnswerChoice(state, prevState, action, effectRegistry, emit, events);
+      return applyAnswerChoice(state, prevState, action, config, effectRegistry, emit, events);
     case 'passPriority': {
       if (action.player !== state.priorityPlayer) return rejectWith(prevState, 'you do not have priority');
       // Passing with a madness window open DECLINES it (CR 702.35a): the card
@@ -1188,6 +1434,7 @@ function applyAnswerChoice(
   state: GameState,
   prevState: GameState,
   action: Extract<GameAction, { kind: 'answerChoice' }>,
+  config: RulesConfig,
   registry: EffectRegistry,
   emit: (e: GameEvent) => void,
   events: GameEvent[],
@@ -1361,6 +1608,20 @@ function applyAnswerChoice(
       state.priorityPlayer = choice.chooser;
       state.consecutivePasses = 0;
     }
+    return { state, events };
+  }
+
+  // A CLEANUP-DISCARD answer belongs to the TURN MACHINE, not to a resolution:
+  // CR 514.1's discard down to maximum hand size is a turn-based action that
+  // uses no stack, and the only part of it the player decides is which cards go.
+  // Routed by the same `context` marker the legend rule uses, and for the same
+  // reason — "there is no frame behind it" also describes the land questions
+  // above. `finishCleanupStep` then runs the REST of the step (CR 514.2, and the
+  // CR 514.3 decision about whether the turn ends here), so both routes through
+  // a cleanup step run the same code in the same order.
+  if (choice.context === 'cleanupDiscard' && answer.kind === 'selectCards') {
+    applyCleanupDiscard(state, config, answer.instanceIds, emit);
+    finishCleanupStep(state, config, emit);
     return { state, events };
   }
 
