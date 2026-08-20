@@ -198,6 +198,26 @@ _Append dated notes here; keep them short. Newest at top._
   `loadDeck(deck, pool).library` for `protectionFrom`, `"menace"`, `flashbackLifeCost`,
   `characteristicPT` and `flashback`.) The full suite is green with all four in.
 
+  🔁 **AFTER MERGING `origin/main` (54 commits: step-triggers, split cards, as-enters choices,
+  tutor/additional-cost templates), two things happened that are worth more than the merge itself.**
+
+  **(a) THE MANIFEST EARNED ITS KEEP ON DAY ONE.** `SOAK_EVENT_WITNESS` is a mapped type over
+  `GameEvent['type']`, so the merge made `soak-config.ts` **stop compiling** until somebody classified
+  the two new events — `chosenAsEnters` and `triggerFizzled`. Nobody had to remember to come back and
+  widen the soak; the build asked. They now witness as-enters choices and CR 603.4's SECOND
+  intervening-"if" check, which is the half an `if` inside the effects could never implement.
+
+  **(b) ⚠️ ALL FOUR NEWLY-MERGED SYSTEMS ARE UNREACHABLE FROM THE SHIPPED POOL.** Measured on the
+  merged tree: the pool is **still 357 cards**, and it prints **0 split/adventure/aftermath cards, 0
+  modal DFCs (`backFaceCastable`), 0 as-enters choices (`asEntersChoice`), 0 mandatory additional
+  costs (`additionalCost`), 0 intervening-"if" triggers and 0 multi-destination searches (`route`).**
+  The compiler got wider (408 → 446 playable on the cached corpus, per those branches' own notes) and
+  **the generated pool was never regenerated**, so a player using the app as shipped cannot see any of
+  it. That is exactly the failure DESIGN §3.20 exists to prevent, now true for four more systems —
+  and it is a POOL regeneration (`packages/cards/scripts/build-expansion.ts`), not engine work. The
+  soak already watches all five mechanics and reports them as "not in the pool (not required)" **out
+  loud**; the day one card appears, the run starts FAILING without an occurrence.
+
   ⚠️ **DEFECTS REPORTED, NOT FIXED — each belongs to somebody else's file.**
   1. **The rich mana-ability model has ZERO cards in the shipped pool.** `CardDefinition.manaAbilities`
      (tap cost / rider / activation restriction / board-derived colours) matches **0 of 357** pool

@@ -2223,6 +2223,17 @@ is precisely why nothing before this had seen them.
   performs no discard (CR 514.1), so hands grow without bound. Adding it would move every recorded
   win-rate baseline in §3.4a, so it is a decision, not a patch.
 
+**What the merge with the four 2026-08-20 branches showed.** Two things, and the second is a finding
+in its own right. First, **the event manifest earned its keep immediately**: `chosenAsEnters` and
+`triggerFizzled` were new `GameEvent` members, so `soak-config.ts` stopped compiling until they were
+classified — nobody had to remember to widen the soak, the build asked. Second, and worse:
+**all four systems are unreachable from the shipped pool.** Measured on the merged tree, the pool is
+still 357 cards and prints 0 split/adventure/aftermath cards, 0 modal DFCs, 0 as-enters choices, 0
+mandatory additional costs, 0 intervening-"if" triggers and 0 multi-destination searches. The compiler
+got wider and the generated pool was never regenerated — §3.20's failure, four systems later. The soak
+watches all five and says "not in the pool (not required)" out loud, and will start failing without an
+occurrence the day one card appears.
+
 **And two false alarms worth writing down, because both are the harness's own recorded failure shape.**
 Asserting state-based actions on a state that is MID-RESOLUTION reports Magma Jet ("2 damage, then
 scry 2") as leaving a dead creature on the battlefield — it does, legally, until the scry is answered
