@@ -869,11 +869,14 @@ describe('"At the beginning of your <step>" - the step-trigger family', () => {
     });
   });
 
-  it('REFUSES "each player\'s" - the engine cannot aim a body at "that player" yet', () => {
-    // The refusal that matters most in this family. A `who: 'any'` trigger would
-    // fire on both turns and run the body for the SOURCE's controller every
-    // time, so "that player draws an additional card" would draw for the wrong
-    // seat half the time. That is a different card, so it reports.
+  it('compiles "each player\'s" and aims the body at the TRIGGERING player', () => {
+    // This used to be a refusal. A `who: 'any'` trigger fires on both turns but
+    // resolves under the SOURCE's controller, so "that player draws an
+    // additional card" drew for the wrong seat half the time — a different card,
+    // so the rule reported instead. The triggering player now rides the stack
+    // object into `EffectContext.triggeringPlayer`, and the body says so with
+    // `whichPlayer: 'triggering'`; the play test in `step-trigger-templates`
+    // proves both seats really draw on their own turns.
     const result = compileCard(
       makeCard({
         name: 'Kami of the Crescent Moon',
@@ -883,8 +886,11 @@ describe('"At the beginning of your <step>" - the step-trigger family', () => {
         oracleText: "At the beginning of each player's draw step, that player draws an additional card.",
       }),
     );
-    expect(result.status).toBe('incomplete');
-    expect(result.definition.triggers).toBeUndefined();
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers![0]!.condition).toEqual({ on: 'drawStep', who: 'any' });
+    expect(result.definition.triggers![0]!.effects).toEqual([
+      { primitive: 'drawCards', params: { count: 1, whichPlayer: 'triggering' } },
+    ]);
   });
 
   it('REFUSES a step the engine has no trigger for', () => {

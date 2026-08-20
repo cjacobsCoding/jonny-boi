@@ -35,6 +35,15 @@ export interface PlayLandAction {
    * like any other land.
    */
   readonly face?: CastFace;
+  /**
+   * The zone the land is played FROM. Omitted means `'hand'`, which is every
+   * land play in the game bar one: an ADVENTURER card whose primary half is a
+   * land ("Then exile this card. You may play the land later from exile.") is
+   * played out of exile, under the same permission that lets a Bonecrusher
+   * Giant be CAST from there. Named with the same field and the same values as
+   * {@link CastSpellAction.fromZone} so a consumer learns one vocabulary.
+   */
+  readonly fromZone?: CastZone;
 }
 
 /** Tap a mana source for mana (adds to the controller's pool). */
