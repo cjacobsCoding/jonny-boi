@@ -350,8 +350,8 @@ _Append dated notes here; keep them short. Newest at top._
   the stroke count and "a recording is held" are mirrored into state, so it adds nothing to the
   `react-hooks/refs` debt this board tracks.
 
-  Suite **2990 passed / 0 failed** on `main` after this, which includes
-  `feat/you-may-and-trigger-templates` landing mid-flight — this feature contributes 59 of them.
+  Suite **3644 passed / 0 failed** on `main` after merging `origin/main` (which brought the casting-
+  cost work and the verify gate's new type-check) — this feature contributes 59 of them.
 
 - 2026-08-19 worker: `feat/alternative-costs` 🚧 PUSHED — **cycling, typecycling/landcycling,
   buyback and madness, measured at +21 cards on the cached 2100-card corpus** (229 → 250 against
