@@ -166,7 +166,14 @@ _Append dated notes here; keep them short. Newest at top._
   fail without the fix with the engine's own message ("Wall of Omens cannot block Black Knight",
   soak seed 1948110550). My edit is 3 small hunks + 1 import — **keep BOTH sides on conflict.**
 
-  ⚠️ **TWO DEFECTS REPORTED, NOT FIXED — both belong to somebody else's file.**
+  📏 **ALL THREE FIXES ARE BASELINE-NEUTRAL, and that is MEASURED, not assumed.** I scanned all
+  eight gauntlet decks in `packages/sim/data/decks` for the cards each fix can possibly touch:
+  **zero protection creatures, zero menace / `minBlockers` creatures, zero flashback-life-cost cards
+  across every one of them.** None of the three code paths can fire in a gauntlet or A/B game, so
+  every recorded win rate in DESIGN §3.4a/§3.4e/§3.4f is untouched by this branch. (Re-run the check by
+  scanning `loadDeck(deck, pool).library` for `protectionFrom`, `"menace"` and `flashbackLifeCost`.)
+
+  ⚠️ **DEFECTS REPORTED, NOT FIXED — each belongs to somebody else's file.**
   1. **The rich mana-ability model has ZERO cards in the shipped pool.** `CardDefinition.manaAbilities`
      (tap cost / rider / activation restriction / board-derived colours) matches **0 of 357** pool
      cards — measured, not guessed. The system is real and tested; nothing a player can see prints
