@@ -15,7 +15,7 @@
  * `JB_SOAK_GAMES`; see TESTING.md.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { buildRegistry, loadCardPool } from '@jonny-boi/cards';
 import { createDefaultAiRegistry, DEFAULT_PILOT_ID } from '@jonny-boi/ai';
 import type { GameEvent } from '@jonny-boi/core';
@@ -36,6 +36,7 @@ import {
   indexPoolForSoak,
   SOAK_DECK_SIZE,
 } from './soak-decks.js';
+import type { SoakReport } from './soak.js';
 import { compareApplyPaths, formatSoakReport, formatViolations, runSoak, soakSimConfig } from './soak.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
@@ -44,18 +45,16 @@ const pilot = createDefaultAiRegistry().getPilot(DEFAULT_PILOT_ID)!;
 const index = indexPoolForSoak(pool.cards);
 
 /**
- * THE RUN. One `runSoak` shared by every assertion below — playing it once and
- * asserting many things about it is the difference between a fast tier that runs
- * always and one somebody switches off.
+ * THE RUN. One `runSoak` shared by every assertion in the last block — playing it
+ * once and asserting many things about it is the difference between a fast tier
+ * that runs always and one somebody switches off.
+ *
+ * In a `beforeAll` rather than at module scope on purpose: module-scope work is
+ * COLLECTION to Vitest, so the run's cost would be billed to "collect" (where it
+ * is invisible) and a throw would fail the whole FILE with a collection error
+ * instead of one named test.
  */
-const report = runSoak({
-  pool,
-  registry,
-  pilot,
-  mixedGames: SOAK_FAST_MIXED_GAMES,
-  anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS,
-  baseSeed: SOAK_BASE_SEED,
-});
+let report: SoakReport;
 
 describe('the deck generator produces legal, reproducible, mixed decks', () => {
   it('every generated deck loads through the SAME loader the gauntlet uses', () => {
@@ -164,6 +163,17 @@ const WITNESSED_WITH_EXTRA_CONTEXT: ReadonlySet<SoakMechanicId> = new Set([
 ]);
 
 describe('the fast soak', () => {
+  beforeAll(() => {
+    report = runSoak({
+      pool,
+      registry,
+      pilot,
+      mixedGames: SOAK_FAST_MIXED_GAMES,
+      anchorAttempts: SOAK_MECHANIC_SEED_ATTEMPTS,
+      baseSeed: SOAK_BASE_SEED,
+    });
+  });
+
   it('breaks no invariant across the whole run', () => {
     expect(report.violations.length, `\n${formatViolations(report.violations)}\n`).toBe(0);
   });
