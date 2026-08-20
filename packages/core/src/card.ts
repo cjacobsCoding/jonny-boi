@@ -879,29 +879,56 @@ const COLORS_MEMO = new WeakMap<CardDefinition, readonly ManaColor[]>();
 const COLOR_PIPS: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
 
 /**
- * The colors of a definition: every color appearing among its cost's colored
- * pips, hybrid symbols included. A land, a free spell, or an artifact with a
- * purely generic cost has no colors ({C} pips are colorless, not a color).
+ * The colors of a definition.
  *
- * The engine has no color indicators and no color-changing effects, so this is
- * the color of every card it can represent — with one documented exception: a
- * transforming DFC's BACK face has no mana cost and reads as colorless, where
- * the printed card carries a color indicator. Every color consumer (protection,
- * colored card filters) inherits that limit together, from this one reader.
+ * Two sources, in this order, and the order is the whole point:
+ *  1. **{@link CardDefinition.colors} when present** — a colour printed in WORDS
+ *     on an object that has no mana cost to read it off. Every TOKEN is that
+ *     object ("a 1/1 **black** Faerie Rogue creature token"), and an empty array
+ *     is a meaningful answer: the printed word "colorless".
+ *  2. Otherwise the cost's colored **pips**, hybrid symbols included. A land, a
+ *     free spell, or an artifact with a purely generic cost has no colors ({C}
+ *     pips are colorless, not a color).
+ *
+ * Preferring the explicit field rather than merging the two keeps every card
+ * that works today working unchanged — no printed card in the pool declares
+ * `colors`, so every one of them still walks its pips — while making the field
+ * authoritative for the objects that need it. (Nothing in Magic both prints a
+ * colour in words and has pips that disagree; devoid and colour indicators are
+ * exactly the "the words win" case.)
+ *
+ * The engine has no color-changing effects, so this is the color of every object
+ * it can represent — with one documented exception: a transforming DFC's BACK
+ * face carries a colour INDICATOR the data pipeline does not capture, so it
+ * declares no `colors` and reads off its (absent) cost as colorless. Every color
+ * consumer (protection, colored card filters, coloured anthems) inherits that
+ * limit together, from this one reader.
  */
 export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   const memoized = COLORS_MEMO.get(def);
   if (memoized) return memoized;
-  const cost = def.cost;
   const colors: ManaColor[] = [];
-  if (cost) {
+  const printed = def.colors;
+  if (printed !== undefined) {
+    // Normalised to canonical WUBRG and de-duplicated, so `['B','U']` and
+    // `['U','B']` are one answer and a repeated word cannot double-count. The
+    // walk is over the five pips (not over `printed`) precisely to fix the
+    // order; anything that is not one of the five — a stray 'C' — is not a
+    // colour and is dropped, which is what makes `[]` mean colorless.
     for (const pip of COLOR_PIPS) {
-      if ((cost[pip] ?? 0) > 0) colors.push(pip);
+      if (printed.includes(pip)) colors.push(pip);
     }
-    if (cost.hybrid) {
-      for (const symbol of cost.hybrid) {
-        for (const option of symbol) {
-          if (option !== 'C' && !colors.includes(option)) colors.push(option);
+  } else {
+    const cost = def.cost;
+    if (cost) {
+      for (const pip of COLOR_PIPS) {
+        if ((cost[pip] ?? 0) > 0) colors.push(pip);
+      }
+      if (cost.hybrid) {
+        for (const symbol of cost.hybrid) {
+          for (const option of symbol) {
+            if (option !== 'C' && !colors.includes(option)) colors.push(option);
+          }
         }
       }
     }

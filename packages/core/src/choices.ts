@@ -113,12 +113,29 @@ export interface CardFilter {
    * Keep only cards of at least one of these COLORS — how "White creatures you
    * control get +1/+1" narrows an anthem, and available to every other filter
    * consumer (searches, discards, sacrifices) through the same field. Color is
-   * derived from the card's mana-cost pips (hybrid included) by
-   * {@link colorsOfDefinition} — the one color reader protection also uses, so
-   * "white" cannot mean two different things. A card with no colored pips (a
-   * land, most artifacts) matches no color and is excluded by any color filter.
+   * read by {@link colorsOfDefinition} — the one color reader protection also
+   * uses, so "white" cannot mean two different things — which prefers a
+   * definition's printed {@link CardDefinition.colors} (every token) and falls
+   * back to mana-cost pips, hybrid included. A card with no colored pips and no
+   * printed colour (a land, most artifacts) matches no color and is excluded by
+   * any color filter.
    */
   readonly anyOfColors?: readonly ManaColor[];
+  /**
+   * The printed words "**token**" and "**nontoken**" — `true` keeps only tokens
+   * ("For each token you control…"), `false` keeps only nontokens ("Destroy all
+   * **nontoken** creatures", "Whenever a **nontoken** creature you control
+   * dies…"). Omit for the ordinary filter, which does not care either way.
+   *
+   * Written as one tri-state field rather than a `nontoken?: boolean` because
+   * both printed words exist and they are the same question asked twice; a
+   * second field would let a filter declare both and mean nothing.
+   *
+   * Reads {@link CardDefinition.isToken}, so it is exact for everything the
+   * engine can create — see that field for why token-ness lives on the
+   * definition.
+   */
+  readonly isToken?: boolean;
 }
 
 /**
@@ -151,6 +168,10 @@ export function matchesCardFilter(card: CardInstance, filter?: CardFilter): bool
   if (filter.minToughness !== undefined || filter.maxToughness !== undefined) {
     if (!withinPrintedBox(def.toughness, filter.minToughness, filter.maxToughness)) return false;
   }
+  // One property read, and only when the filter prints the word. `=== true` is
+  // deliberate: an ordinary card omits the flag entirely, so "is this a token"
+  // is `def.isToken === true`, never a truthiness test on `undefined`.
+  if (filter.isToken !== undefined && (def.isToken === true) !== filter.isToken) return false;
   // Colors last: it is the only test that can touch the (memoized) pip walk, so
   // a candidate rejected by type/subtype/name never pays for it at all.
   if (filter.anyOfColors !== undefined && !hasAnyColor(def, filter.anyOfColors)) return false;

@@ -309,6 +309,12 @@ export {
 // Madness (CR 702.35): the discard replacement and the window it opens.
 export { discardDestination, declineMadness } from './madness.js';
 
+// CR 704.5d, exported because the cards package owns the OTHER
+// leave-the-battlefield funnel (`movePermanentTo`) and both must apply it — a
+// token that ceases to exist only when core's mover was used would depend on
+// which primitive killed it.
+export { ceaseToExistIfToken } from './internal/zones.js';
+
 // Events
 export type { GameEvent, EventLog } from './events.js';
 export { createEventLog, eventsOfType } from './events.js';

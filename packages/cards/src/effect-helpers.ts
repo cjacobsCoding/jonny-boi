@@ -26,6 +26,7 @@ import type {
   TargetRestriction,
 } from '@jonny-boi/core';
 import {
+  ceaseToExistIfToken,
   convertedManaCost,
   DEFAULT_TARGET_RESTRICTION,
   evaluateDerivedCount,
@@ -502,6 +503,12 @@ export function movePermanentTo(ctx: EffectContext, perm: CardInstance, to: Owne
   pruneCardGrantsFor(ctx.state, perm.instanceId);
   ctx.state.players[perm.owner][to].push(perm);
   ctx.emit({ type: 'zoneChange', instanceId: perm.instanceId, from: 'battlefield', to });
+  // CR 704.5d — a token that has left the battlefield ceases to exist. Core's
+  // shared implementation, called AFTER the zoneChange so every "dies" trigger
+  // still sees the move: this helper is the cards-side leave funnel and must
+  // agree with core's `moveToZone`, or whether a dead token lingers in the
+  // graveyard would depend on which primitive destroyed it.
+  ceaseToExistIfToken(ctx.state, perm, ctx.emit);
 }
 
 /**
