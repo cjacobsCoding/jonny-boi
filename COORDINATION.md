@@ -271,9 +271,18 @@ _Append dated notes here; keep them short. Newest at top._
   - **Deep tier**, after the first three fixes: **5,064 games, 106,099 turns, 3,203,620 actions,
     498 s CPU**, 2,520 / 2,490 / 54 (a 1.1% turn-cap draw rate), **zero action-cap games**, and
     exactly ONE violation — defect (0) above, which this branch then fixed.
-  - `battle-defense`, `emblem` and `mana-ability-extras` are not required because the pool prints
-    none — the soak says so out loud rather than passing quietly. The rarest mechanics that DID fire:
-    madness 8 games, damage-prevention 31, legend-rule 39, control-change 126, transform-dfc 127.
+  - **Deep tier again, on the MERGED tree, with all four fixes in: 4,064 games, 85,250 turns,
+    2,576,720 actions, 426 s CPU, 2,038 / 1,981 / 45 (1.1% turn-cap draws), zero action-cap games,
+    and ZERO violations.** All 32 mechanics the pool prints fired.
+  - Eight inventory mechanics are **not required because the pool prints none of them** —
+    `battle-defense`, `emblem`, `mana-ability-extras`, and the four that arrived in this merge
+    (`second-castable-face`, `as-enters-choice`, `additional-cast-cost`, `intervening-if`,
+    `tutor-route`). The soak names them in every report rather than passing quietly.
+  - The rarest mechanics that DID fire, so "it ran" is not doing the work here: madness 7 games,
+    damage-prevention 22, legend-rule 33, transform-dfc 98, control-change 101.
+  - Gate on the merged tree: `npm run verify` **exit 0 — 3,836 passed, 5 skipped, 0 failed**
+    (the 5 skipped are the deep tier, which is env-gated).
+
 - 2026-08-20 worker: `feat/step-trigger-templates` 🚧 PUSHED — **the "At the beginning of…" family,
   and the blocker that was sitting in front of all ~65 of its corpus cards.**
 

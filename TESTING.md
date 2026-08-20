@@ -120,6 +120,11 @@ npm run sim -- soak --games 2000                                         # the s
 > On a loaded box the Vitest worker pool sometimes times out fetching a module before any test runs
 > (`[vitest-worker]: Timeout calling "fetch"`). That is the runner, not the soak — **use the CLI form
 > for long runs**; it needs `npm run build` first, and it exits non-zero on any finding.
+>
+> **And do not edit the working tree while a long run is in flight.** Vitest reads each module once,
+> at collection, so a source file you touch mid-run may or may not be the one being tested — a
+> `npm run verify` here failed on a test that passes, purely because a sabotage-check edit was live
+> for part of the run. Finish the run, then edit.
 
 **What it asserts** (`packages/sim/src/soak-config.ts` → `SOAK_INVARIANTS`, one constant per claim):
 every action a pilot submits is legal; **the engine never rejects an action it offered**; no game
