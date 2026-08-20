@@ -177,6 +177,37 @@ describe('compiling library searches', () => {
     expect(searchParams(result.definition)?.filter).toEqual({ anyOfColors: ['U'], anyOfTypes: ['instant'] });
   });
 
+  it('compiles a TYPE UNION and a SUBTYPE UNION, and refuses a MIXED one', () => {
+    const types = compileCard(
+      cardRecord({
+        name: 'Solve the Equation',
+        oracleText: 'Search your library for an instant or sorcery card, reveal it, put it into your hand, then shuffle.',
+      }),
+    );
+    expect(types.status).toBe('complete');
+    expect(searchParams(types.definition)?.filter).toEqual({ anyOfTypes: ['instant', 'sorcery'] });
+
+    const subtypes = compileCard(
+      cardRecord({
+        name: 'Open the Armory',
+        oracleText: 'Search your library for an Aura or Equipment card, reveal it, put it into your hand, then shuffle.',
+      }),
+    );
+    expect(subtypes.status).toBe('complete');
+    expect(searchParams(subtypes.definition)?.filter).toEqual({ anyOfSubtypes: ['aura', 'equipment'] });
+
+    // MIXED: `CardFilter` ANDs types with subtypes, so this would compile into a
+    // search for something that is BOTH an artifact AND a Goblin — a tutor that
+    // can never find. It must report instead.
+    const mixed = compileCard(
+      cardRecord({
+        name: 'Test Mixed Union',
+        oracleText: 'Search your library for an artifact or Goblin card, put it into your hand, then shuffle.',
+      }),
+    );
+    expect(mixed.status).toBe('incomplete');
+  });
+
   it('compiles a SACRIFICE-OUTLET tutor as an activated ability that sacrifices itself (Burnished Hart)', () => {
     const result = compileCard(
       cardRecord({

@@ -2217,7 +2217,7 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // hand, then shuffle") is mechanically identical — the reveal is
     // information, and no engine state can observe it.
     pattern: new RegExp(
-      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) into your hand, then shuffle$`,
+      `^search your library for an? ${SEARCH_COLOR_PHRASE}([a-z]+(?: or [a-z]+)?) card(?: with ${SEARCH_BOUND_PHRASE} (\\d+)(?: or (less|greater))?)?, (?:reveal (?:it|that card), )?put (?:it|that card) into your hand, then shuffle$`,
     ),
     build(match) {
       const filter = searchFilterFrom(match[2] ?? '', match[3], match[4], match[5], match[1]);
