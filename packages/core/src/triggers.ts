@@ -26,10 +26,10 @@ import type { TargetRestriction } from './targeting.js';
 /**
  * The game occurrences a trigger can watch. Kept small and explicit (the §3.9
  * minimum set) — each maps to one or more `GameEvent`s the engine already emits.
- *   - `etb`            : this permanent enters the battlefield.
- *   - `attacks`        : this creature is declared as an attacker.
- *   - `dies`           : this creature dies (battlefield → graveyard).
- *   - `leaves`         : this permanent leaves the battlefield (any destination).
+ *   - `etb`            : the WATCHED permanent enters the battlefield.
+ *   - `attacks`        : the WATCHED creature is declared as an attacker.
+ *   - `dies`           : the WATCHED creature dies (battlefield → graveyard).
+ *   - `leaves`         : the WATCHED permanent leaves the battlefield (any zone).
  *   - `castSpell`      : a spell is cast — optionally filtered by card type and by
  *                        whether the source's controller cast it.
  *   - `upkeep`         : the beginning of a player's upkeep (by default, the source
@@ -39,7 +39,8 @@ import type { TargetRestriction } from './targeting.js';
  *   - `endStep`        : the beginning of a player's end step.
  *   - `beginCombat`    : the beginning of combat on a player's turn.
  *   - `gainLife`       : a player gained life ("whenever you gain life").
- *   - `combatDamageToPlayer` : this permanent dealt COMBAT damage to a player.
+ *   - `combatDamageToPlayer` : the WATCHED permanent dealt COMBAT damage to a
+ *                        player.
  *   - `permanentEnters`: ANOTHER permanent entered the battlefield — "whenever a
  *                        creature you control enters", landfall, constellation.
  *   - `permanentDies`  : a permanent died (battlefield → graveyard) — "whenever a
@@ -59,6 +60,11 @@ import type { TargetRestriction } from './targeting.js';
  * they share one filter shape: `who` (whose permanent) + `permanentFilter` (a
  * `CardFilter` over its printed characteristics) + `excludeSelf` (the printed
  * word "another").
+ *
+ * The first five are the SELF-REFERENTIAL events, and "the WATCHED permanent"
+ * above is the source itself unless the condition says otherwise — an
+ * attachment's "whenever **equipped creature** deals combat damage to a player"
+ * is the same event watched on its host. See {@link TriggerWatches}.
  */
 export type TriggerEvent =
   | 'etb'
