@@ -2935,8 +2935,9 @@ test still passed. This is the project's signature failure shape — the card pl
 different from what is printed — and it predated all recent work: **every** token card in the pool had
 it.
 
-**Measured, paired, on the same cached 2100-card corpus against the `origin/main` this branched from:
-485 → 497 playable (23.1% → 23.7%), 0 regressions.** The pool itself is 357 → 380 cards.
+**Measured, paired, on the same cached 2100-card corpus against the `origin/main` this merges into:
+533 → 545 playable (25.4% → 26.0%), +12 cards, 0 regressions** — the two full playable SETS were
+diffed, not just the counts. The shipped pool is 545 cards.
 
 #### The shape
 - **`CardDefinition.colors`** — the colour stated in WORDS, for an object that has no pips to read it
@@ -2989,7 +2990,7 @@ colour reader in the codebase.
 Bitterblossom, **Bitterbloom Bearer** (whose token is the two-colour "blue and black" form) and
 Ophiomancer — the three the previous branch left reporting *specifically* because of this — plus
 Goblin Chieftain, Lyra Dawnbringer, Diregraf Captain, Blood Artist, Falkenrath Noble, Hornet Queen,
-Seraph Sanctuary, Harvester of Souls and Soul of the Harvest. Twenty-three cards joined the pool.
+Seraph Sanctuary, Harvester of Souls and Soul of the Harvest. Twelve cards this branch is solely responsible for, measured against the main it merges into.
 
 #### Enforced tables
 `OBSERVATION_POLICY` classifies the new `tokenCeasedToExist` as **public** — both seats watched the
@@ -2999,20 +3000,23 @@ branch adds no primitive. `internal/clone.ts` needed no new line, and now says s
 that is the structural reason token-ness lives on the definition.
 
 #### Throughput (rule 7), measured properly
-Wall clock on this box is worthless — a dozen agents run concurrently. Paired `process.cpuUsage`,
-min-of-N over the same in-process gauntlet (Mono-Red Aggro, 40 games, seed 99): branch **2312 ms** vs
-main **2202 ms**, with the same branch measuring 2312 and 2516 on two passes ten minutes apart — the
-difference sits inside the box's own spread. The deterministic gauntlet output is **identical in six of
-seven matchup rows**; UW Control moves 15/40 → 16/40. That one game is a real behaviour change, not
-noise: the hero deck runs Young Pyromancer, whose Elemental tokens are now red Elementals that cease to
-exist when they die instead of accumulating in a graveyard the evaluator reads.
-
+Wall clock on this box is worthless — a dozen agents run concurrently, and the same build measured
+1422 ms and 1907 ms ten minutes apart. Paired `process.cpuUsage`, min-of-5 over the same in-process
+gauntlet (Mono-Red Aggro, 40 games, seed 99), branch and main measured back to back: **1875 ms vs
+1844 ms (1.02×)**, inside that spread — and an earlier interleaved A/B/A had the branch FASTER than
+main (1422 ms vs 1578 ms), which is what "inside the spread" means. The deterministic gauntlet output
+is **identical in six of seven matchup rows**; UW Control moves 15/40 → 14/40. That one game is a real
+behaviour change, not noise: the hero deck runs Young Pyromancer, whose Elemental tokens are now red
+Elementals that cease to exist when they die instead of accumulating in a graveyard the evaluator
+reads.
 #### Reported by name, not approximated
 - **Token COPIES** ("create a token that's a copy of target creature", "except it's a 4/4 black Zombie
-  Snake Druid with no mana cost"). This is the copy-effect system; `feat/copy-effects` does not exist
-  on the remote, so there is no path to hang a copied face on. When it lands, the token copy must take
-  the COPIED characteristics — `makeToken` builds a definition from params and would otherwise hand it
-  a blank one.
+  Snake Druid with no mana cost"). This is the copy-effect system; copy effects LANDED while this branch was in
+  flight (`copy.ts`, CR 706 layer 1), so the missing half is now only the token-copy PRIMITIVE: a rule
+  that reads "create a token that's a copy of target creature", picks a source, and hands
+  `copyResultDef` to `ctx.createToken`. The trap it must not fall into is already disarmed — core
+  stamps token-ness in `createTokenInState`, so a copy built from `copiableDefOf` (which returns the
+  copied CARD and carries no token flag) is still a token.
 - **The predefined artifact tokens** (Treasure, Clue, Food) — they print no P/T in the clause and carry
   an activated ability the token rule does not build.
 - **A token that enters TAPPED and/or ATTACKING** (mobilize, Anim Pakal, Myrel) — `createToken` has no

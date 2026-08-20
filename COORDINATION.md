@@ -147,9 +147,10 @@ _Append dated notes here; keep them short. Newest at top._
   The cards compiled `'complete'`, the tests passed, and the token then played as a different object
   from the one printed. **Every token card in the pool had it**, and it predates all recent work.
 
-  **Measured, paired, same cached 2100-card corpus, against the same-day `origin/main`: 485 → 497
-  playable (23.1% → 23.7%), 0 regressions** (I diffed the two full playable SETS, not just the
-  counts). The shipped pool is **357 → 380** cards.
+  **Measured, paired, same cached 2100-card corpus, against the `origin/main` this merges into: 533
+  → 545 playable (25.4% → 26.0%), +12 cards, 0 regressions** — I diffed the two full playable SETS,
+  not just the counts. The shipped pool is **545** cards (main's 42 candidate groups plus mine,
+  REGENERATED rather than text-merged; see below).
 
   🎨 **WHAT A TOKEN LOSES NOW: nothing it is printed with.** `CardDefinition.colors` (the colour
   stated in WORDS), `subtypes` (its creature types), `types` ("artifact creature token"), `keywords`,
@@ -206,7 +207,7 @@ _Append dated notes here; keep them short. Newest at top._
   complete rules of their own, which is what makes splitting on a word safe (cutting "1/1 **blue and
   black** Faerie" leaves "create a 1/1 blue", which matches nothing, so that cut is abandoned).
 
-  🧪 **10/10 SABOTAGES RED, and the first pass is the part worth reading: 3 of 10 SURVIVED.** Each
+  🧪 **13/13 SABOTAGES RED, and the first pass is the part worth reading: 3 of 10 SURVIVED.** Each
   survivor named a real gap rather than a flaky test:
   - the token-face REFUSAL branches were never exercised — my two refusal cases failed the *pattern*,
     not `parseTokenFace`. Two descriptors that actually reach it now do.
@@ -226,13 +227,35 @@ _Append dated notes here; keep them short. Newest at top._
   half, which returns the whole card. **Modal DFCs are consequently REPRESENTED in the pool now** and
   have left `pool-mechanics.test.ts`'s unrepresentable list.
 
-  ⚡ **Rule 7, measured properly.** Wall clock on this box is worthless. Paired `process.cpuUsage`,
-  min-of-N over the same in-process gauntlet (Mono-Red Aggro, 40 games, seed 99): branch **2312 ms** vs
-  main **2202 ms**, and the same branch measured 2312 then 2516 on two passes ten minutes apart — the
-  gap is inside the box's own spread. Deterministic gauntlet output is **identical in six of seven
-  matchup rows**; UW Control moves 15/40 → 16/40. That single game is a REAL behaviour change, not
-  noise: the hero deck runs Young Pyromancer, and its Elemental tokens are now red Elementals that
-  cease to exist when they die instead of piling up in a graveyard the evaluator reads.
+  ⚡ **Rule 7, measured properly.** Wall clock on this box is worthless — the SAME build measured
+  1422 ms and 1907 ms ten minutes apart. Paired `process.cpuUsage`, min-of-5 over the same in-process
+  gauntlet (Mono-Red Aggro, 40 games, seed 99), the two measured back to back: branch **1875 ms** vs
+  main **1844 ms** (1.02x), inside that spread — and an earlier interleaved A/B/A had the branch
+  FASTER than main (1422 vs 1578 ms), which is what "inside the spread" means. Deterministic gauntlet
+  output is **identical in six of seven matchup rows**; UW Control moves 15/40 → 14/40. That single
+  game is a REAL behaviour change, not noise: the hero deck runs Young Pyromancer, and its Elemental
+  tokens are now red Elementals that cease to exist when they die instead of piling up in a graveyard
+  the evaluator reads.
+
+  ⚠ **GENERATED DATA MUST BE REGENERATED ACROSS A MERGE, NEVER TEXT-MERGED — and git will not tell
+  you.** Merging a main that had re-run the pool generator produced an `expansion-candidates.json`
+  carrying MY 30 groups and none of main's 42, with **no conflict reported**, and the same for
+  `expanded-pool.ts` and both card indexes. It looked like a clean merge and would have silently
+  reverted ~150 pool cards. What works: take main's generated files WHOLESALE
+  (`git checkout origin/main -- <them>`), re-append your own candidate group, then re-run
+  `build-expansion.ts --fetch`, its emit pass, `npm run fetch -w @jonny-boi/data-tools` and
+  `apps/web/scripts/build-card-index.mjs`. A textual merge of two generator runs is not what either
+  run would have produced. **Check `git diff origin/main --stat -- packages/cards/data` after every
+  merge.**
+
+  ⚠ **THE SOAK FOUND A REAL DEFECT IN ITSELF on the wider pool, and it is fixed here.** Its leak scan
+  buffers observations and tests them against the POST-action state, which reports the mirror image of
+  the buyback false positive its own comment describes: a creature dies (public `creatureDied`, naming
+  it — the whole table saw it), then Gravedigger returns it from the graveyard to a HAND later in the
+  same window, and the honest observation is reported as a leak. An id is only a leak when it was
+  hidden BEFORE the window as well as after — which is exactly "the table never saw this card". A
+  DRAWN card is hidden on both sides and is still scanned. Sabotage-checked: making `drawCard` public
+  still reports it.
 
   📌 **Two existing REFUSAL tests flipped to assert what ships**, because they were documentation of
   exactly the gap this branch closed: `counters-templates.test.ts`'s "REFUSES the nontoken variant —
@@ -241,10 +264,11 @@ _Append dated notes here; keep them short. Newest at top._
   now shown with Kavu, and the rule under test is unchanged).
 
   ⛔ **REPORTED BY NAME, never approximated:** **token COPIES** ("create a token that's a copy of
-  target creature") — this is the copy-effect system and **`feat/copy-effects` does not exist on the
-  remote**, so there is nothing to hang a copied face on; whoever builds it must make the copy take the
-  COPIED characteristics, because `makeToken` builds its definition from params and would otherwise
-  hand it a blank one. Also: the predefined artifact tokens (Treasure/Clue/Food — no P/T in the clause
+  target creature"). Copy effects LANDED while this branch was in flight, so the missing half is now
+  only the token-copy PRIMITIVE — a rule that picks a source and hands `copyResultDef` to
+  `ctx.createToken`. **The trap is already disarmed**: core stamps token-ness in `createTokenInState`,
+  so a copy built from `copiableDefOf` (which returns the copied CARD and carries no token flag) is
+  still a token, ceases to exist, and answers the nontoken filters. Also: the predefined artifact tokens (Treasure/Clue/Food — no P/T in the clause
   and an activated ability the rule does not build), a token that enters TAPPED or ATTACKING
   (`createToken` cannot express either), a DERIVED token count ("create X 1/1 Goblins, where X is
   Krenko's power"), and "Destroy all nontoken creatures" — which is a `destroyAll` gap (it takes no
