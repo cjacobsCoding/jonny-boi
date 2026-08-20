@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, type CardDefinition, type CardInstance, type PlayerId } from '@jonny-boi/core';
 import { createEffectRegistry } from '@jonny-boi/core';
-import { GameSession } from './session.js';
+import { GameSession, type CastOption } from './session.js';
 
 const SEAT_NAMES: Readonly<Record<PlayerId, string>> = { A: 'Alice', B: 'Bob' };
 
@@ -79,7 +79,7 @@ const ADVENTURER: CardDefinition = {
 function sessionAtMain(mountains: number): { session: GameSession; state: ReturnType<typeof buildState> } {
   const state = buildState(mountains);
   const registry = createEffectRegistry();
-  return { session: new GameSession(state, [], registry, SEAT_NAMES), state };
+  return { session: GameSession.fromCreated({ state, events: [] }, registry, SEAT_NAMES), state };
 }
 
 function buildState(mountains: number): ReturnType<typeof createGame>['state'] {
@@ -194,8 +194,10 @@ describe('an adventurer waiting in exile', () => {
         castFace: 'front',
       },
     ];
-    const refreshed = new GameSession(state, [], createEffectRegistry(), SEAT_NAMES);
-    const options = refreshed.exileCastOptions().filter((o) => o.instanceId === id);
+    // A NEW session over the same state: the option lists are memoized per
+    // session, and the permission did not exist when the first one was built.
+    const refreshed = GameSession.fromCreated({ state, events: [] }, createEffectRegistry(), SEAT_NAMES);
+    const options = refreshed.exileCastOptions().filter((o: CastOption) => o.instanceId === id);
     expect(options).toHaveLength(1);
     expect(options[0]!.name).toBe('Bonecrusher Giant');
     expect(options[0]!.fromZone).toBe('exile');
