@@ -1269,10 +1269,11 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
   over the object being paid for (purpose, types, subtypes, colour/colourless, legendary) — so no
   card has a branch, and "cast artifact spells **or** activate abilities of artifacts" is two
   clauses rather than a Power Depot case.
-  **Measured on the cached 2100-card corpus against this branch's `origin/main`: 408 → 412 playable,
-  and the 15-card "spend restriction" gap is gone** — dissolved into four newly playable cards
-  (Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the Spirit Dragon) and four
-  precisely-named residuals, each of which is a different system.
+  **Measured on the cached 2100-card corpus against the matched `origin/main` (068be3d): 485 → 491
+  playable, +6 cards, 0 regressions, and the 15-card "spend restriction" gap is gone** — dissolved
+  into six newly playable cards (Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the
+  Spirit Dragon, Unclaimed Territory, Secluded Courtyard) and three precisely-named residuals, each
+  of which is a different system.
   Five properties make it faithful rather than approximately right:
   - **It is a SUBTRACTION, not a matching problem.** One `payCost` call funds ONE thing, so every
     pip in it shares the same purpose and each mana is either usable for the whole payment or for
@@ -1294,6 +1295,17 @@ asserting it reports `incomplete` for every card the humans flagged in `STUBBED_
     LAZILY — gating it on the live pool was a real bug caught by the pilot tests, because at
     planning time the pool is empty and the restricted mana does not exist yet, so the planner
     refused to tap Ancient Ziggurat at all and a castable creature read as uncastable.
+  - **"…of the chosen type" reads the PERMANENT, and reads it once.** Cavern of Souls, Unclaimed
+    Territory and Secluded Courtyard name a creature type as they enter, which core's as-enters seam
+    already stores on the instance (`CardInstance.chosenAsEntered`) — so this branch reads that value
+    rather than tracking a second copy of the same answer. The clause on the shared definition is a
+    DECLARATION (`subtypeChosenBySource`); the value is substituted when the mana is MADE, which is
+    the only moment both the source and its choice are in hand. The pool therefore only ever holds
+    CONCRETE restrictions, no payment path has to find a permanent, and clone/serialization stay
+    unchanged. A permanent that named NOTHING makes mana that pays for nothing — never for
+    everything, which is the direction that would hand it the best mana on the board. The compiler
+    refuses the clause outright on a card whose text never names a type, because mana that can never
+    be spent is as much a lie as mana that pays for anything.
   - **Restricted mana is spent FIRST.** It is the least flexible resource on the board, and the
     planner's existing "least flexible source first" ordering could not see it (Ancient Ziggurat
     offers five colours, so `flexibility` ranked it LAST). A `restrictedRank` term joins that same

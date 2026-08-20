@@ -300,10 +300,11 @@ formulaic, repeat across cycles, and every deck plays 24 of them.
 > **✅ SHIPPED on `feat/mana-spend-restrictions` (2026-08-20): the fifth one too.** The POOL now
 > carries the restriction (`ManaAbility.spendRestriction` → `ManaPool.restricted`), and `canPay`,
 > `payCost`, the payment planner, the event log, the debug snapshot, the masked protocol view and
-> the AI all honour it. **Re-measured on this same cached corpus against `origin/main` (1dd5b90):
-> 408 → 412 playable**, and the 15-card gap is gone — four cards became playable and the rest now
-> report what they ACTUALLY need (a creature type chosen as the permanent enters; "that spell can't
-> be countered"; a production wording). The commander residual stands refused per §5, and the six
+> the AI all honour it. **Re-measured on this same cached corpus against the matched `origin/main`
+> (068be3d): 485 → 491 playable, +6, 0 regressions**, and the 15-card gap is gone. Six cards became
+> playable — including Unclaimed Territory and Secluded Courtyard, whose "of the chosen type" clause
+> reads the creature type `feat/as-enters-choices` already stores on the permanent — and the rest now
+> report what they ACTUALLY need ("that spell can't be countered"; a production wording). The commander residual stands refused per §5, and the six
 > cards that used to share its gap name were split out: they need a tapped-for-mana TRIGGER
 > (Mirari's Wake, Zendikar Resurgent, Vorinclex, Kinnan, Extraplanar Lens, Incubation Druid), which
 > is ordinary engine work and was invisible while it shared a name with a format decision.

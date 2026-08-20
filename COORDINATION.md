@@ -130,11 +130,26 @@ _Append dated notes here; keep them short. Newest at top._
   reported this one by name with an analysis of why it was different; that analysis was right, and
   this is the answer to it.
 
-  **Measured on the cached 2100-card corpus, same command, against this branch's `origin/main`
-  (1dd5b90): 408 → 412 playable.** Small, and the number is not the point: the 15-card "spend
-  restriction" gap is GONE, dissolved into four newly playable cards (Ancient Ziggurat, Somberwald
-  Sage, Eldrazi Temple, Maelstrom of the Spirit Dragon) and four residuals that are each a different
-  system and now say so. Whoever re-runs the audit will see the mana family shrink — that is the fix.
+  **Measured on the cached 2100-card corpus, same command, against the MATCHED `origin/main`
+  (068be3d, both worktrees rebuilt): 485 → 491 playable, +6, 0 regressions.** The six: Ancient
+  Ziggurat, Somberwald Sage, Eldrazi Temple, Maelstrom of the Spirit Dragon, **Unclaimed Territory
+  and Secluded Courtyard**. The 15-card "spend restriction" gap is GONE, and what remains of it is
+  three residuals that are each a different system and now say so. Whoever re-runs the audit will
+  see the mana family shrink — that is the fix, not a regression.
+
+  🤝 **THE LAST TWO ARE A JOINT WIN WITH `feat/as-enters-choices`, and I used their seam rather
+  than coining a second one.** "Spend this mana only to cast a creature spell **of the chosen type**"
+  is two halves: naming the type as the land enters (theirs — `CardInstance.chosenAsEntered`) and
+  restricting the mana (mine). The clause on the shared definition is a DECLARATION
+  (`ManaSpendClause.subtypeChosenBySource`); `resolveSpendRestriction` substitutes the permanent's
+  own stored value at the moment the mana is MADE, so the pool only ever holds CONCRETE restrictions
+  and no payment path ever looks a permanent up. Cavern of Souls itself still reports — but now only
+  for "and that spell can't be countered", which is a real unimplemented rules effect that also
+  blocks 15 other cards, and nothing to do with mana.
+  ⚠️ A permanent that named NOTHING makes mana that pays for NOTHING, never for everything, and the
+  compiler REFUSES the clause on a card whose text never names a type. Mana that can never be spent
+  is as much a lie as mana that pays for anything; the difference is only which direction the lie
+  flatters the deck.
 
   ⚡ **THE POOL REPRESENTATION, and why it is totals-inclusive.** `ManaPool` is now
   `Record<ManaColor, number> & { restricted?: readonly RestrictedMana[] }`, where `pool[color]` stays
@@ -169,15 +184,16 @@ _Append dated notes here; keep them short. Newest at top._
   directions: it casts a creature off a lone Ziggurat, and it does NOT tap that Ziggurat toward a
   burn spell (the failure there is not "it passes" — it is tapping out and being rejected).
 
-  📊 **PERFORMANCE, measured against a separate `origin/main` worktree on this box, never wall
-  clock.** Gauntlet `Mono-Red Aggro --games 40 --seed 99` is **81/280 on both, every matchup row
-  equal**. Self-play scavenge counts over 40 seeded games: **577/563 (branch) vs 578/563 (main)**,
-  with an identical 29,899 actions both sides — the same games, the same garbage. Paired
-  `process.cpuUsage` user time, 15 alternating runs: ratio **0.953 at the min, 1.014 at the median,
-  0.990 at the mean** — parity.
+  📊 **PERFORMANCE, re-measured after the merge against a separate `origin/main` (068be3d)
+  worktree on this box, never wall clock.** Gauntlet `Mono-Red Aggro --games 40 --seed 99` is
+  **81/280 on both, every matchup row equal**. Self-play scavenge counts over 40 seeded games:
+  **577/563 (branch) vs 576/561 (main)**, with an identical 29,899 actions both sides — the same
+  games, the same garbage. Paired `process.cpuUsage` user time, 8 alternating pairs: ratio **0.880 at
+  the min, 1.000 at the median, 0.972 at the mean** — parity.
   ⚠️ **The brief for this branch quoted the gauntlet gate as 79/280.** That figure is
-  `feat/mana-ability-model`'s, measured on ITS base; `origin/main` at 1dd5b90 reads **81/280** on this
-  box. Measure your own base before treating a number in a brief as a gate.
+  `feat/mana-ability-model`'s, measured on ITS base; `origin/main` reads **81/280** on this box, and
+  has done across every base I measured. Measure your own base before treating a number in a brief
+  as a gate.
 
   ⚠️ **A trap for anyone adding a field to a state object.** `serializeState` is hashed by
   `selfplay-lock.test.ts` to prove a refactor did not change the game. Adding `manaRestricted`
