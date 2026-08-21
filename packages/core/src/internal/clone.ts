@@ -174,6 +174,9 @@ function cloneStackObject(o: StackObject): StackObject {
       // trigger's "still needs aiming" marker on the clone `applyAction` makes at
       // every action boundary, silently resolving it at nothing.
       ...(o.awaitingTargets !== undefined ? { awaitingTargets: o.awaitingTargets } : {}),
+      ...(o.awaitingTargetsExcludeSelf !== undefined
+        ? { awaitingTargetsExcludeSelf: o.awaitingTargetsExcludeSelf }
+        : {}),
       // Same field-by-field stakes as `awaitingTargets`: dropping this would
       // lose the TRIGGERING PLAYER at the very next action boundary, and every
       // "that player draws a card" body would silently fall back to the source's

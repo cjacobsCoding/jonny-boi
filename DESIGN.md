@@ -3526,6 +3526,47 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.38 Exile-until-this-leaves, and imports that never re-compile — ✅ done
+
+A deck builder reporting six cards unplayable. Four of them now play; the fix has two halves and the
+first one matters more than the cards.
+
+**Imports were a CACHE that never expired.** A failed import stored the compiler's verdict from the
+day it was imported, and nothing ever revisited it — so every template added from here would have had
+a dead zone: the card stays broken in your deck until you think to delete and re-import it.
+`Cloudshift` demonstrated it, still reading "needs a filtered-targeting template" a whole release
+after §3.35 shipped the rule that compiles it. Failed entries are now re-compiled once per session on
+load, so a template landing today fixes a deck imported last month. Cheap by construction — only
+failed entries, only once, and a card that still does not compile keeps its reasons intact.
+
+**The O-Ring system** (`exile-until-leaves.ts`) — "exile target creature an opponent controls until
+this creature leaves the battlefield". Two printings, one machine: Banisher Priest folds both
+abilities into one sentence (so that compile rule emits TWO triggers from one clause), while Fiend
+Hunter prints them separately and compiles through the existing `trigger-leaves`.
+
+⚠️ **The link is the mechanic.** The exiled card records WHO exiled it, not the reverse — two jailers
+on the battlefield have each taken their own prisoner, and killing one must return exactly its own. A
+"return everything in exile" implementation passes the obvious test and fails that one, which is why
+the two-jailer case is pinned and sabotage-checked.
+
+⚠️ **"ANOTHER target creature" is load-bearing, and is now a FLAG rather than a fourth one-off
+restriction.** Let Fiend Hunter name itself and it exiles itself → leaves → returns itself →
+triggers again, unbounded (§3.33's shape). §3.37 warned against adding more `nonSomethingSomething`
+members to the restriction union, so "another" is `TriggeredAbility.targetsExcludeSelf` — orthogonal
+to the restriction, applied once where candidates are enumerated and again in `isLegalTarget`,
+because §3.36 is what happens when those disagree.
+
+Two new restrictions were still needed for the printed lines: `creatureAnOpponentControls` (Banisher
+Priest) and `artifactEnchantmentOrLand` (Acidic Slime). Both are type-shaped rather than
+adjective-shaped, which is the axis the union is actually good at.
+
+**Still blocked, honestly:** `Angel of Serenity` targets "up to three other target creatures from the
+battlefield **and/or creature cards from graveyards**" — multi-zone targeting the engine has no
+vocabulary for. `Strionic Resonator` copies a TRIGGERED ABILITY, which is a copy system for stack
+objects that are not spells. Both are real engine work, not templates.
+
+📊 Pool 524 → 528 compiled (surgical: 4 added, 0 changed).
+
 ### 3.37 Restoration Angel, and a curated card reported as broken — ✅ done
 
 Two user-facing defects from one report: a deck builder showing **"⚠ 10 cards not playable"** over a

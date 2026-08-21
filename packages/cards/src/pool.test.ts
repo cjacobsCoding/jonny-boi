@@ -23,7 +23,7 @@ const SEED = 1234;
 /** Hand-authored cards (`CURATED_CARD_POOL`) — the reviewed-against-engine set. */
 const EXPECTED_CURATED_SIZE = 32;
 /** Cards the Oracle compiler built faithfully (`EXPANDED_CARD_POOL`). */
-const EXPECTED_COMPILED_SIZE = 524; // §3.35 Cloudshift + Conjurer's Closet; §3.37 Restoration Angel
+const EXPECTED_COMPILED_SIZE = 528; // +§3.38: Acidic Slime, Banisher Priest, Gatecreeper Vine, Fiend Hunter
 const EXPECTED_POOL_SIZE = EXPECTED_CURATED_SIZE + EXPECTED_COMPILED_SIZE;
 
 // --- pool loading + validation -------------------------------------------------

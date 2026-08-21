@@ -18,7 +18,7 @@
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
-import { getCardDefinition, type UnsupportedClause } from '@jonny-boi/cards';
+import { compileCard, getCardDefinition, type UnsupportedClause } from '@jonny-boi/cards';
 import type { NormalizedCard } from '@jonny-boi/data-tools/pure';
 
 /**
@@ -72,6 +72,42 @@ function ensureLoaded(): void {
     // Corrupt storage: start empty rather than crash the app on boot.
     store = new Map();
   }
+  upgradeStaleEntries();
+}
+
+/**
+ * Re-compile the entries that FAILED, with today's compiler.
+ *
+ * An entry without a `definition` is not a fact about the card — it is a CACHED
+ * VERDICT from whenever the card was imported, and the compiler learns new
+ * templates constantly. Without this, a card stays broken in your deck until you
+ * think to delete and re-import it: `Cloudshift` still read "needs a
+ * filtered-targeting template" for a whole release after the rule that compiles
+ * it had shipped, and every template added from here would have had the same
+ * dead zone.
+ *
+ * Cheap by construction: it only ever touches entries that failed, only once per
+ * session, and a card that still does not compile is left exactly as it was so
+ * its reasons stay accurate. A card that has since joined the CURATED pool is
+ * skipped outright — `unsupportedReason` defers to the pool anyway, so there is
+ * nothing to gain by compiling it again.
+ */
+function upgradeStaleEntries(): void {
+  let upgraded = false;
+  for (const [id, entry] of store) {
+    if (entry.definition !== undefined) continue; // already playable
+    if (getCardDefinition(id) !== undefined) continue; // curated: the pool answers
+    let compiled;
+    try {
+      compiled = compileCard(entry.card as Parameters<typeof compileCard>[0]);
+    } catch {
+      continue; // a card the compiler cannot even read stays as it was
+    }
+    if (compiled.status !== 'complete') continue;
+    store.set(id, { card: entry.card, definition: compiled.definition });
+    upgraded = true;
+  }
+  if (upgraded) persist();
 }
 
 /** Persist the store; a storage failure is non-fatal for the session. */

@@ -237,6 +237,21 @@ export interface TriggeredAbility {
    * than a silently-widened one here.
    */
   readonly targets?: TargetRestriction;
+  /**
+   * "ANOTHER target creature" — the ability's own source is not a legal target.
+   *
+   * Orthogonal to {@link targets} on purpose. "Another" modifies any restriction
+   * ("another target creature", "another target artifact you control"), so it is
+   * a flag rather than a fourth `nonSomethingSomething` member of the
+   * restriction union — that union is a flat string read at dozens of sites, and
+   * one member per printed adjective does not scale.
+   *
+   * It is load-bearing wherever it is printed. Fiend Hunter exiles a creature
+   * until it leaves the battlefield; let it name ITSELF and it exiles itself,
+   * which makes it leave, which returns it, which re-triggers it — the same
+   * unbounded loop shape as DESIGN §3.33's copy mirror.
+   */
+  readonly targetsExcludeSelf?: boolean;
 }
 
 /**

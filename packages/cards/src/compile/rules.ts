@@ -159,6 +159,10 @@ const CREATURE_TARGET: TargetRestriction = 'creature';
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 /** "target non-Angel creature you control" — Restoration Angel; see the type's note. */
 const NON_ANGEL_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'nonAngelCreatureYouControl';
+/** "target creature an opponent controls" — Banisher Priest. */
+const CREATURE_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'creatureAnOpponentControls';
+/** "target artifact, enchantment, or land" — the naturalize family. */
+const ARTIFACT_ENCHANTMENT_OR_LAND_TARGET: TargetRestriction = 'artifactEnchantmentOrLand';
 const SPELL_TARGET: TargetRestriction = 'spell';
 /**
  * "target instant or sorcery spell" — narrower than {@link SPELL_TARGET} and
@@ -2030,6 +2034,46 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'destroy-target-artifact-enchantment-or-land',
+    description: '"Destroy target artifact, enchantment, or land" (Acidic Slime, the naturalize family)',
+    /*
+     * One target with three acceptable types, which is why it is one restriction
+     * rather than three rules. Written to accept the Oracle comma-or spelling
+     * with and without the serial comma, because both printings exist.
+     */
+    pattern: /^destroy target artifact,? enchantment,? or land$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({
+        primitive: 'destroyTarget',
+        params: { targets: ARTIFACT_ENCHANTMENT_OR_LAND_TARGET },
+      });
+    },
+  },
+  {
+    id: 'return-exiled-by-this-to-battlefield',
+    description:
+      'Return the exiled card to the battlefield under its owner’s control (the second half of Fiend Hunter)',
+    /*
+     * The other half of an O-Ring. It names no target: what comes back is
+     * whatever THIS permanent exiled, which the exile half recorded. Accepts the
+     * singular and plural printings so Angel of Serenity's "cards" reads too.
+     */
+    pattern:
+      /^return (?:the exiled cards?|that exiled card) to the battlefield under (?:its|their) owners?['\u2019]?s? control$/,
+    build() {
+      return effects({ primitive: 'returnExiledByThis', params: { to: 'battlefield' } });
+    },
+  },
+  {
+    id: 'return-exiled-by-this-to-hand',
+    description: 'Return the exiled cards to their owners’ hands (Angel of Serenity)',
+    pattern: /^return the exiled cards? to (?:its|their) owners?['\u2019]?s? hands?$/,
+    build() {
+      return effects({ primitive: 'returnExiledByThis', params: { to: 'hand' } });
+    },
+  },
+  {
     id: 'exile-target-creature',
     description: '"Exile target creature"',
     pattern: /^exile target creature$/,
@@ -2761,6 +2805,39 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'search-basic-land-or-subtype-to-hand',
+    description:
+      '"Search your library for a basic land card or a Gate card, reveal it, put it into your hand, then shuffle" (Gatecreeper Vine)',
+    /*
+     * A two-branch search: the basic lands by NAME, plus one printed SUBTYPE.
+     * `CardFilter` already spells the second half (`anyOfSubtypes`), and the
+     * primitive already unions a name list with a filter — Path to Exile's
+     * basic-land fetch uses the same pair — so this is a template gap rather
+     * than an engine one.
+     *
+     * The subtype is captured, not hard-coded to Gate: the same sentence is
+     * printed with other land types, and a rule that read only "Gate" would
+     * report the next one as an unknown template.
+     */
+    pattern:
+      /^search your library for a basic land card or an? ([a-z]+) card, reveal (?:it|that card), put (?:it|that card) into your hand, then shuffle$/,
+    build(match) {
+      const subtype = match[1];
+      if (subtype === undefined || subtype.length === 0) return null;
+      return effects({
+        primitive: 'searchLibrary',
+        params: {
+          who: 'controller',
+          count: 1,
+          filter: { anyOfSubtypes: [subtype] },
+          nameAnyOf: BASIC_LAND_NAMES,
+          destination: 'hand',
+          reveal: true,
+        },
+      });
+    },
+  },
+  {
     id: 'search-any-card',
     description:
       '"Search your library for a card, put that card into your hand/graveyard, then shuffle" (Diabolic Tutor, Grim Tutor, Vile Entomber)',
@@ -3398,6 +3475,90 @@ function splitInterveningIf(
 }
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'trigger-etb-exile-another-target-creature',
+    description: '"When ~ enters, you may exile another target creature" (Fiend Hunter)',
+    /*
+     * The OLDER O-Ring wording: the exile and the return are printed as two
+     * separate abilities, so this rule emits only the first and the card's own
+     * second line compiles through `trigger-leaves` into `returnExiledByThis`.
+     *
+     * "ANOTHER" is load-bearing and is why this is its own rule rather than the
+     * generic optional-enters wrapper: let Fiend Hunter name itself and it
+     * exiles itself, which makes it leave, which returns it, which triggers it
+     * again — unbounded, the shape of DESIGN §3.33's copy mirror. The exclusion
+     * rides the ability as `targetsExcludeSelf`, which the engine applies when it
+     * builds the candidate list.
+     */
+    pattern:
+      /^when ~ enters(?: the battlefield)?, you may exile another target creature$/,
+    needsChosenTarget: true,
+    build() {
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: [
+              {
+                primitive: 'mayEffects',
+                params: {
+                  prompt: 'You may exile another target creature',
+                  valence: 'gain',
+                  effects: [
+                    { primitive: 'exileUntilLeaves', params: { targets: CREATURE_TARGET, max: 1 } },
+                  ],
+                },
+              },
+            ],
+            label: 'Enters: you may exile another target creature',
+            targets: CREATURE_TARGET,
+            targetsExcludeSelf: true,
+          },
+        ],
+      };
+    },
+  },
+  {
+    id: 'trigger-etb-exile-until-this-leaves',
+    description:
+      '"When ~ enters, exile target creature an opponent controls until this creature leaves the battlefield" (Banisher Priest)',
+    /*
+     * ONE printed sentence, TWO abilities (CR 603.6c). The modern O-Ring wording
+     * folds the return into the exile clause, so this rule emits both halves:
+     * the enters trigger that exiles, and the leaves trigger that gives it back.
+     * A body rule could not do it — a body contributes effects to ONE ability,
+     * and the whole point of this template is that the second one exists.
+     *
+     * Ordered before `trigger-etb` so the generic enters rule does not match the
+     * sentence first and compile only the exile, which would be a strictly
+     * better card than the one printed: removal with no drawback.
+     */
+    pattern:
+      /^when ~ enters(?: the battlefield)?, exile target creature an opponent controls until (?:~|this creature) leaves the battlefield$/,
+    needsChosenTarget: true,
+    build() {
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: [
+              {
+                primitive: 'exileUntilLeaves',
+                params: { targets: CREATURE_AN_OPPONENT_CONTROLS_TARGET, max: 1 },
+              },
+            ],
+            label: 'Enters: exile target creature an opponent controls until this leaves',
+            targets: CREATURE_AN_OPPONENT_CONTROLS_TARGET,
+          },
+          {
+            condition: { on: 'leaves' },
+            effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
+            label: 'Leaves: return the exiled card',
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'trigger-etb',
     description: '"When ~ enters (the battlefield), BODY"',

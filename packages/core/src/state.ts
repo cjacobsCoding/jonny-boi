@@ -546,6 +546,13 @@ export interface TriggeredStackObject {
    */
   readonly awaitingTargets?: TargetRestriction;
   /**
+   * "ANOTHER target …" — this trigger's own source may not be chosen. Rides the
+   * stack object beside {@link awaitingTargets} for the same reason: the choice
+   * is made while the trigger sits on the stack, so everything the choice needs
+   * has to be reachable from the stack alone.
+   */
+  readonly awaitingTargetsExcludeSelf?: boolean;
+  /**
    * The player the EVENT that set this ability off was about — the referent of
    * a body's "that player" / "them". Rides the stack object so it survives into
    * the resolution frame and then into `EffectContext`, exactly the way a cast's
