@@ -101,6 +101,15 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       };
     case 'spellCopied':
       return { text: `${r.playerName(event.controller)} copies ${event.name}.`, tone: 'cast' };
+    case 'delayedTriggerCreated':
+      // CR 603.7 — an ability that now exists on NO object and fires later.
+      // Printed rather than silent because it is the whole drawback of the token
+      // that just arrived: without the line a player sees a free hasty creature.
+      return { text: `Delayed: ${event.label}.`, tone: 'trigger' };
+    case 'delayedTriggerFired':
+      // Its moment arrived. `triggerPutOnStack` follows for the same ability —
+      // from here it is an ordinary trigger — so this says only what set it off.
+      return { text: `Delayed ability triggers: ${event.label}.`, tone: 'trigger' };
     case 'spellCopyCeasedToExist':
       // CR 704.5e. Worth a line rather than silence: without it a player sees a
       // second spell resolve and then sees nothing go to a graveyard, which

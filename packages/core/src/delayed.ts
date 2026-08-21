@@ -109,6 +109,23 @@ export interface DelayedTriggeredAbility {
    * turn numbers, so nothing in the rules reads this.
    */
   readonly createdOnTurn: number;
+  /**
+   * The permanents this ability will REMOVE from the battlefield when it
+   * resolves — "sacrifice **it**", "exile **those tokens**".
+   *
+   * ⚠️ **Read by the PILOT, never by the rules.** The body is what actually does
+   * the removing; this is a declaration by whatever created the ability, because
+   * only that code knows what body it built. It exists because the alternative
+   * is a pilot that cannot see the cost: Kiki-Jiki's token dies at end of turn
+   * whatever happens, so attacking with it is the entire point and holding it
+   * back as a blocker throws it away for nothing. A mechanic no pilot ever
+   * prices corrupts nothing and proves nothing.
+   *
+   * Declared rather than INFERRED from the effect refs on purpose: inferring it
+   * would mean core reading primitive ids that belong to the cards package, and
+   * a new removal primitive would then be silently invisible to the pilot.
+   */
+  readonly removesFromBattlefield?: readonly InstanceId[];
 }
 
 /** What a primitive supplies to create one; the id and the turn are minted here. */
@@ -119,6 +136,8 @@ export interface DelayedTriggerRequest {
   /** Defaults to the creating effect's controller at the call site. */
   readonly controller: PlayerId;
   readonly sourceInstanceId: InstanceId;
+  /** See {@link DelayedTriggeredAbility.removesFromBattlefield} — for the pilot. */
+  readonly removesFromBattlefield?: readonly InstanceId[];
 }
 
 /**
@@ -141,6 +160,9 @@ export function createDelayedTrigger(state: DelayedTriggerHost, request: Delayed
       label: request.label,
     },
     createdOnTurn: state.turnNumber,
+    ...(request.removesFromBattlefield !== undefined && request.removesFromBattlefield.length > 0
+      ? { removesFromBattlefield: request.removesFromBattlefield }
+      : {}),
   };
   (state.delayedTriggers ??= []).push(record);
   return id;
@@ -228,6 +250,36 @@ export function pendingFromDelayed(
     abilityIndex: 0,
     ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
   };
+}
+
+/** The answer when nothing is scheduled for removal. Shared and frozen. */
+const NO_DELAYED_REMOVALS: ReadonlySet<InstanceId> = Object.freeze(new Set<InstanceId>()) as ReadonlySet<InstanceId>;
+
+/**
+ * **Every permanent a pending delayed ability will remove from the battlefield.**
+ * The accessor a PILOT reads to know that the hasty 4/4 in front of it is a
+ * creature that dies at end of turn whatever it does.
+ *
+ * Returns the shared frozen empty set by reference in every game that has no
+ * delayed ability — the same allocation-free discipline as `NO_REPLACEMENTS`,
+ * because this is asked once per attack and block decision.
+ *
+ * It reports what the ABILITY DECLARED, never what its body will actually
+ * manage: a token that has already died is still named here, and a pilot asking
+ * about a permanent it can see gets the right answer either way.
+ */
+export function delayedRemovalTargets(state: {
+  readonly delayedTriggers?: readonly DelayedTriggeredAbility[];
+}): ReadonlySet<InstanceId> {
+  const records = state.delayedTriggers;
+  if (records === undefined || records.length === 0) return NO_DELAYED_REMOVALS;
+  let found: Set<InstanceId> | null = null;
+  for (let i = 0; i < records.length; i++) {
+    const removes = (records[i] as DelayedTriggeredAbility).removesFromBattlefield;
+    if (removes === undefined) continue;
+    for (const id of removes) (found ??= new Set<InstanceId>()).add(id);
+  }
+  return found ?? NO_DELAYED_REMOVALS;
 }
 
 /**

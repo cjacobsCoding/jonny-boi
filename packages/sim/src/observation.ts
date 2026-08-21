@@ -242,6 +242,22 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
   spellCopied: 'public',
   spellCopyCeasedToExist: 'public',
   tokenCopyCreated: 'public',
+  /*
+   * THE TWO DELAYED-ABILITY EVENTS (CR 603.7) ARE PUBLIC, by the same test the
+   * copy family above sets out: ask what OBJECT the event names. Both name the
+   * `sourceInstanceId` of whatever created the ability, which is always a
+   * permanent on the battlefield or a spell resolving off the stack — never a
+   * card in a hand or a library. (`id` is the ability's own and names no card at
+   * all, which is why `instance-ids.ts` classifies it `'none'`.)
+   *
+   * Withholding them would be a REAL loss of public information rather than a
+   * conservative default: the delayed sacrifice IS the drawback of the hasty
+   * token now standing on the battlefield, and an opponent who could not see it
+   * would be looking at what appears to be a permanent creature and blocking
+   * accordingly.
+   */
+  delayedTriggerCreated: 'public',
+  delayedTriggerFired: 'public',
   stackResolved: 'public',
   // Mana in a pool is open information in paper Magic, and it is the raw material
   // for the brief's §35–37 "represented mana" reasoning.

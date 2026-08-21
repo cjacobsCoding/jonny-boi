@@ -297,6 +297,10 @@ function createDelayedRemoval(ctx: EffectContext, created: readonly InstanceId[]
       },
     ],
     label,
+    // Declared for the PILOT: the token this makes is a COST, and a pilot that
+    // could not see the removal coming would hold a creature back to block with
+    // something the rules are about to take away anyway.
+    removesFromBattlefield: [...created],
   });
 }
 

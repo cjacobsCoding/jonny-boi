@@ -407,6 +407,7 @@ export {
 export type { DelayedTriggeredAbility, DelayedTriggerRequest } from './delayed.js';
 export {
   createDelayedTrigger,
+  delayedRemovalTargets,
   matchDelayedTriggers,
   pendingFromDelayed,
   removeDelayedTrigger,

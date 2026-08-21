@@ -20,6 +20,7 @@ import { applyControlChange } from './internal/continuous.js';
 import type { ReplacementAbility } from './replacement.js';
 import { addFloatingReplacement, indexReplacements, replaceTokens } from './internal/replacement.js';
 import type { TriggerCondition } from './triggers.js';
+import type { DelayedTriggeredAbility } from './delayed.js';
 import { createDelayedTrigger } from './delayed.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {
@@ -321,6 +322,13 @@ export interface DelayedTriggerArgs {
   readonly label: string;
   /** Whose ability it is; every `who: 'you'` reads this. Defaults to the source's controller. */
   readonly controller?: PlayerId;
+  /**
+   * Which permanents this ability will REMOVE when it resolves — declared for
+   * the PILOT, never read by the rules. See
+   * {@link DelayedTriggeredAbility.removesFromBattlefield} for why it is
+   * declared rather than inferred from the effect refs.
+   */
+  readonly removesFromBattlefield?: readonly InstanceId[];
 }
 
 /**
@@ -465,6 +473,9 @@ export function applyEffectRef(
         label: request.label,
         controller: request.controller ?? base.controller,
         sourceInstanceId: base.source.instanceId,
+        ...(request.removesFromBattlefield !== undefined
+          ? { removesFromBattlefield: request.removesFromBattlefield }
+          : {}),
       });
     },
     createEmblem(def, controller) {

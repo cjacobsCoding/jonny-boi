@@ -256,6 +256,13 @@ const NON_EVENT_INSTANCE_ID_FIELDS = [
   'appliesToInstanceId',
   /** `ReplacementQuery.recipientIs` — the object a replacement is asked about. */
   'recipientIs',
+  /**
+   * `DelayedTriggeredAbility.removesFromBattlefield` — the permanents a pending
+   * delayed ability (CR 603.7) will remove. Always tokens the whole table
+   * watched be created, but the scan is driven by the DECLARED TYPE, not by what
+   * the values happen to be today.
+   */
+  'removesFromBattlefield',
   /** `GameState.nextInstanceId` — the id source. Not a card, but it IS an id. */
   'nextInstanceId',
 ] as const;
