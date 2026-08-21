@@ -5,7 +5,7 @@
  * rather than trusted.
  */
 import { describe, expect, it } from 'vitest';
-import { buildZip, crc32, type DosDateTime } from './zip.js';
+import { buildZip, compressEntries, crc32, shouldCompress, type DosDateTime } from './zip.js';
 
 const WHEN: DosDateTime = { year: 2026, month: 8, day: 15, hour: 14, minute: 25, second: 30 };
 
@@ -109,5 +109,64 @@ describe('buildZip', () => {
     const zip = buildZip([{ name: 'x', bytes: text('x') }], { ...WHEN, year: 1601 });
     const date = u16At(zip, 12);
     expect(date >>> 9).toBe(0); // year 1980, not a wrapped negative
+  });
+});
+
+describe('compression', () => {
+  it('leaves already-compressed formats alone', () => {
+    // Deflating a PNG costs time and can make it BIGGER.
+    expect(shouldCompress('screenshot.png')).toBe(false);
+    expect(shouldCompress('voice.webm')).toBe(false);
+    expect(shouldCompress('annotated.PNG')).toBe(false);
+  });
+
+  it('compresses the text that actually got big', () => {
+    expect(shouldCompress('clip.json')).toBe(true);
+    expect(shouldCompress('replay.html')).toBe(true);
+    expect(shouldCompress('report.md')).toBe(true);
+    expect(shouldCompress('state_dump.txt')).toBe(true);
+  });
+
+  it('writes a DEFLATE entry an unzip tool can read back', async () => {
+    // The bytes are repetitive on purpose: what is under test is that the sizes
+    // and the CRC describe the ORIGINAL data while the payload is the squeezed
+    // version — get that pairing wrong and every archive is corrupt.
+    const original = new TextEncoder().encode('the same line over and over\n'.repeat(200));
+    const [entry] = await compressEntries([{ name: 'clip.json', bytes: original }]);
+    if (entry?.deflated === undefined) {
+      // No CompressionStream in this environment: the fallback is STORE, which
+      // is the other half of the contract and is already covered above.
+      expect(entry?.bytes).toBe(original);
+      return;
+    }
+    expect(entry.deflated.length).toBeLessThan(original.length / 4);
+
+    const zip = buildZip([entry], WHEN);
+    // Local header: method 8, compressed size = deflated, uncompressed = real.
+    expect(u16At(zip, 8)).toBe(8);
+    expect(u32At(zip, 14)).toBe(crc32(original));
+    expect(u32At(zip, 18)).toBe(entry.deflated.length);
+    expect(u32At(zip, 22)).toBe(original.length);
+  });
+
+  it('stores rather than growing an entry compression cannot help', async () => {
+    // Random-ish bytes deflate to slightly MORE than they came in as.
+    const noise = new Uint8Array(64);
+    for (let i = 0; i < noise.length; i += 1) noise[i] = (i * 37 + 11) % 251;
+    const [entry] = await compressEntries([{ name: 'noise.bin', bytes: noise }]);
+    expect(entry?.deflated === undefined || entry.deflated.length < noise.length).toBe(true);
+  });
+
+  it('mixes stored and deflated entries in one archive', async () => {
+    const text = new TextEncoder().encode('x'.repeat(500));
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+    const entries = await compressEntries([
+      { name: 'report.md', bytes: text },
+      { name: 'screenshot.png', bytes: png },
+    ]);
+    const zip = buildZip(entries, WHEN);
+    // Both entries are present and the archive still ends in a valid EOCD.
+    expect(u32At(zip, zip.length - 22)).toBe(0x06054b50);
+    expect(u16At(zip, zip.length - 22 + 10)).toBe(2);
   });
 });

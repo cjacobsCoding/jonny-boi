@@ -350,6 +350,33 @@ _Append dated notes here; keep them short. Newest at top._
   the stroke count and "a recording is held" are mirrored into state, so it adds nothing to the
   `react-hooks/refs` debt this board tracks.
 
+  **The rolling clip landed** (the user's ask: "cant send prior video clip leading up to pressing B").
+  Not video — a rrweb DOM session recording, always on from app load, shipped as a self-contained
+  `replay.html` plus `clip.json`. Video was not an option on the surface that matters: `getDisplayMedia`
+  does not exist on Android Chrome, and rasterising frames costs ~0.8 s each. The replay is arguably
+  better than video for this: real DOM, selectable text, and it fetches nothing when opened.
+
+  Two things it forced, both good: the ZIP writer now DEFLATES text entries (a clip's full snapshot is
+  3 MB of JSON — the first bundle with one was 15.7 MB; it is 3.7 MB now), and the harness inflates
+  what it reads back, so the compressed archive is proven readable rather than assumed. The harness
+  also opens `replay.html` from disk and asserts the player reconstructed the page — 4899 nodes, real
+  app text — because a replay sliced off its snapshot plays as a blank rectangle and passes every
+  file-exists check ever written.
+
+  **Three defects fixed in the same pass, found by reading rather than by failing:**
+  - The voice recorder's safety valve called `void this.stop()` and DROPPED the Recording. Hit the
+    5-minute cap and your audio was gone, silently, with the button back at "Record voice". Now the
+    valve retains and the next asker collects; a test reintroduces the bug and fails without the fix.
+  - A denied microphone was stored as an empty pending recording, so every "does this report contain
+    work?" test said yes and Cancel demanded a confirmation for an empty report.
+  - Escape did nothing during the capture, and a capture that resolved after a cancel re-opened the
+    overlay. Both fixed with a capture sequence guard. Ctrl+Z now undoes a stroke.
+
+  **A measurement trap worth recording:** capture time looked like it had regressed from 1.4 s to
+  6.6 s after the clip landed. It had not — an A/B in the same run measured clip ON at 3958 ms against
+  clip OFF at 4713 ms. The machine was at 100% CPU under this session's own tooling. Measure both arms
+  in the same minute or do not report the number.
+
   Suite **3644 passed / 0 failed** on `main` after merging `origin/main` (which brought the casting-
   cost work and the verify gate's new type-check) — this feature contributes 59 of them.
 

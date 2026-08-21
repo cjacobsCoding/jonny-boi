@@ -1675,6 +1675,28 @@ storage. `App.tsx` registers the view, the decks and the pool size.
   the last node in the body, and while it anchored, nothing anywhere was pruned. Both regressions are
   now unit tests.
 
+**The rolling clip — what happened in the seconds BEFORE `b` was pressed.** The two games read their
+framebuffer ten times a second into a ring and dump the last N seconds as video. A browser cannot:
+rasterising the DOM costs ~0.8 s a frame even optimised, and `getDisplayMedia` is a permission prompt
+Android Chrome does not implement — so on the phone this app actually ships on, screen recording is
+not available at all. The clip is therefore a **DOM session recording** (rrweb), always on from app
+load, and the report carries `replay.html`: one self-contained page, player inlined, that plays those
+seconds back with a scrubber and fetches nothing. For a bug report that is better than video — the
+replay carries the real DOM, so text is selectable and layout is inspectable. `clip.json` ships beside
+it so the events survive even if the player does not.
+
+The ring keeps whole CHUNKS, never a sliced window: a replay can only start from a full snapshot, so
+"the last 30 seconds" rounds outward to the snapshot boundary (a floor, never a ceiling). Recording
+stops the instant the reporter opens, so the clip ends where the bug is and never contains the
+overlay's own frozen frame. The submit-time stepper dials it to zero — the games' rule, kept.
+
+**That clip is what forced the archive to compress.** A full rrweb snapshot of a 95-node page is 3 MB,
+because it carries every inline style and the whole stylesheet; the first bundle with a clip in it was
+**15.7 MB**, which is a report a phone will not upload. The ZIP writer now deflates the text entries
+through the browser's own `CompressionStream` (raw deflate, method 8) and leaves already-compressed
+images alone: **clip.json 6020 KB → 189 KB, replay.html 6503 KB → 294 KB, the bundle 15.7 MB → 3.7 MB.**
+The harness inflates what it reads back, so the compressed archive is proven readable, not assumed.
+
 **How the picture itself is verified — `npm run verify:reporter -w @jonny-boi/web`.** No unit test can
 check a third-party rasteriser's pixels, and the in-app browser pane cannot either: in a backgrounded
 tab `toPng` never resolves at all, even for one header element. So the harness drives the SHIPPING

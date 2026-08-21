@@ -38,7 +38,9 @@ function summary(overrides: Partial<ReportSummary> = {}): ReportSummary {
     screenName: 'Lab',
     buildCommit: 'abc1234',
     attachments: ['screenshot.png', 'annotated.png', 'state_dump.txt'],
-    videoNote: 'the web reporter captures a still, not footage',
+    clipSeconds: 0,
+    clipEvents: 0,
+    clipNote: '',
     audioRecorded: false,
     audioSeconds: 0,
     annotationStrokes: 3,
@@ -214,10 +216,26 @@ describe('report markdown', () => {
     expect(assembleReportMarkdown(summary())).toBe(md);
   });
 
-  it('says a report is a screenshot, and says WHY, rather than leaving a gap', () => {
-    const md = assembleReportMarkdown(summary());
-    expect(md).toContain('- **video**: screenshot only');
-    expect(md).toContain('the web reporter captures a still');
+  it('distinguishes the three reasons a clip can be missing', () => {
+    // "there is no clip", "you asked for no clip" and "the recorder never
+    // started" send a reader to three different places; a single blank line
+    // sends them nowhere.
+    expect(assembleReportMarkdown(summary())).toContain('- **clip**: none');
+    expect(
+      assembleReportMarkdown(summary({ clipNote: 'the clip was dialled to 0 s' })),
+    ).toContain('- **clip**: none (the clip was dialled to 0 s)');
+    expect(
+      assembleReportMarkdown(summary({ clipNote: 'the session recorder would not start (x)' })),
+    ).toContain('would not start');
+  });
+
+  it('reports the clip it actually carries, and points at the player', () => {
+    const md = assembleReportMarkdown(summary({ clipSeconds: 31.25, clipEvents: 417 }));
+    // The SPAN captured, not the span requested: the ring cuts on snapshot
+    // boundaries, so a 30 s request routinely carries a little more.
+    expect(md).toContain('31.3 s before the report');
+    expect(md).toContain('417 recorded event(s)');
+    expect(md).toContain('replay.html');
   });
 
   it('attaches the health warning to every transcript', () => {

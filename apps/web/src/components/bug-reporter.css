@@ -232,3 +232,25 @@
     border-top: 1px solid var(--color-border-strong);
   }
 }
+
+/* The clip control: a stepper, not a slider — on a phone a slider inside a
+   scrolling panel fights the scroll, and the useful range is five presses wide. */
+.bugreport__row--clip {
+  align-items: center;
+  gap: 8px;
+}
+
+.bugreport__btn--step {
+  flex: 0 0 auto;
+  min-width: 40px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.bugreport__clip {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 13px;
+  color: var(--color-text-muted, #9aa2b1);
+  font-variant-numeric: tabular-nums;
+}
