@@ -34,17 +34,21 @@ import type {
   EffectPrimitive,
   EffectRef,
   EffectRegistry,
+  GameEvent,
   PlayerId,
+  ReplacementIndex,
   StaticAbility,
   TriggeredAbility,
 } from '@jonny-boi/core';
 import {
   DEFENSE_COUNTER,
+  MANA_COLORS,
   addCardGrant,
   LOYALTY_COUNTER,
   MINUS_ONE_COUNTER,
   PLUS_ONE_COUNTER,
   aggregateFor,
+  colorsOfDefinition,
   effectiveKeywords,
   effectivePower,
   isBattle,
@@ -53,8 +57,13 @@ import {
   isLegalTarget,
   matchesCardFilter,
   isPlaneswalker,
+  type ManaColor,
   type ManaCost,
   protectionPreventsDamage,
+  drawCardForPlayer,
+  indexReplacements,
+  replaceCounters,
+  replaceDamage,
 } from '@jonny-boi/core';
 import {
   boolParam,
@@ -64,6 +73,7 @@ import {
   restrictionParam,
   firstPermanentTarget,
   firstPlayerTarget,
+  playersForParam,
   intParam,
   isEmptyKeywords,
   isPlayerTarget,
@@ -78,8 +88,52 @@ import {
   targetedSpellOnStack,
 } from './effect-helpers.js';
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
+import { COPY_PRIMITIVES } from './copy-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
+
+/**
+ * The ONE question every NONCOMBAT damage site in this package asks: how much
+ * damage is actually dealt, after the replacement and prevention layer
+ * (CR 614/615)? Combat asks the same question through the same engine —
+ * `internal/replacement.ts` — from `internal/combat.ts`.
+ *
+ * Returns the amount to deal, and emits the `damagePrevented` half itself so
+ * every caller reports a prevented hit identically. Inert when nothing in the
+ * game replaces anything: `index.length === 0` and an immediate return.
+ */
+function damageAfterReplacement(
+  ctx: EffectContext,
+  index: ReplacementIndex,
+  emit: (e: GameEvent) => void,
+  source: CardInstance,
+  recipient: CardInstance | undefined,
+  affectedPlayer: PlayerId,
+  amount: number,
+): number {
+  if (index.length === 0) return amount;
+  const result = replaceDamage(
+    ctx.state,
+    index,
+    source,
+    source.controller,
+    recipient,
+    affectedPlayer,
+    amount,
+    false,
+    emit,
+  );
+  if (result.prevented > 0) {
+    emit({
+      type: 'damagePrevented',
+      source: source.instanceId,
+      target: recipient === undefined ? affectedPlayer : recipient.instanceId,
+      amount: result.prevented,
+      combat: false,
+    });
+  }
+  return result.amount;
+}
 
 /**
  * `dealDamage` — deal `amount` damage to the chosen target. Reads `params.amount`
@@ -92,6 +146,11 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
  *   - `'player'` — "target player or planeswalker" only. Lava Spike, which must
  *     never kill a creature.
  *
+ * With NO target at all it reads `params.whichPlayer` instead — the UNTARGETED
+ * player form a trigger prints ("~ deals 1 damage to that player"), resolved
+ * through the shared `playersForParam` vocabulary. That form asks nobody to aim
+ * anything, which is the printed card: the trigger already knows who it means.
+ *
  * A creature target gets marked damage (SBAs destroy it if lethal); a player target
  * loses life. The restriction is already enforced when the cast is offered and when
  * it is applied (core's targeting.ts); it is re-checked HERE because a target can
@@ -100,23 +159,49 @@ import { CHOICE_PRIMITIVES } from './choice-primitives.js';
  * every caller remembering it. No valid target → safe no-op.
  */
 export const dealDamage: EffectPrimitive = (ctx) => {
-  const amount = intParam(ctx, 'amount', 0);
+  let amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
   const target = ctx.targets[0];
-  if (target === undefined) return;
+  if (target === undefined) {
+    // The UNTARGETED player form — "~ deals 1 damage to that player" / "to
+    // them", printed by a trigger that already knows who it means. No targeting
+    // question is asked and no target restriction applies, because the printed
+    // line names no target: it names the player the trigger was about. With no
+    // `whichPlayer` either, there is genuinely nothing to damage — a safe no-op,
+    // exactly as before.
+    const whichPlayer = strParam(ctx, 'whichPlayer');
+    if (whichPlayer === undefined) return;
+    for (const victim of playersForParam(ctx, whichPlayer)) {
+      changeLife(ctx, victim, -amount);
+      ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target: victim, amount, combat: false });
+    }
+    return;
+  }
   // `ctx.controller` is passed so an "opponent-only" restriction can be judged —
   // without it the check cannot tell the caster apart from their opponent.
   // The source definition rides along so protection's "can't be targeted" half
   // re-fizzles a target that gained protection between cast and resolution.
   if (!isLegalTarget(ctx.state, restrictionParam(ctx), target, ctx.controller, ctx.source.def)) return; // illegal → fizzle
 
+  const replacements = indexReplacements(ctx.state);
+  // `ctx.emit` is a plain function property on the context (see core's
+  // `createEffectContext`), never a `this`-bound method, so it is passed by
+  // reference rather than wrapped — a wrapper here would be one closure
+  // allocated per damage event on the engine's hottest path.
+  const emit = ctx.emit;
+
   if (isPlayerTarget(target)) {
-    changeLife(ctx, target, -amount);
-    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target, amount, combat: false });
+    const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, target, amount);
+    if (dealt <= 0) return;
+    changeLife(ctx, target, -dealt);
+    ctx.emit({ type: 'damageDealt', source: ctx.source.instanceId, target, amount: dealt, combat: false });
     return;
   }
   const perm = permanentById(ctx.state, target);
   if (!perm) return; // target fizzled (already gone) — safe no-op
+  const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, perm, perm.controller, amount);
+  if (dealt <= 0) return;
+  amount = dealt;
   if (isPlaneswalker(perm.def)) {
     // Damage to a planeswalker removes that many loyalty counters immediately
     // (CR 120.3c) — the modern rules aim burn AT the walker ("any target"
@@ -178,36 +263,38 @@ function removeLoyaltyCounters(perm: CardInstance, amount: number): number {
 }
 
 /**
- * `drawCards` — a player draws `params.count` cards. Defaults to the controller;
- * `params.whichPlayer: 'opponent'` makes the controller's opponent draw instead
- * (e.g. Goblin Guide's attack trigger gives the defending player a card), and
- * `'targetPlayer'` the first targeted player ("Target player draws two cards" —
- * Sign in Blood; falls back to the controller, matching the other primitives'
- * target fallbacks). Drawing from an empty library flags a loss via SBA on the
- * next check (we move the top card or stop). Used by Brainstorm (3), Ponder (1),
- * Cryptic Command (1).
+ * `drawCards` — `params.count` cards are drawn by whoever `params.whichPlayer`
+ * names, through the shared {@link playersForParam} vocabulary: the controller
+ * by default, `'opponent'` (Goblin Guide's attack trigger), `'targetPlayer'`
+ * (Sign in Blood), `'triggering'` — the player whose step/draw set the trigger
+ * off, which is Howling Mine's "that player" — or `'each'`, both seats in APNAP
+ * order ("each player draws a card").
+ *
+ * Drawing from an empty library flags a loss via SBA on the next check (we move
+ * the top card or stop). An empty library ends THAT PLAYER's draws and nobody
+ * else's — in "each player draws a card" the other player still draws, which is
+ * what the card says.
+ * Used by Brainstorm (3), Ponder (1), Cryptic Command (1).
  */
 export const drawCards: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
-  const whichPlayer = strParam(ctx, 'whichPlayer');
-  const drawer =
-    whichPlayer === 'opponent'
-      ? otherPlayer(ctx.controller)
-      : whichPlayer === 'targetPlayer'
-        ? (firstPlayerTarget(ctx) ?? ctx.controller)
-        : ctx.controller;
-  const player = ctx.state.players[drawer];
-  for (let i = 0; i < count; i++) {
-    const top = player.library.shift();
-    if (!top) {
+  for (const drawer of playersForParam(ctx, strParam(ctx, 'whichPlayer'))) {
+    const player = ctx.state.players[drawer];
+    for (let i = 0; i < count; i++) {
       // Decking: leave the empty library; core's SBA will register the loss when
       // a *draw step* draw fails. A spell-driven empty draw is rare in the pool;
-      // emit nothing rather than fabricate a loss event here.
-      return;
+      // stop rather than fabricate a loss event here. Checked BEFORE the draw
+      // (rather than by a failed `shift()`) because the draw itself now goes
+      // through core, and an empty library ends THIS player's draws and nobody
+      // else's — in "each player draws a card" the other player still draws.
+      if (player.library.length === 0) break;
+      // Core's draw, not a second copy of it: "if you would draw a card, draw
+      // two instead" and "…you win the game instead" (the CR 614 replacement
+      // layer) have to mean the same thing for a Divination as for a draw step,
+      // and one implementation is how that is guaranteed rather than remembered.
+      drawCardForPlayer(ctx.state, drawer, ctx.emit);
+      if (ctx.state.gameOver) return;
     }
-    top.zone = 'hand';
-    player.hand.push(top);
-    ctx.emit({ type: 'drawCard', player: drawer, instanceId: top.instanceId });
   }
 };
 
@@ -227,8 +314,11 @@ export const gainLife: EffectPrimitive = (ctx) => {
 
 /**
  * `loseLife` — a player loses `params.amount` life. Defaults to the controller;
- * with `params.targetPlayer` true the first player target loses it instead.
- * Used by Thoughtseize (controller loses 2).
+ * with `params.targetPlayer` true the first player target loses it instead, and
+ * otherwise `params.whichPlayer` picks the loser from the shared
+ * {@link playersForParam} vocabulary — `'opponent'` ("each opponent loses 1
+ * life"), `'triggering'` ("that player loses 1 life"), or `'each'` ("each player
+ * … loses 1 life"). Used by Thoughtseize (controller loses 2).
  */
 export const loseLife: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
@@ -239,12 +329,10 @@ export const loseLife: EffectPrimitive = (ctx) => {
   // chosen target to read, so `targetPlayer` cannot express it. In this engine a
   // game is always exactly two seats (`PLAYER_IDS`), so "each opponent" and "the
   // opponent" name the same player — the printed plural has no other referent.
-  const player = useTarget
-    ? (firstPlayerTarget(ctx) ?? ctx.controller)
-    : strParam(ctx, 'whichPlayer') === 'opponent'
-      ? otherPlayer(ctx.controller)
-      : ctx.controller;
-  changeLife(ctx, player, -amount);
+  const victims = useTarget
+    ? [firstPlayerTarget(ctx) ?? ctx.controller]
+    : playersForParam(ctx, strParam(ctx, 'whichPlayer'));
+  for (const player of victims) changeLife(ctx, player, -amount);
 };
 
 /**
@@ -315,12 +403,54 @@ export const grantKeywordToYoursUntilEndOfTurn: EffectPrimitive = (ctx) => {
 };
 
 /**
- * `makeToken` — create `params.count` (default 1) creature tokens under the
- * controller via engine-v2's `ctx.createToken`, so the token enters the battlefield
- * properly (summoning-sick unless it has haste) and fires ETB triggers like any
- * permanent. Token P/T, name, and keywords are all DATA from params (no magic
- * numbers): `power`/`toughness`/`name`/`keywords`. Used by cast-triggers such as
- * Young Pyromancer's "make a 1/1 red Elemental".
+ * The five colours a printed token may declare, in canonical order. Used to keep
+ * a `colors` param honest: anything outside this set is not a colour and is
+ * dropped, so a malformed param degrades to "colorless" rather than to a
+ * definition core's colour reader has to defend against.
+ */
+const TOKEN_COLORS: readonly string[] = ['W', 'U', 'B', 'R', 'G'];
+
+/**
+ * The card types a token may declare. Closed on purpose: a token's type line is
+ * printed text ("artifact creature token", "enchantment creature token"), and a
+ * type outside this set would be either meaningless (a token is never an instant)
+ * or a permanent kind with entry rules of its own (a planeswalker or battle token
+ * needs printed loyalty/defense, which the token rule does not read).
+ */
+const TOKEN_TYPES: readonly CardType[] = ['artifact', 'creature', 'enchantment', 'land'];
+
+/**
+ * `makeToken` — create `params.count` (default 1) tokens under the controller via
+ * engine-v2's `ctx.createToken`, so each enters the battlefield properly
+ * (summoning-sick unless it has haste) and fires ETB triggers like any permanent.
+ *
+ * **EVERY characteristic the printed token has is DATA from params**, and that is
+ * not a style point — it is the fix for a real infidelity. A token is printed as
+ * a whole card face ("a 1/1 **black** **Faerie Rogue** creature token **with
+ * flying**"), and for a long time this primitive built a definition with a name,
+ * a P/T and nothing else. Every token in the game therefore entered COLOURLESS
+ * and with NO CREATURE TYPE, which made it invisible to a coloured anthem, to
+ * protection from a colour, to "destroy target nonblack creature" and to every
+ * typal lord — while the card still compiled `'complete'`.
+ *
+ *   - `power` / `toughness` — the printed box.
+ *   - `name`               — the token's name; also its default creature type,
+ *                            because a "Goblin" token IS a Goblin. Pass
+ *                            `subtypes` explicitly for a multi-type token
+ *                            ("Faerie Rogue") or one whose name is not a type.
+ *   - `subtypes`           — the printed subtype line.
+ *   - `colors`             — the printed colour WORDS, `[]` for the printed word
+ *                            "colorless". A token has no mana cost, so this is
+ *                            the only place its colour can come from.
+ *   - `types`             — the printed type line; defaults to `['creature']`,
+ *                            and "artifact creature" passes `['artifact',
+ *                            'creature']`.
+ *   - `keywords`           — "with flying", "with deathtouch".
+ *
+ * The definition `id` carries the whole face rather than just the name, so two
+ * genuinely different tokens with the same name (a 1/1 white Soldier and a 1/1
+ * colourless Soldier artifact creature) are not conflated by anything keying on
+ * id — the UI's art lookup, a log line, an AI's card memo.
  */
 export const makeToken: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
@@ -328,12 +458,36 @@ export const makeToken: EffectPrimitive = (ctx) => {
   const toughness = intParam(ctx, 'toughness', 1);
   const name = strParam(ctx, 'name') ?? 'Token';
   const keywords = keywordsParam(ctx);
+  // A token's colour is printed in words and it has no mana cost, so an ABSENT
+  // param and an EMPTY one must stay distinguishable: absent means the caller
+  // said nothing (core falls back to the — nonexistent — pips and reads
+  // colourless), `[]` means the printed word "colorless". `ctx.params.colors`
+  // is therefore tested for presence before `strArrayParam` flattens it.
+  const colors =
+    ctx.params.colors === undefined
+      ? undefined
+      : strArrayParam(ctx, 'colors').filter((c) => TOKEN_COLORS.includes(c));
+  const declaredTypes = strArrayParam(ctx, 'types').filter((t): t is CardType =>
+    TOKEN_TYPES.includes(t as CardType),
+  );
+  const types: readonly CardType[] = declaredTypes.length > 0 ? declaredTypes : ['creature'];
+  // The printed subtype line, defaulting to the token's own name: "create a 1/1
+  // red Goblin creature token" makes an object that IS a Goblin, which is what a
+  // typal lord and a "sacrifice a Goblin" cost both select on.
+  const declaredSubtypes = strArrayParam(ctx, 'subtypes');
+  const subtypes = declaredSubtypes.length > 0 ? declaredSubtypes : [name];
   const def: CardDefinition = {
-    id: `token:${name}`,
+    id: `token:${[...types].join('-')}:${(colors ?? []).join('') || 'c'}:${subtypes.join('-')}:${power}/${toughness}`,
     name,
-    types: ['creature'],
+    types,
+    subtypes,
+    // No `isToken` here on purpose: core stamps it in `createTokenInState`, so
+    // token-ness is a property of HOW the object was created and is true of
+    // every token the engine makes, including ones built from a definition that
+    // came from elsewhere (a token COPY). One place, not two.
     power,
     toughness,
+    ...(colors === undefined ? {} : { colors: colors as CardDefinition['colors'] }),
     ...(isEmptyKeywords(keywords) ? {} : { keywords }),
   };
   for (let i = 0; i < count; i++) ctx.createToken(def);
@@ -454,10 +608,21 @@ export const persistReturn: EffectPrimitive = (ctx) => {
     damageMarked: 0,
     markedByDeathtouch: false,
     attachedTo: null,
-    counters: { [PLUS_ONE_COUNTER]: -Math.max(minus, 0) },
+    // A REAL -1/-1 counter (CR 702.79a), not a negative +1/+1. The two read the
+    // same through `counterShift`, which is why this survived as a negative
+    // tally — but persist's own printed condition is "if it had no -1/-1
+    // counters on it", and the CR 704.5q annihilation in `internal/sba.ts` looks
+    // for a counter of this KIND. Written as a negative +1/+1 the returning
+    // creature was invisible to both.
+    counters: { [MINUS_ONE_COUNTER]: Math.max(minus, 0) },
   };
   ctx.state.battlefield.push(returned);
-  ctx.emit({ type: 'counterAdded', instanceId: returned.instanceId, kind: PLUS_ONE_COUNTER, amount: -Math.max(minus, 0) });
+  ctx.emit({
+    type: 'counterAdded',
+    instanceId: returned.instanceId,
+    kind: MINUS_ONE_COUNTER,
+    amount: Math.max(minus, 0),
+  });
   // A battlefield entry: emit the zoneChange so ETB triggers (e.g. the lifegain
   // half of persist) observe the return through the one "enters" mechanism.
   ctx.emit({ type: 'zoneChange', instanceId: returned.instanceId, from: 'graveyard', to: 'battlefield' });
@@ -526,8 +691,13 @@ export const addMana: EffectPrimitive = (ctx) => {
   const symbols = strArrayParam(ctx, 'mana');
   const pool = ctx.state.players[ctx.controller].manaPool;
   for (const sym of symbols) {
-    if (sym in pool) {
-      const color = sym as keyof typeof pool;
+    // Membership is tested against the COLOUR PALETTE, not against the pool
+    // object. A pool carrying spend restrictions also carries a `restricted`
+    // key, so `sym in pool` would answer true for it — turning a malformed card
+    // param into a write over the restriction list. The palette is the authority
+    // on what a colour is; the pool is merely where they are counted.
+    if ((MANA_COLORS as readonly string[]).includes(sym)) {
+      const color = sym as ManaColor;
       pool[color] += 1;
       ctx.emit({ type: 'manaAdded', player: ctx.controller, color, amount: 1 });
     }
@@ -623,11 +793,13 @@ const PERSIST_RETURN_PRIMITIVE = 'persistReturn';
 function passesDestroyFilter(ctx: EffectContext, target: CardInstance): boolean {
   const notColor = strParam(ctx, 'notColor');
   if (notColor) {
-    // The engine's CardDefinition has no color field; derive color from the
-    // card's colored mana pips. A card is "of color X" if its cost requires X.
-    const cost = target.def.cost;
-    const requires = cost ? ((cost as Record<string, number | undefined>)[notColor] ?? 0) > 0 : false;
-    if (requires) return false; // e.g. nonblack filter rejects a card with {B} pips
+    // Asked through core's ONE colour reader, never off the cost record here.
+    // This used to walk `def.cost` directly, and that second opinion about what
+    // "black" means was wrong twice over: it could not see a HYBRID pip, and it
+    // could not see a printed colour with no cost behind it - so Doom Blade
+    // happily destroyed a "1/1 black Faerie Rogue creature token", which the
+    // printed card cannot target at all.
+    if (colorsOfDefinition(target.def).includes(notColor as ManaColor)) return false;
   }
   const maxMv = maxManaValueBound(ctx);
   if (maxMv !== undefined && manaValueOf(target.def) > maxMv) return false;
@@ -704,7 +876,13 @@ export const fight: EffectPrimitive = (ctx) => {
   const otherPower = effectivePower(other, aggregateFor(ctx.state, other.instanceId));
 
   // Protection prevents the damage a protected fighter would take, in either
-  // direction, without stopping the other half of the fight (CR 702.16e).
+  // direction, without stopping the other half of the fight (CR 702.16e). It is
+  // asked BEFORE the replacement layer for the reason `internal/combat.ts` gives
+  // at the same seam: it is an absolute prevention, so nothing a replacement
+  // could do changes the outcome, and asking first means a prevention SHIELD is
+  // not spent on damage that was never going to land.
+  const replacements = indexReplacements(ctx.state);
+  const emit = ctx.emit;
   if (otherPower > 0) {
     if (protectionPreventsDamage(ctx.state, self, other.def)) {
       ctx.emit({
@@ -715,14 +893,17 @@ export const fight: EffectPrimitive = (ctx) => {
         combat: false,
       });
     } else {
-      self.damageMarked += otherPower;
-      ctx.emit({
-        type: 'damageDealt',
-        source: other.instanceId,
-        target: self.instanceId,
-        amount: otherPower,
-        combat: false,
-      });
+      const dealt = damageAfterReplacement(ctx, replacements, emit, other, self, self.controller, otherPower);
+      if (dealt > 0) {
+        self.damageMarked += dealt;
+        ctx.emit({
+          type: 'damageDealt',
+          source: other.instanceId,
+          target: self.instanceId,
+          amount: dealt,
+          combat: false,
+        });
+      }
     }
   }
   if (selfPower > 0) {
@@ -735,14 +916,17 @@ export const fight: EffectPrimitive = (ctx) => {
         combat: false,
       });
     } else {
-      other.damageMarked += selfPower;
-      ctx.emit({
-        type: 'damageDealt',
-        source: self.instanceId,
-        target: other.instanceId,
-        amount: selfPower,
-        combat: false,
-      });
+      const dealt = damageAfterReplacement(ctx, replacements, emit, self, other, other.controller, selfPower);
+      if (dealt > 0) {
+        other.damageMarked += dealt;
+        ctx.emit({
+          type: 'damageDealt',
+          source: self.instanceId,
+          target: other.instanceId,
+          amount: dealt,
+          combat: false,
+        });
+      }
     }
   }
   // Death is the engine's state-based check, exactly as with combat damage.
@@ -758,6 +942,12 @@ export const fight: EffectPrimitive = (ctx) => {
 export const dealDamageToEach: EffectPrimitive = (ctx) => {
   const amount = intParam(ctx, 'amount', 0);
   if (amount <= 0) return;
+
+  // ONE index for the whole sweep: every hit in it is dealt simultaneously, so
+  // an effect that was live when the sweeper resolved is live for all of them —
+  // the same argument `assignAndDealCombatDamage` makes for a damage step.
+  const replacements = indexReplacements(ctx.state);
+  const emit = ctx.emit;
 
   if (boolParam(ctx, 'creatures', false)) {
     // Snapshot first: damage is dealt simultaneously, so a creature dying to it
@@ -775,12 +965,22 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
         });
         continue;
       }
-      creature.damageMarked += amount;
+      const dealt = damageAfterReplacement(
+        ctx,
+        replacements,
+        emit,
+        ctx.source,
+        creature,
+        creature.controller,
+        amount,
+      );
+      if (dealt <= 0) continue;
+      creature.damageMarked += dealt;
       ctx.emit({
         type: 'damageDealt',
         source: ctx.source.instanceId,
         target: creature.instanceId,
-        amount,
+        amount: dealt,
         combat: false,
       });
     }
@@ -792,7 +992,14 @@ export const dealDamageToEach: EffectPrimitive = (ctx) => {
     const victims: PlayerId[] = hitEveryPlayer
       ? [ctx.controller, otherPlayer(ctx.controller)]
       : [otherPlayer(ctx.controller)];
-    for (const victim of victims) changeLife(ctx, victim, -amount);
+    for (const victim of victims) {
+      const dealt = damageAfterReplacement(ctx, replacements, emit, ctx.source, undefined, victim, amount);
+      // Deliberately only the life change, exactly as before this layer existed:
+      // this primitive has never emitted `damageDealt` for its player half, and
+      // adding one here would be a separate (real) log gap to close, not part of
+      // the replacement work.
+      if (dealt > 0) changeLife(ctx, victim, -dealt);
+    }
   }
 };
 
@@ -887,11 +1094,17 @@ function eachCounterTarget(ctx: EffectContext): CardInstance[] {
 
 /**
  * Put `amount` +1/+1 counters (or, when negative, that many -1/-1 counters) on
- * one permanent, annihilating the pairs CR 704.5q says must not coexist.
+ * one permanent.
  *
  * Factored out of {@link addCounters} so the single-target and the "each
- * creature" forms cannot drift apart on the one piece of rules bookkeeping that
- * is easy to forget.
+ * creature" forms cannot drift apart.
+ *
+ * ⚠️ It does NOT annihilate +1/+1 against -1/-1 any more. That is CR 704.5q, a
+ * STATE-BASED ACTION, and it now lives where the other state-based actions do
+ * (`internal/sba.ts`'s `annihilateCounters`) — so every route a counter can
+ * arrive by gets it, not just this one. Doing it here as well would be a second
+ * implementation of one rule; doing it ONLY here is what left persist's returning
+ * creature, and any future counter producer, outside the rule.
  */
 function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number): void {
   // A negative amount is a -1/-1 counter, stored as its own kind rather than as
@@ -899,7 +1112,22 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
   // that the counters now genuinely EXIST as the card says they do, so state can
   // be inspected ("does it have a -1/-1 counter?") and the two kinds annihilate.
   const kind = amount < 0 ? MINUS_ONE_COUNTER : PLUS_ONE_COUNTER;
-  const magnitude = Math.abs(amount);
+  // THE REPLACEMENT LAYER (CR 614) — "that many PLUS ONE are put on it instead"
+  // (Hardened Scales), "TWICE that many" (Corpsejack Menace). This is the ONE
+  // counter site in the engine, which is what makes those cards apply to a spell,
+  // to a triggered ability and to "~ enters with N +1/+1 counters on it" alike:
+  // CR 614.1c puts those on as the permanent enters, and they come through here.
+  // The KIND is passed, so a `+1/+1` doubler correctly ignores a `-1/-1` counter.
+  const magnitude = replaceCounters(
+    ctx.state,
+    indexReplacements(ctx.state),
+    ctx.source,
+    target,
+    kind,
+    Math.abs(amount),
+    ctx.emit,
+  );
+  if (magnitude <= 0) return;
   // REPLACE the record, never write into it — `CardInstance.counters` is shared
   // and FROZEN while a permanent has no counters (`NO_COUNTERS`), so an in-place
   // write threw "object is not extensible" for the very first counter put on any
@@ -907,26 +1135,10 @@ function putCountersOn(ctx: EffectContext, target: CardInstance, amount: number)
   // hand-built test instances (which carry their own `{}`) survived it, which is
   // why a suite full of counter tests never saw it: the pool had no card that
   // put a counter on a permanent the ENGINE created.
-  let counters: Record<string, number> = {
+  target.counters = {
     ...target.counters,
     [kind]: (target.counters[kind] ?? 0) + magnitude,
   };
-
-  // CR 704.5q — a permanent with both +1/+1 and -1/-1 counters has them removed
-  // in pairs as a state-based action. Without this the counts drift apart while
-  // the net stays right, so "remove a -1/-1 counter" later finds one that should
-  // have been annihilated turns ago.
-  const plus = counters[PLUS_ONE_COUNTER] ?? 0;
-  const minus = counters[MINUS_ONE_COUNTER] ?? 0;
-  const annihilated = Math.min(plus, minus);
-  if (annihilated > 0) {
-    counters = {
-      ...counters,
-      [PLUS_ONE_COUNTER]: plus - annihilated,
-      [MINUS_ONE_COUNTER]: minus - annihilated,
-    };
-  }
-  target.counters = counters;
   ctx.emit({ type: 'counterAdded', instanceId: target.instanceId, kind, amount: magnitude });
 };
 
@@ -1125,6 +1337,63 @@ export const mayEffects: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * `preventDamage` — the ONE-SHOT half of the prevention family: "Prevent all
+ * combat damage that would be dealt this turn" (Fog, Darkness, Spore Frog's
+ * sacrifice ability, Dawn Charm's first mode), "Prevent all damage that would be
+ * dealt to you this turn" (Riot Control), "Prevent the next N damage that would
+ * be dealt to target creature".
+ *
+ * It registers a FLOATING replacement effect (core's `addReplacementEffect`) and
+ * mutates nothing else. The prevention itself happens in the one place every
+ * damage site already asks — `internal/replacement.ts` — so a fog covers combat
+ * damage, a Lightning Bolt, a sweeper and a fight through exactly one rule.
+ *
+ * The PRINTED prevention statics ("Prevent all combat damage that would be dealt
+ * to attacking creatures you control" — Dolmen Gate) are NOT this primitive:
+ * they are `CardDefinition.replacements` data, whose lifetime is derived from
+ * the source being on the battlefield and needs no record at all.
+ *
+ * Params (each a printed word, none inferred):
+ *   - `combat` — `true` for "all COMBAT damage", `false` for "all NONCOMBAT
+ *     damage", omitted for a clause that prints neither.
+ *   - `scope` — whose objects it guards, relative to the caster (`'you'` /
+ *     `'opponent'` / `'any'`). Omitted ⇒ everyone's, which is what a fog says.
+ *   - `recipientKind` — `'player'` for "…dealt to you", `'permanent'` for
+ *     "…dealt to creatures you control". Omitted ⇒ either.
+ *   - `attacking` — `true` for "…to ATTACKING creatures you control".
+ *   - `amount` — a SHIELD ceiling ("prevent the next N damage"). Omitted ⇒ a
+ *     blanket prevention with no ceiling.
+ *   - `targeted` — bind the shield to `ctx.targets[0]`, the chosen creature or
+ *     player. Without it the effect guards every object the rest of the filter
+ *     admits.
+ *   - `label` — the printed line, for the log.
+ */
+export const preventDamage: EffectPrimitive = (ctx) => {
+  const shield = intParam(ctx, 'amount', 0);
+  const scope = strParam(ctx, 'scope');
+  const recipientKind = strParam(ctx, 'recipientKind');
+  const targeted = boolParam(ctx, 'targeted', false);
+  const target = targeted ? ctx.targets[0] : undefined;
+  // "prevent the next N damage that would be dealt to TARGET creature" with no
+  // legal target left is a fizzle, not a blanket fog — refusing here is the
+  // direction that can never play better than printed.
+  if (targeted && target === undefined) return;
+  const combat = ctx.params.combat;
+  ctx.addReplacementEffect({
+    event: 'damage',
+    applies: {
+      ...(typeof combat === 'boolean' ? { combat } : {}),
+      ...(scope === 'you' || scope === 'opponent' || scope === 'any' ? { recipientController: scope } : {}),
+      ...(recipientKind === 'player' || recipientKind === 'permanent' ? { recipientKind } : {}),
+      ...(boolParam(ctx, 'attacking', false) ? { recipientAttacking: true } : {}),
+      ...(target !== undefined ? { recipientIs: target } : {}),
+    },
+    outcome: shield > 0 ? { preventUpTo: shield } : { preventAll: true },
+    ...(strParam(ctx, 'label') !== undefined ? { label: strParam(ctx, 'label') as string } : {}),
+  });
+};
+
+/**
  * `grantFlashback` — "target instant or sorcery card in your graveyard gains
  * flashback until end of turn" (Snapcaster Mage).
  *
@@ -1207,10 +1476,16 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   mill,
   fight,
   dealDamageToEach,
+  preventDamage,
   addCounters,
   attachToTarget,
   grantFlashback,
   ...CHOICE_PRIMITIVES,
+  // The copy family (`./copy-primitives`): a copy of a spell on the stack and a
+  // token copy of a permanent. Kept in their own module because both create an
+  // object that is NOT A CARD, and both read what a copy IS from core's single
+  // `copiableDefOf` answer rather than deciding it here.
+  ...COPY_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */

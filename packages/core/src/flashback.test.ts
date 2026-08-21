@@ -283,3 +283,108 @@ describe('flashback — rejections (each leaves the state unchanged)', () => {
     );
   });
 });
+
+/**
+ * THE LIFE HALF OF A FLASHBACK COST ("Flashback—{1}{B}, Pay 3 life" — Crippling
+ * Fatigue). It is a COST, so it is charged as the spell is cast; and paying a
+ * cost can kill you, which has to END THE GAME right there.
+ *
+ * The second half is the one that shipped broken. Paying yourself to exactly 0
+ * is legal (CR 118.4 — the engine does not forbid it), and the caster then
+ * receives priority, which is when state-based actions are checked (CR 704.3)
+ * and a player at 0 or less life loses (CR 704.5a). Without the SBA pass the
+ * game carried on with a corpse holding priority: the full-pool soak
+ * (`@jonny-boi/sim`'s `soak.ts`) found a player sitting at 0 life and casting
+ * spells on turn 20 of seed 3856639351.
+ */
+const LIFE_RIDER = 3;
+
+/** The same card with a life rider on its flashback cost. */
+const FLASHBACK_PAY_LIFE: CardDefinition = {
+  ...FLASHBACK_SORCERY,
+  id: 'fb-pay-life',
+  name: 'Costly Thought',
+  flashbackLifeCost: LIFE_RIDER,
+};
+
+describe('a flashback cost that also costs LIFE', () => {
+  it('charges the life alongside the mana', () => {
+    const { reg } = makeRegistry();
+    const state = gameAtMain(reg);
+    const [card] = giveGraveyard(state, 'A', [FLASHBACK_PAY_LIFE]);
+    fundFlashback(state, 'A');
+    const before = state.players.A.life;
+
+    const after = act(state, flashbackCastOf(state, 'A', card!.instanceId), reg);
+    expect(after.players.A.life).toBe(before - LIFE_RIDER);
+    expect(after.stack).toHaveLength(1);
+  });
+
+  it('is neither offered nor accepted when the caster cannot pay the life', () => {
+    const { reg } = makeRegistry();
+    const state = gameAtMain(reg);
+    const [card] = giveGraveyard(state, 'A', [FLASHBACK_PAY_LIFE]);
+    fundFlashback(state, 'A');
+    state.players.A.life = LIFE_RIDER - 1;
+
+    const offered = generateLegalActions(state, DEFAULT_RULES).filter(
+      (a) => a.kind === 'castSpell' && a.instanceId === card!.instanceId,
+    );
+    expect(offered, 'a cast the caster cannot pay for must not be on the menu').toEqual([]);
+    expect(rejection(state, flashbackCastOf(state, 'A', card!.instanceId), reg)).toMatch(/life/);
+  });
+
+  /**
+   * The card that proves the payment's OWN state-based-action pass is load-bearing.
+   *
+   * `applyCastSpell` runs the pass twice: once right after the life is charged,
+   * and once at the very end of the announcement. The second one alone is enough
+   * for an ordinary pay-life flashback — so without this card the first call
+   * would be untested, and an untested call is a call somebody deletes. Add
+   * `{X}` to the flashback cost and the announcement PARKS a `chooseNumber`
+   * question, which skips the end-of-announcement pass (CR 601.2 — the
+   * announcement is not finished and nobody has priority yet). Only the pass
+   * beside the payment can settle a caster who has just paid itself to death.
+   */
+  const FLASHBACK_PAY_LIFE_X: CardDefinition = {
+    ...FLASHBACK_PAY_LIFE,
+    id: 'fb-pay-life-x',
+    name: 'Costlier Thought',
+    flashbackXCost: 1,
+  };
+
+  it('ENDS THE GAME even when a cast-time question is still outstanding', () => {
+    const { reg } = makeRegistry();
+    const state = gameAtMain(reg);
+    const [card] = giveGraveyard(state, 'A', [FLASHBACK_PAY_LIFE_X]);
+    // MORE than the flashback cost, deliberately: with exactly the cost, the
+    // largest affordable X is 0, the question has one legal answer, and the
+    // engine settles it without ever parking it — which would quietly turn this
+    // back into the previous test.
+    state.players.A.manaPool = { W: 0, U: 1, B: 0, R: 0, G: 0, C: 5 };
+    state.players.A.life = LIFE_RIDER;
+
+    const after = act(state, flashbackCastOf(state, 'A', card!.instanceId), reg);
+    expect(after.pendingChoice?.kind, 'the X question must still be outstanding').toBe('chooseNumber');
+    expect(after.players.A.life).toBe(0);
+    expect(
+      after.players.A.hasLost,
+      'the caster paid itself to death while announcing, and the game carried on',
+    ).toBe(true);
+    expect(after.gameOver).toBe(true);
+  });
+
+  it('ENDS THE GAME when the payment takes its caster to zero', () => {
+    const { reg } = makeRegistry();
+    const state = gameAtMain(reg);
+    const [card] = giveGraveyard(state, 'A', [FLASHBACK_PAY_LIFE]);
+    fundFlashback(state, 'A');
+    state.players.A.life = LIFE_RIDER; // exactly payable, and exactly fatal
+
+    const after = act(state, flashbackCastOf(state, 'A', card!.instanceId), reg);
+    expect(after.players.A.life).toBe(0);
+    expect(after.players.A.hasLost, 'the caster paid itself to death and is still in the game').toBe(true);
+    expect(after.gameOver).toBe(true);
+    expect(after.winner).toBe('B');
+  });
+});

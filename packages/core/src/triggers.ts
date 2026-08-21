@@ -20,16 +20,18 @@ import type { CardType, EffectRef } from './card.js';
 import type { GameEvent } from './events.js';
 import type { CardFilter } from './choices.js';
 import { matchesCardFilter } from './choices.js';
+import { permanentHasSubtype } from './card.js';
 import type { CardInstance, InstanceId, PlayerId, Step } from './state.js';
 import type { TargetRestriction } from './targeting.js';
+import type { InterveningIf } from './intervening.js';
 
 /**
  * The game occurrences a trigger can watch. Kept small and explicit (the §3.9
  * minimum set) — each maps to one or more `GameEvent`s the engine already emits.
- *   - `etb`            : this permanent enters the battlefield.
- *   - `attacks`        : this creature is declared as an attacker.
- *   - `dies`           : this creature dies (battlefield → graveyard).
- *   - `leaves`         : this permanent leaves the battlefield (any destination).
+ *   - `etb`            : the WATCHED permanent enters the battlefield.
+ *   - `attacks`        : the WATCHED creature is declared as an attacker.
+ *   - `dies`           : the WATCHED creature dies (battlefield → graveyard).
+ *   - `leaves`         : the WATCHED permanent leaves the battlefield (any zone).
  *   - `castSpell`      : a spell is cast — optionally filtered by card type and by
  *                        whether the source's controller cast it.
  *   - `upkeep`         : the beginning of a player's upkeep (by default, the source
@@ -39,9 +41,16 @@ import type { TargetRestriction } from './targeting.js';
  *   - `endStep`        : the beginning of a player's end step.
  *   - `beginCombat`    : the beginning of combat on a player's turn.
  *   - `gainLife`       : a player gained life ("whenever you gain life").
- *   - `combatDamageToPlayer` : this permanent dealt COMBAT damage to a player.
+ *   - `combatDamageToPlayer` : the WATCHED permanent dealt COMBAT damage to a
+ *                        player.
  *   - `permanentEnters`: ANOTHER permanent entered the battlefield — "whenever a
  *                        creature you control enters", landfall, constellation.
+ *   - `drawsCard`      : a player DREW a card ("whenever a player draws a card",
+ *                        "whenever an opponent draws a card"). Scoped by `who`
+ *                        like every other relational trigger. It watches the
+ *                        `drawCard` event, so it counts every draw — the draw
+ *                        step's, a spell's, and another trigger's — which is
+ *                        what the printed line says.
  *   - `permanentDies`  : a permanent died (battlefield → graveyard) — "whenever a
  *                        creature you control dies", "whenever ~ or another
  *                        creature dies". Distinct from `dies`, which is this
@@ -59,6 +68,11 @@ import type { TargetRestriction } from './targeting.js';
  * they share one filter shape: `who` (whose permanent) + `permanentFilter` (a
  * `CardFilter` over its printed characteristics) + `excludeSelf` (the printed
  * word "another").
+ *
+ * The first five are the SELF-REFERENTIAL events, and "the WATCHED permanent"
+ * above is the source itself unless the condition says otherwise — an
+ * attachment's "whenever **equipped creature** deals combat damage to a player"
+ * is the same event watched on its host. See {@link TriggerWatches}.
  */
 export type TriggerEvent =
   | 'etb'
@@ -74,13 +88,40 @@ export type TriggerEvent =
   | 'gainLife'
   | 'combatDamageToPlayer'
   | 'permanentEnters'
-  | 'permanentDies';
+  | 'permanentDies'
+  | 'drawsCard';
 
 /**
  * Whose action a relational trigger (cast / a step / life gain) cares about.
  * Read against the SOURCE's controller, never against the active player.
  */
 export type TriggerWho = 'you' | 'opponent' | 'any';
+
+/**
+ * WHICH OBJECT a self-referential trigger (`etb`/`attacks`/`dies`/`leaves`/
+ * `combatDamageToPlayer`) is watching.
+ *
+ *   - `self`         — the permanent the ability is printed on. Every trigger
+ *                      means this unless it says otherwise, so it is the default
+ *                      and absent from every condition that does not say
+ *                      otherwise.
+ *   - `attachedHost` — the permanent this one is ATTACHED TO: an Equipment's
+ *                      "Whenever **equipped creature** deals combat damage to a
+ *                      player, …" and "Whenever **equipped creature** attacks, …".
+ *
+ * A SCOPE on the existing events rather than a parallel family of
+ * `equippedDealsCombatDamage` events, because the game occurrence is identical —
+ * a creature dealt combat damage to a player — and only the object being watched
+ * differs. Two event names for one occurrence is how a matcher ends up with two
+ * answers to the same question.
+ *
+ * ⚠️ The SOURCE of the ability is still the attachment. A Sword's trigger is
+ * controlled by the Sword's controller, is ordered by the Sword's battlefield
+ * position, and its "~ deals 2 damage" means the Sword. Only the *watched*
+ * object moves — which is exactly why this is a field on the condition and not
+ * a different `sourceInstanceId`.
+ */
+export type TriggerWatches = 'self' | 'attachedHost';
 
 /**
  * A trigger condition: the event to watch plus optional filters. `who` scopes
@@ -118,6 +159,17 @@ export interface TriggerCondition {
    */
   readonly permanentFilter?: CardFilter;
   /**
+   * Set for the printed words "**of the chosen type**" on a CAST trigger —
+   * "whenever you cast a creature spell of the chosen type, draw a card"
+   * (Vanquisher's Banner), "whenever you cast a spell of the chosen type"
+   * (Chronicle of Victory).
+   *
+   * The value comes from the SOURCE (`TriggerSource.chosenAsEntered`), so it is
+   * this permanent's own naming — and a source that named nothing fires on
+   * nothing, exactly as its anthem reaches nothing.
+   */
+  readonly spellSubtypeIsChosen?: boolean;
+  /**
    * For `permanentEnters`/`permanentDies`: the printed word "**another**" — the
    * source's own arrival or death does not set it off. A distinct flag rather
    * than something inferred, for the same reason `StaticAffects.excludeSource`
@@ -125,7 +177,38 @@ export interface TriggerCondition {
    * turn it lands.
    */
   readonly excludeSelf?: boolean;
+  /**
+   * For the SELF-REFERENTIAL events: which object this trigger is watching.
+   * Defaults to {@link DEFAULT_TRIGGER_WATCHES} (`'self'`), which is what every
+   * printed trigger means unless it names the equipped/enchanted creature.
+   *
+   * `'attachedHost'` on a source attached to NOTHING matches nothing at all —
+   * it never falls back to the source itself. A Sword lying loose on the
+   * battlefield has an ability that can never trigger, and a fallback would be
+   * the Sword swinging on its own: a card doing something it does not say.
+   */
+  readonly watches?: TriggerWatches;
+  /**
+   * The printed **intervening "if"** clause — "at the beginning of your upkeep,
+   * **if you control three or more artifacts**, you gain 1 life".
+   *
+   * It is part of the CONDITION, not of the body, because CR 603.4 checks it
+   * TWICE: once when the trigger would fire (a false condition means the ability
+   * never goes on the stack at all) and again as it resolves (a condition that
+   * has since become false removes the ability from the stack, doing nothing).
+   * Compiling it as an `if` inside the effects would implement only the second
+   * check — the ability would still go on the stack, still be counted by
+   * anything watching the stack, and still be responded to.
+   *
+   * Evaluated by `interveningIfHolds` (intervening.ts), which needs the game
+   * state; `triggers.ts` stays a pure matcher, so the runtime applies it after
+   * this file has said the event matched.
+   */
+  readonly intervening?: InterveningIf;
 }
+
+/** What a condition watches when it does not say: the permanent it is printed on. */
+export const DEFAULT_TRIGGER_WATCHES: TriggerWatches = 'self';
 
 /**
  * A declared triggered ability: a condition + the effects to run when it resolves.
@@ -169,6 +252,23 @@ export interface PendingTrigger {
   readonly ability: TriggeredAbility;
   /** A stable per-source ordering key (index of the ability on the card). */
   readonly abilityIndex: number;
+  /**
+   * The player the EVENT was about — whose step began, who gained the life, who
+   * drew the card, who controlled the permanent that entered or died. This is
+   * the referent of the printed words "**that player**" / "**them**".
+   *
+   * It exists because the triggering player does NOT otherwise survive into the
+   * resolution: a `who: 'any'` trigger fires under the SOURCE's controller, so a
+   * body that read `ctx.controller` would make Howling Mine draw its own
+   * controller a card on every player's draw step — a different card. The value
+   * rides the stack object and then the resolution frame into `EffectContext`,
+   * exactly the way `xValue` and `kicked` ride a cast-time choice down to
+   * "deals X damage".
+   *
+   * Absent for a trigger whose event is about no particular player (a self ETB,
+   * an attack, this permanent's own death), where a body has nothing to point at.
+   */
+  readonly triggeringPlayer?: PlayerId;
 }
 
 /** The card-name + source needed to describe a pending trigger for events. */
@@ -177,12 +277,44 @@ export interface TriggerSource {
   readonly controller: PlayerId;
   readonly name: string;
   readonly triggers: readonly TriggeredAbility[];
+  /**
+   * The LIVE permanent this source is, read only to answer "what is it attached
+   * to right now" for a `watches: 'attachedHost'` condition.
+   *
+   * A live reference and NOT a copied `attachedTo` id, and that is the whole
+   * point of the field. The runtime caches a `TriggerSource` per permanent and
+   * refreshes it only when the controller or the ability list changes, so a
+   * copied id would go stale exactly where it matters most: an Equipment whose
+   * host died to first-strike damage is unattached by the time regular damage
+   * is dealt, and an Equipment that has LEFT the battlefield had its
+   * `attachedTo` cleared by `resetInstanceForNewZone`. Both read correctly
+   * through the reference and wrongly through a copy.
+   *
+   * Typed as the one field rather than as a whole `CardInstance` so nothing
+   * else can start reading (possibly stale) state through this door.
+   */
+  readonly permanent?: { readonly attachedTo?: InstanceId | null };
+  /**
+   * What this source NAMED as it entered (`CardInstance.chosenAsEntered`), for
+   * the conditions narrowed by it — "whenever you cast a creature spell **of the
+   * chosen type**".
+   *
+   * Snapshotted onto the source rather than looked up during matching because
+   * `triggers.ts` is a pure matcher with no access to the game state, exactly as
+   * `TriggerSubject` is. Absent means nothing was named, which matches nothing.
+   */
+  readonly chosenAsEntered?: string;
 }
 
 /**
  * Decide whether a single ability's condition matches `event`, given the source's
  * controller and (for self-referential triggers like etb/attacks/dies) the source's
  * own instance id. Returns true/false; never throws on a malformed condition.
+ *
+ * `attachedTo` is the object the source is attached to RIGHT NOW, needed only by
+ * a `watches: 'attachedHost'` condition. Passed in (rather than read off a
+ * cached copy) so the answer is the current attachment at the instant the event
+ * is matched — see {@link TriggerSource.permanent}.
  */
 export function conditionMatches(
   condition: TriggerCondition,
@@ -190,23 +322,58 @@ export function conditionMatches(
   sourceInstanceId: InstanceId,
   sourceController: PlayerId,
   subject?: TriggerSubject,
+  sourceChosenAsEntered?: string,
+  attachedTo?: InstanceId | null,
 ): boolean {
   switch (condition.on) {
-    case 'etb':
+    case 'etb': {
       // A permanent's own ETB: a zoneChange into the battlefield for this instance.
-      return event.type === 'zoneChange' && event.to === 'battlefield' && event.instanceId === sourceInstanceId;
-    case 'attacks':
-      return event.type === 'attackersDeclared' && event.attackers.includes(sourceInstanceId);
-    case 'dies':
-      return event.type === 'creatureDied' && event.instanceId === sourceInstanceId;
-    case 'leaves':
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return (
+        watched !== null &&
+        event.type === 'zoneChange' &&
+        event.to === 'battlefield' &&
+        event.instanceId === watched
+      );
+    }
+    case 'attacks': {
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return watched !== null && event.type === 'attackersDeclared' && event.attackers.includes(watched);
+    }
+    case 'dies': {
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return watched !== null && event.type === 'creatureDied' && event.instanceId === watched;
+    }
+    case 'leaves': {
       // Leaving the battlefield: a zoneChange out of the battlefield for this instance.
-      return event.type === 'zoneChange' && event.from === 'battlefield' && event.instanceId === sourceInstanceId;
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
+      return (
+        watched !== null &&
+        event.type === 'zoneChange' &&
+        event.from === 'battlefield' &&
+        event.instanceId === watched
+      );
+    }
     case 'castSpell': {
       if (event.type !== 'spellCast') return false;
       if (!whoMatches(condition.who, event.player, sourceController)) return false;
       if (condition.spellType && !event.castTypes.includes(condition.spellType)) return false;
       if (condition.spellTypeNoneOf?.some((type) => event.castTypes.includes(type))) return false;
+      if (condition.spellSubtypeIsChosen === true) {
+        // "…of the chosen type". A source that named NOTHING matches nothing —
+        // never everything — for the same reason `StaticAffects.ofChosenSubtype`
+        // does: an unnamed value is the inert default, and a trigger that fired
+        // on every spell would be a strictly better card than the printed one.
+        if (sourceChosenAsEntered === undefined || sourceChosenAsEntered === '') return false;
+        const wanted = sourceChosenAsEntered;
+        // The SPELL itself is the subject here — resolved from the stack by the
+        // runtime, exactly as a board-watching trigger's permanent is resolved
+        // from the battlefield. Read off the object rather than off the event
+        // because the event is the LOG, and widening a logged event's payload
+        // for one trigger's benefit would change every replay's bytes for a
+        // fact the object already carries.
+        if (!subject || !permanentHasSubtype(subject.card, wanted)) return false;
+      }
       return true;
     }
     case 'permanentEnters': {
@@ -240,19 +407,72 @@ export function conditionMatches(
       if (event.type !== 'gainLife') return false;
       return whoMatches(condition.who, event.player, sourceController);
     }
-    case 'combatDamageToPlayer':
+    case 'drawsCard': {
+      // "Whenever a player draws a card" / "whenever an opponent draws a card".
+      // Keyed on `drawCard`, the one event every draw path emits, so the turn's
+      // own draw counts exactly as a spell's does.
+      if (event.type !== 'drawCard') return false;
+      return whoMatches(condition.who, event.player, sourceController);
+    }
+    case 'combatDamageToPlayer': {
       // A player target is a PlayerId ('A'/'B'); an InstanceId is a number, so
       // the string test is what distinguishes "to a player" from "to a
       // creature or planeswalker" without a second event field.
+      //
+      // `watched` is the source itself for "Whenever ~ deals combat damage to a
+      // player" and the EQUIPPED CREATURE for a Sword's copy of the same line.
+      const watched = watchedInstanceId(condition, sourceInstanceId, attachedTo);
       return (
+        watched !== null &&
         event.type === 'damageDealt' &&
         event.combat &&
-        event.source === sourceInstanceId &&
+        event.source === watched &&
         typeof event.target === 'string'
       );
+    }
     default:
       // Unknown condition kind → never matches (safe no-op).
       return false;
+  }
+}
+
+/**
+ * Who the event was ABOUT — the referent of a body's "that player" / "them".
+ *
+ * Answered from the EVENT rather than from the source, which is the whole point:
+ * a `who: 'any'` trigger resolves under the source's controller, so this is the
+ * only place the other player survives. Returns `undefined` for the events that
+ * are about a permanent or about nobody, where no printed body says "that
+ * player".
+ *
+ * Called only for triggers that actually matched (a handful per turn), never on
+ * the per-event scan.
+ */
+export function triggeringPlayerFor(
+  condition: TriggerCondition,
+  event: GameEvent,
+  subject?: TriggerSubject,
+): PlayerId | undefined {
+  switch (condition.on) {
+    case 'upkeep':
+    case 'drawStep':
+    case 'precombatMain':
+    case 'endStep':
+    case 'beginCombat':
+      return event.type === 'stepBegin' ? event.activePlayer : undefined;
+    case 'gainLife':
+      return event.type === 'gainLife' ? event.player : undefined;
+    case 'drawsCard':
+      return event.type === 'drawCard' ? event.player : undefined;
+    case 'castSpell':
+      return event.type === 'spellCast' ? event.player : undefined;
+    case 'permanentEnters':
+    case 'permanentDies':
+      // The permanent's CONTROLLER — "whenever a creature an opponent controls
+      // dies, that player loses 1 life".
+      return subject?.controller;
+    default:
+      return undefined;
   }
 }
 
@@ -279,6 +499,11 @@ const STEP_FOR_TRIGGER: Readonly<Record<string, Step>> = Object.freeze({
  * Passed in rather than looked up here because `triggers.ts` is a pure matcher
  * with no access to the game state; the runtime that emits the event resolves
  * the instance once per event and hands it down.
+ *
+ * It also carries the SPELL for a cast trigger narrowed by a creature type
+ * ("whenever you cast a creature spell of the chosen type") — same shape, same
+ * seam, and the reason the `spellCast` EVENT did not have to grow a subtype
+ * list that every replay would then carry.
  */
 export interface TriggerSubject {
   readonly controller: PlayerId;
@@ -302,6 +527,25 @@ function subjectMatches(
   if (!subject) return false;
   if (!whoMatches(condition.who, subject.controller, sourceController)) return false;
   return matchesCardFilter(subject.card, condition.permanentFilter);
+}
+
+/**
+ * The instance a self-referential condition is actually about, or `null` when
+ * there is no such object right now.
+ *
+ * One function so every self-referential case answers "which object?" the same
+ * way. The `null` for an unattached `attachedHost` watcher is the load-bearing
+ * half: a Sword nobody has equipped must match NOTHING, never fall back to
+ * itself. (It also cannot silently match instance id 0 — which is why this
+ * returns `null` rather than `undefined`-as-a-number.)
+ */
+function watchedInstanceId(
+  condition: TriggerCondition,
+  sourceInstanceId: InstanceId,
+  attachedTo: InstanceId | null | undefined,
+): InstanceId | null {
+  if ((condition.watches ?? DEFAULT_TRIGGER_WATCHES) === 'self') return sourceInstanceId;
+  return attachedTo ?? null;
 }
 
 /** Resolve a `who` filter against the acting player and the source's controller. */
@@ -348,7 +592,9 @@ export function matchTriggers(
     if (!subjectResolved) {
       subjectResolved = true;
       subject =
-        resolveSubject && event.type === 'zoneChange' ? resolveSubject(event.instanceId) : undefined;
+        resolveSubject && (event.type === 'zoneChange' || event.type === 'spellCast')
+          ? resolveSubject(event.instanceId)
+          : undefined;
     }
     return subject;
   };
@@ -361,7 +607,17 @@ export function matchTriggers(
     for (let abilityIndex = 0; abilityIndex < abilities.length; abilityIndex++) {
       const ability = abilities[abilityIndex] as TriggeredAbility;
       const watchesBoard =
-        ability.condition.on === 'permanentEnters' || ability.condition.on === 'permanentDies';
+        ability.condition.on === 'permanentEnters' ||
+        ability.condition.on === 'permanentDies' ||
+        // A cast trigger narrowed by the chosen creature type needs the SPELL
+        // object, for the same reason and through the same seam.
+        ability.condition.spellSubtypeIsChosen === true;
+      // Read LIVE, per event, and only for the conditions that ask: an
+      // Equipment's host can change (or vanish) between two events of the same
+      // action, and the cached `TriggerSource` is deliberately not rebuilt for
+      // that. Every other trigger pays one comparison and reads nothing.
+      const attachedTo =
+        ability.condition.watches === 'attachedHost' ? (src.permanent?.attachedTo ?? null) : undefined;
       if (
         !conditionMatches(
           ability.condition,
@@ -369,15 +625,25 @@ export function matchTriggers(
           src.instanceId,
           src.controller,
           watchesBoard ? subjectOf() : undefined,
+          src.chosenAsEntered,
+          attachedTo,
         )
       ) {
         continue;
       }
+      // Resolved only for the triggers that FIRED, and only when the event
+      // names a player at all — so the per-event scan above pays nothing.
+      const triggeringPlayer = triggeringPlayerFor(
+        ability.condition,
+        event,
+        watchesBoard ? subjectOf() : undefined,
+      );
       (pending ??= []).push({
         sourceInstanceId: src.instanceId,
         controller: src.controller,
         ability,
         abilityIndex,
+        ...(triggeringPlayer !== undefined ? { triggeringPlayer } : {}),
       });
     }
   }

@@ -30,12 +30,13 @@
  * object, pumps target their own source, and policing those here would break them.
  */
 
-import type { CardDefinition, EffectRef } from './card.js';
+import type { CardDefinition, EffectRef, KeywordFlags } from './card.js';
 import { hasType, isCreature } from './card.js';
 import { isBattle, isPlaneswalker } from './card.js';
-import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
+import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject, StackObject } from './state.js';
 import { PLAYER_IDS } from './state.js';
-import { indexContinuous, NO_MOD } from './internal/continuous.js';
+import type { ContinuousIndex } from './internal/continuous.js';
+import { anyContinuousModification, indexContinuous, NO_MOD } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { protectionBlocksSource } from './protection.js';
 
@@ -120,7 +121,39 @@ export type TargetRestriction =
    * permanent (CR 110.1), so the battlefield targetability gate is correctly
    * skipped for this restriction.
    */
-  | 'instantOrSorceryInYourGraveyard';
+  | 'instantOrSorceryInYourGraveyard'
+  /**
+   * "target instant or sorcery spell" — Fork, Reverberate, Narset's Reversal.
+   *
+   * Its own restriction rather than a flavour of `'spell'` because the two are
+   * genuinely different sets: `'spell'` reaches a creature spell and an
+   * artifact spell, and a card that says "instant or sorcery" may not copy one.
+   * Flattening it would let Reverberate copy a Grizzly Bears, which is a card
+   * playing WIDER than printed — the exact infidelity this module exists to
+   * prevent, and the direction that is always the wrong one to guess in.
+   *
+   * The timing consequence is `'spell'`'s and is the reason it matters as much
+   * as the aim: a copy spell with no instant or sorcery on the stack has no
+   * legal target and therefore CANNOT BE CAST, so it can never be spent for
+   * nothing.
+   */
+  | 'instantOrSorcerySpell';
+
+/**
+ * Whether a spell on the stack is an INSTANT OR SORCERY spell — the one question
+ * `'instantOrSorcerySpell'` adds over `'spell'`.
+ *
+ * Read off the card ON THE STACK, which is the object with the characteristics
+ * that matter: a modal DFC cast as its instant face, a split card's chosen half
+ * and an adventure being cast as its adventure half are all already carried in
+ * `card.def` by the cast path, so this asks nothing about layouts and is right
+ * for all three by construction. A COPY of a spell answers yes for the same
+ * reason — its definition is the copiable values of what it copies — which is
+ * what makes a copy of a copy legal, exactly as the rules do.
+ */
+function isInstantOrSorcerySpell(spell: SpellStackObject): boolean {
+  return hasType(spell.card.def, 'instant') || hasType(spell.card.def, 'sorcery');
+}
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -149,7 +182,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
-    value === 'instantOrSorceryInYourGraveyard'
+    value === 'instantOrSorceryInYourGraveyard' ||
+    value === 'instantOrSorcerySpell'
   );
 }
 
@@ -242,10 +276,15 @@ export function isLegalTarget(
     }
     return false;
   }
-  if (restriction === 'spell') {
+  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".
-    return state.stack.some((object) => object.kind === 'spell' && object.instanceId === target);
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'spell' || object.instanceId !== target) continue;
+      return restriction === 'spell' || isInstantOrSorcerySpell(object);
+    }
+    return false;
   }
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
@@ -298,27 +337,23 @@ function isTargetableBy(
   permanent: CardInstance,
   caster: PlayerId | undefined,
   source?: CardDefinition,
+  /**
+   * The index to judge granted keywords against, from {@link keywordIndexFor}:
+   * `null` means "nothing on this board modifies a keyword, read the printed
+   * set". Passed in so a menu builder pays for ONE index across every candidate
+   * instead of one per candidate; omit it for a single ad-hoc check.
+   */
+  index?: ContinuousIndex | null,
 ): boolean {
+  const mods = index === undefined ? keywordIndexFor(state) : index;
   // PERFORMANCE: this runs for every candidate target of every castable spell on
-  // the engine's hottest loop, and `indexContinuous` walks the whole effect list.
-  // The overwhelmingly common board has no continuous effects and no printed
-  // hexproof/protection, so those are checked cheaply first and the index is
-  // built only when a grant could actually exist.
-  const printed = permanent.def.keywords;
-  if (state.continuous.length === 0) {
-    if (printed?.shroud === true) return false;
-    if (printed?.hexproof === true && (caster === undefined || caster !== permanent.controller)) {
-      return false;
-    }
-    if (printed?.protectionFrom !== undefined && protectionBlocksSource(printed.protectionFrom, source)) {
-      return false;
-    }
-    return true;
-  }
-  const keywords = effectiveKeywords(
-    permanent,
-    indexContinuous(state).get(permanent.instanceId) ?? NO_MOD,
-  );
+  // the engine's hottest loop. On the overwhelmingly common board — no anthem, no
+  // attachment, no until-EOT effect — `mods` is null and the printed set is read
+  // with no aggregation and no allocation at all.
+  const keywords =
+    mods === null
+      ? (permanent.def.keywords ?? NO_KEYWORDS)
+      : effectiveKeywords(permanent, mods.get(permanent.instanceId) ?? NO_MOD);
   if (keywords.shroud === true) return false;
   if (keywords.hexproof === true && (caster === undefined || caster !== permanent.controller)) {
     return false;
@@ -327,6 +362,26 @@ function isTargetableBy(
     return false;
   }
   return true;
+}
+
+/** The empty printed keyword set, shared so the fast path allocates nothing. */
+const NO_KEYWORDS: KeywordFlags = Object.freeze({});
+
+/**
+ * The continuous index targeting must judge keywords against, or `null` when
+ * nothing on the board can modify one.
+ *
+ * ⚠️ The gate is {@link anyContinuousModification} and NOT `state.continuous.length`.
+ * Layer 3 — an Aura/Equipment's grant to its host, an anthem, an emblem — is
+ * derived from the battlefield and never appears in that list, so keying the fast
+ * path on it let an opponent's burn spell target a creature holding Mask of
+ * Avacyn's granted hexproof. Costed at the module's own bar: on a board with no
+ * modifier at all the check short-circuits over property reads and allocates
+ * nothing, and when there IS one this builds the index ONCE for the whole menu
+ * where the old code rebuilt it per candidate.
+ */
+function keywordIndexFor(state: GameState): ContinuousIndex | null {
+  return anyContinuousModification(state) ? indexContinuous(state) : null;
 }
 
 /**
@@ -342,8 +397,16 @@ export function legalTargetsFor(
   controller?: PlayerId,
   source?: CardDefinition,
 ): readonly (InstanceId | PlayerId)[] {
-  if (restriction === 'spell') {
-    return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
+  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
+    const wantInstantOrSorcery = restriction === 'instantOrSorcerySpell';
+    const out: (InstanceId | PlayerId)[] = [];
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'spell') continue;
+      if (wantInstantOrSorcery && !isInstantOrSorcerySpell(object)) continue;
+      out.push(object.instanceId);
+    }
+    return out;
   }
   if (restriction === 'instantOrSorceryInYourGraveyard') {
     // With no actor there is no such thing as "your graveyard", so nothing is
@@ -359,6 +422,10 @@ export function legalTargetsFor(
     return out;
   }
   const targets: (InstanceId | PlayerId)[] = [];
+  // ONE index for the whole menu. Every `isTargetableBy` below is handed it, so a
+  // board carrying an anthem or an Equipment pays for the aggregation once rather
+  // than once per candidate (which is what the previous shape did).
+  const keywordIndex = keywordIndexFor(state);
   if (restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker') {
     targets.push(...PLAYER_IDS);
   }
@@ -382,14 +449,14 @@ export function legalTargetsFor(
         isCreature(permanent.def) ||
         (walkersToo && isPlaneswalker(permanent.def)) ||
         (battlesToo && isBattle(permanent.def));
-      if (kindOk && isTargetableBy(state, permanent, controller, source)) {
+      if (kindOk && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
   }
   if (restriction === 'playerOrPlaneswalker') {
     for (const permanent of state.battlefield) {
-      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source)) {
+      if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
@@ -399,7 +466,7 @@ export function legalTargetsFor(
       if (
         permanent.controller === controller &&
         isCreature(permanent.def) &&
-        isTargetableBy(state, permanent, controller, source)
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
       ) {
         targets.push(permanent.instanceId);
       }
@@ -407,14 +474,14 @@ export function legalTargetsFor(
   }
   if (restriction === 'artifact') {
     for (const permanent of state.battlefield) {
-      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source)) {
+      if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
         targets.push(permanent.instanceId);
       }
     }
   }
   if (restriction === 'permanent') {
     for (const permanent of state.battlefield) {
-      if (isTargetableBy(state, permanent, controller, source)) targets.push(permanent.instanceId);
+      if (isTargetableBy(state, permanent, controller, source, keywordIndex)) targets.push(permanent.instanceId);
     }
   }
   return targets;
@@ -511,6 +578,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a permanent';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
+    case 'instantOrSorcerySpell':
+      return 'an instant or sorcery spell on the stack';
     case 'any':
       return 'any target (a creature, a player, a planeswalker, or a battle)';
   }

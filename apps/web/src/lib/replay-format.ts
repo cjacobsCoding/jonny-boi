@@ -87,6 +87,14 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':
       return { text: `Player ${event.controller} creates ${event.name}.`, tone: 'cast' };
+    case 'tokenCopyCreated':
+      return { text: `Player ${event.controller}'s token is a copy of ${event.name}.`, tone: 'cast' };
+    case 'spellCopied':
+      return { text: `Player ${event.controller} copies ${event.name}.`, tone: 'cast' };
+    case 'spellCopyCeasedToExist':
+      // CR 704.5e — and it is emitted INSTEAD of a `zoneChange`, so a reader
+      // folding this log must not put the object in a graveyard.
+      return { text: `The copy of ${event.name} ceases to exist.` };
     case 'triggerPutOnStack':
       return { text: `Trigger: ${event.label}.`, tone: 'trigger' };
     case 'triggeredAbilityResolved':
@@ -97,6 +105,9 @@ export function describeEvent(event: GameEvent, name: NameResolver): LogLine | n
           event.amount === 1 ? '' : 's'
         }.`,
       };
+    case 'chosenAsEnters':
+      // Public, and printed as such — see the same case in `play/play-format.ts`.
+      return { text: `${event.name} names ${event.described}.`, tone: 'trigger' };
     case 'continuousEffectAdded':
       return { text: `${name(event.targetInstanceId)} gets a temporary effect.` };
     // Mana left floating when a step ended: the pilot tapped a source and never

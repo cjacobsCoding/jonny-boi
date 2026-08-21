@@ -57,10 +57,21 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
   // back to the front face so the primary record stays meaningful.
   const frontFace = raw.card_faces?.[0];
 
+  /**
+   * CR 715.2 — an ADVENTURER card is the creature in every zone but the stack,
+   * so its mana cost is the creature's. Scryfall still prints the combined
+   * `"{B} // {2}{B}"` at the top level, which `parseManaCost` sums into a cost
+   * the card never has and which contradicts Scryfall's own `cmc` (1, not 4).
+   * A split card is the opposite — CR 709.4 makes the combined object's cost
+   * the SUM, and Scryfall's `cmc` agrees — so this is narrowed to the one
+   * layout where the top-level string is not the card's cost.
+   */
+  const costSource = raw.layout === 'adventure' ? frontFace?.mana_cost : raw.mana_cost;
+
   return {
     id: pickId(raw),
     name: raw.name,
-    manaCost: parseManaCost(raw.mana_cost ?? frontFace?.mana_cost),
+    manaCost: parseManaCost(costSource ?? frontFace?.mana_cost),
     cmc: typeof raw.cmc === 'number' ? raw.cmc : 0,
     typeLine: parseTypeLine(raw.type_line ?? frontFace?.type_line),
     rawTypeLine: raw.type_line ?? frontFace?.type_line ?? '',
@@ -69,10 +80,19 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
     toughness: parseStat(raw.toughness ?? frontFace?.toughness),
     // Planeswalkers: printed starting loyalty. `parseStat` already returns null
     // for a non-numeric box ("X"), which is exactly "variable - not compilable".
-    loyalty: parseStat(raw.loyalty),
-    // Battles: printed starting defense. Same parse and the same meaning for a
+    // The front-face fallback is the one the cost/type/text lines above already
+    // take, and for the same reason: a TRANSFORMING walker prints its number on
+    // a face and carries nothing at the top level.
+    loyalty: parseStat(raw.loyalty ?? frontFace?.loyalty),
+    // Battles: printed starting defense. Same parse, and the same meaning for a
     // non-numeric box as loyalty's — "variable, not compilable".
-    defense: parseStat(raw.defense),
+    //
+    // ⚠️ MEASURED, and the reason a Siege still did not compile after `defense`
+    // was captured: Scryfall puts a Siege's defense on `card_faces[0]`, NOT at
+    // the top level (`Invasion of Gobakhan` → `defense: undefined` on the card,
+    // `'3'` on the battle face). Reading only the top level captured the field
+    // and normalized every battle in the game to `null` anyway.
+    defense: parseStat(raw.defense ?? frontFace?.defense),
     colors: raw.colors ?? frontFace?.colors ?? [],
     colorIdentity: raw.color_identity ?? [],
     keywords: raw.keywords ?? [],
@@ -81,6 +101,10 @@ export function normalizeCard(raw: RawScryfallCard): NormalizedCard {
     rarity: raw.rarity ?? '',
     imageUris: resolveImageUris(raw),
     localImages: {},
+    // Verbatim, never derived: the layout is what tells the compiler whether a
+    // two-faced record is a transforming DFC, a modal DFC, a split card or an
+    // adventure, and those four play by four different rules.
+    ...(typeof raw.layout === 'string' && raw.layout.length > 0 ? { layout: raw.layout } : {}),
     isDoubleFaced,
     faces,
   };

@@ -72,6 +72,10 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return {
         text: `Protection prevents ${event.amount} damage from ${r.name(event.source)} to ${targetText(event.target, r)}.`,
       };
+    case 'counterPrevented':
+      // Same argument as `damagePrevented`: a Counterspell that visibly did
+      // nothing has to say why, or the log reads like a bug.
+      return { text: `${event.name} can't be countered.` };
     case 'lifeChanged':
       return {
         text: `${r.playerName(event.player)} ${event.delta >= 0 ? 'gains' : 'loses'} ${Math.abs(event.delta)} life (now ${event.to}).`,
@@ -87,6 +91,21 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return { text: `${event.name} dies.`, tone: 'death' };
     case 'tokenCreated':
       return { text: `${r.playerName(event.controller)} creates ${event.name}.`, tone: 'cast' };
+    case 'tokenCopyCreated':
+      // Said IN ADDITION to `tokenCreated` (which fires for this object too),
+      // because "a token" and "a token that is a copy of that creature" read as
+      // very different board states to a player watching the log.
+      return {
+        text: `${r.playerName(event.controller)}'s token is a copy of ${event.name}.`,
+        tone: 'cast',
+      };
+    case 'spellCopied':
+      return { text: `${r.playerName(event.controller)} copies ${event.name}.`, tone: 'cast' };
+    case 'spellCopyCeasedToExist':
+      // CR 704.5e. Worth a line rather than silence: without it a player sees a
+      // second spell resolve and then sees nothing go to a graveyard, which
+      // looks like a bug rather than the rule it is.
+      return { text: `The copy of ${event.name} ceases to exist.` };
     case 'cardsLookedAt':
       // The COUNT only — the cards themselves are not public, and this shared
       // hotseat log is exactly the channel that must not leak them.
@@ -101,6 +120,12 @@ export function describeEvent(event: GameEvent, r: LogResolvers): LogLine | null
       return {
         text: `${r.name(event.instanceId)} gets ${event.amount} ${event.kind} counter${event.amount === 1 ? '' : 's'}.`,
       };
+    case 'chosenAsEnters':
+      // NAMED OUT LOUD, unlike a choice answer. The value a permanent names as it
+      // enters is announced at the table (CR 614.1c) and stays readable on the
+      // card, so the log says it — the redaction two cases below is about a
+      // chooser's private ANSWER, which this is not.
+      return { text: `${event.name} names ${event.described}.`, tone: 'trigger' };
     case 'playerLost':
       return { text: `${r.playerName(event.player)} loses — ${event.reason}.`, tone: 'death' };
     case 'gameOver':

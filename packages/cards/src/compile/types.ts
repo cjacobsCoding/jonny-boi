@@ -161,6 +161,21 @@ export interface ClauseContribution {
   /** Set when the text asks for a REVEAL to enter untapped (a reveal-land). */
   readonly entersTappedUnlessRevealed?: import('@jonny-boi/core').RevealFromHandCondition;
   /**
+   * The printed "you may have ~ enter as a copy of …" replacement — which
+   * objects may be copied, and the "except …" tail
+   * (`CardDefinition.copyAsEnters`, CR 707). One clause, one field, because the
+   * whole clause is one replacement effect.
+   */
+  readonly copyAsEnters?: import('@jonny-boi/core').CopyAsEntersSpec;
+  /**
+   * "As ~ enters, choose a…" — the CR 614.1c naming this card makes as it
+   * enters. Only the DECLARATION: who raises the question is decided once, by
+   * the assembly, from whether the card is a land.
+   */
+  readonly asEntersChoice?: import('@jonny-boi/core').AsEntersChoice;
+  /** "~ is the chosen type in addition to its other types". */
+  readonly isChosenSubtype?: boolean;
+  /**
    * The card's printed flashback cost (`CardDefinition.flashback`) — the mana
    * half. `{X}` symbols in it come back as {@link flashbackXCost} and a "Pay N
    * life" rider as {@link flashbackLifeCost}, so all three printed forms of
@@ -178,6 +193,13 @@ export interface ClauseContribution {
    * asks about at cast time (`CardDefinition.kicker`).
    */
   readonly kicker?: import('@jonny-boi/core').ManaCost;
+  /**
+   * The printed "As an additional cost to cast this spell, …" line — a MANDATORY
+   * additional cost (`CardDefinition.additionalCost`). Unlike {@link kicker} it
+   * cannot be declined, so a caster who cannot pay it cannot cast the spell at
+   * all; see the core type for why that difference earns its own field.
+   */
+  readonly additionalCost?: import('@jonny-boi/core').AdditionalCastCost;
   /**
    * The printed "Multikicker {COST}" line — an additional cost the caster may
    * pay ANY NUMBER of times, so the cast-time question is a count rather than a
@@ -220,6 +242,16 @@ export interface ClauseContribution {
    */
   readonly statics?: readonly import('@jonny-boi/core').StaticAbility[];
   /**
+   * REPLACEMENT / PREVENTION abilities this clause prints ("If one or more +1/+1
+   * counters would be put on a creature you control, that many plus one are put
+   * on it instead", "Prevent all combat damage that would be dealt to attacking
+   * creatures you control") — core's replacement layer, live for as long as the
+   * source is on the battlefield. The ONE-SHOT forms (a fog) are `effects`
+   * instead, because those are a spell doing something, not a permanent being
+   * something.
+   */
+  readonly replacements?: readonly import('@jonny-boi/core').ReplacementAbility[];
+  /**
    * The half of an attachment that says WHAT it attaches to and what happens when
    * it isn't legally attached — the printed "Enchant creature" / "Equip {N}" line.
    */
@@ -233,6 +265,28 @@ export interface ClauseContribution {
    * card prints them as two ability lines, and either may be absent.
    */
   readonly attachmentModifies?: import('@jonny-boi/core').PermanentModification;
+  /**
+   * The printed keyword **Changeling** — "this card is every creature type"
+   * (`CardDefinition.changeling`). Not a {@link keywords} flag: it is a
+   * characteristic-defining ability that applies in every zone, and core answers
+   * it from the definition inside `hasSubtype`.
+   */
+  readonly changeling?: boolean;
+  /** "This spell can't be countered" (`CardDefinition.cantBeCountered`). */
+  readonly cantBeCountered?: boolean;
+  /**
+   * "Spells you control can't be countered" — the permanent-side printing
+   * (`CardDefinition.spellsCantBeCountered`).
+   */
+  readonly spellsCantBeCountered?: import('@jonny-boi/core').UncounterableSpellsAbility;
+  /** "You have no maximum hand size" (`CardDefinition.noMaximumHandSize`). */
+  readonly noMaximumHandSize?: boolean;
+  /**
+   * "You may play lands from your graveyard / from the top of your library"
+   * (`CardDefinition.playLandsFrom`). A list, so a card printing both zones is
+   * one field rather than two flags.
+   */
+  readonly playLandsFrom?: readonly import('@jonny-boi/core').LandPlayZone[];
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

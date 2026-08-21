@@ -54,7 +54,7 @@ import {
 import type { CardFilter } from '@jonny-boi/core';
 import { cardValue, findInstance, type CardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
-import { keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
+import { boardIndex, keywordsOf, power as effPower, statTotal, toughnessLeft } from './board-stats.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -261,6 +261,64 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /**
+   * COPYING A SPELL (CR 707.10) is worth **whatever the spell it copies is
+   * worth**, priced by the pilot's one card ruler — a copy of a Cryptic Command
+   * is worth a Cryptic Command, and a copy of a cantrip is worth a cantrip. That
+   * is what makes a pilot hold a Reverberate for something big instead of
+   * spending it on the first instant it sees.
+   *
+   * The sign is the interesting half and it is the OPPOSITE of a counterspell's:
+   * countering your OWN spell is the classic printed-first-mode blunder, while
+   * copying your own spell is the play the card is FOR. Copying an OPPONENT'S
+   * spell is also fine (the copy is yours — CR 707.10), so neither controller
+   * earns a penalty here; what earns zero is copying nothing, which is what a
+   * dead mode is worth.
+   */
+  copySpell: (params, ctx) => {
+    const spell = firstTargetSpell(ctx);
+    if (!spell) return 0; // nothing on the stack — a dead mode
+    const count = Math.max(intParam(params, 'count', 1), 0);
+    return count * cardValue(spell.card, ctx.weights, ctx.cards);
+  },
+
+  /**
+   * A TOKEN COPY is worth a creature of the copied body's size, priced through
+   * the SAME formula `makeToken` uses so "a 4/4 token" means one thing to this
+   * pilot however it was made.
+   *
+   * ⚠️ It reads the copied permanent's PRINTED power and toughness, not its
+   * effective ones — the same trap `copyTargetValue` exists for on the as-enters
+   * path. Reading effective stats would have a pilot copy the 1/1 wearing three
+   * +1/+1 counters over the printed 4/4 beside it and end up with a 1/1, because
+   * CR 707.2 copies the printed card and counters are not copiable.
+   */
+  createTokenCopy: (params, ctx) => {
+    const source = tokenCopySource(ctx);
+    if (!source) return 0;
+    // The BASE count, deliberately: this is asked while the pilot is deciding
+    // whether to CAST, and the kicker has not been paid (or even offered) yet.
+    // Pricing Rite of Replication's kicked five here would have the pilot value
+    // a spell it has not agreed to pay for — the kicker is its own question,
+    // answered by the pilot's kicker policy on its own terms.
+    const count = Math.max(intParam(params, 'count', 1), 0);
+    const stats = (source.def.power ?? 0) + (source.def.toughness ?? 0);
+    return count * (ctx.weights.castCreatureBaseScore + ctx.weights.castCreaturePerStat * stats);
+  },
+
+  /**
+   * Returning the targeted SPELL to its owner's hand (Narset's Reversal) is
+   * tempo against an opponent and a straight loss against yourself: they get the
+   * card back either way, so it is priced as the bounce it is, and aiming it at
+   * your own spell is the same blunder countering your own spell is.
+   */
+  returnSpellToHand: (_params, ctx) => {
+    const spell = firstTargetSpell(ctx);
+    if (!spell) return 0;
+    if (spell.controller === ctx.player) return -ctx.weights.modeSelfHarmPenalty;
+    return cardValue(spell.card, ctx.weights, ctx.cards);
+  },
+
+  /**
    * The SOFT counter is the hard counter's price, **scaled by whether it will
    * actually counter anything**: "unless its controller pays {3}" against an
    * opponent with three untapped lands mostly taxes them, and against a tapped-out
@@ -372,6 +430,34 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /** Life is cheap at a healthy total and priceless when the clock is on us. */
+  /**
+   * PREVENTION — a fog, or a mode of one (Dawn Charm's first bullet). Its value
+   * is not a property of the card: it is exactly the damage it stops, which is
+   * ZERO unless an attack has already been declared against us. So this asks the
+   * same three questions the main-phase scorer does, in one place, and answers
+   * zero cheaply the rest of the time — a modal spell whose prevention mode
+   * scored a flat number would pick that mode in an empty main phase and throw
+   * the card away.
+   */
+  preventDamage: (_params, ctx) => {
+    const combat = ctx.state.combat;
+    if (!combat || !combat.attackersDeclared || combat.attackers.length === 0) return 0;
+    if (ctx.state.activePlayer === ctx.player) return 0; // we are the attacker
+    const index = boardIndex(ctx.state);
+    let incoming = 0;
+    for (const id of combat.attackers) {
+      const attacker = ctx.state.battlefield.find((c) => c.instanceId === id);
+      if (attacker && attacker.controller !== ctx.player) incoming += effPower(attacker, index);
+    }
+    if (incoming <= 0) return 0;
+    const life = ctx.state.players[ctx.player].life;
+    if (incoming >= life) return ctx.weights.lethalBurnScore;
+    if (incoming < ctx.weights.fogMinimumDamagePrevented && life > ctx.weights.desperateLifeThreshold) {
+      return 0;
+    }
+    return incoming * ctx.weights.fogValuePerDamagePrevented;
+  },
+
   gainLife: (params, ctx) => lifeSwing(intParam(params, 'amount', 0), ctx, params),
   loseLife: (params, ctx) => -lifeSwing(intParam(params, 'amount', 0), ctx, params),
 
@@ -587,6 +673,27 @@ function tokenValue(params: Readonly<Record<string, unknown>>, ctx: EffectValueC
   const count = Math.max(intParam(params, 'count', 1), 0);
   const stats = intParam(params, 'power', 1) + intParam(params, 'toughness', 1);
   return count * (weights.castCreatureBaseScore + weights.castCreaturePerStat * stats);
+}
+
+/**
+ * The permanent a `createTokenCopy` ref would copy — its TARGET.
+ *
+ * The primitive reads three selectors (`self`, `equipped`, the target) and this
+ * prices only the third, because the other two are never a DECISION: a card that
+ * copies itself or its equipped host does so from a TRIGGER, which the pilot does
+ * not choose to run. What the pilot chooses is whether to cast a Rite of
+ * Replication and where to point it, and that is always a target.
+ *
+ * `undefined` means "nothing legal to copy", which prices the ref at zero — the
+ * same dead-mode answer `counterSpell` gives with an empty stack.
+ */
+function tokenCopySource(ctx: EffectValueContext): CardInstance | undefined {
+  for (const t of ctx.targets) {
+    if (t === 'A' || t === 'B') continue;
+    const found = ctx.state.battlefield.find((c) => c.instanceId === t);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 /** The value of the best card in a zone, by the pilot's one card ruler. */

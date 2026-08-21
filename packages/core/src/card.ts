@@ -15,8 +15,21 @@
  * just a definition whose `types` includes `'creature'`.
  */
 
-import type { ManaColor, ManaCost, ManaProduction } from './mana.js';
-import { MANA_COLORS } from './mana.js';
+import type { CastZone } from './actions.js';
+import type { ManaColor, ManaCost, ManaPool, ManaProduction } from './mana.js';
+import { MANA_COLORS, convertedManaCost } from './mana.js';
+import type { LandPlayZone } from './actions.js';
+// Type-only, so it is erased at build time and no runtime import cycle exists
+// (`copy.ts` imports this module's `unionProtection` for real).
+import type { CopyAsEntersSpec } from './copy.js';
+import type { ManaSpendKind, ManaSpendPurpose, ManaSpendRestriction } from './spend-restriction.js';
+// TYPE-ONLY, and deliberately so: `choices.ts` imports this module for its colour
+// and subtype readers, so a VALUE import here would close a runtime cycle. A
+// `CardFilter` is plain serializable data, so the type is all a printed cost
+// needs in order to say what qualifies (see `AdditionalCastCost`) — and the
+// MATCHER itself lives in this file (see {@link matchesCardFilter}), precisely so
+// that the enters-tapped conditions below can ask the question without one.
+import type { CardFilter } from './choices.js';
 
 /** Broad card types core needs to enforce timing and zone transitions. */
 export type CardType =
@@ -27,13 +40,84 @@ export type CardType =
   | 'artifact'
   | 'enchantment'
   | 'planeswalker'
-  | 'battle';
+  | 'battle'
+  /**
+   * **Kindred** (CR 308, the type formerly printed as "Tribal") — a card type
+   * that ALWAYS appears alongside another one ("Kindred Sorcery", "Kindred
+   * Enchantment - Faerie"), and whose entire rules content is that the card's
+   * subtypes are CREATURE types even though the card is not a creature.
+   *
+   * That is why it is a real member of this union rather than a word the
+   * compiler quietly drops. Two things in this engine read it, and both would
+   * be wrong without it:
+   *   - `subtypes` on a Kindred card are creature types, so a tribal static
+   *     ("Faeries you control get +1/+1") and a subtype filter select it
+   *     exactly as the printed card does — which they already do, because
+   *     subtypes are one list here;
+   *   - a card type in a GRAVEYARD is a card type: Tarmogoyf counts Kindred,
+   *     so it needs a bit in `CARD_TYPE_BIT` (`derived.ts`) like every other.
+   *
+   * What it deliberately does NOT do is make the card a permanent: a Kindred
+   * Instant is an instant and nothing else, so `isPermanentType` ignores it and
+   * the card's OTHER type decides everything about how it is played.
+   */
+  | 'kindred';
 
 /**
  * Keyword ability flags the combat/turn systems read as data. Core implements the
  * pure-combat keywords; broader-system keywords are present as flags so `cards`
  * can author them now, with engine hooks landing later.
  */
+/**
+ * The boolean-valued keys of {@link KeywordFlags} — every keyword whose whole
+ * meaning is "on or off", as a name.
+ *
+ * Derived from the interface rather than listed, so it cannot fall behind it.
+ * `internal/continuous.ts` builds its grant list against this same type (that is
+ * what makes its exhaustiveness proof a proof), and {@link BlockRestriction} uses
+ * it to name the keyword a blocker must have.
+ */
+export type BooleanKeywordName = {
+  [K in keyof KeywordFlags]-?: boolean extends NonNullable<KeywordFlags[K]> ? K : never;
+}[keyof KeywordFlags];
+
+/**
+ * A block restriction that COMPARES the attacker and the blocker, or reads the
+ * blocker's characteristics — the half of "can't be blocked by …" that no single
+ * flag can express.
+ *
+ * Every bound is judged against EFFECTIVE power/toughness (through the continuous
+ * index `canBlock` already threads), never printed: a 1/1 pumped to 3/3 by an
+ * anthem really has stopped being a legal blocker for "except by creatures with
+ * power 2 or less", and reading the printed box would let it through.
+ *
+ * An absent field is no restriction. Two restrictions merge by taking the
+ * STRICTEST of each field (see {@link KeywordFlags.blockRestriction}).
+ */
+export interface BlockRestriction {
+  /**
+   * "…except by creatures with haste" (Gingerbrute). The blocker must have at
+   * least ONE of these keywords. Named by {@link BooleanKeywordName}, so a
+   * keyword that does not exist cannot be written here.
+   */
+  readonly blockerMustHaveAnyOf?: readonly BooleanKeywordName[];
+  /** "can't be blocked by creatures with power N or greater" ⇒ `maxBlockerPower = N - 1`. */
+  readonly maxBlockerPower?: number;
+  /** "can't be blocked by creatures with power N or less" ⇒ `minBlockerPower = N + 1`. */
+  readonly minBlockerPower?: number;
+  /** "…with toughness N or greater" ⇒ `maxBlockerToughness = N - 1`. */
+  readonly maxBlockerToughness?: number;
+  /** "…with toughness N or less" ⇒ `minBlockerToughness = N + 1`. */
+  readonly minBlockerToughness?: number;
+  /**
+   * **Skulk** (CR 702.118a) — "can't be blocked by creatures with greater power".
+   * A flag rather than a number because the bound is the ATTACKER'S OWN effective
+   * power, read at declare-blockers time: a skulking creature pumped this turn is
+   * harder to block, exactly as printed.
+   */
+  readonly blockerPowerAtMostMine?: boolean;
+}
+
 export interface KeywordFlags {
   readonly flying?: boolean;
   readonly vigilance?: boolean;
@@ -86,6 +170,48 @@ export interface KeywordFlags {
    * creature carrying both is judged by the stricter one.
    */
   readonly minBlockers?: number;
+  /**
+   * **"~ must be blocked if able"** — a block REQUIREMENT (CR 509.1c), the other
+   * half of the declare-blockers rules from every flag above it.
+   *
+   * A restriction says what the defender MAY NOT do and can be judged pair by
+   * pair; a requirement says what they MUST do and can only be judged against the
+   * whole declaration, because "if able" depends on what every other creature is
+   * doing. `illegalBlockDeclaration` therefore resolves requirements and
+   * restrictions TOGETHER (CR 509.1d — satisfy the maximum possible number of
+   * requirements without violating any restriction), which is why this is not a
+   * `canBlock` check.
+   *
+   * "Must be blocked" is satisfied by ONE blocker; {@link blockedByAllAble} is
+   * the stronger printing that demands every creature that could.
+   */
+  readonly mustBeBlocked?: boolean;
+  /**
+   * **"All creatures able to block ~ do so"** — the Lure requirement. Strictly
+   * stronger than {@link mustBeBlocked}: it generates one requirement PER creature
+   * that could block, so a defender who blocks with only some of them has
+   * satisfied fewer requirements than they could and the declaration is illegal.
+   *
+   * Both flags are read by the same declaration-level solver, and a creature
+   * carrying both is judged by this one (satisfying every per-creature
+   * requirement necessarily satisfies "at least one").
+   */
+  readonly blockedByAllAble?: boolean;
+  /**
+   * A block RESTRICTION whose selector describes the BLOCKER — "except by
+   * creatures with haste" (Gingerbrute), "can't be blocked by creatures with
+   * power 2 or less", skulk's "can't be blocked by creatures with greater power".
+   *
+   * NOT a boolean flag: the payload IS the restriction, so the keyword-merge paths
+   * fold two of them by taking the STRICTEST of each bound rather than OR-ing —
+   * the only reading under which both printed restrictions hold at once, and the
+   * same argument `protectionFrom` (union) and `ward` (sum) each make.
+   *
+   * Judged per pair in `canBlock`, because it compares exactly two creatures, and
+   * against EFFECTIVE power/toughness — a creature pumped past the bound really
+   * can no longer block.
+   */
+  readonly blockRestriction?: BlockRestriction;
   /**
    * Indestructible — "damage and effects that say 'destroy' don't destroy this"
    * (CR 702.12b).
@@ -207,6 +333,35 @@ export interface CardDefinition {
    */
   readonly subtypes?: readonly string[];
   /**
+   * The object's colors, stated EXPLICITLY rather than derived from cost pips.
+   *
+   * Almost every card in Magic prints its colour as mana symbols, and
+   * {@link colorsOfDefinition} reads those — so this field is absent on
+   * essentially every card definition and nothing about them changes. It exists
+   * for objects that print a colour in WORDS and carry no mana cost at all:
+   *
+   *  - **TOKENS.** "Create a 1/1 **black** Faerie Rogue creature token" and
+   *    "create a 1/1 **blue and black** Faerie creature token" are printed
+   *    colours with no pip anywhere to read them off. Without this field every
+   *    token in the game entered COLOURLESS and was therefore invisible to
+   *    "black creatures you control get +1/+1", to protection from red, to
+   *    "destroy target nonblack creature", and to every {@link CardFilter}
+   *    `anyOfColors` query — the card compiled `'complete'` and then played as
+   *    something different from what is printed.
+   *  - **The explicitly colourless token** ("a 1/1 **colorless** Thopter
+   *    artifact creature token"), which is why an EMPTY array is meaningful and
+   *    distinct from the field being absent: `[]` says "printed colourless",
+   *    absent says "read my pips".
+   *
+   * A colour INDICATOR (a transforming DFC's back face) is the same shape and
+   * would fit here, but the data pipeline does not capture one yet, so that
+   * limit is still the one {@link colorsOfDefinition} documents.
+   *
+   * Order and duplicates do not matter — the reader normalises to canonical
+   * WUBRG and de-duplicates, so `['B','U']` and `['U','B']` are one answer.
+   */
+  readonly colors?: readonly ManaColor[];
+  /**
    * The printed **Basic** supertype. Carried for the same reason
    * {@link legendary} is: a rule keys on it — "unless you control two or more
    * basic lands" (the battlelands) — and no other characteristic answers it.
@@ -316,6 +471,69 @@ export interface CardDefinition {
    */
   readonly legendary?: boolean;
   /**
+   * **Changeling** (CR 702.73a) — "this card is every creature type." A
+   * characteristic-defining ability that applies in every zone, which is exactly
+   * why it is a flag on the DEFINITION and not a static ability or a continuous
+   * effect: a Universal Automaton in a graveyard, in a library or on the stack is
+   * a Goblin there too, and a battlefield-only mechanism would answer wrongly for
+   * every typal search, every "sacrifice a Zombie" cost and every graveyard
+   * count.
+   *
+   * It is honoured by {@link hasSubtype}, the one funnel every subtype question
+   * in the engine goes through, so no consumer has to know the keyword exists.
+   */
+  readonly changeling?: boolean;
+  /**
+   * **"This spell can't be countered."** A property of the CARD (Supreme Verdict,
+   * Abrupt Decay, Dovin's Veto), so it lives on the definition rather than on the
+   * stack object.
+   *
+   * It is not a targeting restriction and must not be implemented as one: an
+   * uncounterable spell is a perfectly legal target for Counterspell, which then
+   * resolves and does nothing (CR 701.5a — "counter" is the effect that fails, not
+   * the targeting). The rule is enforced at the single point where a spell is
+   * actually removed from the stack, so every counter path — the plain
+   * counterspell, "unless its controller pays", a modal counter mode and the ward
+   * trigger — inherits it without a second implementation to keep in step.
+   */
+  readonly cantBeCountered?: boolean;
+  /**
+   * **"Spells you control can't be countered"** (Chimil, the Inner Sun),
+   * **"Creature spells you control can't be countered"** (Rhythm of the Wild),
+   * **"Spells can't be countered"** (Lier, Disciple of the Drowned) — the same
+   * rule as {@link cantBeCountered}, printed on a PERMANENT that protects other
+   * cards' spells instead of its own.
+   *
+   * Not a {@link StaticAbility}: those filter permanents and contribute a
+   * P/T-and-keyword modification, and the subject here is an object on the stack.
+   * Read by `countering.ts`, whose lifetime is derived from the board on every
+   * query — so destroying the source in response really does let the counterspell
+   * through.
+   */
+  readonly spellsCantBeCountered?: import('./countering.js').UncounterableSpellsAbility;
+  /**
+   * **"You have no maximum hand size."** Reliquary Tower, Spellbook, Venser's
+   * Journal — a static ability of a permanent its controller controls, read by
+   * the cleanup step's discard (CR 514.1).
+   *
+   * A boolean rather than a number because every printing of the effect on this
+   * side removes the limit entirely; a card that RAISES the limit by N would be a
+   * different field, and one that lowers an opponent's (Jin-Gitaxias) is a
+   * different effect again — neither is approximated by this flag.
+   */
+  readonly noMaximumHandSize?: boolean;
+  /**
+   * **"You may play lands from your graveyard."** Crucible of Worlds, Ramunap
+   * Excavator, Conduit of Worlds — a static ability of a permanent that widens
+   * where its controller's land plays may come from.
+   *
+   * A list of zones rather than a boolean so "from the top of your library"
+   * (Courser of Kruphix, Oracle of Mul Daya) is the same field with a different
+   * value, instead of a second flag that the land-play path would have to ask
+   * about separately.
+   */
+  readonly playLandsFrom?: readonly LandPlayZone[];
+  /**
    * Marks this definition as an EMBLEM (CR 114) — the object a planeswalker
    * ultimate leaves behind. An emblem is not a card and not a permanent: it has
    * no card types, no characteristics beyond its abilities, it lives in the
@@ -333,6 +551,27 @@ export interface CardDefinition {
    * because both of those systems discover emblems alongside permanents.
    */
   readonly isEmblem?: boolean;
+  /**
+   * Marks this definition as a TOKEN (CR 111) — an object created on the
+   * battlefield by an effect rather than a card that was ever in a deck.
+   *
+   * It lives on the DEFINITION, beside {@link isEmblem}, rather than on
+   * `CardInstance`, for three reasons that all point the same way:
+   *  - a token definition is MINTED by the effect that creates it and is never
+   *    shared with a card, so "this definition describes a token" and "this
+   *    object is a token" are the same statement here;
+   *  - `cloneInstance` shares `def` by reference, so the flag cannot be dropped
+   *    by the field-by-field clone the way an instance field can — the trap
+   *    `internal/clone.ts` warns about;
+   *  - it costs the engine's hottest allocation nothing at all.
+   *
+   * Two things read it, and both are rules the game gets wrong without it:
+   * {@link CardFilter.isToken} (the printed words "nontoken" and "token", e.g.
+   * "Destroy all nontoken creatures") and CR 704.5d — a token that has left the
+   * battlefield ceases to exist, which is what stops a dead token from sitting
+   * in a graveyard forever inflating every graveyard count in the game.
+   */
+  readonly isToken?: boolean;
   readonly keywords?: KeywordFlags;
   /**
    * Ordered effects run when this spell resolves (instants/sorceries) or as the
@@ -447,6 +686,54 @@ export interface CardDefinition {
    * tapped or untapped — is the whole of it, and it is exact.
    */
   readonly entersTappedUnlessRevealed?: RevealFromHandCondition;
+  /**
+   * "**You may have ~ enter as a copy of** any creature on the battlefield"
+   * (Clone, Phantasmal Image, Spark Double, Sakashima, Vesuva) — the as-enters
+   * COPY replacement (CR 614.1c + CR 707.9), declared as data.
+   *
+   * It sits here beside `entersTapped*` and {@link asEntersChoice} because it is
+   * the same family of thing: a replacement applied AS the permanent enters,
+   * which every entry path must ask about rather than only the ones that happen
+   * to run a resolution script. The engine asks it in `resolveTopOfStack` (a
+   * permanent spell — before a single effect runs, so the COPIED card decides
+   * summoning sickness, starting loyalty and starting defense) and in
+   * `applyPlayLand` (a land — once, ahead of the entry ladder, because it
+   * decides WHICH LAND that ladder is then asking its naming/reveal/life
+   * questions about).
+   *
+   * The copy itself is applied in LAYER 1 by swapping the instance's `def`; see
+   * `copy.ts` for the layering argument and the copiable-values rule.
+   */
+  readonly copyAsEnters?: CopyAsEntersSpec;
+  /**
+   * "**As ~ enters, choose a** creature type / a color / a player / a card type"
+   * — the replacement-effect naming made as the permanent enters (CR 614.1c).
+   *
+   * The DECLARATION lives here so one record answers every consumer: the engine
+   * (which raises the question on the entry paths that can ask), the AI (whose
+   * per-subject answering policy is chosen from `subject`), the UI (which
+   * renders the option list), and the About page. The ANSWER lives on the
+   * instance, in `CardInstance.chosenAsEntered`, which is what the card's own
+   * later abilities and other cards' filters read.
+   *
+   * Same rule as {@link entersTappedUnlessLifePaid}: a naming is a DECISION, and
+   * **every entry path that cannot ask records nothing** — which matches
+   * nothing, the direction that can never play better than the real card. See
+   * `NOTHING_CHOSEN` in `choices.ts`.
+   */
+  readonly asEntersChoice?: AsEntersChoice;
+  /**
+   * "**This creature is the chosen type in addition to its other types**"
+   * (Adaptive Automaton, Metallic Mimic, Roaming Throne) — set when the printed
+   * line makes the permanent ITSELF a member of the type it named.
+   *
+   * It reads {@link asEntersChoice}'s answer off the instance, so it is only
+   * meaningful on a definition that also declares one. Absent, or with nothing
+   * chosen, the permanent has exactly its printed subtypes — see
+   * {@link subtypesOfInstance}, which is the one accessor that folds the two
+   * together.
+   */
+  readonly isChosenSubtype?: boolean;
   /** Casting timing; defaults to `'sorcery'` when omitted. */
   readonly timing?: CastTiming;
   /**
@@ -522,6 +809,26 @@ export interface CardDefinition {
    */
   readonly buyback?: ManaCost;
   /**
+   * A MANDATORY ADDITIONAL COST paid as this spell is cast — "As an additional
+   * cost to cast this spell, sacrifice a creature" (Village Rites), "…discard a
+   * card" (Thrill of Possibility).
+   *
+   * It is NOT the optional-cost shape {@link kicker} and {@link buyback} have,
+   * and the difference is the whole point of a separate field: an optional cost
+   * may be declined, so a caster who cannot pay simply casts the spell without
+   * it. This one may not. CR 601.2h makes an unpayable cost an ILLEGAL CAST —
+   * so a Village Rites with no creature is not offered and is rejected if a
+   * hand-built action tries it, exactly as a spell with no legal target is.
+   * Treating it as declinable would print a strictly better card: a free
+   * two-card draw.
+   *
+   * Paying it is a real sacrifice/discard performed by the engine as the answer
+   * is accepted, through the same zone-change funnel every other one uses —
+   * which is what makes a dies/leaves-the-battlefield trigger and the madness
+   * discard replacement see it, because in the rules they genuinely do.
+   */
+  readonly additionalCost?: AdditionalCastCost;
+  /**
    * MADNESS — "If you discard this card, exile it instead of putting it into
    * your graveyard. When you do, you may cast it for its madness cost" (CR
    * 702.35). The value is that cost.
@@ -565,6 +872,22 @@ export interface CardDefinition {
    */
   readonly statics?: readonly import('./statics.js').StaticAbility[];
   /**
+   * REPLACEMENT and PREVENTION abilities (CR 614/615): "If one or more +1/+1
+   * counters would be put on a creature you control, that many **plus one** are
+   * put on it instead", "If a source you control would deal damage …, it deals
+   * **double** that damage instead", "Prevent all combat damage that would be
+   * dealt to attacking creatures you control".
+   *
+   * Data, like {@link statics}, and with the same DERIVED lifetime: live for
+   * exactly as long as this permanent is on the battlefield, because the layer
+   * re-reads `state.battlefield` rather than storing anything. See
+   * `replacement.ts` for the vocabulary and `internal/replacement.ts` for the one
+   * seam damage, counters and draws all consult. Omit for cards with none, which
+   * is nearly every card — the absent field is what keeps the damage and counter
+   * hot paths free.
+   */
+  readonly replacements?: readonly import('./replacement.js').ReplacementAbility[];
+  /**
    * The SECOND FACE of a transforming double-faced card (Innistrad-style), as a
    * complete nested definition — everything a face can print: name, types, P/T,
    * keywords, triggers, statics, the lot.
@@ -605,6 +928,58 @@ export interface CardDefinition {
    * back face counts as the turn's land play like any other land.
    */
   readonly backFaceCastable?: boolean;
+  /**
+   * The FIRST castable half of a SPLIT card (CR 709) — "Fire" of "Fire // Ice".
+   *
+   * A split card is ONE card with TWO halves, and the object that sits in a
+   * hand, graveyard or library is neither half: CR 709.4 gives it the COMBINED
+   * characteristics (both names, the union of the type lines and colours, and a
+   * mana value equal to the sum). So for a split card THIS definition carries
+   * those combined characteristics and is not itself castable, while the two
+   * halves hang off it as {@link frontFace} and {@link backFace}.
+   *
+   * That is the whole difference from a modal DFC, whose front face IS one of
+   * the castable halves (CR 712.8a gives an MDFC in a non-battlefield zone only
+   * its front face's characteristics). `playableFaceOf` reads this field, so
+   * every cast path asks one function which object it is actually casting and
+   * no caller has to know which layout it is holding.
+   *
+   * Absent on every other card, including modal DFCs — reading it is how the
+   * engine tells the two layouts apart.
+   */
+  readonly frontFace?: CardDefinition;
+  /**
+   * The zones the CASTABLE BACK half may be cast from. Absent means `['hand']`,
+   * which is a modal DFC and the left-to-right half of an ordinary split card.
+   *
+   * `['graveyard']` is AFTERMATH (CR 702.127a: "cast this spell only from your
+   * graveyard") — the second half of Dusk // Dawn is not castable from hand at
+   * all, and offering it there would be a strictly better card than printed.
+   * `['exile']` is a SIEGE's reward half, which becomes castable only once the
+   * battle is defeated and exiled (see {@link backFaceFreeCast}); the exile
+   * offer additionally requires the per-instance permission a defeated Siege
+   * grants, so an exiled Siege that was never defeated is not castable.
+   */
+  readonly backFaceCastZones?: readonly CastZone[];
+  /**
+   * The back half is cast WITHOUT PAYING ITS MANA COST — a Siege's reward (CR
+   * 310.4: "exile it, then you may cast it transformed without paying its mana
+   * cost"). Data rather than a special case at the cast seam, so the one cast
+   * path charges what the card says and nothing else.
+   */
+  readonly backFaceFreeCast?: boolean;
+  /**
+   * Marks THIS definition as an ADVENTURE — the instant/sorcery half of an
+   * adventurer card (CR 715), printed on the back face beside the creature.
+   *
+   * It is the whole of what makes an adventure different from any other spell:
+   * when it RESOLVES the card is exiled instead of being put into its owner's
+   * graveyard, and its owner may then cast the creature half from exile (CR
+   * 715.3d). Countered, it goes to the graveyard like anything else — which is
+   * why the exile lives in `spellLeaveDestination`'s `reason` and not in a flag
+   * each exit reads for itself.
+   */
+  readonly adventure?: boolean;
   /**
    * Declares this permanent to be an ATTACHMENT — an Aura or an Equipment — as
    * data: what it may be attached to, what it does to its host while attached, and
@@ -722,29 +1097,56 @@ const COLORS_MEMO = new WeakMap<CardDefinition, readonly ManaColor[]>();
 const COLOR_PIPS: readonly ManaColor[] = ['W', 'U', 'B', 'R', 'G'];
 
 /**
- * The colors of a definition: every color appearing among its cost's colored
- * pips, hybrid symbols included. A land, a free spell, or an artifact with a
- * purely generic cost has no colors ({C} pips are colorless, not a color).
+ * The colors of a definition.
  *
- * The engine has no color indicators and no color-changing effects, so this is
- * the color of every card it can represent — with one documented exception: a
- * transforming DFC's BACK face has no mana cost and reads as colorless, where
- * the printed card carries a color indicator. Every color consumer (protection,
- * colored card filters) inherits that limit together, from this one reader.
+ * Two sources, in this order, and the order is the whole point:
+ *  1. **{@link CardDefinition.colors} when present** — a colour printed in WORDS
+ *     on an object that has no mana cost to read it off. Every TOKEN is that
+ *     object ("a 1/1 **black** Faerie Rogue creature token"), and an empty array
+ *     is a meaningful answer: the printed word "colorless".
+ *  2. Otherwise the cost's colored **pips**, hybrid symbols included. A land, a
+ *     free spell, or an artifact with a purely generic cost has no colors ({C}
+ *     pips are colorless, not a color).
+ *
+ * Preferring the explicit field rather than merging the two keeps every card
+ * that works today working unchanged — no printed card in the pool declares
+ * `colors`, so every one of them still walks its pips — while making the field
+ * authoritative for the objects that need it. (Nothing in Magic both prints a
+ * colour in words and has pips that disagree; devoid and colour indicators are
+ * exactly the "the words win" case.)
+ *
+ * The engine has no color-changing effects, so this is the color of every object
+ * it can represent — with one documented exception: a transforming DFC's BACK
+ * face carries a colour INDICATOR the data pipeline does not capture, so it
+ * declares no `colors` and reads off its (absent) cost as colorless. Every color
+ * consumer (protection, colored card filters, coloured anthems) inherits that
+ * limit together, from this one reader.
  */
 export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   const memoized = COLORS_MEMO.get(def);
   if (memoized) return memoized;
-  const cost = def.cost;
   const colors: ManaColor[] = [];
-  if (cost) {
+  const printed = def.colors;
+  if (printed !== undefined) {
+    // Normalised to canonical WUBRG and de-duplicated, so `['B','U']` and
+    // `['U','B']` are one answer and a repeated word cannot double-count. The
+    // walk is over the five pips (not over `printed`) precisely to fix the
+    // order; anything that is not one of the five — a stray 'C' — is not a
+    // colour and is dropped, which is what makes `[]` mean colorless.
     for (const pip of COLOR_PIPS) {
-      if ((cost[pip] ?? 0) > 0) colors.push(pip);
+      if (printed.includes(pip)) colors.push(pip);
     }
-    if (cost.hybrid) {
-      for (const symbol of cost.hybrid) {
-        for (const option of symbol) {
-          if (option !== 'C' && !colors.includes(option)) colors.push(option);
+  } else {
+    const cost = def.cost;
+    if (cost) {
+      for (const pip of COLOR_PIPS) {
+        if ((cost[pip] ?? 0) > 0) colors.push(pip);
+      }
+      if (cost.hybrid) {
+        for (const symbol of cost.hybrid) {
+          for (const option of symbol) {
+            if (option !== 'C' && !colors.includes(option)) colors.push(option);
+          }
         }
       }
     }
@@ -752,6 +1154,33 @@ export function colorsOfDefinition(def: CardDefinition): readonly ManaColor[] {
   const frozen = Object.freeze(colors);
   COLORS_MEMO.set(def, frozen);
   return frozen;
+}
+
+/**
+ * A mandatory additional cost printed on a spell — see
+ * {@link CardDefinition.additionalCost}.
+ *
+ * `kind` says which zone the payment comes out of and what the move MEANS:
+ * `'sacrifice'` takes permanents its controller controls off the battlefield,
+ * `'discard'` takes cards out of its controller's hand. Both are expressed with
+ * the shared {@link CardFilter} vocabulary rather than a private one, so
+ * "sacrifice an artifact **or creature**" is the same data an edict, a search
+ * and an anthem are narrowed by.
+ *
+ * `count` is how many (default 1). There is deliberately NO "you may" variant
+ * here: an optional additional cost is a different decision (it may be declined,
+ * so it can never make a cast illegal) and belongs in its own field when a card
+ * that prints one is implemented.
+ */
+export interface AdditionalCastCost {
+  /** Which zone the payment leaves, and what the move means. */
+  readonly kind: 'sacrifice' | 'discard';
+  /** How many cards/permanents (default 1). */
+  readonly count?: number;
+  /** What qualifies. Absent means "any card in that zone". */
+  readonly filter?: CardFilter;
+  /** Printed text, for the prompt and the log. */
+  readonly label: string;
 }
 
 /**
@@ -834,12 +1263,61 @@ export interface CyclingAbility {
 const SUBTYPE_SET_MEMO = new WeakMap<CardDefinition, ReadonlySet<string>>();
 
 /**
+ * The subtypes that are **not** creature types, so {@link CardDefinition.changeling}
+ * ("this card is every creature type", CR 702.73a) cannot claim them.
+ *
+ * Changeling is expressed as an EXCLUSION list rather than as the ~280-entry
+ * creature-type list, and only this direction stays correct as Magic prints new
+ * words: every set adds creature types, and a new one would be silently missing
+ * from an inclusion list — a changeling that stops being a Cephalid the day
+ * Cephalids matter. The non-creature subtype vocabulary (land / artifact /
+ * enchantment / spell types) is the half that is genuinely closed.
+ *
+ * Planeswalker types are deliberately absent: they are only ever asked about
+ * alongside the planeswalker CARD TYPE, and {@link hasSubtype} already gates the
+ * changeling answer on the card being a creature.
+ *
+ * Lower-cased, because {@link hasSubtype} folds both sides.
+ */
+const NON_CREATURE_SUBTYPES: ReadonlySet<string> = new Set([
+  // Land types (basic and nonbasic).
+  'plains', 'island', 'swamp', 'mountain', 'forest', 'wastes',
+  'desert', 'gate', 'lair', 'locus', 'mine', 'power-plant', 'sphere', 'tower',
+  "urza's", 'cave',
+  // Artifact types.
+  'equipment', 'fortification', 'vehicle', 'contraption', 'clue', 'food',
+  'treasure', 'gold', 'blood', 'powerstone', 'map', 'junk', 'incubator',
+  'bobblehead', 'attraction',
+  // Enchantment types.
+  'aura', 'cartouche', 'case', 'class', 'curse', 'rune', 'saga', 'shard',
+  'shrine', 'background', 'role',
+  // Spell types.
+  'adventure', 'arcane', 'chorus', 'lesson', 'omen', 'trap',
+]);
+
+/**
  * Whether a definition has a printed subtype, compared case-insensitively.
  *
  * A card with no subtypes answers `false` without touching the memo, so the common
  * board pays a single property check.
+ *
+ * CHANGELING (CR 702.73a) is answered here and nowhere else, because this is the
+ * single funnel every subtype question in the engine already goes through — the
+ * shared `CardFilter` (`choices.ts`), every static's `anyOfSubtypes` /
+ * `noneOfSubtypes`, fetchland searches, and the enters-tapped `controlsSubtype`
+ * condition. A card that "is every creature type" therefore becomes one for lords,
+ * for typal searches and for "non-Goblin" exclusions alike, with no consumer
+ * having to learn the keyword exists.
  */
 export function hasSubtype(def: CardDefinition, subtype: string): boolean {
+  const folded = subtype.toLowerCase();
+  // Changeling is asked BEFORE the printed list, because the whole point of the
+  // keyword is that the printed list is not the answer. It is gated on the card
+  // actually being a creature: the keyword grants creature types, and an artifact
+  // creature with changeling is still not an Equipment.
+  if (def.changeling === true && def.types.includes('creature') && !NON_CREATURE_SUBTYPES.has(folded)) {
+    return true;
+  }
   const printed = def.subtypes;
   if (!printed || printed.length === 0) return false;
   let set = SUBTYPE_SET_MEMO.get(def);
@@ -847,7 +1325,48 @@ export function hasSubtype(def: CardDefinition, subtype: string): boolean {
     set = new Set(printed.map((s) => s.toLowerCase()));
     SUBTYPE_SET_MEMO.set(def, set);
   }
-  return set.has(subtype.toLowerCase());
+  return set.has(folded);
+}
+
+/**
+ * The minimum of a permanent that a chosen-value read needs: its active face and
+ * what it named as it entered.
+ *
+ * Declared structurally rather than as `CardInstance` because `state.ts` imports
+ * THIS file, so the dependency cannot run the other way — and because it makes
+ * the contract explicit: nothing else about the instance participates.
+ */
+export interface ChoiceBearingPermanent {
+  readonly def: CardDefinition;
+  readonly chosenAsEntered?: string;
+}
+
+/**
+ * Whether a PERMANENT has `subtype` — its printed subtypes, plus the one it
+ * named as it entered when the card says it is that type too ("this creature is
+ * the chosen type in addition to its other types",
+ * {@link CardDefinition.isChosenSubtype}).
+ *
+ * This is the instance-aware form of {@link hasSubtype}, and it is what every
+ * battlefield subtype question must use — a lord that named Goblin and is
+ * therefore a Goblin has to see itself in the next lord's filter, or two
+ * Adaptive Automatons stop pumping each other.
+ *
+ * It creates no layer-dependency loop (CR 613.8), for the same reason
+ * `StaticAffects.hasCounterKind` does not: the named value is instance STATE
+ * written once as the permanent entered, and no continuous effect in this engine
+ * can change it. The single-pass layering stays exact.
+ *
+ * Reads in the printed order and returns early, so the common permanent — one
+ * with no `isChosenSubtype` — pays exactly what {@link hasSubtype} costs today.
+ */
+export function permanentHasSubtype(permanent: ChoiceBearingPermanent, subtype: string): boolean {
+  if (hasSubtype(permanent.def, subtype)) return true;
+  if (permanent.def.isChosenSubtype !== true) return false;
+  const chosen = permanent.chosenAsEntered;
+  // Nothing named ⇒ no extra type. See `NOTHING_CHOSEN`: an unchosen value
+  // matches nothing, never everything.
+  return chosen !== undefined && chosen !== '' && chosen.toLowerCase() === subtype.toLowerCase();
 }
 
 /** Convenience predicates over a definition's type line. */
@@ -1012,6 +1531,25 @@ export interface ManaAbility {
   /** Present ⇒ the modes are one mana of each colour the board makes available. */
   readonly derivedColors?: DerivedManaColors;
   /**
+   * "Add one mana of **the chosen color**" (Coldsteel Heart, Heraldic Banner,
+   * Temple of the Dragon Queen) — the colour this ability makes is the one its
+   * own permanent named as it entered
+   * ({@link CardDefinition.asEntersChoice}).
+   *
+   * Modelled exactly like {@link derivedColors} and for the same reason: the
+   * mode LIST is fixed at five entries (one per colour) because
+   * `TapForManaAction.mode` is an index into it and a list whose length moved
+   * with the game would make the same action number mean different colours to
+   * the action generator, the payment planner and the apply path. WHICH of the
+   * five is available is the per-permanent question, asked against the live
+   * instance by `manaModeBlockedReason`.
+   *
+   * A permanent that named NOTHING has no available mode and therefore produces
+   * no mana at all — the inert default, and the direction that can never play
+   * better than the real card.
+   */
+  readonly chosenColor?: boolean;
+  /**
    * Whether the derivation includes COLOURLESS. Oracle draws the line with one
    * word: Reflecting Pool adds "one mana of any **type** that a land you control
    * could produce" and can therefore make {C}; Exotic Orchard and Fellwar Stone
@@ -1025,8 +1563,79 @@ export interface ManaAbility {
   readonly rider?: ManaAbilityRider;
   /** "Activate only if …". */
   readonly restriction?: ManaActivationCondition;
+  /**
+   * "Spend this mana only to cast a creature spell" — a restriction carried by
+   * the MANA this ability produces, not by the source (see spend-restriction.ts).
+   *
+   * It is the one entry in this interface that outlives the activation: the other
+   * four are answered while the permanent is being tapped, and this one is
+   * answered later, by the pool, when the mana is spent.
+   */
+  readonly spendRestriction?: ManaSpendRestriction;
   /** Human-readable text for logs and the inspector. */
   readonly label?: string;
+}
+
+/**
+ * The spend-restriction descriptor of a definition — what a restricted mana asks
+ * about the spell it is being offered to pay for.
+ *
+ * Memoized per definition and per kind. Definitions are immutable and shared, so
+ * this is computed once per printed card for the whole process; a payment on a
+ * board that holds restricted mana therefore costs a WeakMap lookup rather than
+ * an allocation, and a payment on any other board never calls this at all.
+ */
+const SPEND_PURPOSE_MEMO = new WeakMap<
+  CardDefinition,
+  { cast?: ManaSpendPurpose; activate?: ManaSpendPurpose }
+>();
+
+export function spendPurposeFor(def: CardDefinition, kind: ManaSpendKind): ManaSpendPurpose {
+  let entry = SPEND_PURPOSE_MEMO.get(def);
+  if (!entry) {
+    entry = {};
+    SPEND_PURPOSE_MEMO.set(def, entry);
+  }
+  const memoized = entry[kind];
+  if (memoized) return memoized;
+  const built: ManaSpendPurpose = Object.freeze({
+    kind,
+    // Lowercased once, here, rather than on every clause comparison. `CardType`
+    // is already lowercase; `subtypes` is printed in title case.
+    types: def.types as readonly string[],
+    subtypes: Object.freeze((def.subtypes ?? []).map((subtype) => subtype.toLowerCase())),
+    legendary: def.legendary === true,
+    colors: colorsOfDefinition(def),
+  });
+  entry[kind] = built;
+  return built;
+}
+
+/**
+ * The purpose to hand {@link canPay}/{@link payCost}, **or `undefined` when the
+ * pool holds no restricted mana at all**.
+ *
+ * ⚠️ THE `undefined` RETURN IS THE POINT, exactly as it is for `manaExtrasOf`.
+ * Payment feasibility is asked for every card in hand on every decision, and on
+ * essentially every board there is nothing to restrict; the whole system must
+ * therefore cost that board one property read on the pool. Call sites read
+ * better for it too: the purpose is named at the place that knows what is being
+ * paid for, and costs nothing where there is nothing to pay for it with.
+ *
+ * ⛔ **DO NOT USE THIS FOR `planManaPayment`.** It asks the pool as it is NOW, and
+ * a planner is called before the mana exists — the restricted mana it is about to
+ * create is exactly what the plan is for. Gating on the live pool made the
+ * planner refuse to tap Ancient Ziggurat at all, because there was no purpose to
+ * check the restriction it was creating against, and the pilot then read a
+ * castable creature as uncastable. The planner takes the DEFINITION and resolves
+ * the purpose itself, lazily; see `mana-plan.ts`.
+ */
+export function spendPurposeIfRestricted(
+  pool: ManaPool,
+  def: CardDefinition,
+  kind: ManaSpendKind,
+): ManaSpendPurpose | undefined {
+  return pool.restricted === undefined ? undefined : spendPurposeFor(def, kind);
 }
 
 /**
@@ -1040,6 +1649,15 @@ export interface ManaModeExtra {
   readonly ability: ManaAbility;
   /** For a derived-colour mode: which colour this mode would add. */
   readonly derivedColor?: ManaColor;
+  /**
+   * For a CHOSEN-colour mode ({@link ManaAbility.chosenColor}): which colour this
+   * mode would add. Kept distinct from {@link derivedColor} rather than folded
+   * into it because the availability questions are different — a derived mode
+   * asks the BOARD what other lands make, a chosen mode asks THIS PERMANENT what
+   * it named — and one field answering two questions is how a mode ends up
+   * available for the wrong reason.
+   */
+  readonly chosenColor?: ManaColor;
 }
 
 /**
@@ -1051,6 +1669,15 @@ export interface ManaModeExtra {
  * The colourless mode of a colour-only ability is simply never available.
  */
 const DERIVED_COLOR_ORDER: readonly ManaColor[] = MANA_COLORS;
+
+/**
+ * The colours a CHOSEN-colour mana ability enumerates modes for — the five a card
+ * may name, in canonical order. Colourless is absent because "choose a color"
+ * cannot name it; see {@link ManaAbility.chosenColor}.
+ */
+const CHOSEN_COLOR_ORDER: readonly ManaColor[] = Object.freeze(
+  MANA_COLORS.filter((color) => color !== 'C'),
+);
 
 /** No mana modes — shared frozen empty list so the hot path allocates nothing. */
 const NO_MANA_MODES: readonly ManaProduction[] = Object.freeze([]);
@@ -1143,6 +1770,16 @@ function flattenManaAbilities(def: CardDefinition): {
       }
       continue;
     }
+    if (ability.chosenColor === true) {
+      // The five NAMEABLE colours, never colourless: "choose a color" is one of
+      // five (CR 105.1), so a sixth mode here would be a mode no printed card
+      // offers. Same fixed-length argument as the derived branch above.
+      for (const color of CHOSEN_COLOR_ORDER) {
+        modes.push(Object.freeze({ [color]: 1 }) as ManaProduction);
+        extras.push(Object.freeze({ ability, chosenColor: color }));
+      }
+      continue;
+    }
     for (const production of ability.produces ?? []) {
       modes.push(production);
       extras.push(Object.freeze({ ability }));
@@ -1160,18 +1797,31 @@ function flattenManaAbilities(def: CardDefinition): {
  * The colours this source could contribute to ANOTHER source's derived-colour
  * ability ("any color that a land you control could produce").
  *
+ * `chosenColor` is what the permanent NAMED as it entered (`chosenColorOf` in
+ * `as-enters.ts`), passed in by the caller rather than read here so this file
+ * stays free of a dependency cycle. Omitting it — which is what every caller that
+ * has only a definition does — makes a chosen-colour source contribute NOTHING,
+ * the conservative direction that never invents mana the board cannot make.
+ *
  * Deliberately excludes derived modes. Two Reflecting Pools do not see each
  * other: the rules answer is that a derived ability reads what the other
  * permanents *could* produce, and a permanent whose own production is defined by
  * that same question contributes nothing rather than looping. Excluding it here
  * is both the faithful answer and what makes the derivation terminate.
  */
-export function fixedManaColorsOf(def: CardDefinition): readonly ManaColor[] {
+export function fixedManaColorsOf(def: CardDefinition, chosenColor?: ManaColor): readonly ManaColor[] {
   const extras = manaExtrasOf(def);
   const modes = manaModesOf(def);
   const out: ManaColor[] = [];
   for (let i = 0; i < modes.length; i++) {
     if (extras?.[i]?.derivedColor !== undefined) continue;
+    // A CHOSEN-colour mode contributes only the colour this permanent actually
+    // named. Without the instance we cannot know it, so the mode contributes
+    // nothing — a Reflecting Pool reads an unknown Coldsteel Heart as producing
+    // nothing rather than as producing all five, which is the conservative
+    // direction and the one that never invents mana that is not there.
+    const modeChosenColor = extras?.[i]?.chosenColor;
+    if (modeChosenColor !== undefined && modeChosenColor !== chosenColor) continue;
     const mode = modes[i] as ManaProduction;
     for (const color of MANA_COLORS) {
       if ((mode[color] ?? 0) > 0 && !out.includes(color)) out.push(color);
@@ -1277,6 +1927,27 @@ export interface RevealFromHandCondition {
   readonly anyOfSubtypes: readonly string[];
 }
 
+/**
+ * What a permanent NAMES as it enters — see {@link CardDefinition.asEntersChoice}.
+ *
+ * `subject` is the printed noun ("a creature type", "a color", "a player"), and
+ * it is the whole record for every subject whose option list is a fixed, known
+ * set. `options` exists for the one printed form that names its own menu —
+ * Cloud Key's "choose artifact, creature, enchantment, instant, or sorcery" —
+ * where the card, not the rules, decides what is on offer.
+ */
+export interface AsEntersChoice {
+  readonly subject: import('./choices.js').ChosenValueSubject;
+  /**
+   * The explicit menu, when the card prints one. Absent ⇒ the canonical list for
+   * the subject (`asEntersOptions` in `as-enters.ts`), which for a creature type
+   * is derived from the game rather than hard-coded.
+   */
+  readonly options?: readonly string[];
+  /** Prompt override for the UI / log. Absent ⇒ built from `subject`. */
+  readonly prompt?: string;
+}
+
 export interface EntersUntappedCondition {
   /**
    * "unless you control two or fewer other lands" — a fastland. Satisfied when
@@ -1303,6 +1974,28 @@ export interface EntersUntappedCondition {
    * SUBTYPES as two basics and would otherwise be counted as one.
    */
   readonly minBasicLands?: number;
+  /**
+   * "unless you control **a legendary creature**" (Minas Tirith, Rivendell,
+   * Barad-dûr), "unless you control **a basic land**" (Ba Sing Se), "unless you
+   * control **three or more other Swamps**" (Witch's Cottage) — the GENERAL form
+   * of which the three fields above are fixed printings.
+   *
+   * Satisfied when the controller's OTHER permanents matching `filter` number at
+   * least `minimum` (default 1). It reuses the shared {@link CardFilter} rather
+   * than growing a fourth bespoke count, so a new wording of the same rule is a
+   * data edit; the older fields stay because live card data already uses them and
+   * a silent re-encoding is exactly the kind of change that flips a land's
+   * behaviour without a test noticing.
+   *
+   * Like every other condition here it counts only permanents the controller
+   * controls, and never the entering land itself (the `self` exclusion in
+   * {@link EntersTappedContext}) — which is what makes "three or more OTHER
+   * Swamps" the plain reading rather than an off-by-one.
+   */
+  readonly controlsMatching?: {
+    readonly filter: CardFilter;
+    readonly minimum?: number;
+  };
 }
 
 /**
@@ -1367,6 +2060,111 @@ export function canRevealForUntapped(
   return false;
 }
 
+/**
+ * Whether a card instance passes a filter. An absent filter matches everything.
+ *
+ * Written with explicit loops rather than `.some(...)`: static abilities
+ * (`statics.ts`) run this for every permanent on the battlefield inside the
+ * continuous-layering pass, which combat and every legality check drive, and a
+ * closure allocated per predicate per candidate showed up in the hot path.
+ *
+ * The parameter is a {@link ChoiceBearingPermanent} — a `def` plus the subtype the
+ * permanent NAMED as it entered — rather than a full `CardInstance`, which keeps
+ * two callers honest at once. Subtype matching goes through `permanentHasSubtype`,
+ * so a card that "is the chosen type in addition to its other types" is that type
+ * here; and a caller holding only a definition — the enters-tapped conditions in
+ * `card.ts`, which see the battlefield as `{ controller, def }` — is not forced to
+ * fabricate an instance to ask the same question a second way. Every other
+ * characteristic a filter reads is PRINTED (see {@link CardFilter.minPower}).
+ */
+export function matchesCardFilter(card: ChoiceBearingPermanent, filter?: CardFilter): boolean {
+  if (!filter) return true;
+  const def = card.def;
+  // The helper forms are the allocation-free, case-insensitive ones — required by
+  // the statics pass that runs this for every permanent, and by subtype matching
+  // that must treat "Mountain" and "mountain" alike.
+  if (filter.anyOfTypes !== undefined && !hasAnyType(def.types, filter.anyOfTypes)) return false;
+  if (filter.noneOfTypes !== undefined && hasAnyType(def.types, filter.noneOfTypes)) return false;
+  if (filter.anyOfSubtypes !== undefined && !hasAnySubtype(card, filter.anyOfSubtypes)) return false;
+  if (filter.noneOfSubtypes !== undefined && hasAnySubtype(card, filter.noneOfSubtypes)) return false;
+  if (filter.nameEquals !== undefined && def.name !== filter.nameEquals) return false;
+  // Supertypes: absent on most definitions, so `=== true` rather than truthiness —
+  // `legendary: false` must match a plain creature, not be treated as "unset".
+  if (filter.legendary !== undefined && (def.legendary === true) !== filter.legendary) return false;
+  if (filter.basic !== undefined && (def.basic === true) !== filter.basic) return false;
+  // The printed words "token" / "nontoken". Same `=== true` argument as the two
+  // supertypes above: an ordinary card omits the flag entirely, so a `false`
+  // filter must match it rather than reading `undefined` as "unset".
+  if (filter.isToken !== undefined && (def.isToken === true) !== filter.isToken) return false;
+  if (filter.minManaValue !== undefined || filter.maxManaValue !== undefined) {
+    const mv = def.cost ? convertedManaCost(def.cost) : 0;
+    if (filter.minManaValue !== undefined && mv < filter.minManaValue) return false;
+    if (filter.maxManaValue !== undefined && mv > filter.maxManaValue) return false;
+  }
+  if (filter.minPower !== undefined || filter.maxPower !== undefined) {
+    if (!withinPrintedBox(def.power, filter.minPower, filter.maxPower)) return false;
+  }
+  if (filter.minToughness !== undefined || filter.maxToughness !== undefined) {
+    if (!withinPrintedBox(def.toughness, filter.minToughness, filter.maxToughness)) return false;
+  }
+  // Colors last: it is the only test that can touch the (memoized) pip walk, so
+  // a candidate rejected by type/subtype/name never pays for it at all.
+  if (filter.anyOfColors !== undefined && !hasAnyColor(def, filter.anyOfColors)) return false;
+  return true;
+}
+
+/**
+ * Whether a printed power/toughness box falls inside an inclusive bound.
+ *
+ * An ABSENT box (a non-creature, or a `*` P/T that is a formula rather than a
+ * number) is outside every bound — see {@link CardFilter.minPower} for why that
+ * is the printed reading and not a conservative guess.
+ */
+function withinPrintedBox(box: number | undefined, min?: number, max?: number): boolean {
+  if (box === undefined) return false;
+  if (min !== undefined && box < min) return false;
+  if (max !== undefined && box > max) return false;
+  return true;
+}
+
+/** Whether a definition is any of `wanted` colors. Allocation-free (see above). */
+function hasAnyColor(def: CardDefinition, wanted: readonly ManaColor[]): boolean {
+  const colors = colorsOfDefinition(def);
+  for (const want of wanted) {
+    for (const color of colors) {
+      if (color === want) return true;
+    }
+  }
+  return false;
+}
+
+/** Whether a type line carries any of `wanted`. Allocation-free (see above). */
+function hasAnyType(types: readonly CardType[], wanted: readonly CardType[]): boolean {
+  for (const want of wanted) {
+    for (const type of types) {
+      if (type === want) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a card carries any of `wanted` as a subtype.
+ *
+ * Instance-aware ({@link permanentHasSubtype}), not definition-only: a permanent
+ * that named a creature type and prints "this creature is the chosen type in
+ * addition to its other types" genuinely HAS that type, so a filter that read
+ * only the printed line would fail to see one Adaptive Automaton from another.
+ * For every card in a hand, library or graveyard the two readings are identical,
+ * because nothing there has named anything.
+ */
+function hasAnySubtype(card: ChoiceBearingPermanent, wanted: readonly string[]): boolean {
+  for (const want of wanted) {
+    if (permanentHasSubtype(card, want)) return true;
+  }
+  return false;
+}
+
 /** Whether the "enters untapped" condition holds on the current board. */
 function conditionMet(
   condition: EntersUntappedCondition,
@@ -1398,10 +2196,24 @@ function conditionMet(
 
   if (condition.controlsSubtype !== undefined) {
     const wanted = condition.controlsSubtype;
-    const has = others.some((permanent) =>
-      (permanent.def.subtypes ?? []).some((subtype) => wanted.includes(subtype)),
-    );
+    // Through `hasSubtype`, so a changeling counts as the wanted type here for the
+    // same reason it counts everywhere else — and so casing cannot break a
+    // checkland.
+    const has = others.some((permanent) => wanted.some((subtype) => hasSubtype(permanent.def, subtype)));
     if (!has) return false;
+  }
+
+  if (condition.controlsMatching !== undefined) {
+    const { filter, minimum } = condition.controlsMatching;
+    const needed = minimum ?? 1;
+    let found = 0;
+    for (const permanent of others) {
+      if (!matchesCardFilter(permanent, filter)) continue;
+      // Counting stops the moment the printed threshold is met: the condition is
+      // "three or MORE", so the exact total past that point changes no answer.
+      if (++found >= needed) break;
+    }
+    if (found < needed) return false;
   }
 
   return true;
@@ -1419,9 +2231,35 @@ function conditionMet(
  * casting the 3/2 Aberration half of a Delver directly.
  */
 export function playableFaceOf(def: CardDefinition, face: 'front' | 'back' | undefined): CardDefinition | undefined {
-  if (face !== 'back') return def;
+  // A SPLIT card's own definition is the CR 709.4 combined object, which is
+  // never cast: `'front'` on one means its LEFT half. Every other layout is its
+  // own front face, so this is one property read for all of them.
+  if (face !== 'back') return def.frontFace ?? def;
   if (def.backFaceCastable !== true) return undefined;
   return def.backFace;
+}
+
+/**
+ * The zones a card's castable BACK half may be cast from — `['hand']` unless
+ * the definition says otherwise. THE accessor: the offer loop and the accept
+ * path both ask it, so aftermath's graveyard-only restriction and a Siege
+ * reward's exile-only one cannot be enforced in one place and forgotten in the
+ * other.
+ */
+export function backFaceCastZonesOf(def: CardDefinition): readonly CastZone[] {
+  return def.backFaceCastZones ?? DEFAULT_BACK_FACE_CAST_ZONES;
+}
+
+/** The zones a back half is castable from when its definition does not say. */
+const DEFAULT_BACK_FACE_CAST_ZONES: readonly CastZone[] = ['hand'];
+
+/**
+ * Whether this definition is a SPLIT card's combined object rather than a
+ * castable spell — the question "is what I am holding itself a thing I can
+ * cast?", asked by name so no caller re-derives it from `frontFace != null`.
+ */
+export function isSplitCard(def: CardDefinition): boolean {
+  return def.frontFace !== undefined;
 }
 
 /**

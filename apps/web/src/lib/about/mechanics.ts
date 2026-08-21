@@ -17,7 +17,14 @@
  * bugs; a capabilities page that lies is the worst kind).
  */
 
-import { hasCastableBackFace, modalSpecOf, playableFaceOf } from '@jonny-boi/core';
+import {
+  backFaceCastZonesOf,
+  castPermissionFor,
+  hasCastableBackFace,
+  isSplitCard,
+  modalSpecOf,
+  playableFaceOf,
+} from '@jonny-boi/core';
 import {
   CARD_POOL,
   CHOICE_PRIMITIVES,
@@ -166,8 +173,18 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Conditional and board-derived mana',
         detail:
-          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping. Still refused by name: "spend this mana only to…", which would need the mana POOL to carry the restriction.',
+          '"Activate only if you control an Island / a red permanent / three or more artifacts" (Nimbus Maze, the Verge cycle, Mox Opal) is checked when the ability is OFFERED, so an unmet condition makes the source invisible to the payment planner rather than refusing after it has been counted on. Reflecting Pool and Exotic Orchard read their colours off the live board every time — never frozen when the card compiles — and two of them see each other as producing nothing rather than looping.',
         witness: { kind: 'rule', id: 'mana-ability-activation-restriction' },
+      },
+      {
+        title: 'Mana you may spend on only one thing',
+        detail:
+          'Ancient Ziggurat, Somberwald Sage, Eldrazi Temple, Giada and Power Depot print a restriction on the MANA rather than on the source: "Spend this mana only to cast a creature spell", "…only to cast artifact spells or activate abilities of artifacts". The floating pool carries it, so casting, activating an ability, cycling and a filter land’s own cost each ask what the mana is being spent on — and a spell it may not pay for is not offered at all. Mana you cannot spend still counts as floating and still empties at end of step, exactly like any other. Unclaimed Territory and Secluded Courtyard restrict theirs to “the chosen type”, read from the creature type the land itself named as it entered — and a land that named nothing makes mana that pays for nothing, never for everything. The shared payment planner spends restricted mana FIRST when it legally can, because it is the least flexible resource on the board.',
+        witness: {
+          kind: 'oracle',
+          text: '{T}: Add one mana of any color. Spend this mana only to cast a creature spell.',
+          as: 'creature',
+        },
       },
       {
         title: '{X} costs',
@@ -207,8 +224,24 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Auras & Equipment',
         detail:
-          'One attachment relationship covers both: an Aura dies when its host is illegal (CR 704.5m), Equipment falls off and stays (CR 704.5n), and grants layer with anthems and pumps.',
+          'One attachment relationship covers both: an Aura dies when its host is illegal (CR 704.5m), Equipment falls off and stays (CR 704.5n), and grants layer with anthems and pumps. What it grants is the full printed line — "Equipped creature gets +2/+2 and has protection from black and from green", "gets +1/+0 and has haste and ward {1}" — including the two keywords that carry a value.',
         witness: { kind: 'primitive', id: 'attachToTarget' },
+      },
+      {
+        title: 'What the EQUIPPED creature does',
+        detail:
+          'An Equipment or Aura may watch its HOST rather than itself: "whenever equipped creature deals combat damage to a player", "whenever equipped creature attacks", "when equipped creature dies". It is the same trigger the creature\'s own printed line uses, scoped to whatever the attachment is on right now — so it follows the Sword when the Sword moves, and fires for nobody while the Sword is lying loose. The ability still belongs to the Equipment: its "~ deals 2 damage" means the Sword (Sword of Fire and Ice, Argentum Armor, Skullclamp).',
+        witness: { kind: 'rule', id: 'trigger-equipped-combat-damage-to-player' },
+      },
+      {
+        title: 'Connecting with an attacker',
+        detail:
+          '"Whenever ~ deals combat damage to a player" fires on the hit itself, never on damage to a creature or a planeswalker, and the AI treats it as a reason to attack — and as a reason NOT to send that creature at a planeswalker, where the trigger would pay nothing. Optional bodies are a real question: "you may draw two cards" is asked, and the no is a complete outcome.',
+        witness: {
+          kind: 'oracle',
+          text: 'Whenever ~ deals combat damage to a player, you may draw a card.',
+          as: 'creature',
+        },
       },
       {
         title: 'Targeting restrictions',
@@ -231,8 +264,44 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Blocking restrictions',
         detail:
-          'Each restriction is enforced where it is expressible: "can\'t be blocked" and "~ can\'t block" per pair, while menace — and its general form "can\'t be blocked except by three or more creatures" — judges the whole block declaration, because every blocker is individually legal and only the count is not. Block REQUIREMENTS ("must be blocked if able") are not implemented, and a card printing one says so rather than playing without it.',
+          'Each restriction is enforced where it is expressible: "can\'t be blocked" and "~ can\'t block" per pair, while menace — and its general form "can\'t be blocked except by three or more creatures" — judges the whole block declaration, because every blocker is individually legal and only the count is not.',
         witness: { kind: 'keyword', word: 'menace' },
+      },
+      {
+        title: 'Block requirements — "must be blocked if able"',
+        detail:
+          'The other half of declare-blockers, and the half that needs a search rather than a check: the rules resolve requirements and restrictions TOGETHER, so a declaration must satisfy the maximum possible number of requirements without violating any restriction. A lure really does drag blockers off your other attackers, "all creatures able to block it do so" pulls every one of them, and "if able" is honest — a menacing lure facing a single creature requires nothing, because that creature could never legally block it.',
+        witness: { kind: 'rule', id: 'must-be-blocked-if-able' },
+      },
+      {
+        title: 'Blocking restrictions that compare the two creatures',
+        detail:
+          'Skulk ("can\'t be blocked by creatures with greater power"), a printed power or toughness bound, and Gingerbrute\'s "except by creatures with haste" are judged against EFFECTIVE stats — an anthem that pushes a blocker past the bound genuinely stops it blocking, and a skulking creature pumped this turn is harder to block, exactly as printed.',
+        witness: { kind: 'rule', id: 'cant-be-blocked-by-power-or-toughness' },
+      },
+      {
+        title: 'Changeling',
+        detail:
+          'A changeling is every creature type, in every zone — on the battlefield, in a graveyard, in a library. It is answered inside the one function every subtype question in the engine already goes through, so lords, typal searches and "non-Goblin" exclusions all see it without knowing the keyword exists.',
+        witness: { kind: 'oracle', text: 'Changeling', as: 'creature' },
+      },
+      {
+        title: "Spells that can't be countered",
+        detail:
+          'Enforced where a spell actually leaves the stack, never as a targeting restriction — so Counterspell may still target Supreme Verdict, resolve, and do nothing, which is what the printed cards say. Both printings work: on the spell itself, and on a permanent protecting others ("creature spells you control can\'t be countered"), whose protection ends the instant it does.',
+        witness: { kind: 'rule', id: 'this-spell-cant-be-countered' },
+      },
+      {
+        title: 'Maximum hand size, and the cards that lift it',
+        detail:
+          'The cleanup step really discards down to seven, and the active player chooses which cards to keep — frequently the most important decision of a turn. Reliquary Tower and friends remove the limit entirely.',
+        witness: { kind: 'rule', id: 'no-maximum-hand-size' },
+      },
+      {
+        title: 'Playing lands from somewhere other than your hand',
+        detail:
+          'Crucible of Worlds replays a land from your graveyard and Courser of Kruphix plays the top card of your library — still a land play, so it costs the turn\'s land drop and needs an empty stack. The permission is re-derived from the board every time, so destroying the source in response really does stop it.',
+        witness: { kind: 'rule', id: 'play-lands-from-zone' },
       },
       {
         title: 'Granted evasion',
@@ -341,16 +410,40 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
         witness: { kind: 'rule', id: 'enters-tapped-unless-revealed' },
       },
       {
+        title: '"As ~ enters, choose a creature type / a color"',
+        detail:
+          'The naming a permanent makes on the way in (CR 614.1c), asked at the printed moment — while a land is being played, or while a permanent spell is resolving and the card is not yet on the battlefield. The answer is REMEMBERED on that permanent for as long as it is there, which is the whole point: Adaptive Automaton becomes the type it named and pumps the others of it, Coldsteel Heart taps for the colour it named, and Chronicle of Victory draws off the type it named. A permanent that enters where nobody can be asked — reanimated, put onto the battlefield by another card, copied as a token — names NOTHING, and nothing named matches nothing.',
+        witness: { kind: 'primitive', id: 'chooseAsEnters' },
+      },
+      {
+        title: '"Of the chosen type / color" — reading a named value back',
+        detail:
+          'The three readers that make a naming worth making: an anthem narrowed to the named type or colour ("creatures you control of the chosen type get +1/+1"), a mana ability that adds the named colour, and a cast trigger that fires only on the named type. Each is refused at compile time on a card that never names anything, because an anthem over a value nothing writes is a card that reports as playable and then does nothing.',
+        witness: { kind: 'rule', id: 'as-enters-choose-value' },
+      },
+      {
         title: 'Optional triggers ("you may")',
         detail:
           'The printed "you may" is a genuine yes/no asked as the ability resolves, and declining is a complete outcome — never auto-answered to make a card compile, because a forced yes is a different card. Reclamation-Sage-style entries, the Mage cycle\'s tutors and Farhaven Elf all play both ways.',
         witness: { kind: 'primitive', id: 'mayEffects' },
       },
       {
-        title: 'Step-beginning triggers',
+        title: 'Step-beginning triggers, in every printed scope',
         detail:
-          'Upkeep, draw step, first main phase and end step all carry triggers ("At the beginning of your end step, untap all lands you control"). "Each player\'s <step>" still reports: the engine cannot yet aim a body at the player whose step it is, and firing it for the source\'s controller would be a different card.',
+          'Upkeep, draw step, first main phase, end step and combat all carry triggers, and so do the shared forms — "each player\'s", "each opponent\'s" and the bare "each". The player whose step it is rides the ability into its resolution, so a body can say "that player": Howling Mine, Kami of the Crescent Moon, Dictate of Kruphix, Font of Mythos and Teferi\'s Puzzle Box all draw for the RIGHT seat instead of for their controller.',
         witness: { kind: 'rule', id: 'trigger-step-begins' },
+      },
+      {
+        title: 'The intervening "if"',
+        detail:
+          'A trigger\'s printed condition ("…, if this artifact is untapped, …", "…, if you control six or more lands, …") is checked at BOTH moments the rules require: a false condition stops the ability going on the stack at all, and one that lapses before it resolves removes it doing nothing. A power bound reads EFFECTIVE power, so counters and anthems count. A condition the compiler cannot read makes its card report — never a body compiled as though the condition were not printed.',
+        witness: { kind: 'oracle', text: 'At the beginning of your upkeep, if you control six or more lands, create a 5/5 red Dragon creature token with flying.', as: 'creature' },
+      },
+      {
+        title: '"That player" / "each player" bodies',
+        detail:
+          'A trigger body can happen to somebody other than its controller through one shared vocabulary — "each player draws a card and loses 1 life" (Stormfist Crusader), "each opponent loses 1 life", and the "that player" forms a scoped trigger points at. "Whenever a player draws a card" watches every draw in the game, which is what makes Spiteful Visions and Scrawling Crawler real cards.',
+        witness: { kind: 'rule', id: 'trigger-draws-card' },
       },
       {
         title: 'Board-watching triggers',
@@ -373,13 +466,77 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Modal double-faced cards',
         detail:
-          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield. Split and adventure cards still report — they are two halves of one object, not two faces.',
+          'A modal DFC is one card with two CASTABLE halves — unlike a transforming DFC, whose back face is only ever reached by a transform instruction. Either face may be cast (or played, when the back is a land, counting as your land drop) with that face\'s own cost, timing, targets and script; the card reverts to its front face whenever it leaves the battlefield.',
         witness: { kind: 'engine', api: 'hasCastableBackFace' },
+      },
+      {
+        title: 'Copy effects (Clone)',
+        detail:
+          '"You may have this creature enter as a copy of any creature on the battlefield" plays as printed, including the "except" tail (an added type or creature type, a kept name, legendary on or off, an extra +1/+1 or loyalty counter, an "enters tapped"). A copy is applied in LAYER 1 (CR 613.2), beneath everything: the permanent keeps its OWN +1/+1 counters, the anthems on the board still shine on it, and an until-end-of-turn pump still applies — all on top of the copied card. And you copy the PRINTED card (CR 707.2), so a 1/1 wearing three counters is copied as a 1/1 and a transformed permanent is copied by its front face. Sculpting Steel, Mirrormade, Copy Enchantment, Clever Impersonator, Spark Double, Vesuva and Echoing Deeps all import as playable.',
+        witness: { kind: 'rule', id: 'copy-as-enters' },
+      },
+      {
+        title: 'Copying from a graveyard',
+        detail:
+          'The objects a copy may choose from are not always on the battlefield: Echoing Deeps enters tapped "as a copy of any land card in a graveyard", and a card in a graveyard is copied by exactly the same printed values a permanent is.',
+        witness: {
+          kind: 'oracle',
+          text: "You may have this land enter tapped as a copy of any land card in a graveyard, except it's a Cave in addition to its other types.",
+          as: 'creature',
+        },
+      },
+      {
+        title: 'Copying a SPELL on the stack (Reverberate)',
+        detail:
+          'A copy of a spell is put on the stack ABOVE the original, carrying every decision made for it — its targets, the value of X, whether it was kicked, and a modal spell’s announced modes with each mode’s own aim (CR 707.10). You may then choose new targets for the copy, asked as a real question while the copying spell resolves. The copy is NOT A CARD: when it leaves the stack it goes to no zone at all (CR 704.5e), so it can never leave a phantom card that delirium counts, Tarmogoyf reads or flashback could recast. Reverberate, Twincast, Reiterate, Narset’s Reversal and Dualcaster Mage all import as playable.',
+        witness: { kind: 'primitive', id: 'copySpell' },
+      },
+      {
+        title: 'Token copies (Rite of Replication)',
+        detail:
+          '"Create a token that’s a copy of target creature" makes a token whose characteristics are the copied card’s PRINTED ones (CR 707.2) — so a 1/1 wearing three +1/+1 counters is copied as a 1/1, and a transformed permanent by its front face. It is a real token: it answers every "nontoken" filter and it ceases to exist when it leaves the battlefield. The printed "if this spell was kicked, create five of those tokens instead" REPLACES the count rather than adding to it. Rite of Replication, Cackling Counterpart and Giant Adephage all import as playable.',
+        witness: { kind: 'primitive', id: 'createTokenCopy' },
+      },
+      {
+        title: 'Split cards (Fire // Ice)',
+        detail:
+          'One card, two halves, either castable for its own cost. While it sits in a hand, graveyard or library it is NEITHER half: CR 709.4 gives it the combined name, the union of the type lines and a mana value equal to the sum of both — which is what a discard filter or a "mana value 3 or less" clause reads. Casting one puts THAT half on the stack, and the card reverts to the combined object on the way out.',
+        witness: { kind: 'engine', api: 'isSplitCard' },
+      },
+      {
+        title: 'Aftermath (Dusk // Dawn)',
+        detail:
+          'The second half of an aftermath card is castable ONLY from your graveyard (CR 702.127a), never from your hand, and it pays its own printed cost rather than a flashback cost it does not print. It is exiled after it resolves — the same one answer that exiles a flashback spell, so the two can never disagree.',
+        witness: { kind: 'engine', api: 'backFaceCastZonesOf' },
+      },
+      {
+        title: 'Adventures (Bonecrusher Giant // Stomp)',
+        detail:
+          'Cast the adventure half as an instant or sorcery and, when it RESOLVES, the card is exiled instead of being buried — with permission for its owner to cast the creature half from exile later (CR 715.3d). Countered, it goes to the graveyard like anything else and the creature is gone. The permission names one face, dies with the object if the card ever leaves exile (CR 400.7), and a Town // Adventure card whose primary half is a land is PLAYED from exile as your land drop.',
+        witness: { kind: 'engine', api: 'castPermissionFor' },
       },
       {
         title: 'Gaining control of a permanent',
         detail: '"Gain control of target creature until end of turn" — Act of Treason effects.',
         witness: { kind: 'rule', id: 'gain-control-until-eot' },
+      },
+      {
+        title: 'Replacement effects — damage doublers and counter multipliers',
+        detail:
+          'CR 614: an effect that changes what WOULD happen. "If one or more +1/+1 counters would be put on a creature you control, that many plus one are put on it instead" (Hardened Scales, Corpsejack Menace); "If a red source you control would deal damage to an opponent, it deals that much damage plus 2 instead" (Torbran, Gratuitous Violence, Fiery Emancipation). Damage, counters and draws all ask ONE layer, so a doubler applies to a burn spell, a combat hit, a sweeper and a fight alike. Each effect applies at most once per event (CR 614.5 — a doubler never doubles its own output), and when two apply the order is the one the affected player would pick, which is why Hardened Scales plus Corpsejack Menace puts four counters and not three.',
+        witness: { kind: 'rule', id: 'replacement-damage-scaled' },
+      },
+      {
+        title: 'Prevention — fogs and prevention statics',
+        detail:
+          'CR 615: "Prevent all combat damage that would be dealt this turn" (Fog, Darkness) creates a real prevention effect that wears off in cleanup, and "Prevent all combat damage that would be dealt to attacking creatures you control" (Dolmen Gate) is a static that lives exactly as long as its source. A "prevent the next N damage" shield is consumed as it prevents and is gone the moment it is spent. The pilot casts a fog in front of an attack that matters and holds it against one that does not.',
+        witness: { kind: 'primitive', id: 'preventDamage' },
+      },
+      {
+        title: 'Replacing a draw',
+        detail:
+          '"If you would draw a card except the first one you draw in each of your draw steps, draw two cards instead" (Teferi’s Ageless Insight) and "If you would draw a card while your library has no cards in it, you win the game instead" (Laboratory Maniac). The printed exception is exact, not approximated — the engine remembers whether you have already taken your draw step’s draw this turn.',
+        witness: { kind: 'rule', id: 'replacement-draw' },
       },
       {
         title: 'Anthems (static buffs)',
@@ -396,7 +553,7 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Battles (Sieges)',
         detail:
-          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. ⚠️ Printed Sieges still import as unplayable: their reward is casting the back face, which needs the modal double-faced system.",
+          "Battles enter with their printed defense counters and are attacked through the very same seam planeswalkers use. A battle is defended by its PROTECTOR — its controller's opponent — so you attack your own Siege, and their creatures block. Combat damage and \"any target\" burn alike strip defense counters, trample carries the excess to the defender, and removing the last counter defeats it. A defeated SIEGE is exiled rather than buried, and its controller may then cast its reward half from exile without paying its mana cost (CR 310.4).",
         witness: { kind: 'primitive', id: 'createEmblem' },
       },
       {
@@ -429,8 +586,21 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       },
       {
         title: 'Tokens',
-        detail: 'Creature tokens with their own printed stats, subtypes and keywords.',
-        witness: { kind: 'primitive', id: 'createToken' },
+        detail:
+          "A token enters with the WHOLE face it is printed with, not just its size: its colour (“a 1/1 black Faerie Rogue creature token”, and the two-colour “blue and black” form), its creature types, its card types (“artifact creature token”), the printed word “colorless”, and its keywords. That is what makes a black token feel a black anthem, a red token unable to block protection from red, and a Goblin token pumped by a Goblin lord. A descriptor the compiler cannot read completely refuses the whole line rather than creating a token missing a characteristic.",
+        witness: { kind: 'rule', id: 'create-creature-token' },
+      },
+      {
+        title: 'Token-ness itself',
+        detail:
+          "A token is a TOKEN, and two rules key on it. The printed words “token” and “nontoken” narrow a trigger (“whenever another nontoken creature dies”), and CR 704.5d removes a token that has left the battlefield from the game — after its “dies” trigger has fired, so nothing is lost, but before it can sit in a graveyard forever inflating every graveyard count.",
+        witness: { kind: 'oracle', text: 'Whenever another nontoken creature dies, draw a card.', as: 'creature' },
+      },
+      {
+        title: 'Typal (“tribal”) lords',
+        detail:
+          "“Other Goblin creatures you control get +1/+1 and have haste” and the bare “Goblins you control have haste”, over a closed vocabulary of creature types. The bare form deliberately carries no card type, because a Kindred Enchantment — Bitterblossom — genuinely IS a Faerie without being a creature.",
+        witness: { kind: 'oracle', text: 'Other Goblin creatures you control get +1/+1 and have haste.', as: 'creature' },
       },
       {
         title: 'Card flow',
@@ -453,8 +623,26 @@ export const SUPPORTED_MECHANIC_GROUPS: readonly SupportedMechanicGroup[] = [
       {
         title: 'Ramp & sacrifice-fetch',
         detail:
-          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder).',
+          '"Search your library for a basic land card, put it onto the battlefield tapped, then shuffle" — as a spell (Rampant Growth) or funded by a sacrifice-self activated ability (Sakura-Tribe Elder, Burnished Hart, the Landscape cycle).',
         witness: { kind: 'rule', id: 'search-basic-land-to-battlefield' },
+      },
+      {
+        title: 'Tutors',
+        detail:
+          'Search your library for a card and take it to your hand, onto the battlefield (tapped or not) or into your graveyard — unrestricted (Diabolic Tutor) or narrowed by card type, a type union ("an instant or sorcery card"), colour ("a blue instant card"), mana value, power or toughness. The restriction is never dropped: a printed word the filter cannot express keeps the card reported rather than compiling a tutor that fetches more than it should — or one that could never find anything at all.',
+        witness: { kind: 'rule', id: 'search-any-card' },
+      },
+      {
+        title: 'Multi-destination searches',
+        detail:
+          'Cultivate and Kodama’s Reach: "search your library for up to two basic land cards, put one onto the battlefield tapped and the other into your hand". You choose which land goes where — the order you pick them IS the routing — and a library holding only one basic still works, because "up to two" is a maximum.',
+        witness: { kind: 'rule', id: 'search-two-basics-split-destination' },
+      },
+      {
+        title: 'Additional costs to cast',
+        detail:
+          '"As an additional cost to cast this spell, sacrifice a creature" (Village Rites) or "…discard a card" (Thrill of Possibility). It is a real cost, not a rider: you choose which permanent or card pays, the sacrifice/discard happens as the spell is cast, and a spell whose cost you cannot pay is not offered and cannot be cast at all — never a free spell.',
+        witness: { kind: 'rule', id: 'additional-cast-cost' },
       },
       {
         title: 'Mill',
@@ -569,12 +757,18 @@ export function mechanicsSummary(): MechanicsSummary {
  * a deleted seam becomes a compile error here, not a silently-passing witness.
  */
 const CORE_ENGINE_API = {
-  /** A card declares a second, CASTABLE face (a modal DFC). */
+  /** A card declares a second, CASTABLE face (a modal DFC, a split half). */
   hasCastableBackFace,
   /** Which face a cast/play action names. */
   playableFaceOf,
   /** A card's printed modal header + modes. */
   modalSpecOf,
+  /** The definition is a SPLIT card's combined object, not a castable spell. */
+  isSplitCard,
+  /** Which zones a castable back half may be cast FROM (aftermath, a Siege). */
+  backFaceCastZonesOf,
+  /** Permission to cast a card out of exile (an adventure, a defeated Siege). */
+  castPermissionFor,
 } as const;
 
 /** A minimal real-shaped card wrapped around a witness's Oracle text. */

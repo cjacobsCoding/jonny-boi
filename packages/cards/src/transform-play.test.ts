@@ -22,11 +22,18 @@ import { describe, expect, it } from 'vitest';
 import type {
   CardDefinition,
   CardInstance,
+  GameAction,
   GameEvent,
   GameState,
   PlayerId,
 } from '@jonny-boi/core';
-import { applyAction, createGame, DEFAULT_RULES, generateLegalActions } from '@jonny-boi/core';
+import {
+  applyAction,
+  createGame,
+  DEFAULT_RULES,
+  defaultAnswerFor,
+  generateLegalActions,
+} from '@jonny-boi/core';
 import { CARD_POOL } from '../data/pool.js';
 import { buildRegistry } from './pool.js';
 import { compileCard } from './compile/index.js';
@@ -135,7 +142,7 @@ describe('the compiler plays both faces or reports the card', () => {
     expect(result.definition.backFace!.cost).toBeUndefined();
   });
 
-  it('a SPLIT card still reports — two castable halves are not two faces', () => {
+  it('a SPLIT card with no per-face data still reports — there is nothing to compile', () => {
     const split: CompilableCard = {
       id: 'split-test',
       name: 'Fire // Ice',
@@ -146,6 +153,10 @@ describe('the compiler plays both faces or reports the card', () => {
       toughness: null,
       keywords: [],
     };
+    // Split cards SHIP (see `compile/split-cards.test.ts`) — but only from a
+    // record that carries `layout: 'split'` and its two faces. This one carries
+    // the combined name and nothing else, so both halves would have to be
+    // guessed, and the compiler reports rather than guessing.
     const result = compileCard(split);
     expect(result.status).toBe('incomplete');
     expect(result.missing.map((gap) => gap.missingEngineSystem)).toContain(SECOND_CASTABLE_FACE_GAP);
@@ -254,9 +265,24 @@ function playThroughUpkeep(
   // Pass until the reveal question is parked (it is asked when the upkeep
   // trigger RESOLVES, at A's next upkeep). The cap is generous but hard: a
   // wedged game fails the test rather than hanging the suite.
+  //
+  // The cleanup step's discard down to maximum hand size (CR 514.1) parks its own
+  // question on the way, and it is answered and stepped past here rather than
+  // mistaken for the reveal — this test is about the Delver's question, not about
+  // whichever question happens to be first.
   let guard = 0;
-  while (!state.pendingChoice && guard++ < 400) {
-    drive({ kind: 'passPriority', player: state.priorityPlayer });
+  while (!isDelverReveal(state) && guard++ < 400) {
+    const parked = state.pendingChoice;
+    drive(
+      parked
+        ? {
+            kind: 'answerChoice',
+            player: parked.chooser,
+            choiceId: parked.id,
+            answer: defaultAnswerFor(parked),
+          }
+        : { kind: 'passPriority', player: state.priorityPlayer },
+    );
   }
   expect(state.pendingChoice, 'the reveal question was never asked').toBeTruthy();
   const choice = state.pendingChoice!;
@@ -277,6 +303,16 @@ function playThroughUpkeep(
     });
   }
   return { state, events, delverId: delver.instanceId };
+}
+
+/**
+ * Whether the parked question is DELVER'S reveal, as opposed to some other rule's
+ * (the cleanup step's discard down to maximum hand size asks one too). Keyed on
+ * the source name, which is the card that asked.
+ */
+function isDelverReveal(state: GameState): boolean {
+  const parked = state.pendingChoice;
+  return parked !== null && parked !== undefined && parked.sourceName === DELVER.name;
 }
 
 describe('Delver of Secrets plays exactly as printed', () => {
@@ -395,11 +431,21 @@ describe('Delver of Secrets plays exactly as printed', () => {
     // cards the run will draw and none for the reveal to look at.
     setLibrary(state, 'A', []);
     let guard = 0;
-    while (!state.gameOver && guard++ < 60 && !state.pendingChoice) {
-      state = applyAction(state, { kind: 'passPriority', player: state.priorityPlayer }, DEFAULT_RULES, registry).state;
+    while (!state.gameOver && guard++ < 60 && !isDelverReveal(state)) {
+      const parked = state.pendingChoice;
+      const action: GameAction = parked
+        ? {
+            kind: 'answerChoice',
+            player: parked.chooser,
+            choiceId: parked.id,
+            answer: defaultAnswerFor(parked),
+          }
+        : { kind: 'passPriority', player: state.priorityPlayer };
+      state = applyAction(state, action, DEFAULT_RULES, registry).state;
     }
     // The game ended by decking (empty library) or ran on — either way, the
-    // trigger never parked an unanswerable question.
-    expect(state.pendingChoice ?? null).toBeNull();
+    // trigger never parked an unanswerable question. Other rules' questions (the
+    // cleanup discard) are answered by the loop above and are not what is asserted.
+    expect(isDelverReveal(state)).toBe(false);
   });
 });

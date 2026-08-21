@@ -127,6 +127,51 @@ export function moveToZone(
     if (arr) arr.push(inst);
   }
   emit({ type: 'zoneChange', instanceId: inst.instanceId, from, to: destination });
+  ceaseToExistIfToken(state, inst, emit);
+}
+
+/**
+ * CR 704.5d — a TOKEN that has left the battlefield **ceases to exist**. Returns
+ * whether the object was removed from the game.
+ *
+ * Call it immediately AFTER emitting the `zoneChange` that moved the object, and
+ * that order is the whole contract: every "dies" / "leaves the battlefield"
+ * trigger in this engine is matched against that event, so a token's death fires
+ * exactly what a card's death fires. Only then does the object stop existing.
+ *
+ * Done at the MOVE rather than as a pass inside `checkStateBasedActions`, which
+ * is where the rule formally lives: the SBA form would have to walk both
+ * players' graveyards, exiles, hands and libraries on every SBA check — after
+ * every resolution, every draw and every combat-damage step — hunting for
+ * something that is nearly never there. Here it is ONE property read on a path
+ * that already knows exactly which object moved. The only observable difference
+ * would be a reader looking into a graveyard between the move and the next SBA
+ * pass, and nothing in this engine reads a graveyard in that window.
+ *
+ * Shared by BOTH leave-the-battlefield funnels — core's {@link moveToZone} and
+ * the cards package's `movePermanentTo` — for the reason those two funnels exist
+ * at all: a rule implemented in one of them and not the other is a rule that
+ * depends on which primitive killed the creature.
+ *
+ * Without it a dead token sat in its owner's graveyard for the rest of the game,
+ * inflating every graveyard count the engine derives (a Tarmogoyf's card-type
+ * box, "for each creature card in your graveyard") and standing there as a legal
+ * target for anything that returns a creature CARD.
+ */
+export function ceaseToExistIfToken(
+  state: GameState,
+  inst: CardInstance,
+  emit: (e: GameEvent) => void,
+): boolean {
+  if (inst.zone === 'battlefield' || inst.def.isToken !== true) return false;
+  removeFromCurrentZone(state, inst);
+  emit({
+    type: 'tokenCeasedToExist',
+    instanceId: inst.instanceId,
+    name: inst.def.name,
+    zone: inst.zone,
+  });
+  return true;
 }
 
 /**
@@ -158,6 +203,11 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   // recast creature is kicked (or not) by its own new cast, never by its last
   // one. Same shape-guard as `attachedTo`.
   if (inst.timesKicked !== undefined) delete inst.timesKicked;
+  // The value named AS this permanent entered (CR 614.1c) is a fact about THAT
+  // entry, and CR 400.7 makes the card a new object the moment it leaves — so a
+  // bounced-and-recast Adaptive Automaton names a type again rather than still
+  // lording over the one it named last time. Same shape-guard as `attachedTo`.
+  if (inst.chosenAsEntered !== undefined) delete inst.chosenAsEntered;
   // CR 712.8a: a double-faced card is front-face-up everywhere except the
   // battlefield, so a TRANSFORMED permanent that leaves (dies, bounces, exiles)
   // reverts to its printed front face here — the same single chokepoint that
@@ -166,5 +216,14 @@ export function resetInstanceForNewZone(inst: CardInstance): void {
   if (inst.printedDef != null) {
     inst.def = inst.printedDef;
     inst.printedDef = null;
+  }
+  // CR 707 + CR 400.7: a copy effect applies to the PERMANENT, and a permanent
+  // that changes zones is a new object — so a Clone that dies, bounces or is
+  // exiled stops being what it copied. Restored AFTER the face revert above and
+  // not instead of it: the two answer different questions ("which face" vs
+  // "which card"), and a copy of a DFC that had transformed carries both.
+  if (inst.uncopiedDef != null) {
+    inst.def = inst.uncopiedDef;
+    inst.uncopiedDef = null;
   }
 }

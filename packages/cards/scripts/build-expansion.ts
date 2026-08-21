@@ -32,6 +32,7 @@ import type { CardDefinition } from '@jonny-boi/core';
 import { createFetchHttpClient, ScryfallClient } from '../../data-tools/src/client.js';
 import { normalizeCard } from '../../data-tools/src/normalize.js';
 import type { NormalizedCard } from '../../data-tools/src/types.js';
+import { frontFaceName } from '../../data-tools/src/verify.js';
 // Only the HAND-AUTHORED half is read here, never `CARD_POOL`. The full pool
 // already contains this script's own previous output, so de-duplicating against
 // it would make the generator skip every card it produced last time and emit an
@@ -84,7 +85,11 @@ async function fetchCandidates(): Promise<void> {
   const names = await candidateNames();
   console.info(`[expansion] resolving ${names.length} candidate names via Scryfall…`);
   const client = new ScryfallClient(createFetchHttpClient());
-  const { cards, unresolved } = await client.fetchCardsByNames(names);
+  // A candidate is listed under the card's REAL name ("Fire // Ice"), which the
+  // collection endpoint reports as not_found — it resolves a two-faced card only
+  // by a FACE name. Asking for the front half returns the whole combined record,
+  // which is the object the compiler wants.
+  const { cards, unresolved } = await client.fetchCardsByNames(names.map(frontFaceName));
   const normalized = cards.map(normalizeCard).sort((a, b) => a.name.localeCompare(b.name));
   await writeJson(SCRATCH_INDEX_PATH, { cards: normalized, unresolved });
   console.info(
@@ -247,10 +252,14 @@ async function buildExpansion(): Promise<void> {
   // The committed Scryfall index should carry exactly the cards that are in the
   // pool — no more (the browser would offer unplayable cards) and no fewer (the
   // UI would have no art for a card you can deck).
+  // The list is a list of things to ASK SCRYFALL FOR, so it carries front-face
+  // names: the pipeline feeds it straight back to the collection endpoint, which
+  // does not resolve a combined "A // B" name. `invariants.test.ts` matches a
+  // starter name against either half, so the index still stores the real name.
   const starter = await readJson<{ description: string; names: string[] }>(STARTER_LIST_PATH);
   const poolNames = [
-    ...CURATED_CARD_POOL.map((card) => card.name),
-    ...accepted.map((entry) => entry.card.name),
+    ...CURATED_CARD_POOL.map((card) => frontFaceName(card.name)),
+    ...accepted.map((entry) => frontFaceName(entry.card.name)),
   ];
   await writeJson(STARTER_LIST_PATH, {
     ...starter,

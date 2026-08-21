@@ -6,6 +6,7 @@ import {
   generateLegalActions,
   DEFAULT_RULES,
   serializeState,
+  defaultAnswerFor,
   type GameAction,
   type GameState,
   type PlayerId,
@@ -29,11 +30,30 @@ function act(state: GameState, action: GameAction, registry = createEffectRegist
   return r.state;
 }
 
-/** Pass priority for whoever currently holds it. */
+/**
+ * Pass priority — or, when a turn-based action has parked a question (the cleanup
+ * step's discard down to maximum hand size, CR 514.1), ANSWER it. A seat with a
+ * question outstanding may do nothing else, so a helper that only ever passes
+ * would wedge the moment any rule stops to ask something.
+ */
 function pass(state: GameState): GameState {
+  const question = state.pendingChoice;
+  if (question) {
+    return act(state, {
+      kind: 'answerChoice',
+      player: question.chooser,
+      choiceId: question.id,
+      answer: defaultAnswerFor(question),
+    });
+  }
   return act(state, { kind: 'passPriority', player: state.priorityPlayer });
 }
 
+/**
+ * Turn-runner: pass until the target step, ANSWERING anything the game asks on
+ * the way — CR 514.1's cleanup discard is a real question a turn now ends with.
+ * `pass` above already answers.
+ */
 function advanceToStep(state: GameState, target: string, maxPasses = 300): GameState {
   let s = state;
   let guard = 0;

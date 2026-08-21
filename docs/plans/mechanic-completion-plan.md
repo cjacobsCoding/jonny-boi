@@ -142,6 +142,17 @@ metric**; `blocks` tells you how much of the format touches the mechanic.
 \* Rows 9 and 16 are the keyword-sweep bug from §2, not real systems. The audit reports
 them as systems because the sweep names them that way.
 
+> **✅ ROW 6 CLOSED on `feat/as-enters-choices` (2026-08-20)** — `As ~ enters, choose a…`
+> is a real system now, not a template: a `chooseValue` choice kind, the answer
+> REMEMBERED on the permanent (`CardInstance.chosenAsEntered`), and four readers that
+> consume it (an anthem, the permanent's own type line, a mana ability and a cast
+> trigger). Its `sole` of 0 was honest — every one of those 27 cards prints a second
+> line that reads the value back, which is why the readers had to ship with the naming.
+> **Re-measured offline against the cached corpus: 408 → 414 playable.** What still
+> blocks the rest is listed in DESIGN §3.23 by clause, and those lines now report as
+> `a "the chosen …" READER the compiler does not recognize yet` rather than as a
+> you-may template — the value IS stored; what is missing is the sentence that reads it.
+
 Two rows deserve calling out. **Row 12** — `{T}: Add {U} or {R}` — is one rule-table
 entry that alone unblocks **20 cards** (the dual-mana lands), the best
 cards-per-hour ratio in the whole census. **Row 3**, the `//` type, has a `sole` of 0:
@@ -285,6 +296,18 @@ formulaic, repeat across cycles, and every deck plays 24 of them.
 > than the source, so `ManaPool` would have to carry it and every payment path honour it. Two
 > smaller residuals also still report by name: a cost that taps another permanent (Springleaf Drum)
 > and a colour derived from a commander's identity (refused for good, §5).
+>
+> **✅ SHIPPED on `feat/mana-spend-restrictions` (2026-08-20): the fifth one too.** The POOL now
+> carries the restriction (`ManaAbility.spendRestriction` → `ManaPool.restricted`), and `canPay`,
+> `payCost`, the payment planner, the event log, the debug snapshot, the masked protocol view and
+> the AI all honour it. **Re-measured on this same cached corpus against the matched `origin/main`
+> (068be3d): 485 → 491 playable, +6, 0 regressions**, and the 15-card gap is gone. Six cards became
+> playable — including Unclaimed Territory and Secluded Courtyard, whose "of the chosen type" clause
+> reads the creature type `feat/as-enters-choices` already stores on the permanent — and the rest now
+> report what they ACTUALLY need ("that spell can't be countered"; a production wording). The commander residual stands refused per §5, and the six
+> cards that used to share its gap name were split out: they need a tapped-for-mana TRIGGER
+> (Mirari's Wake, Zendikar Resurgent, Vorinclex, Kinnan, Extraplanar Lens, Incubation Druid), which
+> is ordinary engine work and was invisible while it shared a name with a format decision.
 >
 > The same caution applies to §4's wave 1 ("Land templates: mana-ability (24) +
 > enters-tapped (8) families, ≈305 playable"). The enters-tapped half is real template

@@ -61,8 +61,9 @@
  */
 
 import type { CardInstance, GameState, InstanceId, PlayerId } from '../state.js';
-import type { KeywordFlags } from '../card.js';
+import type { BooleanKeywordName, KeywordFlags } from '../card.js';
 import { unionProtection } from '../card.js';
+import { intersectBlockRestrictions } from './stats.js';
 import type { GameEvent } from '../events.js';
 import { modificationIsInert, staticAppliesTo, staticIsInert, staticsOf } from '../statics.js';
 import { characteristicValue } from '../derived.js';
@@ -172,17 +173,21 @@ const KEYWORD_KEYS = [
   'unblockable',
   'cantBlock',
   'indestructible',
+  'mustBeBlocked',
+  'blockedByAllAble',
 ] as const;
 
 /**
- * The boolean-valued keys of `KeywordFlags`. The three payload keywords
- * (`protectionFrom`, `ward`, `minBlockers`) are excluded BY TYPE rather than by
- * memory: they are folded by their own merge rules in {@link grantInto}, since
- * "set it to true" is not what granting one of them means.
+ * The boolean-valued keys of `KeywordFlags`. The FOUR payload keywords
+ * (`protectionFrom`, `ward`, `minBlockers`, `blockRestriction`) are excluded BY
+ * TYPE rather than by memory: they are folded by their own merge rules in
+ * {@link grantInto}, since "set it to true" is not what granting one of them
+ * means.
+ *
+ * Imported from `card.ts` rather than restated here, so the interface and this
+ * proof cannot be edited apart.
  */
-type BooleanKeywordKey = {
-  [K in keyof KeywordFlags]-?: boolean extends NonNullable<KeywordFlags[K]> ? K : never;
-}[keyof KeywordFlags];
+type BooleanKeywordKey = BooleanKeywordName;
 
 /**
  * COMPILE-TIME PROOF that {@link KEYWORD_KEYS} is exactly the boolean keyword
@@ -252,6 +257,17 @@ function grantInto(agg: MutableMod, grant: KeywordFlags | undefined): void {
       agg.keywords.minBlockers ?? 0,
       grant.minBlockers,
     );
+  }
+  // The fourth payload: a comparing block restriction. Merged field by field to
+  // the STRICTEST of each, through the same function `mergeKeywordGrant` uses, so
+  // a granted "except by creatures with haste" and a printed "power 2 or less"
+  // are both in force rather than one replacing the other.
+  if (grant.blockRestriction !== undefined) {
+    if (agg.keywords === NO_KEYWORDS) agg.keywords = {};
+    const merged = intersectBlockRestrictions(agg.keywords.blockRestriction, grant.blockRestriction);
+    if (merged !== undefined) {
+      (agg.keywords as { blockRestriction?: KeywordFlags['blockRestriction'] }).blockRestriction = merged;
+    }
   }
 }
 
@@ -421,6 +437,42 @@ export function indexContinuous(state: GameState): ContinuousIndex {
     grantInto(agg, eff.keywords);
   }
   return map;
+}
+
+/**
+ * Whether ANY continuous modification could be in force on this board right now
+ * — the cheap gate a caller uses before deciding whether it has to build the
+ * index at all.
+ *
+ * ⚠️ **`state.continuous.length === 0` is NOT that gate, and using it as one is a
+ * shipped-bug shape.** That list holds only layer-4 "until end of turn" effects.
+ * Layer 3 — an Aura or Equipment's grant to its host, an anthem-style static, an
+ * emblem radiating from the command zone — is DERIVED from the battlefield and the
+ * command zones on every read and puts nothing in that list at all (see the
+ * `statics.ts` "lifetime is derived" note). So a fast path keyed on it silently
+ * answers "printed keywords only" on exactly the boards where an equipped,
+ * enchanted or anthem'd creature is standing there wearing a granted keyword. That
+ * is how a real pool card (Mask of Avacyn — "equipped creature … has hexproof")
+ * stayed targetable by an opponent's burn.
+ *
+ * Cost: short-circuits on the first modifying source, and on a board with none it
+ * is one or two property reads per permanent with NO allocation — the same shape,
+ * and the same reason, as `internal/sba.ts`'s `collectAttachments`.
+ */
+export function anyContinuousModification(state: GameState): boolean {
+  if (state.continuous.length > 0) return true;
+  if (state.players.A.command.length > 0 || state.players.B.command.length > 0) return true;
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    const declared = perm.def.statics;
+    if (declared !== undefined && declared.length > 0) return true;
+    // `!= null` for the same reason `indexContinuous` uses it: an instance built
+    // before this field existed must read as unattached, not as an attachment
+    // with an undefined host.
+    if (perm.attachedTo != null) return true;
+  }
+  return false;
 }
 
 /**

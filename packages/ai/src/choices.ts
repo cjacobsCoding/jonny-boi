@@ -37,14 +37,25 @@
  * kept), or about what the opponent is representing; both need the search
  * pilots' machinery, not a per-card ruler.
  *
+ * NAMING A VALUE ("As ~ enters, choose a creature type") is the fourth kind
+ * valence cannot answer, and the one where a careless answer is most expensive:
+ * the question is never "how many" or "yes or no" but WHICH, and a wrong which
+ * turns a lord into a vanilla body — which would make every card in that family
+ * read as "no measurable difference" in an A/B verdict. The policy is written
+ * out in full on `answerChooseValue`, and it reads only the CHOOSER'S OWN cards,
+ * which is information the seat genuinely has.
+ *
  * Determinism: no `Math.random`, no wall clock. Every comparison falls back to
  * `instanceId` / option index, so equal-scoring options break ties in a fixed
  * order and the same seed reproduces the same answers.
  */
 
 import type {
+  CardInstance,
   ChoiceAnswer,
+  ChoiceValueOption,
   ChooseModesChoice,
+  ChooseValueChoice,
   EffectRef,
   InstanceId,
   StackObject,
@@ -59,8 +70,18 @@ import type {
   PlayerId,
   SelectCardsChoice,
   SelectPlayersChoice,
+  CardDefinition,
 } from '@jonny-boi/core';
-import { defaultAnswerFor, modeById, nextUnaimedPick, opponentOf } from '@jonny-boi/core';
+import {
+  CHOOSABLE_COLORS,
+  convertedManaCost,
+  copyResultDef,
+  defaultAnswerFor,
+  isLand,
+  modeById,
+  nextUnaimedPick,
+  opponentOf,
+} from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
 import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
@@ -119,6 +140,8 @@ export function answerChoiceHeuristically(
       return answerAction(choice, answerPayLife(state, choice, weights));
     case 'chooseNumber':
       return answerAction(choice, answerChooseNumber(choice));
+    case 'chooseValue':
+      return answerAction(choice, answerChooseValue(state, choice));
     case 'selectTargets':
       return answerAction(choice, answerSelectTargets(state, choice, weights));
     default:
@@ -139,16 +162,179 @@ function selectionSize(choice: { min: number; max: number; valence: PendingChoic
   return choice.valence === 'gain' ? choice.max : choice.min;
 }
 
+/**
+ * The permanent-to-be that a copy question was raised for.
+ *
+ * `findInstance` deliberately does not search the STACK, and a copying SPELL is
+ * exactly there: its question is asked before a single effect runs, so a
+ * creature/artifact/enchantment is still a spell on the stack. (A copying LAND
+ * is already on the battlefield, which `findInstance` does reach — that is the
+ * entry model every land question uses.) Looking on the stack first is what
+ * makes the policy fire at all: without it every copy question on a spell falls
+ * through to "decline", which is a 0/0 in the graveyard and looks exactly like a
+ * pilot that chose badly.
+ */
+function copierFor(state: GameState, instanceId: InstanceId): CardInstance | undefined {
+  for (let i = state.stack.length - 1; i >= 0; i--) {
+    const object = state.stack[i] as StackObject | undefined;
+    if (object?.kind === 'spell' && object.instanceId === instanceId) return object.card;
+  }
+  return findInstance(state, instanceId);
+}
+
+/**
+ * **The copy-target ruler (CR 707.2).** What a permanent with these PRINTED
+ * characteristics is worth to be.
+ *
+ * Deliberately not `cardValue`, and the difference is the whole point of the
+ * policy: `cardValue` prices a card by what it is worth IN HAND (mana value as
+ * a proxy for power) and reads EFFECTIVE stats off the board. Neither answers
+ * "which permanent should I BE?".
+ *
+ *  - **Printed, never effective.** Counters (7d), anthems (7c) and until-EOT
+ *    pumps do not come along when you copy something — you get the printed
+ *    card. A pilot ranking by the board would copy the 1/1 wearing three +1/+1
+ *    counters instead of the printed 4/4 next to it, and end up with a 1/1.
+ *  - **What it DOES in play, not what it cost.** A copy of a Sol Ring is worth
+ *    more than a blank artifact even though it costs less, so mana value has no
+ *    place here; printed abilities and the bare fact of tapping for mana do.
+ *
+ * Pure and deterministic — no state, no clock, no RNG — so the same definition
+ * always scores the same and the policy can be tested directly.
+ */
+export function copyTargetValue(def: CardDefinition, weights: HeuristicWeights): number {
+  const stats = (def.power ?? 0) + (def.toughness ?? 0);
+  const abilities =
+    (def.effects?.length ?? 0) +
+    (def.triggers?.length ?? 0) +
+    (def.activated?.length ?? 0) +
+    (def.statics?.length ?? 0);
+  const keywords = def.keywords ? Object.values(def.keywords).filter(Boolean).length : 0;
+  const manaSource =
+    def.produces !== undefined || def.producesOptions !== undefined || def.manaAbilities !== undefined;
+  return (
+    Math.max(0, stats) * weights.copyTargetPerStatValue +
+    abilities * weights.copyTargetAbilityValue +
+    keywords * weights.copyTargetKeywordValue +
+    (manaSource ? weights.copyTargetManaSourceValue : 0)
+  );
+}
+
+/**
+ * Answer an AS-ENTERS COPY question (CR 707): "you may have ~ enter as a copy
+ * of …". Two decisions, and the generic valence path would get both wrong.
+ *
+ * 1. **WHICH to copy** — the best candidate by {@link copyTargetValue}, scored
+ *    on what the copy WOULD BE (`copyResultDef`, the very function the engine
+ *    applies, so the "except …" tail is priced too: Spark Double's extra
+ *    counter, Phyrexian Metamorph's added artifact type). Ties break on the
+ *    order the choice offered, which is battlefield order — stable and seedable.
+ * 2. **WHETHER to copy at all** — `min: 0` makes declining legal, and the bar is
+ *    this card's OWN printed body scored by the SAME ruler. That is what makes
+ *    the comparison meaningful: every card printing this clause is a body
+ *    designed to be replaced (a 0/0 Clone, a blank artifact, a land that taps
+ *    for nothing), so the bar is usually zero and the pilot copies. It is a
+ *    comparison rather than an unconditional "always copy" so a future card
+ *    with a real body of its own is judged rather than assumed.
+ *
+ * Copying the WORST creature on the board is the failure this exists to
+ * prevent: a card that is noise in every A/B verdict it appears in is worse
+ * than a card that is not implemented.
+ */
+function answerCopyAsEnters(state: GameState, choice: SelectCardsChoice, weights: HeuristicWeights): ChoiceAnswer {
+  const decline: ChoiceAnswer = { kind: 'selectCards', instanceIds: [] };
+  const self = copierFor(state, choice.sourceInstanceId);
+  if (!self) return decline;
+  // The copier's OWN printed card — `uncopiedDef` when it is somehow already a
+  // copy, so the spec is read off the card that prints the clause.
+  const own = self.uncopiedDef ?? self.def;
+  const spec = own.copyAsEnters;
+  if (spec === undefined) return decline;
+
+  let bestId: InstanceId | undefined;
+  let bestValue = copyTargetValue(own, weights);
+  for (const option of choice.candidates) {
+    const source = findInstance(state, option.instanceId);
+    if (!source) continue;
+    const value = copyTargetValue(copyResultDef(own, source, spec), weights);
+    if (value > bestValue) {
+      bestValue = value;
+      bestId = option.instanceId;
+    }
+  }
+  return bestId === undefined ? decline : { kind: 'selectCards', instanceIds: [bestId] };
+}
+
+/**
+ * THE TUTOR / COST POLICY, in one place, because a card selection is now asked by
+ * three quite different printed things and they must not each grow an opinion:
+ *
+ *  - **A LIBRARY SEARCH** (`fromZone: 'library'`, valence `'gain'`) — the pilot
+ *    may take any card in its own deck, so raw card value alone would fetch the
+ *    deck's biggest bomb on turn two and sit on it. Candidates out of casting
+ *    reach are discounted by {@link HeuristicWeights.tutorUncastablePenalty}
+ *    (see that weight for why a discount and not a ban), so the answer is "the
+ *    best card I can actually use soon", falling back to the best card outright
+ *    when nothing is reachable. A ROUTED search (Cultivate's "one onto the
+ *    battlefield and the other into your hand") is `ordered`, and this same
+ *    best-first order IS the routing: the better card takes the first printed
+ *    destination, which for every printed card of that shape is the battlefield.
+ *  - **A COST** — a mandatory additional cost's sacrifice/discard, and every
+ *    other `'loss'` selection: give up the WORST qualifying card. That is the
+ *    tail of the same one sorted list, so there is exactly one ranking in this
+ *    file and a card cannot be "best" for one question and "worst" for another.
+ *  - **THE CLEANUP DISCARD** (CR 514.1, `context: 'cleanupDiscard'`) is that same
+ *    COST policy, deliberately and with no branch of its own. "Discard down to
+ *    seven" asks the one question this file already answers — *which of these do
+ *    I least want to keep?* — and the discard is a `'loss'` selection of an exact
+ *    count, so the tail of the ranking IS the answer. Three properties of
+ *    `cardValue` are what make that a real policy rather than a shrug:
+ *      * a LAND is priced by the board, not in the abstract
+ *        (`choiceLandShortValue` while the pilot is still short of lands,
+ *        `choiceLandValue` once its mana is built), so an unbuilt pilot pitches a
+ *        spell and a flooded one pitches the land — which is the actual decision
+ *        a human makes at end of turn;
+ *      * a CREATURE is priced by its effective stats through the board's
+ *        continuous index, so the anthem that makes a 1/1 a real card is seen;
+ *      * a SPELL is priced by mana value, so the uncastable seven-drop goes
+ *        before the one-mana trick.
+ *    ⚠️ What it deliberately does NOT model is what a card is worth NEXT turn: a
+ *    reactive instant held for the opponent's turn prices the same as a sorcery,
+ *    and a second copy of a card prices the same as the first. Improving that is
+ *    a `cardValue` change (one ranking, every consumer), never a second opinion
+ *    written here.
+ *  - **A SCRY/SURVEIL look** — a per-card verdict, not a count; see below.
+ */
 function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights: HeuristicWeights): ChoiceAnswer {
+  // The as-enters COPY question is not a "how many of these do I want?" — it is
+  // "which permanent should I BE?", and the ruler is the copiable values, not
+  // the board's. See `answerCopyAsEnters`.
+  if (choice.context === 'copyAsEnters') return answerCopyAsEnters(state, choice, weights);
+
   // Score every candidate, then sort BEST FIRST. `ordered` choices use exactly this
   // order (first = the position that comes up soonest — top of library, drawn
   // first), so the good card is the one we see again first.
   const context = cardValueContext(state);
-  const scored = choice.candidates.map((option, index) => ({
-    instanceId: option.instanceId,
-    index,
-    value: cardValue(findInstance(state, option.instanceId), weights, context),
-  }));
+  // The reach test is computed once, and ONLY for a genuine library SEARCH — the
+  // one selection where every candidate is a card the pilot would have to cast
+  // later. The other two library questions are deliberately excluded, because
+  // their candidates are not being acquired at all:
+  //   - a SCRY/SURVEIL look (`keepOnTop`) decides where cards already on top go;
+  //   - a REORDER (Ponder's "put them back in any order") puts every card back,
+  //     which is why its floor equals its ceiling. A search's floor is ZERO —
+  //     a search may always fail to find — and that is what tells them apart.
+  const isLibrarySearch =
+    choice.fromZone === 'library' && choice.valence === 'gain' && choice.keepOnTop !== true && choice.min === 0;
+  const reach = isLibrarySearch ? castingReach(state, choice.chooser, weights) : undefined;
+  const scored = choice.candidates.map((option, index) => {
+    const card = findInstance(state, option.instanceId);
+    const base = cardValue(card, weights, context);
+    return {
+      instanceId: option.instanceId,
+      index,
+      value: reach !== undefined && !withinCastingReach(card, reach) ? base - weights.tutorUncastablePenalty : base,
+    };
+  });
   scored.sort((a, b) => b.value - a.value || a.index - b.index);
 
   // A SCRY/SURVEIL look is not a "how many" question — it is a per-card verdict,
@@ -163,6 +349,33 @@ function answerSelectCards(state: GameState, choice: SelectCardsChoice, weights:
   // still best-first within the picked set so an ordering lands the right way up.
   const picked = choice.valence === 'loss' ? scored.slice(scored.length - take) : scored.slice(0, take);
   return { kind: 'selectCards', instanceIds: picked.map((p) => p.instanceId) };
+}
+
+/**
+ * The mana value a pilot can plausibly pay this turn or next: the lands it
+ * controls plus {@link HeuristicWeights.tutorReachableManaLead}.
+ *
+ * Counted from LANDS rather than from the floating pool because a tutor resolves
+ * mid-turn, after the mana that paid for it is already spent — the pool is empty
+ * exactly when this question is asked, and reading it would call every card
+ * unreachable.
+ */
+function castingReach(state: GameState, who: PlayerId, weights: HeuristicWeights): number {
+  let lands = 0;
+  for (const perm of state.battlefield) {
+    if (perm.controller === who && isLand(perm.def)) lands += 1;
+  }
+  return lands + weights.tutorReachableManaLead;
+}
+
+/**
+ * Whether a searched card is one the pilot could cast within its reach. A LAND
+ * always is — playing it costs no mana — and so is a card with no printed cost.
+ */
+function withinCastingReach(card: CardInstance | undefined, reach: number): boolean {
+  if (!card) return true; // unknown: never penalised on a guess
+  if (isLand(card.def)) return true;
+  return (card.def.cost ? convertedManaCost(card.def.cost) : 0) <= reach;
 }
 
 // --- players / modes / yes-no ------------------------------------------------------
@@ -270,6 +483,137 @@ function castValueContext(state: GameState, player: PlayerId, weights: Heuristic
 }
 
 /**
+ * NAME A VALUE — "As ~ enters, choose a creature type / a color / a player"
+ * (core's `chooseValue`).
+ *
+ * ## Why this cannot be answered from valence
+ * Valence answers "is being selected good or bad?", and here the answer is
+ * always "good" — the question is WHICH, and a wrong which is a blank card. A
+ * Cavern of Souls that names Sliver in a Goblin deck taps for nothing; an
+ * Adaptive Automaton that names Angel is a vanilla 2/2. **A pilot that named
+ * values at random would make every card in this family noise in an A/B
+ * verdict** — the deck with the Automaton would win at exactly the rate the deck
+ * without it does, and the lab would report "no measurable difference" about a
+ * card that is in fact a lord.
+ *
+ * ## The policy, and why it is information the player really has
+ * Every branch reads the CHOOSER'S OWN CARDS — their battlefield, hand, library,
+ * graveyard and exile. A player knows their own decklist, so nothing here is
+ * information the seat does not have; the opponent's hidden zones are never
+ * touched. (The option list core offers is built the same way, for the same
+ * reason — see `as-enters.ts`.)
+ *
+ *   - **creature type / basic land type** → the type that appears on the most of
+ *     the chooser's own cards. That is the deck's tribe, which is exactly what a
+ *     human names.
+ *   - **color** → the colour the chooser's own cards need most, counted in
+ *     COLOURED PIPS rather than in cards, because a deck with one triple-black
+ *     spell wants black more than one with three single-blue cantrips wants blue.
+ *   - **card type** → the card type the chooser owns most of, over the menu the
+ *     card itself printed (Cloud Key).
+ *   - **player** → the OPPONENT. Every printed "as ~ enters, choose a player"
+ *     names a victim (Stuffy Doll aims its damage at the chosen player), so the
+ *     chooser is the wrong default and the opponent is the right one.
+ *
+ * Deterministic throughout: ties break on the option's index in the offered
+ * list, which core builds in a fixed order, so the same seed reproduces the same
+ * naming.
+ *
+ * What it deliberately does NOT do is read the card's own later text to work out
+ * what the value will be used for. That would be per-card knowledge, which this
+ * package does not have and does not want (DESIGN §1.2) — and for every card in
+ * the pool the two answers agree, because a lord's chosen type and a mana
+ * source's chosen colour are both "whatever my deck is made of".
+ */
+function answerChooseValue(state: GameState, choice: ChooseValueChoice): ChoiceAnswer {
+  const options = choice.options;
+  if (options.length === 0) return defaultAnswerFor(choice);
+  if (choice.subject === 'player') {
+    const opponent = opponentOf(choice.chooser);
+    const named = options.find((option) => option.value === opponent) ?? options[0];
+    return { kind: 'chooseValue', value: (named as ChoiceValueOption).value };
+  }
+  const score =
+    choice.subject === 'color'
+      ? colorPipDemand(state, choice.chooser)
+      : ownedPrintedWordCounts(state, choice.chooser, choice.subject);
+  let best = options[0] as ChoiceValueOption;
+  let bestScore = score.get(best.value.toLowerCase()) ?? 0;
+  for (let i = 1; i < options.length; i++) {
+    const option = options[i] as ChoiceValueOption;
+    const value = score.get(option.value.toLowerCase()) ?? 0;
+    // Strictly greater: ties keep the earlier option, which is what makes the
+    // answer a deterministic function of core's fixed option order.
+    if (value > bestScore) {
+      best = option;
+      bestScore = value;
+    }
+  }
+  return { kind: 'chooseValue', value: best.value };
+}
+
+/** Every card the chooser owns, in a fixed order (their zones plus the board). */
+function ownedCards(state: GameState, chooser: PlayerId): readonly CardInstance[] {
+  const player = state.players[chooser];
+  const out: CardInstance[] = [];
+  for (const permanent of state.battlefield) {
+    if (permanent.controller === chooser) out.push(permanent);
+  }
+  out.push(...player.hand, ...player.library, ...player.graveyard, ...player.exile);
+  return out;
+}
+
+/**
+ * How many of the chooser's own cards carry each printed SUBTYPE (for a creature
+ * or basic-land-type naming) or each printed CARD TYPE (for a card-type naming),
+ * keyed lowercase so the count and the option agree on spelling.
+ */
+function ownedPrintedWordCounts(
+  state: GameState,
+  chooser: PlayerId,
+  subject: ChooseValueChoice['subject'],
+): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  const bump = (word: string): void => {
+    const key = word.toLowerCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  };
+  for (const card of ownedCards(state, chooser)) {
+    if (subject === 'cardType') {
+      for (const type of card.def.types) bump(type);
+      continue;
+    }
+    // A creature-type naming counts CREATURE cards only: a Goblin-themed land's
+    // printed subtypes are land types, and counting them would let a deck's
+    // manabase outvote its actual tribe.
+    if (subject === 'creatureType' && !card.def.types.includes('creature')) continue;
+    for (const subtype of card.def.subtypes ?? []) bump(subtype);
+  }
+  return counts;
+}
+
+/**
+ * How badly the chooser's own cards want each colour, counted in COLOURED PIPS —
+ * `{B}{B}{B}` is three votes for black, `{1}{U}` one for blue.
+ *
+ * Pips rather than cards because that is what the mana source being named will
+ * actually have to pay for: a deck whose one bomb costs `{B}{B}{B}` needs black
+ * more than it needs the colour of three cheap cantrips.
+ */
+function colorPipDemand(state: GameState, chooser: PlayerId): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const card of ownedCards(state, chooser)) {
+    const cost = card.def.cost;
+    if (!cost) continue;
+    for (const color of CHOOSABLE_COLORS) {
+      const pips = cost[color] ?? 0;
+      if (pips > 0) counts.set(color.toLowerCase(), (counts.get(color.toLowerCase()) ?? 0) + pips);
+    }
+  }
+  return counts;
+}
+
+/**
  * Aim a triggered ability — "when ~ enters, it deals 2 damage to any target".
  *
  * Valence cannot answer this one, and neither can a rule of thumb about whose
@@ -290,12 +634,19 @@ function answerSelectTargets(
   choice: SelectTargetsChoice,
   weights: HeuristicWeights,
 ): ChoiceAnswer {
-  // TWO things park a `selectTargets` question, and they are aimed by different
-  // data. A spell being CAST is aiming one announced MODE (its effects are on
-  // the card, indexed by which pick is still unaimed); a trigger going on the
-  // stack is aiming its own ability. Checked in that order because a modal cast
-  // can be sitting on the stack while nothing is triggering, and the pilot must
-  // price the mode it is actually being asked about.
+  // THREE things park a `selectTargets` question, and they are aimed by
+  // different data. A spell being CAST is aiming one announced MODE (its effects
+  // are on the card, indexed by which pick is still unaimed); a trigger going on
+  // the stack is aiming its own ability; and a RESOLUTION may be asking "you may
+  // choose new targets for the copy" (CR 707.10), where what is being aimed is
+  // neither of those — it is a copy the engine is in the middle of creating.
+  //
+  // Checked in this order because a modal cast can be sitting on the stack while
+  // nothing is triggering, and the pilot must price the thing it is actually
+  // being asked about. Getting this wrong is not a subtle loss: with no effects
+  // to price, every candidate scores zero and the pilot degrades to the FIRST
+  // offered one — which for a copy of a Lightning Bolt is very often its own
+  // face.
   const casting = state.stack.find(
     (object): object is Extract<typeof object, { kind: 'spell' }> =>
       object.kind === 'spell' && object.awaitingCastChoice === 'modeTarget',
@@ -305,7 +656,7 @@ function answerSelectTargets(
     (object): object is Extract<typeof object, { kind: 'trigger' }> =>
       object.kind === 'trigger' && object.awaitingTargets !== undefined,
   );
-  const effects = castingEffects ?? aiming?.effects ?? [];
+  const effects = castingEffects ?? aiming?.effects ?? spellCopyBeingAimed(state) ?? [];
   const base = casting
     ? castValueContext(state, choice.chooser, weights)
     : resolutionValueContext(state, choice.chooser, weights, cardValueContext(state));
@@ -320,6 +671,39 @@ function answerSelectTargets(
   const worstFirst = choice.valence === 'loss';
   scored.sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value) || a.index - b.index);
   return { kind: 'selectTargets', targets: scored.slice(0, choice.max).map((s) => s.ref) };
+}
+
+/**
+ * The primitive that asks "you may choose new targets for the copy". Named once
+ * rather than written as a bare string, and read by exactly one function — the
+ * same discipline `EFFECT_VALUE`'s keys keep.
+ */
+const COPY_SPELL_PRIMITIVE = 'copySpell';
+
+/**
+ * The effects a COPY OF A SPELL is about to run — what "you may choose new
+ * targets for the copy" (CR 707.10) is really aiming.
+ *
+ * The copy itself is NOT on the stack yet: `copySpell` builds it as a local
+ * value and pushes only once every question has an answer, because a parked
+ * question re-runs the whole effect ref. So the pilot cannot find it there. What
+ * it CAN find is the object the copy is a copy OF, and that is still on the
+ * stack: the resolving spell's own target names it.
+ *
+ * Read entirely from public state — the suspended resolution frame, which is a
+ * field on `GameState` precisely because it must survive a clone and a replay.
+ * A frame running anything else returns `undefined`, so this cannot capture a
+ * question that belongs to somebody else.
+ */
+function spellCopyBeingAimed(state: GameState): readonly EffectRef[] | undefined {
+  const frame = state.resolution;
+  if (!frame) return undefined;
+  const running = frame.effects[frame.next];
+  if (running?.primitive !== COPY_SPELL_PRIMITIVE) return undefined;
+  const aimedAt = (frame.effectTargets?.[frame.next] ?? frame.targets)[0];
+  if (aimedAt === undefined || aimedAt === 'A' || aimedAt === 'B') return undefined;
+  const original = state.stack.find((object) => object.kind === 'spell' && object.instanceId === aimedAt);
+  return original?.kind === 'spell' ? original.card.def.effects : undefined;
 }
 
 /**

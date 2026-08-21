@@ -209,7 +209,12 @@ describe('Kitchen Finks — persist returns with a -1/-1 counter, then dies for 
     // and the ETB lifegain re-fired (gain 2 again).
     const returned = s.battlefield.find((c) => c.def.name === 'Kitchen Finks');
     expect(returned).toBeDefined();
-    expect(returned!.counters['+1/+1']).toBe(-1);
+    // A REAL -1/-1 counter (CR 702.79a). It used to be written as a negative
+    // '+1/+1' tally, which nets the same power and toughness but is invisible to
+    // 'does it have a -1/-1 counter on it?' — persist's own printed condition —
+    // and to the CR 704.5q annihilation.
+    expect(returned!.counters['-1/-1']).toBe(1);
+    expect(returned!.counters['+1/+1'] ?? 0).toBe(0);
     expect(effectivePower(returned!)).toBe(2);
     expect(effectiveToughness(returned!)).toBe(1);
     expect(s.players.A.life).toBe(lifeBefore + 2); // ETB lifegain fired on the return

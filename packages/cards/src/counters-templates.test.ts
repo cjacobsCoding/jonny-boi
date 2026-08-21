@@ -329,9 +329,12 @@ describe('the trigger templates the counters family needed', () => {
     );
     expect(combat.triggers?.[0]?.condition).toEqual({ on: 'beginCombat', who: 'you' });
 
-    // "At the beginning of EACH end step" stays reported on purpose: main's
-    // step rule refuses a `who` other than "you" because such a body usually
-    // says "that player", which no effect can be aimed at yet.
+    // "At the beginning of EACH end step" now COMPILES, with `who: 'any'`. The
+    // rule used to refuse every scope but "your", because such a body usually
+    // says "that player" and nothing could be aimed at them; the triggering
+    // player now rides the resolution, so the scope is expressible. This body
+    // ("put a counter on ~") names no player at all, which is the case that was
+    // always safe and was refused with the rest.
     const eachEndStep = compileCard(
       scryfall({
         name: 'Nightly Grower',
@@ -343,7 +346,8 @@ describe('the trigger templates the counters family needed', () => {
         oracleText: 'At the beginning of each end step, put a +1/+1 counter on Nightly Grower.',
       }),
     );
-    expect(eachEndStep.status).toBe('incomplete');
+    expect(eachEndStep.status, JSON.stringify(eachEndStep.missing)).toBe('complete');
+    expect(eachEndStep.definition.triggers?.[0]?.condition).toEqual({ on: 'endStep', who: 'any' });
   });
 
   it('compiles "whenever ~ deals combat damage to a player"', () => {
@@ -775,7 +779,13 @@ describe('another-permanent-enters triggers', () => {
     });
   });
 
-  it('REFUSES the "nontoken" variant — instances carry no token flag', () => {
+  it('reads the "nontoken" variant, which token-ness on the definition made expressible', () => {
+    // This refusal was correct when it was written: nothing in the engine knew
+    // what a token was, so compiling the word would have produced a trigger that
+    // fired on token arrivals too - a completely different card on a go-wide
+    // board. `CardDefinition.isToken` and `CardFilter.isToken` are what removed
+    // the refusal, so the test now asserts the shipped behaviour instead of
+    // standing as documentation of a gap that has closed.
     const result = compileCard(
       scryfall({
         name: 'Token Hater',
@@ -787,7 +797,13 @@ describe('another-permanent-enters triggers', () => {
         oracleText: 'Whenever another nontoken creature you control enters, put a +1/+1 counter on it.',
       }),
     );
-    expect(result.status).toBe('incomplete');
+    expect(result.status, JSON.stringify(result.missing)).toBe('complete');
+    expect(result.definition.triggers?.[0]?.condition).toMatchObject({
+      on: 'permanentEnters',
+      who: 'you',
+      permanentFilter: { anyOfTypes: ['creature'], isToken: false },
+      excludeSelf: true,
+    });
   });
 
   it('really counts the team when creatures enter in a played game', () => {

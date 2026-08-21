@@ -18,6 +18,7 @@ import { isBattle } from './card.js';
 import type { ManaPool } from './mana.js';
 import { emptyPool } from './mana.js';
 import type { ContinuousEffect } from './internal/continuous.js';
+import type { FloatingReplacement } from './internal/replacement.js';
 import type { CardGrant } from './card-grants.js';
 import type { PendingChoice, ResolutionFrame } from './choices.js';
 import type { TargetRestriction } from './targeting.js';
@@ -99,6 +100,32 @@ export interface CardInstance {
    * test `!= null`, and `cloneInstance` copies it conditionally.
    */
   printedDef?: CardDefinition | null;
+  /**
+   * While this permanent is a **COPY** of something else (CR 707 — layer 1, the
+   * bottom of the layer system), the definition it would be if the copy ended:
+   * its own printed card. `null`/absent means "this is really what it says it
+   * is", which is every instance in the game except a Clone that has made its
+   * as-enters choice.
+   *
+   * The copy itself lives in {@link CardInstance.def}, exactly as a transformed
+   * face does — which is what routes every characteristic read (P/T, types,
+   * keywords, triggers, mana production, art) through the copied card with no
+   * second code path, and what automatically leaves counters (7d), anthems (7c)
+   * and until-end-of-turn pumps applying ON TOP of it. See `copy.ts`.
+   *
+   * ⚠️ SEPARATE from {@link printedDef}, and not redundant with it: `printedDef`
+   * answers "which FACE is up", this answers "which CARD is this really". A copy
+   * of a transforming DFC that then transforms needs both answers at once, and
+   * one field can only give one of them. The leave-the-battlefield reset
+   * (`resetInstanceForNewZone`) restores this one first — a bounced Clone is a
+   * Clone in hand, never the Bear it was copying (CR 707.2 / CR 400.7).
+   *
+   * OPTIONAL and written only when a permanent actually becomes a copy, for the
+   * same object-shape/throughput reason as {@link CardInstance.attachedTo} —
+   * readers test `!= null`, and `cloneInstance` copies it conditionally. Anyone
+   * adding a field here must also edit `internal/clone.ts`.
+   */
+  uncopiedDef?: CardDefinition | null;
   /** Controller (who plays/controls it). For MVP, owner === controller. */
   controller: PlayerId;
   owner: PlayerId;
@@ -180,6 +207,39 @@ export interface CardInstance {
    * also edit `internal/clone.ts`.
    */
   timesKicked?: number;
+  /**
+   * The value NAMED AS THIS PERMANENT ENTERED — "As ~ enters, choose a creature
+   * type / a color / a player" (CR 614.1c). A colour letter, a printed subtype,
+   * a card-type word, or a `PlayerId`, depending on
+   * `CardDefinition.asEntersChoice.subject`.
+   *
+   * **This field is the whole system.** The prompt is the easy half; what makes
+   * Cavern of Souls a card rather than a question is that the answer PERSISTS on
+   * the permanent and is READ later — by a static ("creatures you control of the
+   * chosen type get +1/+1", `StaticAffects.ofChosenSubtype`), by a mana ability
+   * ("add one mana of the chosen color", the `chosen` mana mode), and by the
+   * card's own type line ("this creature is the chosen type in addition to its
+   * other types", `CardDefinition.isChosenSubtype`).
+   *
+   * **ABSENT — OR THE EMPTY STRING — MEANS NOTHING WAS CHOSEN, AND MATCHES
+   * NOTHING.** That is the one inert default (`NOTHING_CHOSEN` in `choices.ts`),
+   * and no reader may invent a value for it. The two spellings are the two ways
+   * of reaching it, and the difference is bookkeeping rather than meaning:
+   * ABSENT is a permanent that was never asked (reanimation, another card's "put
+   * it onto the battlefield", a token, a hand-built test instance), while the
+   * EMPTY STRING is one that was asked and declined — which the asking paths need
+   * to tell apart from "not asked yet", because the land-play path re-enters its
+   * question step after every answer and would otherwise ask again forever.
+   *
+   * Cleared when the permanent leaves the battlefield (`resetInstanceForNewZone`):
+   * a new entry is a new naming, so a bounced-and-recast Adaptive Automaton must
+   * not still be lording over the type it named last time.
+   *
+   * OPTIONAL and written only by the permanents that name something, for the same
+   * object-shape/throughput reason as {@link attachedTo}. Anyone adding a field
+   * here must also edit `internal/clone.ts`.
+   */
+  chosenAsEntered?: string;
 }
 
 /**
@@ -322,7 +382,23 @@ export interface SpellStackObject {
    * where the card goes is one answer, not a flag each exit interprets.
    */
   readonly boughtBack?: boolean;
-  readonly awaitingCastChoice?: 'modes' | 'x' | 'kicker' | 'multikicker' | 'modeTarget' | 'buyback';
+  /**
+   * Whether this spell's MANDATORY additional cost has been paid
+   * ({@link CardDefinition.additionalCost}). Absent for spells that print none.
+   *
+   * Recorded rather than inferred because the payment is a real sacrifice or
+   * discard performed once: without a marker the cast-question loop would ask
+   * again every time it re-ran, and the caster would pay twice.
+   */
+  readonly additionalCostPaid?: boolean;
+  readonly awaitingCastChoice?:
+    | 'modes'
+    | 'x'
+    | 'kicker'
+    | 'multikicker'
+    | 'modeTarget'
+    | 'buyback'
+    | 'additionalCost';
   /**
    * The zone this spell was CAST FROM. Optional, and absent means `'hand'` —
    * which keeps every state serialized before non-hand casting existed (and
@@ -335,6 +411,39 @@ export interface SpellStackObject {
    * reads it through {@link spellLeaveDestination}.
    */
   readonly castFrom?: 'hand' | 'graveyard' | 'exile';
+  /**
+   * Set once the as-enters COPY question (`CardDefinition.copyAsEnters`, CR 707)
+   * has been answered for this spell — including when it was answered "no".
+   *
+   * It has to live on the STACK OBJECT rather than on the instance because a
+   * DECLINE leaves no trace on the permanent: `uncopiedDef` stays absent, which
+   * is indistinguishable from "never asked". Without this marker the resolution
+   * re-entry after the answer would ask again, forever.
+   */
+  readonly copyAsEntersDecided?: boolean;
+  /**
+   * **CR 707.10 — this stack object is a COPY OF A SPELL, and it is not a card.**
+   *
+   * A copy is put onto the stack by an effect rather than cast, and the object
+   * it puts there has no card behind it: {@link CardInstance} is still the
+   * carrier (every characteristic read in the engine routes through a
+   * definition, so a second carrier shape would be a second code path), but the
+   * instance was MINTED by the copying effect and belongs to no zone.
+   *
+   * That is why the flag exists rather than another `resolvesTo` value: where a
+   * spell goes is asked through {@link spellLeaveDestination},
+   * and this is the ONE fact that outranks every answer it can give. A copy of a
+   * flashback cast is not exiled, a copy of a bought-back spell does not return
+   * to a hand, and a copy that is countered does not reach a graveyard — CR
+   * 704.5e: **a copy of a spell in any zone other than the stack ceases to
+   * exist.** Leaving it in any of those zones would put a phantom CARD where
+   * delirium, flashback, Tarmogoyf and every graveyard count would see it.
+   *
+   * `true` or absent, never `false`: absence is the answer for every spell ever
+   * cast, and a two-valued field would add a property to the object the clone
+   * allocates at every action boundary.
+   */
+  readonly isSpellCopy?: true;
 }
 
 /**
@@ -351,14 +460,34 @@ export type SpellLeaveReason = 'resolve' | 'counter';
  * exiled instead of going to the graveyard, and that applies even when it is
  * COUNTERED (CR 702.34a: "…if it would leave the stack, exile it instead") —
  * countering is precisely a way of leaving the stack.
+ *
+ * `'ceaseToExist'` is the fourth answer and it names an object that goes to NO
+ * ZONE AT ALL (CR 704.5e) — see {@link SpellStackObject.isSpellCopy}. Every
+ * caller must handle it explicitly, which is why it is in the return type rather
+ * than expressed by a caller-side `if`: the two exits from the stack live in two
+ * packages, and a rule enforced in one of them is a rule that depends on how the
+ * spell happened to leave.
  */
 export function spellLeaveDestination(
   spell: SpellStackObject,
   reason: SpellLeaveReason,
-): 'graveyard' | 'exile' | 'hand' {
-  // Flashback first: exiling a card cast from the graveyard applies however it
-  // leaves the stack, so it outranks everything else here.
+): 'graveyard' | 'exile' | 'hand' | 'ceaseToExist' {
+  // CR 704.5e OUTRANKS EVERY OTHER ANSWER, so it is asked first. A copy of a
+  // spell is not a card: there is no card to exile for flashback, none to hand
+  // back for buyback, and none to put in a graveyard when it is countered. Any
+  // of those would leave a phantom card in a zone the rest of the engine counts.
+  if (spell.isSpellCopy === true) return 'ceaseToExist';
+  // Flashback next: exiling a card cast from the graveyard applies however it
+  // leaves the stack, so it outranks everything else here. It is also what
+  // AFTERMATH (CR 702.127a) rides — its second half is cast only from the
+  // graveyard and is exiled after it resolves, which is the same sentence.
   if (spell.castFrom === 'graveyard') return 'exile';
+  // An ADVENTURE exiles its own card, but ONLY as it resolves (CR 715.3d): an
+  // adventure spell that is countered goes to the graveyard like anything else,
+  // and the creature half is then gone for good. Reading the face that is on
+  // the stack — a card is only ever an Adventure while its adventure half is
+  // being cast — is what keeps the creature half out of this branch.
+  if (reason === 'resolve' && spell.card.def.adventure === true) return 'exile';
   // Buyback returns the card to its owner's HAND — but only as it RESOLVES
   // (CR 702.27a). A bought-back spell that is countered goes to the graveyard
   // like any other countered spell; a caller that forgets the distinction
@@ -416,6 +545,20 @@ export interface TriggeredStackObject {
    * reason state-based actions are derived from the board rather than queued.
    */
   readonly awaitingTargets?: TargetRestriction;
+  /**
+   * The player the EVENT that set this ability off was about — the referent of
+   * a body's "that player" / "them". Rides the stack object so it survives into
+   * the resolution frame and then into `EffectContext`, exactly the way a cast's
+   * `xValue`/`kicked` do (see `PendingTrigger.triggeringPlayer` for why the
+   * source's controller is NOT the answer).
+   */
+  readonly triggeringPlayer?: PlayerId;
+  /**
+   * The trigger's printed intervening "if", carried so it can be re-checked as
+   * the ability RESOLVES (CR 603.4's second check). Absent for every trigger
+   * that prints no such clause, which is almost all of them.
+   */
+  readonly intervening?: import('./intervening.js').InterveningIf;
 }
 
 /** Anything that can sit on the stack. */
@@ -483,6 +626,20 @@ export interface GameState {
    * (`hasCardGrants`), so the hot paths stay exactly as fast as before.
    */
   cardGrants?: CardGrant[];
+  /**
+   * FLOATING replacement and prevention effects (CR 614/615) — a fog's "prevent
+   * all combat damage that would be dealt this turn", a "prevent the next N
+   * damage" shield. See `internal/replacement.ts`. The ones PRINTED on a
+   * permanent are derived from `battlefield` on every read and never stored, for
+   * the same reason an anthem is.
+   *
+   * OPTIONAL, like `cardGrants`, and for the same two reasons: every state
+   * serialized (or hand-built in a test) before this existed stays valid, and a
+   * game that never creates one never touches the field — `indexReplacements`
+   * starts with the same one-property empty check, so the damage and counter hot
+   * paths stay exactly as fast as they were.
+   */
+  replacements?: FloatingReplacement[];
   combat: CombatState | null;
   /** Set once the game is decided. */
   winner: PlayerId | null;

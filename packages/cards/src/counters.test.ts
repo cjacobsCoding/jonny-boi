@@ -14,6 +14,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  checkStateBasedActions,
   createGame,
   effectivePower,
   effectiveToughness,
@@ -106,16 +107,41 @@ describe('the two standard counter kinds are real, independent state', () => {
     expect(effectiveToughness(creature)).toBe(1);
   });
 
-  it('the two kinds ANNIHILATE in pairs (CR 704.5q)', () => {
+  it('the two kinds ANNIHILATE in pairs (CR 704.5q) — as a STATE-BASED ACTION', () => {
     const state = freshState();
     const creature = bear(state);
     applyPrimitive(state, creature, 'addCounters', { amount: 3, self: true });
     applyPrimitive(state, creature, 'addCounters', { amount: -2, self: true });
 
+    // Both kinds sit there until the game looks. CR 704.5q is a state-based
+    // action, not part of putting a counter on something — which is why the
+    // annihilation moved OUT of the counters primitive and into the SBA pass:
+    // there it reaches every route a counter can arrive by, not just this one.
+    expect(creature.counters[PLUS_ONE_COUNTER]).toBe(3);
+    expect(creature.counters[MINUS_ONE_COUNTER]).toBe(2);
+
+    checkStateBasedActions(state, () => {});
+
     // One +1/+1 survives; no -1/-1 remains sitting alongside it.
     expect(creature.counters[PLUS_ONE_COUNTER]).toBe(1);
     expect(creature.counters[MINUS_ONE_COUNTER]).toBe(0);
     expect(effectivePower(creature)).toBe(3);
+  });
+
+  it('annihilates counters that arrived by a route the primitive never touched', () => {
+    // The whole reason CR 704.5q belongs to the state-based actions. This
+    // permanent is handed both kinds directly — as persist, a token created
+    // with counters, or any future producer would — and the rule still applies.
+    const state = freshState();
+    const creature = bear(state);
+    creature.counters = { [PLUS_ONE_COUNTER]: 5, [MINUS_ONE_COUNTER]: 2 };
+
+    checkStateBasedActions(state, () => {});
+
+    expect(creature.counters[PLUS_ONE_COUNTER]).toBe(3);
+    expect(creature.counters[MINUS_ONE_COUNTER]).toBe(0);
+    // The arithmetic never moved — a 2/2 at +3 net before and after.
+    expect(effectivePower(creature)).toBe(5);
   });
 
   it('counters accumulate across several applications', () => {

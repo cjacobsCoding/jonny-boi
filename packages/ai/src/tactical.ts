@@ -68,9 +68,11 @@ import type {
 import {
   effectiveKeywords,
   effectivePower,
+  indexReplacements,
   isCreature,
   NO_MOD,
   opponentOf,
+  projectDamage,
   remainingToughness,
 } from '@jonny-boi/core';
 
@@ -385,7 +387,72 @@ function collectCombatants(
     if (canFace) evasiveBlockers++;
     blockers++;
   }
+  applyDamageReplacements(state, attacker, defender, attackers);
   return { attackers, blockers, evasiveBlockers };
+}
+
+/**
+ * Re-price every attacker's damage through core's REPLACEMENT layer (CR 614) —
+ * a damage doubler, a Torbran-style "+2", a fog, a Dolmen Gate.
+ *
+ * This is the whole difference between a pilot that OWNS a Gratuitous Violence
+ * and one that KNOWS it: `attackerPower` feeds `maxDamage`, the guaranteed
+ * damage after optimal blocks, the lethal flag and the clock, so a doubler that
+ * did not pass through here would be a permanent the pilot paid five mana for
+ * and then attacked as if it were not on the table. The engine will double the
+ * damage whatever the pilot believes; the belief is what decides whether it
+ * attacks at all.
+ *
+ * Projected, never applied: `projectDamage` runs the identical loop with the
+ * identical CR 616.1 ordering and writes NOTHING — a pilot that spent the
+ * prevention shield it was merely asking about would corrupt the state it is
+ * evaluating.
+ *
+ * COST on an ordinary board: `indexReplacements` is one property read per
+ * permanent (and returns the shared frozen empty index by reference), then a
+ * single `.length` check ends this function. Nothing is re-walked and nothing is
+ * allocated unless the board really carries a replacement effect.
+ */
+function applyDamageReplacements(
+  state: GameState,
+  attacker: PlayerId,
+  defender: PlayerId,
+  attackers: number,
+): void {
+  const replacements = indexReplacements(state);
+  if (replacements.length === 0) return;
+  for (let i = 0; i < attackers; i++) {
+    const id = attackerInstance[i] as InstanceId;
+    const perm = findOnBattlefield(state, id);
+    if (perm === undefined) continue;
+    // Priced against the DEFENDING PLAYER as the recipient, which is where an
+    // attacker's damage goes when it is not blocked — the number every field
+    // this array feeds is about. A blocker absorbs the same doubled hit for
+    // every replacement in this vocabulary that can reach a permanent, because
+    // each of them says "a permanent or player" or "an opponent or a permanent
+    // an opponent controls"; a future one that names only players would want its
+    // own figure, and this is the one place that would change.
+    attackerPower[i] = projectDamage(
+      state,
+      replacements,
+      perm,
+      attacker,
+      undefined,
+      defender,
+      attackerPower[i] as number,
+      true,
+    ).amount;
+  }
+}
+
+/** Find a battlefield permanent by id, without allocating a closure per call. */
+function findOnBattlefield(state: GameState, id: InstanceId): CardInstance | undefined {
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.instanceId === id) return perm;
+  }
+  return undefined;
 }
 
 /**

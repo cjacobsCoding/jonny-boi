@@ -52,8 +52,16 @@ import type {
   PlayerId,
 } from '@jonny-boi/core';
 import {
+  backFaceCastZonesOf,
+  castPermissionFor,
   castTiming,
   convertedManaCost,
+  forcedBlockAssignment,
+  hasCardGrants,
+  hasCastableBackFace,
+  indexReplacements,
+  playableFaceOf,
+  projectDamage,
   isCreature,
   isLand,
   flashbackCostOf,
@@ -62,6 +70,7 @@ import {
   isPlaneswalker,
   protectorOf,
   legalTargetsFor,
+  protectionBlocksSource,
   defenseOf,
   loyaltyOf,
   MANA_COLORS,
@@ -70,8 +79,10 @@ import {
   modalSpecOf,
   modeCountsFor,
   targetRestrictionOf,
+  unpayableAdditionalCostReason,
+  DEFAULT_TRIGGER_WATCHES,
 } from '@jonny-boi/core';
-import type { PermanentModification, TargetRestriction } from '@jonny-boi/core';
+import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
 import { boardIndex, keywordsOf, power, statTotal, toughness, toughnessLeft } from './board-stats.js';
@@ -113,12 +124,30 @@ const PRIMITIVE = Object.freeze({
    * "generic spell" and the pilot would never hold it up at all.
    */
   counterUnlessPaid: 'counterUnlessPaid',
+  /**
+   * COPY TARGET INSTANT OR SORCERY SPELL (CR 707.10). Played on the same clock
+   * as a counterspell and for the opposite reason: both are only castable with a
+   * spell on the stack, so both must be HELD UP rather than fired in a main
+   * phase. Missing from this list, a Reverberate classified as a "generic
+   * spell", and a generic spell is offered only with an EMPTY stack — so the
+   * pilot could never cast it at all, and the full-pool soak reported the whole
+   * mechanic INERT. That is what caught it.
+   */
+  copySpell: 'copySpell',
   /** A symmetric board sweeper (Wrath of God / Day of Judgment). */
   destroyAll: 'destroyAll',
   gainLife: 'gainLife',
   drawCards: 'drawCards',
   /** Library search. Recognised so a fetchland's ability can be identified. */
   searchLibrary: 'searchLibrary',
+  /**
+   * THE FOG — "prevent all combat damage that would be dealt this turn". Missing
+   * from this list it would classify as a "generic spell", and a generic spell is
+   * cast in a main phase for a flat score, which is the one moment a fog is worth
+   * exactly nothing. It has to be recognised to be held, and held to be worth
+   * anything at all.
+   */
+  preventDamage: 'preventDamage',
 });
 
 /** What we think a spell *does*, derived from its effect primitives. */
@@ -142,6 +171,13 @@ type SpellIntent =
   | { readonly kind: 'shrink'; readonly toughness: number }
   | { readonly kind: 'pump'; readonly power: number; readonly toughness: number }
   | { readonly kind: 'counter' }
+  /**
+   * "Copy target instant or sorcery spell" — a counterspell's timing with the
+   * opposite sign. It answers the TOP of the stack like a counter does, but it
+   * wants that spell to be GOOD (its own, usually) rather than an opposing
+   * threat, and it is worth exactly what the spell it copies is worth.
+   */
+  | { readonly kind: 'copySpell' }
   | { readonly kind: 'sweeper' }
   | { readonly kind: 'creature' }
   /**
@@ -167,6 +203,14 @@ type SpellIntent =
    * rather than a primitive id, so no rename can silently blank it.
    */
   | { readonly kind: 'modal' }
+  /**
+   * A FOG — a one-shot prevention effect (core's CR 615 layer). Its value is not
+   * a property of the card at all: it is exactly the damage it stops, which is
+   * zero in a main phase and the whole game in front of a lethal attack. So the
+   * intent carries only what the printed line RESTRICTS, and the scorer asks the
+   * board what that is worth right now.
+   */
+  | { readonly kind: 'fog'; readonly combatOnly: boolean; readonly protectsMeOnly: boolean }
   | { readonly kind: 'other' };
 
 /** Build the heuristic pilot with the given (tunable) weights. */
@@ -280,7 +324,14 @@ function decideMadness(ctx: DecisionContext, weights: HeuristicWeights): GameAct
   const exiled = window ? view.players[me].exile.find((c) => c.instanceId === window.instanceId) : undefined;
   const cost = exiled?.def.madness;
   if (cost) {
-    const plan = planManaPayment(view as GameState, me, cost, legalActions);
+    const plan = planManaPayment(
+      view as GameState,
+      me,
+      cost,
+      legalActions,
+      exiled!.def,
+      'cast',
+    );
     const next = plan?.[0];
     if (next) {
       const tap: GameAction = { kind: 'tapForMana', player: me, instanceId: next.instanceId, mode: next.mode };
@@ -306,11 +357,52 @@ interface SpellGoal {
   readonly targets: readonly (InstanceId | PlayerId)[];
   readonly reason: string;
   /**
-   * Set when this goal casts the card out of the GRAVEYARD (flashback) — the
-   * cast action must then carry `fromZone: 'graveyard'` and `cost` is the
-   * card's flashback cost, not its printed one.
+   * Set when this goal casts the card out of a zone other than the hand — the
+   * GRAVEYARD (flashback, or an aftermath half) or EXILE (an adventurer's
+   * creature half, a defeated Siege's reward). The cast action must then carry
+   * the same `fromZone`, and `cost` is whatever that path pays rather than the
+   * printed cost.
    */
-  readonly fromZone?: 'graveyard';
+  readonly fromZone?: 'graveyard' | 'exile';
+  /**
+   * Set when this goal casts the SECOND HALF of a two-halved card — a split
+   * card's right half, an aftermath half, an adventure. The cast action must
+   * name the face or the engine casts the other one.
+   */
+  readonly face?: 'back';
+}
+
+/**
+ * One castable HALF of a card in hand, as the scorer wants it: a card instance
+ * whose `def` IS the half, so every downstream reader — the scorer, the target
+ * legality check, the mana planner — sees the half's own cost, types, script
+ * and target restriction with no second code path.
+ *
+ * A card with no second half yields exactly itself and allocates nothing, which
+ * is every card in every deck the sim plays today; the synthetic instance is
+ * built only for the cards that actually print two halves.
+ */
+interface CastableHalf {
+  readonly card: CardInstance;
+  readonly face?: 'back';
+}
+
+/**
+ * The halves of a card in hand the pilot may consider casting.
+ *
+ * Reads exactly the accessors core's offer loop reads, so the pilot cannot come
+ * to a different conclusion about which halves exist than the engine will: a
+ * SPLIT card's own definition is not castable and its left half is what
+ * `playableFaceOf` hands back; an AFTERMATH right half is castable only from
+ * the graveyard and so is not offered here at all.
+ */
+function castableHalvesInHand(card: CardInstance): readonly CastableHalf[] {
+  const def = card.def;
+  const second = hasCastableBackFace(def) && backFaceCastZonesOf(def).includes('hand');
+  if (def.frontFace === undefined && !second) return [{ card }];
+  const halves: CastableHalf[] = [{ card: { ...card, def: playableFaceOf(def, 'front') as CardDefinition } }];
+  if (second) halves.push({ card: { ...card, def: def.backFace as CardDefinition }, face: 'back' });
+  return halves;
 }
 
 function choosePriorityAction(
@@ -527,8 +619,13 @@ function bestEquipPlay(
     const perm = battlefield[b] as CardInstance;
     const abilities = perm.def.activated;
     if (abilities === undefined || perm.controller !== me) continue;
-    const modifies = perm.def.attachment?.modifies;
-    if (!modifies) continue;
+    // `attachment`, not `attachment.modifies`. An Equipment whose whole printed
+    // text is a triggered ability on its HOST (Skullclamp; Sword of the Animist)
+    // has no modification at all, and gating the search on one made every such
+    // card INERT: the pilot never equipped it, so its trigger never fired, in
+    // every game ever simulated. What the card is WORTH is `scoreEquip`'s
+    // question — this loop only asks whether it is an attachment at all.
+    if (perm.def.attachment === undefined) continue;
     for (let a = 0; a < abilities.length; a++) {
       const ability = abilities[a]!;
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
@@ -541,9 +638,17 @@ function bestEquipPlay(
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null, index);
       if (!host) continue;
 
-      const score = scoreEquip(modifies, host, weights, index);
+      const score = scoreEquip(perm.def, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
-      const plan = planManaPayment(view as GameState, me, mana, legalActions);
+      if (!equipIsAnUpgrade(view, perm, score, weights, index)) continue;
+      const plan = planManaPayment(
+        view as GameState,
+        me,
+        mana,
+        legalActions,
+        perm.def,
+        'activate',
+      );
       if (!plan) continue; // cannot fund it this turn
       const action: GameAction =
         plan.length > 0
@@ -563,6 +668,35 @@ function bestEquipPlay(
     }
   }
   return best;
+}
+
+/**
+ * Whether MOVING an already-attached attachment onto `host` is an improvement.
+ *
+ * ⚠️ THE GUARD THAT KEEPS AN EQUIP {0} FROM LOOPING FOREVER. {@link bestEquipHost}
+ * excludes the creature the Equipment is already on, which stops it re-equipping
+ * the same body — but with TWO hosts and a free equip cost (Lightning Greaves)
+ * the pilot moves it A → B, then finds A is the best non-host and moves it back,
+ * forever, at no cost and with nothing else on the menu ever winning. The
+ * full-pool soak caught it as three games that burned the 6000-action cap
+ * without ending, all three holding Lightning Greaves.
+ *
+ * Requiring the destination to STRICTLY beat the current host makes the move
+ * monotone in `scoreEquip`, so the cycle cannot close. An unattached Equipment
+ * is unaffected: there is no host to beat.
+ */
+function equipIsAnUpgrade(
+  view: PilotView,
+  perm: CardInstance,
+  score: number,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): boolean {
+  if (perm.attachedTo === undefined || perm.attachedTo === null) return true;
+  const current = findInstance(view, perm.attachedTo);
+  if (!current) return true;
+  const currentScore = scoreEquip(perm.def, current, weights, index);
+  return currentScore === undefined || score > currentScore;
 }
 
 /** The target restriction every printed `Equip {N}` aims with (CR 301.5c). */
@@ -591,28 +725,57 @@ function bestEquipHost(
 }
 
 /**
- * What moving an attachment granting `modifies` onto `host` is worth, or
- * `undefined` when there is nothing to gain.
+ * What moving the attachment `def` onto `host` is worth, or `undefined` when
+ * there is nothing to gain.
+ *
+ * THREE things an attachment can give its host, and it is worth equipping if it
+ * gives ANY of them: stats, keywords, and TRIGGERED ABILITIES that watch the
+ * host. The third is not decoration — it is the whole of Skullclamp and of
+ * Sword of the Animist, and while this score read only the first two those
+ * cards scored `undefined` and were never picked up by anyone, ever.
  *
  * Bigger bodies carry equipment better (a +2/+0 on a 4/4 attacker beats the same
  * sword on a 0/1), so the host's own power counts toward the score — which is also
  * what makes the pilot move a sword onto a better creature when one arrives.
  */
 function scoreEquip(
-  modifies: PermanentModification,
+  def: CardDefinition,
   host: CardInstance,
   weights: HeuristicWeights,
   index: ContinuousIndex,
 ): number | undefined {
-  const stats = (modifies.power ?? 0) + (modifies.toughness ?? 0);
-  const keywords = modifies.keywords ? Object.values(modifies.keywords).filter(Boolean).length : 0;
-  if (stats <= 0 && keywords === 0) return undefined;
+  const modifies = def.attachment?.modifies;
+  const stats = (modifies?.power ?? 0) + (modifies?.toughness ?? 0);
+  const keywords = modifies?.keywords ? Object.values(modifies.keywords).filter(Boolean).length : 0;
+  const hostTriggers = countHostWatchingTriggers(def);
+  if (stats <= 0 && keywords === 0 && hostTriggers === 0) return undefined;
   return (
     weights.attachBaseScore +
     weights.attachPerStat * stats +
     weights.attachPerKeyword * keywords +
+    weights.attachPerHostTrigger * hostTriggers +
     weights.castCreaturePerStat * power(host, index)
   );
+}
+
+/**
+ * How many of this card's triggered abilities fire off its HOST rather than off
+ * itself — the "whenever equipped/enchanted creature …" family.
+ *
+ * The scope is read from core's `TriggerCondition.watches`, which is the data
+ * the ENGINE matches on, so a card cannot be valued for a trigger the engine
+ * would not fire (nor the reverse). The attachment's OWN triggers ("when ~
+ * enters, …") are deliberately not counted: they are a reason to have played
+ * the card, never a reason to spend mana equipping it.
+ */
+function countHostWatchingTriggers(def: CardDefinition): number {
+  const triggers = def.triggers;
+  if (triggers === undefined) return 0;
+  let count = 0;
+  for (let i = 0; i < triggers.length; i++) {
+    if ((triggers[i] as TriggeredAbility).condition.watches === 'attachedHost') count += 1;
+  }
+  return count;
 }
 
 /**
@@ -643,7 +806,14 @@ function bestSpellGoal(
   // step, so it runs on ranked candidates and stops at the first payable one.
   const me = ctx.view.priorityPlayer;
   for (const goal of scored) {
-    const plan = planManaPayment(ctx.view as GameState, me, goal.cost, ctx.legalActions);
+    const plan = planManaPayment(
+      ctx.view as GameState,
+      me,
+      goal.cost,
+      ctx.legalActions,
+      goal.card.def,
+      'cast',
+    );
     if (plan) return { goal, plan };
   }
   return undefined;
@@ -681,35 +851,42 @@ function scoredSpellGoals(
   let oppCreatures: readonly CardInstance[] | undefined;
 
   const scored: SpellGoal[] = [];
-  for (const card of hand) {
-    const def = card.def;
-    if (isLand(def)) continue;
-    const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
-    if (!timingOk) continue;
-    const cost = def.cost ?? {};
-    // Cheap upper-bound prefilter; `planManaTaps` below is the real test.
-    if (convertedManaCost(cost) > availableMana) continue;
+  for (const handCard of hand) {
+    // A two-halved card is scored HALF BY HALF: a pilot that only ever looked at
+    // `card.def` would score a split card's combined object (which has no script
+    // and a cost equal to both halves) and would never cast an adventure at all,
+    // making the whole layout inert in exactly the decks that bought it.
+    for (const half of castableHalvesInHand(handCard)) {
+      const card = half.card;
+      const def = card.def;
+      if (isLand(def)) continue;
+      const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
+      if (!timingOk) continue;
+      const cost = def.cost ?? {};
+      // Cheap upper-bound prefilter; `planManaTaps` below is the real test.
+      if (convertedManaCost(cost) > availableMana) continue;
 
-    let intent = classifySpell(def);
-    // An X spell's damage is whatever this board can fund: project X as the
-    // mana left after the base cost, so Blaze is scored as the burn it would
-    // actually be cast for. The engine will offer exactly this ceiling at cast
-    // time and the choice answerer takes the maximum, so score and play agree.
-    if (intent.kind === 'damage' && intent.amountIsX) {
-      const perX = Math.max(def.xCost ?? 1, 1);
-      const projected = Math.floor((availableMana - convertedManaCost(cost)) / perX);
-      if (projected <= 0) continue; // an X of zero is a cast with no payload — hold it
-      intent = { ...intent, amount: projected };
-    }
-    oppCreatures ??= creaturesControlledBy(view, opp);
-    const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
-    // A spell that prints a target restriction is only a goal if we can point it
-    // somewhere legal. This runs on EVERY goal, not just the ones the scorer
-    // understands, so a restricted card the scorer classifies as 'other' (and
-    // would therefore cast with no target at all) still gets a legal target
-    // instead of being rejected by the engine and retried forever.
-    const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
-    if (legal) scored.push(legal);
+      let intent = classifySpell(def);
+      // An X spell's damage is whatever this board can fund: project X as the
+      // mana left after the base cost, so Blaze is scored as the burn it would
+      // actually be cast for. The engine will offer exactly this ceiling at cast
+      // time and the choice answerer takes the maximum, so score and play agree.
+      if (intent.kind === 'damage' && intent.amountIsX) {
+        const perX = Math.max(def.xCost ?? 1, 1);
+        const projected = Math.floor((availableMana - convertedManaCost(cost)) / perX);
+        if (projected <= 0) continue; // an X of zero is a cast with no payload — hold it
+        intent = { ...intent, amount: projected };
+      }
+      oppCreatures ??= creaturesControlledBy(view, opp);
+      const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
+      // A spell that prints a target restriction is only a goal if we can point it
+      // somewhere legal. This runs on EVERY goal, not just the ones the scorer
+      // understands, so a restricted card the scorer classifies as 'other' (and
+      // would therefore cast with no target at all) still gets a legal target
+      // instead of being rejected by the engine and retried forever.
+      const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
+      if (legal) scored.push(half.face === undefined ? legal : { ...legal, face: half.face });
+      }
   }
 
   // Flashback casts out of OUR graveyard — the same scoring, targeting and
@@ -720,6 +897,30 @@ function scoredSpellGoals(
   // in. (A card in the graveyard costs no card from hand, so the same score
   // reads as at least as attractive — free spells win ties naturally.)
   for (const card of view.players[me].graveyard) {
+    // AFTERMATH first: a right half printed "cast this spell only from your
+    // graveyard" is a real cast for its own printed cost, and is the one
+    // graveyard cast that is not a flashback.
+    if (hasCastableBackFace(card.def) && backFaceCastZonesOf(card.def).includes('graveyard')) {
+      const half = { ...card, def: card.def.backFace as CardDefinition };
+      const cost = half.def.cost ?? {};
+      if (
+        (castTiming(half.def) === 'instant' || sorcerySpeedOpen) &&
+        convertedManaCost(cost) <= availableMana
+      ) {
+        oppCreatures ??= creaturesControlledBy(view, opp);
+        const goal = scoreSpell(view, opp, oppCreatures, half, classifySpell(half.def), weights, explain, index);
+        const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
+        if (legal) {
+          scored.push({
+            ...legal,
+            cost,
+            fromZone: 'graveyard',
+            face: 'back',
+            reason: explain ? `aftermath — ${legal.reason}` : NO_REASON,
+          });
+        }
+      }
+    }
     const def = card.def;
     // Printed OR granted (Snapcaster). Read through core's one accessor, the
     // same one `generateLegalActions` and `applyCastSpell` use — a pilot that
@@ -730,11 +931,28 @@ function scoredSpellGoals(
     const timingOk = castTiming(def) === 'instant' ? true : sorcerySpeedOpen;
     if (!timingOk) continue;
     if (convertedManaCost(flashbackCost) > availableMana) continue;
+    /*
+     * A FLASHBACK COST CAN PRINT A LIFE RIDER — "Flashback—{1}{B}, Pay 3 life"
+     * (Crippling Fatigue). It is part of the cost, so core's
+     * `generateLegalActions` does not offer the cast and `applyCastSpell`
+     * rejects it.
+     *
+     * Without this gate the pilot still WANTED the spell, and what that cost it
+     * was worse than a rejection: it committed the taps first, so it **tapped
+     * every land toward a cast it could never make and then passed**, floating
+     * the whole pool and throwing the turn away EXACTLY when it was at low life
+     * (measured: 5 taps, 0 casts, at 1 and 2 life against a 3-life rider). When
+     * the macro path did reach the cast, the engine refused it and the sim harness
+     * passed priority after `maxConsecutiveRejectedActions` — same lost turn,
+     * louder. Found by the full-pool soak, seed 3329123684.
+     */
+    const lifeCost = def.flashbackLifeCost ?? 0;
+    if (lifeCost > 0 && view.players[me].life < lifeCost) continue;
 
     const intent = classifySpell(def);
     oppCreatures ??= creaturesControlledBy(view, opp);
     const goal = scoreSpell(view, opp, oppCreatures, card, intent, weights, explain, index);
-    const legal = goal ? withLegalTargets(view, opp, goal, index) : undefined;
+    const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
     if (legal) {
       scored.push({
         ...legal,
@@ -745,8 +963,62 @@ function scoredSpellGoals(
     }
   }
 
+  // Casts out of EXILE the card has explicit permission for — an adventurer's
+  // creature half waiting after its adventure resolved (CR 715.3d), or a
+  // defeated Siege's reward (CR 310.4). Without this loop the whole adventure
+  // layout is inert to the pilot: it would cast Stomp and then never take the
+  // Giant, which is strictly worse than not owning the card. Behind the same
+  // empty check every other card-grant reader starts with.
+  if (hasCardGrants(view as GameState)) {
+    for (const card of view.players[me].exile) {
+      const permission = castPermissionFor(view as GameState, card);
+      if (permission === undefined) continue;
+      const castDef = playableFaceOf(card.def, permission.face);
+      if (castDef === undefined || isLand(castDef)) continue;
+      if (castTiming(castDef) !== 'instant' && !sorcerySpeedOpen) continue;
+      const cost = permission.free ? {} : (castDef.cost ?? {});
+      if (convertedManaCost(cost) > availableMana) continue;
+      const half = castDef === card.def ? card : { ...card, def: castDef };
+      oppCreatures ??= creaturesControlledBy(view, opp);
+      const goal = scoreSpell(view, opp, oppCreatures, half, classifySpell(castDef), weights, explain, index);
+      const legal = goal ? withLegalTargets(view, opp, goal, index, weights) : undefined;
+      if (legal) {
+        scored.push({
+          ...legal,
+          cost,
+          fromZone: 'exile',
+          ...(permission.face === 'back' ? { face: 'back' as const } : {}),
+          reason: explain ? `from exile — ${legal.reason}` : NO_REASON,
+        });
+      }
+    }
+  }
+
   scored.sort((a, b) => b.score - a.score);
-  return scored;
+  /*
+   * CR 601.2h: a MANDATORY additional cost this board cannot pay makes the cast
+   * ILLEGAL — not cost-free. Filtered here, at the one exit, so both consumers
+   * inherit it: `bestSpellGoal` and the search policy.
+   *
+   * Without it the pilot builds a `castSpell` the engine refuses, and — because
+   * nothing about the board changed — proposes the SAME cast on the next
+   * priority, and the next. That is the "spin forever" this function's own
+   * header warns about, and the full-pool soak caught it the moment the pool
+   * gained a card with one: Altar's Reap and Harrow with nothing to sacrifice
+   * burned the 6000-action cap without the game ending.
+   *
+   * The reader is core's, not a second opinion: `generateLegalActions` withholds
+   * the offer and `applyCastSpell` rejects the action from this same function.
+   */
+  return scored.filter(
+    (goal) =>
+      unpayableAdditionalCostReason(
+        view as GameState,
+        goal.card.def,
+        me,
+        goal.card.instanceId,
+      ) === undefined,
+  );
 }
 
 /**
@@ -767,6 +1039,7 @@ function withLegalTargets(
   opp: PlayerId,
   goal: SpellGoal,
   index: ContinuousIndex,
+  weights: HeuristicWeights,
 ): SpellGoal | undefined {
   // A MODAL spell is aimed per mode at cast time, never as a whole card, and
   // the engine rejects a modal cast that carries a target — so the goal keeps
@@ -782,7 +1055,7 @@ function withLegalTargets(
     if (!isLegalTarget(state, restriction, target, goal.card.controller, goal.card.def)) continue;
     return goal.targets.length === 1 ? goal : { ...goal, targets: [target] };
   }
-  const fallback = defaultLegalTarget(view, opp, restriction, index, goal.card.def);
+  const fallback = defaultLegalTarget(view, opp, restriction, index, weights, goal.card.def);
   return fallback === undefined ? undefined : { ...goal, targets: [fallback] };
 }
 
@@ -797,6 +1070,7 @@ function defaultLegalTarget(
   opp: PlayerId,
   restriction: TargetRestriction,
   index: ContinuousIndex,
+  weights: HeuristicWeights,
   source?: CardDefinition,
 ): InstanceId | PlayerId | undefined {
   if (restriction === 'player' || restriction === 'playerOrPlaneswalker') return opp;
@@ -811,7 +1085,7 @@ function defaultLegalTarget(
   const legal = creaturesControlledBy(view, opp).filter((creature) =>
     isLegalTarget(state, probe, creature.instanceId, undefined, source),
   );
-  const biggest = biggestThreat(legal, index);
+  const biggest = biggestThreat(legal, index, weights);
   if (biggest) return biggest.instanceId;
   if (restriction === 'creatureOrPlaneswalker') {
     return walkersControlledBy(view, opp)[0]?.instanceId;
@@ -856,7 +1130,7 @@ function scoreSpell(
       // (Scanned in place: the old `filter(...)` built a throwaway array per
       // candidate spell, and `biggestThreat` only ever wanted the maximum.)
       const target = intent.canTargetCreature
-        ? biggestThreatWithin(oppCreatures, intent.amount, index)
+        ? biggestThreatWithin(oppCreatures, intent.amount, index, weights)
         : undefined;
       const killScore = target
         ? weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index)
@@ -910,7 +1184,7 @@ function scoreSpell(
       const reachable = intent.exiles
         ? oppCreatures
         : oppCreatures.filter((c) => !isIndestructible(c, index));
-      const target = biggestThreat(reachable, index);
+      const target = biggestThreat(reachable, index, weights);
       if (!target) return undefined; // no target → don't waste removal
       return {
         score: weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index),
@@ -925,7 +1199,7 @@ function scoreSpell(
     case 'shrink': {
       // Shrink-removal kills exactly what its toughness reduction can finish off,
       // so it is scored and targeted like burn: the biggest thing it can kill.
-      const target = biggestThreatWithin(oppCreatures, intent.toughness, index);
+      const target = biggestThreatWithin(oppCreatures, intent.toughness, index, weights);
       if (!target) return undefined; // it would shrink something that survives — hold it
       return {
         score: weights.removalBaseScore + weights.removalPerPowerOfTarget * power(target, index),
@@ -950,6 +1224,34 @@ function scoreSpell(
         cost,
         targets: [target.instanceId],
         reason: explain ? `counter ${target.card.def.name}` : NO_REASON,
+      };
+    }
+    case 'fog': {
+      const score = fogValue(view, otherPlayer(opp), intent, weights, index);
+      // A fog with nothing to prevent is NOT cast — that is the whole discipline
+      // of the card, and a pilot that fires it in its own main phase has thrown
+      // it away. Returning undefined leaves it in hand for the attack.
+      if (score <= 0) return undefined;
+      return {
+        score,
+        card,
+        cost,
+        targets: [],
+        reason: explain ? `fog the attack with ${card.def.name}` : NO_REASON,
+      };
+    }
+    case 'copySpell': {
+      const target = copyTarget(view, otherPlayer(opp));
+      if (!target) return undefined; // nothing on the stack worth copying — hold it
+      return {
+        // Worth what the copy is worth, on the same card ruler removal uses — so
+        // a Reverberate held for a Cryptic Command outscores one spent on a
+        // cantrip, which is the whole discipline of the card.
+        score: cardValue(target.card, weights, cardValueContext(view as GameState, index)),
+        card,
+        cost,
+        targets: [target.instanceId],
+        reason: explain ? `copy ${target.card.def.name}` : NO_REASON,
       };
     }
     case 'sweeper': {
@@ -978,7 +1280,7 @@ function scoreSpell(
       // enter attached to nothing and (for an Aura) die on the spot.
       const me = otherPlayer(opp);
       const hosts = intent.helpful ? creaturesControlledBy(view, me) : oppCreatures;
-      const host = biggestThreat(hosts, index);
+      const host = biggestThreat(hosts, index, weights);
       if (!host) return undefined;
       return {
         score: attachmentScore(intent, weights),
@@ -1095,11 +1397,83 @@ function counterTarget(view: PilotView, me: PlayerId) {
 }
 
 /**
+ * The spell on the stack a COPY should point at, or undefined for "hold it".
+ *
+ * The mirror image of {@link counterTarget}, and the differences are the card:
+ *
+ *  - it answers the TOP object, for the same reason a counter does — anything
+ *    below has already been responded to;
+ *  - the spell must be an INSTANT OR SORCERY, because that is what the printed
+ *    restriction allows and offering anything else builds a cast the engine
+ *    rejects, which is the loop `scoredSpellGoals` exists to avoid;
+ *  - unlike a counter, OUR OWN spell is the good case, not the disqualifying
+ *    one. Casting a burn spell and copying it before it resolves is the line the
+ *    card is printed for. An opponent's spell is legal to copy too (the copy is
+ *    ours — CR 707.10), and worth exactly as much.
+ */
+function copyTarget(view: PilotView, me: PlayerId) {
+  void me;
+  const top = view.stack[view.stack.length - 1];
+  if (!top || top.kind !== 'spell') return undefined;
+  const types = top.card.def.types;
+  if (!types.includes('instant') && !types.includes('sorcery')) return undefined;
+  return top as Extract<typeof top, { kind: 'spell' }>;
+}
+
+/**
  * What sweeping the board is worth to us right now: their creatures cleared, less
  * ours cleared with them, on the same scale as targeted removal. A sweeper with
  * nothing to sweep — or one that costs us more than it costs them — scores zero or
  * less and is held, instead of being fired into an empty board for value nobody got.
  */
+/**
+ * WHAT A FOG IS WORTH RIGHT NOW — which is the only honest way to price one.
+ *
+ * A prevention spell has no intrinsic value: it is worth exactly the damage it
+ * stops, and that number is zero at every moment except one. So this asks the
+ * board three questions, in the order that lets the answer be "nothing" as
+ * cheaply as possible:
+ *
+ *  1. **Is there an attack to fog?** Attackers must be DECLARED. A fog cast
+ *     before blockers are declared, or on our own turn, prevents nothing —
+ *     `combat.attackersDeclared` is the engine's own answer to "has the swing
+ *     happened yet", and it is what keeps this from being cast on curve like a
+ *     three-drop.
+ *  2. **Is it aimed at us?** A prevention that only guards our own seat is worth
+ *     nothing while WE are the attacker.
+ *  3. **How much would actually land?** The incoming total is read through the
+ *     SAME replacement projection the rest of the pilot uses, so a fog held
+ *     against a Gratuitous Violence board is priced against the doubled swing —
+ *     and a swing already prevented by a Dolmen Gate prices the second fog at
+ *     nothing, correctly.
+ *
+ * Lethal is the whole game and is scored as such; anything short of it is priced
+ * per point of life saved, so a fog against a two-power poke stays in hand while
+ * a fog against a real attack gets cast.
+ */
+function fogValue(
+  view: PilotView,
+  me: PlayerId,
+  intent: Extract<SpellIntent, { kind: 'fog' }>,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): number {
+  const combat = view.combat;
+  if (!combat || !combat.attackersDeclared || combat.attackers.length === 0) return 0;
+  // The defending player is the one being attacked; a fog does nothing for the
+  // attacker, and one that guards only its own controller does nothing at all.
+  if (view.activePlayer === me) return 0;
+  if (intent.protectsMeOnly && defendingPlayer(view) !== me) return 0;
+  const incoming = totalIncomingDamage(view, combat.attackers, index);
+  if (incoming <= 0) return 0;
+  const life = view.players[me].life;
+  if (incoming >= life) return weights.lethalBurnScore;
+  // A fog is a whole card, so a poke is not worth one — unless we are already in
+  // the red, where every point is worth spending a card on.
+  if (incoming < weights.fogMinimumDamagePrevented && life > weights.desperateLifeThreshold) return 0;
+  return incoming * weights.fogValuePerDamagePrevented;
+}
+
 function sweeperValue(
   view: PilotView,
   me: PlayerId,
@@ -1332,7 +1706,14 @@ function bestCycle(ctx: DecisionContext, weights: HeuristicWeights): CycleGoal |
           : -Infinity;
       if (score <= weights.passScore) continue;
       if (best && score <= best.score) continue;
-      const plan = planManaPayment(view as GameState, me, ability.cost, ctx.legalActions);
+      const plan = planManaPayment(
+        view as GameState,
+        me,
+        ability.cost,
+        ctx.legalActions,
+        card.def,
+        'activate',
+      );
       if (!plan) continue;
       best = {
         action: { kind: 'cycleCard', player: me, instanceId: card.instanceId, abilityIndex: index },
@@ -1372,8 +1753,11 @@ function pursueSpell(ctx: DecisionContext, funded: FundedGoal): GameAction {
       player: me,
       instanceId: goal.card.instanceId,
       targets: goal.targets.length > 0 ? goal.targets : undefined,
-      // A flashback goal must say so, or the engine looks for the card in hand.
+      // A flashback / aftermath / from-exile goal must say so, or the engine
+      // looks for the card in hand; a second-half goal must name its face, or
+      // the engine casts the other one.
       fromZone: goal.fromZone,
+      face: goal.face,
     };
     return emit(ctx, cast, goal.reason, goal.score);
   }
@@ -1421,7 +1805,7 @@ function chooseAttack(
   for (const id of eligible) {
     const attacker = findInstance(view, id);
     if (!attacker) continue;
-    if (attackIsProfitable(attacker, enemyBlockers, weights, index)) chosen.push(id);
+    if (attackIsProfitable(attacker, enemyBlockers, weights, index, view)) chosen.push(id);
   }
 
   if (chosen.length === 0) {
@@ -1513,8 +1897,19 @@ function planWalkerAttack(
   // Only divert when the object is worth more than the face damage given up.
   if (targetWorth < weights.faceDamageValue * targetNeed) return undefined;
 
-  // Fewest attackers: biggest first until the need is covered.
-  const byPowerDesc = [...attackers].sort((a, b) => power(b, index) - power(a, index));
+  // Fewest attackers: biggest first until the need is covered — and among equals,
+  // the one with the LEAST to lose by being diverted.
+  //
+  // "Whenever ~ deals combat damage to a PLAYER" pays nothing when its creature
+  // is sent at a planeswalker, so diverting the saboteur and leaving the vanilla
+  // to hit the face throws the trigger away for free. Two attackers of the same
+  // size are otherwise interchangeable here, which is exactly the case where
+  // getting this backwards is invisible.
+  const byPowerDesc = [...attackers].sort((a, b) => {
+    const byPower = power(b, index) - power(a, index);
+    if (byPower !== 0) return byPower;
+    return saboteurTriggerCount(a, view) - saboteurTriggerCount(b, view);
+  });
   const assigned: Record<InstanceId, InstanceId | PlayerId> = {};
   let covered = 0;
   for (const attacker of byPowerDesc) {
@@ -1536,6 +1931,7 @@ function attackIsProfitable(
   enemyBlockers: readonly CardInstance[],
   weights: HeuristicWeights,
   index: ContinuousIndex,
+  view: PilotView,
 ): boolean {
   const myPower = power(attacker, index);
   const myTough = toughness(attacker, index);
@@ -1563,7 +1959,7 @@ function attackIsProfitable(
   // blockers the defender actually needs: menace (or "except by N or more") means
   // a single blocker is not a legal block at all, so a lone potential blocker is
   // no deterrent and this attack is really unopposed.
-  const blockersNeeded = needsMultipleBlockers(attacker) ? MENACE_BLOCKERS_NEEDED : 1;
+  const blockersNeeded = needsMultipleBlockers(attacker, index) ? MENACE_BLOCKERS_NEEDED : 1;
   const blockerExists = eligibleBlockers >= blockersNeeded;
 
   // If the opponent has a block that's good for them (positive value) AND it kills
@@ -1576,9 +1972,62 @@ function attackIsProfitable(
   }
 
   // No profitable block for the opponent: either they have no blocker (face
-  // damage) or blocking only loses them value. Attack for the face-damage value.
-  const faceValue = weights.faceDamageValue * myPower;
+  // damage) or blocking only loses them value. Attack for the face-damage value
+  // PLUS what connecting is worth beyond the damage — every triggered ability
+  // that fires on combat damage to a player, the attacker's own and the ones its
+  // Equipment lends it.
+  //
+  // Counted only HERE, in the branch where the attack is expected to get
+  // through. A saboteur trigger pays nothing when the attacker is blocked, so
+  // adding it to the trade branch above would be a pilot walking into removal
+  // for a benefit it is not going to collect.
+  const faceValue =
+    weights.faceDamageValue * myPower +
+    weights.attackSaboteurTriggerValue * saboteurTriggerCount(attacker, view);
   return faceValue >= weights.attackValueThreshold;
+}
+
+/**
+ * How many "whenever ~ deals combat damage to a player" abilities THIS creature
+ * would set off by connecting — the ones printed on it, plus the ones its
+ * attached Auras and Equipment watch it with.
+ *
+ * The attachments are searched from the battlefield rather than read off the
+ * creature, because the relationship only exists in one direction: an
+ * attachment knows its host (`attachedTo`), a host knows nothing about what is
+ * on it. Both halves are read from the same core data the ENGINE matches on
+ * (`TriggerCondition.on` / `.watches`), so the pilot cannot value a trigger the
+ * engine would not fire.
+ *
+ * Cost: the battlefield walk happens only for a creature that got as far as the
+ * unblocked branch of the attack evaluation, and it stops at one property read
+ * per permanent for every board with no attachment on it.
+ */
+function saboteurTriggerCount(attacker: CardInstance, view: PilotView): number {
+  let count = countCombatDamageTriggers(attacker.def.triggers, 'self');
+  const battlefield = view.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.attachedTo !== attacker.instanceId) continue;
+    count += countCombatDamageTriggers(perm.def.triggers, 'attachedHost');
+  }
+  return count;
+}
+
+/** Triggers on `combatDamageToPlayer` with the given watch scope. */
+function countCombatDamageTriggers(
+  triggers: readonly TriggeredAbility[] | undefined,
+  watches: 'self' | 'attachedHost',
+): number {
+  if (triggers === undefined) return 0;
+  let count = 0;
+  for (let i = 0; i < triggers.length; i++) {
+    const condition = (triggers[i] as TriggeredAbility).condition;
+    if (condition.on !== 'combatDamageToPlayer') continue;
+    if ((condition.watches ?? DEFAULT_TRIGGER_WATCHES) !== watches) continue;
+    count += 1;
+  }
+  return count;
 }
 
 // --- blocking ------------------------------------------------------------------
@@ -1620,6 +2069,21 @@ function chooseBlock(
     .filter((c): c is CardInstance => c !== undefined)
     .sort((a, b) => power(b, index) - power(a, index));
 
+  // BLOCK REQUIREMENTS FIRST (CR 509.1c/d). These are not a preference — a
+  // declaration that satisfies fewer requirements than it could is REJECTED
+  // WHOLESALE, so a pilot that picked its favourite blocks first and then noticed
+  // the lure would lose every one of them. Core's own solver answers it, so the
+  // pilot and the engine cannot disagree about what the rule demands; it returns
+  // `undefined` after one keyword pass when nothing on the board requires
+  // anything, which is every ordinary combat.
+  const forced = forcedBlockAssignment(attackers, availableBlockers, index);
+  if (forced) {
+    for (const assignment of forced) {
+      blocks.push(assignment);
+      used.add(assignment.blocker);
+    }
+  }
+
   for (const attacker of attackers) {
     const blocker = pickBlocker(attacker, availableBlockers, used, desperate, weights, index);
     if (blocker) {
@@ -1629,15 +2093,22 @@ function chooseBlock(
   }
 
   // Declaring zero blocks via an empty `declareBlockers` would leave combat.blocks
-  // empty and get us re-offered the same choice forever. When we don't block, pass
-  // priority instead — that lets combat damage resolve and the step advance.
-  if (blocks.length === 0) {
-    return emit(ctx, passAction(view), 'no profitable block — taking the hit', weights.passScore);
-  }
+  // empty and get us re-offered the same choice forever, so no block declaration
+  // is made. What happens INSTEAD is a fall-through, not a pass.
+  //
+  // ⚠️ This used to `return` a pass, and that short-circuit made every
+  // instant-speed response in the declare-blockers step unreachable for a pilot
+  // that had decided not to block — a fog, a combat trick, a burn spell to
+  // finish the turn. "Nothing is worth blocking" is an answer to WHICH BLOCKS,
+  // not to what to do with priority; the priority logic below ends in the same
+  // pass when nothing is worth casting, so the loop-avoidance is unchanged and
+  // only the considered options grow.
+  if (blocks.length === 0) return undefined;
   const action: GameAction = { kind: 'declareBlockers', player: me, blocks };
   if (!ctx.trace) return emit(ctx, action, NO_REASON);
-  const reason = facingLethal
-    ? `block to avoid lethal (${incomingDamage} incoming vs ${myLife} life)`
+  const reason =
+    facingLethal ? `block to avoid lethal (${incomingDamage} incoming vs ${myLife} life)`
+    : forced ? `block ${blocks.length} attacker(s) — ${forced.length} forced by a block requirement`
     : `block ${blocks.length} attacker(s) for value`;
   return emit(ctx, action, reason);
 }
@@ -1659,7 +2130,7 @@ function pickBlocker(
   // block at all: it assigns a single blocker per attacker, and a lone blocker on
   // a menacing attacker makes the WHOLE declaration illegal - so every other
   // block in the same action is lost with it.
-  if (needsMultipleBlockers(attacker)) return undefined;
+  if (needsMultipleBlockers(attacker, index)) return undefined;
   const aPower = power(attacker, index);
   const aTough = toughness(attacker, index);
 
@@ -1769,7 +2240,18 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
     if (ref.primitive === PRIMITIVE.counterSpell || ref.primitive === PRIMITIVE.counterUnlessPaid) {
       return { kind: 'counter' };
     }
+    if (ref.primitive === PRIMITIVE.copySpell) return { kind: 'copySpell' };
     if (ref.primitive === PRIMITIVE.destroyAll) return { kind: 'sweeper' };
+    if (ref.primitive === PRIMITIVE.preventDamage) {
+      return {
+        kind: 'fog',
+        combatOnly: ref.params?.combat === true,
+        // "…dealt to YOU this turn" (Riot Control) guards one seat; a plain fog
+        // (Fog, Darkness) stops the whole combat damage step for everybody, which
+        // on this side of the table is the same thing when we are being attacked.
+        protectsMeOnly: stringParam(ref.params, 'scope', 'any') === 'you',
+      };
+    }
     if (ref.primitive === PRIMITIVE.pumpUntilEndOfTurn) {
       const power = numberParam(ref.params, 'power', 0);
       const toughness = numberParam(ref.params, 'toughness', 0);
@@ -1870,6 +2352,7 @@ function biggestThreatWithin(
   creatures: readonly CardInstance[],
   amount: number,
   index: ContinuousIndex,
+  weights: HeuristicWeights,
 ): CardInstance | undefined {
   let best: CardInstance | undefined;
   for (const c of creatures) {
@@ -1878,17 +2361,40 @@ function biggestThreatWithin(
       best = c;
       continue;
     }
-    const cp = power(c, index);
-    const bp = power(best, index);
+    const cp = threatRank(c, index, weights);
+    const bp = threatRank(best, index, weights);
     if (cp > bp || (cp === bp && toughness(c, index) > toughness(best, index))) best = c;
   }
   return best;
 }
 
-/** The biggest threat among creatures: highest power, then toughness. */
+/**
+ * How threatening a creature is, in POWER UNITS — its effective power plus what a
+ * printed block requirement is worth.
+ *
+ * A LURE IS A THREAT, NOT A GIFT. "Must be blocked if able" does not make the
+ * creature easier to deal with; it takes the defender's blockers away from every
+ * other attacker, so a 1/1 carrying one can be the card that decides the combat.
+ * A pilot ranking removal targets by body size alone points its removal at the
+ * biggest body and then loses to the attack the lure enabled.
+ *
+ * Adding to POWER rather than replacing the comparison keeps the existing
+ * power-then-toughness ordering byte-for-byte unchanged on every board where
+ * nothing requires a block — which is every board this pool could build before
+ * requirements existed.
+ */
+function threatRank(creature: CardInstance, index: ContinuousIndex, weights: HeuristicWeights): number {
+  return (
+    power(creature, index) +
+    (hasBlockRequirement(creature, index) ? weights.blockRequirementThreatValue : 0)
+  );
+}
+
+/** The biggest threat among creatures: highest threat rank, then toughness. */
 function biggestThreat(
   creatures: readonly CardInstance[],
   index: ContinuousIndex,
+  weights: HeuristicWeights,
 ): CardInstance | undefined {
   let best: CardInstance | undefined;
   for (const c of creatures) {
@@ -1896,8 +2402,8 @@ function biggestThreat(
       best = c;
       continue;
     }
-    const cp = power(c, index);
-    const bp = power(best, index);
+    const cp = threatRank(c, index, weights);
+    const bp = threatRank(best, index, weights);
     if (cp > bp || (cp === bp && toughness(c, index) > toughness(best, index))) best = c;
   }
   return best;
@@ -1909,10 +2415,27 @@ function totalIncomingDamage(
   attackerIds: readonly InstanceId[],
   index: ContinuousIndex,
 ): number {
+  // The replacement layer (CR 614/615), asked ONCE for the whole swing: a
+  // Gratuitous Violence on their side makes every attacker hit twice as hard,
+  // and a Fog already on the stack makes the whole attack worth nothing. A
+  // blocking decision made on printed power in front of either is a decision
+  // made about a different board.
+  //
+  // PROJECTED, never applied — `projectDamage` writes nothing, so a pilot
+  // weighing its options cannot spend the prevention shield it is weighing.
+  // Inert when nothing replaces anything: one `.length` read.
+  const replacements = indexReplacements(view as GameState);
+  const defender = defendingPlayer(view);
   let total = 0;
   for (const id of attackerIds) {
     const a = findInstance(view, id);
-    if (a) total += power(a, index);
+    if (!a) continue;
+    const printed = power(a, index);
+    total +=
+      replacements.length === 0
+        ? printed
+        : projectDamage(view as GameState, replacements, a, a.controller, undefined, defender, printed, true)
+            .amount;
   }
   return total;
 }
@@ -1959,7 +2482,58 @@ function canBlockByEvasion(
   if (bk.cantBlock) return false;
   if (ak.unblockable) return false;
   if (ak.flying && !(bk.flying || bk.reach)) return false;
+  /*
+   * PROTECTION'S BLOCKING HALF (CR 702.16e): an attacker with protection from a
+   * quality can't be blocked by creatures having it. Core's `canBlock` has
+   * always enforced this; this mirror did not, so every white creature the pilot
+   * owned kept proposing a block on a Black Knight — and because a single
+   * illegal pair makes the WHOLE `declareBlockers` action illegal, the engine
+   * rejected the declaration, the harness passed priority after three
+   * rejections, and the defender took the entire attack UNBLOCKED. Found by the
+   * full-pool soak (`packages/sim/src/soak.ts`), seed 1948110550: "Wall of Omens
+   * cannot block Black Knight".
+   */
+  if (ak.protectionFrom !== undefined && protectionBlocksSource(ak.protectionFrom, blocker.def)) return false;
+  // A COMPARING restriction — "except by creatures with haste", a power or
+  // toughness bound, skulk. Mirrored here for the same reason the evasion tests
+  // are: a pilot that proposed one of these blocks would have its WHOLE
+  // declaration rejected, losing every other block in the same action.
+  const restriction = ak.blockRestriction;
+  if (restriction !== undefined) {
+    const required = restriction.blockerMustHaveAnyOf;
+    if (required !== undefined && !required.some((keyword) => bk[keyword] === true)) return false;
+    const blockerPower = power(blocker, index);
+    if (restriction.maxBlockerPower !== undefined && blockerPower > restriction.maxBlockerPower) return false;
+    if (restriction.minBlockerPower !== undefined && blockerPower < restriction.minBlockerPower) return false;
+    if (restriction.blockerPowerAtMostMine === true && blockerPower > power(attacker, index)) return false;
+    const blockerToughness = toughness(blocker, index);
+    if (
+      restriction.maxBlockerToughness !== undefined &&
+      blockerToughness > restriction.maxBlockerToughness
+    ) {
+      return false;
+    }
+    if (
+      restriction.minBlockerToughness !== undefined &&
+      blockerToughness < restriction.minBlockerToughness
+    ) {
+      return false;
+    }
+  }
   return true;
+}
+
+/**
+ * Whether this creature carries a block REQUIREMENT — "must be blocked if able" /
+ * "all creatures able to block it do so".
+ *
+ * Read EFFECTIVE, because both are grantable (Irresistible Prey hands one out for
+ * a turn) and a pilot reading the printed box would miss exactly the case the
+ * card was played for.
+ */
+function hasBlockRequirement(creature: CardInstance, index: ContinuousIndex): boolean {
+  const keywords = keywordsOf(creature, index);
+  return keywords.mustBeBlocked === true || keywords.blockedByAllAble === true;
 }
 
 /**
@@ -1970,14 +2544,20 @@ function canBlockByEvasion(
 const MENACE_BLOCKERS_NEEDED = 2;
 
 /**
- * Whether this attacker prints a blocking requirement of two or more creatures
+ * Whether this attacker has a blocking requirement of two or more creatures
  * (menace, or the general "except by N or more"). This pilot never assigns more
  * than one blocker to an attacker, so proposing ANY block on such a creature is
  * proposing an illegal declaration - the engine rejects the whole thing, and the
  * pilot loses every other block in it as well.
+ *
+ * Keywords are read EFFECTIVE, for the same reason `canBlockByEvasion` reads
+ * them effective: menace GRANTED by an Aura or an until-end-of-turn pump is
+ * menace, and the rules path (`requiredBlockerCount` in core) reads the granted
+ * set. Two answers to one question is exactly the shape `board-stats.ts` exists
+ * to make unspellable.
  */
-function needsMultipleBlockers(attacker: CardInstance): boolean {
-  const ak = attacker.def.keywords ?? {};
+function needsMultipleBlockers(attacker: CardInstance, index: ContinuousIndex): boolean {
+  const ak = keywordsOf(attacker, index);
   return Boolean(ak.menace) || (ak.minBlockers ?? 0) > 1;
 }
 
@@ -2171,7 +2751,7 @@ function collectAttackCandidates(
   const profitable: InstanceId[] = [];
   for (const id of offered.attackers) {
     const attacker = findInstance(view, id);
-    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights, index)) profitable.push(id);
+    if (attacker && attackIsProfitable(attacker, enemyBlockers, weights, index, view)) profitable.push(id);
   }
   if (profitable.length > 0) {
     // The value-judged attack carries the same walker assignment the plain
@@ -2307,7 +2887,14 @@ function collectPriorityCandidates(
 
   // THE ATOMIC CASTS. Every legal, scored spell, each bundled with its funding.
   for (const goal of scoredSpellGoals(view, weights, explain, index)) {
-    const plan = planManaPayment(state, me, goal.cost, legalActions);
+    const plan = planManaPayment(
+      state,
+      me,
+      goal.cost,
+      legalActions,
+      goal.card.def,
+      'cast',
+    );
     if (!plan) continue; // cannot be funded from this board — not an option at all
     const plies: GameAction[] = [];
     for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });
@@ -2354,8 +2941,13 @@ function bestEquipMacro(
     const perm = battlefield[b] as CardInstance;
     const abilities = perm.def.activated;
     if (abilities === undefined || perm.controller !== me) continue;
-    const modifies = perm.def.attachment?.modifies;
-    if (!modifies) continue;
+    // `attachment`, not `attachment.modifies`. An Equipment whose whole printed
+    // text is a triggered ability on its HOST (Skullclamp; Sword of the Animist)
+    // has no modification at all, and gating the search on one made every such
+    // card INERT: the pilot never equipped it, so its trigger never fired, in
+    // every game ever simulated. What the card is WORTH is `scoreEquip`'s
+    // question — this loop only asks whether it is an attachment at all.
+    if (perm.def.attachment === undefined) continue;
     for (let a = 0; a < abilities.length; a++) {
       const ability = abilities[a]!;
       if (restrictionOfEffects(ability.effects) !== EQUIP_RESTRICTION) continue;
@@ -2364,9 +2956,17 @@ function bestEquipMacro(
       hosts ??= legalTargetsFor(view as GameState, EQUIP_RESTRICTION, me, perm.def);
       const host = bestEquipHost(view, hosts, perm.attachedTo ?? null, index);
       if (!host) continue;
-      const score = scoreEquip(modifies, host, weights, index);
+      const score = scoreEquip(perm.def, host, weights, index);
       if (score === undefined || (best !== undefined && score <= best.score)) continue;
-      const plan = planManaPayment(view as GameState, me, mana, legalActions);
+      if (!equipIsAnUpgrade(view, perm, score, weights, index)) continue;
+      const plan = planManaPayment(
+        view as GameState,
+        me,
+        mana,
+        legalActions,
+        perm.def,
+        'activate',
+      );
       if (!plan) continue;
       const plies: GameAction[] = [];
       for (const tap of plan) plies.push({ kind: 'tapForMana', player: me, instanceId: tap.instanceId, mode: tap.mode });

@@ -85,6 +85,16 @@ export type GameEvent =
       readonly player: PlayerId;
       readonly color: ManaColor;
       readonly amount: number;
+      /**
+       * The printed SPEND RESTRICTION this mana carries, if any — "only to cast a
+       * creature spell". Absent for ordinary mana, which is nearly all of it.
+       *
+       * The LABEL rather than the predicate: the event log and the observation
+       * feed want words, and the machine-readable restriction already lives on
+       * the pool, which is where every payment reads it. Two copies of a
+       * predicate is two things that can disagree.
+       */
+      readonly spendRestriction?: string;
     }
   | { readonly type: 'manaPoolEmptied'; readonly player: PlayerId }
   | {
@@ -184,6 +194,59 @@ export type GameEvent =
       readonly amount: number;
       readonly combat: boolean;
     }
+  | {
+      /**
+       * A counter effect resolved against a spell that **can't be countered**
+       * (CR 701.5a), so nothing happened to it. The exact argument
+       * `damagePrevented` makes: a Counterspell that visibly does nothing has to be
+       * distinguishable from a bug in a replay, and silence here is what would make
+       * a real defect look like the rule working.
+       *
+       * Fully public — a spell on the stack, its name and its controller are what
+       * the whole table is already looking at.
+       */
+      readonly type: 'counterPrevented';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly controller: PlayerId;
+    }
+  | {
+      /**
+       * A REPLACEMENT effect changed an event before it happened (CR 614) — a
+       * damage doubler, a counter multiplier, a prevention shield eating part of
+       * a hit. Its own event for exactly the reason `damagePrevented` has one: a
+       * replay or the inspector must be able to show WHY four counters went onto
+       * a creature the card said to put one on, and "it just happened" is
+       * indistinguishable from a bug.
+       *
+       * `from`/`to` are the quantity before and after THIS one effect, so a
+       * chain of two doublers reads as two events with matching seams rather
+       * than one lossy summary — which is also what makes the CR 616.1 ordering
+       * decision auditable from the log alone.
+       */
+      readonly type: 'replacementApplied';
+      /** The permanent (or resolving spell) the replacement effect comes from. */
+      readonly source: InstanceId;
+      /** Which event family was replaced. */
+      readonly event: 'damage' | 'counters' | 'draw';
+      readonly from: number;
+      readonly to: number;
+      /** How much of `from` this effect PREVENTED (0 for a pure multiplier). */
+      readonly prevented: number;
+      /** The printed line, when the card carried one. Never read by the rules. */
+      readonly label?: string;
+    }
+  | {
+      /**
+       * A floating replacement/prevention effect wore off in cleanup — the fog
+       * that guarded this turn's combat, or an unspent shield. Mirrors
+       * `continuousEffectExpired`, so the two lifetimes read the same way in a
+       * log.
+       */
+      readonly type: 'replacementExpired';
+      readonly id: number;
+      readonly source: InstanceId;
+    }
   | { readonly type: 'lifeChanged'; readonly player: PlayerId; readonly delta: number; readonly to: number }
   | { readonly type: 'gainLife'; readonly player: PlayerId; readonly amount: number }
   | { readonly type: 'creatureDied'; readonly instanceId: InstanceId; readonly name: string }
@@ -264,11 +327,48 @@ export type GameEvent =
   | { readonly type: 'actionRejected'; readonly reason: string }
   | { readonly type: 'counterAdded'; readonly instanceId: InstanceId; readonly kind: string; readonly amount: number }
   | {
+      /**
+       * A permanent NAMED a value as it entered — "As ~ enters, choose a creature
+       * type" (CR 614.1c). Its own event rather than a `choiceAnswered`, because
+       * the two are not the same fact: the ANSWER to a question is private to its
+       * chooser (and redacted as such), while the value a permanent named is
+       * ANNOUNCED AT THE TABLE and is a permanent, public characteristic of the
+       * board for as long as the card is on it.
+       *
+       * `value` is the raw stored form (a colour letter, a subtype, a seat) and
+       * `described` is it written out for a log line — carried so a reader needs
+       * neither the subject nor a lookup table to render it.
+       */
+      readonly type: 'chosenAsEnters';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      readonly subject: import('./choices.js').ChosenValueSubject;
+      readonly value: string;
+      readonly described: string;
+    }
+  | {
       // A triggered ability matched an event and was placed on the stack.
       readonly type: 'triggerPutOnStack';
       readonly sourceInstanceId: InstanceId;
       readonly controller: PlayerId;
       readonly label: string;
+    }
+  | {
+      /**
+       * A triggered ability was removed from the stack WITHOUT resolving,
+       * because its printed intervening "if" had stopped being true by the time
+       * it would have resolved (CR 603.4's second check).
+       *
+       * A distinct event rather than silence: the ability really did go on the
+       * stack and really was responded to, so a log that showed the push and
+       * then nothing would read as an engine bug. Public — every player watched
+       * it happen.
+       */
+      readonly type: 'triggerFizzled';
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly label: string;
+      readonly reason: string;
     }
   | {
       /**
@@ -416,10 +516,102 @@ export type GameEvent =
       readonly faceUp: 'front' | 'back';
     }
   | {
+      /**
+       * A permanent ENTERED AS A COPY of another object (CR 707, layer 1) —
+       * the printed "you may have ~ enter as a copy of …" replacement. Like
+       * `transformed` this is deliberately NOT a `zoneChange`: the copy is
+       * applied as the permanent enters, and the entry itself is announced by
+       * its own `zoneChange`.
+       *
+       * Fully public. Every field names something a spectator watching the
+       * table sees: which permanent became a copy, the card it printed as, the
+       * card it now is, and which visible object it was copied from.
+       */
+      readonly type: 'becameCopy';
+      readonly instanceId: InstanceId;
+      /** The name printed on the copying card itself ("Clone"). */
+      readonly ownName: string;
+      /** The name it now has — the copied card, after any "except …" tail. */
+      readonly copiedName: string;
+      /** The object it was copied from. */
+      readonly copiedInstanceId: InstanceId;
+    }
+  | {
       // A token permanent was created on the battlefield.
       readonly type: 'tokenCreated';
       readonly instanceId: InstanceId;
       readonly controller: PlayerId;
+      readonly name: string;
+    }
+  | {
+      // CR 704.5d: a token that has left the battlefield CEASES TO EXIST. It is
+      // emitted immediately after the `zoneChange` that moved it, so a "dies" /
+      // "leaves the battlefield" trigger still sees the move exactly as it does
+      // for a card — and so a log or a replay folding zone changes is told why
+      // the object it just put in a graveyard is not there.
+      readonly type: 'tokenCeasedToExist';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+      // The zone it reached before ceasing to exist (graveyard, exile, hand,
+      // library) — the printed destination, which is what a log line reads.
+      readonly zone: ZoneName;
+    }
+  | {
+      /**
+       * A COPY OF A SPELL was put onto the stack (CR 707.10) — Reverberate,
+       * Fork, Narset's Reversal. The copy is a spell like any other and can be
+       * countered and targeted as one; what it is NOT is a card.
+       *
+       * Fully public: a copy is created on the stack, where everything is
+       * visible. `copiedInstanceId` names the spell it was made from so a log,
+       * a replay and the inspector can draw the pair.
+       */
+      readonly type: 'spellCopied';
+      /** The COPY's own id — freshly minted, never the original's. */
+      readonly instanceId: InstanceId;
+      /** The spell it was copied from, still on the stack at this moment. */
+      readonly copiedInstanceId: InstanceId;
+      /** Who controls the copy, which need not be the original's controller. */
+      readonly controller: PlayerId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * CR 704.5e: a copy of a spell that leaves the stack CEASES TO EXIST —
+       * it is not a card, so no zone can hold it. Emitted INSTEAD of the
+       * `zoneChange` every other spell leaving the stack emits, which is the
+       * point: a log or a replay folding zone changes must not put this object
+       * in a graveyard, because the game never did.
+       *
+       * Emitted at both exits — a copy that finishes resolving, and a copy that
+       * is countered — so the two can never disagree about what happened to it.
+       */
+      readonly type: 'spellCopyCeasedToExist';
+      readonly instanceId: InstanceId;
+      readonly name: string;
+    }
+  | {
+      /**
+       * A TOKEN COPY of a permanent was created (CR 707.2 + CR 111) — Rite of
+       * Replication, Kiki-Jiki, Helm of the Host.
+       *
+       * Its own event rather than a flavour of `tokenCreated`, which the token
+       * also emits (it IS a token, and every enters-the-battlefield trigger must
+       * see the entry exactly as it does for any other): `tokenCreated` says a
+       * token appeared and names it, and this says which BOARD OBJECT it is a
+       * copy of. Nothing else carries that link, and without it a log cannot
+       * draw the pair and the full-pool soak has no witness that separates a
+       * token copy from any other token.
+       *
+       * Fully public — both objects are on the battlefield.
+       */
+      readonly type: 'tokenCopyCreated';
+      /** The token's own id. */
+      readonly instanceId: InstanceId;
+      /** The permanent it was copied from. */
+      readonly copiedInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      /** The name it now has — the copied card, after any "except …" tail. */
       readonly name: string;
     }
   | {
