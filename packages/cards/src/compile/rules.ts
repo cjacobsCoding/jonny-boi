@@ -6552,6 +6552,15 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // ADDITIONAL COST offering a CHOICE of payments ("discard a card or pay 3
     // life") — the mandatory single-payment forms compile (see the sacrifice
     // hint below).
+    //
+    // ⚠️ NOR is the "you may" WRAPPER missing on any trigger family. It ships for
+    // enters, dies, attacks-scoped-to-a-host, combat damage, cast-a-spell,
+    // draws-a-card, the board-watching arrival/death trigger and every "at the
+    // beginning of…" step — each as a sibling rule ordered after its plain form,
+    // so a body that implements its own option still wins. A clause reaching
+    // this hint with "you may" in it is one whose INNER body has no rule, which
+    // is a different piece of work from the wrapper and must not be reported as
+    // one.
     pattern: /\byou may\b|\bchoose\b|\bchooses\b|discards? a card|\bdiscards\b/,
     missingEngineSystem: 'a "you may / choose" template the compiler does not recognize yet',
   },
@@ -6961,11 +6970,21 @@ export const UNSUPPORTED_HINTS: ReadonlyArray<{
     // stack object into the resolution so a body can say "that player".
     //
     // What lands here is therefore a BODY with no rule — not a trigger the
-    // engine cannot express. Named so nobody re-builds finished work, the bodies
-    // still missing in the corpus are: "you win/lose the game", blink (exile
-    // then return), token COPIES of a permanent, the city's blessing/ascend,
-    // amass, discover, the Ring, a delayed "at the beginning of your NEXT
-    // upkeep", and any count derived from a revealed card's mana value.
+    // engine cannot express. A SECOND round of bodies has since shipped too, and
+    // is named here for the same reason: "each player sacrifices a [nontoken]
+    // NOUN of their choice", "return a NOUN you control to its owner's hand",
+    // "gain 1 life / draw a card FOR EACH <counted thing>", and the additional
+    // land play in both its lifetimes ("on each of your turns" as a player
+    // static, "this turn" as a one-shot).
+    //
+    // Named so nobody re-builds finished work, the bodies STILL missing in the
+    // corpus are: "you win/lose the game", blink (exile then return), token
+    // COPIES of a permanent, the city's blessing/ascend, amass, discover, the
+    // Ring, a delayed "at the beginning of your NEXT upkeep", Treasure tokens
+    // (a token carrying its own activated mana ability), a count derived from a
+    // revealed card's mana value, a "for each" count with a MULTIPLIER above one
+    // (a `DerivedValue` has no scale factor), and "if you can't, …" — a body
+    // that branches on whether the previous one could be performed.
     pattern: /^at the beginning of /,
     missingEngineSystem:
       'an "at the beginning of…" trigger BODY the compiler does not recognize yet (the trigger itself — every printed scope, the "you may" form, the intervening "if", and the triggering player a body points at — is implemented)',

@@ -1045,6 +1045,39 @@
         "Extravagant Replication",
         "Vaultborn Tyrant"
       ]
+    },
+    {
+      "role": "trigger BODIES — the karoo bounce lands, whose \"return a land you control to its owner's hand\" is CHOSEN at resolution rather than targeted",
+      "names": [
+        "Simic Growth Chamber",
+        "Golgari Rot Farm",
+        "Dimir Aqueduct",
+        "Orzhov Basilica",
+        "Izzet Boilerworks",
+        "Gruul Turf",
+        "Azorius Chancery",
+        "Boros Garrison",
+        "Rakdos Carnarium",
+        "Selesnya Sanctuary"
+      ]
+    },
+    {
+      "role": "trigger BODIES — \"each player sacrifices…\", the additional land play in both its lifetimes, a derived \"for each\" count, and the \"you may\" siblings",
+      "names": [
+        "Fleshbag Marauder",
+        "Merciless Executioner",
+        "Accursed Marauder",
+        "Azusa, Lost but Seeking",
+        "Icetill Explorer",
+        "Rites of Flourishing",
+        "Explore",
+        "Urban Evolution",
+        "Venser's Journal",
+        "Consecrated Sphinx",
+        "Mesa Enchantress",
+        "Verduran Enchantress",
+        "Soul's Attendant"
+      ]
     }
   ]
 }
