@@ -22,6 +22,8 @@ import { recordTurnFacts } from '../turn-facts.js';
 import type { PendingTrigger, TriggerSource } from '../triggers.js';
 import { matchTriggers, orderPendingTriggers } from '../triggers.js';
 import { interveningIfHolds } from '../intervening.js';
+import type { DelayedTriggeredAbility } from '../delayed.js';
+import { matchDelayedTriggers, pendingFromDelayed, removeDelayedTrigger } from '../delayed.js';
 
 /**
  * A trigger collector bound to a draft state and a base emit. Call `emit` exactly
@@ -222,6 +224,48 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     return undefined;
   };
 
+  /**
+   * The DELAYED half (CR 603.7): abilities that live on `state.delayedTriggers`
+   * rather than on any object, because the effect that created them is long gone
+   * — see `delayed.ts`.
+   *
+   * Scanned SEPARATELY from the battlefield sources, and deliberately not folded
+   * into `seenSources`: that map is keyed by instance id and holds one entry per
+   * permanent, so two delayed abilities created by the same Kiki-Jiki would
+   * collide, and a delayed record is not last-known-information about anything.
+   * The matching itself is `triggers.ts`'s (`conditionMatches`,
+   * `triggeringPlayerFor`) — one vocabulary, one matcher.
+   *
+   * A matched record is REMOVED HERE, before its ability reaches the stack:
+   * CR 603.7a's "it triggers only once" is then structural rather than a flag,
+   * and an ability countered on the stack cannot come back for another try.
+   *
+   * Costs one property read per event in every game that never makes one.
+   */
+  const collectDelayed = (event: GameEvent): void => {
+    const records = state.delayedTriggers;
+    if (records === undefined || records.length === 0) return;
+    // Resolved at most once per event, and only for the two event kinds a
+    // board-watching condition reads — the same rule (and the same resolver) the
+    // ordinary scan uses. A step trigger, which is every delayed ability this
+    // engine's compiler builds, never asks for it at all.
+    const subject =
+      event.type === 'zoneChange' || event.type === 'spellCast' ? resolveSubject(event.instanceId) : undefined;
+    const matched = matchDelayedTriggers(records, event, subject);
+    for (let i = 0; i < matched.length; i++) {
+      const record = matched[i] as DelayedTriggeredAbility;
+      removeDelayedTrigger(state, record.id);
+      baseEmit({
+        type: 'delayedTriggerFired',
+        id: record.id,
+        sourceInstanceId: record.sourceInstanceId,
+        controller: record.controller,
+        label: record.ability.label ?? '',
+      });
+      (queue ??= []).push(pendingFromDelayed(record, event, subject));
+    }
+  };
+
   const emit = (event: GameEvent): void => {
     baseEmit(event);
     // Fold the event into the turn's fact memory (revolt / morbid / lifegain).
@@ -232,6 +276,11 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
     // Refresh the known-source set so a permanent that entered earlier in this same
     // action can trigger on a later event.
     rememberSources();
+    // The delayed scan runs BEFORE the battlefield early-out below, and that
+    // ordering is load-bearing: a delayed ability belongs to no permanent, so a
+    // board with no triggerful permanent at all (Kiki-Jiki destroyed in response
+    // to its own activation) must still sacrifice the token at end of turn.
+    collectDelayed(event);
     // Perf early-exit: with no triggerful permanent ever seen this action, no event
     // can match — skip the scan entirely. Behavior is unchanged: matchTriggers over
     // an empty source list always returns nothing.

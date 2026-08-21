@@ -362,6 +362,24 @@ export function cloneState(state: GameState): GameState {
   if (state.replacements !== undefined && state.replacements.length > 0) {
     next.replacements = state.replacements.map(cloneFloatingReplacement);
   }
+  // Same conditional rule, and the sharpest stakes of any state-level field
+  // here: this is where a DELAYED triggered ability lives (CR 603.7), and it
+  // lives here precisely because it belongs to no object. Drop this line and
+  // Kiki-Jiki's token stops being sacrificed at end of turn at the very next
+  // action boundary — a permanent hasty copy with no drawback, i.e. strictly
+  // better than the printed card, produced by a field-by-field copy that merely
+  // forgot a field.
+  //
+  // The ARRAY is copied and the RECORDS are shared, and the asymmetry with
+  // `replacements` above is deliberate rather than an oversight: a
+  // `FloatingReplacement` carries a mutable `remaining`, while a delayed record
+  // is written once and only ever removed WHOLE (see `delayed.ts`) — so an
+  // aliased record cannot be edited by one state behind the other's back, and
+  // copying the array is exactly enough to keep one state's creations and
+  // firings out of the other's list. `clone.test.ts` pins both halves.
+  if (state.delayedTriggers !== undefined && state.delayedTriggers.length > 0) {
+    next.delayedTriggers = state.delayedTriggers.slice();
+  }
   // Same `!== undefined` rule and the same reason as the two choice fields above:
   // a window that was DECLINED (`null`) is a different shape from one that never
   // opened, and only one of the two engine paths ever re-clones.

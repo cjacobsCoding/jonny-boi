@@ -18,7 +18,9 @@ import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import { applyControlChange } from './internal/continuous.js';
 import type { ReplacementAbility } from './replacement.js';
-import { addFloatingReplacement } from './internal/replacement.js';
+import { addFloatingReplacement, indexReplacements, replaceTokens } from './internal/replacement.js';
+import type { TriggerCondition } from './triggers.js';
+import { createDelayedTrigger } from './delayed.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
 import type {
   ChooseModesRequest,
@@ -113,6 +115,49 @@ export interface EffectContext {
    * permanent. Used by token-makers (e.g. a cast-trigger that makes a 1/1).
    */
   createToken(def: CardDefinition, controller?: PlayerId): InstanceId;
+  /**
+   * Create `count` tokens AS ONE EVENT, returning their ids in creation order.
+   *
+   * The count belongs here — rather than in the caller's `for` loop — because
+   * CR 614's token-count replacement watches "if an effect would create **one or
+   * more** tokens" (Doubling Season, Parallel Lives, Anointed Procession). That
+   * is ONE event carrying a quantity, so it must be replaced once over the whole
+   * count: a loop of single creations would log N replacements for one printed
+   * sentence, and CR 614.5's apply-once would be counted per token instead of
+   * per event — the same answer only for as long as every printed multiplier
+   * happens to be a pure multiplication.
+   *
+   * {@link EffectContext.createToken} is this function with `count: 1`, kept
+   * because that is what most callers mean. Both go through the same
+   * replacement, so "create a 1/1" is doubled exactly as a batch is.
+   *
+   * `options` carries what a token definition cannot say on its own: a token
+   * created TAPPED, and one created tapped **and attacking** (CR 506.3c — it was
+   * never *declared* an attacker, so no "whenever ~ attacks" ability sees it).
+   */
+  createTokens(
+    def: CardDefinition,
+    count: number,
+    controller?: PlayerId,
+    options?: TokenEntryOptions,
+  ): readonly InstanceId[];
+  /**
+   * Create a DELAYED TRIGGERED ABILITY (CR 603.7) — "sacrifice it at the
+   * beginning of the next end step", "at the beginning of your next upkeep, pay
+   * {3}{U}{U}". Returns the new ability's id.
+   *
+   * The ability is stored on the STATE rather than on this effect's source, and
+   * that is the whole point: the source may be destroyed the instant it has
+   * finished resolving and the delayed ability still fires at its moment. See
+   * `delayed.ts`.
+   *
+   * `controller` defaults to this effect's controller and is what every
+   * `who: 'you'` in the condition reads (so "your next upkeep" means the
+   * creating player's). The `effects` are built by the CALLER, with any object
+   * the body acts on already baked into their params — "sacrifice **it**" names
+   * a token that did not exist when the card was compiled.
+   */
+  createDelayedTrigger(request: DelayedTriggerArgs): number;
   /**
    * Create an EMBLEM in `controller`'s command zone (defaults to the source's
    * controller) — what a planeswalker ultimate leaves behind. Returns the new
@@ -263,6 +308,43 @@ export interface ReplacementEffectRequest extends ReplacementAbility {
   readonly duration?: ContinuousDuration;
 }
 
+/**
+ * What a primitive asks for when it creates a delayed triggered ability. The
+ * ability half is the same {@link TriggerCondition} + {@link EffectRef} list a
+ * printed trigger declares, so "at the beginning of the next end step" is spelled
+ * the same whether a card prints it or an effect creates it; only the controller
+ * is optional, defaulting to the creating effect's.
+ */
+export interface DelayedTriggerArgs {
+  readonly condition: TriggerCondition;
+  readonly effects: readonly EffectRef[];
+  readonly label: string;
+  /** Whose ability it is; every `who: 'you'` reads this. Defaults to the source's controller. */
+  readonly controller?: PlayerId;
+}
+
+/**
+ * How a token ARRIVES, for the two facts a `CardDefinition` cannot carry.
+ *
+ * `tapped` is not folded into the definition's own `entersTapped` because that
+ * is a property of the CARD ("Skyclave Relic enters tapped"), while this is a
+ * property of the printed instruction that made this particular token ("create a
+ * **tapped** 1/1"); a token copy proves they are different, since it takes its
+ * definition from another permanent that says nothing about being tapped.
+ */
+export interface TokenEntryOptions {
+  /** "Create a **tapped** … token" (Skyclave Relic, Kambal). */
+  readonly tapped?: boolean;
+  /**
+   * "…**tapped and attacking**" (Delina, Mobilize). Implies {@link tapped}, and
+   * puts the token straight into `GameState.combat.attackers` — which is legal
+   * only during a combat its controller is attacking in. CR 506.3c: the token
+   * was never DECLARED, so no "whenever ~ attacks" ability triggers off it, and
+   * this deliberately emits no `attackersDeclared`.
+   */
+  readonly attacking?: boolean;
+}
+
 export interface ContinuousModRequest {
   readonly target?: InstanceId;
   readonly duration?: ContinuousDuration;
@@ -367,7 +449,23 @@ export function applyEffectRef(
       });
     },
     createToken(def, controller) {
-      return createTokenInState(base.state, def, controller ?? base.controller, emit);
+      const made = createTokensInState(base.state, def, 1, controller ?? base.controller, emit, undefined);
+      // The batch can come back EMPTY: a replacement that reduced the count to
+      // zero really did stop the token being created. Callers that want an id
+      // get the first one, exactly as they always did.
+      return made[0] ?? 0;
+    },
+    createTokens(def, count, controller, options) {
+      return createTokensInState(base.state, def, count, controller ?? base.controller, emit, options);
+    },
+    createDelayedTrigger(request) {
+      return createDelayedTrigger(base.state, {
+        condition: request.condition,
+        effects: request.effects,
+        label: request.label,
+        controller: request.controller ?? base.controller,
+        sourceInstanceId: base.source.instanceId,
+      });
     },
     createEmblem(def, controller) {
       return createEmblemInState(base.state, def, controller ?? base.controller, emit);
@@ -533,12 +631,45 @@ function createEmblemInState(
   return instanceId;
 }
 
-/** Create a token permanent on the battlefield; returns its instance id. */
-function createTokenInState(
+/**
+ * Create `count` token permanents on the battlefield; returns their ids.
+ *
+ * ⚠️ **The CR 614 token-count replacement is applied HERE, once, over the whole
+ * count** (Doubling Season, Parallel Lives, Anointed Procession) — this is the
+ * one funnel every token in the engine passes through, exactly as `changeCounters`
+ * is for counters and `dealDamage` is for damage, so a doubler cannot be right in
+ * one token-maker and absent in another. The guard is the layer's usual
+ * `index.length === 0`, so a game with no doubler pays one property read.
+ *
+ * A replaced count of ZERO is a real answer and creates nothing at all.
+ */
+function createTokensInState(
+  state: GameState,
+  def: CardDefinition,
+  count: number,
+  controller: PlayerId,
+  emit: (event: GameEvent) => void,
+  options: TokenEntryOptions | undefined,
+): readonly InstanceId[] {
+  const requested = Math.max(0, Math.trunc(count));
+  if (requested === 0) return NO_TOKENS;
+  const actual = replaceTokens(state, indexReplacements(state), controller, requested, emit);
+  if (actual === 0) return NO_TOKENS;
+  const made: InstanceId[] = [];
+  for (let i = 0; i < actual; i++) made.push(createOneTokenInState(state, def, controller, emit, options));
+  return made;
+}
+
+/** Shared empty result so a fully-replaced-away creation allocates nothing. */
+const NO_TOKENS: readonly InstanceId[] = Object.freeze([]);
+
+/** Put ONE token on the battlefield; returns its instance id. */
+function createOneTokenInState(
   state: GameState,
   def: CardDefinition,
   controller: PlayerId,
   emit: (event: GameEvent) => void,
+  options: TokenEntryOptions | undefined,
 ): InstanceId {
   const instanceId = state.nextInstanceId++;
   const hasHaste = Boolean(def.keywords?.haste);
@@ -562,8 +693,11 @@ function createTokenInState(
     owner: controller,
     zone: 'battlefield',
     // Tokens obey the same "enters tapped" rule as printed permanents — asked
-    // through the one shared accessor so every entry path agrees.
-    tapped: entersTapped(def),
+    // through the one shared accessor so every entry path agrees. The printed
+    // INSTRUCTION can also say so ("create a **tapped** … token", "tapped and
+    // attacking"), which is a fact about this creation rather than about the
+    // card, and either is enough.
+    tapped: entersTapped(def) || options?.tapped === true || options?.attacking === true,
     summoningSick: isCreatureToken ? !hasHaste : false,
     damageMarked: 0,
     markedByDeathtouch: false,
@@ -585,5 +719,18 @@ function createTokenInState(
   // untapped, so a token that arrives tapped must emit the same `tapped` event
   // every other battlefield-entry path emits.
   if (token.tapped) emit({ type: 'tapped', instanceId });
+  // "…tapped **and attacking**" (CR 506.3c). Put into combat only when there IS
+  // a combat its controller is the attacking player in — a token created
+  // attacking outside one is simply a tapped token, which is the reading that
+  // can never play better than the printed card. No `attackersDeclared` event
+  // and no attack trigger: the token was never DECLARED an attacker, and
+  // emitting the declaration event would fire every "whenever ~ attacks"
+  // ability on the board off an object that never attacked.
+  if (options?.attacking === true) {
+    const combat = state.combat;
+    if (combat !== null && combat.attackersDeclared && state.activePlayer === controller) {
+      combat.attackers.push(instanceId);
+    }
+  }
   return instanceId;
 }

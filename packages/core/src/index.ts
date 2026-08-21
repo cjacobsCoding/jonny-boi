@@ -397,8 +397,20 @@ export {
   replaceCounters,
   replaceDamage,
   replaceDraw,
+  replaceTokens,
   runReplacements,
 } from './internal/replacement.js';
+
+// Delayed triggered abilities (CR 603.7) — an ability created DURING a
+// resolution that fires once at a named later moment. It lives on the STATE
+// rather than on any object, which is how it outlives the source that made it.
+export type { DelayedTriggeredAbility, DelayedTriggerRequest } from './delayed.js';
+export {
+  createDelayedTrigger,
+  matchDelayedTriggers,
+  pendingFromDelayed,
+  removeDelayedTrigger,
+} from './delayed.js';
 
 // State
 export type {
@@ -465,6 +477,8 @@ export type {
   EffectRegistry,
   ContinuousModRequest,
   ReplacementEffectRequest,
+  DelayedTriggerArgs,
+  TokenEntryOptions,
   ChoiceChannel,
   ChoiceRequestArgs,
 } from './effects.js';

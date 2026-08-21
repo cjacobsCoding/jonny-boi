@@ -227,8 +227,13 @@ export type GameEvent =
       readonly type: 'replacementApplied';
       /** The permanent (or resolving spell) the replacement effect comes from. */
       readonly source: InstanceId;
-      /** Which event family was replaced. */
-      readonly event: 'damage' | 'counters' | 'draw';
+      /**
+       * Which event family was replaced. Spelled out rather than importing
+       * `ReplacementEventKind` so `events.ts` stays free of engine imports;
+       * `replacement.test.ts` pins the two lists identical, which is what stops
+       * a fifth kind reaching the log as an unlisted string.
+       */
+      readonly event: 'damage' | 'counters' | 'draw' | 'tokens';
       readonly from: number;
       readonly to: number;
       /** How much of `from` this effect PREVENTED (0 for a pure multiplier). */
@@ -613,6 +618,44 @@ export type GameEvent =
       readonly controller: PlayerId;
       /** The name it now has — the copied card, after any "except …" tail. */
       readonly name: string;
+    }
+  | {
+      /**
+       * A DELAYED TRIGGERED ABILITY was created by a resolving effect
+       * (CR 603.7) — "sacrifice it at the beginning of the next end step".
+       *
+       * A real event, not bookkeeping: the ability exists from this moment, it
+       * is on no object and on no stack, and it is the only thing that makes the
+       * hasty token now on the board a TEMPORARY one. A spectator (or a pilot)
+       * that could not see it would be looking at a permanent creature.
+       *
+       * Fully public — the effect that created it resolved in the open.
+       */
+      readonly type: 'delayedTriggerCreated';
+      /** The ability's own id, from the instance-id space. Names no card. */
+      readonly id: number;
+      /** The object whose effect created it. */
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      /** The printed clause, for the log and the inspector. */
+      readonly label: string;
+    }
+  | {
+      /**
+       * A delayed triggered ability reached its moment and went on the stack.
+       *
+       * Paired with `delayedTriggerCreated` exactly as `tokenCeasedToExist` is
+       * paired with `tokenCreated`: the pair proves the ability both EXISTED and
+       * FIRED, and only the second says the "once, later" half ran rather than
+       * merely compiling. `triggerPutOnStack` is emitted alongside it (from this
+       * point the ability IS an ordinary trigger) and cannot serve as that
+       * witness, because every printed trigger emits it too.
+       */
+      readonly type: 'delayedTriggerFired';
+      readonly id: number;
+      readonly sourceInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      readonly label: string;
     }
   | {
       // A resolving spell/ability asked a player a question; resolution is parked
