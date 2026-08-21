@@ -4820,7 +4820,7 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     // different lifetimes, and matching the one-shot here would print a
     // permanent grant on a sorcery — an unbounded ramp spell.
     pattern: new RegExp(
-      `^(you|each player) may play (an|${COUNT_TOKEN}) additional lands? on each of (?:your|their) turns\.?$`,
+      `^(you|each player) may play (an|${COUNT_TOKEN}) additional lands? on each of (?:your|their) turns[.]?$`,
     ),
     build(match) {
       const who = match[1] === 'each player' ? ('each' as const) : ('controller' as const);
