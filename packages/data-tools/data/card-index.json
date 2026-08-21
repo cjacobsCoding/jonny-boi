@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-20T13:21:00.474Z",
+  "generatedAt": "2026-08-21T08:59:25.345Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 553,
+  "requested": 555,
   "unresolved": [],
   "cards": [
     {
@@ -5853,6 +5853,64 @@
       "faces": []
     },
     {
+      "id": "6879f5ce-7a1b-4606-bad1-885779b0d456",
+      "name": "Cloudshift",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Instant"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Instant",
+      "oracleText": "Exile target creature you control, then return that card to the battlefield under your control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "tle",
+      "collectorNumber": "152",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.jpg?1783904809",
+        "normal": "https://cards.scryfall.io/normal/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.jpg?1783904809",
+        "large": "https://cards.scryfall.io/large/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.jpg?1783904809",
+        "png": "https://cards.scryfall.io/png/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.png?1783904809",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.jpg?1783904809",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.jpg?1783904809",
+        "thumb": "https://cards.scryfall.io/thumb/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.webp?1783904809",
+        "grid": "https://cards.scryfall.io/grid/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.webp?1783904809",
+        "display": "https://cards.scryfall.io/display/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.webp?1783904809",
+        "art": "https://cards.scryfall.io/art/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.webp?1783904809",
+        "crop": "https://cards.scryfall.io/crop/front/6/d/6dc0c976-26d2-40c9-a571-c370e9139d1d.webp?1783904809"
+      },
+      "localImages": {
+        "normal": "cloudshift-normal.jpg",
+        "art_crop": "cloudshift-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8d8682f3-9ef3-4aa7-9ea6-8a2ce09bff6f",
       "name": "Cobbled Wings",
       "manaCost": {
@@ -6201,6 +6259,60 @@
       "localImages": {
         "normal": "condescend-normal.jpg",
         "art_crop": "condescend-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "cd1eda60-53e4-44d0-9b2c-7a57395e291f",
+      "name": "Conjurer's Closet",
+      "manaCost": {
+        "generic": 5,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "At the beginning of your end step, you may exile target creature you control, then return that card to the battlefield under your control.",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "inr",
+      "collectorNumber": "259",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.jpg?1783908066",
+        "normal": "https://cards.scryfall.io/normal/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.jpg?1783908066",
+        "large": "https://cards.scryfall.io/large/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.jpg?1783908066",
+        "png": "https://cards.scryfall.io/png/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.png?1783908066",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.jpg?1783908066",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.jpg?1783908066",
+        "thumb": "https://cards.scryfall.io/thumb/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.webp?1783908066",
+        "grid": "https://cards.scryfall.io/grid/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.webp?1783908066",
+        "display": "https://cards.scryfall.io/display/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.webp?1783908066",
+        "art": "https://cards.scryfall.io/art/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.webp?1783908066",
+        "crop": "https://cards.scryfall.io/crop/front/a/f/af2115e4-009e-4432-99bb-05e844bc18b6.webp?1783908066"
+      },
+      "localImages": {
+        "normal": "conjurer-s-closet-normal.jpg",
+        "art_crop": "conjurer-s-closet-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,

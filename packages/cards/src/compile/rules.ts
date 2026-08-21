@@ -2037,6 +2037,30 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'blink-target-creature-you-control',
+    description:
+      '"Exile target creature you control, then return that card to the battlefield under your control" (blink)',
+    /*
+     * ONE rule, three cards, because the two wrappers already exist: the step
+     * prefix ("At the beginning of your end step, …") makes it Conjurer's Closet
+     * and the `you may` wrapper makes it optional, while the bare clause is
+     * Cloudshift. Written against the printed comma-then form rather than as two
+     * chained clauses (exile + return) on purpose — "then return **that card**"
+     * is one effect on one object, and splitting it would let the exile half
+     * resolve while the return half found nothing.
+     *
+     * `it` is accepted alongside `that card` because Oracle has used both
+     * wordings for the same effect over the years, and a rule that matched only
+     * today's phrasing would silently reject the other printing.
+     */
+    pattern:
+      /^exile target creature you control, then return (?:that card|it) to the battlefield under your control$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({ primitive: 'blinkTarget', params: { targets: CREATURE_YOU_CONTROL_TARGET } });
+    },
+  },
+  {
     id: 'exile-creature-controller-gains-life',
     description: '"Exile target creature. Its controller gains life equal to its power."',
     pattern: /^exile target creature\. its controller gains life equal to its power$/,

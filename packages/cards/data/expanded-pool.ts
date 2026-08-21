@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 521 cards.
+ * 523 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -1416,6 +1416,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Exile target creature you control, then return that card to the battlefield under your control.
+  {
+    id: '6879f5ce-7a1b-4606-bad1-885779b0d456',
+    name: 'Cloudshift',
+    types: ['instant'],
+    cost: { W: 1 },
+    effects: [{ primitive: 'blinkTarget', params: { targets: 'creatureYouControl' } }],
+  },
   // Equipped creature has flying.
   // Equip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)
   {
@@ -1500,6 +1508,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     effects: [
       { primitive: 'counterUnlessPaid', params: { targets: 'spell', unlessPaidX: true } },
       { primitive: 'scry', params: { count: 2 } },
+    ],
+  },
+  // At the beginning of your end step, you may exile target creature you control, then return that card to the battlefield under your control.
+  {
+    id: 'cd1eda60-53e4-44d0-9b2c-7a57395e291f',
+    name: 'Conjurer\'s Closet',
+    types: ['artifact'],
+    cost: { generic: 5 },
+    triggers: [
+      {
+        condition: { on: 'endStep', who: 'you' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may exile target creature you control, then return that card to the battlefield under your control',
+              valence: 'gain',
+              effects: [{ primitive: 'blinkTarget', params: { targets: 'creatureYouControl' } }],
+            },
+          },
+        ],
+        label: 'your end step: you may exile target creature you control, then return that card to the battlefield under your control',
+        targets: 'creatureYouControl',
+      },
     ],
   },
   // Surveil 1. (Look at the top card of your library. You may put it into your graveyard.)

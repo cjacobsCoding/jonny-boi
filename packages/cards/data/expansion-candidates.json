@@ -1045,6 +1045,21 @@
         "Extravagant Replication",
         "Vaultborn Tyrant"
       ]
+    },
+    {
+      "role": "blink (DESIGN §3.35) — exile a permanent you control and return it, so an enters-the-battlefield trigger fires again (CR 400.7). The immediate-return half only: the delayed-return cards are listed too, deliberately, so the report keeps naming what delayed triggers would unblock.",
+      "names": [
+        "Cloudshift",
+        "Conjurer's Closet",
+        "Restoration Angel",
+        "Teleportation Circle",
+        "Flickerwisp",
+        "Ephemerate",
+        "Eerie Interlude",
+        "Reclamation Sage",
+        "Charming Prince",
+        "Whitemane Lion"
+      ]
     }
   ]
 }

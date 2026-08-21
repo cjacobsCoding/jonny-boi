@@ -36,6 +36,7 @@ import {
   indexPoolForSoak,
   SOAK_DECK_SIZE,
 } from './soak-decks.js';
+import { PINNED_MATCHUPS } from './soak-pinned-decks.js';
 import type { SoakReport } from './soak.js';
 import {
   compareApplyPaths,
@@ -293,11 +294,18 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
 
   for (const { seed, onPlay, what, mustContain } of PINNED) {
     it(`seed ${seed}: ${what}`, () => {
+      // The decks are PINNED, not regenerated. Generating them from the seed
+      // meant every pool change re-dealt these rows onto a different match —
+      // §3.35 added two cards and did exactly that to three of the four. See
+      // `soak-pinned-decks.ts`.
+      const pinnedDecks = PINNED_MATCHUPS[seed];
+      expect(pinnedDecks, `seed ${seed} has no recorded decklist`).toBeDefined();
       const { violations, decks } = replaySoakMixedGame({
         pool,
         registry,
         pilot,
         seed,
+        decks: pinnedDecks,
         ...(onPlay ? { onPlay } : {}),
       });
       // WHICH GAME — asserted first, because it is what makes the next line mean

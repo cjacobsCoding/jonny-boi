@@ -2151,8 +2151,9 @@ CONDITIONALLY in `internal/clone.ts` so an ordinary trigger clones byte-for-byte
 
 ⛔ **Reported by name rather than approximated** (each is a different system, not a missing rule):
 "you win / you lose the game"; a DELAYED trigger ("at the beginning of your NEXT upkeep" — Pact of
-Negation); blink (exile then return — Conjurer's Closet, Soulherder, Thassa, Teleportation Circle,
-Y'shtola); token COPIES of a permanent (Extravagant Replication, Mechanized Production); the city's
+Negation); ~~blink (exile then return)~~ — **the immediate-return half SHIPPED in §3.35**; the
+DELAYED-return half (Flickerwisp, Eerie Interlude, Ghostway) still needs delayed triggers; token
+COPIES of a permanent (Extravagant Replication, Mechanized Production); the city's
 blessing / ascend; amass; discover; the Ring; "no maximum hand size"; a spell-cost increase or
 decrease static (God-Pharaoh's Statue, The Immortal Sun); "players can't activate loyalty abilities";
 DOUBLING power and toughness (Unnatural Growth, Zopandrel); "life lost this turn" (Wound Reflection);
@@ -3394,6 +3395,83 @@ would put an engine change in a branch whose diff is meant to be readable as one
 for its own branch with a reproducing seed. → **Closed in §3.32**: it was neither the gate nor a
 stale toughness but a mutation site with no pass behind it — paying a spell's additional cost — and
 the handoff was right, because the fix is an engine change in `applyActionToDraft`.
+
+### 3.35 Blink — exile a permanent you control and return it — ✅ done
+
+Blink was on §3.21's ⛔ named-unsupported list, which meant a Selesnya Blink deck could not exist:
+not "played badly", but *unbuildable* — the mechanic had no primitive and the pool had no enabler.
+It is now playable end to end, and **`Selesnya Blink` is the ninth sample deck**, selectable in the
+online lobby and in the gauntlet.
+
+**The whole mechanic is CR 400.7 taken seriously** — what returns is a NEW OBJECT. That is the
+payoff (the enters trigger fires again) and the cost (counters, damage and Auras do not come back;
+it returns untapped and summoning-sick), and it is why this is one primitive rather than a card
+script. `blinkTarget` composes the package's two EXISTING zone funnels — `movePermanentTo` out and
+`putOntoBattlefield` back — rather than opening a third opinion about what a zone change does;
+`effect-helpers.ts` already carries a scar comment about the last time those drifted.
+
+One shared funnel gained one option: `putOntoBattlefield` now takes an optional `controller`,
+because a card always goes to its OWNER's exile (CR 400.3) while a blink returns it under the
+BLINKER's control. For a creature you control but do not own those genuinely differ — which is the
+classic way a temporary control effect is made permanent.
+
+**One compile rule unlocked two cards**, because the wrappers already existed: the step-trigger
+prefix makes it Conjurer's Closet and the `you may` wrapper makes it optional, while the bare clause
+is Cloudshift. The pool regeneration was surgical — exactly 2 cards added, 0 changed.
+
+⚠️ **The pilot half is not optional, and the measurement is why.** With the engine working but no
+pilot valuation, Conjurer's Closet blinked **94 times across 20 games** (it is a `you may` trigger,
+which the pilot already accepts) while Cloudshift — the one-mana instant doing the same thing — was
+cast **zero times**, because an unclassified primitive scores as a "generic spell" and a generic
+spell is only offered into an empty stack. A mechanic half-played is worse than one that is absent:
+the deck looks functional while its best card rots in hand. Adding the `blink` goal took Cloudshift
+to **45 casts** and the deck from **55.9% → 61.9%**.
+
+A blink is priced as *what re-running the target's triggers is worth*, through the same
+`valueOfEffects` ruler everything else uses — and it counts the `leaves` trigger too, which is what
+makes Thragtusk (leaves: a 3/3; enters: 5 life) the best blink target in the pool by a distance. A
+creature with no such trigger scores nothing and is never chosen, so the spell is held rather than
+spent blinking a vanilla body.
+
+**Deck-order note that is easy to get wrong.** A gauntlet matchup is seeded by the opponent's INDEX
+(`gameSeedFor(baseSeed, i)`), so inserting a deck mid-list reseeds every deck after it. Slotting
+Selesnya Blink into the curve order moved UW Control's recorded row from 14 to 12 while changing
+nothing about how either deck plays. It is APPENDED instead, and all seven recorded rows stay
+byte-identical (12 · 13 · 17 · 7 · 9 · 7 · 14) with an eighth added.
+
+**Still out, named so it is not rediscovered.** The delayed-return half of the archetype —
+Flickerwisp, Eerie Interlude, Ghostway, and Charming Prince's third mode — needs DELAYED TRIGGERS
+("return it at the beginning of the next end step"), which the engine still does not have.
+Ephemerate needs rebound as well, and its blink half also prints "under its **owner's** control",
+a wording this rule does not yet match. Teleportation Circle needs "up to one target artifact or
+creature". All are left in the candidate list on purpose, so `expansion-report.json` keeps counting
+what delayed triggers would unblock.
+
+#### The pinned soak rows broke, and that is the interesting part
+
+Adding two cards re-sampled every generated deck, so **three of §3.33's four pinned rows started
+replaying a different match** and their `mustContain` guards fired. That guard worked exactly as its
+author intended — it is there so pool churn is a *finding* rather than a silent vacuous pass — but it
+left the regressions with nowhere to live: the bugs are still fixed, the positions simply are not
+dealt any more. **An 8,000-game hunt with the copy fix reverted did not re-deal the mirror once.**
+Re-pinning onto fresh seeds would only buy time until the next card is added.
+
+So a pinned row now carries its own DECKLISTS (`soak-pinned-decks.ts`), and
+`replaySoakMixedGame` takes an optional `decks` that wins over the generated pair. Card ids are
+Scryfall UUIDs and are stable across churn — only the sampling ever moved. A row is now
+self-describing and replays the exact game its bug came from for ever.
+
+⚠️ **This could easily have destroyed the coverage it was protecting**, so it was checked the only
+way that means anything: sabotage. Reverting the copy chain walk still turns all three copy rows red
+("burned the 6000-action cap", turns 11/20/18), and disabling the CR 704.3 end-of-action check still
+turns the SBA row red with its *original* violation text, `#34 Blood Artist has toughness 0`.
+`mustContain` keeps earning its place too — it now proves the pinned decklist is the right one,
+which is what a copy-paste between rows would break.
+
+📊 The deck is the strongest in the gauntlet at **61.9%** (95% vs Mono-Red, 100% vs Rakdos Goblins —
+eight 0/4 walls and a great deal of lifegain), and its bad matchups are real: 27.5% into Mono-Green
+Ramp and 37.5% into Izzet Prowess, neither of which cares about blocking. Whether the meta wants a
+62% deck is a TUNING question for the integrator, not a correctness one.
 
 ### 3.33 The copy mirror — a game that could not end — ✅ done
 

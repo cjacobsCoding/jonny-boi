@@ -86,7 +86,7 @@ import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
 import { boardIndex, keywordsOf, power, statTotal, toughness, toughnessLeft } from './board-stats.js';
-import { valueOfEffects, valueOfMode } from './effect-value.js';
+import { resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -134,6 +134,16 @@ const PRIMITIVE = Object.freeze({
    * mechanic INERT. That is what caught it.
    */
   copySpell: 'copySpell',
+  /**
+   * BLINK — exile a permanent you control and return it (CR 400.7). Recognised
+   * for the same reason `copySpell` is: unlisted it classifies as a "generic
+   * spell", and the full-pool measurement showed the consequence exactly —
+   * Conjurer's Closet (a `you may` TRIGGER the pilot accepts) blinked 94 times
+   * across 20 games while Cloudshift, the one-mana instant doing the same
+   * thing, was cast ZERO times. A mechanic half-played is worse than one that
+   * is absent, because the deck looks functional while its best card rots.
+   */
+  blinkTarget: 'blinkTarget',
   /** A symmetric board sweeper (Wrath of God / Day of Judgment). */
   destroyAll: 'destroyAll',
   gainLife: 'gainLife',
@@ -178,6 +188,14 @@ type SpellIntent =
    * threat, and it is worth exactly what the spell it copies is worth.
    */
   | { readonly kind: 'copySpell' }
+  /**
+   * "Exile target creature you control, then return it" — worth whatever
+   * re-running that creature's enters-the-battlefield trigger is worth, which
+   * is why it is its own goal rather than a generic spell: the value is
+   * entirely in the TARGET, and a pilot that picked the wrong creature would
+   * spend a card blinking a vanilla body.
+   */
+  | { readonly kind: 'blink' }
   | { readonly kind: 'sweeper' }
   | { readonly kind: 'creature' }
   /**
@@ -1240,6 +1258,17 @@ function scoreSpell(
         reason: explain ? `fog the attack with ${card.def.name}` : NO_REASON,
       };
     }
+    case 'blink': {
+      const pick = bestBlinkTarget(view, otherPlayer(opp), weights, index);
+      if (!pick) return undefined; // nothing whose ETB is worth re-running — hold it
+      return {
+        score: pick.score,
+        card,
+        cost,
+        targets: [pick.instanceId],
+        reason: explain ? `blink ${pick.name} to re-trigger it` : NO_REASON,
+      };
+    }
     case 'copySpell': {
       const target = copyTarget(view, otherPlayer(opp));
       if (!target) return undefined; // nothing on the stack worth copying — hold it
@@ -1394,6 +1423,47 @@ function counterTarget(view: PilotView, me: PlayerId) {
   if (!top || top.kind !== 'spell') return undefined;
   if (top.controller === me) return undefined; // already answered / it is ours
   return top as Extract<typeof top, { kind: 'spell' }>;
+}
+
+/**
+ * WHICH of our creatures is worth blinking, and what that is worth.
+ *
+ * A blink is worth re-running an enters-the-battlefield trigger, so the answer
+ * is "the creature whose ETB is worth the most, priced through the same
+ * `valueOfEffects` ruler every other effect uses". Three things this must get
+ * right, each of which is a way the card gets misplayed:
+ *
+ *  - A creature with NO enters trigger is worth nothing to blink. Worse than
+ *    nothing, in fact — it comes back summoning sick and loses its counters —
+ *    so it is never offered and the spell is simply held.
+ *  - A LEAVES trigger counts too. Blinking Thragtusk fires both halves: the 3/3
+ *    on the way out and the five life on the way back, which is what makes it
+ *    the best blink target in the pool by a distance.
+ *  - A creature already summoning sick is still fine to blink (nothing is lost),
+ *    but an ATTACKING one is not: returning it removes it from combat. Combat is
+ *    not modelled here, and the pilot only casts spells in its main phases, so
+ *    this stays a main-phase value question exactly as printed.
+ */
+function bestBlinkTarget(
+  view: PilotView,
+  me: PlayerId,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): { readonly instanceId: InstanceId; readonly score: number; readonly name: string } | undefined {
+  const base = resolutionValueContext(view as GameState, me, weights, cardValueContext(view as GameState, index));
+  let best: { instanceId: InstanceId; score: number; name: string } | undefined;
+  for (const permanent of view.battlefield) {
+    if (permanent.controller !== me) continue;
+    const triggers = permanent.def.triggers ?? [];
+    // Both halves of the blink: what leaving fires, and what entering fires.
+    const fired = triggers.filter((t) => t.condition.on === 'etb' || t.condition.on === 'leaves');
+    if (fired.length === 0) continue;
+    let score = 0;
+    for (const trigger of fired) score += valueOfEffects(trigger.effects, { ...base, targets: [] });
+    if (score <= 0) continue; // nothing worth re-running
+    if (!best || score > best.score) best = { instanceId: permanent.instanceId, score, name: permanent.def.name };
+  }
+  return best;
 }
 
 /**
@@ -2241,6 +2311,7 @@ function computeSpellIntent(def: CardDefinition): SpellIntent {
       return { kind: 'counter' };
     }
     if (ref.primitive === PRIMITIVE.copySpell) return { kind: 'copySpell' };
+    if (ref.primitive === PRIMITIVE.blinkTarget) return { kind: 'blink' };
     if (ref.primitive === PRIMITIVE.destroyAll) return { kind: 'sweeper' };
     if (ref.primitive === PRIMITIVE.preventDamage) {
       return {

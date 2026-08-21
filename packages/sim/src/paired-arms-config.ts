@@ -360,6 +360,28 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * `returnToHand` above.
    */
   'returnSpellToHand',
+  /*
+   * BLINK (CR 400.7) — SAFE, and for a reason worth writing down because the
+   * first instinct is the wrong one.
+   *
+   * The worry: blinking a permanent re-fires its enters-the-battlefield trigger,
+   * and that trigger can absolutely read a library (blink a Wood Elves and it
+   * searches for a Forest). So does the blink "acquire" an ability whose read is
+   * invisible to the scan?
+   *
+   * No — and the difference from `copyAsEnters` is the whole argument. A blink
+   * creates no new object identity: the permanent that returns is the SAME CARD,
+   * carrying the SAME decklist instance id it has had since the opening shuffle.
+   * `sourceCardFor` therefore places it exactly as it always did, and the ETB
+   * read is attributed to the card that actually made it — Wood Elves' own row —
+   * rather than to the Cloudshift that blinked it. The scan sees the read
+   * through the right card, which is precisely what soundness requires here.
+   *
+   * The blinking CARD itself (Cloudshift, Conjurer's Closet) reads nothing: it
+   * moves one known permanent out of a public zone and back into it.
+   */
+  'blinkTarget',
+  'blinkSelf',
 ]);
 
 /**

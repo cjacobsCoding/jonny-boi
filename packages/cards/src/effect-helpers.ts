@@ -493,6 +493,15 @@ export function putOntoBattlefield(
      * charged by the engine, so the entry must honour it.
      */
     readonly ignoreEntersTapped?: boolean;
+    /**
+     * Who ends up CONTROLLING it, when that is not whose zone it came from.
+     * A blink says "exile target creature you control, then return that card to
+     * the battlefield **under your control**" — and a card always goes to its
+     * OWNER's exile on the way out (CR 400.3), so for a creature you control but
+     * do not own the two players genuinely differ. Defaults to `player`, which
+     * is every other caller's case.
+     */
+    readonly controller?: PlayerId;
   } = {},
 ): CardInstance | undefined {
   const owner = ctx.state.players[player];
@@ -502,7 +511,7 @@ export function putOntoBattlefield(
   const [card] = source.splice(index, 1);
   if (!card) return undefined;
   card.zone = 'battlefield';
-  card.controller = player;
+  card.controller = options.controller ?? player;
   card.tapped = options.ignoreEntersTapped === true ? options.tapped === true : options.tapped === true || entersTapped(card.def);
   card.summoningSick = isCreature(card.def) && card.def.keywords?.haste !== true;
   card.damageMarked = 0;

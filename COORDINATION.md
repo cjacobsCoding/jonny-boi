@@ -139,10 +139,67 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
+| feat/blink-selesnya | DESKTOP-90PJPM4 (worker) | packages/cards (NEW blink-primitives.ts + blink-play.test.ts; primitives.ts registration, effect-helpers.ts +1 option, compile/rules.ts +1 rule; GENERATED data/expanded-pool.ts + expansion-report.json + expansion-candidates.json), packages/data-tools/data (GENERATED card-index.json + starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/ai (heuristic.ts blink goal + picker), packages/sim (NEW data/decks/selesnya-blink.ts + decks/index.ts), DESIGN §3.35 + §3.21 note, COORDINATION. **Gauntlet seed 99 rows byte-identical; new 8th row.** | 🚧 PUSHED, not merged — STACKS on fix/soak-action-cap |
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-21 DESKTOP-90PJPM4: `feat/blink-selesnya` 🚧 PUSHED — **BLINK SHIPPED; `Selesnya Blink` is
+  the ninth sample deck** and is selectable online. DESIGN §3.35. ⚠️ **Stacks on
+  `fix/soak-action-cap`** (both touch `packages/ai/effect-value.ts`/`heuristic.ts`) — merge that first.
+
+  Blink was on §3.21's ⛔ named-unsupported list, so the deck was not "broken", it was
+  **unbuildable**: no primitive, no enabler in the pool. Now `blinkTarget` + `blinkSelf`
+  (`packages/cards/src/blink-primitives.ts`), one compile rule, and two real pool cards.
+
+  **What the mechanic IS: CR 400.7 — a new object.** The ETB fires again (the payoff); counters,
+  damage and Auras do not return, and it comes back untapped and summoning-sick (the cost). Built by
+  composing the two EXISTING zone funnels (`movePermanentTo` out, `putOntoBattlefield` back) rather
+  than a third opinion about zone changes — `effect-helpers.ts` already carries a scar comment about
+  the last time those drifted. `putOntoBattlefield` gained one optional `controller`, because a card
+  goes to its OWNER's exile (CR 400.3) but returns under the BLINKER's control.
+
+  **One rule, two cards** — the wrappers already existed, so the step-trigger prefix gives Conjurer's
+  Closet and `you may` makes it optional, while the bare clause is Cloudshift. Pool regeneration was
+  surgical: **exactly 2 cards added, 0 changed**.
+
+  ⚠️ **The pilot half is not optional, and this is the number that proves it.** Engine working, no
+  valuation: Conjurer's Closet blinked **94 times in 20 games** (a `you may` trigger the pilot already
+  accepts) while Cloudshift was cast **ZERO** times — an unclassified primitive is a "generic spell",
+  and a generic spell is only offered into an empty stack. The deck looked functional while its best
+  card rotted in hand. Adding the `blink` goal → **45 Cloudshifts** and **55.9% → 61.9%**.
+
+  ⚠️ **Deck ORDER is load-bearing and cost me a baseline once.** A gauntlet matchup is seeded by the
+  opponent's INDEX (`gameSeedFor(baseSeed, i)`), so inserting a deck mid-list reseeds everything after
+  it: slotting Selesnya Blink into the curve order moved UW Control's row 14 → 12 while changing
+  nothing about how either deck plays. **Append new decks to `SAMPLE_DECKS`, never insert.** Appended,
+  all seven recorded rows are byte-identical (12 · 13 · 17 · 7 · 9 · 7 · 14) with an eighth added.
+
+  📊 It is the STRONGEST deck in the gauntlet at **61.9%** (95% vs Mono-Red, 100% vs Rakdos Goblins;
+  27.5% into Mono-Green Ramp, 37.5% into Izzet Prowess). Whether the meta wants a 62% deck is a
+  TUNING call for the integrator — flagging it rather than quietly shipping it.
+
+  ⚠️ **PINNED SOAK ROWS NOW CARRY THEIR OWN DECKLISTS — read this before your next pool change.**
+  Adding two cards re-sampled every generated deck, so three of §3.33's four pinned rows began
+  replaying a DIFFERENT match and their `mustContain` guards fired. The guard did its job; the
+  problem is what is left afterwards — the bugs are still fixed, the positions are simply no longer
+  dealt, and an **8,000-game hunt with the copy fix reverted did not re-deal the mirror once**.
+  Re-pinning fresh seeds would only survive until the next card lands. So `replaySoakMixedGame` now
+  takes an optional `decks`, and `soak-pinned-decks.ts` records the exact decklists (Scryfall UUIDs —
+  stable across churn; only the SAMPLING moved). **Any future pool change leaves these rows alone.**
+  Sabotage-verified that this did not hollow them out: reverting the copy chain walk still turns all
+  three copy rows red, and disabling the CR 704.3 check still turns the SBA row red with its original
+  `#34 Blood Artist has toughness 0`.
+
+  Also updated for the +2 cards: `pool.test.ts` expected size 521 → 523, and the two new primitives
+  are classified in `paired-arms-config.ts` (SAFE — a blink keeps the card's own decklist instance id,
+  so an ETB library read is attributed to the card that made it, unlike `copyAsEnters`).
+
+  **Still out, deliberately left in the candidate list so the report keeps counting them:** the
+  DELAYED-return half (Flickerwisp, Eerie Interlude, Ghostway, Charming Prince's third mode) needs
+  delayed triggers; Ephemerate additionally needs rebound and prints "under its **owner's** control";
+  Teleportation Circle needs "up to one target artifact or creature".
 
 - 2026-08-21 DESKTOP-90PJPM4: `fix/soak-action-cap` 🚧 PUSHED — **§3.32's three action-cap games are
   fixed; the deep tier's `gameCanEnd` is GREEN (3 → 0 in 2,000 games).** DESIGN §3.33.

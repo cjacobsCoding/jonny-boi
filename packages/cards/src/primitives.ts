@@ -89,6 +89,7 @@ import {
 } from './effect-helpers.js';
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 import { COPY_PRIMITIVES } from './copy-primitives.js';
+import { BLINK_PRIMITIVES } from './blink-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
 
@@ -1486,6 +1487,12 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // object that is NOT A CARD, and both read what a copy IS from core's single
   // `copiableDefOf` answer rather than deciding it here.
   ...COPY_PRIMITIVES,
+  // The blink family (`./blink-primitives`): exile a permanent you control and
+  // return it immediately. Its own module because the mechanic is one CR rule —
+  // 400.7's "a new object" — and every consequence players care about (the ETB
+  // fires again, counters and Auras fall off, it comes back summoning-sick) is
+  // that rule rather than anything the cards say.
+  ...BLINK_PRIMITIVES,
 });
 
 /** The set of primitive ids this package provides (for validation). */
