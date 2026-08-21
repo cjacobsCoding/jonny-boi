@@ -201,6 +201,13 @@ export function fingerprintPosition(state: GameState): PositionFingerprint {
     mix(player.life);
     mix(player.hasLost ? 1 : 0);
     mix(player.landsPlayedThisTurn);
+    // The land-drop ALLOWANCE, not just the count spent: two states that have
+    // each played one land are genuinely different if one of them resolved an
+    // Explore and may still play another. Without this the two hash identically
+    // and tree reuse would hand back a subtree built for the wrong board.
+    // `?? 0` keeps the hash byte-identical for every state that never touches
+    // the field, which is almost all of them.
+    mix(player.extraLandPlaysThisTurn ?? 0);
     for (let c = 0; c < MANA_COLORS.length; c++) mix(player.manaPool[MANA_COLORS[c] as ManaColor] ?? 0);
     mixInstanceIds(player.hand);
     mixInstanceIds(player.graveyard);

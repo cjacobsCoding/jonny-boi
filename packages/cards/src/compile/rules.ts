@@ -297,6 +297,40 @@ const DERIVED_COUNTS: Readonly<Record<string, string>> = Object.freeze({
   'creature cards in your graveyard': 'creaturesInYourGraveyard',
 });
 
+/**
+ * The SINGULAR half of the same vocabulary — the phrase a card prints after
+ * "**for each**". "You gain 1 life for each *card in your hand*" counts exactly
+ * the set "the number of *cards in your hand*" counts, so the two spellings map
+ * to the same {@link DerivedCount} and cannot drift apart.
+ *
+ * A separate table rather than a de-pluralising regex, for the reason every
+ * table in this file is closed: "for each creature card in your graveyard"
+ * de-pluralises cleanly and "for each card types among cards in all graveyards"
+ * does not, and a rule that half-understands a count makes a card quietly
+ * stronger or weaker than printed.
+ */
+const DERIVED_EACH_COUNTS: Readonly<Record<string, string>> = Object.freeze({
+  'creature you control': 'creaturesYouControl',
+  'creature your opponents control': 'creaturesOpponentControls',
+  'creature your opponent controls': 'creaturesOpponentControls',
+  'creature on the battlefield': 'creaturesOnBattlefield',
+  'land you control': 'landsYouControl',
+  'card in your hand': 'cardsInYourHand',
+  'card in your graveyard': 'cardsInYourGraveyard',
+  'creature card in your graveyard': 'creaturesInYourGraveyard',
+});
+
+/** The alternation of the "for each" phrases, longest-first. */
+const DERIVED_EACH_PHRASE = `(${Object.keys(DERIVED_EACH_COUNTS)
+  .sort((a, b) => b.length - a.length)
+  .join('|')})`;
+
+/** The derived descriptor a printed "for each …" phrase means, or null. */
+function derivedEachValue(phrase: string): { countOf: string } | null {
+  const countOf = DERIVED_EACH_COUNTS[phrase.trim().toLowerCase()];
+  return countOf ? { countOf } : null;
+}
+
 /** The alternation of the phrases above, longest-first so none is truncated. */
 const DERIVED_PHRASE = `(${Object.keys(DERIVED_COUNTS)
   .sort((a, b) => b.length - a.length)
@@ -1335,6 +1369,36 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const amount = derivedValue(match[1]!);
       if (!amount) return null;
       return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  {
+    id: 'gain-life-for-each',
+    description: "\"You gain 1 life for each X\" (Venser's Journal, Riot Control)",
+    // The "for each" spelling of `gain-life-equal-to-count`, and it compiles to
+    // the IDENTICAL descriptor — one derived count, read by `intParam`.
+    //
+    // ⚠️ ONLY the multiplier of ONE compiles. "Gain 2 life for each creature you
+    // control" is `2 × count`, and a `DerivedValue` carries a count with no
+    // scale factor — so there is no honest way to emit it and the card reports
+    // instead. Emitting the bare count would print a card that gains HALF the
+    // life it says, which is the class of infidelity nothing would ever notice.
+    pattern: new RegExp(`^you gain ${COUNT_TOKEN} life for each ${DERIVED_EACH_PHRASE}$`),
+    build(match) {
+      if (parseCount(match[1]) !== 1) return null;
+      const amount = derivedEachValue(match[2] ?? '');
+      if (!amount) return null;
+      return effects({ primitive: 'gainLife', params: { amount } });
+    },
+  },
+  {
+    id: 'draw-for-each',
+    description: '"Draw a card for each X" (Earthshaker Dreadmaw)',
+    // Same shape, same restriction: one card PER thing counted, never two.
+    pattern: new RegExp(`^draw a card for each ${DERIVED_EACH_PHRASE}$`),
+    build(match) {
+      const count = derivedEachValue(match[1] ?? '');
+      if (!count) return null;
+      return effects({ primitive: 'drawCards', params: { count } });
     },
   },
   {

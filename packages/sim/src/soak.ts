@@ -60,6 +60,7 @@ import {
   isCreature,
   isPlaneswalker,
   loyaltyOf,
+  maxLandPlaysFor,
   NO_MOD,
   PLAYER_IDS,
   PLUS_ONE_COUNTER,
@@ -506,8 +507,19 @@ function checkStateInvariants(state: GameState): { invariant: SoakInvariantName;
     if (poolTotal(player.manaPool) < 0) {
       record(SOAK_INVARIANTS.manaPoolNonNegative, `${pid}'s mana pool totals ${poolTotal(player.manaPool)}`);
     }
-    if (player.landsPlayedThisTurn > DEFAULT_RULES.maxLandsPerTurn) {
-      record(SOAK_INVARIANTS.landDropCap, `${pid} played ${player.landsPlayedThisTurn} lands this turn`);
+    // The cap is the RULES FLOOR WIDENED by every "additional land" grant in
+    // effect, not the bare config number: an Azusa on the battlefield or an
+    // Explore resolved this turn legally raises it (CR 305.2). Reading
+    // `DEFAULT_RULES.maxLandsPerTurn` directly made this invariant fire on a
+    // perfectly legal board the moment the first extra-land card entered the
+    // pool — a false alarm from the harness, which is the one failure shape
+    // this suite exists to have none of.
+    const landDropCap = maxLandPlaysFor(state, pid as PlayerId, DEFAULT_RULES.maxLandsPerTurn);
+    if (player.landsPlayedThisTurn > landDropCap) {
+      record(
+        SOAK_INVARIANTS.landDropCap,
+        `${pid} played ${player.landsPlayedThisTurn} lands this turn (cap ${landDropCap})`,
+      );
     }
   }
 

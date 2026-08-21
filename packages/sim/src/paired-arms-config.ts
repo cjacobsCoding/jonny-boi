@@ -300,6 +300,19 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
   // ordinary primitives listed here, each classified on its own terms — which is
   // strictly better for this table than one opaque wrapper would have been.
   'returnToHand',
+  /*
+   * `returnChosenToHand` is the karoo lands' untargeted bounce: its controller
+   * picks one of their OWN battlefield permanents and it goes to its owner's
+   * hand. Battlefield in, hand out, and the move emits a `zoneChange` carrying
+   * the instance id — so the runner tracks it exactly, for the same reason
+   * `returnToHand` above is safe.
+   *
+   * The one thing worth checking, because it is what would make it unsafe: the
+   * CANDIDATE LIST is built from the battlefield, never from a library, so the
+   * question it asks cannot differ between the arms while the identical-game
+   * claim still holds.
+   */
+  'returnChosenToHand',
   'tapPermanents',
   // Sacrifices read and write the BATTLEFIELD only: the victim's (or the pile
   // split's) choice is over permanents in play, and every card moved emits its
@@ -326,6 +339,14 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    * the swapped card until that card has publicly arrived in the yard.
    */
   'grantFlashback',
+  /*
+   * `grantExtraLandPlay` widens a seat's land-drop allowance for the turn. It
+   * writes one number on a `PlayerState` and reads nothing at all — not a
+   * library, not even the battlefield. The extra land it enables is an ordinary
+   * `playLand` action on a card the log has already named as drawn, so the
+   * identical-game argument survives it untouched.
+   */
+  'grantExtraLandPlay',
   /*
    * THE COPY FAMILY (CR 707) — all three SAFE, and the argument is the same one
    * `createToken` and `makeToken` already make, so it is worth stating rather
