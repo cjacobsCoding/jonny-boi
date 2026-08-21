@@ -37,7 +37,14 @@ import {
   SOAK_DECK_SIZE,
 } from './soak-decks.js';
 import type { SoakReport } from './soak.js';
-import { compareApplyPaths, formatSoakReport, formatViolations, runSoak, soakSimConfig } from './soak.js';
+import {
+  compareApplyPaths,
+  formatSoakReport,
+  formatViolations,
+  replaySoakMixedGame,
+  runSoak,
+  soakSimConfig,
+} from './soak.js';
 
 const pool = loadCardPool({ onWarn: () => {} });
 const registry = buildRegistry();
@@ -205,6 +212,101 @@ describe('the fast soak', () => {
     expect(report.turns / report.games, 'games are ending before anything happens').toBeGreaterThan(3);
     expect(report.actions).toBeGreaterThan(report.games * 20);
   });
+});
+
+/*
+ * PINNED SOAK VIOLATIONS — one game each, replayed from the seed the run printed.
+ *
+ * The soak's whole contract is that a violation reproduces (`soak-config.ts`'s
+ * header: "a violation prints the seed AND both decklists"). This is where that
+ * contract gets spent: a defect the tier found becomes a ~200 ms test that fails
+ * for exactly the original reason, instead of a seed in a commit message that
+ * nobody can afford to re-run.
+ *
+ * Add a row when a soak finds something. Keep the row after it is fixed — the
+ * point is the fix staying fixed.
+ *
+ * ⚠️ **EVERY ROW MUST NAME THE CARDS THAT MADE THE BUG**, and the test asserts
+ * they are really in the decks this seed built. "No violations" is also what a
+ * replay of the WRONG game reports, so an outcome-only assertion is green for two
+ * completely different reasons and cannot tell them apart. This was not a
+ * hypothesis: flipping one bit of the opponent-deck seed left the row below
+ * passing, happily replaying a different match. `mustContain` is the half of the
+ * test that fails when the pool churns until this seed no longer deals the
+ * position — which is a finding, not a pass.
+ */
+describe('soak violations stay fixed, replayed from their seed alone', () => {
+  const PINNED: ReadonlyArray<{
+    readonly seed: number;
+    readonly onPlay?: 'A' | 'B';
+    readonly what: string;
+    /** Cards without which this seed is not the game that found the bug. */
+    readonly mustContain: readonly string[];
+  }> = [
+    /*
+     * THE THREE GAMES THAT COULD NOT END, and they are ONE bug: the pilot priced
+     * a copy of a COPY SPELL as a card (8 + 2 per mana value) rather than as what
+     * it would end up copying, so "you may choose new targets for the copy"
+     * (CR 707.10) aimed every new copy back at the copy spell sitting above its
+     * own target. Each of the three froze with a two-object stack and a board
+     * that never changed while ~1,800 copies were made.
+     *
+     * ⚠️ The DRAW ENGINE each of these decks also holds (Howling Mine, Font of
+     * Mythos, Kami of the Crescent Moon) is NOT part of the position and is not
+     * named below. It was the first hypothesis and it is a coincidence of the
+     * decks the generator dealt: the loop needs two copy spells and one spell
+     * worth less than they cost, nothing more.
+     */
+    {
+      seed: 3434778477,
+      onPlay: 'B',
+      what:
+        'CR 707.10: with the stack at [Thought Scour, Reverberate→Thought Scour], every copy of the ' +
+        'Reverberate was re-aimed at the Reverberate (worth 12 as a card) instead of the Thought ' +
+        'Scour (worth 10), so the copy copied the copy spell forever — 6,000 actions, 1,797 copies, ' +
+        'one unchanged board (fixed by pricing a copy chain at what it ENDS at, one link down)',
+      mustContain: ['Reverberate', 'Thought Scour'],
+    },
+    {
+      seed: 1390617766,
+      what:
+        'the same loop through Twincast: stack frozen at [Dream Twist, Twincast→Dream Twist] for ' +
+        '1,891 copies. Reproduces from BOTH seats, which is what proved it was the pilot rather ' +
+        'than anything about who was on the play',
+      mustContain: ['Twincast', 'Dream Twist'],
+    },
+    {
+      seed: 113343071,
+      what:
+        "the same loop through the OPPONENT's Reverberate: stack frozen at [Geistflame, " +
+        'Reverberate→Geistflame] for 1,848 copies',
+      mustContain: ['Reverberate', 'Geistflame'],
+    },
+  ];
+
+  for (const { seed, onPlay, what, mustContain } of PINNED) {
+    it(`seed ${seed}: ${what}`, () => {
+      const { violations, decks } = replaySoakMixedGame({
+        pool,
+        registry,
+        pilot,
+        seed,
+        ...(onPlay ? { onPlay } : {}),
+      });
+      // WHICH GAME — asserted first, because it is what makes the next line mean
+      // anything. A replay that drifted onto another match reports no violations
+      // and would otherwise read as a fix holding.
+      for (const card of mustContain) {
+        expect(decks, `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game
+${decks}
+`).toContain(card);
+      }
+      // WHAT IT DID.
+      expect(violations.length, `
+${formatViolations(violations)}
+`).toBe(0);
+    });
+  }
 });
 
 describe('applyActionInPlace stays exact on SOAK decks', () => {
