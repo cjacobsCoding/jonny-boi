@@ -1591,7 +1591,12 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
   {
     id: 'gain-life',
     description: '"You gain N life"',
-    pattern: new RegExp(`^you gain ${COUNT_TOKEN} life$`),
+    // The "you" is OPTIONAL because the `mayEffects` wrapper strips the printed
+    // words "you may " and hands the rest to this table — so "you may gain 1
+    // life" (Soul's Attendant) arrives here as the bare "gain 1 life". Both
+    // spellings are the same clause with the same subject; refusing the bare one
+    // reported a card whose only unread word was one the wrapper had removed.
+    pattern: new RegExp(`^(?:you )?gain ${COUNT_TOKEN} life$`),
     build(match) {
       const amount = parseCount(match[1]);
       return amount === null ? null : effects({ primitive: 'gainLife', params: { amount } });
@@ -3562,6 +3567,18 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-dies-you-may',
+    description: '"When ~ dies, you may BODY" (Solemn Simulacrum)',
+    // Ordered AFTER `trigger-dies`, for the reason spelled out on
+    // `trigger-etb-you-may`: a body that implements its own option plays better
+    // on the rule that knows about it, and this is the general fallback.
+    pattern: /^when ~ dies, you may (.+)$/,
+    build(match, ctx) {
+      const body = match[1] ?? '';
+      return optionalTriggerFrom(ctx, { on: 'dies' }, body, `Dies: you may ${body}`);
+    },
+  },
+  {
     id: 'trigger-leaves',
     description: '"When ~ leaves the battlefield, BODY"',
     // Core has had the `leaves` trigger event all along; only this pattern was
@@ -3758,6 +3775,37 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'trigger-cast-spell-you-may',
+    description:
+      '"Whenever you cast a(n) TYPE spell, you may BODY" (Mesa Enchantress, Verduran Enchantress, Lys Alana Huntmaster)',
+    // Ordered AFTER `trigger-cast-spell`, the same way every other optional
+    // sibling in this table is.
+    //
+    // It builds ONE trigger per matched condition, because `spellFiltersFor`
+    // can return several (a printed type word that means two engine filters) —
+    // and each of those triggers gets its OWN `mayEffects` wrapper, so a card
+    // whose filter expands to two conditions still asks exactly once per
+    // occurrence rather than once for the card.
+    pattern: /^whenever you cast an? ([a-z ]+?) spell, you may (.+)$/,
+    build(match, ctx) {
+      const conditions = spellFiltersFor(match[1] ?? '');
+      if (!conditions) return null;
+      const body = match[2] ?? '';
+      const compiled = ctx.compileTriggerBody(body);
+      if (compiled === null) return null;
+      const effectRefs = mayEffectsFrom(body, compiled.effects);
+      if (effectRefs === null || effectRefs.length === 0) return null;
+      return {
+        triggers: conditions.map((condition) => ({
+          condition,
+          effects: effectRefs,
+          label: `Cast ${describeSpellFilter(condition)}: you may ${body}`,
+          ...(compiled.targets ? { targets: compiled.targets } : {}),
+        })),
+      };
+    },
+  },
+  {
     id: 'trigger-draws-card',
     description: '"Whenever you / a player / an opponent draws a card, BODY"',
     // The draw WATCHER, not the draw step. It fires on every draw — the turn's
@@ -3778,6 +3826,23 @@ export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
         { on: 'drawsCard', who },
         match[2] ?? '',
         `${printed} draws: ${match[2] ?? ''}`,
+      );
+    },
+  },
+  {
+    id: 'trigger-draws-card-you-may',
+    description: '"Whenever you / a player / an opponent draws a card, you may BODY" (Consecrated Sphinx)',
+    // Ordered AFTER `trigger-draws-card`, like every other optional sibling.
+    pattern: /^whenever (you|a player|an opponent) draws a card, you may (.+)$/,
+    build(match, ctx) {
+      const printed = match[1] ?? '';
+      const who: TriggerWho = printed === 'you' ? 'you' : printed === 'an opponent' ? 'opponent' : 'any';
+      const body = match[2] ?? '';
+      return optionalTriggerFrom(
+        ctx,
+        { on: 'drawsCard', who },
+        body,
+        `${printed} draws: you may ${body}`,
       );
     },
   },

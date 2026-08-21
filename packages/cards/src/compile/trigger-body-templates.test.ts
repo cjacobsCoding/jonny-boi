@@ -63,6 +63,8 @@ const SEEDS = Object.freeze({
   explore: 725,
   ritesOfFlourishing: 726,
   vensersJournal: 727,
+  sphinx: 730,
+  soulsAttendant: 731,
 });
 
 const DECK_SIZE = 40;
@@ -661,6 +663,128 @@ describe('"you may play an additional land"', () => {
     putOnBattlefield(s, dryad, 'A');
     putOnBattlefield(s, dryad, 'A');
     expect(maxLandPlaysFor(s, 'A', RULES.maxLandsPerTurn)).toBe(RULES.maxLandsPerTurn + 2);
+  });
+});
+
+// --- the missing "you may" SIBLINGS ------------------------------------------------
+//
+// `mayEffects` has worked in every scope since §3.27; what was missing for these
+// three trigger families was a rule that RECOGNIZED the printed words. Without
+// the sibling, "When ~ dies, you may draw a card" fell through to the plain
+// `trigger-dies`, whose body compiler was handed the literal string
+// "you may draw a card" and had no entry for it — so the card reported.
+
+const SOLEMN_SIMULACRUM = makeCard({
+  name: 'Solemn Simulacrum',
+  typeLine: { supertypes: [], types: ['Artifact', 'Creature'], subtypes: ['Golem'] },
+  power: 2,
+  toughness: 2,
+  oracleText:
+    'When ~ enters, you may search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.\nWhen ~ dies, you may draw a card.',
+});
+
+const CONSECRATED_SPHINX = makeCard({
+  name: 'Consecrated Sphinx',
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Sphinx'] },
+  power: 4,
+  toughness: 6,
+  keywords: ['Flying'],
+  oracleText: 'Flying\nWhenever an opponent draws a card, you may draw two cards.',
+});
+
+const MESA_ENCHANTRESS = makeCard({
+  name: 'Mesa Enchantress',
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Human', 'Druid'] },
+  power: 0,
+  toughness: 2,
+  oracleText: 'Whenever you cast an enchantment spell, you may draw a card.',
+});
+
+const SOULS_ATTENDANT = makeCard({
+  name: "Soul's Attendant",
+  typeLine: { supertypes: [], types: ['Creature'], subtypes: ['Human', 'Cleric'] },
+  power: 1,
+  toughness: 1,
+  oracleText: 'Whenever another creature enters, you may gain 1 life.',
+});
+
+describe('the "you may" siblings — dies, cast-a-spell, and draws-a-card', () => {
+  it('each wraps its body in mayEffects with a GAIN valence', () => {
+    // Valence is not cosmetic: `packages/ai/src/choices.ts` answers a `confirm`
+    // from it, so a `'loss'` here would make every pilot DECLINE a free draw.
+    const solemn = compileCard(SOLEMN_SIMULACRUM);
+    expect(solemn.status).toBe('complete');
+    const diesTrigger = solemn.definition.triggers?.find((t) => t.condition.on === 'dies');
+    expect(diesTrigger?.effects).toEqual([
+      {
+        primitive: 'mayEffects',
+        params: {
+          prompt: 'You may draw a card',
+          valence: 'gain',
+          effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        },
+      },
+    ]);
+
+    const sphinx = compileCard(CONSECRATED_SPHINX);
+    expect(sphinx.status).toBe('complete');
+    expect(sphinx.definition.triggers?.[0]?.condition).toEqual({ on: 'drawsCard', who: 'opponent' });
+    expect(sphinx.definition.triggers?.[0]?.effects).toEqual([
+      {
+        primitive: 'mayEffects',
+        params: {
+          prompt: 'You may draw two cards',
+          valence: 'gain',
+          effects: [{ primitive: 'drawCards', params: { count: 2 } }],
+        },
+      },
+    ]);
+
+    const mesa = compileCard(MESA_ENCHANTRESS);
+    expect(mesa.status).toBe('complete');
+    expect(mesa.definition.triggers?.[0]?.effects?.[0]?.primitive).toBe('mayEffects');
+  });
+
+  it('PLAYS: Consecrated Sphinx asks a REAL question — yes draws two, no draws none', () => {
+    const reg = buildRegistry();
+    const sphinx = compiledDef(CONSECRATED_SPHINX);
+
+    // The SAME seeded position, answered both ways. One run proving "yes draws
+    // two" would pass just as well if the option were not a question at all.
+    const run = (yes: boolean): number => {
+      let s = gameAtMain(reg, SEEDS.sphinx);
+      putOnBattlefield(s, sphinx, 'A');
+      const before = s.players.A.hand.length;
+      // B draws a card the engine really performs, which is what the trigger
+      // watches — the draw STEP is a different card (see `trigger-draws-card`).
+      s = act(s, { kind: 'passPriority', player: s.priorityPlayer }, reg);
+      let guard = 0;
+      while (!s.pendingChoice && !s.gameOver && guard++ < 200) s = pass(s, reg);
+      expect(s.pendingChoice?.kind).toBe('confirm');
+      expect(s.pendingChoice?.chooser).toBe('A');
+      s = answer(s, reg, { kind: 'confirm', yes });
+      s = settle(s, reg, () => ({ kind: 'confirm', yes: false }));
+      return s.players.A.hand.length - before;
+    };
+
+    expect(run(true)).toBe(2);
+    expect(run(false)).toBe(0);
+  });
+
+  it("PLAYS: Soul's Attendant gains the life its bare-bodied \"you may\" prints", () => {
+    const reg = buildRegistry();
+    const attendant = compiledDef(SOULS_ATTENDANT);
+    let s = gameAtMain(reg, SEEDS.soulsAttendant);
+    putOnBattlefield(s, attendant, 'A');
+    const before = s.players.A.life;
+
+    // Another creature arrives. The body the wrapper hands on is the BARE
+    // "gain 1 life" — the printed "you" having been eaten by "you may".
+    const inHand = putInHand(s, BEAR, 'A');
+    floodMana(s, 'A');
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: inHand.instanceId }, reg);
+    s = settle(s, reg, () => ({ kind: 'confirm', yes: true }));
+    expect(s.players.A.life).toBe(before + 1);
   });
 });
 
