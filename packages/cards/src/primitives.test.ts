@@ -20,10 +20,14 @@ import type {
 } from '@jonny-boi/core';
 import {
   PLUS_ONE_COUNTER,
+  createDelayedTrigger,
   defaultAnswerFor,
   effectiveToughness,
   effectivePower,
+  entersTapped,
+  indexReplacements,
   normalizeChoiceRequest,
+  replaceTokens,
   validateChoiceAnswer,
 } from '@jonny-boi/core';
 import {
@@ -157,23 +161,56 @@ function ctxFor(
     },
     // Mirror the engine's token creation: place a creature token on the battlefield.
     createToken(def, controller) {
-      const instanceId = state.nextInstanceId++;
+      return ctx.createTokens(def, 1, controller)[0] ?? 0;
+    },
+    // The BATCH form, which is the engine's real funnel — `createToken` is this
+    // with a count of one, exactly as in `effects.ts`. The CR 614 token-count
+    // replacement runs here through core's OWN `replaceTokens` rather than a
+    // stand-in: a fixture that skipped it would let a primitive pass its unit
+    // test while Doubling Season silently failed to double what it created.
+    createTokens(def, count, controller, options) {
       const ctrl = controller ?? source.controller;
-      state.battlefield.push({
-        instanceId,
-        def,
-        controller: ctrl,
-        owner: ctrl,
-        zone: 'battlefield',
-        tapped: false,
-        summoningSick: def.types.includes('creature') ? !(def.keywords?.haste ?? false) : false,
-        damageMarked: 0,
-        markedByDeathtouch: false,
-        counters: {},
+      const requested = Math.max(0, Math.trunc(count));
+      if (requested === 0) return [];
+      const actual = replaceTokens(state, indexReplacements(state), ctrl, requested, (e) => events.push(e));
+      const made: InstanceId[] = [];
+      for (let i = 0; i < actual; i++) {
+        const instanceId = state.nextInstanceId++;
+        const tokenDef = def.isToken === true ? def : { ...def, isToken: true };
+        const tapped = entersTapped(def) || options?.tapped === true || options?.attacking === true;
+        state.battlefield.push({
+          instanceId,
+          def: tokenDef,
+          controller: ctrl,
+          owner: ctrl,
+          zone: 'battlefield',
+          tapped,
+          summoningSick: def.types.includes('creature') ? !(def.keywords?.haste ?? false) : false,
+          damageMarked: 0,
+          markedByDeathtouch: false,
+          counters: {},
+        });
+        events.push({ type: 'tokenCreated', instanceId, controller: ctrl, name: tokenDef.name });
+        events.push({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });
+        if (tapped) events.push({ type: 'tapped', instanceId });
+        if (options?.attacking === true && state.combat !== null && state.combat.attackersDeclared) {
+          state.combat.attackers.push(instanceId);
+        }
+        made.push(instanceId);
+      }
+      return made;
+    },
+    // Mirror the engine's DELAYED-ABILITY channel (CR 603.7) through core's own
+    // writer, for the same reason: a stand-in that merely recorded the request
+    // would let a primitive "create" an ability that never fires.
+    createDelayedTrigger(request) {
+      return createDelayedTrigger(state, {
+        condition: request.condition,
+        effects: request.effects,
+        label: request.label,
+        controller: request.controller ?? source.controller,
+        sourceInstanceId: source.instanceId,
       });
-      events.push({ type: 'tokenCreated', instanceId, controller: ctrl, name: def.name });
-      events.push({ type: 'zoneChange', instanceId, from: 'stack', to: 'battlefield' });
-      return instanceId;
     },
     // Mirror the engine's CHOICE channel (choices.ts) so a primitive that asks a
     // question can be unit-tested without a game: every request is normalised

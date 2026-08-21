@@ -268,7 +268,16 @@ describe('the printed lines compile with EXACTLY their printed filter', () => {
 });
 
 describe('the compiler refuses what it cannot build, by name', () => {
-  it('refuses a TOKEN doubler rather than compiling it as a counter doubler', () => {
+  /*
+   * ⚠️ THIS TEST USED TO ASSERT THE OPPOSITE, and was right to: it read
+   * "refuses a TOKEN doubler rather than compiling it as a counter doubler",
+   * because the layer scaled counters, damage and draws and creating extra
+   * OBJECTS was a system nobody had built. The token-count kind (DESIGN §3.32)
+   * built it, so Doubling Season now compiles BOTH halves — and the assertion
+   * the old test was really protecting is that the two clauses stay two
+   * independent entries rather than one being read as the other.
+   */
+  it('compiles BOTH halves of Doubling Season, as two independent entries', () => {
     const doublingSeason = compileCard(
       scryfall({
         name: 'Doubling Season',
@@ -278,16 +287,34 @@ describe('the compiler refuses what it cannot build, by name', () => {
           'If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.',
       }),
     );
-    expect(doublingSeason.status).toBe('incomplete');
-    expect(doublingSeason.missing.map((m) => m.text.toLowerCase()).join(' ')).toContain('tokens');
-    // The half it CAN build is still built, and built right — an incomplete card
-    // is not a broken one, it is one the importer refuses to treat as playable.
-    expect(doublingSeason.definition.replacements?.[0]).toMatchObject({
-      event: 'counters',
-      outcome: { times: 2 },
-    });
+    expect(doublingSeason.status).toBe('complete');
+    const replacements = doublingSeason.definition.replacements ?? [];
+    expect(replacements).toHaveLength(2);
+    expect(replacements[0]).toMatchObject({ event: 'tokens', outcome: { times: 2 } });
+    expect(replacements[1]).toMatchObject({ event: 'counters', outcome: { times: 2 } });
+    // "under YOUR control" — never quietly widened to the symmetric card.
+    expect(replacements[0]?.applies.recipientController).toBe('you');
     // "one or more COUNTERS" with no kind printed really does mean every kind.
-    expect(doublingSeason.definition.replacements?.[0]?.applies.counterKind).toBeUndefined();
+    expect(replacements[1]?.applies.counterKind).toBeUndefined();
+  });
+
+  it('still refuses a token replacement that creates a DIFFERENT object', () => {
+    // Peregrin Took's "plus an additional Food token", Academy Manufactor's
+    // "instead create one of each" and Divine Visitation's Angels are NOT
+    // counts: the layer scales a quantity, and substituting a different object
+    // is a different outcome. All three stay reported, which is what stops the
+    // token kind quietly widening into "any token replacement at all".
+    for (const oracleText of [
+      'If one or more tokens would be created under your control, those tokens plus an additional Food token are created instead.',
+      'If you would create a Clue, Food, or Treasure token, instead create one of each.',
+      'If one or more creature tokens would be created under your control, that many 4/4 white Angel creature tokens with flying and vigilance are created instead.',
+    ]) {
+      const card = compileCard(
+        scryfall({ name: 'Token Test', cost: { generic: 3 }, types: ['Enchantment'], oracleText }),
+      );
+      expect(card.status).toBe('incomplete');
+      expect(card.definition.replacements ?? []).toHaveLength(0);
+    }
   });
 
   it('does not compile a fog printed on an INSTANT as a permanent static', () => {
