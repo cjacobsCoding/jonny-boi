@@ -411,4 +411,132 @@ describe('state-based actions run when a spell is CAST, not only when one resolv
     ).toBe(false);
     expect(s.players.A.graveyard.some((c) => c.instanceId === goyf.instanceId)).toBe(true);
   });
+
+  /*
+   * THE ADDITIONAL-COST PAYMENT, which is a mutation site with no pass behind it.
+   *
+   * Found by the full-pool soak at seed 4222011655 (`soak.test.ts` replays that
+   * whole game): A cast Costly Plunder, whose mandatory additional cost (CR
+   * 601.2h) sacrificed the Trusty Machete that was the only thing holding a
+   * Weakness-ed Blood Artist above zero toughness. The payment happens while the
+   * caster still holds priority and hands the floor straight back through
+   * `finishCastChoice`, so nothing passed priority and — before the CR 704.3
+   * boundary moved to the end of every action — nothing checked. The 0/0 Blood
+   * Artist sat on the battlefield for the next FIVE TURNS.
+   *
+   * Written with the answered form of the question (two candidate artifacts, so a
+   * real `selectCards` is parked) because that is the shape the soak found. The
+   * auto-paid form — one candidate, settled inside the cast — is the same seam one
+   * function earlier and the Goyf test above covers the cast side of it.
+   */
+  const EQUIPMENT: CardDefinition = {
+    id: 'Brace',
+    name: 'Brace',
+    types: ['artifact'],
+    cost: { generic: 1 },
+    attachment: {
+      attachesTo: { kind: 'creature' },
+      modifies: { power: 0, toughness: 2 },
+      whenIllegal: 'detach',
+      label: 'Equipped creature gets +0/+2.',
+    },
+  };
+  const SPARE_ARTIFACT: CardDefinition = {
+    id: 'Spare',
+    name: 'Spare',
+    types: ['artifact'],
+    cost: { generic: 1 },
+  };
+  const PLUNDER: CardDefinition = {
+    id: 'Plunder',
+    name: 'Plunder',
+    types: ['instant'],
+    timing: 'instant',
+    cost: { generic: 0 },
+    additionalCost: {
+      kind: 'sacrifice',
+      filter: { anyOfTypes: ['artifact'] },
+      label: 'sacrifice an artifact',
+    },
+  };
+
+  it('a creature the sacrificed Equipment was keeping alive dies as the cost is PAID', () => {
+    const registry = createEffectRegistry();
+    const g = createGame({ seed: 17, decks: { A: deckOf(ISLAND, 40), B: deckOf(ISLAND, 40) } });
+    let s = advanceToStep(g.state, 'precombatMain', registry);
+
+    const put = (def: CardDefinition, controller: PlayerId): CardInstance => {
+      const inst: CardInstance = {
+        instanceId: s.nextInstanceId++,
+        def,
+        controller,
+        owner: controller,
+        zone: 'battlefield',
+        tapped: false,
+        summoningSick: false,
+        damageMarked: 0,
+        markedByDeathtouch: false,
+        attachedTo: null,
+        counters: {},
+      };
+      s.battlefield.push(inst);
+      return inst;
+    };
+
+    // A 1/1 wearing a -0/-2 (a Weakness, power half dropped so toughness is the
+    // only thing in question) and a +0/+2 Equipment. Net: a 1/1, alive — and
+    // alive ONLY because the Equipment is there.
+    const runt = put(creatureDef('Runt', 1, 1), 'A');
+    const brace = put(EQUIPMENT, 'A');
+    brace.attachedTo = runt.instanceId;
+    put(SPARE_ARTIFACT, 'A');
+    s.continuous.push({
+      id: s.nextInstanceId++,
+      targetInstanceId: runt.instanceId,
+      sourceInstanceId: runt.instanceId,
+      power: 0,
+      toughness: -2,
+      duration: 'permanent',
+    });
+    expect(s.battlefield.some((c) => c.instanceId === runt.instanceId), 'the Runt should start alive').toBe(true);
+
+    const [plunder] = giveHand(s, 'A', [PLUNDER]);
+    const cast = applyAction(
+      s,
+      { kind: 'castSpell', player: 'A', instanceId: plunder!.instanceId },
+      DEFAULT_RULES,
+      registry,
+    );
+    expect(cast.events.find((e) => e.type === 'actionRejected')).toBeUndefined();
+    s = cast.state;
+
+    // Two artifacts qualify, so the cost stops to ask WHICH one pays.
+    const question = s.pendingChoice;
+    expect(question, 'the additional cost should have parked a question').toBeTruthy();
+    expect(s.battlefield.some((c) => c.instanceId === runt.instanceId), 'nothing is owed yet').toBe(true);
+
+    const answered = applyAction(
+      s,
+      {
+        kind: 'answerChoice',
+        player: 'A',
+        choiceId: question!.id,
+        answer: { kind: 'selectCards', instanceIds: [brace.instanceId] },
+      },
+      DEFAULT_RULES,
+      registry,
+    );
+    expect(answered.events.find((e) => e.type === 'actionRejected')).toBeUndefined();
+    s = answered.state;
+
+    // The Equipment is paid, the spell is on the stack, and A has the floor back.
+    expect(s.players.A.graveyard.some((c) => c.instanceId === brace.instanceId), 'the Equipment was sacrificed').toBe(true);
+    expect(s.pendingChoice ?? null, 'nothing is still being asked').toBeNull();
+    expect(s.priorityPlayer).toBe('A');
+    expect(
+      s.battlefield.some((c) => c.instanceId === runt.instanceId),
+      'a 0-toughness creature was still on the battlefield with a player holding priority',
+    ).toBe(false);
+    expect(s.players.A.graveyard.some((c) => c.instanceId === runt.instanceId)).toBe(true);
+  });
 });

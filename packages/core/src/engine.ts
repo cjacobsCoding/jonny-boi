@@ -1329,6 +1329,76 @@ function applyActionToDraft(
   // the stack and hand the active player priority over them. Rejections return a
   // fresh clone of prevState, so `result.state !== state`; we only flush our draft.
   if (result.state === state && !wasRejected(result.events)) {
+    /*
+     * CR 704.3 — THE PRIORITY BOUNDARY, for every action rather than for one of
+     * them.
+     *
+     * State-based actions are checked "whenever a player would get priority",
+     * and only THEN are triggered abilities put on the stack. In this engine a
+     * player receives priority at the end of essentially every action, not only
+     * when somebody passes — so a check installed inside `onPassPriority` alone
+     * covers exactly one of the doors into that moment.
+     *
+     * That is not a hypothetical gap. Paying a spell's mandatory additional cost
+     * (CR 601.2h) sacrifices a permanent and hands the floor straight back to the
+     * caster through `finishCastChoice`, which passed priority to nobody and so
+     * ran no check: a creature that the sacrificed Equipment was the only thing
+     * keeping alive stayed on the battlefield at toughness 0 — for five turns, in
+     * the soak game that found this (seed 4222011655; `soak.test.ts` pins it).
+     * Every mutation site that hands priority back without routing through a pass
+     * is the same shape, and enumerating them is how this bug was written in the
+     * first place. So the check goes where the ACTION ends, which is the one
+     * place every door leads to.
+     *
+     * Ordering is the rule's, not a convenience: SBAs run BEFORE `collector.flush()`
+     * puts triggers on the stack, so a death this check causes queues its
+     * dies-trigger into the same flush (Blood Artist's own ability is exactly
+     * that shape) rather than being stranded in a collector nobody drains again.
+     *
+     * The three state guards are "is anybody actually receiving priority": a
+     * decided game hands out none, and a parked question or a suspended
+     * resolution means a spell is still resolving (CR 608.2) — the case `soak.ts`
+     * documents at length, where a creature genuinely does sit dead on the
+     * battlefield until the question is answered. `stateBasedActionsPossible` is
+     * the same cheap gate the pass boundary uses; see its note for the direction
+     * it may err in.
+     *
+     * ## Why the PASS is excluded, and what this costs
+     * A pass is the one action that already ran this exact check — at its START,
+     * in `onPassPriority`, where it must be, because a state-based action can end
+     * the game or park the legend rule's question and so stop the pass happening
+     * at all. Re-running it at the other end of the same action would ask the same
+     * question twice: counted over the seed-99 gauntlet, 125,918 of the 151,124
+     * actions are passes, so the exclusion is most of the work rather than a
+     * rounding error. What a pass goes on to change — a resolution, a step advance
+     * — checks at its own site (`resolveTopOfStack`, the draw/combat-damage/cleanup
+     * arms of `advanceStep`), which is the arrangement the soak has run over
+     * thousands of games.
+     *
+     * Measured, paired in ONE process (⚠️ never wall clock on this box — ten agents
+     * share it; the same build read 39–128 games/sec inside an hour, and the first
+     * attempt at this measurement returned rounds of 2,484 ms and 5,110 ms for the
+     * SAME arm):
+     *   - the 280-game seed-99 gauntlet — 24,965 extra gate calls and **zero**
+     *     extra full checks, because curated decks rarely hold an attachment. At
+     *     `sba-gate-cost.ts`'s ~240 ns for an eight-permanent board that is ~6 ms
+     *     against a ~2.3 s run, and every row comes back byte-identical.
+     *   - the full-pool soak, the worst case, where nearly every board carries an
+     *     Aura or an Equipment and the gate therefore says yes about half the time
+     *     — 11,328 extra gate calls and 6,227 extra full checks, i.e. 25.6% more
+     *     full checks (24,369 → 30,596), for **+9.5% CPU** (minimum over 14
+     *     alternating paired rounds).
+     * That is the price of the rule actually holding at the boundary it names.
+     */
+    if (
+      action.kind !== 'passPriority' &&
+      !state.gameOver &&
+      !state.pendingChoice &&
+      !state.resolution &&
+      stateBasedActionsPossible(state)
+    ) {
+      checkStateBasedActions(state, emit);
+    }
     // A suspended resolution keeps the floor: a trigger that fired mid-resolution
     // goes on the stack and waits its turn, but the chooser must still answer first.
     if (collector.flush() > 0 && !state.gameOver && !state.pendingChoice) {

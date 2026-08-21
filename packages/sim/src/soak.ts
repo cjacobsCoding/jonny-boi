@@ -819,6 +819,19 @@ function loadSoakDeck(deck: SoakDeck, pool: CardPool): LoadedDeck {
   return loadDeck(deck, pool);
 }
 
+/**
+ * BOTH DECKLISTS, verbatim — the identity of one soaked game.
+ *
+ * One function rather than one per caller because this string is what makes a
+ * violation replayable: `playOne` stamps it onto every {@link SoakViolation} and
+ * `replaySoakMixedGame` hands it back so a pinned test can assert it replayed the
+ * game it meant to. Two renderings that could drift is two answers to "which game
+ * was this", and the weaker one is the one a green test would be believing.
+ */
+function describeMatchup(deckA: SoakDeck, deckB: SoakDeck, nameOf: (id: string) => string): string {
+  return `A: ${describeDeck(deckA, nameOf)}\n    B: ${describeDeck(deckB, nameOf)}`;
+}
+
 /** Play one soaked game and return the violations plus what fired. */
 function playOne(
   options: SoakOptions,
@@ -835,7 +848,7 @@ function playOne(
   /** Observations the redaction scan looked at (0 when this game was not sampled). */
   readonly scanned: number;
 } {
-  const decks = `A: ${describeDeck(deckA, nameOf)}\n    B: ${describeDeck(deckB, nameOf)}`;
+  const decks = describeMatchup(deckA, deckB, nameOf);
   const out: SoakViolation[] = [];
   const push = (invariant: SoakInvariantName, detail: string, turn = 0, step = '-', action = '-') => {
     out.push({ invariant, detail, seed, turn, step, action, decks });
@@ -965,6 +978,86 @@ export function requiredMechanicsOf(index: SoakCardIndex): SoakMechanicId[] {
  * thousands of games before the rarest mechanic appears, while an anchored deck
  * is 12 copies of cards that print it.
  */
+/** What one replayed soak game broke, and WHICH game it was. */
+export interface SoakReplayResult {
+  readonly violations: readonly SoakViolation[];
+  /** Both decklists, verbatim — the same rendering a {@link SoakViolation} carries. */
+  readonly decks: string;
+}
+
+/** What {@link replaySoakMixedGame} needs: one seed and the things to play it with. */
+export interface SoakReplayOptions {
+  readonly pool: CardPool;
+  readonly registry: EffectRegistry;
+  readonly pilot: Pilot;
+  /** The `seed` a {@link SoakViolation} printed. */
+  readonly seed: number;
+  readonly sim?: SimConfig;
+  /**
+   * Who was on the play. `runSoak` alternates it by ABSOLUTE game index
+   * (`onPlayFor`), so a violation from an even index replays with `'A'` — the
+   * default — and one from an odd index with `'B'`.
+   */
+  readonly onPlay?: PlayerId;
+}
+
+/**
+ * Replay ONE mixed-deck soak game from its seed alone, and return what it broke.
+ *
+ * This file's header promises that a violation is "a bug report you can paste
+ * into a new test". Until this existed that was only half true: the seed and both
+ * decklists were printed, but the only way to reach the game they describe was to
+ * re-run the whole tier and hope your `mixedGames` was large enough to contain it
+ * — and the bug that prompted this replayed at mixed index 112, three times past
+ * the fast tier's reach. A pinned regression that costs a 2,000-game run is not a
+ * regression test anybody keeps.
+ *
+ * Both decks are a pure function of the seed, exactly as the mixed half of
+ * `runSoak` builds them, so this plays the same game that violation came from —
+ * in the ~200 ms one game costs rather than the minutes the tier does. See
+ * `soak.test.ts` for the pinned list.
+ *
+ * ⚠️ **The decklists come back with the violations, and a pinned test must assert
+ * on them.** A replay that quietly plays the WRONG game reports zero violations,
+ * which is the same green as a fixed bug — and this is not hypothetical: mutating
+ * one bit of the opponent-deck seed left the pinned regression passing, happily
+ * replaying a different match. The decks are a game's identity;
+ * {@link SoakReplayResult.decks} is how a test says which game it just played.
+ */
+export function replaySoakMixedGame(options: SoakReplayOptions): SoakReplayResult {
+  const sim = soakSimConfig(options.sim);
+  const index = indexPoolForSoak(options.pool.cards);
+  const nameOf = (id: string) => options.pool.get(id)?.name ?? id;
+  const { seed } = options;
+  const deckA = buildMixedDeck(index, seed);
+  const deckB = buildMixedDeck(index, seed ^ 0x27d4eb2f);
+  // `playOne` reads the game index for two things only: which seat is on the play,
+  // and whether the two sampled checks land on this game. Parity carries the
+  // first; the second is switched off outright above, because a replay is asking
+  // one narrow question and the leak scan and the apply-path replay both own
+  // dedicated tests (`observation.test.ts`, `match-inplace.test.ts`).
+  const gameIndex = (options.onPlay ?? 'A') === 'A' ? 0 : 1;
+  const played = playOne(
+    {
+      pool: options.pool,
+      registry: options.registry,
+      pilot: options.pilot,
+      mixedGames: 0,
+      baseSeed: 0,
+      leakScanEvery: 0,
+      equivalenceEvery: 0,
+      ...(options.sim ? { sim: options.sim } : {}),
+    },
+    deckA,
+    deckB,
+    seed,
+    gameIndex,
+    sim,
+    nameOf,
+  );
+  return { violations: played.violations, decks: describeMatchup(deckA, deckB, nameOf) };
+}
+
 export function runSoak(options: SoakOptions): SoakReport {
   const sim = soakSimConfig(options.sim);
   const index = indexPoolForSoak(options.pool.cards);
