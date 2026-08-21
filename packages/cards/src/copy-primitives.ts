@@ -31,6 +31,8 @@ import {
   isLegalTarget,
   legalTargetsFor,
   makeSpellCopy,
+  pruneCardGrantsFor,
+  resetInstanceForNewZone,
   spellCopyAimAt,
   spellCopyAimRestriction,
   spellCopyAimSlots,
@@ -309,6 +311,21 @@ function exceptParam(ctx: EffectContext): CopyExceptions | undefined {
  * A copy of a spell has no hand to go to, so returning one CEASES IT TO EXIST
  * (CR 704.5e) — the same rule every other exit from the stack asks, through the
  * same one function.
+ *
+ * ⚠️ **The card arriving in hand is a NEW OBJECT (CR 400.7), and the face it was
+ * cast as does not come with it.** A modal DFC cast as its BACK half and then
+ * Narset's-Reversal'd used to land in hand still wearing the back-face
+ * definition — and a back face cannot be cast from hand (CR 712.8b), so the
+ * engine refused it every time the pilot offered it. The full-pool soak caught
+ * exactly that: one game submitted the same rejected `castSpell face:'back'`
+ * **82 times**, failing both "every action a pilot submits came from
+ * generateLegalActions" and "the engine never rejects an action it offered". The
+ * card was a dead draw for the rest of the game.
+ *
+ * `resetInstanceForNewZone` is core's own answer to "what does a zone change
+ * clear", and it is CALLED here rather than re-implemented — the same discipline
+ * `movePermanentTo` states at length in `effect-helpers.ts`. Three hand-rolled
+ * lines were how this funnel drifted from that one in the first place.
  */
 export const returnSpellToHand: EffectPrimitive = (ctx) => {
   const spell = targetedSpellOnStack(ctx);
@@ -322,6 +339,8 @@ export const returnSpellToHand: EffectPrimitive = (ctx) => {
     return;
   }
   card.zone = 'hand';
+  resetInstanceForNewZone(card);
+  pruneCardGrantsFor(ctx.state, card.instanceId);
   ctx.state.players[card.owner].hand.push(card);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to: 'hand' });
 };

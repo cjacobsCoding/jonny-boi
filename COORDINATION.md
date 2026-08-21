@@ -139,11 +139,41 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
+| fix/returned-spell-keeps-back-face | DESKTOP-90PJPM4 (worker) | packages/cards (`copy-primitives.ts` returnSpellToHand reset + NEW returned-spell-face.test.ts), DESIGN §3.34 rewritten + §3.33 pointer, COORDINATION | 🚧 PUSHED, not merged — STACKS on feat/blink-selesnya |
 | feat/blink-selesnya | DESKTOP-90PJPM4 (worker) | packages/cards (NEW blink-primitives.ts + blink-play.test.ts; primitives.ts registration, effect-helpers.ts +1 option, compile/rules.ts +1 rule; GENERATED data/expanded-pool.ts + expansion-report.json + expansion-candidates.json), packages/data-tools/data (GENERATED card-index.json + starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/ai (heuristic.ts blink goal + picker), packages/sim (NEW data/decks/selesnya-blink.ts + decks/index.ts), DESIGN §3.35 + §3.21 note, COORDINATION. **Gauntlet seed 99 rows byte-identical; new 8th row.** | 🚧 PUSHED, not merged — STACKS on fix/soak-action-cap |
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-21 DESKTOP-90PJPM4: `fix/returned-spell-keeps-back-face` 🚧 PUSHED — **§3.34 closed, and my
+  first diagnosis of it was WRONG.** ⚠️ Stacks on `feat/blink-selesnya` → `fix/soak-action-cap`.
+
+  §3.34 said the pilot was building `castSpell` for a modal DFC whose back face is a LAND, and
+  prescribed a guard in `castableHalvesInHand`. **I wrote that guard and it fixed nothing** — the
+  caller already drops a land half one line later (`if (isLand(def)) continue;`), so it was
+  unreachable code. The seed I "verified" against had gone green because §3.35 changed the pool and
+  re-dealt it, not because of the guard. I only caught it by removing the guard and watching the seed
+  still pass. **`targets:['B']` was the tell the whole time: a land does not target a player.**
+
+  **The real defect.** Trace every event naming the instance and you get three lines: DRAWN, CAST as
+  its back half ("Blow Off Steam"), then **stack → hand** — Narset's Reversal. `returnSpellToHand`
+  pushed the instance into the hand array with three hand-rolled lines and NO CR 400.7 reset, so it
+  arrived still wearing the back-face definition. A back face cannot be cast from hand (CR 712.8b),
+  so the engine refused it every time the pilot offered it: same rejected action **82 times in one
+  game**, and a dead draw for the rest of it. Fix calls core's own `resetInstanceForNewZone` +
+  `pruneCardGrantsFor` instead of re-implementing what a zone change clears — the drift
+  `movePermanentTo`'s comment warns about, in the sibling funnel.
+
+  ⚠️ **The regression is CONSTRUCTIVE, not a seed** (`returned-spell-face.test.ts`): cast a modal
+  DFC's back half, bounce it, assert the card in hand is front-face-up AND castable again. A seed
+  would be re-dealt by the next pool change — which is literally what invalidated my first attempt.
+  Sabotage-checked: removing the reset turns both tests red.
+
+  Two lessons for the board, both cheap to repeat: **a fix verified only against a soak seed is not
+  verified** if the pool moved underneath it — remove the fix and confirm the seed goes RED before
+  believing it. And **read the action's own fields**; the target list contradicted my hypothesis
+  before I wrote a line of code.
 
 - 2026-08-21 DESKTOP-90PJPM4: `feat/blink-selesnya` 🚧 PUSHED — **BLINK SHIPPED; `Selesnya Blink` is
   the ninth sample deck** and is selectable online. DESIGN §3.35. ⚠️ **Stacks on

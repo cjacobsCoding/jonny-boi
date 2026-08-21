@@ -3522,27 +3522,18 @@ reverting the CR 707.10 `min` turns the optionality tests red. Gauntlet seed 99 
 at 79/280, rows 12 · 13 · 17 · 7 · 9 · 7 · 14 — no curated deck holds a copy spell, so curated play
 cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 
-⚠️ **The deep tier's `gameCanEnd` is now GREEN — 0 action-cap hits in 2,000 games, where it was 3 —
-but the tier is still RED, for something else this change made REACHABLE.** See §3.34.
+⚠️ **The deep tier's `gameCanEnd` is now GREEN — 0 action-cap hits in 2,000 games, where it was 3.**
+The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
+now also fixed.
 
-### 3.34 HANDOFF — the pilot casts a land — 🔜 open
+### 3.34 A spell returned to hand kept the face it was cast as — ✅ done
 
-Not a copy bug, and not caused by §3.33: §3.33 changes which games get played in copy-spell decks,
-and one of the 2,000 now walks into a defect that was already there.
+Not a copy-pricing bug and not caused by §3.33: §3.33 changes which games get played in copy-spell
+decks, and one of the 2,000 walks into a defect that was already there. §3.35's two new pool cards
+then re-dealt every generated match and it surfaced again at a different instance, which is how we
+know it is the CLASS and not one unlucky game.
 
-**Proved both directions, so nobody has to re-derive it.** Reverting §3.33 and replaying seed
-1490533871 at BOTH seats gives **0 violations** — the position is only reached with the fix in. And
-the 2,000-game deep tier on the untouched pre-fix tree reports **3 violations, all `gameCanEnd`
-action-cap hits, zero DFC** — so the pre-fix tier never met this at all. The tier's ledger across
-the change:
-
-| | action-cap hits | DFC violations | total |
-|---|---|---|---|
-| before §3.33 | **3** | 0 | 3 |
-| after §3.33 | **0** | 2 (one game) | 2 |
-
-**The violation**, at seed **1490533871** (both seats, ~200 ms via `replaySoakMixedGame`), turn 22,
-**draw step**:
+**The violation** (turn 22, draw step; the instance id moves with the pool):
 
 ```
 ✗ every action a pilot submits came from generateLegalActions
@@ -3551,25 +3542,33 @@ the change:
     the engine rejected an offered action: the back face of a double-faced card cannot be cast
 ```
 
-The action is `{kind:'castSpell', player:'A', instanceId:7, targets:['B'], face:'back'}`, submitted
-**82 times** in that one game.
+The action is `{kind:'castSpell', instanceId:7, targets:['B'], face:'back'}`, submitted **82 times**
+in that one game.
 
-**What is actually wrong.** A modal DFC whose back face is a LAND — `Skyclave Cleric //
-Skyclave Basilica` here — is marked `backFaceCastable: true`, and that flag is CORRECT: `compile.ts`
-documents it as "both halves are cast **or played** from hand". The pilot reads it as *castable* and
-builds a `castSpell` for a land. `playLand` has taken `face?: CastFace` since §3.13 precisely so a
-modal DFC's land half can be played — the pilot is simply building the wrong action kind. It also
-built it in the **draw step**, where neither a land nor a sorcery-speed spell is legal at all, so
-there is a second question about which planning path proposes casts outside a legal window.
+⚠️ **This section first shipped with the WRONG diagnosis, and the way it was wrong is worth keeping.**
+It said the pilot was building a `castSpell` for a modal DFC whose back face is a LAND
+(`Skyclave Cleric // Skyclave Basilica`), and prescribed a guard in the pilot's
+`castableHalvesInHand`. That guard was written, and it fixed nothing: the caller already drops a land
+half one line later (`if (isLand(def)) continue;`), so the guard was unreachable. The seed had gone
+green for an unrelated reason — §3.35 changed the pool and re-dealt it — and the "fix" was only ever
+confirmed against that. **`targets:['B']` was the tell all along: a land does not target a player.**
 
-**Scope for whoever takes it: 21 pool cards, not one.** Every modal DFC in the pool with a land back
-face carries `backFaceCastable: true` — Pathways (9), Zendikar MDFCs (Akoum Warrior, Bala Ged
-Recovery, Jwari Disruption, Kazandu Mammoth, Song-Mad Treachery, Tangled Florahedron, Zof
-Consumption, Skyclave Cleric), Glasswing Grace, Revitalizing Repast, Vastwood Fortification. Any of
-them can deal this position.
+**What is actually wrong.** Tracing every event naming the instance gives three lines and the whole
+story: it is DRAWN, it is CAST as its back half ("Blow Off Steam"), and it moves **stack → hand** —
+Narset's Reversal returning it. `returnSpellToHand` pushed the instance into the hand array with
+three hand-rolled lines and no CR 400.7 reset, so the card arrived in hand still wearing the
+back-face definition. A back face cannot be cast from hand (CR 712.8b), so the engine refused it
+every time the pilot offered it, and the card was a dead draw for the rest of the game.
 
-⚠️ **Do NOT "fix" it by editing `data/expanded-pool.ts`** — that file is generated, and a test
-re-derives it. The flag is right; the pilot's reading of it is wrong.
+The fix CALLS core's own `resetInstanceForNewZone` (plus `pruneCardGrantsFor`) rather than
+re-implementing what a zone change clears — the same discipline `movePermanentTo` states at length,
+and the two funnels had drifted for exactly the reason that comment warns about.
+
+**The regression is CONSTRUCTIVE, not a seed.** `returned-spell-face.test.ts` builds the position
+directly: cast a modal DFC's back half, bounce it with Narset's Reversal, assert the card in hand is
+front-face-up AND castable again. A seed would have been re-dealt by the next pool change — which is
+precisely what happened to the first attempt at this section. Sabotage-checked: removing the reset
+turns both tests red.
 
 ### 3.32 The other doors into the priority boundary — CR 704.3 for every action — ✅ done
 
