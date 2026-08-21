@@ -31,7 +31,7 @@
  */
 
 import type { CardDefinition, EffectRef, KeywordFlags } from './card.js';
-import { hasSubtype, hasType, isCreature } from './card.js';
+import { hasSubtype, hasType, isCreature, isLand } from './card.js';
 import { isBattle, isPlaneswalker } from './card.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject, StackObject } from './state.js';
 import { PLAYER_IDS } from './state.js';
@@ -108,6 +108,23 @@ export type TargetRestriction =
    * different size from adding a member.
    */
   | 'nonAngelCreatureYouControl'
+  /**
+   * "target creature an OPPONENT controls" — Banisher Priest's printed line.
+   *
+   * The mirror of `creatureYouControl`, and like it (and `'opponent'`) legality
+   * depends on WHO is acting, so an absent `controller` makes every candidate
+   * illegal rather than guessed. Its own restriction rather than `'creature'`
+   * because widening it would let a pilot exile its OWN board — a card playing
+   * differently from its printed text, and in this case a strictly worse play
+   * offered as if it were legal.
+   */
+  | 'creatureAnOpponentControls'
+  /**
+   * "target artifact, enchantment, or land" — Acidic Slime's printed line, and
+   * the shape of most naturalize-family removal. One restriction rather than
+   * three, because the printed line is one target with three acceptable types.
+   */
+  | 'artifactEnchantmentOrLand'
   /**
    * "target player or planeswalker" — a face or a walker, never a creature.
    * Lava Spike's printed line. Its own restriction (not `'player'`) because
@@ -204,6 +221,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'opponent' ||
     value === 'creatureYouControl' ||
     value === 'nonAngelCreatureYouControl' ||
+    value === 'creatureAnOpponentControls' ||
+    value === 'artifactEnchantmentOrLand' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
@@ -278,7 +297,13 @@ export function isLegalTarget(
   target: InstanceId | PlayerId,
   controller?: PlayerId,
   source?: CardDefinition,
+  /** See {@link legalTargetsFor} — the instance "another" excludes. */
+  excludeInstanceId?: InstanceId,
 ): boolean {
+  // Checked first and for every restriction: "another" is orthogonal to type,
+  // and the enumeration site applies the same rule (DESIGN §3.36 — offer and
+  // apply must agree).
+  if (excludeInstanceId !== undefined && target === excludeInstanceId) return false;
   if (isPlayerTarget(target)) {
     if (restriction === 'opponent') {
       // Unknown caster ⇒ illegal, never "probably fine" (see the type's note).
@@ -329,6 +354,14 @@ export function isLegalTarget(
   }
   if (restriction === 'creatureOrPlaneswalker') {
     return isCreature(permanent.def) || isPlaneswalker(permanent.def);
+  }
+  if (restriction === 'artifactEnchantmentOrLand') {
+    return hasType(permanent.def, 'artifact') || hasType(permanent.def, 'enchantment') || isLand(permanent.def);
+  }
+  if (restriction === 'creatureAnOpponentControls') {
+    // Unknown actor ⇒ illegal, never "probably theirs" (see the type's note).
+    if (controller === undefined || permanent.controller === controller) return false;
+    return isCreature(permanent.def);
   }
   if (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
@@ -424,6 +457,26 @@ export function legalTargetsFor(
   restriction: TargetRestriction,
   controller?: PlayerId,
   source?: CardDefinition,
+  /**
+   * "ANOTHER target …" — an instance this aim may not name, normally the
+   * aiming ability's own source. Optional so every existing caller is unchanged;
+   * a caller that does not pass it simply cannot express "another".
+   */
+  excludeInstanceId?: InstanceId,
+): readonly (InstanceId | PlayerId)[] {
+  const all = enumerateTargets(state, restriction, controller, source);
+  // Applied to whatever the branches produced, so "another" works with EVERY
+  // restriction rather than needing a case in each. Same rule `isLegalTarget`
+  // applies, which is what keeps the offer and the apply in agreement.
+  return excludeInstanceId === undefined ? all : all.filter((ref) => ref !== excludeInstanceId);
+}
+
+/** Every legal target for `restriction`, before any "another" exclusion. */
+function enumerateTargets(
+  state: GameState,
+  restriction: TargetRestriction,
+  controller?: PlayerId,
+  source?: CardDefinition,
 ): readonly (InstanceId | PlayerId)[] {
   if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
     const wantInstantOrSorcery = restriction === 'instantOrSorcerySpell';
@@ -485,6 +538,29 @@ export function legalTargetsFor(
   if (restriction === 'playerOrPlaneswalker') {
     for (const permanent of state.battlefield) {
       if (isPlaneswalker(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'artifactEnchantmentOrLand') {
+    for (const permanent of state.battlefield) {
+      if (
+        (hasType(permanent.def, 'artifact') ||
+          hasType(permanent.def, 'enchantment') ||
+          isLand(permanent.def)) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'creatureAnOpponentControls' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller !== controller &&
+        isCreature(permanent.def) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
         targets.push(permanent.instanceId);
       }
     }
@@ -606,6 +682,10 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a creature you control';
     case 'nonAngelCreatureYouControl':
       return 'a non-Angel creature you control';
+    case 'creatureAnOpponentControls':
+      return 'a creature an opponent controls';
+    case 'artifactEnchantmentOrLand':
+      return 'an artifact, enchantment, or land';
     case 'playerOrPlaneswalker':
       return 'a player or a planeswalker';
     case 'creatureOrPlaneswalker':

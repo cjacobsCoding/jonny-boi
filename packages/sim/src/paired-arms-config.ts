@@ -382,6 +382,23 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    */
   'blinkTarget',
   'blinkSelf',
+  /*
+   * EXILE UNTIL THIS LEAVES (the O-Ring pair) — SAFE, same argument as blink and
+   * for the same reason: neither half creates a new object identity. A card
+   * exiled this way keeps the decklist instance id it has carried since the
+   * opening shuffle, and so does the one that comes back, so `sourceCardFor`
+   * places both exactly as it always did.
+   *
+   * Neither primitive reads a library. `exileUntilLeaves` moves a known permanent
+   * from a public zone to a public zone and stamps a link on it;
+   * `returnExiledByThis` walks the two exiles for that link and moves them back.
+   * An exiled card's own enters-trigger may of course read a library when it
+   * returns (a Wood Elves given back by a dying Fiend Hunter searches), and that
+   * read is attributed to Wood Elves' own row — which is correct, and is exactly
+   * the distinction from `copyAsEnters`.
+   */
+  'exileUntilLeaves',
+  'returnExiledByThis',
 ]);
 
 /**

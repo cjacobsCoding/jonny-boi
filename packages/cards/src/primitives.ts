@@ -89,6 +89,7 @@ import {
 } from './effect-helpers.js';
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 import { COPY_PRIMITIVES } from './copy-primitives.js';
+import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
@@ -1487,6 +1488,11 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // object that is NOT A CARD, and both read what a copy IS from core's single
   // `copiableDefOf` answer rather than deciding it here.
   ...COPY_PRIMITIVES,
+  // "Exile until this leaves the battlefield" (`./exile-until-leaves`) — the
+  // O-Ring pair. Its own module because the LINK between exiler and exiled is
+  // the whole mechanic: two of these on the battlefield must each return their
+  // own card, not each other's.
+  ...EXILE_UNTIL_LEAVES_PRIMITIVES,
   // The blink family (`./blink-primitives`): exile a permanent you control and
   // return it immediately. Its own module because the mechanic is one CR rule —
   // 400.7's "a new object" — and every consequence players care about (the ETB

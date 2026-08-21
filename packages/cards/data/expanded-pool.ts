@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 524 cards.
+ * 528 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -79,6 +79,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Equip {3}',
       modifies: { power: 0, toughness: 3, keywords: { vigilance: true } },
     },
+  },
+  // Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)
+  // When this creature enters, destroy target artifact, enchantment, or land.
+  {
+    id: '21f45043-5419-4019-8b6c-e5294bd5f549',
+    name: 'Acidic Slime',
+    types: ['creature'],
+    cost: { generic: 3, G: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { deathtouch: true },
+    subtypes: ['ooze'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'artifactEnchantmentOrLand' } }],
+        label: 'Enters: destroy target artifact, enchantment, or land',
+        targets: 'artifactEnchantmentOrLand',
+      },
+    ],
   },
   // Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. (It can attack and {T} this turn.)
   {
@@ -621,6 +641,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       isBackFace: true,
     },
     backFaceCastable: true,
+  },
+  // When this creature enters, exile target creature an opponent controls until this creature leaves the battlefield.
+  {
+    id: '9f560b83-32d4-4bb4-a956-8f5db18599db',
+    name: 'Banisher Priest',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 2,
+    toughness: 2,
+    subtypes: ['human', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'exileUntilLeaves',
+            params: { targets: 'creatureAnOpponentControls', max: 1 },
+          },
+        ],
+        label: 'Enters: exile target creature an opponent controls until this leaves',
+        targets: 'creatureAnOpponentControls',
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
+        label: 'Leaves: return the exiled card',
+      },
+    ],
   },
   // {T}: Add {G}.
   {
@@ -2772,6 +2820,40 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     ],
     producesOptions: [{ U: 1 }, { B: 1 }],
   },
+  // When this creature enters, you may exile another target creature.
+  // When this creature leaves the battlefield, return the exiled card to the battlefield under its owner's control.
+  {
+    id: 'cb9d557a-fc06-428c-8be6-7d28add33028',
+    name: 'Fiend Hunter',
+    types: ['creature'],
+    cost: { generic: 1, W: 2 },
+    power: 1,
+    toughness: 3,
+    subtypes: ['human', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may exile another target creature',
+              valence: 'gain',
+              effects: [{ primitive: 'exileUntilLeaves', params: { targets: 'creature', max: 1 } }],
+            },
+          },
+        ],
+        label: 'Enters: you may exile another target creature',
+        targets: 'creature',
+        targetsExcludeSelf: true,
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'returnExiledByThis', params: { to: 'battlefield' } }],
+        label: 'Leaves: return the exiled card to the battlefield under its owner\'s control',
+      },
+    ],
+  },
   // Fiery Temper deals 3 damage to any target.
   // Madness {R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
   {
@@ -3065,6 +3147,46 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 2,
     keywords: { trample: true },
     subtypes: ['beast'],
+  },
+  // Defender
+  // When this creature enters, you may search your library for a basic land card or a Gate card, reveal it, put it into your hand, then shuffle.
+  {
+    id: '0f539127-535f-4e0d-abaa-e884521098d2',
+    name: 'Gatecreeper Vine',
+    types: ['creature'],
+    cost: { generic: 1, G: 1 },
+    power: 0,
+    toughness: 2,
+    keywords: { defender: true },
+    subtypes: ['plant'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may search your library for a basic land card or a gate card, reveal it, put it into your hand, then shuffle',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'searchLibrary',
+                  params: {
+                    who: 'controller',
+                    count: 1,
+                    filter: { anyOfSubtypes: ['gate'] },
+                    nameAnyOf: ['Plains', 'Island', 'Swamp', 'Mountain', 'Forest'],
+                    destination: 'hand',
+                    reveal: true,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'Enters: you may search your library for a basic land card or a gate card, reveal it, put it into your hand, then shuffle',
+      },
+    ],
   },
   // Geistflame deals 1 damage to any target.
   // Flashback {3}{R} (You may cast this card from your graveyard for its flashback cost. Then exile it.)

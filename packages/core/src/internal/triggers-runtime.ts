@@ -284,6 +284,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         // which is when the rules say targets are chosen. Absent for every other
         // trigger, so those are pushed byte-for-byte as they always were.
         ...(pending.ability.targets ? { awaitingTargets: pending.ability.targets } : {}),
+        ...(pending.ability.targetsExcludeSelf === true ? { awaitingTargetsExcludeSelf: true } : {}),
       });
       baseEmit({
         type: 'triggerPutOnStack',

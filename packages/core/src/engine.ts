@@ -2188,7 +2188,16 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
     // definition is recovered from wherever the card now is.
     const triggerSourceDef = (findOnBattlefield(state, trigger.sourceInstanceId) ??
       findInstanceAnywhere(state, trigger.sourceInstanceId))?.def;
-    const candidates = legalTargetsFor(state, restriction, trigger.controller, triggerSourceDef);
+    // "ANOTHER target …": the ability's own source is excluded, at the point the
+    // candidates are built — so the menu never offers what the apply path would
+    // then refuse (DESIGN §3.36).
+    const candidates = legalTargetsFor(
+      state,
+      restriction,
+      trigger.controller,
+      triggerSourceDef,
+      trigger.awaitingTargetsExcludeSelf === true ? trigger.sourceInstanceId : undefined,
+    );
 
     if (candidates.length === 0) {
       state.stack.splice(index, 1);

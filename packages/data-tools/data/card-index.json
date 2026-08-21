@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-21T10:43:37.898Z",
+  "generatedAt": "2026-08-21T11:28:10.614Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 556,
+  "requested": 560,
   "unresolved": [],
   "cards": [
     {
@@ -175,6 +175,68 @@
       "localImages": {
         "normal": "accorder-s-shield-normal.jpg",
         "art_crop": "accorder-s-shield-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "21f45043-5419-4019-8b6c-e5294bd5f549",
+      "name": "Acidic Slime",
+      "manaCost": {
+        "generic": 3,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 2,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Ooze"
+        ]
+      },
+      "rawTypeLine": "Creature — Ooze",
+      "oracleText": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nWhen this creature enters, destroy target artifact, enchantment, or land.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Deathtouch"
+      ],
+      "set": "cmm",
+      "collectorNumber": "270",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.jpg?1783915638",
+        "normal": "https://cards.scryfall.io/normal/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.jpg?1783915638",
+        "large": "https://cards.scryfall.io/large/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.jpg?1783915638",
+        "png": "https://cards.scryfall.io/png/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.png?1783915638",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.jpg?1783915638",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.jpg?1783915638",
+        "thumb": "https://cards.scryfall.io/thumb/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.webp?1783915638",
+        "grid": "https://cards.scryfall.io/grid/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.webp?1783915638",
+        "display": "https://cards.scryfall.io/display/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.webp?1783915638",
+        "art": "https://cards.scryfall.io/art/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.webp?1783915638",
+        "crop": "https://cards.scryfall.io/crop/front/9/3/932d48fb-42b5-4aaa-a91c-d35cdb5e41a3.webp?1783915638"
+      },
+      "localImages": {
+        "normal": "acidic-slime-normal.jpg",
+        "art_crop": "acidic-slime-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -2377,6 +2439,67 @@
           }
         }
       ]
+    },
+    {
+      "id": "9f560b83-32d4-4bb4-a956-8f5db18599db",
+      "name": "Banisher Priest",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Cleric"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Cleric",
+      "oracleText": "When this creature enters, exile target creature an opponent controls until this creature leaves the battlefield.",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "moc",
+      "collectorNumber": "173",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.jpg?1783917191",
+        "normal": "https://cards.scryfall.io/normal/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.jpg?1783917191",
+        "large": "https://cards.scryfall.io/large/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.jpg?1783917191",
+        "png": "https://cards.scryfall.io/png/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.png?1783917191",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.jpg?1783917191",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.jpg?1783917191",
+        "thumb": "https://cards.scryfall.io/thumb/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.webp?1783917191",
+        "grid": "https://cards.scryfall.io/grid/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.webp?1783917191",
+        "display": "https://cards.scryfall.io/display/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.webp?1783917191",
+        "art": "https://cards.scryfall.io/art/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.webp?1783917191",
+        "crop": "https://cards.scryfall.io/crop/front/0/e/0e518f9e-d74d-4a6f-8fde-5e3ec5834e63.webp?1783917191"
+      },
+      "localImages": {
+        "normal": "banisher-priest-normal.jpg",
+        "art_crop": "banisher-priest-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "59d22de5-e310-44d7-89cf-ef3529e40cef",
@@ -11525,6 +11648,67 @@
       "faces": []
     },
     {
+      "id": "cb9d557a-fc06-428c-8be6-7d28add33028",
+      "name": "Fiend Hunter",
+      "manaCost": {
+        "generic": 1,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Human",
+          "Cleric"
+        ]
+      },
+      "rawTypeLine": "Creature — Human Cleric",
+      "oracleText": "When this creature enters, you may exile another target creature.\nWhen this creature leaves the battlefield, return the exiled card to the battlefield under its owner's control.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [],
+      "set": "hoc",
+      "collectorNumber": "167",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.jpg?1785497384",
+        "normal": "https://cards.scryfall.io/normal/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.jpg?1785497384",
+        "large": "https://cards.scryfall.io/large/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.jpg?1785497384",
+        "png": "https://cards.scryfall.io/png/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.png?1785497384",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.jpg?1785497384",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.jpg?1785497384",
+        "thumb": "https://cards.scryfall.io/thumb/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.webp?1785497384",
+        "grid": "https://cards.scryfall.io/grid/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.webp?1785497384",
+        "display": "https://cards.scryfall.io/display/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.webp?1785497384",
+        "art": "https://cards.scryfall.io/art/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.webp?1785497384",
+        "crop": "https://cards.scryfall.io/crop/front/2/b/2b497736-e502-4e0c-b5dc-6ce5e9e8d4ab.webp?1785497384"
+      },
+      "localImages": {
+        "normal": "fiend-hunter-normal.jpg",
+        "art_crop": "fiend-hunter-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "f07bd49d-8e71-4d56-be2a-638514011318",
       "name": "Fiery Temper",
       "manaCost": {
@@ -12946,6 +13130,68 @@
       "localImages": {
         "normal": "garruk-s-companion-normal.jpg",
         "art_crop": "garruk-s-companion-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "0f539127-535f-4e0d-abaa-e884521098d2",
+      "name": "Gatecreeper Vine",
+      "manaCost": {
+        "generic": 1,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Plant"
+        ]
+      },
+      "rawTypeLine": "Creature — Plant",
+      "oracleText": "Defender\nWhen this creature enters, you may search your library for a basic land card or a Gate card, reveal it, put it into your hand, then shuffle.",
+      "power": 0,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G"
+      ],
+      "colorIdentity": [
+        "G"
+      ],
+      "keywords": [
+        "Defender"
+      ],
+      "set": "ddm",
+      "collectorNumber": "48",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.jpg?1783939483",
+        "normal": "https://cards.scryfall.io/normal/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.jpg?1783939483",
+        "large": "https://cards.scryfall.io/large/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.jpg?1783939483",
+        "png": "https://cards.scryfall.io/png/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.png?1783939483",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.jpg?1783939483",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.jpg?1783939483",
+        "thumb": "https://cards.scryfall.io/thumb/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.webp?1783939483",
+        "grid": "https://cards.scryfall.io/grid/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.webp?1783939483",
+        "display": "https://cards.scryfall.io/display/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.webp?1783939483",
+        "art": "https://cards.scryfall.io/art/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.webp?1783939483",
+        "crop": "https://cards.scryfall.io/crop/front/e/1/e1ebaed7-b3d5-4eb8-93f7-3a65fd7b89b6.webp?1783939483"
+      },
+      "localImages": {
+        "normal": "gatecreeper-vine-normal.jpg",
+        "art_crop": "gatecreeper-vine-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
