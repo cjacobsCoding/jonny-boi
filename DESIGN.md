@@ -3460,6 +3460,24 @@ That is the price of the rule holding at the boundary it names.
 Byte-identical per-opponent rows with the check on and off, measured in the same process: Boros 12/40,
 Rakdos 13/40, Izzet 17/40, Golgari 7/40, Orzhov 9/40, Mono-Green 7/40, UW 14/40.
 
+#### The sibling hunt — 2,056 games, zero SBA-class violations left
+
+One instance of this shape usually means more, so the deep tier ran at 2,000 games **on the merged
+tree**: 2,056 games, 39,116 turns, 1,122,195 actions, 348,608 ms CPU. **Not one state-based-action
+violation** — no 0-toughness creature, no 0-loyalty walker, no 0-defense battle, no illegally attached
+Aura, no player at 0 life still playing. The class this branch opened is closed.
+
+⚠️ **It did surface three failures, and they are NOT this branch's.** Three games burned the
+6,000-action cap without ending (`gameCanEnd`): seeds **3434778477** (turn 20), **1390617766**
+(turn 11) and **113343071** (turn 18). Replaying all three through `replaySoakMixedGame` with the new
+check toggled ON and OFF in one process gives the **identical** violation set both ways, at both
+on-the-play assignments — so they are pre-existing on `origin/main`, not a behaviour change here.
+Their decks say why: every one pairs a copy spell (`Reverberate`, `Twincast`, `Narset's Reversal`)
+with an extra-draw engine (`Howling Mine`, `Font of Mythos`, `Kami of the Crescent Moon`), which is
+§3.31's cards meeting a card-advantage board. **`origin/main`'s deep tier is currently RED for that
+reason** and it needs its own branch; closing it here would bury an engine fix under an unrelated
+one, which is exactly the call §3.30 made about this bug.
+
 #### A regression test that could have been green for the wrong reason
 
 `soak-config.ts` promises a violation is "a bug report you can paste into a new test". It was only half

@@ -185,6 +185,22 @@ _Append dated notes here; keep them short. Newest at top._
   the position cannot exist, **before** asserting the outcome. **4 sabotages, 3 caught, 1 escape,
   fixed and re-checked red.** If you add a pinned row, name its cards.
 
+  📊 **The sibling hunt, 2,000-game deep tier on the merged tree**: 2,056 games, 1,122,195 actions,
+  **zero** SBA-class violations — no 0-toughness creature, no 0-loyalty walker, no 0-defense battle, no
+  illegal attachment, no player at 0 life still playing.
+
+  ⚠️ **HANDOFF — `origin/main`'s deep soak is RED, and it is not this branch.** Three games burn the
+  6,000-action cap without ending (`gameCanEnd`): seeds **3434778477**, **1390617766**, **113343071**.
+  Replayed with the new check ON and OFF in one process, at both on-the-play seats, the violation sets
+  are **identical** — pre-existing. Every one of the three decks pairs a copy spell (`Reverberate`,
+  `Twincast`, `Narset's Reversal`) with an extra-draw engine (`Howling Mine`, `Font of Mythos`,
+  `Kami of the Crescent Moon`), i.e. §3.31's new cards meeting a card-advantage board. `replaySoakMixedGame`
+  reproduces each in ~200 ms — whoever takes it should start there.
+
+  ✅ verify 0, build 0, **5009 passed / 0 failed**, gauntlet seed 99 **79/280** with all seven rows
+  byte-identical to the recorded baseline.
+
+
 - 2026-08-20 worker: `feat/spell-and-token-copies` 🚧 PUSHED — **the corpus's #1 gap is closed, and
   it was closed the way `feat/copy-effects` said it had to be.** That branch reported copying a SPELL
   and TOKEN COPIES by name rather than half-building them, and named the trap precisely: a copy needs
