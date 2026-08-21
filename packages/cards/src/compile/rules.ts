@@ -157,6 +157,19 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
 const CREATURE_TARGET: TargetRestriction = 'creature';
 /** "target creature you control" — never widened to any creature on the table. */
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
+/**
+ * "target NONLEGENDARY creature you control" (Kiki-Jiki) — never widened to
+ * {@link CREATURE_YOU_CONTROL_TARGET}. The printed word is what stops the card
+ * copying itself, and dropping it turns a fair rare into an infinite combo with
+ * every legend on the table.
+ */
+const NONLEGENDARY_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'nonlegendaryCreatureYouControl';
+/**
+ * "target artifact or creature you control" (Molten Duplication) — neither
+ * {@link CREATURE_YOU_CONTROL_TARGET} widened nor `'permanent'` narrowed, both
+ * of which are the wrong set.
+ */
+const ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'artifactOrCreatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 /**
  * "target instant or sorcery spell" — narrower than {@link SPELL_TARGET} and
@@ -2113,9 +2126,14 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     // tables the as-enters copy uses (`parseCopyException`), so "except it has
     // haste" means one thing in this codebase rather than two. A selector or a
     // clause outside them returns null and the card reports.
-    pattern: /^create (a|an|one|two|three|four|five) tokens? that(?:'s a copy|s are copies) of (.+)$/,
+    pattern: /^create (a|an|one|two|three|four|five) ((?:tapped(?: and attacking)? )?)tokens? that(?:'s a copy|s are copies) of (.+)$/,
     build(match, ctx) {
-      return buildTokenCopy(match[1] ?? 'a', match[2] ?? '', ctx);
+      // The entry words are read BEFORE anything else: a phrase outside the
+      // closed set makes the whole clause report rather than quietly creating an
+      // untapped token, which would be a card playing better than printed.
+      const entry = tokenEntryWords(match[2]);
+      if (entry === null) return null;
+      return buildTokenCopy(match[1] ?? 'a', entry, match[3] ?? '', ctx);
     },
   },
   {
@@ -3857,6 +3875,59 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
   },
   {
     /**
+     * "If an effect would create one or more tokens under your control, it
+     * creates TWICE THAT MANY of those tokens instead" (Doubling Season's other
+     * half, Parallel Lives, Anointed Procession) and the passive wording "If one
+     * or more tokens would be created under your control, twice that many of
+     * those tokens are created instead" (Mondrak, Elspeth Storm Slayer, Exalted
+     * Sunborn).
+     *
+     * ⚠️ WHAT THIS RULE REFUSES, and why each refusal is the contract working
+     * rather than a gap in the layer:
+     *  - "…those tokens **plus an additional Food token**" (Peregrin Took) and
+     *    "…plus **that many 1/1 green Squirrel** tokens" (Chatterfang): the
+     *    replacement creates a DIFFERENT object, not more of the same one.
+     *  - "…**instead create one of each**" (Academy Manufactor) — likewise.
+     *  - "…that many **4/4 white Angel** tokens are created instead" (Divine
+     *    Visitation): the tokens are replaced, not counted.
+     *  - "If one or more **creature** tokens…" (Ojer Taq): the clause narrows by
+     *    what the token IS, and the replaced event is a count under a player —
+     *    the tokens do not exist yet, so there is no object to filter on.
+     * Each is a genuinely different outcome and stays reported.
+     */
+    id: 'replacement-tokens-multiplied',
+    description:
+      '"If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead" (Doubling Season, Parallel Lives, Anointed Procession, Mondrak) — CR 614',
+    pattern: new RegExp(
+      `^if (?:an effect would create one or more tokens|one or more tokens would be created) ` +
+        `under (your|a player's) control, ` +
+        `(?:it creates ${REPLACEMENT_MULTIPLIER_TOKEN} that many of those tokens|` +
+        `${REPLACEMENT_MULTIPLIER_TOKEN} that many of those tokens are created) instead$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const times = REPLACEMENT_MULTIPLIERS[match[2] ?? match[3] ?? ''];
+      if (times === undefined) return null;
+      return {
+        replacements: [
+          {
+            event: 'tokens',
+            applies: {
+              // "under YOUR control" is the ability's own controller; "under A
+              // PLAYER'S control" (Primal Vigor) is the symmetric card and must
+              // not be quietly read as "yours" — the same rule the damage
+              // clause's missing controller tail follows.
+              recipientController: match[1] === 'your' ? 'you' : 'any',
+            },
+            outcome: { times },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
+    /**
      * "If a [red] source you control would deal [noncombat] damage to RECIPIENT,
      * it deals DOUBLE that damage / that much damage PLUS N instead" — Torbran,
      * Gratuitous Violence, Fiery Emancipation, Angrath's Marauders, Twinflame
@@ -5167,8 +5238,11 @@ function parseCopyException(clause: string, ctx: RuleContext): CopyExceptions | 
   // "it's legendary" — the supertype form, which the branch above deliberately
   // does not swallow (a supertype is not "another type").
   if (/^it'?s legendary(?: in addition to its other types)?$/.test(clause)) return { legendary: true };
-  // "it isn't legendary" (Spark Double).
-  if (/^it isn'?t legendary$/.test(clause)) return { legendary: false };
+  // "it isn't legendary" (Spark Double) / "THE TOKEN isn't legendary" (Helm of
+  // the Host). The two nouns name the same object in these clauses — a token
+  // copy's "except" tail is about the token it is making — so they are one rule
+  // rather than two entries that could drift apart.
+  if (/^(?:it|the token) isn'?t legendary$/.test(clause)) return { legendary: false };
   // "its name is ~" — the copy keeps the copying card's own printed name
   // (Sakashima the Impostor, Chameleon's "his name is …").
   if (/^(?:its|his|her|their) name is ~$/.test(clause)) return { name: ctx.card.name };
@@ -5256,15 +5330,25 @@ function buildCopyAsEnters(
  *
  * A CLOSED table, for the same reason `COPY_SELECTOR_FILTERS` is closed: a
  * selector the compiler only half-read produces a card that copies something
- * the printed one cannot. "target NONLEGENDARY creature you control"
- * (Kiki-Jiki) is deliberately absent — the engine has no such target
- * restriction, and pretending it were "target creature you control" would let
- * the card copy a legend it may not.
+ * the printed one cannot.
+ *
+ * ⚠️ "ANOTHER target creature you control" (Orthion, Jaxis, The Jolly Balloon
+ * Man) is still deliberately absent, and the blocker is specific: the printed
+ * word "another" excludes the ASKING INSTANCE, while core's target vocabulary is
+ * checked against a source DEFINITION (`isLegalTarget(state, restriction, ref,
+ * controller, sourceDef)`) and never learns which object is asking. Compiling it
+ * as plain "target creature you control" would let Orthion copy itself, which is
+ * a card playing wider than printed.
  */
 const TOKEN_COPY_SELECTORS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = Object.freeze({
   'target creature': { targets: CREATURE_TARGET },
   'target creature you control': { targets: CREATURE_YOU_CONTROL_TARGET },
+  // "target NONLEGENDARY creature you control" (Kiki-Jiki, Fable of the
+  // Mirror-Breaker). Its own restriction rather than an approximation: the
+  // printed word is the entire reason Kiki-Jiki cannot copy itself.
+  'target nonlegendary creature you control': { targets: NONLEGENDARY_CREATURE_YOU_CONTROL_TARGET },
   'target artifact': { targets: ARTIFACT_TARGET },
+  'target artifact or creature you control': { targets: ARTIFACT_OR_CREATURE_YOU_CONTROL_TARGET },
   'target permanent': { targets: PERMANENT_TARGET },
   // "a copy of equipped creature" (Helm of the Host) / "of enchanted artifact"
   // (Mechanized Production): the source's HOST, not a target. One param covers
@@ -5302,10 +5386,49 @@ const TOKEN_COPY_COUNTS: Readonly<Record<string, number>> = Object.freeze({
  * Parsing from the end rather than with one greedy regex is what keeps a
  * selector containing a comma from being mistaken for an "except" clause.
  */
-function buildTokenCopy(countWord: string, rest: string, ctx: RuleContext): ClauseContribution | null {
+function buildTokenCopy(
+  countWord: string,
+  entry: TokenEntryWords,
+  rest: string,
+  ctx: RuleContext,
+): ClauseContribution | null {
   const count = TOKEN_COPY_COUNTS[countWord];
   if (count === undefined) return null;
   let body = rest.trim();
+
+  // "… **Sacrifice it at the beginning of the next end step**" (Kiki-Jiki, The
+  // Fire Crystal, Orthion, Molten Duplication) / "**Exile those tokens** at the
+  // beginning of the next end step" (Twinflame, Mimic Vat) — CR 603.7, a DELAYED
+  // triggered ability. Parsed FIRST because it is the last printed sentence.
+  //
+  // It is a param on the SAME ref rather than a second effect, and that is not a
+  // shortcut: the delayed ability has to name the tokens this ref creates, and
+  // nothing but this ref will ever know their ids.
+  let delayedRemoval: 'sacrifice' | 'exile' | undefined;
+  const delayed = body.match(TOKEN_COPY_DELAYED_REMOVAL);
+  if (delayed) {
+    delayedRemoval = delayed[1] === 'exile' ? 'exile' : 'sacrifice';
+    body = body.slice(0, body.length - (delayed[0] ?? '').length).trim();
+  }
+
+  // "… **It gains haste.**" (Orthion, Mimic Vat) / "**It gains haste until end
+  // of turn.**" (Molten Duplication) / "**That token gains haste.**" (Helm of
+  // the Host) — a FOLLOW-UP SENTENCE about the object the first one created.
+  //
+  // Carried as its own param and NOT merged into the "except" tail, because a
+  // grant is layer 6 on that object and is therefore not among the copiable
+  // values a second copy would take, while "except it has haste" is. They look
+  // identical on the board and differ exactly one copy later.
+  let grantKeywords: KeywordFlags | undefined;
+  let grantUntilEndOfTurn = false;
+  const grant = body.match(TOKEN_COPY_GRANT_SENTENCE);
+  if (grant) {
+    const flag = KEYWORD_FLAGS[(grant[1] ?? '').trim()];
+    if (flag === undefined) return null;
+    grantKeywords = { [flag]: true } as KeywordFlags;
+    grantUntilEndOfTurn = grant[2] !== undefined;
+    body = body.slice(0, body.length - (grant[0] ?? '').length).trim();
+  }
 
   // "… If this spell was kicked, create FIVE of those tokens INSTEAD" (Rite of
   // Replication). A replacement of the COUNT, so it is one number on the same
@@ -5339,11 +5462,61 @@ function buildTokenCopy(countWord: string, rest: string, ctx: RuleContext): Clau
     params: {
       ...selector,
       count,
+      ...(entry.tapped ? { tapped: true } : {}),
+      ...(entry.attacking ? { attacking: true } : {}),
       ...(kickedCount > 0 ? { kickedCount } : {}),
       ...(Object.keys(except).length > 0 ? { except } : {}),
+      ...(grantKeywords !== undefined ? { grantKeywords } : {}),
+      ...(grantUntilEndOfTurn ? { grantUntilEndOfTurn: true } : {}),
+      ...(delayedRemoval !== undefined ? { delayedRemoval } : {}),
     },
   });
 }
+
+/**
+ * "Sacrifice it / them at the beginning of the next end step" · "Exile it /
+ * them / those tokens at the beginning of the next end step" — the printed
+ * delayed triggered ability (CR 603.7), anchored to the END of the clause.
+ *
+ * Both verbs are captured because they are two outcomes, not two spellings: a
+ * sacrifice is a DEATH that a dies-trigger sees and that lands in a graveyard,
+ * an exile is neither.
+ */
+const TOKEN_COPY_DELAYED_REMOVAL =
+  /\. (sacrifice|exile) (?:it|them|that token|those tokens|this token) at the beginning of the next end step$/;
+
+/**
+ * "It gains haste." / "They gain haste." / "That token gains haste." /
+ * "It gains haste until end of turn." — the follow-up sentence about the object
+ * the previous one created, anchored to the END of what remains.
+ */
+const TOKEN_COPY_GRANT_SENTENCE =
+  /\. (?:it|they|that token|those tokens) gains? ([a-z' ]+?)( until end of turn)?$/;
+
+/** The printed words a "create … token" clause may put in front of "token". */
+interface TokenEntryWords {
+  readonly tapped: boolean;
+  readonly attacking: boolean;
+}
+
+/**
+ * Read the "tapped" / "tapped and attacking" words a create-token clause prints
+ * before the noun (Skyclave Relic, Kambal, Delina, Mobilize).
+ *
+ * `null` for a phrase outside the closed set, so a wording nobody has read is
+ * REPORTED rather than silently creating an untapped token — which would be a
+ * card playing better than printed.
+ */
+function tokenEntryWords(phrase: string | undefined): TokenEntryWords | null {
+  const words = (phrase ?? '').trim();
+  if (words.length === 0) return NO_TOKEN_ENTRY_WORDS;
+  if (words === 'tapped') return { tapped: true, attacking: false };
+  if (words === 'tapped and attacking') return { tapped: true, attacking: true };
+  return null;
+}
+
+/** Shared "the clause printed no extra entry words" answer. */
+const NO_TOKEN_ENTRY_WORDS: TokenEntryWords = Object.freeze({ tapped: false, attacking: false });
 
 /** Number words a printed "N or fewer" uses. */
 const SMALL_NUMBER_WORDS: Readonly<Record<string, number>> = Object.freeze({

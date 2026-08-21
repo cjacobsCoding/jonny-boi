@@ -513,20 +513,41 @@ function compileActivatedAbility(clause: string, assembly: Assembly, ctx: RuleCo
   const cost = parseActivationCost(split.cost, ctx);
   if (!cost) return false;
 
-  const effects = ctx.compileEffectClause(split.effect);
+  // "**Activate only as a sorcery**" (Orthion, Whip of Erebos, The Jolly Balloon
+  // Man) — a TIMING restriction printed as the last sentence of the EFFECT half,
+  // which is why the cost parser never saw it. Stripped here and turned into
+  // core's `timing: 'sorcery'`, the same field a loyalty ability carries and the
+  // same one `applyActivateAbility` already enforces.
+  //
+  // ⚠️ Stripped only when it is the trailing sentence and only for the SORCERY
+  // wording. "Activate only if …" and "Activate only during …" are conditions
+  // this engine cannot check, and they stay reported: an ability whose
+  // restriction was dropped is activatable in windows the printed one is not.
+  const sorceryOnly = SORCERY_SPEED_ONLY.exec(split.effect);
+  const effectText = sorceryOnly ? split.effect.slice(0, sorceryOnly.index).trim() : split.effect;
+
+  const effects = ctx.compileEffectClause(effectText);
   if (!effects || effects.length === 0) return false;
 
   assembly.activated.push({
     cost,
     effects,
-    // Printed activated abilities are instant-speed unless they say otherwise;
-    // "activate only as a sorcery" is caught by the cost parser refusing the
-    // line, so anything reaching here is genuinely instant-speed.
+    // Printed activated abilities are instant-speed unless they say otherwise —
+    // and the one wording that says otherwise is stripped above.
+    ...(sorceryOnly ? { timing: 'sorcery' as const } : {}),
     label: capitalizeFirst(split.raw),
   });
   assembly.matchedRules.push('activated-ability');
   return true;
 }
+
+/**
+ * "Activate only as a sorcery", as the trailing sentence of an activated
+ * ability's effect half. Anchored to the end so it cannot swallow a body, and
+ * deliberately NOT matching "activate only if …" / "activate only during …",
+ * which are conditions this engine cannot check and must keep reporting.
+ */
+const SORCERY_SPEED_ONLY = /\.\s*activate only as a sorcery\.?$/;
 
 /**
  * Split `COST: EFFECT` on the FIRST colon, rejecting lines whose colon is not an

@@ -85,6 +85,32 @@ export type TargetRestriction =
    */
   | 'creatureYouControl'
   /**
+   * "target NONLEGENDARY creature you control" — Kiki-Jiki's aim, and Fable of
+   * the Mirror-Breaker's.
+   *
+   * Its own restriction rather than an approximation of `'creatureYouControl'`,
+   * and the direction is the whole reason: a card that may not copy a legend
+   * compiled as one that may is a card playing WIDER than printed, and in this
+   * family it is the difference between a fair rare and an infinite combo with
+   * every legendary creature ever printed. (Kiki-Jiki is itself legendary, so
+   * the printed word is exactly what stops it copying itself.)
+   *
+   * Like `'creatureYouControl'`, legality depends on WHO is acting, so an absent
+   * `controller` makes every candidate illegal rather than guessed.
+   */
+  | 'nonlegendaryCreatureYouControl'
+  /**
+   * "target artifact or creature you control" — Molten Duplication's aim.
+   *
+   * Its own restriction rather than `'creatureYouControl'` widened or
+   * `'permanent'` narrowed, because both of those are the wrong SET: the first
+   * cannot reach the Sol Ring the card is often pointed at, and the second
+   * reaches a land and an opponent's board, neither of which the printed card
+   * may. Controller-dependent like its two neighbours, with the same
+   * absent-actor rule.
+   */
+  | 'artifactOrCreatureYouControl'
+  /**
    * "target player or planeswalker" — a face or a walker, never a creature.
    * Lava Spike's printed line. Its own restriction (not `'player'`) because
    * flattening it would make the card NARROWER than printed now that
@@ -179,6 +205,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'artifact' ||
     value === 'opponent' ||
     value === 'creatureYouControl' ||
+    value === 'nonlegendaryCreatureYouControl' ||
+    value === 'artifactOrCreatureYouControl' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
@@ -305,9 +333,18 @@ export function isLegalTarget(
   if (restriction === 'creatureOrPlaneswalker') {
     return isCreature(permanent.def) || isPlaneswalker(permanent.def);
   }
-  if (restriction === 'creatureYouControl') {
+  if (restriction === 'artifactOrCreatureYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
     if (controller === undefined || permanent.controller !== controller) return false;
+    return isCreature(permanent.def) || permanent.def.types.includes('artifact');
+  }
+  if (restriction === 'creatureYouControl' || restriction === 'nonlegendaryCreatureYouControl') {
+    // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
+    if (controller === undefined || permanent.controller !== controller) return false;
+    // The printed word "nonlegendary", read off the CURRENT definition — which
+    // is what a copy effect has to read: a token copy of a legend is legendary,
+    // and a Clone that copied one is too.
+    if (restriction === 'nonlegendaryCreatureYouControl' && permanent.def.legendary === true) return false;
   }
   return isCreature(permanent.def);
 }
@@ -461,11 +498,16 @@ export function legalTargetsFor(
       }
     }
   }
-  if (restriction === 'creatureYouControl' && controller !== undefined) {
+  if (
+    (restriction === 'creatureYouControl' || restriction === 'nonlegendaryCreatureYouControl') &&
+    controller !== undefined
+  ) {
+    const excludeLegends = restriction === 'nonlegendaryCreatureYouControl';
     for (const permanent of state.battlefield) {
       if (
         permanent.controller === controller &&
         isCreature(permanent.def) &&
+        !(excludeLegends && permanent.def.legendary === true) &&
         isTargetableBy(state, permanent, controller, source, keywordIndex)
       ) {
         targets.push(permanent.instanceId);
@@ -475,6 +517,17 @@ export function legalTargetsFor(
   if (restriction === 'artifact') {
     for (const permanent of state.battlefield) {
       if (permanent.def.types.includes('artifact') && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        targets.push(permanent.instanceId);
+      }
+    }
+  }
+  if (restriction === 'artifactOrCreatureYouControl' && controller !== undefined) {
+    for (const permanent of state.battlefield) {
+      if (
+        permanent.controller === controller &&
+        (isCreature(permanent.def) || permanent.def.types.includes('artifact')) &&
+        isTargetableBy(state, permanent, controller, source, keywordIndex)
+      ) {
         targets.push(permanent.instanceId);
       }
     }
@@ -570,6 +623,10 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an opponent';
     case 'creatureYouControl':
       return 'a creature you control';
+    case 'nonlegendaryCreatureYouControl':
+      return 'a nonlegendary creature you control';
+    case 'artifactOrCreatureYouControl':
+      return 'an artifact or creature you control';
     case 'playerOrPlaneswalker':
       return 'a player or a planeswalker';
     case 'creatureOrPlaneswalker':
