@@ -226,22 +226,33 @@ describe('the fast soak', () => {
  * Add a row when a soak finds something. Keep the row after it is fixed — the
  * point is the fix staying fixed.
  *
- * ⚠️ **EVERY ROW MUST NAME THE CARDS THAT MADE THE BUG**, and the test asserts
- * they are really in the decks this seed built. "No violations" is also what a
- * replay of the WRONG game reports, so an outcome-only assertion is green for two
- * completely different reasons and cannot tell them apart. This was not a
- * hypothesis: flipping one bit of the opponent-deck seed left the row below
- * passing, happily replaying a different match. `mustContain` is the half of the
- * test that fails when the pool churns until this seed no longer deals the
- * position — which is a finding, not a pass.
+ * ⚠️ **EVERY ROW MUST NAME THE CARDS THAT MADE THE BUG, PER SEAT**, and the test
+ * asserts they are really in the deck that seat was dealt. "No violations" is
+ * also what a replay of the WRONG game reports, so an outcome-only assertion is
+ * green for two completely different reasons and cannot tell them apart. This was
+ * not a hypothesis: flipping one bit of the opponent-deck seed left the rows below
+ * passing, happily replaying a different match.
+ *
+ * ⚠️ **PER SEAT is the part that took two goes.** A flat list is checked against
+ * both decklists at once, so a row whose cards all sit in deck A stays green when
+ * deck B is replaced wholesale — which is exactly what the bit-flip sabotage did
+ * to two of the three rows here. Naming the seat is what makes the assertion
+ * about the MATCHUP rather than about the pool.
+ *
+ * `mustContain` is also the half of the test that fails when the pool churns until
+ * this seed no longer deals the position — which is a finding, not a pass.
  */
 describe('soak violations stay fixed, replayed from their seed alone', () => {
   const PINNED: ReadonlyArray<{
     readonly seed: number;
     readonly onPlay?: 'A' | 'B';
     readonly what: string;
-    /** Cards without which this seed is not the game that found the bug. */
-    readonly mustContain: readonly string[];
+    /**
+     * Cards without which this seed is not the game that found the bug, listed
+     * under the SEAT that must be dealt them. Both seats, always: half a matchup
+     * is not a game.
+     */
+    readonly mustContain: { readonly A: readonly string[]; readonly B: readonly string[] };
   }> = [
     /*
      * THE THREE GAMES THAT COULD NOT END, and they are ONE bug: the pilot priced
@@ -265,7 +276,10 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
         'Reverberate was re-aimed at the Reverberate (worth 12 as a card) instead of the Thought ' +
         'Scour (worth 10), so the copy copied the copy spell forever — 6,000 actions, 1,797 copies, ' +
         'one unchanged board (fixed by pricing a copy chain at what it ENDS at, one link down)',
-      mustContain: ['Reverberate', 'Thought Scour'],
+      // The loop is A's, both halves of it. B's Font of Mythos is the other side
+      // of the matchup — the extra draw is why turn 20 still had two Reverberates
+      // in hand — and naming it is what makes this row about this GAME.
+      mustContain: { A: ['Reverberate', 'Thought Scour'], B: ['Font of Mythos'] },
     },
     {
       seed: 1390617766,
@@ -273,14 +287,14 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
         'the same loop through Twincast: stack frozen at [Dream Twist, Twincast→Dream Twist] for ' +
         '1,891 copies. Reproduces from BOTH seats, which is what proved it was the pilot rather ' +
         'than anything about who was on the play',
-      mustContain: ['Twincast', 'Dream Twist'],
+      mustContain: { A: ['Twincast', 'Dream Twist'], B: ['Howling Mine'] },
     },
     {
       seed: 113343071,
       what:
         "the same loop through the OPPONENT's Reverberate: stack frozen at [Geistflame, " +
         'Reverberate→Geistflame] for 1,848 copies',
-      mustContain: ['Reverberate', 'Geistflame'],
+      mustContain: { A: ['Mikokoro, Center of the Sea'], B: ['Reverberate', 'Geistflame'] },
     },
   ];
 
@@ -296,10 +310,21 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       // WHICH GAME — asserted first, because it is what makes the next line mean
       // anything. A replay that drifted onto another match reports no violations
       // and would otherwise read as a fix holding.
-      for (const card of mustContain) {
-        expect(decks, `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game
+      //
+      // Split at the seam `describeMatchup` writes, so each seat's list is checked
+      // against THAT seat's decklist. A missing seam fails loudly rather than
+      // silently collapsing both seats into one string.
+      const halves = decks.split('\n    B: ');
+      expect(halves, `the replay's decklists no longer name both seats:
+${decks}
+`).toHaveLength(2);
+      const dealt: Record<'A' | 'B', string> = { A: halves[0]!, B: halves[1]! };
+      for (const seat of ['A', 'B'] as const) {
+        for (const card of mustContain[seat]) {
+          expect(dealt[seat], `seed ${seed} no longer deals ${seat} a ${card} — this row is replaying a DIFFERENT game
 ${decks}
 `).toContain(card);
+        }
       }
       // WHAT IT DID.
       expect(violations.length, `

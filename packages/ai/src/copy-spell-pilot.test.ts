@@ -191,6 +191,18 @@ describe('the pilot does not aim a copy at the copy spell above its own target',
       kind: 'selectTargets',
       targets: [boltId],
     });
+
+    // ⚠️ AND IT WON, rather than merely being listed first. A sabotage run
+    // caught this: with `copiedCopySpellValueShare` at 1 the two candidates score
+    // the SAME, the sort falls through to candidate order — which is stack order,
+    // and a copy spell is always above its own target — and the line above stays
+    // green off an ordering accident. The share is what makes it a rule.
+    const cards = cardValueContext(s);
+    const spellOn = (id: InstanceId) => s.stack.find((o) => o.kind === 'spell' && o.instanceId === id) as never;
+    expect(
+      copySpellValue(s, spellOn(boltId), DEFAULT_HEURISTIC_WEIGHTS, cards),
+      'the chosen route must be STRICTLY better, not tied and lucky in the sort',
+    ).toBeGreaterThan(copySpellValue(s, spellOn(revOneId), DEFAULT_HEURISTIC_WEIGHTS, cards));
   });
 
   it('prices a copy of a copy spell STRICTLY below a copy of what it is aimed at', () => {
