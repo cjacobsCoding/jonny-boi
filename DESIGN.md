@@ -3526,6 +3526,34 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.36 A granted flashback on a SPLIT card — the menu lied — ✅ done
+
+The last violation keeping the deep tier red, and the third distinct defect the copy-mirror hunt
+turned up behind the first. **The tier is now GREEN: 0 violations in 2,000 games.**
+
+Snapcaster Mage grants flashback to a CARD in a graveyard. A split card (CR 709) is one card with
+two halves, so casting it from the graveyard resolves to a HALF — and `castDef` is then not
+`card.def`. `applyCastSpell` consulted the grant only when those two were the same object and
+otherwise read the half's PRINTED flashback, which a split half does not have:
+
+```ts
+castDef === card.def ? flashbackCostOf(state, card) : castDef.flashback
+```
+
+Meanwhile `generateLegalActions` offers the graveyard cast using `flashbackCostOf(state, card)` —
+which DOES find the grant, and even checks affordability against it. So the menu offered a cast the
+apply path then refused with "that card has no flashback", for ever. Soak seed **1200969370**, an
+`Assault // Battery` already spent as Assault.
+
+Both sides now read the same accessor (`flashbackCostOf(state, card) ?? castDef.flashback`), which
+also settles the cost question without needing a ruling: the number the apply path charges is the
+number the offer already validated.
+
+⚠️ **The invariant that caught it is worth more than the fix.** "The engine never rejects an action
+it offered" is not a rules check — it is an internal-consistency check between two code paths that
+must agree, and nothing else in the suite compares them. It failed silently in the sense that
+matters: no crash, no wrong result, just an action refused every single time it was offered.
+
 ### 3.34 A spell returned to hand kept the face it was cast as — ✅ done
 
 Not a copy-pricing bug and not caused by §3.33: §3.33 changes which games get played in copy-spell

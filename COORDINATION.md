@@ -139,12 +139,30 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
-| fix/returned-spell-keeps-back-face | DESKTOP-90PJPM4 (worker) | packages/cards (`copy-primitives.ts` returnSpellToHand reset + NEW returned-spell-face.test.ts), DESIGN §3.34 rewritten + §3.33 pointer, COORDINATION | 🚧 PUSHED, not merged — STACKS on feat/blink-selesnya |
+| fix/returned-spell-keeps-back-face | DESKTOP-90PJPM4 (worker) | packages/cards (`copy-primitives.ts` returnSpellToHand reset + NEW returned-spell-face.test.ts + NEW granted-flashback-split.test.ts), packages/core (`engine.ts` ONE line — the flashback-grant accessor), DESIGN §3.34 rewritten + §3.36 + §3.33 pointer, COORDINATION. **Deep tier GREEN: 0/2000.** | 🚧 PUSHED, not merged — STACKS on feat/blink-selesnya |
 | feat/blink-selesnya | DESKTOP-90PJPM4 (worker) | packages/cards (NEW blink-primitives.ts + blink-play.test.ts; primitives.ts registration, effect-helpers.ts +1 option, compile/rules.ts +1 rule; GENERATED data/expanded-pool.ts + expansion-report.json + expansion-candidates.json), packages/data-tools/data (GENERATED card-index.json + starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/ai (heuristic.ts blink goal + picker), packages/sim (NEW data/decks/selesnya-blink.ts + decks/index.ts), DESIGN §3.35 + §3.21 note, COORDINATION. **Gauntlet seed 99 rows byte-identical; new 8th row.** | 🚧 PUSHED, not merged — STACKS on fix/soak-action-cap |
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-21 DESKTOP-90PJPM4: 🟢 **THE DEEP SOAK TIER IS GREEN — 0 violations in 2,000 games.** It
+  has been red since 2026-08-20. Three distinct defects, found one behind the other by the same hunt:
+  the copy mirror (§3.33), a returned spell keeping its cast face (§3.34), and a granted flashback on
+  a SPLIT card (§3.36, on this branch). Same stack: `fix/soak-action-cap` → `feat/blink-selesnya` →
+  `fix/returned-spell-keeps-back-face`.
+
+  **§3.36.** Snapcaster grants flashback to a CARD; a split card cast from the graveyard resolves to
+  a HALF, so `castDef !== card.def` and `applyCastSpell` read the half's PRINTED flashback (there is
+  none) instead of the grant. `generateLegalActions` meanwhile offered the cast using
+  `flashbackCostOf(state, card)`, which finds the grant and even checks affordability against it —
+  so the menu offered a cast the apply path refused for ever. Both sides now read the same accessor,
+  which settles the cost question without a ruling: the apply charges the number the offer validated.
+  Seed 1200969370, an `Assault // Battery` already spent as Assault.
+
+  ⚠️ **The invariant is the lesson.** "The engine never rejects an action it offered" is not a rules
+  check — it compares two code paths that must agree, and nothing else in the suite does. Worth
+  keeping in mind when adding any second reader of a legality question.
 
 - 2026-08-21 DESKTOP-90PJPM4: `fix/returned-spell-keeps-back-face` 🚧 PUSHED — **§3.34 closed, and my
   first diagnosis of it was WRONG.** ⚠️ Stacks on `feat/blink-selesnya` → `fix/soak-action-cap`.

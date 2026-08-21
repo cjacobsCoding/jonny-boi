@@ -2848,9 +2848,18 @@ function applyCastSpell(
   // graveyard for its OWN printed cost, not for a flashback cost it does not
   // print, so a graveyard-legal back half skips this question entirely.
   const aftermath = fromZone === 'graveyard' && action.face === 'back';
+  // GRANT FIRST, then the face's own printed flashback.
+  //
+  // `flashbackCostOf` is the accessor the OFFER loop uses, and it is keyed on the
+  // CARD (a grant names an instance, not a face). Reading it only when the cast
+  // resolves to the whole definition is what broke a SPLIT card: `castDef` is
+  // then the half, so a Snapcaster grant on `Assault // Battery` was offered —
+  // the offer even checked affordability against the granted cost — and refused
+  // here with "that card has no flashback". Offer and apply must read the same
+  // accessor or the menu lies. Found by the full-pool soak at seed 1200969370.
   const flashbackCost =
     fromZone === 'graveyard' && !aftermath
-      ? (castDef === card.def ? flashbackCostOf(state, card) : castDef.flashback)
+      ? (flashbackCostOf(state, card) ?? castDef.flashback)
       : undefined;
   if (fromZone === 'graveyard' && !aftermath && flashbackCost === undefined) {
     return rejectWith(prevState, 'that card has no flashback');
