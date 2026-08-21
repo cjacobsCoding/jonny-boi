@@ -467,16 +467,28 @@ export function applyEffectRef(
       return createTokensInState(base.state, def, count, controller ?? base.controller, emit, options);
     },
     createDelayedTrigger(request) {
-      return createDelayedTrigger(base.state, {
+      const controller = request.controller ?? base.controller;
+      const id = createDelayedTrigger(base.state, {
         condition: request.condition,
         effects: request.effects,
         label: request.label,
-        controller: request.controller ?? base.controller,
+        controller,
         sourceInstanceId: base.source.instanceId,
         ...(request.removesFromBattlefield !== undefined
           ? { removesFromBattlefield: request.removesFromBattlefield }
           : {}),
       });
+      // Said out loud. The ability exists from this moment and is on no object,
+      // so a log that stayed silent would show a hasty token arriving with no
+      // drawback anywhere — see `delayedTriggerCreated` in `events.ts`.
+      emit({
+        type: 'delayedTriggerCreated',
+        id,
+        sourceInstanceId: base.source.instanceId,
+        controller,
+        label: request.label,
+      });
+      return id;
     },
     createEmblem(def, controller) {
       return createEmblemInState(base.state, def, controller ?? base.controller, emit);

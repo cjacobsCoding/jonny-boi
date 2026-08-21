@@ -2363,13 +2363,20 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
      */
     id: 'create-creature-token',
     description: '"Create N X/Y COLOR [SUBTYPES] [artifact] creature token(s) [with KEYWORDS]"',
-    pattern: new RegExp(`^create ${COUNT_TOKEN} (\\d+)\\/(\\d+) ([a-z][a-z ]*?) tokens?(?: with (.+))?$`),
+    // The printed ENTRY WORDS sit between the count and the size — "create two
+    // **tapped** 1/1 white Soldier tokens" (Kambal), "a **tapped and attacking**
+    // …" (Mobilize) — so they are read as their own group rather than being left
+    // to the colour/subtype descriptor, which would refuse the whole line.
+    pattern: new RegExp(
+      `^create ${COUNT_TOKEN} ((?:tapped(?: and attacking)? )?)(\\d+)\\/(\\d+) ([a-z][a-z ]*?) tokens?(?: with (.+))?$`,
+    ),
     build(match) {
       const count = parseCount(match[1]);
-      const power = Number.parseInt(match[2] ?? '', 10);
-      const toughness = Number.parseInt(match[3] ?? '', 10);
-      if (count === null || !Number.isFinite(power) || !Number.isFinite(toughness)) return null;
-      const face = parseTokenFace(match[4] ?? '');
+      const entry = tokenEntryWords(match[2]);
+      const power = Number.parseInt(match[3] ?? '', 10);
+      const toughness = Number.parseInt(match[4] ?? '', 10);
+      if (count === null || entry === null || !Number.isFinite(power) || !Number.isFinite(toughness)) return null;
+      const face = parseTokenFace(match[5] ?? '');
       if (face === null) return null;
       const params: Record<string, unknown> = {
         power,
@@ -2384,8 +2391,12 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       // `count` is omitted when it is the primitive's default of one, keeping the
       // emitted data minimal and identical to the hand-authored pool's style.
       if (count !== TOKEN_DEFAULT_COUNT) params.count = count;
-      if (match[5]) {
-        const keywords = parseKeywordList(match[5]);
+      // Likewise written only when the line prints them, so every token-maker
+      // already in the pool emits byte-identical data.
+      if (entry.tapped) params.tapped = true;
+      if (entry.attacking) params.attacking = true;
+      if (match[6]) {
+        const keywords = parseKeywordList(match[6]);
         if (!keywords) return null;
         params.keywords = keywords;
       }
