@@ -225,12 +225,23 @@ describe('the fast soak', () => {
  *
  * Add a row when a soak finds something. Keep the row after it is fixed — the
  * point is the fix staying fixed.
+ *
+ * ⚠️ **EVERY ROW MUST NAME THE CARDS THAT MADE THE BUG**, and the test asserts
+ * they are really in the decks this seed built. "No violations" is also what a
+ * replay of the WRONG game reports, so an outcome-only assertion is green for two
+ * completely different reasons and cannot tell them apart. This was not a
+ * hypothesis: flipping one bit of the opponent-deck seed left the row below
+ * passing, happily replaying a different match. `mustContain` is the half of the
+ * test that fails when the pool churns until this seed no longer deals the
+ * position — which is a finding, not a pass.
  */
 describe('soak violations stay fixed, replayed from their seed alone', () => {
   const PINNED: ReadonlyArray<{
     readonly seed: number;
     readonly onPlay?: 'A' | 'B';
     readonly what: string;
+    /** Cards without which this seed is not the game that found the bug. */
+    readonly mustContain: readonly string[];
   }> = [
     {
       seed: 4222011655,
@@ -239,18 +250,30 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
         "Costly Plunder's additional cost then sacrificed — the payment handed priority straight " +
         'back to the caster, so nothing checked state-based actions and the 0/0 sat there for five ' +
         'turns (fixed by moving the CR 704.3 boundary to the end of every action)',
+      // A's half of the interaction, and B's Aura. All four have to be dealt into
+      // the same game for the position to exist at all.
+      mustContain: ['Blood Artist', 'Trusty Machete', 'Costly Plunder', 'Weakness'],
     },
   ];
 
-  for (const { seed, onPlay, what } of PINNED) {
+  for (const { seed, onPlay, what, mustContain } of PINNED) {
     it(`seed ${seed}: ${what}`, () => {
-      const violations = replaySoakMixedGame({
+      const { violations, decks } = replaySoakMixedGame({
         pool,
         registry,
         pilot,
         seed,
         ...(onPlay ? { onPlay } : {}),
       });
+      // WHICH GAME — asserted first, because it is what makes the next line mean
+      // anything. A replay that drifted onto another match reports no violations
+      // and would otherwise read as a fix holding.
+      for (const card of mustContain) {
+        expect(decks, `seed ${seed} no longer deals ${card} — this row is replaying a DIFFERENT game
+${decks}
+`).toContain(card);
+      }
+      // WHAT IT DID.
       expect(violations.length, `
 ${formatViolations(violations)}
 `).toBe(0);
