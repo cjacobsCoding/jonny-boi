@@ -159,6 +159,18 @@ const RITES_OF_FLOURISHING = makeCard({
     "At the beginning of each player's draw step, that player draws an additional card.\nEach player may play an additional land on each of their turns.",
 });
 
+/**
+ * The REFUSAL case for the "for each" count: a multiplier this engine cannot
+ * express. `DerivedValue` is a bare count with no scale factor, so "2 life for
+ * each" has no honest encoding — and emitting the count alone would print a card
+ * that gains HALF the life it says.
+ */
+const DOUBLED_FOR_EACH = makeCard({
+  name: 'Doubled For Each Test',
+  typeLine: { supertypes: [], types: ['Sorcery'], subtypes: [] },
+  oracleText: 'You gain 2 life for each creature you control.',
+});
+
 const VENSERS_JOURNAL = makeCard({
   name: "Venser's Journal",
   typeLine: { supertypes: [], types: ['Artifact'], subtypes: [] },
@@ -662,6 +674,17 @@ describe('"gain N life for each …" — a derived count in a trigger body', () 
     expect(result.definition.triggers?.[0]?.effects).toEqual([
       { primitive: 'gainLife', params: { amount: { countOf: 'cardsInYourHand' } } },
     ]);
+  });
+
+  it('REFUSES a multiplier it cannot express — "gain 2 life for each" reports', () => {
+    const result = compileCard(DOUBLED_FOR_EACH);
+    expect(result.status).toBe('incomplete');
+    expect(result.missing.map((m) => m.text)).toEqual([
+      'You gain 2 life for each creature you control.',
+    ]);
+    // And crucially it did NOT quietly compile the bare count, which would be a
+    // card gaining one life per creature instead of two.
+    expect(result.definition.effects ?? []).toEqual([]);
   });
 
   it('PLAYS: the life gained is the hand size AT RESOLUTION', () => {
