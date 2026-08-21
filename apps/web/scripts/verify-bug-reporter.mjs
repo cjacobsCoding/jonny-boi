@@ -213,7 +213,11 @@ async function main() {
     const page = await browser.newPage();
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(String(error)));
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: PREVIEW_START_MS });
+    // `domcontentloaded`, NOT `networkidle2`. The app holds connections open (a
+    // sim worker, the service worker), so "the network went quiet" never happens
+    // and the harness timed out after 90 s on an app that had loaded in two.
+    // Readiness is the app's own launcher appearing, which is waited on below.
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PREVIEW_START_MS });
 
     // The Cards view is the WORST CASE on purpose: ~190 card tiles, most of them
     // off screen. It is the view that made an earlier build of this capture run
@@ -229,6 +233,9 @@ async function main() {
       }, viewArg);
       await new Promise((r) => setTimeout(r, 1500));
     }
+    // Give the visible card art a moment to decode; without the network-idle
+    // wait this is the thing that would otherwise be captured half-drawn.
+    await new Promise((r) => setTimeout(r, 2500));
     const dom = await page.evaluate(() => ({
       images: document.querySelectorAll('img').length,
       nodes: document.querySelectorAll('*').length,
