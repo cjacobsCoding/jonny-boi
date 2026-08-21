@@ -139,9 +139,54 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
+| fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-21 DESKTOP-90PJPM4: `fix/soak-action-cap` 🚧 PUSHED — **§3.32's three action-cap games are
+  fixed; the deep tier's `gameCanEnd` is GREEN (3 → 0 in 2,000 games).** DESIGN §3.33.
+
+  **All three seeds were ONE bug, and the extra-draw engines in their decklists were a red herring.**
+  It is the copy MIRROR: two copy spells on the stack are each other's legal targets, and
+  `EFFECT_VALUE.copySpell` priced a copy at the copied CARD's face value — so "copy the Twincast"
+  always outscored "copy the Dream Twist underneath it", and what it bought was another Twincast
+  copy. Instrumented replay of 1390617766: **1,891 `spellCopied` events in one game** against 8
+  casts. A copy is now priced by what its chain actually DELIVERS (walk to the non-copy spell at the
+  end; a chain whose target already left the stack is 0, CR 608.2b).
+
+  ⚠️ **Read this before touching the new weight.** `modeCopyChainPenalty` is NOT what fixes the loop
+  — the chain walk is. With the penalty at 0 all three seeds still pass, because the candidates then
+  score EQUAL and the tie happens to fall to the real spell. That is correctness by candidate
+  ordering. The penalty makes it strict, and the test asserts `bolt > mirror` rather than only the
+  configured gap — assert the gap alone and `0 === 0` passes with the loop wide open.
+
+  Also fixed a real CR 707.10 infidelity found on the way: `retargetCopy` asked for an EXACT target
+  count, which only lets you decline while the inherited target is still legal. Once it has left the
+  stack it is not a candidate, so "leave it alone" became unsayable — and with exactly one other
+  candidate the exact count made the question AUTO-ANSWERABLE, so the engine silently aimed the copy
+  at the only other copy spell without asking anyone. Now `min: 0` in that case.
+
+  Sabotage-checked 3 ways, all caught: revert the chain walk → 4 pilot tests + 3 pinned seeds red;
+  zero the penalty → 2 pilot tests red; revert the `min` → the optionality tests red.
+
+  ⚠️ **HANDOFF — the tier is STILL RED, for something else this made reachable (DESIGN §3.34).**
+  Seed **1490533871**, turn 22, **draw step**: the pilot submits
+  `{castSpell, instanceId:7, targets:['B'], face:'back'}` **82 times** and the engine refuses it
+  ("the back face of a double-faced card cannot be cast"). A modal DFC whose back face is a LAND
+  (`Skyclave Cleric // Skyclave Basilica`) is marked `backFaceCastable: true` — and **that flag is
+  correct**; `compile.ts` documents it as "both halves are cast **or played** from hand". The pilot
+  reads it as *castable* and builds a `castSpell` for a land; `playLand` has taken `face?: CastFace`
+  since §3.13 for exactly this. **21 pool cards** carry a land back face (9 Pathways + the Zendikar
+  MDFCs + Glasswing Grace, Revitalizing Repast, Vastwood Fortification), so any of them can deal it.
+  ⚠️ Do NOT "fix" it in `data/expanded-pool.ts` — that file is generated and a test re-derives it.
+
+  Proved it is not mine, both directions: revert this branch and seed 1490533871 replays **clean at
+  both seats**, and the pre-fix 2,000-game tier reports **3 violations, all action-cap, zero DFC**.
+
+  ✅ verify 0, build 0, **5060 passed / 0 failed**, gauntlet seed 99 **79/280** byte-identical
+  (rows 12 · 13 · 17 · 7 · 9 · 7 · 14) — no curated deck holds a copy spell, so curated play cannot
+  reach the changed code at all.
 
 - 2026-08-20 worker: `fix/sba-toughness-violation` 🚧 PUSHED — **the CR 704.3 boundary was
   installed on ONE of the doors into "a player would receive priority"; paying a spell's additional

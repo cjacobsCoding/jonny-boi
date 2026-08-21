@@ -327,6 +327,15 @@ export interface HeuristicWeights {
   /** Penalty (subtracted) for pointing an effect at our OWN board/face/spell.
    *  Large enough that such a mode always loses to any other on the menu. */
   readonly modeSelfHarmPenalty: number;
+  /** Penalty (subtracted) per extra link when a copy spell is aimed at ANOTHER
+   *  copy spell rather than at the spell that actually does something. A copy of
+   *  a copy delivers the same payload one resolution later, with one more chance
+   *  to fizzle, so it must score strictly BELOW copying that payload directly —
+   *  otherwise two copy spells aimed at each other are each other's best target
+   *  forever, which is a game that cannot end. Small on the mode scale (removal
+   *  ≈ 60, generic ≈ 25): it breaks the tie between equal payloads without ever
+   *  flipping the order of two genuinely different ones. */
+  readonly modeCopyChainPenalty: number;
   /** Base worth of bouncing an opposing permanent — the tempo floor, before what
    *  it costs them to redeploy. Deliberately low, so bouncing a land or a mana
    *  dork loses to simply drawing a card. */
@@ -526,6 +535,7 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   modeDrawCardValue: 30,
   modeSelfDeckPenalty: 1000,
   modeSelfHarmPenalty: 100,
+  modeCopyChainPenalty: 5,
   modeBounceBaseScore: 6,
   modeBouncePerManaValue: 6,
   modeTapPerPowerValue: 6,

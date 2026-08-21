@@ -3395,6 +3395,104 @@ for its own branch with a reproducing seed. → **Closed in §3.32**: it was nei
 stale toughness but a mutation site with no pass behind it — paying a spell's additional cost — and
 the handoff was right, because the fix is an engine change in `applyActionToDraft`.
 
+### 3.33 The copy mirror — a game that could not end — ✅ done
+
+§3.32 handed off three full-pool soak games that burned the 6,000-action cap without ending
+(`gameCanEnd`): seeds **3434778477**, **1390617766**, **113343071**. They are one defect, and it is
+**not** the copy-spell engine §3.31 shipped — it is what the pilot thinks a copy is WORTH, plus a
+CR 707.10 "may" the engine had quietly made mandatory.
+
+**The position**, verbatim from the instrumented replay — stack bottom-to-top
+`[2: Dream Twist, 17: Twincast → 2]`, with a copy of the Twincast resolving above them. That copy
+inherits the Twincast's aim at the Dream Twist and may be re-aimed (CR 707.10), and its two
+candidates are exactly those two objects. Re-aim it at **17** and it copies the Twincast again,
+producing another copy with the same two candidates. Neither 2 nor 17 ever reaches the top of the
+stack. The instrumented replay of seed 1390617766 counted **1,891
+`spellCopied` events in one game** against 8 `castSpell`s — 1,894 re-aim questions asked, every
+sampled answer naming the same Twincast.
+
+**Why the pilot always chose it.** `EFFECT_VALUE.copySpell` priced a copy at `cardValue` of the
+copied CARD. A Twincast is a pricier card than a Dream Twist, so "copy the Twincast" outscored "copy
+the real spell underneath it" every single time — and the thing it bought was another copy of a
+Twincast. The valuation was self-reinforcing.
+
+The fix prices a copy by **what the copy will actually deliver**: the chain is walked to the non-copy
+spell it bottoms out at, and each extra link costs `modeCopyChainPenalty`. Copying
+`Twincast → Bolt` is therefore worth a Bolt minus one wasted resolution — correctly just *below*
+copying the Bolt directly. A chain that leads to a spell already gone from the stack is worth **0**
+(it would be countered on resolution, CR 608.2b), and `MAX_COPY_CHAIN_LINKS` stops the walk.
+
+⚠️ **The penalty is not what fixes the loop; the chain walk is.** With the penalty at 0 the three
+seeds still pass, because the two candidates then score EQUAL and the tie happens to fall to the
+real spell. That is correctness by candidate ordering, and it would come back the day the ordering
+changes — so the penalty makes the preference strict, and `copy-chain-pilot.test.ts` asserts
+`bolt > mirror` rather than only the configured gap (with the penalty zeroed, `0 === 0` passes while
+the loop is wide open).
+
+**The rules half.** `retargetCopy` asked for an EXACT number of targets, justified as "declining is
+re-choosing the same object". That holds only while the inherited target is still legal. Once the
+copied spell's own target has left the stack it is not offered, and an exact-count question then has
+no way to express "leave it alone" — CR 707.10's *may* had become *must*. Worse than forced: with
+exactly one other candidate the count made the question auto-answerable, so the engine silently
+aimed the copy at the only other copy spell without asking anyone. It now asks with `min: 0` in that
+case, and an empty answer keeps the dead aim so the copy is countered on resolution.
+
+**Verified.** All three seeds are pinned in `soak.test.ts` (named by their cards, as that file
+requires) and each reproduces in ~200 ms. Sabotage-checked three ways — reverting the chain walk
+turns all 4 pilot tests and all 3 pinned seeds red; zeroing the penalty turns 2 pilot tests red;
+reverting the CR 707.10 `min` turns the optionality tests red. Gauntlet seed 99 **byte-identical**
+at 79/280, rows 12 · 13 · 17 · 7 · 9 · 7 · 14 — no curated deck holds a copy spell, so curated play
+cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
+
+⚠️ **The deep tier's `gameCanEnd` is now GREEN — 0 action-cap hits in 2,000 games, where it was 3 —
+but the tier is still RED, for something else this change made REACHABLE.** See §3.34.
+
+### 3.34 HANDOFF — the pilot casts a land — 🔜 open
+
+Not a copy bug, and not caused by §3.33: §3.33 changes which games get played in copy-spell decks,
+and one of the 2,000 now walks into a defect that was already there.
+
+**Proved both directions, so nobody has to re-derive it.** Reverting §3.33 and replaying seed
+1490533871 at BOTH seats gives **0 violations** — the position is only reached with the fix in. And
+the 2,000-game deep tier on the untouched pre-fix tree reports **3 violations, all `gameCanEnd`
+action-cap hits, zero DFC** — so the pre-fix tier never met this at all. The tier's ledger across
+the change:
+
+| | action-cap hits | DFC violations | total |
+|---|---|---|---|
+| before §3.33 | **3** | 0 | 3 |
+| after §3.33 | **0** | 2 (one game) | 2 |
+
+**The violation**, at seed **1490533871** (both seats, ~200 ms via `replaySoakMixedGame`), turn 22,
+**draw step**:
+
+```
+✗ every action a pilot submits came from generateLegalActions
+    castSpell#7 was never offered (10 legal actions: passPriority, tapForMana)
+✗ the engine never rejects an action it offered
+    the engine rejected an offered action: the back face of a double-faced card cannot be cast
+```
+
+The action is `{kind:'castSpell', player:'A', instanceId:7, targets:['B'], face:'back'}`, submitted
+**82 times** in that one game.
+
+**What is actually wrong.** A modal DFC whose back face is a LAND — `Skyclave Cleric //
+Skyclave Basilica` here — is marked `backFaceCastable: true`, and that flag is CORRECT: `compile.ts`
+documents it as "both halves are cast **or played** from hand". The pilot reads it as *castable* and
+builds a `castSpell` for a land. `playLand` has taken `face?: CastFace` since §3.13 precisely so a
+modal DFC's land half can be played — the pilot is simply building the wrong action kind. It also
+built it in the **draw step**, where neither a land nor a sorcery-speed spell is legal at all, so
+there is a second question about which planning path proposes casts outside a legal window.
+
+**Scope for whoever takes it: 21 pool cards, not one.** Every modal DFC in the pool with a land back
+face carries `backFaceCastable: true` — Pathways (9), Zendikar MDFCs (Akoum Warrior, Bala Ged
+Recovery, Jwari Disruption, Kazandu Mammoth, Song-Mad Treachery, Tangled Florahedron, Zof
+Consumption, Skyclave Cleric), Glasswing Grace, Revitalizing Repast, Vastwood Fortification. Any of
+them can deal this position.
+
+⚠️ **Do NOT "fix" it by editing `data/expanded-pool.ts`** — that file is generated, and a test
+re-derives it. The flag is right; the pilot's reading of it is wrong.
+
 ### 3.32 The other doors into the priority boundary — CR 704.3 for every action — ✅ done
 
 §3.29 put `checkStateBasedActions` on the priority boundary and called it a backstop for "the next
@@ -3499,6 +3597,10 @@ with an extra-draw engine (`Howling Mine`, `Font of Mythos`, `Kami of the Cresce
 §3.31's cards meeting a card-advantage board. **`origin/main`'s deep tier is currently RED for that
 reason** and it needs its own branch; closing it here would bury an engine fix under an unrelated
 one, which is exactly the call §3.30 made about this bug.
+
+> ✅ **Closed in §3.33.** The extra-draw engines were a coincidence of the decklists, not the cause —
+> all three are the same copy-mirror loop, fixed in how the pilot prices a copy (plus a CR 707.10
+> "may" the engine had made mandatory). The deep tier is green again.
 
 #### A regression test that could have been green for the wrong reason
 

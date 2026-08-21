@@ -128,21 +128,36 @@ function retargetCopy(ctx: EffectContext, copy: SpellStackObject): SpellStackObj
     if (candidates.length === 0) continue;
     // Nothing to decide: the only legal target is the one it already points at.
     if (candidates.length === 1 && current.length === 1 && candidates[0] === current[0]) continue;
+    // CR 707.10 is a "MAY", and declining has to stay reachable. While the copy's
+    // inherited aim is still legal that costs nothing to express — declining IS
+    // re-choosing it, which is what a player does in paper, so the count stays
+    // exact. Once the original's target has LEFT the stack it is no longer among
+    // the candidates, and an exact-count question then has no way to say "leave
+    // it alone": the copy is FORCED onto one of the remaining targets.
+    //
+    // That gap is not cosmetic. Two copy spells staring at each other
+    // (Twincast, Reverberate) are each other's only legal targets, so a forced
+    // re-aim makes every copy produce another copy while the original never
+    // reaches the top of the stack — three full-pool soak games burned the
+    // 6,000-action cap on exactly this, ~1,850 copies deep. Letting the player
+    // decline ends it the way the rules already do: the copy keeps a target that
+    // is gone and is countered on resolution (CR 608.2b).
+    const keepIsLegal = current.length > 0 && current.every((ref) => candidates.includes(ref));
     const answer = ctx.ask({
       kind: 'selectTargets',
       chooser: ctx.controller,
       prompt: `Choose new targets for the copy of ${aimed.card.def.name}? (${describeRestriction(restriction)})`,
       candidates: candidates.map((ref) => targetOptionFor(ctx, ref)),
       restriction,
-      // Exactly as many as the slot already aims (CR 707.10 — the copy has the
-      // SAME targets; "choose new targets" changes what they are, never how
-      // many). Declining is expressed by re-choosing the same object, which is
-      // what a player physically does in paper.
-      min: current.length,
+      // Never MORE than the slot already aims (CR 707.10 — the copy has the SAME
+      // targets; "choose new targets" changes what they are, never how many).
+      min: keepIsLegal ? current.length : 0,
       max: current.length,
     });
     if (answer === undefined) return undefined; // parked — caller abandons
     if (answer.kind !== 'selectTargets') continue;
+    // Declined — the copy keeps the aim it inherited, legal or not.
+    if (answer.targets.length === 0) continue;
     aimed = withSpellCopyAim(aimed, slot, answer.targets);
   }
   return aimed;

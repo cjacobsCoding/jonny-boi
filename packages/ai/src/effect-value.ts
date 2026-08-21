@@ -185,12 +185,85 @@ function firstTargetPermanent(ctx: EffectValueContext): CardInstance | undefined
 
 /** The first targeted SPELL still on the stack, if any. */
 function firstTargetSpell(ctx: EffectValueContext) {
-  for (const t of ctx.targets) {
+  return spellOnStackAmong(ctx, ctx.targets);
+}
+
+/** The first of `targets` that is a spell still on the stack, if any. */
+function spellOnStackAmong(ctx: EffectValueContext, targets: readonly (InstanceId | PlayerId)[]) {
+  for (const t of targets) {
     if (t === 'A' || t === 'B') continue;
     const obj = ctx.state.stack.find((o) => o.kind === 'spell' && o.instanceId === t);
     if (obj && obj.kind === 'spell') return obj;
   }
   return undefined;
+}
+
+/** A spell sitting on the stack — what the copy-chain walk below moves between. */
+type SpellOnStack = NonNullable<ReturnType<typeof firstTargetSpell>>;
+
+/**
+ * The primitive a copy spell runs. Named once so this file and the pilot's
+ * copy-aiming code cannot drift apart on a bare string.
+ */
+const COPY_SPELL_PRIMITIVE = 'copySpell';
+
+/**
+ * How many copy-of-a-copy links to follow before calling the chain worthless.
+ * Its job is to stop two copy spells aimed at each other from recursing, not to
+ * model play — no real board stacks this many.
+ */
+const MAX_COPY_CHAIN_LINKS = 4;
+
+/**
+ * What a COPY of `spell` actually delivers — which is NOT `cardValue(spell)`.
+ *
+ * A copy of a COPY SPELL does nothing on its own: it resolves, copies whatever
+ * its own target is, and hands the real work one step further down. So the chain
+ * is walked to the non-copy spell it bottoms out at, and each extra link costs
+ * {@link HeuristicWeights.modeCopyChainPenalty} — one more resolution that puts
+ * nothing on the board, and one more chance to fizzle on the way.
+ *
+ * Pricing a copy spell at its face value instead is what let two copy spells
+ * aimed at each other look like the best target available, forever: every copy
+ * made another copy, neither original ever reached the top of the stack, and
+ * three full-pool soak games burned the 6,000-action cap ~1,850 copies deep.
+ */
+function copyPayloadValue(ctx: EffectValueContext, spell: SpellOnStack, links: number): number {
+  if (willFizzleOnResolution(ctx, spell.targets)) return 0;
+  // `effects` is optional on a CardDefinition — a spell with none copies nothing,
+  // so it is priced as the plain card it is rather than throwing here.
+  const copiesSomething = (spell.card.def.effects ?? []).some(
+    (e) => e.primitive === COPY_SPELL_PRIMITIVE,
+  );
+  if (!copiesSomething) return cardValue(spell.card, ctx.weights, ctx.cards);
+  if (links >= MAX_COPY_CHAIN_LINKS) return 0;
+  const next = spellOnStackAmong(ctx, spell.targets ?? []);
+  if (!next) return 0; // it copies nothing that is still there — a dead copy
+  return Math.max(0, copyPayloadValue(ctx, next, links + 1) - ctx.weights.modeCopyChainPenalty);
+}
+
+/**
+ * Will a spell with these targets be countered on resolution for having none of
+ * them left (CR 608.2b)?
+ *
+ * "None", not "any": a spell with several targets still resolves for the ones
+ * that remain, so only a spell that has lost EVERY target is dead. A spell that
+ * never targeted anything is not targeting-dependent and always resolves.
+ *
+ * A player target is always still there — players do not leave the game here —
+ * so only object targets are looked up, in the two zones a spell's target can
+ * still be sitting in when the question is asked.
+ */
+function willFizzleOnResolution(
+  ctx: EffectValueContext,
+  targets: readonly (InstanceId | PlayerId)[] | undefined,
+): boolean {
+  if (!targets || targets.length === 0) return false;
+  return !targets.some((target) => {
+    if (target === 'A' || target === 'B') return true;
+    if (ctx.state.battlefield.some((permanent) => permanent.instanceId === target)) return true;
+    return ctx.state.stack.some((object) => object.instanceId === target);
+  });
 }
 
 // --- shared pricing --------------------------------------------------------------
@@ -261,11 +334,15 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /**
-   * COPYING A SPELL (CR 707.10) is worth **whatever the spell it copies is
-   * worth**, priced by the pilot's one card ruler — a copy of a Cryptic Command
-   * is worth a Cryptic Command, and a copy of a cantrip is worth a cantrip. That
-   * is what makes a pilot hold a Reverberate for something big instead of
-   * spending it on the first instant it sees.
+   * COPYING A SPELL (CR 707.10) is worth **whatever the copy will actually
+   * deliver**, priced by the pilot's one card ruler — a copy of a Cryptic
+   * Command is worth a Cryptic Command, and a copy of a cantrip is worth a
+   * cantrip. That is what makes a pilot hold a Reverberate for something big
+   * instead of spending it on the first instant it sees.
+   *
+   * "Deliver", not "the copied card's face value", because those differ for the
+   * one card type that matters here: copying a COPY SPELL delivers only whatever
+   * sits at the end of its chain. See {@link copyPayloadValue}.
    *
    * The sign is the interesting half and it is the OPPOSITE of a counterspell's:
    * countering your OWN spell is the classic printed-first-mode blunder, while
@@ -278,7 +355,7 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
     const spell = firstTargetSpell(ctx);
     if (!spell) return 0; // nothing on the stack — a dead mode
     const count = Math.max(intParam(params, 'count', 1), 0);
-    return count * cardValue(spell.card, ctx.weights, ctx.cards);
+    return count * copyPayloadValue(ctx, spell, 0);
   },
 
   /**

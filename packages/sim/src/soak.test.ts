@@ -254,6 +254,41 @@ describe('soak violations stay fixed, replayed from their seed alone', () => {
       // the same game for the position to exist at all.
       mustContain: ['Blood Artist', 'Trusty Machete', 'Costly Plunder', 'Weakness'],
     },
+    /*
+     * THE COPY-MIRROR LOOP — one defect, three seeds, both seats.
+     *
+     * Two copy spells on the stack are each other's only interesting target, and
+     * the pilot priced a copy spell at its FACE VALUE, so re-aiming a copy at the
+     * other copy spell always outscored aiming it at the real spell underneath.
+     * Every copy then made another copy, neither original ever reached the top of
+     * the stack, and the game burned the 6,000-action cap ~1,850 copies deep.
+     *
+     * All three rows are kept even though one fix covers them: they are different
+     * cards (Twincast / Reverberate), different seats (A and B) and different
+     * turns, so a regression that only re-breaks one of the three still fails
+     * loudly here.
+     */
+    {
+      seed: 1390617766,
+      onPlay: 'A',
+      what:
+        'CR 707.10: a copy of Twincast re-aimed at the Twincast that made it, forever — the pilot ' +
+        'valued copying a copy spell at the copy spell\'s own face value, so the mirror always beat ' +
+        'copying the Dream Twist underneath it (fixed by pricing a copy by what its chain delivers)',
+      mustContain: ['Twincast', 'Dream Twist'],
+    },
+    {
+      seed: 3434778477,
+      onPlay: 'B',
+      what: 'CR 707.10: the same copy-mirror loop on Reverberate, seat B',
+      mustContain: ['Reverberate'],
+    },
+    {
+      seed: 113343071,
+      onPlay: 'A',
+      what: 'CR 707.10: the same copy-mirror loop with Reverberate + Narset\'s Reversal, seat A',
+      mustContain: ['Reverberate', "Narset's Reversal"],
+    },
   ];
 
   for (const { seed, onPlay, what, mustContain } of PINNED) {
