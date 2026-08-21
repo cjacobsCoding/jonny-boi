@@ -3364,7 +3364,110 @@ of what the widening buys.
 at seed 4222011655 (`#34 Blood Artist has toughness 0`), in `packages/core`'s state-based-action pass.
 It is not a redaction bug, it does not reproduce inside the fast soak's game range, and fixing it here
 would put an engine change in a branch whose diff is meant to be readable as one argument. Recorded
-for its own branch with a reproducing seed.
+for its own branch with a reproducing seed. → **Closed in §3.31**: it was neither the gate nor a
+stale toughness but a mutation site with no pass behind it — paying a spell's additional cost — and
+the handoff was right, because the fix is an engine change in `applyActionToDraft`.
+
+### 3.31 The other doors into the priority boundary — CR 704.3 for every action — ✅ done
+
+§3.29 put `checkStateBasedActions` on the priority boundary and called it a backstop for "the next
+mutation path that forgets". It was installed on **one** of the doors into that moment, and the next
+path had already forgotten.
+
+#### The reproduction
+
+The 450-game redaction hunt (§3.30) filed one unrelated violation and deferred it: seed
+**4222011655**, `#34 Blood Artist has toughness 0` while still on the battlefield — CR 704.5f says a
+creature at 0 toughness is put into its owner's graveyard. It did not reproduce inside the fast tier
+because it is **mixed game 112** and the fast tier plays 40.
+
+Inverting `gameSeedFor` narrowed it to that one index in seconds, and from there to a single game that
+replays in **200 ms**. What it shows:
+
+- Turn 8: B enchants A's Blood Artist (a 0/1) with **Weakness** (−2/−1). It does not die, because A's
+  **Trusty Machete** is equipped to it. Net: alive, correctly.
+- Turn 13, draw step: A casts **Costly Plunder**, whose mandatory additional cost (CR 601.2h) is
+  "sacrifice an artifact or creature". Two artifacts qualify, so the cost parks a `selectCards`
+  question. A answers it with the Machete.
+- The Machete leaves. The Blood Artist is now a −2/0 — and it sits there for the **next five turns**.
+
+#### Which of the three it was
+
+Three candidates were on the table and two of them were wrong, which is worth recording because both
+were plausible and both would have been fixed in the wrong place:
+
+- **Not the narrowed gate.** `stateBasedActionsPossible` returned **`true`** on the offending board —
+  the Weakness is an attachment and the gate treats either end of an attachment as "always look". The
+  §3.29 narrowing is innocent.
+- **Not a stale or lazily-computed toughness.** Calling `checkStateBasedActions` **by hand** on that
+  exact state killed the creature immediately and emitted the whole correct cascade — `creatureDied`,
+  the zone change, the Weakness unattaching and following it to the graveyard.
+- **It was a mutation site that changed state and never re-checked.** Instrumenting the engine showed
+  the pilot being handed two consecutive views at turn 13's draw step with **no check between them**:
+  the first with the Machete and toughness 1, the second without it and toughness 0. Paying the
+  additional cost runs through `finishCastChoice`, which hands the floor **straight back to the
+  caster** — nobody passed priority, so `onPassPriority` never ran, so nothing looked.
+
+#### The seam
+
+CR 704.3 says state-based actions are checked *whenever a player would receive priority*, and *then*
+triggered abilities go on the stack. In this engine a player receives priority at the end of
+essentially every action. So the check moved from one action's handler to **where an action ends** —
+`applyActionToDraft`, after dispatch, before `collector.flush()` puts triggers on the stack. That
+ordering is the rule's own: a death this check causes queues its dies-trigger into the same flush
+rather than being stranded in a collector nobody drains again — and Blood Artist's own ability is
+exactly that shape. Three guards say "is anybody actually receiving priority": not a decided game, and
+not a parked question or a suspended resolution, which mean a spell is still resolving (CR 608.2 — the
+case `soak.ts` documents at length, where a creature genuinely does sit dead until the question is
+answered).
+
+**The pass is excluded, and that is not a special case in disguise.** A pass is the one action that
+already ran this exact check — at its START, in `onPassPriority`, where it must be, because a
+state-based action can end the game or park the legend rule's question and so stop the pass happening
+at all. What a pass then goes on to change checks at its own site (`resolveTopOfStack`, and the
+draw/combat-damage/cleanup arms of `advanceStep`). Enumerating *mutation sites* is what produced this
+bug; enumerating *action kinds* is a closed list the compiler checks, and this covers all of it.
+
+#### What it costs
+
+⚠️ **Wall clock is worthless on this box and so, it turns out, is a small number of CPU rounds** — the
+first paired attempt returned rounds of 2,484 ms and 5,110 ms **for the same arm**. So the added work
+was counted deterministically first, and only then timed.
+
+| workload | extra gate calls | extra FULL checks | cost |
+|---|---|---|---|
+| seed-99 gauntlet (280 games) | 24,965 | **0** | ~6 ms of ~2.3 s (~0.3%), every row byte-identical |
+| full-pool soak (worst case) | 11,328 | 6,227 (24,369 → 30,596, +25.6%) | **+9.5% CPU** |
+
+Of the gauntlet's 151,124 actions, **125,918 are passes** — which is why excluding them is most of the
+work rather than a rounding error. The gauntlet reaches **zero** extra full checks because curated
+decks rarely hold an attachment; that is also why the gauntlet cannot see this bug and the soak can.
+The +9.5% is the minimum over 14 alternating paired rounds in one process, on full-pool boards where
+nearly every game has an Aura or an Equipment out and the gate therefore says yes about half the time.
+That is the price of the rule holding at the boundary it names.
+
+#### Gauntlet: 79/280, unmoved
+
+Byte-identical per-opponent rows with the check on and off, measured in the same process: Boros 12/40,
+Rakdos 13/40, Izzet 17/40, Golgari 7/40, Orzhov 9/40, Mono-Green 7/40, UW 14/40.
+
+#### A regression test that could have been green for the wrong reason
+
+`soak-config.ts` promises a violation is "a bug report you can paste into a new test". It was only half
+true: the seed and both decklists printed, but the only way to reach the game they describe was to
+re-run the whole tier and hope `mixedGames` was large enough to contain it. `replaySoakMixedGame`
+closes that — one seed, one game, 200 ms — and `soak.test.ts` gains a PINNED list.
+
+**The sabotage that survived is the finding worth keeping.** Mutating one bit of the replay's
+opponent-deck seed left the pinned row **passing**: it replayed a different match, found nothing, and
+read exactly like a fix holding. "No violations" is also what the wrong game reports. The replay now
+returns both decklists beside the violations, and every pinned row names the cards without which the
+position cannot exist (`Blood Artist`, `Trusty Machete`, `Costly Plunder`, `Weakness`) — asserted
+*before* the outcome, so the row fails loudly when pool churn stops dealing the position instead of
+passing vacuously forever.
+
+**Sabotage-checked: 4 breaks, 3 caught immediately, 1 escape — and the escape was fixed and re-checked
+red.**
 
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.

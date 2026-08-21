@@ -137,9 +137,51 @@ throughput (games/sec) from regressing.
 
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
+| fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.31 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-20 worker: `fix/sba-toughness-violation` 🚧 PUSHED — **the CR 704.3 boundary was
+  installed on ONE of the doors into "a player would receive priority"; paying a spell's additional
+  cost walks through another one.** DESIGN §3.31. Closes the violation `fix/redaction-guarantee`
+  deferred (seed 4222011655, `#34 Blood Artist has toughness 0`).
+
+  **Which of the three it was.** Not the narrowed gate — `stateBasedActionsPossible` answered
+  **true** on the offending board (the Weakness is an attachment, and either end of an attachment is
+  an "always look"), so §3.29's `MODIFICATION_IS_PURELY_ADDITIVE` narrowing is innocent. Not a stale
+  toughness — calling `checkStateBasedActions` **by hand** on that exact state killed the creature
+  and emitted the whole correct cascade. It was **a mutation site that never re-checked**: Costly
+  Plunder's mandatory additional cost (CR 601.2h) sacrificed the Trusty Machete that was holding a
+  Weakness-ed Blood Artist above zero toughness, and `finishCastChoice` hands the floor straight back
+  to the caster — nobody passes priority, so `onPassPriority` never runs. The 0/0 sat on the
+  battlefield for **five turns**.
+
+  **The seam.** `applyActionToDraft`, after dispatch and **before** `collector.flush()` — SBAs then
+  triggers, which is CR 704.3's own order and is what lets a death this check causes queue its
+  dies-trigger into the same flush. Guarded on "is anybody actually receiving priority" (not gameOver,
+  no parked question, no suspended resolution) and behind the same cheap gate. **The pass is excluded
+  on purpose**: it already runs this check at its START, where it must be (an SBA can end the game or
+  park the legend rule and so stop the pass), and 125,918 of the gauntlet's 151,124 actions are passes.
+
+  ⚠️ **If you add a new `GameAction` kind, it is covered automatically** — the exclusion is written
+  as `action.kind !== 'passPriority'`, not as a list of the kinds that need checking. Enumerating
+  mutation sites is what produced this bug.
+
+  **Cost, counted before it was timed** (⚠️ the first paired attempt read 2,484 ms and 5,110 ms **for
+  the same arm** — a few CPU rounds are not a measurement on this box either). Gauntlet: +24,965 gate
+  calls, **zero** extra full checks (curated decks rarely hold an attachment) ≈ 6 ms of ~2.3 s, rows
+  byte-identical. Full-pool soak, the worst case: +11,328 gate calls and +6,227 full checks
+  (24,369 → 30,596, +25.6%) for **+9.5% CPU**, minimum over 14 alternating paired rounds in one process.
+
+  **A sabotage escaped, and that is the finding.** `soak.test.ts` gains a PINNED replay list built on
+  a new `replaySoakMixedGame` (one seed → one game → 200 ms; the tier's promise that "a violation is
+  a bug report you can paste into a new test" was previously only half true, since mixed game 112 is
+  three times past the fast tier's reach). Flipping one bit of the replay's opponent-deck seed left
+  the pinned row **GREEN** — it replayed a different match, found nothing, and read exactly like a fix
+  holding. The replay now returns both decklists and every pinned row asserts the cards without which
+  the position cannot exist, **before** asserting the outcome. **4 sabotages, 3 caught, 1 escape,
+  fixed and re-checked red.** If you add a pinned row, name its cards.
 
 - 2026-08-20 worker: `fix/redaction-guarantee` 🚧 PUSHED — **the hidden-information scan recognised
   ONE key name and walked past eighteen others; the class is now closed, and the wider net found a
