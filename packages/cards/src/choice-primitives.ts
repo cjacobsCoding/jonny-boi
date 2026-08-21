@@ -61,6 +61,7 @@ import {
   moveOwnedCard,
   movePermanentTo,
   otherPlayer,
+  playersForParam,
   putOntoBattlefield,
   strArrayParam,
   strParam,
@@ -592,6 +593,62 @@ export const returnToHand: EffectPrimitive = (ctx) => {
 };
 
 /**
+ * `returnChosenToHand` — "**return a land you control** to its owner's hand"
+ * (every karoo/bounce land: Azorius Chancery, Simic Growth Chamber, Dimir
+ * Aqueduct and their eight siblings).
+ *
+ * NOT `returnToHand`, and the difference is the whole card. `returnToHand`
+ * bounces a permanent someone AIMED at — a target, chosen when the ability went
+ * on the stack, checked for hexproof, and lost if it becomes illegal. This
+ * bounces one its own controller PICKS AT RESOLUTION from their own board:
+ * nothing targets, so hexproof and protection are irrelevant (they read
+ * "target"), and the ability cannot be fizzled by the choice going away.
+ *
+ * ## The valence is `'loss'`, and it has to be
+ * The chooser is giving up one of their OWN permanents. `packages/ai/src/choices.ts`
+ * answers a valence-`'loss'` selection with the chooser's least valuable
+ * candidates, which is what a real player does with a karoo land's drawback —
+ * a tapped basic goes back, not the board's best creature. Calling it a `'gain'`
+ * would make every pilot bounce its best permanent, every game.
+ *
+ * ## Returning ITSELF is legal and is not special-cased
+ * A karoo land is "a land you control" the instant its own trigger resolves, so
+ * a player whose only land is the karoo must return the karoo. That is the
+ * printed card (and the reason these lands are playable at all in a one-land
+ * opener), so the candidate list is not filtered to exclude the source.
+ *
+ * Params: `who` (whose permanents — `'controller'` by default), `count` (how
+ * many, default 1), `filter` (what qualifies — `{ anyOfTypes: ['land'] }` is
+ * "a land"), `optional` (the printed "you **may** return…", a floor of zero).
+ */
+export const returnChosenToHand: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  const who = playerParam(ctx, 'who', 'controller');
+  if (!who) return;
+  const candidates = collectCardOptions(ctx.state, 'battlefield', {
+    controller: who,
+    filter: filterParam(ctx),
+  });
+  const chosen = ctx.chooseCards({
+    chooser: who,
+    prompt: `Return ${count} permanent(s) you control to its owner's hand`,
+    candidates,
+    min: boolParam(ctx, 'optional', false) ? 0 : count,
+    max: count,
+    valence: 'loss',
+    fromZone: 'battlefield',
+  });
+  if (!chosen) return; // parked
+  for (const id of chosen) {
+    const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+    // "to its OWNER's hand" — `movePermanentTo` routes by owner, which is what
+    // makes a stolen permanent go home rather than to the thief's hand.
+    if (perm) movePermanentTo(ctx, perm, 'hand');
+  }
+};
+
+/**
  * `tapPermanents` — tap (or UNTAP) every permanent matching `params.types`
  * (default: creatures) controlled by `params.who` (default: the opponent).
  * Cryptic Command's "tap all creatures your opponents control"; a Falter-style
@@ -1008,6 +1065,20 @@ function sacrificePermanent(ctx: EffectContext, perm: CardInstance): void {
 export const sacrificeChosen: EffectPrimitive = (ctx) => {
   const count = intParam(ctx, 'count', 1);
   if (count <= 0) return;
+  // "EACH PLAYER sacrifices a creature of their choice" (Fleshbag Marauder,
+  // Merciless Executioner, Accursed Marauder) — the same question asked of both
+  // seats, so it is a `who` value rather than a second primitive.
+  //
+  // It is NOT "each opponent, and also me": the printed word is *each player*,
+  // which includes the controller, and a card that spared its own controller
+  // would be strictly better than printed. `playersForParam`'s `'each'` answers
+  // in APNAP order (CR 101.4), which is what makes the pair of answers
+  // reproducible from a seed instead of depending on which seat the source sits
+  // in.
+  if (strParam(ctx, 'who') === 'each') {
+    sacrificeEachPlayer(ctx, count);
+    return;
+  }
   const victim = playerParam(ctx, 'who', 'targetPlayer');
   if (!victim) return;
   const candidates = collectCardOptions(ctx.state, 'battlefield', {
@@ -1029,6 +1100,49 @@ export const sacrificeChosen: EffectPrimitive = (ctx) => {
     if (perm) sacrificePermanent(ctx, perm);
   }
 };
+
+/**
+ * The "each player sacrifices …" branch of {@link sacrificeChosen}.
+ *
+ * Mirrors `discardEachPlayer`, and for the same reason: BOTH answers are
+ * collected before ANYTHING leaves the battlefield, so neither player's choice
+ * can see the other's result. Sacrificing the active player's pick first would
+ * let the second chooser answer on a board the rules say they never saw, and it
+ * would also let a dies-trigger resolve between the two halves of one
+ * simultaneous event.
+ *
+ * A seat with no qualifying permanent auto-answers as "none", and one with fewer
+ * than the card demands gives up every one it has: core's `normalizeCounts`
+ * clamps `min` to the candidate count, so this asks the same impossible-free
+ * question the single-victim branch above does.
+ */
+function sacrificeEachPlayer(ctx: EffectContext, count: number): void {
+  const order = playersForParam(ctx, 'each');
+  const picks: (readonly InstanceId[])[] = [];
+  for (const victim of order) {
+    const candidates = collectCardOptions(ctx.state, 'battlefield', {
+      controller: victim,
+      filter: filterParam(ctx),
+    });
+    const chosen = ctx.chooseCards({
+      chooser: victim,
+      prompt: `Sacrifice ${count} permanent(s)`,
+      candidates,
+      min: count,
+      max: count,
+      valence: 'loss',
+      fromZone: 'battlefield',
+    });
+    if (!chosen) return; // parked — nothing mutated yet
+    picks.push(chosen);
+  }
+  for (let i = 0; i < order.length; i++) {
+    for (const id of picks[i]!) {
+      const perm = ctx.state.battlefield.find((c) => c.instanceId === id);
+      if (perm) sacrificePermanent(ctx, perm);
+    }
+  }
+}
 
 /** The two pile ids the split offers — data the UI/AI answer refers back to. */
 const PILE_ONE = 'pile1';
@@ -1154,6 +1268,7 @@ export const CHOICE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Obje
   discardCard,
   returnFromGraveyard,
   returnToHand,
+  returnChosenToHand,
   tapPermanents,
   counterUnlessPaid,
   sacrificeChosen,

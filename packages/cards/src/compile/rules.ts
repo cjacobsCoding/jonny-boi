@@ -1941,6 +1941,35 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'return-chosen-permanent-to-hand',
+    description:
+      "\"Return a land/creature/artifact/permanent you control to its owner's hand\" — the karoo lands' drawback, chosen at resolution rather than targeted",
+    // NOT the same template as `return-target-permanent-to-hand` above, and the
+    // difference is not cosmetic: that one AIMS at a permanent (a target, checked
+    // for hexproof, lost if it becomes illegal), and this one has its controller
+    // PICK one of their own at resolution. Nothing targets, so the ability cannot
+    // be fizzled and hexproof is irrelevant — see `returnChosenToHand`.
+    //
+    // "You may" is deliberately NOT accepted here. No printed card in this family
+    // prints it, and the general `mayEffects` wrapper already handles the optional
+    // form for any that ever does; matching it here would swallow the word
+    // without implementing the option.
+    pattern: new RegExp(
+      `^return an? (${Object.keys(STATIC_NOUN_TYPES).join('|')}) you control to (?:its|their) owner'?s hand$`,
+    ),
+    build(match) {
+      const filter = permanentNounFilter(match[1] ?? '');
+      if (filter === undefined) return null;
+      return effects({
+        primitive: 'returnChosenToHand',
+        // "A permanent" is every type, which `permanentNounFilter` returns as an
+        // EMPTY filter — omitted, because an absent filter already matches
+        // everything and an empty object in the params would only be noise.
+        params: Object.keys(filter).length > 0 ? { filter } : {},
+      });
+    },
+  },
+  {
     id: 'creature-fights',
     description: '"~ fights target creature"',
     pattern: /^~ fights target creature$/,
@@ -2575,6 +2604,34 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
           who: 'targetPlayer',
           ...(filter ? { filter } : {}),
         },
+      });
+    },
+  },
+  {
+    id: 'each-player-sacrifices',
+    description:
+      '"Each player sacrifices a [nontoken] creature of their choice" (Fleshbag Marauder, Merciless Executioner, Accursed Marauder)',
+    // Ordered BEFORE `each-opponent-sacrifices` only for readability — the two
+    // patterns are disjoint ("each player" vs "each opponent"/"each other
+    // player"). They are separate entries because they are separate CARDS: this
+    // one hits its own controller too, and compiling it as the opponent-only
+    // form would print a strictly better card.
+    //
+    // "Of their choice" is the printed reminder that the victim picks, which is
+    // what `sacrificeChosen` does by construction; it is optional in the pattern
+    // because older printings omit it.
+    pattern:
+      /^each player sacrifices an? (nontoken )?(creature|land|artifact|permanent)(?: of their choice)?$/,
+    build(match) {
+      const kind = match[2]!;
+      const filter: Record<string, unknown> = {};
+      if (kind !== 'permanent') filter.anyOfTypes = [kind as CardType];
+      // "Nontoken" is a printed narrowing with an exact `CardFilter` field, so it
+      // is expressible rather than reported: a token creature does not qualify.
+      if (match[1]) filter.isToken = false;
+      return effects({
+        primitive: 'sacrificeChosen',
+        params: { who: 'each', ...(Object.keys(filter).length > 0 ? { filter } : {}) },
       });
     },
   },
