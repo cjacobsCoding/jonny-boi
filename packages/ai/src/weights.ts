@@ -268,12 +268,12 @@ export interface HeuristicWeights {
    */
   readonly scryKeepValueThreshold: number;
 
-  // --- choosing a COPY TARGET (CR 706) --------------------------------------
+  // --- choosing a COPY TARGET (CR 707) --------------------------------------
   //
   // A dedicated ruler, and it has to be: `cardValue` prices a card by what it
   // is worth IN HAND (cost as a proxy) and reads EFFECTIVE stats off the board.
   // Neither is the question here. "Which permanent should I BE?" is about
-  // PRINTED, copiable values (CR 706.2 - counters and anthems do not come
+  // PRINTED, copiable values (CR 707.2 - counters and anthems do not come
   // along) and about what the permanent does once it is in play. These four
   // weights price exactly that, and nothing else, so the policy is one short
   // function a reader can check against the board.

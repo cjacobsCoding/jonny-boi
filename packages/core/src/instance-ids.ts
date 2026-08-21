@@ -164,6 +164,17 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
   becameCopy: { instanceId: 'id', ownName: 'none', copiedName: 'none', copiedInstanceId: 'id' },
   tokenCreated: { instanceId: 'id', controller: 'none', name: 'none' },
   tokenCeasedToExist: { instanceId: 'id', name: 'none', zone: 'none' },
+
+  /*
+   * THE COPY FAMILY (CR 707). Every id here names an object on the STACK or the
+   * BATTLEFIELD, never a card in a hand or a library: a copy is created from a
+   * spell the whole table watched be cast, and a token copy from a permanent in
+   * play. That is why all three events are `'public'` in `OBSERVATION_POLICY`,
+   * and this table is what makes that claim checkable rather than asserted.
+   */
+  spellCopied: { instanceId: 'id', copiedInstanceId: 'id', controller: 'none', name: 'none' },
+  spellCopyCeasedToExist: { instanceId: 'id', name: 'none' },
+  tokenCopyCreated: { instanceId: 'id', copiedInstanceId: 'id', controller: 'none', name: 'none' },
   // `choiceId` is the QUESTION's id, not a card's. `sourceInstanceId` is a card's
   // — and is the field the CR 514.1 cleanup discard once pointed at a card in the
   // discarding player's hand (see `NO_ASKING_OBJECT` in `choices.ts`).

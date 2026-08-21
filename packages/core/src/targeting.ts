@@ -33,7 +33,7 @@
 import type { CardDefinition, EffectRef, KeywordFlags } from './card.js';
 import { hasType, isCreature } from './card.js';
 import { isBattle, isPlaneswalker } from './card.js';
-import type { CardInstance, GameState, InstanceId, PlayerId } from './state.js';
+import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject, StackObject } from './state.js';
 import { PLAYER_IDS } from './state.js';
 import type { ContinuousIndex } from './internal/continuous.js';
 import { anyContinuousModification, indexContinuous, NO_MOD } from './internal/continuous.js';
@@ -121,7 +121,39 @@ export type TargetRestriction =
    * permanent (CR 110.1), so the battlefield targetability gate is correctly
    * skipped for this restriction.
    */
-  | 'instantOrSorceryInYourGraveyard';
+  | 'instantOrSorceryInYourGraveyard'
+  /**
+   * "target instant or sorcery spell" — Fork, Reverberate, Narset's Reversal.
+   *
+   * Its own restriction rather than a flavour of `'spell'` because the two are
+   * genuinely different sets: `'spell'` reaches a creature spell and an
+   * artifact spell, and a card that says "instant or sorcery" may not copy one.
+   * Flattening it would let Reverberate copy a Grizzly Bears, which is a card
+   * playing WIDER than printed — the exact infidelity this module exists to
+   * prevent, and the direction that is always the wrong one to guess in.
+   *
+   * The timing consequence is `'spell'`'s and is the reason it matters as much
+   * as the aim: a copy spell with no instant or sorcery on the stack has no
+   * legal target and therefore CANNOT BE CAST, so it can never be spent for
+   * nothing.
+   */
+  | 'instantOrSorcerySpell';
+
+/**
+ * Whether a spell on the stack is an INSTANT OR SORCERY spell — the one question
+ * `'instantOrSorcerySpell'` adds over `'spell'`.
+ *
+ * Read off the card ON THE STACK, which is the object with the characteristics
+ * that matter: a modal DFC cast as its instant face, a split card's chosen half
+ * and an adventure being cast as its adventure half are all already carried in
+ * `card.def` by the cast path, so this asks nothing about layouts and is right
+ * for all three by construction. A COPY of a spell answers yes for the same
+ * reason — its definition is the copiable values of what it copies — which is
+ * what makes a copy of a copy legal, exactly as the rules do.
+ */
+function isInstantOrSorcerySpell(spell: SpellStackObject): boolean {
+  return hasType(spell.card.def, 'instant') || hasType(spell.card.def, 'sorcery');
+}
 
 /**
  * The reserved effect-param name carrying a {@link TargetRestriction}. One name,
@@ -150,7 +182,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
-    value === 'instantOrSorceryInYourGraveyard'
+    value === 'instantOrSorceryInYourGraveyard' ||
+    value === 'instantOrSorcerySpell'
   );
 }
 
@@ -243,10 +276,15 @@ export function isLegalTarget(
     }
     return false;
   }
-  if (restriction === 'spell') {
+  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
     // A *spell* on the stack — never a triggered ability, which is also a stack
     // object but is not a spell and cannot be countered by "counter target spell".
-    return state.stack.some((object) => object.kind === 'spell' && object.instanceId === target);
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'spell' || object.instanceId !== target) continue;
+      return restriction === 'spell' || isInstantOrSorcerySpell(object);
+    }
+    return false;
   }
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
@@ -359,8 +397,16 @@ export function legalTargetsFor(
   controller?: PlayerId,
   source?: CardDefinition,
 ): readonly (InstanceId | PlayerId)[] {
-  if (restriction === 'spell') {
-    return state.stack.filter((object) => object.kind === 'spell').map((object) => object.instanceId);
+  if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
+    const wantInstantOrSorcery = restriction === 'instantOrSorcerySpell';
+    const out: (InstanceId | PlayerId)[] = [];
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'spell') continue;
+      if (wantInstantOrSorcery && !isInstantOrSorcerySpell(object)) continue;
+      out.push(object.instanceId);
+    }
+    return out;
   }
   if (restriction === 'instantOrSorceryInYourGraveyard') {
     // With no actor there is no such thing as "your graveyard", so nothing is
@@ -532,6 +578,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a permanent';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
+    case 'instantOrSorcerySpell':
+      return 'an instant or sorcery spell on the stack';
     case 'any':
       return 'any target (a creature, a player, a planeswalker, or a battle)';
   }

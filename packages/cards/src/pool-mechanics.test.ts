@@ -141,6 +141,12 @@ const REPRESENTED: ReadonlyArray<{
     mechanic: 'replacement effects (CR 614/615 — counter and damage multipliers)',
     present: (c) => (c as { replacements?: readonly unknown[] }).replacements !== undefined,
   },
+  // --- §3.31: the two copies that are NOT CARDS -----------------------------
+  // Deliberately separate from the as-enters copy above, which the pool has had
+  // since §3.24: a Clone proves nothing about a Reverberate. The predicates name
+  // the PRIMITIVE, which is what the compiler emits and what the soak witnesses.
+  { mechanic: 'copying a SPELL on the stack (CR 707.10)', present: (_c, t) => t.includes('"copySpell"') },
+  { mechanic: 'a TOKEN COPY of a permanent (CR 707.2)', present: (_c, t) => t.includes('"createTokenCopy"') },
 ];
 
 /** Equipment that does more than modify: it watches its host and triggers. */
@@ -378,6 +384,10 @@ const SEEDS = {
   equipmentTrigger: 223,
   prevention: 224,
   replacement: 225,
+  spellCopy: 226,
+  spellCopyReturn: 227,
+  tokenCopy: 228,
+  tokenCopyKicked: 229,
 } as const;
 
 describe('the pool PLAYS every mechanic it claims', () => {

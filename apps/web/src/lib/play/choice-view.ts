@@ -421,7 +421,7 @@ function requirementText(choice: PendingChoice): string {
   }
   // An as-enters COPY is not a "how many" question either: it is "which
   // permanent do you want to be?", and the one thing a player has to be told is
-  // that they get the PRINTED card (CR 706.2) — counters and buffs on the thing
+  // that they get the PRINTED card (CR 707.2) — counters and buffs on the thing
   // they copy stay behind. A generic "choose up to 1 card from the battlefield"
   // leaves that out, and it is exactly the part that surprises people.
   if (choice.kind === 'selectCards' && choice.context === 'copyAsEnters') {

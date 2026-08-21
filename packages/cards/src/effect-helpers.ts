@@ -578,6 +578,14 @@ export function targetedSpellOnStack(ctx: EffectContext): SpellStackObject | und
  * `spellLeaveDestination`, the same answer resolution uses, so countering and
  * resolving cannot disagree about where a flashback card ends up.
  *
+ * …AND NO ZONE AT ALL when the thing being countered is a COPY of a spell
+ * (CR 704.5e). A copy is not a card: there is nothing to put in a graveyard, and
+ * putting one there would hand the game a phantom card that delirium, flashback
+ * and Tarmogoyf all count. This is the second of the two exits from the stack,
+ * living in a different package from the first, which is exactly why the answer
+ * is a value in `spellLeaveDestination`'s return type rather than an `if` at
+ * each call site: a caller cannot type-check without handling it.
+ *
  * One implementation, shared by the plain counterspell and the "unless its
  * controller pays" one. They differ ONLY in whether the payment happens first, and
  * a second copy of the zone move is exactly how two primitives start disagreeing
@@ -606,6 +614,13 @@ export function counterSpellOnStack(ctx: EffectContext, spell: SpellStackObject)
   // flashback card is exiled either way, but a bought-back spell returns to hand
   // only as it RESOLVES, so a countered one belongs in the graveyard.
   const to = spellLeaveDestination(spell, 'counter');
+  if (to === 'ceaseToExist') {
+    // Emitted INSTEAD of a `zoneChange`, which is the point: a log, a replay or
+    // an inspector folding zone changes must not put this object in a graveyard,
+    // because the game never did.
+    ctx.emit({ type: 'spellCopyCeasedToExist', instanceId: card.instanceId, name: card.def.name });
+    return;
+  }
   card.zone = to;
   ctx.state.players[card.owner][to].push(card);
   ctx.emit({ type: 'zoneChange', instanceId: card.instanceId, from: 'stack', to });

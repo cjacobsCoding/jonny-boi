@@ -2407,6 +2407,11 @@ are creature types without the card being a creature, and that it counts as a ca
 (Tarmogoyf) — so it is a member of `CardType`, has a bit in `CARD_TYPE_BIT`, and `TYPES_WITHOUT_SYSTEM`
 stays honestly empty. A record whose ONLY type is Kindred still reports: CR 308.1 requires a second.
 
+> ✅ **The first two of these SHIPPED in §3.31** — copying a spell on the stack and token copies.
+> The paragraph below is left as written because it is the record of what this section reported and
+> WHY, and its diagnosis was exactly right; what it lists is no longer the open work. (Its "CR 706"
+> citations are also corrected to CR 707 in the source — copying objects is section 707.)
+
 **Reported by name, not half-built:** copying a SPELL on the stack (Reverberate, Narset's Reversal) and
 TOKEN copies (Rite of Replication, Kiki-Jiki) need a stack object that is **not a card** and ceases to
 exist as it resolves (CR 707.10 — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of
@@ -3364,15 +3369,19 @@ of what the widening buys.
 at seed 4222011655 (`#34 Blood Artist has toughness 0`), in `packages/core`'s state-based-action pass.
 It is not a redaction bug, it does not reproduce inside the fast soak's game range, and fixing it here
 would put an engine change in a branch whose diff is meant to be readable as one argument. Recorded
-for its own branch with a reproducing seed. → **Closed in §3.31**: it was neither the gate nor a
+for its own branch with a reproducing seed. → **Closed in §3.32**: it was neither the gate nor a
 stale toughness but a mutation site with no pass behind it — paying a spell's additional cost — and
 the handoff was right, because the fix is an engine change in `applyActionToDraft`.
 
-### 3.31 The other doors into the priority boundary — CR 704.3 for every action — ✅ done
+### 3.32 The other doors into the priority boundary — CR 704.3 for every action — ✅ done
 
 §3.29 put `checkStateBasedActions` on the priority boundary and called it a backstop for "the next
 mutation path that forgets". It was installed on **one** of the doors into that moment, and the next
 path had already forgotten.
+
+**This section is §3.32, not §3.31**: `feat/spell-and-token-copies` published a §3.31 while this
+branch was in flight, and renumbering a section other branches already cite would break more than it
+tidies.
 
 #### The reproduction
 
@@ -3469,6 +3478,179 @@ passing vacuously forever.
 **Sabotage-checked: 4 breaks, 3 caught immediately, 1 escape — and the escape was fixed and re-checked
 red.**
 
+### 3.31 Copies that are NOT CARDS — a spell copy on the stack, and a token copy — ✅ done
+§3.24 shipped copying ONTO an object that already exists: a Clone entering the battlefield swaps its
+own `def`, so the copy inherits a card, an owner and a zone to go home to. It reported the other half
+of the family **by name rather than half-building it**, and the reason it gave is the whole of this
+section: *"a copy of a SPELL needs a stack object that is not a card and ceases to exist as it
+resolves — `resolvesTo` has only battlefield/graveyard/exile/hand, and any of them would leave a
+phantom card in a zone that delirium, flashback and Tarmogoyf all count."* That is exactly right, and
+it is the trap this section had to disarm before anything else.
+
+**CR 704.5e IS THE FEATURE, AND IT IS ASKED IN ONE PLACE.** `spellLeaveDestination` gains a fourth
+answer, `'ceaseToExist'`, and it is asked **first** — before flashback's exile, before buyback's
+return to hand, before the graveyard. Both exits from the stack already funnel through that one
+function, and they live in **two different packages** (resolution in core's `finishSpellResolution`,
+countering in the cards package's `counterSpellOnStack`), which is precisely why the answer is a
+value in a RETURN TYPE rather than an `if` at each call site: neither caller type-checks without
+handling it, and the compiler caught the second one the moment the type widened. Nothing is ever
+pushed into a zone, so the phantom does not exist to be cleaned up — the same argument §3.29 makes
+for doing CR 704.5d at the MOVE rather than as a state-based sweep.
+
+The one copy that DOES keep an object is a copy of a **permanent spell**, and what it keeps is a
+**token** — stamped on the DEFINITION in `makeSpellCopy`, because a definition field survives the
+per-action clone by construction (`internal/clone.ts` shares `def` by reference and says so), where a
+new instance field is a line a field-by-field copy can forget. It then ceases to exist by the token
+rule the moment it leaves the battlefield, so that exit leaves no card either.
+
+**The copy IS a `SpellStackObject`, and that is the design.** A copy of a spell is a spell: it can be
+countered, it is a legal "target spell", and it resolves through the very same code — so there is no
+second resolution path to keep in step, exactly as swapping `def` gave §3.24's copy no second
+characteristic path. Two things differ, both consequences of it not being a card: its `CardInstance`
+is **minted** (a fresh id, `zone: 'stack'`, the original's copiable values), and it carries
+`isSpellCopy`. `internal/clone.ts` copies that field, with a test, because dropping it would put a
+phantom card in a graveyard at the very next action boundary.
+
+**Every decision made for the original comes with it (CR 707.10)** — its targets, the value of X,
+whether it was kicked and how many times, and a modal spell's announced modes *with each mode's own
+aim*, deep-copied so re-aiming the copy cannot re-aim a spell its controller may not even control.
+What deliberately does NOT come across is the bookkeeping of a CAST, because a copy is not cast:
+`castFrom` (whose only job is to exile a flashback CARD), `boughtBack`, `additionalCostPaid`,
+`awaitingCastChoice`. None could change where the copy goes anyway — `isSpellCopy` outranks them —
+so carrying them would only state a falsehood in the state a UI and a replay both read.
+
+**"You may choose new targets for the copy" is an aiming moment the engine did not have.** Targets
+are chosen as a spell is CAST or as a trigger goes on the stack; nothing aimed an object the engine
+itself had just created. It happens inside the copying spell's RESOLUTION, so it is asked through the
+ordinary resolution channel and the existing suspend/resume machinery carries it — no new transport,
+and it replays from a seed. `spellCopyAimSlots` is what makes a MODAL copy work: the slots are the
+announced modes, each re-aimed on its own, and a slot with no target is never offered (the permission
+changes what a target is, never how many there are).
+
+⚠️ **Two latent engine bugs had to be fixed to get there, and both predate this branch.**
+- `applyAnswerChoice` routed **every** `selectTargets` answer to `recordTriggerTargets`, with no
+  `!state.resolution` guard — the three sibling branches beside it all carry one. A target answer
+  raised from inside a resolution would have aimed some unrelated trigger and left the suspended
+  resolution parked forever.
+- `targetOptionFor` never searched the **stack**, so every counterspell's own target has been
+  rendering to the UI and to the AI's target scorer as `#7`. "Target spell" has been a restriction
+  since Counterspell; it matters twice over now, because both the copy question and the re-aim
+  question are lists OF SPELLS.
+
+**The compiler: two rules, and the residual reports something TRUE.** `copy-target-spell` owns the
+whole printed idiom on ONE LINE ("Copy target instant or sorcery spell[, then return it to its
+owner's hand]. You may choose new targets for the copy.") rather than sentence by sentence, because
+the permission is not an effect of its own — splitting them would make the second sentence a vacuous
+rule. `create-token-copy` parses its tails from the END (the kicked count, then the "except …"), so a
+selector containing a comma cannot be mistaken for an exception, and it reuses §3.24's
+`parseCopyException` unchanged: "except it has haste" means exactly one thing in this codebase.
+`instantOrSorcerySpell` is a new target restriction and is deliberately not `'spell'` — flattening it
+would let Reverberate copy a Grizzly Bears, which is a card playing WIDER than printed.
+
+The obsoleted hint is replaced by **two precise ones**, because the residual is not one thing: a
+**DELAYED triggered ability** ("Sacrifice it at the beginning of the next end step" — CR 603.7, the
+single biggest remaining token-copy blocker, and a card compiled without that clause would be a
+permanent hasty copy with no drawback, i.e. strictly better than printed), and a **copy-creating
+template outside the closed tables** — an activated/triggered ABILITY on the stack, a
+"nonlegendary"/"another"/"token" selector, a token that enters tapped, "copy THAT spell" naming the
+spell that triggered the ability, a follow-up sentence about the token just created, an "except …"
+tail on a SPELL copy (Fork's "except that the copy is red"), or a copy count conditional on the zone
+the spell was cast from.
+
+📊 **Measured, paired, same cached 2100-card corpus, against the `origin/main` this merges into:
+545 → 550 playable, +5, 0 regressions** — the two full playable SETS were diffed, not the counts.
+Reverberate, Reiterate, Narset's Reversal, Rite of Replication, Giant Adephage. The residual copy
+family is 29 cards and is still the corpus's #1 gap, but it is now named honestly: almost all of it
+is delayed triggers and ability-copying, neither of which is this system.
+
+🃏 **The shipped pool is 545 → 553**, names in and `'complete'` verdicts out, nothing hand-authored:
+Reverberate, Twincast, Reiterate, Narset's Reversal, **Dualcaster Mage** (a spell copy from an ETB
+TRIGGER, aimed as the trigger goes on the stack), Rite of Replication, Cackling Counterpart and Giant
+Adephage. The blocked candidates stay in `expansion-candidates.json` on purpose — they are the
+coverage probe for what the family still needs.
+
+⚠️ **THE FULL-POOL SOAK REPORTED THE MECHANIC INERT, AND IT WAS THE PILOT.** The pool printed
+`spell-copy` and no soak game ever fired it. Nothing was wrong with the engine: the heuristic
+classifies spells by INTENT, `copySpell` was in no intent, so a Reverberate classified as a "generic
+spell" — and a generic spell is only ever offered with an **empty stack**. The pilot could not cast
+it at all. A `copySpell` intent now holds it up like a counterspell and answers the top of the stack;
+the soak going green is the end-to-end proof that the mechanic is reachable in a real game, and it is
+the strongest argument yet for §3.26 existing.
+
+**The pilot needed a policy for the re-aim, too, and the failure mode was not subtle.**
+`answerSelectTargets` had exactly two cases (a modal cast; a trigger). The copy re-aim is a third,
+asked from inside a resolution — and with nothing to price, every candidate scores zero and the pilot
+degrades to the FIRST offered, which for a copy of a Lightning Bolt is very often **its own face**.
+The copy is not on the stack when the question is asked (the primitive builds it locally and pushes
+only once every question is answered, because a parked question re-runs the whole ref), so the pilot
+reads the spell being COPIED — named by the resolving frame's own target — from public state.
+
+⚡ **Rule 7, measured rather than assumed.** The gauntlet at seed 99 is **byte-identical** to this
+branch's `origin/main`: **79/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 14. Scavenge probe over 40
+identical seeded self-play games (30,600 actions, equal in both arms): **584/583 here vs 584/585 for
+the same worktree at HEAD, interleaved** — and 606 at the branch point, so this branch allocates
+slightly LESS (`legalTargetsFor`'s `'spell'` branch stopped building two intermediate arrays).
+
+🧪 **21 tests across five packages, and 20 of 21 sabotages RED on the first pass.** The one that
+survived is worth reading: nulling ONE of the two `spell-copy` soak witnesses changes nothing,
+because they cover each other exactly as `tokenCreated`/`tokenCeasedToExist` do — and the case that
+matters (a copy created but never ceasing to exist, i.e. the phantom) fires only the first, so it
+would still fail. Nulling both goes red. Two real product bugs were found by the tests rather than by
+review: `createTokenCopy` never implemented the `self` selector the compiler emits (so every
+self-copying trigger made nothing), and `spellCopyAimRestriction` read `targetRestrictionOf`
+literally, which answers `undefined` for the default `'any'` — Lightning Bolt, the most-copied card
+in Magic, could never have been re-aimed.
+
+⚠️ **A trap that cost an hour and is now written down in the test that hit it:** `applyAction` takes
+`(state, action, CONFIG, REGISTRY)` **positionally**. Passing `{ registry, config }` — which reads
+like an options object, and which other suites in this repo do — hands the object to `config` and
+leaves the registry undefined, so every primitive degrades to `effectUnsupported` and the test stays
+GREEN while proving nothing.
+
+📚 **CR 707, not CR 706.** Copying objects is section **707**; 706 is rolling a die, and no card in
+the pool has one. The repo cited 706 in 24 files. `conformance/rules-manifest.ts` already had it
+right, and five independent anchors in that same file confirm the numbering (708 face-down, 709
+split, 712 DFC, 715 adventurer), so the citation is corrected throughout the source.
+
+**Reported by name, not half-built** (each is a system, not a template): a **delayed triggered
+ability** created at resolution (CR 603.7) — Kiki-Jiki, Twinflame, Splinter Twin, The Fire Crystal,
+Orthion, Jaxis, Molten Duplication and Mimic Vat are all blocked on this one clause and nothing else;
+**copying an activated or triggered ABILITY** (Lithoform Engine, Return the Favor), which needs a
+target restriction that can reach a `TriggeredStackObject`; a token that **enters tapped** (Skyclave
+Relic, Kambal, Delina); **"whenever you cast a spell, copy THAT spell"** (Reflections of Littjara,
+Jin-Gitaxias, Sword of Wealth and Power), where the copy is of the spell that triggered the ability
+and a trigger carries its triggering PLAYER but not the stack object; a **follow-up sentence about
+the object just created** ("That token gains haste" — Helm of the Host), deliberately not folded into
+the copy's keywords because a grant is layer 6 on THAT object and is not among the copiable values a
+second copy would take; and an **"except …" tail on a SPELL copy** (Fork's "except that the copy is
+red"), for which `CopyExceptions` has no colour field.
+
+**Re-gated after merging `origin/main` at `b01cedf`** (which brought CR 704.3 at the priority
+boundary, CR 704.5q and the CR 514.1 cleanup discard). `npm run verify` exit 0, `npm run build`
+exit 0, **4981 passed / 0 failed**, and the gauntlet at seed 99 is STILL byte-identical —
+**79/280**, rows 12 · 13 · 17 · 7 · 9 · 7 · 14. The corpus measurement is unmoved by the merge and
+is properly paired: main’s compiler is untouched since the branch point (the only file it changed
+under `packages/cards/src/compile` is a test), so its playable set is still exactly the 545 captured
+there, and the merged branch’s 550 differs from it by **five additions and zero removals**. Every
+generated pool artefact was diffed against `origin/main` by NAME rather than by count —
+`starter-cards.json`, `expanded-pool.ts` and both card indexes are strict supersets, so the merge
+dropped nothing of main’s.
+
+**And re-gated a SECOND time after `origin/main` moved again to `98488b2`** (the
+hidden-information guarantee, §3.30). That merge brought `packages/core/src/instance-ids.ts` — an
+enforced table of WHERE AN INSTANCE ID CAN HIDE, mapped over every field of every event — and it
+broke the build until this section’s three new events were classified in it. They are, and all five
+of their id fields name objects on the STACK or the BATTLEFIELD, never a card in a hand or a
+library, which is the same fact that makes them `'public'` observations.
+
+⚠️ **That table’s own source scan checks a FIELD NAME, not a field of an event** — so declaring
+`spellCopied` all-`'none'` leaves it green, because `instanceId` and `copiedInstanceId` are
+classified by `becameCopy` and `tokenCreated`. A sabotage found that, and two cases now ask the real
+reader (`instanceIdsNamedBy`) per EVENT, which is what makes these entries load-bearing.
+
+**This section is §3.31, not §3.30**: `fix/redaction-guarantee` published a §3.30 while this branch
+was out, so the number moved rather than collide. `npm run verify` exit 0, `npm run build` exit 0,
+**5007 passed / 0 failed**, gauntlet at seed 99 still **79/280** with the same seven rows.
 ## 7. Definition of done
 Tests green · status flipped in §3 · committed with explicit paths · pushed · a build delivered to test.
 Workers push branches; the integrator merges + ships (COORDINATION.md).

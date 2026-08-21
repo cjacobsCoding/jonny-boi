@@ -527,7 +527,7 @@ interface PendingChoiceBase {
    * ordinary choice, so all existing states and tests read unchanged.
    *
    * `'asEnters'` marks the CR 614.1c NAMING ("As ~ enters, choose a creature
-   * type"), and `'copyAsEnters'` the CR 706 as-enters COPY ("you may have ~
+   * type"), and `'copyAsEnters'` the CR 707 as-enters COPY ("you may have ~
    * enter as a copy of any creature on the battlefield"). Both are raised by an
    * ENTRY PATH rather than by a resolving effect, and both are routed by this
    * marker for exactly the reason the legend rule is: "there is no frame behind
@@ -1400,11 +1400,13 @@ export interface ResolutionFrame {
   card?: CardInstance;
   /**
    * Where that card goes when the resolution finishes — exile for flashback,
-   * HAND for a bought-back spell. Computed once, as the resolution begins, by
-   * `spellLeaveDestination`, so the frame that outlives the stack object still
-   * carries the one agreed answer.
+   * HAND for a bought-back spell, and `'ceaseToExist'` for a COPY of a spell,
+   * which is not a card and goes to no zone at all (CR 704.5e). Computed once,
+   * as the resolution begins, by `spellLeaveDestination`, so the frame that
+   * outlives the stack object still carries the one agreed answer — including
+   * for a copy, whose `isSpellCopy` marker dies with the stack object.
    */
-  resolvesTo?: 'battlefield' | 'graveyard' | 'exile' | 'hand';
+  resolvesTo?: 'battlefield' | 'graveyard' | 'exile' | 'hand' | 'ceaseToExist';
   /**
    * The value chosen for `{X}` when this spell was cast — carried off the stack
    * object so "deals X damage" still reads the paid-for number AFTER the spell

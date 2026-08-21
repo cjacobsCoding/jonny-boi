@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 513 cards.
+ * 521 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -1180,6 +1180,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Create a token that's a copy of target creature you control.
+  // Flashback {5}{U}{U} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
+  {
+    id: '9e2adca5-f39c-4a09-bcce-8238ebac2c4a',
+    name: 'Cackling Counterpart',
+    types: ['instant'],
+    cost: { generic: 1, U: 2 },
+    flashback: { generic: 5, U: 2 },
+    effects: [{ primitive: 'createTokenCopy', params: { targets: 'creatureYouControl', count: 1 } }],
+  },
   // Create a 3/3 green Elephant creature token.
   // Flashback {3}{G} (You may cast this card from your graveyard for its flashback cost. Then exile it.)
   {
@@ -2273,6 +2283,31 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     entersTapped: true,
     producesOptions: [{ B: 1 }, { R: 1 }],
   },
+  // Flash
+  // When this creature enters, copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: '8eb7c0a5-6190-40de-b473-2d1daa3bbe28',
+    name: 'Dualcaster Mage',
+    types: ['creature'],
+    cost: { generic: 1, R: 2 },
+    power: 2,
+    toughness: 2,
+    keywords: { flash: true },
+    subtypes: ['human', 'wizard'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'copySpell',
+            params: { targets: 'instantOrSorcerySpell', mayRetarget: true },
+          },
+        ],
+        label: 'Enters: copy target instant or sorcery spell. you may choose new targets for the copy',
+        targets: 'instantOrSorcerySpell',
+      },
+    ],
+  },
   // Deathtouch
   // Whenever another creature you control enters, you gain 1 life.
   // Whenever another creature you control dies, each opponent loses 1 life.
@@ -3008,6 +3043,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { R: 1 },
     flashback: { generic: 3, R: 1 },
     effects: [{ primitive: 'dealDamage', params: { amount: 1 } }],
+  },
+  // Trample
+  // Whenever this creature deals combat damage to a player, create a token that's a copy of this creature.
+  {
+    id: '8e1d261d-b8d3-4fb1-922d-47789854b5b3',
+    name: 'Giant Adephage',
+    types: ['creature'],
+    cost: { generic: 5, G: 2 },
+    power: 7,
+    toughness: 7,
+    keywords: { trample: true },
+    subtypes: ['insect'],
+    triggers: [
+      {
+        condition: { on: 'combatDamageToPlayer' },
+        effects: [{ primitive: 'createTokenCopy', params: { self: true, count: 1 } }],
+        label: 'Combat damage to a player: create a token that\'s a copy of ~',
+      },
+    ],
   },
   // Reach (This creature can block creatures with flying.)
   {
@@ -4770,6 +4824,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { produces: [{ W: 2 }, { W: 1, U: 1 }, { U: 2 }], cost: { mana: { hybrid: [['W', 'U']] } } },
     ],
   },
+  // Copy target instant or sorcery spell, then return it to its owner's hand. You may choose new targets for the copy.
+  {
+    id: 'd55f6c70-321f-4fb4-bd33-0850ae1a7c36',
+    name: 'Narset\'s Reversal',
+    types: ['instant'],
+    cost: { U: 2 },
+    effects: [
+      { primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } },
+      { primitive: 'returnSpellToHand', params: { targets: 'instantOrSorcerySpell' } },
+    ],
+  },
   // Search your library for a Forest card, put that card onto the battlefield, then shuffle.
   {
     id: '78826359-fe63-44ad-adc4-a17ffcd710e4',
@@ -5339,6 +5404,24 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['land'],
     manaAbilities: [{ derivedColors: 'landsYouControl', derivedIncludesColorless: true }],
   },
+  // Buyback {3} (You may pay an additional {3} as you cast this spell. If you do, put this card into your hand as it resolves.)
+  // Copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: '38394ee3-6726-4f91-bc25-36bce0c6aab9',
+    name: 'Reiterate',
+    types: ['instant'],
+    cost: { generic: 1, R: 2 },
+    buyback: { generic: 3 },
+    effects: [{ primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } }],
+  },
+  // Copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: 'a1f55890-31c5-4ed4-a2cd-7a4a9f05f8ca',
+    name: 'Reverberate',
+    types: ['instant'],
+    cost: { R: 2 },
+    effects: [{ primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } }],
+  },
   // Put a +1/+1 counter on target creature. It gains indestructible until end of turn.
   {
     id: '8dd6d060-d023-48a6-85cb-7a5521b6257b',
@@ -5391,6 +5474,16 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       adventure: true,
     },
     backFaceCastable: true,
+  },
+  // Kicker {5} (You may pay an additional {5} as you cast this spell.)
+  // Create a token that's a copy of target creature. If this spell was kicked, create five of those tokens instead.
+  {
+    id: 'fb60739e-1dc3-481d-a056-ad72e665c680',
+    name: 'Rite of Replication',
+    types: ['sorcery'],
+    cost: { generic: 2, U: 2 },
+    kicker: { generic: 5 },
+    effects: [{ primitive: 'createTokenCopy', params: { targets: 'creature', count: 1, kickedCount: 5 } }],
   },
   // {T}: Add {U}.
   {
@@ -7353,6 +7446,14 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       { produces: [{ C: 1 }] },
       { produces: [{ B: 2 }, { B: 1, G: 1 }, { G: 2 }], cost: { mana: { hybrid: [['B', 'G']] } } },
     ],
+  },
+  // Copy target instant or sorcery spell. You may choose new targets for the copy.
+  {
+    id: '8f878efc-850f-43d2-a6fe-5ea8d1dd5afb',
+    name: 'Twincast',
+    types: ['instant'],
+    cost: { U: 2 },
+    effects: [{ primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } }],
   },
   // Menace (This creature can't be blocked except by two or more creatures.)
   {

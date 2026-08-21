@@ -742,7 +742,7 @@ function decideIdenticalGameSkip(
     }
   }
 
-  // A COPY effect (CR 706) detaches a permanent's abilities from its decklist
+  // A COPY effect (CR 707) detaches a permanent's abilities from its decklist
   // row, which is the map `peekCouldReadHeroLibrary` reasons through. See
   // `ABILITY_ACQUIRING_DEFINITION_FIELDS` for why this is withdrawn wholesale
   // rather than handled per instance.

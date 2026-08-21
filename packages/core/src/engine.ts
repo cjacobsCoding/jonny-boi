@@ -771,7 +771,7 @@ function resolveTopOfStack(
 
   const card = top.card;
 
-  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 706), asked before anything else
+  // THE AS-ENTERS COPY CHOICE (CR 614.1c + CR 707), asked before anything else
   // happens to this spell — before `stackResolved`, before a single effect runs,
   // and above all before the permanent is on the battlefield, because the copied
   // card is what decides its `entersTapped`, its summoning sickness, its
@@ -795,7 +795,7 @@ function resolveTopOfStack(
   // for a flashback cast, or back to hand for a bought-back spell. Computed
   // once here so the fast path, the resolution frame, and countering all read
   // the same function rather than three opinions.
-  const leaveTo: 'battlefield' | 'graveyard' | 'exile' | 'hand' =
+  const leaveTo: 'battlefield' | 'graveyard' | 'exile' | 'hand' | 'ceaseToExist' =
     top.resolvesTo === 'battlefield' ? 'battlefield' : spellLeaveDestination(top, 'resolve');
   // A MODAL spell's script IS its announced modes: printed order, each mode's
   // effects carrying that mode's OWN chosen target (a mode whose target has
@@ -1002,10 +1002,23 @@ interface KickRecord {
 function finishSpellResolution(
   state: GameState,
   card: CardInstance,
-  resolvesTo: 'battlefield' | 'graveyard' | 'exile' | 'hand',
+  resolvesTo: 'battlefield' | 'graveyard' | 'exile' | 'hand' | 'ceaseToExist',
   emit: (e: GameEvent) => void,
   kick?: KickRecord,
 ): void {
+  // CR 704.5e — A COPY OF A SPELL GOES TO NO ZONE AT ALL. It is not a card, so
+  // there is nothing to put in a graveyard, an exile or a hand; the object
+  // simply stops existing when it finishes resolving. Handled here, at the MOVE,
+  // rather than as a state-based-action sweep for exactly the reason CR 704.5d's
+  // token rule is (`internal/zones.ts`): the SBA form would have to walk both
+  // graveyards, exiles, hands and libraries after every resolution looking for
+  // something that is never there. Nothing is pushed anywhere, so the phantom
+  // card that delirium, flashback and Tarmogoyf would all have counted never
+  // exists in the first place.
+  if (resolvesTo === 'ceaseToExist') {
+    emit({ type: 'spellCopyCeasedToExist', instanceId: card.instanceId, name: card.def.name });
+    return;
+  }
   if (resolvesTo === 'battlefield') {
     // Stack objects aren't in a player zone; place directly on battlefield.
     card.zone = 'battlefield';
@@ -1711,7 +1724,7 @@ function applyAnswerChoice(
     return { state, events };
   }
 
-  // AN AS-ENTERS COPY answer (CR 614.1c + CR 706) belongs to the ENTRY PATH that
+  // AN AS-ENTERS COPY answer (CR 614.1c + CR 707) belongs to the ENTRY PATH that
   // raised it, not to a resolution. Routed by its own `context` marker for the
   // same reason the legend rule is: "no frame behind it" also describes the
   // shockland question below. Two entry paths raised it and each is finished
@@ -1806,7 +1819,15 @@ function applyAnswerChoice(
   // triggered ability points at, chosen as the ability went on the stack. Nothing
   // is resumed — the aim is recorded, and any trigger still waiting behind it asks
   // next (see `aimPendingTriggers`).
-  if (choice.kind === 'selectTargets' && answer.kind === 'selectTargets') {
+  //
+  // ⚠️ `!state.resolution` is the whole condition, not decoration — the same
+  // guard the three branches below carry. A `selectTargets` question CAN be
+  // raised from inside a resolution: "you may choose new targets for the copy"
+  // (CR 707.10) is asked by the `copySpell` primitive while the copying spell is
+  // resolving. Without this test that answer would be handed to
+  // `recordTriggerTargets`, which would aim some unrelated trigger with it and
+  // leave the suspended resolution parked forever. `spell-copy.test.ts` pins it.
+  if (choice.kind === 'selectTargets' && answer.kind === 'selectTargets' && !state.resolution) {
     recordTriggerTargets(state, answer.targets, emit);
     aimPendingTriggers(state, emit);
     if (!state.pendingChoice && !state.gameOver) {
@@ -1971,7 +1992,7 @@ function applyPlayLand(
   });
   card.summoningSick = false; // lands aren't affected by summoning sickness
 
-  // THE AS-ENTERS COPY (CR 706 - Vesuva, Echoing Deeps) is asked HERE, once,
+  // THE AS-ENTERS COPY (CR 707 - Vesuva, Echoing Deeps) is asked HERE, once,
   // ahead of the entry ladder rather than as another rung of it. It is not a
   // rung because it does not answer a question ABOUT this land -- it decides
   // WHICH LAND the ladder is then asking about: a Vesuva that copies Cavern of
@@ -2323,6 +2344,14 @@ function targetOptionFor(state: GameState, ref: InstanceId | PlayerId): TargetOp
   // `'instantOrSorceryInYourGraveyard'`, and describing it as `#7` would leave
   // a UI rendering an unnamed button and the AI's own target scorer with
   // nothing to read. Found wherever it actually is.
+  //
+  // THE STACK IS SEARCHED FIRST, and it was the zone this was missing: "target
+  // spell" has been a restriction since Counterspell, and a spell on the stack
+  // is in no player zone, so every counterspell's own target has been rendering
+  // as `#7`. It matters twice over now — a copy's re-aim question and the
+  // "copy target instant or sorcery spell" question are both lists OF SPELLS.
+  const onStack = spellOnStack(state, ref);
+  if (onStack) return { ref, name: onStack.card.def.name, controller: onStack.controller };
   const card = findInstanceAnywhere(state, ref);
   return card
     ? { ref, name: card.def.name, controller: card.controller }
