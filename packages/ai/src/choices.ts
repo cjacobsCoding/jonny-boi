@@ -83,7 +83,13 @@ import {
   opponentOf,
 } from '@jonny-boi/core';
 import { cardValue, cardValueContext, findInstance } from './card-value.js';
-import { modeEffectsFor, resolutionValueContext, valueOfEffects, valueOfMode } from './effect-value.js';
+import {
+  COPY_SPELL_PRIMITIVE,
+  modeEffectsFor,
+  resolutionValueContext,
+  valueOfEffects,
+  valueOfMode,
+} from './effect-value.js';
 import type { HeuristicWeights } from './weights.js';
 
 /**
@@ -672,13 +678,6 @@ function answerSelectTargets(
   scored.sort((a, b) => (worstFirst ? a.value - b.value : b.value - a.value) || a.index - b.index);
   return { kind: 'selectTargets', targets: scored.slice(0, choice.max).map((s) => s.ref) };
 }
-
-/**
- * The primitive that asks "you may choose new targets for the copy". Named once
- * rather than written as a bare string, and read by exactly one function — the
- * same discipline `EFFECT_VALUE`'s keys keep.
- */
-const COPY_SPELL_PRIMITIVE = 'copySpell';
 
 /**
  * The effects a COPY OF A SPELL is about to run — what "you may choose new

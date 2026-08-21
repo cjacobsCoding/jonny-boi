@@ -369,6 +369,26 @@ export interface HeuristicWeights {
    * exactly the card advantage the pilot already understands.
    */
   readonly grantedFlashbackValueShare: number;
+  /**
+   * What copying a spell is worth when the spell being copied is ITSELF a
+   * "copy target instant or sorcery spell" — one more link in a copy chain, as a
+   * fraction of what copying the spell at the END of that chain is worth.
+   *
+   * **Strictly below 1, and that is a termination guarantee rather than taste.**
+   * A copy of a Twincast that is copying a Bolt eventually produces the same one
+   * Bolt copy that copying the Bolt directly does — a resolution later, and only
+   * if the Twincast is still on the stack when it happens. So it can never be
+   * worth MORE; pricing it EQUAL is what let the pilot re-aim copy after copy at
+   * the copy spell forever. Three full-pool soak games burned the 6,000-action
+   * cap exactly that way, with the stack frozen at `[Dream Twist, Twincast→Dream
+   * Twist]` while the position never changed. This repo has fixed the shape once
+   * before: the free equip cost that looped A→B→A until a STRICT improvement was
+   * required.
+   *
+   * Above zero by a wide margin: copying a copy spell is a real play (it is one
+   * more copy of whatever that spell copies), just never the best one on offer.
+   */
+  readonly copiedCopySpellValueShare: number;
 }
 
 /**
@@ -541,4 +561,9 @@ export const DEFAULT_HEURISTIC_WEIGHTS: HeuristicWeights = Object.freeze({
   // Two thirds of the card: the same card again, minus the end-of-turn clock
   // and minus having to pay for it a second time.
   grantedFlashbackValueShare: 2 / 3,
+  // Three quarters: the same copy, one resolution later, and it only happens if
+  // the spell in the middle is still there when it does. Any value strictly
+  // between 0 and 1 makes aiming a copy at the copy spell above its own target
+  // lose to aiming it at the target — which is what makes the chain terminate.
+  copiedCopySpellValueShare: 3 / 4,
 });

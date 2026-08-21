@@ -183,14 +183,97 @@ function firstTargetPermanent(ctx: EffectValueContext): CardInstance | undefined
   return undefined;
 }
 
+/** One spell on the stack, as `state.stack` carries it. */
+type SpellOnStack = Extract<GameState['stack'][number], { kind: 'spell' }>;
+
+/** The spell with this id, if it is still on the stack. */
+function spellOnStack(state: GameState, id: InstanceId | PlayerId): SpellOnStack | undefined {
+  if (id === 'A' || id === 'B') return undefined;
+  const obj = state.stack.find((o) => o.kind === 'spell' && o.instanceId === id);
+  return obj?.kind === 'spell' ? obj : undefined;
+}
+
 /** The first targeted SPELL still on the stack, if any. */
-function firstTargetSpell(ctx: EffectValueContext) {
+function firstTargetSpell(ctx: EffectValueContext): SpellOnStack | undefined {
   for (const t of ctx.targets) {
-    if (t === 'A' || t === 'B') continue;
-    const obj = ctx.state.stack.find((o) => o.kind === 'spell' && o.instanceId === t);
-    if (obj && obj.kind === 'spell') return obj;
+    const spell = spellOnStack(ctx.state, t);
+    if (spell) return spell;
   }
   return undefined;
+}
+
+/**
+ * The primitive id of "copy target instant or sorcery spell" (CR 707.10).
+ *
+ * Exported so `choices.ts` — which has to recognise the SAME primitive to know
+ * that a parked `selectTargets` is the "you may choose new targets for the copy"
+ * question — names it from here instead of keeping a second copy of the string.
+ */
+export const COPY_SPELL_PRIMITIVE = 'copySpell';
+
+/**
+ * The spell a copy of `spell` would go on to copy, or `undefined` when `spell`
+ * is not a copy effect at all (the END of a copy chain).
+ *
+ * `null` is the third answer and it matters: `spell` IS a copy effect but the
+ * thing it was aimed at is no longer on the stack, so a copy of it will fizzle
+ * and is worth nothing.
+ */
+function copiedSpellOf(state: GameState, spell: SpellOnStack): SpellOnStack | null | undefined {
+  if (!spell.card.def.effects?.some((ref) => ref.primitive === COPY_SPELL_PRIMITIVE)) return undefined;
+  for (const t of spell.targets) {
+    const next = spellOnStack(state, t);
+    if (next) return next;
+  }
+  return null;
+}
+
+/**
+ * WHAT COPYING THIS SPELL IS WORTH — the one answer, followed down the copy chain
+ * to the spell that will actually DO something.
+ *
+ * A copy of a Lightning Bolt is worth a Lightning Bolt: that much was already
+ * true, and it is the whole discipline of holding a Reverberate for a Cryptic
+ * Command. What was missing is what a copy of a COPY SPELL is worth. Priced as a
+ * card — 8 plus 2 per mana value, the ruler every choice in this pilot uses — a
+ * Twincast outscored the Dream Twist underneath it on the stack, so the pilot
+ * aimed each new copy back at the Twincast, which produced another copy of the
+ * Twincast, forever. Three full-pool soak games burned the 6,000-action cap on
+ * exactly that (soak seeds 3434778477, 1390617766, 113343071); the board, the
+ * stack and both life totals were identical across ~1,800 repetitions.
+ *
+ * So the chain is walked to its end and the value is the END's, shrunk by
+ * {@link HeuristicWeights.copiedCopySpellValueShare} per link. That makes aiming
+ * at a copy spell STRICTLY worse than aiming at what that copy spell is aimed at
+ * — which is also simply true, since both eventually produce the same one copy
+ * and the shorter route cannot fizzle in between.
+ *
+ * Two chains are worth nothing at all, and both are real:
+ *  - one that runs OFF the stack (the middle spell's target has already
+ *    resolved) — the copy would fizzle;
+ *  - one that comes BACK to a spell already on the walk (two copy spells aimed
+ *    at each other) — it produces copies forever and a game, never a card. The
+ *    visited set is also what stops this function itself looping.
+ */
+export function copySpellValue(
+  state: GameState,
+  spell: SpellOnStack | undefined,
+  weights: HeuristicWeights,
+  cards: CardValueContext,
+): number {
+  let share = 1;
+  const seen = new Set<InstanceId>();
+  let current = spell;
+  while (current) {
+    if (seen.has(current.instanceId)) return 0; // a cycle produces copies, never a card
+    seen.add(current.instanceId);
+    const next = copiedSpellOf(state, current);
+    if (next === undefined) return share * cardValue(current.card, weights, cards);
+    if (next === null) return 0; // the chain runs off the stack — the copy fizzles
+    share *= weights.copiedCopySpellValueShare;
+    current = next;
+  }
+  return 0; // nothing on the stack — a dead mode
 }
 
 // --- shared pricing --------------------------------------------------------------
@@ -273,12 +356,15 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
    * spell is also fine (the copy is yours — CR 707.10), so neither controller
    * earns a penalty here; what earns zero is copying nothing, which is what a
    * dead mode is worth.
+   *
+   * ⚠️ The ruler is {@link copySpellValue}, not `cardValue` directly: a spell
+   * that is itself a copy effect is worth what it will ultimately copy, not what
+   * its own card costs. Reading the card here is what made a pilot aim copy
+   * after copy at the copy spell above its own target and hang three soak games.
    */
   copySpell: (params, ctx) => {
-    const spell = firstTargetSpell(ctx);
-    if (!spell) return 0; // nothing on the stack — a dead mode
     const count = Math.max(intParam(params, 'count', 1), 0);
-    return count * cardValue(spell.card, ctx.weights, ctx.cards);
+    return count * copySpellValue(ctx.state, firstTargetSpell(ctx), ctx.weights, ctx.cards);
   },
 
   /**

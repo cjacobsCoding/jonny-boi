@@ -86,7 +86,7 @@ import type { TargetRestriction, TriggeredAbility } from '@jonny-boi/core';
 import { cardValue, cardValueContext } from './card-value.js';
 import type { ContinuousIndex } from './board-stats.js';
 import { boardIndex, keywordsOf, power, statTotal, toughness, toughnessLeft } from './board-stats.js';
-import { valueOfEffects, valueOfMode } from './effect-value.js';
+import { copySpellValue, valueOfEffects, valueOfMode } from './effect-value.js';
 import { answerChoiceHeuristically, safeFallbackAction } from './choices.js';
 import { bestLandDrop, describeLandDrop, rankLandDrops, totalAvailableMana } from './land-sequencing.js';
 import type { DecisionContext, DecisionTrace, Pilot, PilotView } from './pilot.js';
@@ -1243,11 +1243,22 @@ function scoreSpell(
     case 'copySpell': {
       const target = copyTarget(view, otherPlayer(opp));
       if (!target) return undefined; // nothing on the stack worth copying — hold it
+      const score = copySpellValue(
+        view as GameState,
+        target,
+        weights,
+        cardValueContext(view as GameState, index),
+      );
+      // Nothing worth copying after all — a copy chain that fizzles or feeds
+      // itself is worth zero, and a Reverberate is worth more in hand than spent
+      // on one. `copySpellValue` is the same ruler the RE-AIM question uses, so
+      // "what is copying this worth" has one answer in this pilot, not two.
+      if (score <= 0) return undefined;
       return {
         // Worth what the copy is worth, on the same card ruler removal uses — so
         // a Reverberate held for a Cryptic Command outscores one spent on a
         // cantrip, which is the whole discipline of the card.
-        score: cardValue(target.card, weights, cardValueContext(view as GameState, index)),
+        score,
         card,
         cost,
         targets: [target.instanceId],
