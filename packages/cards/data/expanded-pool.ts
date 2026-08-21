@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 523 cards.
+ * 524 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -5445,6 +5445,36 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 1, R: 2 },
     buyback: { generic: 3 },
     effects: [{ primitive: 'copySpell', params: { targets: 'instantOrSorcerySpell', mayRetarget: true } }],
+  },
+  // Flash
+  // Flying
+  // When this creature enters, you may exile target non-Angel creature you control, then return that card to the battlefield under your control.
+  {
+    id: 'dfbd3afc-9905-4cff-a4f4-df08a4d0a7fa',
+    name: 'Restoration Angel',
+    types: ['creature'],
+    cost: { generic: 3, W: 1 },
+    power: 3,
+    toughness: 4,
+    keywords: { flash: true, flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may exile target non-angel creature you control, then return that card to the battlefield under your control',
+              valence: 'gain',
+              effects: [{ primitive: 'blinkTarget', params: { targets: 'nonAngelCreatureYouControl' } }],
+            },
+          },
+        ],
+        label: 'Enters: you may exile target non-angel creature you control, then return that card to the battlefield under your control',
+        targets: 'nonAngelCreatureYouControl',
+      },
+    ],
   },
   // Copy target instant or sorcery spell. You may choose new targets for the copy.
   {

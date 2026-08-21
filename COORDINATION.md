@@ -139,12 +139,42 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | ✅ MERGED + DEPLOYED |
+| fix/pool-shadowed-by-import | DESKTOP-90PJPM4 (worker) | apps/web (`lib/decklist/importedCards.ts` pool-first + NEW poolBeatsImport.test.ts; GENERATED src/data/card-index.json), packages/core (`targeting.ts` +1 restriction), packages/cards (`compile/rules.ts` +1 rule, `pool.test.ts` count, NEW restoration-angel.test.ts, GENERATED data/expanded-pool.ts + expansion-report.json), packages/data-tools/data (GENERATED), packages/sim (selesnya-blink.ts), DESIGN §3.37, COORDINATION | 🚧 PUSHED, not merged |
 | fix/returned-spell-keeps-back-face | DESKTOP-90PJPM4 (worker) | packages/cards (`copy-primitives.ts` returnSpellToHand reset + NEW returned-spell-face.test.ts + NEW granted-flashback-split.test.ts), packages/core (`engine.ts` ONE line — the flashback-grant accessor), DESIGN §3.34 rewritten + §3.36 + §3.33 pointer, COORDINATION. **Deep tier GREEN: 0/2000.** | ✅ MERGED + DEPLOYED |
 | feat/blink-selesnya | DESKTOP-90PJPM4 (worker) | packages/cards (NEW blink-primitives.ts + blink-play.test.ts; primitives.ts registration, effect-helpers.ts +1 option, compile/rules.ts +1 rule; GENERATED data/expanded-pool.ts + expansion-report.json + expansion-candidates.json), packages/data-tools/data (GENERATED card-index.json + starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/ai (heuristic.ts blink goal + picker), packages/sim (NEW data/decks/selesnya-blink.ts + decks/index.ts), DESIGN §3.35 + §3.21 note, COORDINATION. **Gauntlet seed 99 rows byte-identical; new 8th row.** | ✅ MERGED + DEPLOYED |
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-21 DESKTOP-90PJPM4: `fix/pool-shadowed-by-import` 🚧 PUSHED — **a CURATED card was being
+  reported "not playable", and Restoration Angel now compiles.** DESIGN §3.37. Branches off `main`
+  (which now carries §3.33–§3.36).
+
+  **The user-visible bug.** A deck builder showed "⚠ 10 cards not playable" including `Thragtusk`,
+  `Cloudshift` and `Conjurer's Closet` — all three CURATED and playable. `unsupportedReason`
+  consulted only the imported-card store, so a card that is both curated and imported was judged by
+  the import. Both files promise this cannot happen (`importedCards.ts`: "nothing here can shadow a
+  curated card"; `deckHealth.ts`: "cards in the curated pool are always playable") — true as
+  documentation, false as code. Ask the pool first. ⚠️ Note the store is also a CACHE of an
+  import-time verdict: Cloudshift's entry still said "needs a filtered-targeting template" after the
+  rule compiling it had shipped. Curated cards are now immune; an uncurated failed import still
+  carries its old verdict until re-imported, and a test pins that those are STILL reported (silencing
+  every warning would be the worse bug).
+
+  **Restoration Angel** needed the "filtered-targeting" gap the report kept naming:
+  `nonAngelCreatureYouControl`. ⚠️ The exclusion is load-bearing — the Angel is a creature you
+  control, so an unfiltered blink lets it re-trigger itself for ever (§3.33's shape). Applied at BOTH
+  the enumeration site and `isLegalTarget`, because §3.36 is exactly what happens when those disagree.
+
+  ⚠️ **Why it is a named member and not a general filter.** `CardFilter` already spells "non-Goblin
+  creature" as `noneOfSubtypes`, so the general form is a restriction that carries a filter — but
+  `TargetRestriction` is a flat string union read at **67 non-test sites**, and giving it a shape is a
+  different size of change. The new member's comment names the trigger for doing it properly: the
+  second non-<subtype> card. Do not add a third one-off.
+
+  Pool 523 → 524 (surgical: 1 card added, 0 changed). Selesnya Blink swaps 2× Angel of Mercy for 2×
+  Restoration Angel and reads **60.9%** (was 61.9%).
 
 - 2026-08-21 integrator: 🚢 **SHIPPED — all four commits MERGED to `main` and DEPLOYED** (Deploy PWA
   green, 1m12s; https://cjacobscoding.github.io/jonny-boi-app/ returns 200 and the bundle contains

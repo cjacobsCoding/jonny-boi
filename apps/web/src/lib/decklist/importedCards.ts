@@ -18,7 +18,7 @@
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
-import type { UnsupportedClause } from '@jonny-boi/cards';
+import { getCardDefinition, type UnsupportedClause } from '@jonny-boi/cards';
 import type { NormalizedCard } from '@jonny-boi/data-tools/pure';
 
 /**
@@ -123,11 +123,34 @@ export function importedDefinitions(): readonly CardDefinition[] {
 }
 
 /**
- * Why an imported card cannot be played yet, or `undefined` when it is playable
- * (or not an imported card at all). Callers use this to explain a card by NAME
- * instead of leaving the user to guess which of their 60 cards is the problem.
+ * Why a card cannot be played yet, or `undefined` when it is playable (or not an
+ * imported card at all). Callers use this to explain a card by NAME instead of
+ * leaving the user to guess which of their 60 cards is the problem.
+ *
+ * ⚠️ **THE CURATED POOL WINS.** This module's header promises it is "deliberately
+ * additive: nothing here can shadow a curated card", and `deckHealth.ts` states
+ * the same contract from the other side — but the lookup used to consult only
+ * this store, so a card that is BOTH imported and curated was judged by the
+ * import.
+ *
+ * That is not a corner case, it is the normal one: a user imports a real
+ * decklist, some of those cards are already in the pool, and any that failed to
+ * compile at IMPORT time were then reported unplayable forever — even though the
+ * engine ships a hand-verified definition for them and plays them perfectly. It
+ * was reported with a deck flagging `Thragtusk`, `Cloudshift` and
+ * `Conjurer's Closet`: all three curated, all three playable, all three named as
+ * broken.
+ *
+ * The store is also a CACHE of a compile verdict taken when the card was
+ * imported, so it goes stale the moment the compiler learns a new template —
+ * Cloudshift's entry still said "needs a filtered-targeting template" after the
+ * rule that compiles it had shipped. Deferring to the pool fixes that for every
+ * curated card; a genuinely-uncurated card still carries its import-time verdict
+ * until it is re-imported.
  */
 export function unsupportedReason(id: string): readonly UnsupportedClause[] | undefined {
+  // Asked FIRST, and cheaply: the pool is a frozen map built at module load.
+  if (getCardDefinition(id) !== undefined) return undefined;
   ensureLoaded();
   const entry = store.get(id);
   if (!entry || entry.definition) return undefined;

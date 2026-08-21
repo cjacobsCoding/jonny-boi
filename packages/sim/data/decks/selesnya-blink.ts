@@ -61,7 +61,11 @@ export const SELESNYA_BLINK: Deck = {
 
     // The top end the whole deck is pointed at.
     { cardId: 'Thragtusk', count: 4 }, // ETB gain 5; LEAVES a 3/3 — a blink is both
-    { cardId: 'Angel of Mercy', count: 2 }, // ETB gain 3, on a flier that closes
+    // The marquee blink card, and the only one here that blinks at INSTANT speed:
+    // flash means it ambushes an attacker AND re-triggers something in the same
+    // motion. It cannot target itself or another Angel (CR-faithful "non-Angel"),
+    // so Angel of Mercy came out to keep the effect live rather than blanked.
+    { cardId: 'Restoration Angel', count: 2 },
 
     // Mana. Both duals are on-colour and the lifegain land is genuinely on-plan
     // against the decks this list wants to beat.

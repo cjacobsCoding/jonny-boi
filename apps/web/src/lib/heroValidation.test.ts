@@ -47,13 +47,34 @@ function importedFixture(
   return base as unknown as Parameters<typeof registerImportedCards>[0][number];
 }
 
-/** The four entries the live app answered for with bare uuids. */
+/**
+ * The entries the live app answered for with bare uuids, minus one.
+ *
+ * `Sacred Foundry` was captured here as a failed import and has since entered the
+ * CURATED pool, so it is no longer an example of anything unplayable — see
+ * {@link CURATED_BUT_FAILED_IMPORT}, where it now earns its keep as the
+ * regression for DESIGN §3.37.
+ */
 const UNPLAYABLE_IMPORTS = [
   importedFixture('2588f348-d7a3-46c8-9ace-dca53ed5ef99', 'Ajani, Nacatl Pariah', false),
   importedFixture('3407eb6e-b74d-4159-a801-d7163937953c', "Phlage, Titan of Fire's Fury", false),
   importedFixture('37108cd4-bbab-4ce3-9ed6-f60e8422e703', 'Ragavan, Nimble Pilferer', false),
-  importedFixture('45181cb8-2090-4471-ba90-e5a8f04d525f', 'Sacred Foundry', false),
 ];
+
+/**
+ * A card that is BOTH curated and a failed import — the §3.37 bug, in the shape
+ * the suite already had lying around.
+ *
+ * `Sacred Foundry` is in the pool with a hand-verified definition, and this
+ * fixture says its import failed. The pool must win: blaming it would be the
+ * exact defect a user reported as "⚠ 10 cards not playable" over a deck of
+ * cards the engine plays perfectly well.
+ */
+const CURATED_BUT_FAILED_IMPORT = importedFixture(
+  '45181cb8-2090-4471-ba90-e5a8f04d525f',
+  'Sacred Foundry',
+  false,
+);
 
 /** Imports from the same deck that DID compile — they must not be blamed. */
 const PLAYABLE_IMPORTS = [
@@ -122,12 +143,13 @@ describe('validateHero', () => {
     // live produced a 7-entry deck of which four entries had no definition, and
     // the Match viewer answered with four bare uuids and nothing else. Scryfall
     // ids are uuids, so "contains no uuid" is the precise regression assertion.
-    registerImportedCards([...UNPLAYABLE_IMPORTS, ...PLAYABLE_IMPORTS]);
+    registerImportedCards([...UNPLAYABLE_IMPORTS, ...PLAYABLE_IMPORTS, CURATED_BUT_FAILED_IMPORT]);
     const deck: Deck = {
       ...healthyDeck(),
       cards: [
         ...UNPLAYABLE_IMPORTS.map((c) => ({ cardId: c.card.id, count: 4 })),
         ...PLAYABLE_IMPORTS.map((c) => ({ cardId: c.card.id, count: 4 })),
+        { cardId: CURATED_BUT_FAILED_IMPORT.card.id, count: 4 },
       ],
     };
 
@@ -142,5 +164,10 @@ describe('validateHero', () => {
     for (const playable of PLAYABLE_IMPORTS) {
       expect(problems[0]).not.toContain(playable.card.name);
     }
+    // …and neither must a CURATED card whose import happened to fail (§3.37).
+    expect(
+      problems[0],
+      'Sacred Foundry is in the curated pool — a failed import of it must not shadow that',
+    ).not.toContain(CURATED_BUT_FAILED_IMPORT.card.name);
   });
 });

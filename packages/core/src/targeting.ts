@@ -31,7 +31,7 @@
  */
 
 import type { CardDefinition, EffectRef, KeywordFlags } from './card.js';
-import { hasType, isCreature } from './card.js';
+import { hasSubtype, hasType, isCreature } from './card.js';
 import { isBattle, isPlaneswalker } from './card.js';
 import type { CardInstance, GameState, InstanceId, PlayerId, SpellStackObject, StackObject } from './state.js';
 import { PLAYER_IDS } from './state.js';
@@ -39,6 +39,13 @@ import type { ContinuousIndex } from './internal/continuous.js';
 import { anyContinuousModification, indexContinuous, NO_MOD } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
 import { protectionBlocksSource } from './protection.js';
+
+/**
+ * The creature type Restoration Angel's printed line excludes. Named because a
+ * bare `'angel'` in a legality check is a behaviour-defining literal, and it has
+ * to read the same at both the enumeration and the legality site.
+ */
+const ANGEL_SUBTYPE = 'angel';
 
 /**
  * What a targeted effect may point at.
@@ -84,6 +91,23 @@ export type TargetRestriction =
    * differently from its printed text.
    */
   | 'creatureYouControl'
+  /**
+   * "target NON-ANGEL creature you control" — Restoration Angel's printed line.
+   *
+   * Its own restriction rather than `'creatureYouControl'` for a reason the soak
+   * would find within a thousand games: Restoration Angel blinks a creature you
+   * control, and it is itself a creature you control. Widen this to any creature
+   * and the pilot blinks the Angel with its own trigger, which re-triggers it,
+   * for ever — the same shape as the copy mirror in DESIGN §3.33.
+   *
+   * ⚠️ Named for the printed line, in the style of `instantOrSorceryInYourGraveyard`.
+   * The general form is a target that carries a {@link CardFilter} (which already
+   * spells "non-Goblin creature" as `noneOfSubtypes`) — worth building the day a
+   * SECOND non-<subtype> card lands, and not before: `TargetRestriction` is a flat
+   * string union read at 67 sites, and giving it a shape is a change of a
+   * different size from adding a member.
+   */
+  | 'nonAngelCreatureYouControl'
   /**
    * "target player or planeswalker" — a face or a walker, never a creature.
    * Lava Spike's printed line. Its own restriction (not `'player'`) because
@@ -179,6 +203,7 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'artifact' ||
     value === 'opponent' ||
     value === 'creatureYouControl' ||
+    value === 'nonAngelCreatureYouControl' ||
     value === 'playerOrPlaneswalker' ||
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
@@ -305,9 +330,12 @@ export function isLegalTarget(
   if (restriction === 'creatureOrPlaneswalker') {
     return isCreature(permanent.def) || isPlaneswalker(permanent.def);
   }
-  if (restriction === 'creatureYouControl') {
+  if (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') {
     // Unknown actor ⇒ illegal, never "probably mine" (see the type's note).
     if (controller === undefined || permanent.controller !== controller) return false;
+    if (restriction === 'nonAngelCreatureYouControl' && hasSubtype(permanent.def, ANGEL_SUBTYPE)) {
+      return false;
+    }
   }
   return isCreature(permanent.def);
 }
@@ -461,11 +489,17 @@ export function legalTargetsFor(
       }
     }
   }
-  if (restriction === 'creatureYouControl' && controller !== undefined) {
+  if (
+    (restriction === 'creatureYouControl' || restriction === 'nonAngelCreatureYouControl') &&
+    controller !== undefined
+  ) {
     for (const permanent of state.battlefield) {
       if (
         permanent.controller === controller &&
         isCreature(permanent.def) &&
+        // The offer list and `isLegalTarget` must agree, or the menu offers a
+        // cast the apply path refuses — see DESIGN §3.36 for what that costs.
+        !(restriction === 'nonAngelCreatureYouControl' && hasSubtype(permanent.def, ANGEL_SUBTYPE)) &&
         isTargetableBy(state, permanent, controller, source, keywordIndex)
       ) {
         targets.push(permanent.instanceId);
@@ -570,6 +604,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'an opponent';
     case 'creatureYouControl':
       return 'a creature you control';
+    case 'nonAngelCreatureYouControl':
+      return 'a non-Angel creature you control';
     case 'playerOrPlaneswalker':
       return 'a player or a planeswalker';
     case 'creatureOrPlaneswalker':

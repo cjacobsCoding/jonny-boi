@@ -3526,6 +3526,42 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.37 Restoration Angel, and a curated card reported as broken — ✅ done
+
+Two user-facing defects from one report: a deck builder showing **"⚠ 10 cards not playable"** over a
+list that included `Thragtusk`, `Cloudshift` and `Conjurer's Closet`.
+
+**Three of those ten were curated pool cards, playable all along.** `unsupportedReason` consulted only
+the IMPORTED-card store, so a card that is BOTH curated and imported was judged by the import — even
+though `importedCards.ts` promises the store is "deliberately additive: nothing here can shadow a
+curated card" and `deckHealth.ts` promises "cards in the curated pool are always playable". Both were
+true as documentation and false as code. It is the ORDINARY case, not a corner: you paste a real
+decklist, part of it is already in the pool, and anything the compiler could not read at IMPORT time
+was reported broken forever. Thragtusk was named for wanting "leaves-the-battlefield triggers" the
+engine has had for months.
+
+The store is also a CACHE of an import-time verdict, which is the same bug's second half: Cloudshift
+still read "needs a filtered-targeting template" after §3.35 shipped the rule that compiles it.
+Asking the pool first fixes that permanently for curated cards. ⚠️ An UNCURATED failed import still
+carries its import-time verdict until re-imported — deliberately, and the third test pins that a
+genuinely unreadable card is still reported, because silencing every warning would be the worse bug.
+
+**Restoration Angel now compiles**, which needed the one thing the report called "a filtered-targeting
+template": `nonAngelCreatureYouControl`. The exclusion is load-bearing, not flavour — the Angel is
+itself a creature you control, so a blink that could name it would re-trigger its own enters ability
+for ever, the same shape as §3.33's copy mirror. Both the enumeration site and `isLegalTarget` apply
+the filter, because §3.36 is what happens when those two disagree.
+
+⚠️ **Named for the printed line, not generalised — on purpose.** `CardFilter` already spells
+"non-Goblin creature" as `noneOfSubtypes`, so the general form is a target restriction that carries a
+filter. `TargetRestriction` is a flat string union read at **67 non-test sites**, and giving it a
+shape is a change of a different order from adding a member. The comment on the new member names the
+trigger for doing it: the second non-<subtype> card.
+
+📊 Selesnya Blink now runs 2× Restoration Angel over the 2× Angel of Mercy (flash makes it the only
+instant-speed blink in the deck): **60.9%**, essentially unmoved from 61.9%, and its bad matchups
+stay bad (30% into Mono-Green Ramp, 40% into Izzet Prowess).
+
 ### 3.36 A granted flashback on a SPLIT card — the menu lied — ✅ done
 
 The last violation keeping the deep tier red, and the third distinct defect the copy-mirror hunt

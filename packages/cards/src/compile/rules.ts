@@ -157,6 +157,8 @@ function damageParams(amount: number, restriction: TargetRestriction): Record<st
 const CREATURE_TARGET: TargetRestriction = 'creature';
 /** "target creature you control" — never widened to any creature on the table. */
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
+/** "target non-Angel creature you control" — Restoration Angel; see the type's note. */
+const NON_ANGEL_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'nonAngelCreatureYouControl';
 const SPELL_TARGET: TargetRestriction = 'spell';
 /**
  * "target instant or sorcery spell" — narrower than {@link SPELL_TARGET} and
@@ -2034,6 +2036,26 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
     needsChosenTarget: true,
     build() {
       return effects({ primitive: 'exileTarget', params: { targets: CREATURE_TARGET } });
+    },
+  },
+  {
+    id: 'blink-target-non-angel-creature-you-control',
+    description:
+      '"Exile target non-Angel creature you control, then return that card to the battlefield under your control" (Restoration Angel)',
+    /*
+     * Restoration Angel's printed line, and the exclusion is load-bearing rather
+     * than flavour: the Angel is itself a creature you control, so a blink that
+     * could name it would re-trigger its own enters ability for ever. See
+     * `TargetRestriction.nonAngelCreatureYouControl`.
+     */
+    pattern:
+      /^exile target non-angel creature you control, then return (?:that card|it) to the battlefield under your control$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({
+        primitive: 'blinkTarget',
+        params: { targets: NON_ANGEL_CREATURE_YOU_CONTROL_TARGET },
+      });
     },
   },
   {
