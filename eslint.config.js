@@ -94,6 +94,11 @@ export default tseslint.config(
         DataView: 'readonly',
         innerWidth: 'readonly',
         innerHeight: 'readonly',
+        // Used by BOTH halves: the harness inflates the archive's deflated
+        // entries to check them, and times its own fetches out.
+        DecompressionStream: 'readonly',
+        Response: 'readonly',
+        AbortSignal: 'readonly',
       },
     },
   },

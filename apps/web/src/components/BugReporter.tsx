@@ -20,7 +20,9 @@ import { consoleRing, installConsoleRing } from '../lib/bugreport/console-ring.j
 import { collectStateDump } from '../lib/bugreport/state-dump.js';
 import { buildLine } from '../lib/bugreport/build-info.js';
 import { VoiceRecorder, blobToBytes } from '../lib/bugreport/voice.js';
-import { buildZip, type ZipEntry } from '../lib/bugreport/zip.js';
+import { buildZip, compressEntries, type ZipEntry } from '../lib/bugreport/zip.js';
+import { CLIP_DEFAULTS, ClipRing } from '../lib/bugreport/clip-ring.js';
+import { buildReplayHtml } from '../lib/bugreport/replay-html.js';
 import './bug-reporter.css';
 
 /**
@@ -52,6 +54,8 @@ const LAUNCHER_LABEL = 'Report a bug';
 /** Line width in the note box before the panel scrolls, and other panel numbers. */
 const NOTE_ROWS = 5;
 const RECORDING_TICK_MS = 200;
+/** How much the clip control moves per press. */
+const CLIP_STEP_SECONDS = 5;
 
 type Phase = 'closed' | 'capturing' | 'open' | 'submitting';
 
@@ -109,13 +113,37 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
   // saying "Record voice" after a recording had been captured.
   const [hasVoice, setHasVoice] = useState(false);
   const [lastBundle, setLastBundle] = useState<{ name: string; url: string } | null>(null);
+  /**
+   * Seconds of session the report should carry. The games default this to 0
+   * because their clip is video and encoding it is expensive; here the clip is a
+   * recorded event stream costing a few tens of kilobytes, and the whole point
+   * of it is seeing what led up to the bug — so it defaults ON.
+   */
+  const [clipSeconds, setClipSeconds] = useState<number>(CLIP_DEFAULTS.windowSeconds);
 
   const annotationRef = useRef(new Annotation());
+  const clipRef = useRef(new ClipRing());
+  /** rrweb's `record`, kept so the ring can be restarted after a report. */
+  const recordFnRef = useRef<Parameters<ClipRing['start']>[0] | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const voiceRef = useRef(new VoiceRecorder());
   const pendingVoiceRef = useRef<{ bytes: Uint8Array; seconds: number; transcript: string; note: string } | null>(
     null,
   );
+  /**
+   * Why the voice note is missing, when it is. SEPARATE from pendingVoiceRef,
+   * which now only ever holds real audio: a denied microphone used to be stored
+   * as an empty pending recording, and every "does this report have work in it?"
+   * test then said yes — so Cancel demanded a confirmation for a report the
+   * reporter had not put anything into.
+   */
+  const voiceNoteRef = useRef('');
+  /**
+   * Which capture attempt is current. A capture takes a second or two, and the
+   * reporter can hit Escape inside that window; without this the resolved
+   * capture would then re-open an overlay they had already dismissed.
+   */
+  const captureSeqRef = useRef(0);
 
   // The console ring records from the moment the app loads, not from the moment
   // the reporter opens — by then it has already missed the thing you opened it
@@ -125,6 +153,37 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     installConsoleRing();
   }, []);
 
+  // The rolling clip starts with the APP, not with the reporter: by the time
+  // someone presses `b`, the seconds worth having have already happened. The
+  // recorder is imported lazily so it is not in the critical path of the first
+  // paint, and a failure to load costs the clip and nothing else (rule 6).
+  useEffect(() => {
+    let cancelled = false;
+    const ring = clipRef.current;
+    void import('rrweb')
+      .then(({ record }) => {
+        if (cancelled) return;
+        recordFnRef.current = record as unknown as Parameters<ClipRing['start']>[0];
+        ring.start(recordFnRef.current);
+      })
+      .catch(() => {
+        // Swallowed on purpose: the report will say the clip is missing.
+      });
+    return () => {
+      cancelled = true;
+      ring.stop();
+    };
+  }, []);
+
+  /** Record again after a report, from a fresh snapshot. */
+  const restartClip = useCallback(() => {
+    const record = recordFnRef.current;
+    if (record === null) return;
+    clipRef.current.stop();
+    clipRef.current.clear();
+    clipRef.current.start(record);
+  }, []);
+
   /** Redraw the ink and refresh what the panel says about it. */
   const inkChanged = useCallback(() => {
     setStrokeTick((tick) => tick + 1);
@@ -132,27 +191,67 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
   }, []);
 
   const open = useCallback(async () => {
+    const attempt = captureSeqRef.current + 1;
+    captureSeqRef.current = attempt;
+    // FIRST, before anything is drawn on top: the clip must end at the moment
+    // the key was pressed, and must not contain the overlay's own frozen frame
+    // (a multi-megabyte data URL) as a DOM mutation.
+    clipRef.current.stop();
     setPhase('capturing');
-    setStatus('freezing the frame…');
+    setStatus('freezing the frame… (Esc to cancel)');
     annotationRef.current.clear();
     inkChanged();
     setNote('');
     setDiscardArmed(false);
     pendingVoiceRef.current = null;
+    voiceNoteRef.current = '';
     setHasVoice(false);
     setRecordedSeconds(0);
     const captured = await captureViewport();
+    // Cancelled, or superseded by a second open, while the rasteriser worked.
+    if (captureSeqRef.current !== attempt) return;
     setShot(captured);
     setPhase('open');
     setStatus(captured.note ? 'the screenshot failed — see the note in the report' : '');
   }, [inkChanged]);
 
   const close = useCallback(() => {
+    // Bump the sequence so a capture still in flight cannot re-open the overlay.
+    captureSeqRef.current += 1;
     void voiceRef.current.stop();
     setRecording(false);
     setPhase('closed');
     setShot(null);
     setDiscardArmed(false);
+    restartClip();
+  }, [restartClip]);
+
+  /**
+   * Take whatever the recorder is holding — whether the reporter pressed Stop or
+   * the safety valve fired on its own. ONE place, because the valve firing used
+   * to leave the audio uncollected: the button went back to "Record voice" and
+   * five minutes of the reporter's own words were gone without a word about it.
+   */
+  const harvestRecording = useCallback(async (): Promise<void> => {
+    const result = await voiceRef.current.stop();
+    setRecording(false);
+    if (result.blob !== null) {
+      pendingVoiceRef.current = {
+        bytes: await blobToBytes(result.blob),
+        seconds: result.seconds,
+        transcript: result.transcript,
+        note: result.note,
+      };
+      voiceNoteRef.current = result.note;
+      setHasVoice(true);
+      setRecordedSeconds(result.seconds);
+      setStatus(
+        `${result.seconds.toFixed(1)} s of voice held${result.transcript ? ' + transcript' : ''}`,
+      );
+      return;
+    }
+    voiceNoteRef.current = result.note;
+    if (result.note) setStatus(result.note);
   }, []);
 
   // The hotkey. Suppressed while a text field has the keyboard, so typing the
@@ -160,20 +259,39 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
   // games apply, and the one that makes a single-letter hotkey safe at all.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // A modified key is never the single-letter hotkey (Ctrl+B is a browser
+      // shortcut), but Ctrl+Z IS ours once the overlay is open — so the guard
+      // covers only the hotkey branch below, not the whole handler.
       if (phase === 'closed') {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key.toLowerCase() === config.hotkey.toLowerCase() && !typingInField(event.target)) {
           event.preventDefault();
           void open();
         }
         return;
       }
+      if (event.altKey) return;
+      // Escape during the capture aborts it. The rasteriser can take a second or
+      // two on a heavy view, and being unable to back out of a tool you opened by
+      // mistake is the kind of thing that stops people opening it at all.
+      if (event.key === 'Escape' && phase === 'capturing') {
+        event.preventDefault();
+        close();
+        setStatus('');
+        return;
+      }
+      // Ctrl/Cmd+Z undoes the last stroke, because a drawing surface that does
+      // not is a drawing surface people are careful on instead of quick on.
+      if (phase === 'open' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (annotationRef.current.undo()) inkChanged();
+        return;
+      }
       if (event.key === 'Escape' && phase === 'open') {
         event.preventDefault();
         // Losing a drawing and a spoken note to a stray keypress would be worse
         // than an extra keystroke, so a report with content arms first.
-        const hasWork =
-          note.length > 0 || !annotationRef.current.empty || pendingVoiceRef.current !== null;
+        const hasWork = note.length > 0 || !annotationRef.current.empty || hasVoice;
         if (!hasWork || discardArmed) {
           close();
         } else {
@@ -184,17 +302,22 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [phase, open, close, config.hotkey, note, discardArmed]);
+  }, [phase, open, close, config.hotkey, note, discardArmed, inkChanged, hasVoice]);
 
   // Live seconds readout while recording.
   useEffect(() => {
     if (!recording) return undefined;
     const timer = window.setInterval(() => {
+      if (!voiceRef.current.recording) {
+        // The safety valve stopped it. Collect, rather than just flipping the
+        // button back and leaving the audio behind.
+        void harvestRecording();
+        return;
+      }
       setRecordedSeconds(voiceRef.current.elapsedSeconds());
-      if (!voiceRef.current.recording) setRecording(false);
     }, RECORDING_TICK_MS);
     return () => window.clearInterval(timer);
-  }, [recording]);
+  }, [recording, harvestRecording]);
 
   // Redraw the annotation whenever it changes or the frame is (re)captured.
   useEffect(() => {
@@ -261,27 +384,17 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
 
   const toggleRecording = async (): Promise<void> => {
     if (recording) {
-      const result = await voiceRef.current.stop();
-      setRecording(false);
-      if (result.blob !== null) {
-        pendingVoiceRef.current = {
-          bytes: await blobToBytes(result.blob),
-          seconds: result.seconds,
-          transcript: result.transcript,
-          note: result.note,
-        };
-        setHasVoice(true);
-        setRecordedSeconds(result.seconds);
-        setStatus(`${result.seconds.toFixed(1)} s of voice held${result.transcript ? ' + transcript' : ''}`);
-      } else {
-        setStatus(result.note || 'nothing was recorded');
-      }
+      await harvestRecording();
       return;
     }
     const error = await voiceRef.current.start(config.audioMaxSeconds);
     if (error !== null) {
+      // The REASON is kept (it belongs in the report), but it is not stored as a
+      // pending recording — a denied microphone is not work the reporter would
+      // be sad to lose, and treating it as such made Cancel ask twice for
+      // nothing.
       setStatus(error);
-      pendingVoiceRef.current = { bytes: new Uint8Array(0), seconds: 0, transcript: '', note: error };
+      voiceNoteRef.current = error;
       return;
     }
     setRecording(true);
@@ -309,19 +422,8 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     setPhase('submitting');
     setStatus('writing the report…');
 
-    // Stop a live recording first: a report must never ship a half-written WAV.
-    if (recording) {
-      const result = await voiceRef.current.stop();
-      setRecording(false);
-      if (result.blob !== null) {
-        pendingVoiceRef.current = {
-          bytes: await blobToBytes(result.blob),
-          seconds: result.seconds,
-          transcript: result.transcript,
-          note: result.note,
-        };
-      }
-    }
+    // Stop a live recording first: a report must never ship a half-written clip.
+    if (recording || voiceRef.current.recording) await harvestRecording();
 
     const timestamp = nowTimestamp();
     const bundleName = reportBundleName(timestamp, config.bundlePrefix);
@@ -339,6 +441,46 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
       entries.push({ name: 'annotated.png', bytes: dataUrlToBytes(annotated) });
       attachments.push('annotated.png');
     }
+    // THE CLIP. Assembled before the state dump so its outcome can be reported.
+    const clipEvents = clipRef.current.eventsForWindow(clipSeconds, Date.now());
+    let clipNote = clipRef.current.status;
+    let clipSpanSeconds = 0;
+    if (clipEvents.length >= 2) {
+      const firstMs = clipEvents[0]?.timestamp ?? 0;
+      const lastMs = clipEvents[clipEvents.length - 1]?.timestamp ?? 0;
+      clipSpanSeconds = Math.max(0, (lastMs - firstMs) / 1000);
+      const eventsJson = JSON.stringify(clipEvents);
+      entries.push(textEntry('clip.json', eventsJson));
+      attachments.push('clip.json');
+      try {
+        // The player is fetched only when a report is actually filed, so its
+        // half-megabyte never lands in the app's own startup bundle.
+        const [playerJs, playerCss] = await Promise.all([
+          import('virtual:replay-player-js').then((m) => m.default),
+          import('virtual:replay-player-css').then((m) => m.default),
+        ]);
+        entries.push(
+          textEntry(
+            'replay.html',
+            buildReplayHtml({
+              playerJs,
+              playerCss,
+              eventsJson,
+              title: `${bundleName} — replay`,
+              subtitle: `${screenName} — the ${clipSpanSeconds.toFixed(1)} s before the report was filed`,
+            }),
+          ),
+        );
+        attachments.push('replay.html');
+      } catch (error) {
+        // clip.json is already in the bundle, so the recording survives even
+        // when the player does not — that is the whole reason both ship.
+        clipNote = `the replay player could not be bundled (${String(error)}); clip.json holds the events`;
+      }
+    } else if (!clipNote) {
+      clipNote = clipSeconds <= 0 ? 'the clip was dialled to 0 s' : 'nothing was recorded to replay';
+    }
+
     entries.push(textEntry('state_dump.txt', collectStateDump()));
     attachments.push('state_dump.txt');
     entries.push(textEntry('console.txt', `${ring.format()}\n`));
@@ -358,11 +500,13 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
       timestamp,
       typedText: note,
       transcript: voice?.transcript ?? '',
-      transcriptNote: voice?.note ?? '',
+      transcriptNote: voice?.note || voiceNoteRef.current,
       screenName,
       buildCommit: buildLine(),
       attachments: [...attachments, 'report.md'],
-      videoNote: 'the web reporter captures a still; console.txt is the recent history',
+      clipSeconds: clipSpanSeconds,
+      clipEvents: clipEvents.length,
+      clipNote,
       audioRecorded: (voice?.bytes.length ?? 0) > 0,
       audioSeconds: voice?.seconds ?? 0,
       annotationStrokes: annotationRef.current.strokeCount,
@@ -373,7 +517,10 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     // report.md last, so its file list is complete.
     entries.push(textEntry('report.md', assembleReportMarkdown(summary)));
 
-    const zip = buildZip(entries, timestamp);
+    // Squeeze the text entries first. The clip's full DOM snapshot is megabytes
+    // of JSON; stored raw it made a 15 MB report, which is one a phone will not
+    // upload. Images are left alone — see shouldCompress.
+    const zip = buildZip(await compressEntries(entries), timestamp);
     // `zip.buffer` is typed as ArrayBufferLike (it could in principle be a
     // SharedArrayBuffer), which BlobPart will not accept — so hand Blob the
     // exact byte range instead of the view.
@@ -397,6 +544,7 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
     setPhase('closed');
     setShot(null);
     setStatus(`wrote ${fileName}`);
+    restartClip();
     // The console ring IS the log, so a filed report belongs in it — the next
     // report then carries the record of the previous one.
     console.info(`[bugreport] wrote ${fileName} (${zip.length} bytes, ${entries.length} entries)`);
@@ -538,6 +686,34 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
               : '● Record voice'}
         </button>
 
+        <div className="bugreport__row bugreport__row--clip">
+          <button
+            type="button"
+            className="bugreport__btn bugreport__btn--step"
+            onClick={() => setClipSeconds((v) => Math.max(0, v - CLIP_STEP_SECONDS))}
+            disabled={clipSeconds <= 0}
+            aria-label="Less clip"
+          >
+            −
+          </button>
+          <span className="bugreport__clip">
+            {clipSeconds <= 0
+              ? 'no clip'
+              : `clip: last ${clipSeconds} s`}
+          </span>
+          <button
+            type="button"
+            className="bugreport__btn bugreport__btn--step"
+            onClick={() =>
+              setClipSeconds((v) => Math.min(CLIP_DEFAULTS.windowSeconds, v + CLIP_STEP_SECONDS))
+            }
+            disabled={clipSeconds >= CLIP_DEFAULTS.windowSeconds}
+            aria-label="More clip"
+          >
+            +
+          </button>
+        </div>
+
         <div className="bugreport__row">
           <button
             type="button"
@@ -551,8 +727,7 @@ export function BugReporter({ screenName }: BugReporterProps): ReactElement {
             type="button"
             className="bugreport__btn"
             onClick={() => {
-              const hasWork =
-                note.length > 0 || strokeCount > 0 || pendingVoiceRef.current !== null;
+              const hasWork = note.length > 0 || strokeCount > 0 || hasVoice;
               if (!hasWork || discardArmed) {
                 close();
               } else {

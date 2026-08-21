@@ -31,7 +31,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import puppeteer from 'puppeteer-core';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -45,7 +45,8 @@ const EXIT_CANNOT_RUN = 2;
 const VIEWPORT = { width: 1280, height: 800 };
 /** The reporter's own budget is 12 s; allow for a cold start on top of it. */
 const CAPTURE_WAIT_MS = 30_000;
-const PREVIEW_START_MS = 30_000;
+/** Vite preview is slow to boot on a cold cache; this is a ceiling, not a wait. */
+const PREVIEW_START_MS = 90_000;
 /** Below this a "PNG" is a header and a blank rectangle, not a screenshot. */
 const MIN_FRAME_BYTES = 20_000;
 
@@ -85,42 +86,93 @@ function findChrome() {
   return CHROME_CANDIDATES.find((path) => path && existsSync(path)) ?? null;
 }
 
-/** Start `vite preview` and resolve with its URL once it is listening. */
+/** A port nothing is listening on, so `--strictPort` cannot lose a race. */
+async function freePort() {
+  const net = await import('node:net');
+  return new Promise((resolvePort, reject) => {
+    const server = net.createServer();
+    server.on('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close(() => resolvePort(port));
+    });
+  });
+}
+
+/** True once the server answers. */
+async function isUp(url) {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    return response.status > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Start `vite preview` and resolve with its URL once it is actually answering.
+ *
+ * POLLED, NOT PARSED. This used to read the URL out of vite's banner, which is
+ * not printed when stdout is not a TTY — so the harness reported "did not start
+ * in time", with an empty transcript, about a server that had started perfectly
+ * well and was serving on the port it was told to. Choosing the port here and
+ * polling it removes both the banner dependency and the race that made
+ * `--strictPort` unusable.
+ */
 function startPreview() {
-  return new Promise((resolvePreview, reject) => {
+  return (async () => {
     if (!existsSync(resolve(WEB_ROOT, 'dist', 'index.html'))) {
-      reject(new Error('apps/web/dist is missing — run `npm run build` first'));
-      return;
+      throw new Error('apps/web/dist is missing — run `npm run build` first');
     }
-    // No --strictPort: a stale preview from an interrupted run must not make
-    // this look like a broken reporter. Vite picks the next free port and the
-    // URL is read from its own output, so whichever one it lands on is used.
-    const child = spawn('npx', ['vite', 'preview', '--port', '4180'], {
+    const port = await freePort();
+    const url = `http://localhost:${port}/`;
+    // vite's own bin, run directly. Going through `npx` added seconds of
+    // resolution to every run and gave the harness a shell + npx + node process
+    // tree to clean up instead of one child.
+    const viteBin = [
+      resolve(WEB_ROOT, 'node_modules', 'vite', 'bin', 'vite.js'),
+      resolve(WEB_ROOT, '..', '..', 'node_modules', 'vite', 'bin', 'vite.js'),
+    ].find((candidate) => existsSync(candidate));
+    if (viteBin === undefined) throw new Error('vite is not installed — run `npm install`');
+    const child = spawn(process.execPath, [viteBin, 'preview', '--port', String(port), '--strictPort'], {
       cwd: WEB_ROOT,
-      shell: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let output = '';
-    // Vite COLOURS its output, and the escape codes land in the middle of the
-    // URL (`http://localhost:` ESC `[1m` `4180`), so a naive match finds nothing
-    // and the harness reports 'did not start' about a server that started fine.
-    const ANSI = new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g');
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error('vite preview did not start in time. Its output was:' + output));
-    }, PREVIEW_START_MS);
-    const onData = (buffer) => {
-      const text = String(buffer).replace(ANSI, '');
-      output += text;
-      const match = output.match(/https?:\/\/localhost:\d+\/[^\s]*/);
-      if (match) {
-        clearTimeout(timer);
-        resolvePreview({ url: match[0], child });
-      }
-    };
-    child.stdout.on('data', onData);
-    child.stderr.on('data', onData);
-  });
+    child.stdout.on('data', (b) => {
+      output += String(b);
+    });
+    child.stderr.on('data', (b) => {
+      output += String(b);
+    });
+
+    const deadline = Date.now() + PREVIEW_START_MS;
+    while (Date.now() < deadline) {
+      if (await isUp(url)) return { url, child, port };
+      if (child.exitCode !== null) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    stopPreview(child);
+    throw new Error(`vite preview never answered on ${url}. Its output was:${chr10}${output}`);
+  })();
+}
+
+/**
+ * Kill the preview AND its children. `npx vite preview` is npx spawning vite, so
+ * killing the handle leaves the actual server holding the port — which is how a
+ * previous run's server ends up failing the next one.
+ */
+function stopPreview(child) {
+  if (!child || child.exitCode !== null) return;
+  if (process.platform === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+      return;
+    } catch {
+      // fall through to the portable kill
+    }
+  }
+  child.kill();
 }
 
 function dataUrlToBuffer(dataUrl) {
@@ -156,11 +208,16 @@ async function main() {
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
 
+  let extractedReplay = null;
   try {
     const page = await browser.newPage();
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(String(error)));
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: PREVIEW_START_MS });
+    // `domcontentloaded`, NOT `networkidle2`. The app holds connections open (a
+    // sim worker, the service worker), so "the network went quiet" never happens
+    // and the harness timed out after 90 s on an app that had loaded in two.
+    // Readiness is the app's own launcher appearing, which is waited on below.
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PREVIEW_START_MS });
 
     // The Cards view is the WORST CASE on purpose: ~190 card tiles, most of them
     // off screen. It is the view that made an earlier build of this capture run
@@ -176,6 +233,9 @@ async function main() {
       }, viewArg);
       await new Promise((r) => setTimeout(r, 1500));
     }
+    // Give the visible card art a moment to decode; without the network-idle
+    // wait this is the thing that would otherwise be captured half-drawn.
+    await new Promise((r) => setTimeout(r, 2500));
     const dom = await page.evaluate(() => ({
       images: document.querySelectorAll('img').length,
       nodes: document.querySelectorAll('*').length,
@@ -184,6 +244,14 @@ async function main() {
       'View: ' + (viewArg ?? 'Cards (the worst case)') + ' - ' + dom.nodes +
         ' DOM nodes, ' + dom.images + ' images.',
     );
+
+    // Give the rolling clip something to have recorded. The whole point of it is
+    // the seconds BEFORE the key is pressed, so the harness has to generate some.
+    console.log(chr10 + 'Interacting, so the clip has something in it...');
+    await page.evaluate(() => window.scrollBy(0, 400));
+    await new Promise((r) => setTimeout(r, 500));
+    await page.evaluate(() => window.scrollBy(0, -200));
+    await new Promise((r) => setTimeout(r, 500));
 
     console.log('\nOpening the reporter…');
     const startedAt = Date.now();
@@ -297,6 +365,38 @@ async function main() {
       Math.abs(ink.minX - expectedMinX) < 25,
       `ink starts at x=${ink.minX}, pointer mapped to x=${Math.round(expectedMinX)}`);
 
+    // The clip control, driven the way a thumb drives it: real clicks, with the
+    // render between them. Clicking in a tight loop inside one page.evaluate
+    // reads the label before React has re-rendered, which made an earlier
+    // version of this check report a stall that was not there.
+    const clipLabel = async () =>
+      page.$eval('.bugreport__clip', (el) => el.textContent.trim());
+    const clipStepper = async (which) => {
+      const buttons = await page.$$('.bugreport__btn--step');
+      return which === 'less' ? buttons[0] : buttons[1];
+    };
+    const defaultClip = await clipLabel();
+    check('the clip is on by default, so a report carries one without being asked',
+      /clip: last \d+ s/.test(defaultClip), defaultClip);
+
+    for (let i = 0; i < 8; i += 1) {
+      const less = await clipStepper('less');
+      if (await less.evaluate((el) => el.disabled)) break;
+      await less.click();
+    }
+    const zeroed = await clipLabel();
+    check('the clip dials all the way down to nothing, as the games do',
+      zeroed === 'no clip', zeroed);
+
+    for (let i = 0; i < 8; i += 1) {
+      const more = await clipStepper('more');
+      if (await more.evaluate((el) => el.disabled)) break;
+      await more.click();
+    }
+    const restored = await clipLabel();
+    check('and dials back up, so a change of mind is not a lost clip',
+      /clip: last \d+ s/.test(restored), restored);
+
     await page.type('#bugreport-note', 'VERIFY: filed by verify-bug-reporter.mjs');
 
     // Submit, then read the zip back out of its own central directory.
@@ -325,30 +425,49 @@ async function main() {
                 const nameLen = dv.getUint16(at + 28, true);
                 out.push({
                   name: new TextDecoder().decode(bytes.slice(at + 46, at + 46 + nameLen)),
+                  compressedSize: dv.getUint32(at + 20, true),
                   size: dv.getUint32(at + 24, true),
                 });
                 at += 46 + nameLen + dv.getUint16(at + 30, true) + dv.getUint16(at + 32, true);
               }
               return out;
             })(),
-            annotatedDataUrl: (() => {
+            // Pull the entries the checks below need straight out of the
+            // bundle, INFLATING the ones that were deflated. Reading them back
+            // through the archive's own headers rather than from the app's state
+            // is the point: what is verified is the artifact a person receives,
+            // and it now proves the compressed entries decompress.
+            extracted: await (async () => {
+              const wanted = ['annotated.png', 'replay.html', 'clip.json'];
               const dv = new DataView(bytes.buffer);
+              const out = {};
               let at = 0;
               while (at < bytes.length - 4 && dv.getUint32(at, true) === 0x04034b50) {
+                const method = dv.getUint16(at + 8, true);
                 const nameLen = dv.getUint16(at + 26, true);
                 const extraLen = dv.getUint16(at + 28, true);
                 const size = dv.getUint32(at + 18, true);
                 const entryName = new TextDecoder().decode(bytes.slice(at + 30, at + 30 + nameLen));
                 const dataAt = at + 30 + nameLen + extraLen;
-                if (entryName === 'annotated.png') {
+                if (wanted.includes(entryName)) {
+                  let slice = bytes.slice(dataAt, dataAt + size);
+                  if (method === 8) {
+                    const ds = new DecompressionStream('deflate-raw');
+                    const writer = ds.writable.getWriter();
+                    void writer.write(slice);
+                    void writer.close();
+                    slice = new Uint8Array(await new Response(ds.readable).arrayBuffer());
+                  }
                   let binary = '';
-                  const slice = bytes.slice(dataAt, dataAt + size);
-                  for (let i = 0; i < slice.length; i += 1) binary += String.fromCharCode(slice[i]);
-                  return `data:image/png;base64,${btoa(binary)}`;
+                  const CHUNK = 8192; // String.fromCharCode blows the stack on a big spread
+                  for (let i = 0; i < slice.length; i += CHUNK) {
+                    binary += String.fromCharCode(...slice.subarray(i, i + CHUNK));
+                  }
+                  out[entryName] = btoa(binary);
                 }
                 at = dataAt + size;
               }
-              return '';
+              return out;
             })(),
           };
         }
@@ -361,15 +480,55 @@ async function main() {
       submitted ? `${submitted.name}, ${Math.round(submitted.length / 1024)} KB` : 'none');
     if (submitted !== null) {
       const names = submitted.entries.map((e) => e.name);
-      for (const required of ['screenshot.png', 'annotated.png', 'state_dump.txt', 'console.txt', 'report.md']) {
+      // Per-entry sizes, because "the bundle is 15 MB" is not actionable and
+      // "clip.json is 7 MB of it" is.
+      console.log(
+        '  bundle: ' +
+          submitted.entries
+            .map(
+              (e) =>
+                `${e.name} ${Math.round(e.size / 1024)} KB` +
+                (e.compressedSize < e.size
+                  ? ` -> ${Math.round(e.compressedSize / 1024)} KB`
+                  : ''),
+            )
+            .join(', '),
+      );
+      const rawTotal = submitted.entries.reduce((n, e) => n + e.size, 0);
+      check('the bundle is small enough for a phone to upload',
+        submitted.length < 8 * 1024 * 1024,
+        `${Math.round(submitted.length / 1024)} KB from ${Math.round(rawTotal / 1024)} KB of content`);
+      for (const required of [
+        'screenshot.png',
+        'annotated.png',
+        'state_dump.txt',
+        'console.txt',
+        'clip.json',
+        'replay.html',
+        'report.md',
+      ]) {
         check(`the bundle contains ${required}`, names.includes(required), names.join(', '));
       }
       const screenshotEntry = submitted.entries.find((e) => e.name === 'screenshot.png');
       check('the bundled screenshot is the real picture, not an empty file',
         (screenshotEntry?.size ?? 0) > MIN_FRAME_BYTES,
         `${Math.round((screenshotEntry?.size ?? 0) / 1024)} KB`);
-      if (submitted.annotatedDataUrl) {
-        writeFileSync(resolve(OUT_DIR, 'annotated.png'), dataUrlToBuffer(submitted.annotatedDataUrl));
+      const extracted = submitted.extracted ?? {};
+      if (extracted['replay.html']) {
+        extractedReplay = Buffer.from(extracted['replay.html'], 'base64').toString('utf8');
+      }
+      if (extracted['clip.json']) {
+        const clip = JSON.parse(Buffer.from(extracted['clip.json'], 'base64').toString('utf8'));
+        check('the clip carries a real event stream', Array.isArray(clip) && clip.length > 10,
+          `${Array.isArray(clip) ? clip.length : 0} events`);
+        // Type 2 is rrweb's full snapshot. Without one the replay has nothing to
+        // start from, which is the failure the chunked ring exists to prevent.
+        const snapshots = Array.isArray(clip) ? clip.filter((e) => e && e.type === 2).length : 0;
+        check('the clip begins at a full DOM snapshot, so it can replay at all',
+          snapshots > 0, `${snapshots} full-snapshot event(s)`);
+      }
+      if (extracted['annotated.png']) {
+        writeFileSync(resolve(OUT_DIR, 'annotated.png'), Buffer.from(extracted['annotated.png'], 'base64'));
       }
     }
 
@@ -490,6 +649,54 @@ async function main() {
       }
     }
 
+    // THE CLIP, PROVEN BY PLAYING IT. Everything above only shows that a file
+    // called replay.html is in the bundle. A replay that opens to a blank
+    // rectangle would pass every one of those checks — and a blank rectangle is
+    // exactly what a clip sliced off its snapshot produces. So the page is
+    // opened, from disk, with no network, and asked what it rendered.
+    if (extractedReplay !== null) {
+      const replayPath = resolve(OUT_DIR, 'replay.html');
+      writeFileSync(replayPath, extractedReplay);
+      console.log(chr10 + 'Opening the replay the way a person would...');
+      const replayPage = await browser.newPage();
+      const replayErrors = [];
+      replayPage.on('pageerror', (error) => replayErrors.push(String(error)));
+      await replayPage.goto(pathToFileURL(replayPath).href, { waitUntil: 'load' });
+      // The player builds its iframe asynchronously once it has parsed events.
+      await new Promise((r) => setTimeout(r, 2500));
+      const played = await replayPage.evaluate(() => {
+        const fallback = document.getElementById('fallback');
+        const iframe = document.querySelector('iframe');
+        let nodes = 0;
+        let text = '';
+        try {
+          const doc = iframe?.contentDocument;
+          nodes = doc ? doc.querySelectorAll('*').length : 0;
+          text = doc?.body?.innerText?.slice(0, 200) ?? '';
+        } catch {
+          nodes = -1;
+        }
+        return {
+          fallbackShown: fallback !== null && !fallback.hidden,
+          fallbackText: fallback?.textContent ?? '',
+          hasIframe: iframe !== null,
+          nodes,
+          text,
+          hasController: document.querySelector('.rr-controller, .rr-progress') !== null,
+        };
+      });
+      await replayPage.close();
+
+      check('the replay page reports no failure of its own', !played.fallbackShown,
+        played.fallbackText);
+      check('the replay built a player with a scrubber', played.hasController);
+      check('the replay actually RECONSTRUCTED the page, not a blank frame',
+        played.nodes > 50, `${played.nodes} nodes inside the replay iframe`);
+      check('the replayed page is this app, not an empty document',
+        /jonny-boi|Cards|Deck/i.test(played.text), JSON.stringify(played.text.slice(0, 60)));
+      check('the replay threw no errors', replayErrors.length === 0, replayErrors.join(' | '));
+    }
+
     check('the page threw no errors while all of that happened', pageErrors.length === 0,
       pageErrors.join(' | '));
 
@@ -499,7 +706,7 @@ async function main() {
     return failed.length === 0 ? EXIT_OK : EXIT_FAILED;
   } finally {
     await browser.close();
-    preview?.child.kill();
+    stopPreview(preview?.child);
   }
 }
 

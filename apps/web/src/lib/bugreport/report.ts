@@ -286,8 +286,15 @@ export interface ReportSummary {
   readonly buildCommit: string;
   /** File names present in the bundle. */
   readonly attachments: readonly string[];
-  /** Why there is no video — the web reporter never has one. */
-  readonly videoNote: string;
+  /**
+   * The rolling clip: how many seconds of session were handed over, how many
+   * recorded events that came to, and why there is none when there is none.
+   * `clipSeconds` is the span actually captured, not what was asked for — the
+   * ring can only cut on snapshot boundaries, so the two differ.
+   */
+  readonly clipSeconds: number;
+  readonly clipEvents: number;
+  readonly clipNote: string;
   readonly audioRecorded: boolean;
   readonly audioSeconds: number;
   readonly annotationStrokes: number;
@@ -318,9 +325,19 @@ export function assembleReportMarkdown(s: ReportSummary): string {
   out += `- **screen**: ${s.screenName || '(unknown)'}\n`;
   out += `- **build**: ${s.buildCommit || '(unknown)'}\n`;
   out += `- **annotation strokes**: ${s.annotationStrokes}\n`;
-  // Says what was produced AND why, because "there is no video" and "this tool
-  // never has video" are different facts.
-  out += `- **video**: screenshot only${s.videoNote ? ` (${s.videoNote})` : ''}\n`;
+  // Says what was produced AND why, because "there is no clip", "you asked for
+  // no clip" and "the recorder could not start" are three different facts, and a
+  // reader chasing a bug needs to know which one they are looking at.
+  out += '- **clip**: ';
+  if (s.clipEvents > 0) {
+    out +=
+      `${(Math.round(s.clipSeconds * 10) / 10).toFixed(1)} s before the report, ` +
+      `${s.clipEvents} recorded event(s) - open replay.html`;
+  } else {
+    out += 'none';
+  }
+  if (s.clipNote) out += ` (${s.clipNote})`;
+  out += '\n';
   out += `- **voice**: ${
     s.audioRecorded ? `${(Math.round(s.audioSeconds * 10) / 10).toFixed(1)} s recorded` : 'none recorded'
   }\n`;

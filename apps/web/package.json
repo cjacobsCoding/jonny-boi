@@ -22,6 +22,8 @@
     "html-to-image": "^1.11.13",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "rrweb": "^2.1.1",
+    "rrweb-player": "^2.1.1",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {

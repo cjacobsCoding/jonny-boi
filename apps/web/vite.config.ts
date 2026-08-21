@@ -1,4 +1,7 @@
-import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -28,17 +31,66 @@ const BUILD_COMMIT = process.env.GITHUB_SHA ?? process.env.BUILD_COMMIT ?? 'loca
 const BUILD_TIME = new Date().toISOString();
 
 /**
+ * The replay player, resolved to real file paths so it can be inlined as TEXT.
+ *
+ * A bug report's `replay.html` has to be self-contained — opened days later, on
+ * another machine, possibly with no network — so the player is embedded in the
+ * page rather than linked. That needs its SOURCE, and `rrweb-player`'s exports
+ * map publishes only the module entry and the stylesheet: a `?raw` deep import
+ * fails the build with `Missing "./dist/rrweb-player.umd.cjs" specifier`.
+ *
+ * Resolving the package entry and taking its directory sidesteps the exports map
+ * without hard-coding a node_modules path, which npm workspaces are free to
+ * hoist wherever they like.
+ */
+const playerDist = dirname(fileURLToPath(import.meta.resolve('rrweb-player')));
+
+/**
+ * Serves the player's source and stylesheet as plain strings, under two virtual
+ * module ids, so the reporter can inline them into `replay.html`.
+ *
+ * A plugin rather than a `?raw` import or a resolve alias, because neither
+ * works here: `?raw` on a deep path is refused by the package's exports map,
+ * and an alias is matched against the WHOLE specifier, so the `?raw` suffix
+ * makes it miss. Reading the file here is also the honest version of what is
+ * happening — these bytes are being copied into an artifact, not linked.
+ */
+function replayPlayerAssets(): Plugin {
+  const sources: Record<string, string> = {
+    'virtual:replay-player-js': join(playerDist, 'rrweb-player.umd.cjs'),
+    'virtual:replay-player-css': join(playerDist, 'style.css'),
+  };
+  // Rollup's convention for a virtual module id: a leading NUL, which keeps
+  // other plugins and the resolver from treating it as a real file path.
+  const RESOLVED = '\0';
+  return {
+    name: 'jonny-boi:replay-player-assets',
+    resolveId(id) {
+      return id in sources ? RESOLVED + id : null;
+    },
+    load(id) {
+      if (!id.startsWith(RESOLVED)) return null;
+      const file = sources[id.slice(RESOLVED.length)];
+      if (file === undefined) return null;
+      return `export default ${JSON.stringify(readFileSync(file, 'utf8'))};`;
+    },
+  };
+}
+
+/**
  * Vite config for the PWA shell. `vite-plugin-pwa` generates the service worker
  * (offline shell) and injects the web manifest; `registerType: 'autoUpdate'`
  * keeps installed clients current without a manual update prompt.
  */
 export default defineConfig({
   base: DEPLOY_BASE,
+
   define: {
     __BUILD_COMMIT__: JSON.stringify(BUILD_COMMIT),
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
   },
   plugins: [
+    replayPlayerAssets(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',

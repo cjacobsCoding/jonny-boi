@@ -57,6 +57,20 @@ export class VoiceRecorder {
   private note = '';
   private startedAtMs = 0;
   private stopTimer = 0;
+  /**
+   * The in-flight stop, and the result of one that already finished.
+   *
+   * WHY BOTH. The safety-valve timer stops the recorder on its own, and it used
+   * to do it with `void this.stop()` — throwing the Recording away. A reporter
+   * who hit the cap got the button back at "Record voice" and their audio was
+   * GONE, silently, which is the exact failure this whole tool exists to stop.
+   * `finished` keeps that result so the next `stop()` still hands it over, and
+   * `stopping` makes concurrent stops (the valve firing while a thumb is on the
+   * Stop button) return the SAME promise instead of the second one finding a
+   * null recorder and reporting nothing recorded.
+   */
+  private stopping: Promise<Recording> | null = null;
+  private finished: Recording | null = null;
 
   get recording(): boolean {
     return this.recorder !== null;
@@ -77,6 +91,7 @@ export class VoiceRecorder {
     this.chunks = [];
     this.transcriptParts = [];
     this.note = '';
+    this.finished = null;
 
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
       return 'this browser cannot record audio';
@@ -102,7 +117,14 @@ export class VoiceRecorder {
     // A safety valve, not a feature: a forgotten recording must not run forever.
     this.stopTimer = window.setTimeout(() => {
       this.note = 'recording stopped at the configured maximum length';
-      void this.stop();
+      // Deliberately NOT the public stop(): that one hands the result to its
+      // caller and clears it, and here there IS no caller. Collecting directly
+      // leaves the audio in `finished` for whoever asks next — the UI's poll,
+      // or Submit.
+      this.stopping = this.stopAndCollect();
+      void this.stopping.finally(() => {
+        this.stopping = null;
+      });
     }, maxSeconds * MS_PER_SECOND);
 
     this.startRecognition();
@@ -142,8 +164,38 @@ export class VoiceRecorder {
     }
   }
 
-  /** Stop and collect. Safe to call when not recording. */
+  /**
+   * Stop and collect. Safe to call when not recording, safe to call twice, and
+   * safe to call while another stop is still finishing — all three happen: the
+   * safety valve, the Stop button and Submit can each ask.
+   */
   async stop(): Promise<Recording> {
+    // A stop already in flight (the safety valve's) is the one to wait for.
+    if (this.stopping !== null) {
+      const inFlight = await this.stopping;
+      this.finished = null; // delivered to this caller
+      return inFlight;
+    }
+    if (this.recorder === null) {
+      // Hand over a result the safety valve collected, exactly once.
+      const done = this.finished;
+      if (done !== null) {
+        this.finished = null;
+        return done;
+      }
+      return { blob: null, seconds: 0, transcript: '', note: this.note };
+    }
+    this.stopping = this.stopAndCollect();
+    try {
+      const result = await this.stopping;
+      this.finished = null; // delivered to this caller
+      return result;
+    } finally {
+      this.stopping = null;
+    }
+  }
+
+  private async stopAndCollect(): Promise<Recording> {
     if (this.recorder === null) {
       return { blob: null, seconds: 0, transcript: '', note: this.note };
     }
@@ -163,12 +215,15 @@ export class VoiceRecorder {
     this.releaseStream();
 
     const blob = this.chunks.length > 0 ? new Blob(this.chunks, { type: recorder.mimeType || 'audio/webm' }) : null;
-    return {
+    const result: Recording = {
       blob,
       seconds,
       transcript: this.transcriptParts.join(' ').trim(),
       note: this.note,
     };
+    // Retained so a stop nobody was awaiting (the safety valve) still delivers.
+    this.finished = result;
+    return result;
   }
 
   private releaseStream(): void {
