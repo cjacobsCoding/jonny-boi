@@ -17,11 +17,12 @@
 
 import { describe, expect, it } from 'vitest';
 import type { CardDefinition, CardInstance, GameState, InstanceId, PlayerId } from '@jonny-boi/core';
-import { applyAction, createGame, DEFAULT_RULES } from '@jonny-boi/core';
+import { applyAction, createGame, DEFAULT_RULES, generateLegalActions } from '@jonny-boi/core';
 import { buildRegistry, CARD_POOL } from '@jonny-boi/cards';
 import { cardValueContext } from './card-value.js';
 import { answerChoiceHeuristically } from './choices.js';
 import { copySpellValue } from './effect-value.js';
+import { createHeuristicPilot } from './heuristic.js';
 import { DEFAULT_HEURISTIC_WEIGHTS } from './weights.js';
 
 type Registry = ReturnType<typeof buildRegistry>;
@@ -281,10 +282,89 @@ describe('what copying a spell is worth follows the chain to its end', () => {
     expect(valueOf(after, revId)).toBe(0);
   });
 
+  it('prices a chain that comes BACK on itself at nothing, and TERMINATES doing it', () => {
+    const reg = buildRegistry();
+    const { s, revId } = stackedCopyChain(reg);
+    const revTwoId = giveHand(s, 'A', getByName('Reverberate'));
+    const withTwo = act(s, { kind: 'castSpell', player: 'A', instanceId: revTwoId, targets: [revId] }, reg);
+
+    // Two copy spells aimed at EACH OTHER. No sequence of legal plays reaches
+    // this — targets are chosen when a spell goes on the stack, so the second
+    // one cannot be aimed at a spell that does not exist yet, and only COPIES are
+    // ever re-aimed. It is written by hand because the guard against it is a
+    // guard on the WALK: without it this call does not return a wrong number, it
+    // does not return at all, and a hung pilot is the failure this whole branch
+    // exists to remove.
+    const first = withTwo.stack.find((o) => o.kind === 'spell' && o.instanceId === revId)!;
+    (first as { targets: readonly InstanceId[] }).targets = [revTwoId];
+
+    expect(valueOf(withTwo, revTwoId)).toBe(0);
+    expect(valueOf(withTwo, revId)).toBe(0);
+  });
+
   /** The Bolt on the stack — read back rather than closed over, so the cast is real. */
   function boltOf(s: GameState): InstanceId {
     const bolt = s.stack.find((o) => o.kind === 'spell' && o.card.def.name === 'Lightning Bolt');
     if (!bolt) throw new Error('no Bolt on the stack');
     return bolt.instanceId;
   }
+});
+
+/**
+ * THE CAST DECISION reads the same ruler as the re-aim question.
+ *
+ * Two answers to "what is copying this worth" is one answer too many — the copy
+ * chain the re-aim now walks has to be the chain the CAST prices too, or the
+ * pilot spends a real card on a chain the re-aim would have valued at nothing.
+ */
+describe('the pilot spends a copy spell only on a chain that ends somewhere', () => {
+  const pilot = createHeuristicPilot();
+
+  /** The Reverberate cast the pilot proposes right now, if it proposes one. */
+  function proposedCopyCast(s: GameState, revInHand: InstanceId) {
+    const legal = generateLegalActions(s);
+    const action = pilot.chooseAction({ view: s, legalActions: legal, rng: () => 0.5 });
+    // The cast really was AVAILABLE — otherwise "the pilot did not cast it" is a
+    // statement about the legal-action generator, not about the pilot.
+    expect(
+      legal.some((a) => a.kind === 'castSpell' && a.instanceId === revInHand),
+      'casting the Reverberate must be on the menu for this test to mean anything',
+    ).toBe(true);
+    return action.kind === 'castSpell' && action.instanceId === revInHand ? action : undefined;
+  }
+
+  it('casts it at a copy spell whose own target is still there — and NOT at one whose target was countered', () => {
+    const reg = buildRegistry();
+    const { state } = createGame({
+      seed: SEED,
+      decks: {
+        A: { cards: Array.from({ length: 60 }, () => FOREST) },
+        B: { cards: Array.from({ length: 60 }, () => FOREST) },
+      },
+      registry: reg,
+    });
+    let s = advanceToMain(state, reg);
+    s.players.A.manaPool = { W: 9, U: 9, B: 9, R: 9, G: 9, C: 9 };
+    s.players.B.manaPool = { W: 9, U: 9, B: 9, R: 9, G: 9, C: 9 };
+    const boltId = giveHand(s, 'A', getByName('Lightning Bolt'));
+    const revOneId = giveHand(s, 'A', getByName('Reverberate'));
+    const revTwoId = giveHand(s, 'A', getByName('Reverberate'));
+    const cancelId = giveHand(s, 'B', getByName('Cancel'));
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: boltId, targets: ['B'] }, reg);
+    s = act(s, { kind: 'castSpell', player: 'A', instanceId: revOneId, targets: [boltId] }, reg);
+
+    // LIVE CHAIN: Reverberate → Bolt. Copying the Reverberate is worth the Bolt,
+    // one link down, so the pilot spends the second one.
+    expect(proposedCopyCast(s, revTwoId), 'a live chain is worth casting into').toBeDefined();
+
+    // DEAD CHAIN: B counters the Bolt out from under it. Nothing has changed
+    // about the Reverberate's own card — which is exactly why pricing the card
+    // was wrong — but there is now nothing at the end of the chain.
+    let dead = act(s, { kind: 'passPriority', player: 'A' }, reg);
+    dead = act(dead, { kind: 'castSpell', player: 'B', instanceId: cancelId, targets: [boltId] }, reg);
+    dead = act(dead, { kind: 'passPriority', player: 'B' }, reg);
+    dead = act(dead, { kind: 'passPriority', player: 'A' }, reg);
+    expect(dead.stack.map((o) => (o.kind === 'spell' ? o.card.def.name : o.kind))).toEqual(['Reverberate']);
+    expect(proposedCopyCast(dead, revTwoId), 'a copy of a chain that ends nowhere is a wasted card').toBeUndefined();
+  });
 });
