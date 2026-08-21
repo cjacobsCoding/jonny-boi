@@ -145,7 +145,7 @@ function clonePool(pool: ManaPool): ManaPool {
 }
 
 function clonePlayer(p: PlayerState): PlayerState {
-  return {
+  const copy: PlayerState = {
     id: p.id,
     life: p.life,
     manaPool: clonePool(p.manaPool),
@@ -157,6 +157,13 @@ function clonePlayer(p: PlayerState): PlayerState {
     exile: cloneInstances(p.exile),
     command: cloneInstances(p.command),
   };
+  // Written only when a one-shot "play an additional land this turn" has
+  // actually been granted, which is rare — so the overwhelmingly common player
+  // clones with the same shape it always had (see the header: field-by-field,
+  // and a new field is DROPPED unless it is copied here — dropping this one
+  // would silently revoke Explore's extra land drop at the next action).
+  if (p.extraLandPlaysThisTurn !== undefined) copy.extraLandPlaysThisTurn = p.extraLandPlaysThisTurn;
+  return copy;
 }
 
 function cloneStackObject(o: StackObject): StackObject {

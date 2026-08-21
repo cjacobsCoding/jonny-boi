@@ -133,7 +133,7 @@ import { declineMadness } from './madness.js';
 import { cloneState } from './internal/clone.js';
 import { createTriggerCollector } from './internal/triggers-runtime.js';
 import { clearTurnFacts, turnFactHolds } from './turn-facts.js';
-import { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+import { hasNoMaximumHandSize, landPlayZonesFor, maxLandPlaysFor } from './player-statics.js';
 import { expireFloatingReplacements, indexReplacements, replaceDraw } from './internal/replacement.js';
 import { expireContinuousEffects, indexContinuous, NO_MOD, pruneOrphanContinuousEffects } from './internal/continuous.js';
 import { effectiveKeywords } from './internal/stats.js';
@@ -390,6 +390,13 @@ function beginTurn(state: GameState, _config: RulesConfig, emit: (e: GameEvent) 
 
   const active = state.players[state.activePlayer];
   active.landsPlayedThisTurn = 0;
+  // The ONE-SHOT "additional land this turn" expires with the turn it was
+  // granted in. Cleared for BOTH seats, not just the active one: "this turn" is
+  // a fact about the turn, and an Explore resolved on an opponent's turn (it
+  // cannot be, today — but a flash/copy path could) must not survive into the
+  // next one. Deleted rather than zeroed so the common player keeps the shape it
+  // had before this field existed.
+  for (const seat of PLAYER_IDS) delete state.players[seat].extraLandPlaysThisTurn;
   emptyManaPools(state, emit);
 
   // Untap step.
@@ -1847,7 +1854,13 @@ function applyPlayLand(
   if (state.stack.length > 0) return rejectWith(prevState, 'cannot play a land while the stack is non-empty');
   if (!MAIN_STEPS.includes(state.step)) return rejectWith(prevState, 'lands can only be played during a main phase');
   const player = state.players[action.player];
-  if (player.landsPlayedThisTurn >= config.maxLandsPerTurn) {
+  // The rules floor WIDENED by every "additional land" grant in effect — an
+  // Azusa on the battlefield, an Explore resolved earlier this turn. Read
+  // through `maxLandPlaysFor` rather than off `config` so the legality check and
+  // the action the engine OFFERS below cannot disagree about how many lands are
+  // left; an offered-but-rejected land play is the shape a pilot burns its whole
+  // turn on.
+  if (player.landsPlayedThisTurn >= maxLandPlaysFor(state, action.player, config.maxLandsPerTurn)) {
     return rejectWith(prevState, 'no land plays remaining this turn');
   }
   // WHERE FROM. The hand needs no permission. Every other zone does, and there
@@ -4138,7 +4151,7 @@ export function generateLegalActions(state: GameState, config: RulesConfig = DEF
   const sorcerySpeedWindow = me === state.activePlayer && MAIN_STEPS.includes(state.step) && state.stack.length === 0;
 
   // Play a land (sorcery-speed, land plays remaining).
-  if (sorcerySpeedWindow && player.landsPlayedThisTurn < config.maxLandsPerTurn) {
+  if (sorcerySpeedWindow && player.landsPlayedThisTurn < maxLandPlaysFor(state, me, config.maxLandsPerTurn)) {
     for (let h = 0; h < player.hand.length; h++) {
       const card = player.hand[h] as CardInstance;
       if (card.def.isBackFace === true) continue;

@@ -43,6 +43,7 @@ export interface SerializedState {
       readonly librarySize: number;
       readonly graveyardSize: number;
       readonly landsPlayedThisTurn: number;
+      readonly extraLandPlaysThisTurn?: number;
       readonly hasLost: boolean;
     }
   >;
@@ -115,6 +116,9 @@ export function serializeState(state: GameState): SerializedState {
       librarySize: p.library.length,
       graveyardSize: p.graveyard.length,
       landsPlayedThisTurn: p.landsPlayedThisTurn,
+      ...(p.extraLandPlaysThisTurn !== undefined
+        ? { extraLandPlaysThisTurn: p.extraLandPlaysThisTurn }
+        : {}),
       hasLost: p.hasLost,
     };
   }

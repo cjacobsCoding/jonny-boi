@@ -312,6 +312,23 @@ export type CastTiming = 'sorcery' | 'instant';
  * `power`/`toughness` are present only for creatures. `produces` lets a land/mana
  * source declare what tapping it yields without a bespoke primitive.
  */
+/**
+ * A permanent's **"play an additional land"** grant: how many extra land plays
+ * it hands out per turn, and to whom.
+ *
+ * `who` is the shared player vocabulary narrowed to the two forms that are
+ * printed: `'controller'` ("**you** may play an additional land on each of your
+ * turns") and `'each'` ("**each player** may play an additional land on each of
+ * their turns" — Rites of Flourishing, Ghirapur Orrery). There is no "opponent
+ * only" printing, and inventing one would be a card nobody prints.
+ */
+export interface ExtraLandPlaysAbility {
+  /** How many EXTRA lands (beyond the rules default) — "an additional" is 1. */
+  readonly count: number;
+  /** Whose land plays this widens. */
+  readonly who: 'controller' | 'each';
+}
+
 export interface CardDefinition {
   /** Stable id, unique within the pool (e.g. a Scryfall-derived slug). */
   readonly id: string;
@@ -533,6 +550,33 @@ export interface CardDefinition {
    * about separately.
    */
   readonly playLandsFrom?: readonly LandPlayZone[];
+  /**
+   * **"You may play an additional land on each of your turns."** Dryad of the
+   * Ilysian Grove, Oracle of Mul Daya, Azusa, Wayward Swordtooth — and, with
+   * `who: 'each'`, the symmetric printings (Rites of Flourishing, Ghirapur
+   * Orrery, Exploration's mirror).
+   *
+   * The third player-static, and it sits beside the other two for the reason
+   * given in `player-statics.ts`: the subject is a SEAT, not a permanent, so
+   * there is no instance for the continuous layer to hang an aggregate on and
+   * nothing about it is a P/T-or-keyword modification.
+   *
+   * A COUNT rather than a boolean because the grants STACK — two Azusas is three
+   * extra lands, not one — and a `who` because the printed symmetric form gives
+   * the extra play to every player, which "the controller's own" cannot say. It
+   * is one field rather than two so a definition cannot declare both and mean
+   * neither.
+   *
+   * Read by {@link maxLandPlaysFor}, which re-derives it from the board on every
+   * land-play decision, so the extra play ends the instant the source leaves —
+   * the same derived lifetime the other two player-statics have, and the reason
+   * nothing is pushed into the state when one of these resolves.
+   *
+   * NOT the same thing as the one-shot "additional land **this turn**"
+   * (`PlayerState.extraLandPlaysThisTurn`), which outlives its own source and
+   * therefore has to be remembered rather than derived.
+   */
+  readonly extraLandPlays?: ExtraLandPlaysAbility;
   /**
    * Marks this definition as an EMBLEM (CR 114) — the object a planeswalker
    * ultimate leaves behind. An emblem is not a card and not a permanent: it has

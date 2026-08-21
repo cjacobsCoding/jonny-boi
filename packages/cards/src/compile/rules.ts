@@ -308,6 +308,14 @@ function derivedValue(phrase: string): { countOf: string } | null {
   return countOf ? { countOf } : null;
 }
 
+/**
+ * How many extra land plays the printed word "an **additional** land" grants.
+ * Named because it is a printed quantity, not an arbitrary one — a card reading
+ * "two additional lands" is a different (unmatched) sentence, not this one with
+ * a different literal.
+ */
+const ADDITIONAL_LAND_COUNT = 1;
+
 /** Persist returns the creature with this many -1/-1 counters (the printed value). */
 const PERSIST_MINUS_COUNTERS = 1;
 
@@ -1295,6 +1303,28 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       const count = derivedValue(match[1]!);
       if (!count) return null;
       return effects({ primitive: 'drawCards', params: { count } });
+    },
+  },
+  {
+    id: 'play-additional-land-this-turn',
+    description:
+      '"You may play an additional land this turn" (Explore, Urban Evolution, Escape to the Wilds)',
+    // The ONE-SHOT half of the additional-land family. It is an EFFECT and not a
+    // static because it outlives its own source: Explore is in a graveyard by the
+    // time the extra land is played, so there is no permanent left to derive the
+    // permission from and the grant has to be remembered on the seat
+    // (`PlayerState.extraLandPlaysThisTurn`, cleared as the next turn begins).
+    //
+    // "You MAY play" prints no question and gets none: the permission is
+    // unconditional and costs nothing, and the "may" is about whether the player
+    // later chooses to use the land drop — which the land-play action already
+    // is. Wrapping this in `mayEffects` would ask a yes/no whose "no" no printed
+    // card allows.
+    pattern: /^(you|each player) may play an additional land this turn\.?$/,
+    build(match) {
+      const params: Record<string, unknown> = {};
+      if (match[1] === 'each player') params.whichPlayer = 'each';
+      return effects({ primitive: 'grantExtraLandPlay', params });
     },
   },
   {
@@ -4644,6 +4674,34 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     build(match) {
       const zone = match[1] === 'your graveyard' ? ('graveyard' as const) : ('libraryTop' as const);
       return { playLandsFrom: [zone] };
+    },
+  },
+  {
+    id: 'extra-land-plays',
+    description:
+      '"You may play an additional land on each of your turns" (Azusa, Dryad of the Ilysian Grove, Wayward Swordtooth) and its symmetric printing (Rites of Flourishing, Ghirapur Orrery)',
+    // A PLAYER static, beside `no-maximum-hand-size` and `play-lands-from-zone`
+    // and read the same way: `maxLandPlaysFor` re-derives it from the board on
+    // every land-play decision, so the extra play ends the instant the source
+    // leaves the battlefield. Nothing is pushed into the state.
+    //
+    // ⚠️ The "…on each of your TURNS" tail is REQUIRED by this pattern and is
+    // the whole difference from the one-shot Explore line ("an additional land
+    // THIS TURN"), which compiles to `grantExtraLandPlay` instead. The two are
+    // different lifetimes, and matching the one-shot here would print a
+    // permanent grant on a sorcery — an unbounded ramp spell.
+    pattern: new RegExp(
+      `^(you|each player) may play (an|${COUNT_TOKEN}) additional lands? on each of (?:your|their) turns\.?$`,
+    ),
+    build(match) {
+      const who = match[1] === 'each player' ? ('each' as const) : ('controller' as const);
+      // "AN additional land" is one; "TWO additional lands" (Azusa) is the same
+      // sentence with a printed number, so it is parsed rather than being a
+      // second rule — and a number the count parser cannot read reports instead
+      // of quietly becoming one.
+      const count = match[2] === 'an' ? ADDITIONAL_LAND_COUNT : parseCount(match[2]);
+      if (count === null || count <= 0) return null;
+      return { extraLandPlays: { count, who } };
     },
   },
   {

@@ -345,6 +345,7 @@ interface Assembly {
   noMaximumHandSize?: boolean;
   /** Land-play zones this card unlocks, accumulated across lines. */
   playLandsFrom?: import('@jonny-boi/core').LandPlayZone[];
+  extraLandPlays?: import('@jonny-boi/core').ExtraLandPlaysAbility;
   readonly matchedRules: string[];
   readonly missing: UnsupportedClause[];
 }
@@ -410,6 +411,19 @@ function absorb(assembly: Assembly, contribution: ClauseContribution, ruleId: st
     // line could print another, and both permissions are real at once.
     const zones = assembly.playLandsFrom ?? (assembly.playLandsFrom = []);
     for (const zone of contribution.playLandsFrom) if (!zones.includes(zone)) zones.push(zone);
+  }
+  if (contribution.extraLandPlays) {
+    // ACCUMULATED, not replaced: a card printing the line twice (or two lines
+    // that each grant one) really does grant two extra land plays, and taking
+    // the last would silently drop one. The two halves cannot disagree about
+    // `who`, because a `'each'` grant is strictly wider — so the wider one wins.
+    const prior = assembly.extraLandPlays;
+    assembly.extraLandPlays = prior
+      ? {
+          count: prior.count + contribution.extraLandPlays.count,
+          who: prior.who === 'each' || contribution.extraLandPlays.who === 'each' ? 'each' : 'controller',
+        }
+      : contribution.extraLandPlays;
   }
   if (contribution.attachesAs) assembly.attachesAs = contribution.attachesAs;
   if (contribution.attachmentModifies) {
@@ -1230,6 +1244,7 @@ export function compileCard(card: CompilableCard): CompileResult {
     ...(assembly.playLandsFrom && assembly.playLandsFrom.length > 0
       ? { playLandsFrom: assembly.playLandsFrom }
       : {}),
+    ...(assembly.extraLandPlays ? { extraLandPlays: assembly.extraLandPlays } : {}),
     ...(Object.keys(assembly.keywords).length > 0 ? { keywords: assembly.keywords } : {}),
     // Printed subtypes, lowercased, so subtype-selecting effects ("a Mountain
     // or Plains card") match a dual land the way the printed card does.

@@ -1,7 +1,8 @@
 /**
  * PLAYER-FACING STATICS — the small family of continuous abilities that modify a
  * PLAYER rather than a permanent: "You have no maximum hand size", "You may play
- * lands from your graveyard".
+ * lands from your graveyard", "You may play an additional land on each of your
+ * turns".
  *
  * ## Why this is not `statics.ts`
  * A {@link StaticAbility} is a filter over permanents plus a P/T-and-keyword
@@ -26,8 +27,9 @@
  * hand size" emblem works without a second mechanism.
  *
  * ## It stays off the hot path
- * Both readers walk the battlefield, and both are asked rarely: the hand-size
- * question once per cleanup step, the land-play zones once per land-play decision.
+ * All three readers walk the battlefield, and all three are asked rarely: the
+ * hand-size question once per cleanup step, the land-play zones and the land-play
+ * COUNT once per land-play decision.
  * Neither is inside the continuous-layering pass, combat, or the mana planner. The
  * zone reader returns a SHARED FROZEN EMPTY LIST when nothing grants anything, so
  * the overwhelmingly common board allocates nothing and its caller's `length === 0`
@@ -37,6 +39,7 @@
 import type { LandPlayZone } from './actions.js';
 import type { CardDefinition } from './card.js';
 import type { GameState, PlayerId } from './state.js';
+import { PLAYER_IDS } from './state.js';
 
 /**
  * Whether `player` has no maximum hand size — Reliquary Tower, Spellbook,
@@ -97,4 +100,58 @@ export function landPlayZonesFor(state: GameState, player: PlayerId): readonly L
   const command = state.players[player].command;
   for (let i = 0; i < command.length; i++) collect(command[i]!.def);
   return zones ?? NO_EXTRA_LAND_ZONES;
+}
+
+/**
+ * How many lands `player` may play this turn — the rules default widened by
+ * every "additional land" grant currently in effect.
+ *
+ * Three sources, and they are deliberately different mechanisms because they
+ * have different lifetimes:
+ *  1. `defaultMaxLands` — the rules floor (CR 305.2), `RulesConfig.maxLandsPerTurn`;
+ *  2. permanents on the battlefield (and emblems in the command zone) whose
+ *     definition carries {@link CardDefinition.extraLandPlays} — RE-DERIVED here
+ *     on every call, so an Azusa dying mid-turn takes its extra plays with it
+ *     even if the player has not used them yet, exactly as the rules do;
+ *  3. `PlayerState.extraLandPlaysThisTurn` — the one-shot "additional land THIS
+ *     TURN" (Explore, Urban Evolution), which outlives its own source and so is
+ *     the only one of the three that is stored.
+ *
+ * Grants STACK (CR 305.2 counts permissions, it does not take a maximum), so
+ * this sums rather than taking the largest — two Azusas really is three extra
+ * lands. A `who: 'each'` permanent widens BOTH seats, which is why the
+ * controller check is inside the branch rather than skipping the permanent
+ * outright.
+ *
+ * PERF: one indexed battlefield walk with no allocation and no closure, on a
+ * path taken once per land-play decision — never inside the continuous layering
+ * pass, combat, or the mana planner. The overwhelmingly common board carries no
+ * grant at all and the loop's whole cost is the `extraLandPlays === undefined`
+ * miss.
+ */
+export function maxLandPlaysFor(
+  state: GameState,
+  player: PlayerId,
+  defaultMaxLands: number,
+): number {
+  let total = defaultMaxLands + (state.players[player].extraLandPlaysThisTurn ?? 0);
+  const add = (def: CardDefinition, controller: PlayerId): void => {
+    const granted = def.extraLandPlays;
+    if (granted === undefined) return;
+    if (granted.who === 'controller' && controller !== player) return;
+    total += granted.count;
+  };
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const permanent = battlefield[i]!;
+    add(permanent.def, permanent.controller);
+  }
+  // An emblem radiates from the command zone exactly as a permanent does from
+  // the battlefield (CR 114) — the same rule the two readers above apply. Its
+  // owner is its controller, so a `'controller'` grant there is that seat's.
+  for (const seat of PLAYER_IDS) {
+    const command = state.players[seat].command;
+    for (let i = 0; i < command.length; i++) add(command[i]!.def, seat);
+  }
+  return total;
 }

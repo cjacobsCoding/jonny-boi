@@ -65,6 +65,7 @@ export type {
   ActivatedAbility,
   AdditionalCastCost,
   CyclingAbility,
+  ExtraLandPlaysAbility,
   ActivationCost,
   EntersUntappedCondition,
   RevealFromHandCondition,
@@ -164,7 +165,7 @@ export {
  * "Spells you control can't be countered". Each derives its answer from the board
  * on every read, so its lifetime ends with its source and nothing has to expire.
  */
-export { hasNoMaximumHandSize, landPlayZonesFor } from './player-statics.js';
+export { hasNoMaximumHandSize, landPlayZonesFor, maxLandPlaysFor } from './player-statics.js';
 
 /**
  * BLOCK REQUIREMENTS (CR 509.1c/d). `forcedBlockAssignment` is the seam an AI uses

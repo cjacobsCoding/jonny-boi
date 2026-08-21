@@ -287,6 +287,12 @@ export interface ClauseContribution {
    * one field rather than two flags.
    */
   readonly playLandsFrom?: readonly import('@jonny-boi/core').LandPlayZone[];
+  /**
+   * "You may play an additional land on each of your turns"
+   * (`CardDefinition.extraLandPlays`). The PERMANENT grant only — the one-shot
+   * "…this turn" is an effect (`grantExtraLandPlay`), not a contribution.
+   */
+  readonly extraLandPlays?: import('@jonny-boi/core').ExtraLandPlaysAbility;
 }
 
 /** A compiler rule: a pattern over one normalized clause + what it builds. */

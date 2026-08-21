@@ -1452,6 +1452,40 @@ export const grantFlashback: EffectPrimitive = (ctx) => {
  */
 export const ITS_MANA_COST = 'itsManaCost';
 
+/**
+ * `grantExtraLandPlay` — "**You may play an additional land this turn**"
+ * (Explore, Urban Evolution, Escape to the Wilds).
+ *
+ * The one-shot half of the additional-land family, and the only half that is
+ * STATE: the permanent form (Azusa, Dryad of the Ilysian Grove) is a static
+ * ability re-derived from the battlefield by core's `maxLandPlaysFor`, so it
+ * needs no primitive and expires with its source. Explore's grant outlives its
+ * own resolution — the spell is in a graveyard by the time the land is played —
+ * so it has to be remembered on the seat, and core clears it as the next turn
+ * begins.
+ *
+ * `count` is the printed number ("an additional land" is one) and it ACCUMULATES
+ * rather than assigning, because two Explores really are two extra lands.
+ *
+ * `whichPlayer` reads the shared `playersForParam` vocabulary, so the symmetric
+ * one-shot ("each player may play an additional land this turn") is the same
+ * primitive with different data rather than a second entry.
+ *
+ * NO dedicated `GameEvent`, deliberately: core emits `effectApplied` for every
+ * primitive it runs, so the grant is already named in the log and the replay
+ * viewer. A second event carrying the same fact would earn three entries in the
+ * enforced event tables (`EVENT_ID_FIELDS`, `OBSERVATION_POLICY`,
+ * `SOAK_EVENT_WITNESS`) and tell a reader nothing new.
+ */
+const grantExtraLandPlay: EffectPrimitive = (ctx) => {
+  const count = intParam(ctx, 'count', 1);
+  if (count <= 0) return;
+  for (const player of playersForParam(ctx, strParam(ctx, 'whichPlayer'))) {
+    const seat = ctx.state.players[player];
+    seat.extraLandPlaysThisTurn = (seat.extraLandPlaysThisTurn ?? 0) + count;
+  }
+};
+
 export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object.freeze({
   gainControl,
   ifKicked,
@@ -1480,6 +1514,7 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   addCounters,
   attachToTarget,
   grantFlashback,
+  grantExtraLandPlay,
   ...CHOICE_PRIMITIVES,
   // The copy family (`./copy-primitives`): a copy of a spell on the stack and a
   // token copy of a permanent. Kept in their own module because both create an

@@ -255,6 +255,22 @@ export interface PlayerState {
   manaPool: ManaPool;
   /** Lands played so far this turn (reset each turn). */
   landsPlayedThisTurn: number;
+  /**
+   * EXTRA land plays granted to this player by a one-shot "you may play an
+   * additional land **this turn**" (Explore, Urban Evolution), reset each turn
+   * alongside {@link landsPlayedThisTurn}.
+   *
+   * Separate from the PERMANENT grant (`CardDefinition.extraLandPlays`, read
+   * off the battlefield by `maxLandPlaysFor`) because the two have different
+   * lifetimes and only one of them is state: a Dryad of the Ilysian Grove's
+   * grant is re-derived from the board on every read and ends the instant the
+   * Dryad dies, while Explore's outlives its own resolution and must be
+   * remembered.
+   *
+   * OPTIONAL so every state serialized or hand-built before this existed reads
+   * as "no extra plays", and so the field costs an ordinary board nothing.
+   */
+  extraLandPlaysThisTurn?: number;
   /** Set when this player has lost (and why is in the event log). */
   hasLost: boolean;
   // Zones owned by this player. Battlefield instances are addressed globally too
