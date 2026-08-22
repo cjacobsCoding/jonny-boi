@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 528 cards.
+ * 529 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -6699,6 +6699,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Equip {1}',
       modifies: { power: 1, toughness: 1, keywords: { haste: true } },
     },
+  },
+  // {2}, {T}: Copy target triggered ability you control. You may choose new targets for the copy. (A triggered ability uses the words "when," "whenever," or "at.")
+  {
+    id: 'cf751552-156f-4f81-ac94-9814dce099f9',
+    name: 'Strionic Resonator',
+    types: ['artifact'],
+    cost: { generic: 2 },
+    activated: [
+      {
+        cost: { mana: { generic: 2 }, tap: true },
+        effects: [
+          {
+            primitive: 'copyTriggeredAbility',
+            params: { targets: 'triggeredAbilityYouControl', count: 1 },
+          },
+        ],
+        label: '{2}, {t}: copy target triggered ability you control. you may choose new targets for the copy',
+      },
+    ],
   },
   // Choose one or both —
   // • Target creature gets -1/-1 until end of turn.

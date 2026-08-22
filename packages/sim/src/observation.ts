@@ -240,6 +240,9 @@ export const OBSERVATION_POLICY: { readonly [K in GameEvent['type']]: Observatio
    * and would need a redacting function here rather than this literal.
    */
   spellCopied: 'public',
+  // A copy on the stack is as public as the ability it copied — both players
+  // watch it go on, and both must be able to respond to it.
+  triggerCopied: 'public',
   spellCopyCeasedToExist: 'public',
   tokenCopyCreated: 'public',
   stackResolved: 'public',

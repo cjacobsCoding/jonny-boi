@@ -126,6 +126,17 @@ export interface SoakReport {
    * the "the game cannot END" signature.
    */
   readonly actionCapHits: number;
+  /**
+   * Games that ended as a DRAW by CR 104.4b — one turn ran past
+   * `maxActionsPerTurn`, which only a mandatory loop does.
+   *
+   * Counted, not a violation. Some real card pairs genuinely are mandatory
+   * infinite loops (Dualcaster Mage + Rite of Replication), and the rules end
+   * those games rather than calling them broken. But a loop must stay VISIBLE:
+   * a silent pass is how "the soak is green" would start meaning less than it
+   * does. A sharp rise here is a finding even though no test fails on it.
+   */
+  readonly loopDraws: number;
   readonly wins: Readonly<Record<PlayerId, number>>;
   readonly violations: readonly SoakViolation[];
   /** How many games each mechanic was witnessed in. */
@@ -1108,6 +1119,7 @@ export function runSoak(options: SoakOptions): SoakReport {
   let actions = 0;
   let timeouts = 0;
   let actionCapHits = 0;
+  let loopDraws = 0;
   let leakScanObservations = 0;
   const cpuStart = process.cpuUsage();
 
@@ -1126,6 +1138,7 @@ export function runSoak(options: SoakOptions): SoakReport {
     if (result.outcome.kind === 'win') wins[result.outcome.winner]++;
     else timeouts++;
     if (result.actions >= sim.maxActionsPerGame) actionCapHits++;
+    if (result.outcome.kind === 'loop') loopDraws++;
     options.onGame?.(games, total);
   };
 
@@ -1172,6 +1185,7 @@ export function runSoak(options: SoakOptions): SoakReport {
     actions,
     timeouts,
     actionCapHits,
+    loopDraws,
     wins,
     violations,
     mechanicGames,
@@ -1209,6 +1223,11 @@ export function formatSoakReport(report: SoakReport): string {
   // green otherwise, and this is the anti-cheat guarantee.
   lines.push(`  redaction scan: ${report.leakScanObservations} observation(s) checked`);
   if (report.actionCapHits > 0) lines.push(`  ⚠ ${report.actionCapHits} game(s) hit the ACTION cap — a game that cannot end`);
+  if (report.loopDraws > 0) {
+    lines.push(
+      `  ↻ ${report.loopDraws} game(s) drew on a MANDATORY LOOP (CR 104.4b) — legal, but watch the count`,
+    );
+  }
   const fired = [...report.mechanicGames.entries()].sort((a, b) => b[1] - a[1]);
   lines.push('  mechanics witnessed (games):');
   for (const [id, count] of fired) {

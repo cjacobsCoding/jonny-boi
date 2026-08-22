@@ -173,6 +173,9 @@ export const EVENT_ID_FIELDS: { readonly [K in GameEvent['type']]: EventIdFields
    * and this table is what makes that claim checkable rather than asserted.
    */
   spellCopied: { instanceId: 'id', copiedInstanceId: 'id', controller: 'none', name: 'none' },
+  // Both ids are real object ids and must be remapped like a spell copy's. The
+  // `label` is printed ability text, not an id — the same 'none' a name gets.
+  triggerCopied: { instanceId: 'id', copiedInstanceId: 'id', controller: 'none', label: 'none' },
   spellCopyCeasedToExist: { instanceId: 'id', name: 'none' },
   tokenCopyCreated: { instanceId: 'id', copiedInstanceId: 'id', controller: 'none', name: 'none' },
   // `choiceId` is the QUESTION's id, not a card's. `sourceInstanceId` is a card's

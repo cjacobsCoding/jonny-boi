@@ -159,6 +159,8 @@ const CREATURE_TARGET: TargetRestriction = 'creature';
 const CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'creatureYouControl';
 /** "target non-Angel creature you control" — Restoration Angel; see the type's note. */
 const NON_ANGEL_CREATURE_YOU_CONTROL_TARGET: TargetRestriction = 'nonAngelCreatureYouControl';
+/** "target triggered ability you control" — Strionic Resonator. */
+const TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction = 'triggeredAbilityYouControl';
 /** "target creature an opponent controls" — Banisher Priest. */
 const CREATURE_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'creatureAnOpponentControls';
 /** "target artifact, enchantment, or land" — the naturalize family. */
@@ -2155,6 +2157,32 @@ export const EFFECT_RULES: readonly CompileRule[] = Object.freeze([
       return effects({
         primitive: 'transformRevealTop',
         params: { filter: { anyOfTypes: ['instant', 'sorcery'] } },
+      });
+    },
+  },
+  {
+    id: 'copy-target-triggered-ability',
+    description:
+      '"Copy target triggered ability you control. You may choose new targets for the copy." (Strionic Resonator) — CR 707.10',
+    /*
+     * The OTHER kind of stack object. Written beside the spell-copy rule and in
+     * the same shape — the trailing "you may choose new targets" sentence is an
+     * optional capture rather than a second rule, because CR 707.10 attaches it
+     * to the copy itself and the primitive implements it either way.
+     *
+     * The activation cost is NOT part of this pattern: the generic activated
+     * -ability compiler has already split `{2}, {T}:` off the front and handed
+     * this rule only the effect. A rule that re-parsed the cost would work for
+     * Strionic Resonator and fail for the next card that prints the ability at a
+     * different price.
+     */
+    pattern:
+      /^copy target triggered ability you control(\. you may choose new targets for the copy)?$/,
+    needsChosenTarget: true,
+    build() {
+      return effects({
+        primitive: 'copyTriggeredAbility',
+        params: { targets: TRIGGERED_ABILITY_YOU_CONTROL_TARGET, count: 1 },
       });
     },
   },

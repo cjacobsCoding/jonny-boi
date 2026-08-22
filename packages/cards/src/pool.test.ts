@@ -23,7 +23,7 @@ const SEED = 1234;
 /** Hand-authored cards (`CURATED_CARD_POOL`) — the reviewed-against-engine set. */
 const EXPECTED_CURATED_SIZE = 32;
 /** Cards the Oracle compiler built faithfully (`EXPANDED_CARD_POOL`). */
-const EXPECTED_COMPILED_SIZE = 528; // +§3.38: Acidic Slime, Banisher Priest, Gatecreeper Vine, Fiend Hunter
+const EXPECTED_COMPILED_SIZE = 529; // +§3.39 Strionic Resonator (copy a triggered ability)
 const EXPECTED_POOL_SIZE = EXPECTED_CURATED_SIZE + EXPECTED_COMPILED_SIZE;
 
 // --- pool loading + validation -------------------------------------------------

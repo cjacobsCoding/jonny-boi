@@ -3526,6 +3526,42 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.39 Copying a triggered ability, and a game the rules end — ✅ done
+
+Strionic Resonator: "{2}, {T}: Copy target triggered ability you control." The stack holds two kinds
+of object and only one of them was copiable. A trigger is already the resolved shape of an ability —
+a controller, a source, effect refs and its targets — so copying one is copying that record, which is
+why it lives beside the spell copier rather than inside it (the two share no field but an id and a
+controller).
+
+**Adding one card to the pool turned the soak red, and the card was not in the failing game.** The
+anchored decks are a pure function of the pool, so a 529th card reshuffles every one of them — and the
+new pairing dealt **Dualcaster Mage + Rite of Replication**, which is a genuine MANDATORY infinite
+loop in paper Magic: neither half is a "may", so no player can decline their way out. It made 2,138
+tokens and burned the 6,000-action cap.
+
+⚠️ **The rules already answer this and the engine did not.** CR 104.4b — "if the game somehow enters a
+loop of mandatory actions, repeating a sequence of events with no way to stop, the game is a draw."
+`SimConfig.maxActionsPerTurn` (2,000 — two orders of magnitude above a real turn) ends such a game as
+`{kind: 'loop'}`, which is deliberately NOT `'timeout'`: a timeout means "we gave up and the verdict is
+suspect", a loop means "the rules end it here". The soak counts loop-draws and prints them rather than
+failing on them — legal, but a rising count is a finding.
+
+⚠️ **This is NOT the §3.33 copy mirror.** That loop produced nothing and was fixed by pricing a copy by
+its payload. This one produces a real 2/2 every iteration, so the valuation is right to like it; what
+is missing is any way to stop. Do not "fix" it in the pilot.
+
+**Known gap, measured rather than assumed: the sim pilot cannot use Strionic Resonator.** The engine
+offers an activation only when the pool ALREADY covers its cost, so copying a trigger means tapping
+lands in response to your own trigger — a two-step plan the heuristic does not make. Over six anchored
+games it had Strionic untapped with a trigger on the stack **122 times and was offered the activation
+0 times**. So `trigger-copy` is deliberately not registered as a soak-witnessed mechanic: it would fail
+the inert-feature guard for a reason the card cannot fix. The card is real for a human (the online
+board taps mana by hand); teaching `bestAbility` to plan a payment is the next piece of work, and it
+is the same gap the online client's `tapCastable` documents.
+
+📊 Pool 528 → 529 compiled.
+
 ### 3.38 Exile-until-this-leaves, and imports that never re-compile — ✅ done
 
 A deck builder reporting six cards unplayable. Four of them now play; the fix has two halves and the

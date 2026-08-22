@@ -178,7 +178,16 @@ export type TargetRestriction =
    * legal target and therefore CANNOT BE CAST, so it can never be spent for
    * nothing.
    */
-  | 'instantOrSorcerySpell';
+  | 'instantOrSorcerySpell'
+  /**
+   * "target TRIGGERED ABILITY you control" — Strionic Resonator.
+   *
+   * The stack holds two kinds of object, and every other stack-targeting
+   * restriction here deliberately means the SPELL kind ("counter target spell"
+   * cannot hit a trigger). This is the mirror: only the trigger kind, and only
+   * the ones this player controls.
+   */
+  | 'triggeredAbilityYouControl';
 
 /**
  * Whether a spell on the stack is an INSTANT OR SORCERY spell — the one question
@@ -336,6 +345,17 @@ export function isLegalTarget(
     }
     return false;
   }
+  if (restriction === 'triggeredAbilityYouControl') {
+    // Unknown actor ⇒ illegal, never "probably theirs" — the same rule
+    // `'opponent'` and `creatureYouControl` follow.
+    if (controller === undefined) return false;
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'trigger' || object.instanceId !== target) continue;
+      return object.controller === controller;
+    }
+    return false;
+  }
   const permanent = state.battlefield.find((c) => c.instanceId === target);
   if (!permanent) return false;
   if (!isTargetableBy(state, permanent, controller, source)) return false;
@@ -478,6 +498,17 @@ function enumerateTargets(
   controller?: PlayerId,
   source?: CardDefinition,
 ): readonly (InstanceId | PlayerId)[] {
+  if (restriction === 'triggeredAbilityYouControl') {
+    if (controller === undefined) return [];
+    const out: (InstanceId | PlayerId)[] = [];
+    for (let i = 0; i < state.stack.length; i++) {
+      const object = state.stack[i] as StackObject;
+      if (object.kind !== 'trigger') continue;
+      if (object.controller !== controller) continue;
+      out.push(object.instanceId);
+    }
+    return out;
+  }
   if (restriction === 'spell' || restriction === 'instantOrSorcerySpell') {
     const wantInstantOrSorcery = restriction === 'instantOrSorcerySpell';
     const out: (InstanceId | PlayerId)[] = [];
@@ -694,6 +725,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a permanent';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
+    case 'triggeredAbilityYouControl':
+      return 'a triggered ability you control';
     case 'instantOrSorcerySpell':
       return 'an instant or sorcery spell on the stack';
     case 'any':

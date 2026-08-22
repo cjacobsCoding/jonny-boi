@@ -45,7 +45,14 @@ import { deliverObservation, type MatchObservers } from './observation.js';
 /** Why a game ended — a win by a player, or a draw on the turn/action cap. */
 export type MatchOutcome =
   | { readonly kind: 'win'; readonly winner: PlayerId }
-  | { readonly kind: 'timeout' };
+  | { readonly kind: 'timeout' }
+  /**
+   * A draw by CR 104.4b — one turn ran past `maxActionsPerTurn`, which only a
+   * mandatory loop does. Its own outcome rather than a `timeout` because the two
+   * mean opposite things to anything reading the result: a timeout is "we gave
+   * up and the verdict is suspect", while this is "the rules end the game here".
+   */
+  | { readonly kind: 'loop' };
 
 /** The seat assignment for a match: which deck + pilot sits in A and B. */
 export interface MatchSeats {
@@ -203,6 +210,18 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
 
   let actions = 0;
   let rejectedActions = 0;
+  /*
+   * CR 104.4b — actions spent in the CURRENT turn, and the turn they belong to.
+   *
+   * A mandatory loop (Dualcaster Mage copying a Rite of Replication that makes
+   * another Dualcaster Mage) never advances the turn, so a per-turn counter
+   * separates it cleanly from a long game. Reset on the turn number changing
+   * rather than on a step event, because the loop happens INSIDE one step and
+   * the turn number is the only thing it cannot move.
+   */
+  let turnOfCount = state.turnNumber;
+  let actionsThisTurn = 0;
+  let loopedOut = false;
   // Consecutive rejections at the *current* decision point. A pilot that keeps
   // proposing a move the engine refuses would otherwise spin until the action cap
   // and bank a fake timeout draw, so after `maxConsecutiveRejectedActions` we pass
@@ -257,12 +276,25 @@ export function runMatch(seats: MatchSeats, seed: number, opts: MatchOptions = {
       consecutiveRejections = 0;
     }
     actions++;
+    if (state.turnNumber !== turnOfCount) {
+      turnOfCount = state.turnNumber;
+      actionsThisTurn = 0;
+    }
+    actionsThisTurn++;
+    if (actionsThisTurn >= sim.maxActionsPerTurn) {
+      // The rules end the game here. Breaking out (rather than playing on to the
+      // game-wide cap) is what makes the outcome say WHY.
+      loopedOut = true;
+      break;
+    }
   }
 
   const outcome: MatchOutcome =
     state.gameOver && state.winner !== null
       ? { kind: 'win', winner: state.winner }
-      : { kind: 'timeout' };
+      : loopedOut
+        ? { kind: 'loop' }
+        : { kind: 'timeout' };
 
   const result: MatchResult = {
     outcome,

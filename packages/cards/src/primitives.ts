@@ -90,6 +90,7 @@ import {
 import { CHOICE_PRIMITIVES } from './choice-primitives.js';
 import { COPY_PRIMITIVES } from './copy-primitives.js';
 import { EXILE_UNTIL_LEAVES_PRIMITIVES } from './exile-until-leaves.js';
+import { TRIGGER_COPY_PRIMITIVES } from './trigger-copy-primitives.js';
 import { BLINK_PRIMITIVES } from './blink-primitives.js';
 
 // --- the primitives ------------------------------------------------------------
@@ -1493,6 +1494,10 @@ export const CORE_PRIMITIVES: Readonly<Record<string, EffectPrimitive>> = Object
   // the whole mechanic: two of these on the battlefield must each return their
   // own card, not each other's.
   ...EXILE_UNTIL_LEAVES_PRIMITIVES,
+  // Copying a TRIGGERED ABILITY (`./trigger-copy-primitives`) — the other kind of
+  // stack object. Separate from the spell copier because the two share no field
+  // beyond an id and a controller: a trigger has no card, no face and no cast.
+  ...TRIGGER_COPY_PRIMITIVES,
   // The blink family (`./blink-primitives`): exile a permanent you control and
   // return it immediately. Its own module because the mechanic is one CR rule —
   // 400.7's "a new object" — and every consequence players care about (the ETB
