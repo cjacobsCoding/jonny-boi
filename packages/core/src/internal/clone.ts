@@ -177,6 +177,7 @@ function cloneStackObject(o: StackObject): StackObject {
       ...(o.awaitingTargetsExcludeSelf !== undefined
         ? { awaitingTargetsExcludeSelf: o.awaitingTargetsExcludeSelf }
         : {}),
+      ...(o.awaitingTargetCount !== undefined ? { awaitingTargetCount: o.awaitingTargetCount } : {}),
       // Same field-by-field stakes as `awaitingTargets`: dropping this would
       // lose the TRIGGERING PLAYER at the very next action boundary, and every
       // "that player draws a card" body would silently fall back to the source's

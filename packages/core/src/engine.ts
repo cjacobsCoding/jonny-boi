@@ -2199,7 +2199,19 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
       trigger.awaitingTargetsExcludeSelf === true ? trigger.sourceInstanceId : undefined,
     );
 
+    // How many to aim. Absent ⇒ exactly one, which is every trigger written
+    // before "up to three" existed.
+    const wanted = trigger.awaitingTargetCount ?? { min: SINGLE_TARGET, max: SINGLE_TARGET };
+
     if (candidates.length === 0) {
+      // "UP TO three" (min 0) is satisfied by choosing none, so the ability stays
+      // on the stack and resolves doing nothing — CR 603.3d's own distinction
+      // between a trigger that NEEDS a target and one that merely permits them.
+      // Removing it here would silently delete the rest of its effects.
+      if (wanted.min === 0) {
+        recordTriggerTargets(state, [], emit);
+        continue;
+      }
       state.stack.splice(index, 1);
       emit({
         type: 'triggerRemovedFromStack',
@@ -2218,8 +2230,11 @@ function aimPendingTriggers(state: GameState, emit: (e: GameEvent) => void): voi
         prompt: `Choose ${describeRestriction(restriction)} for ${trigger.label}`,
         candidates: candidates.map((ref) => targetOptionFor(state, ref)),
         restriction,
-        min: SINGLE_TARGET,
-        max: SINGLE_TARGET,
+        min: wanted.min,
+        // Never ask for more than exist: `normalizeChoiceRequest` clamps too, but
+        // asking for three of two candidates would make an answerable question
+        // look unanswerable to anything reading the request directly.
+        max: Math.min(wanted.max, candidates.length),
       },
       {
         id: state.nextInstanceId++,

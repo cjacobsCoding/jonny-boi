@@ -165,6 +165,8 @@ const TRIGGERED_ABILITY_YOU_CONTROL_TARGET: TargetRestriction = 'triggeredAbilit
 const CREATURE_AN_OPPONENT_CONTROLS_TARGET: TargetRestriction = 'creatureAnOpponentControls';
 /** "target artifact, enchantment, or land" — the naturalize family. */
 const ARTIFACT_ENCHANTMENT_OR_LAND_TARGET: TargetRestriction = 'artifactEnchantmentOrLand';
+/** "creatures from the battlefield and/or creature cards from graveyards" — Angel of Serenity. */
+const CREATURE_BATTLEFIELD_OR_GRAVEYARD_TARGET: TargetRestriction = 'creatureOnBattlefieldOrInGraveyard';
 const SPELL_TARGET: TargetRestriction = 'spell';
 /**
  * "target instant or sorcery spell" — narrower than {@link SPELL_TARGET} and
@@ -3503,6 +3505,45 @@ function splitInterveningIf(
 }
 
 export const TRIGGER_RULES: readonly CompileRule[] = Object.freeze([
+  {
+    id: 'trigger-etb-exile-up-to-three-until-this-leaves',
+    description:
+      '"When ~ enters, you may exile up to three other target creatures from the battlefield and/or creature cards from graveyards" (Angel of Serenity)',
+    /*
+     * The O-Ring pattern at its largest: THREE targets, spanning TWO zones, and
+     * "up to" — so choosing none is a legal answer and the ability must stay on
+     * the stack rather than being removed for want of a target.
+     *
+     * Only the exile half is emitted here; the card's second printed line
+     * ("return the exiled cards to their owners' hands") compiles through
+     * `trigger-leaves` into `returnExiledByThis` with `to: 'hand'`.
+     *
+     * "OTHER" is load-bearing exactly as it is on Fiend Hunter — an Angel that
+     * exiled itself would leave, return itself, and trigger again forever.
+     */
+    pattern:
+      /^when ~ enters(?: the battlefield)?, you may exile up to three other target creatures from the battlefield and\/or creature cards from graveyards$/,
+    needsChosenTarget: true,
+    build() {
+      return {
+        triggers: [
+          {
+            condition: { on: 'etb' },
+            effects: [
+              {
+                primitive: 'exileUntilLeaves',
+                params: { targets: CREATURE_BATTLEFIELD_OR_GRAVEYARD_TARGET, max: 3 },
+              },
+            ],
+            label: 'Enters: exile up to three other creatures until this leaves',
+            targets: CREATURE_BATTLEFIELD_OR_GRAVEYARD_TARGET,
+            targetsExcludeSelf: true,
+            targetCount: { min: 0, max: 3 },
+          },
+        ],
+      };
+    },
+  },
   {
     id: 'trigger-etb-exile-another-target-creature',
     description: '"When ~ enters, you may exile another target creature" (Fiend Hunter)',

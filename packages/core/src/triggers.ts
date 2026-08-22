@@ -252,6 +252,20 @@ export interface TriggeredAbility {
    * unbounded loop shape as DESIGN §3.33's copy mirror.
    */
   readonly targetsExcludeSelf?: boolean;
+  /**
+   * How MANY targets, when the printed line is not "target X" but "up to three
+   * other target X" (Angel of Serenity).
+   *
+   * Absent ⇒ exactly one, which is every trigger written before this existed —
+   * so no card changes behaviour by this field appearing. `min: 0` is what makes
+   * "UP TO three" different from "three": the ability stays on the stack and
+   * resolves doing nothing rather than being removed for want of a target, which
+   * is CR 603.3d's own distinction.
+   *
+   * Targets are still chosen as the ability goes on the stack, not on
+   * resolution — the engine simply asks for a range instead of exactly one.
+   */
+  readonly targetCount?: { readonly min: number; readonly max: number };
 }
 
 /**
