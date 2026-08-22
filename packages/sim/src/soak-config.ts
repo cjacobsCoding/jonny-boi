@@ -739,6 +739,23 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    */
   spellCopied: 'spell-copy',
   /*
+   * NOT a witnessed mechanic yet, and the reason is a PILOT gap rather than an
+   * engine one — recorded here so the next person does not re-derive it.
+   *
+   * Copying a triggered ability needs Strionic Resonator untapped, two mana
+   * FLOATING, and a trigger on the stack, all at once. The engine offers an
+   * activation only when the pool already covers its cost (`canPay` in
+   * `unpayableActivationReason`), so reaching it means tapping lands in response
+   * to your own trigger — a two-step plan the heuristic pilot does not make. It
+   * is the same shape as the online client's `tapCastable` gap.
+   *
+   * Measured, not assumed: over six anchored games the pilot had Strionic
+   * untapped with a trigger on the stack 122 times and was offered the
+   * activation 0 times. Registering it as a witness today would fail the
+   * "inert feature" guard for a reason the card cannot fix.
+   */
+  triggerCopied: null,
+  /*
    * CR 704.5e — the copy left the stack and stopped existing. The SAME mechanic
    * as the creation, exactly as `tokenCeasedToExist` is the same mechanic as
    * `tokenCreated`: what it buys is that a game which copies a spell and lets it

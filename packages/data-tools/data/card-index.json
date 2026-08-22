@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-21T11:28:10.614Z",
+  "generatedAt": "2026-08-22T04:24:28.236Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 560,
+  "requested": 561,
   "unresolved": [],
   "cards": [
     {
@@ -29239,6 +29239,60 @@
       "localImages": {
         "normal": "strider-harness-normal.jpg",
         "art_crop": "strider-harness-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "cf751552-156f-4f81-ac94-9814dce099f9",
+      "name": "Strionic Resonator",
+      "manaCost": {
+        "generic": 2,
+        "W": 0,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Artifact"
+        ],
+        "subtypes": []
+      },
+      "rawTypeLine": "Artifact",
+      "oracleText": "{2}, {T}: Copy target triggered ability you control. You may choose new targets for the copy. (A triggered ability uses the words \"when,\" \"whenever,\" or \"at.\")",
+      "power": null,
+      "toughness": null,
+      "loyalty": null,
+      "defense": null,
+      "colors": [],
+      "colorIdentity": [],
+      "keywords": [],
+      "set": "moc",
+      "collectorNumber": "384",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.jpg?1783917105",
+        "normal": "https://cards.scryfall.io/normal/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.jpg?1783917105",
+        "large": "https://cards.scryfall.io/large/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.jpg?1783917105",
+        "png": "https://cards.scryfall.io/png/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.png?1783917105",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.jpg?1783917105",
+        "border_crop": "https://cards.scryfall.io/border_crop/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.jpg?1783917105",
+        "thumb": "https://cards.scryfall.io/thumb/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.webp?1783917105",
+        "grid": "https://cards.scryfall.io/grid/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.webp?1783917105",
+        "display": "https://cards.scryfall.io/display/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.webp?1783917105",
+        "art": "https://cards.scryfall.io/art/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.webp?1783917105",
+        "crop": "https://cards.scryfall.io/crop/front/b/9/b9edb215-f967-4968-905e-d1dc3b5d3424.webp?1783917105"
+      },
+      "localImages": {
+        "normal": "strionic-resonator-normal.jpg",
+        "art_crop": "strionic-resonator-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,

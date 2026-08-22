@@ -399,6 +399,15 @@ export const LIBRARY_SAFE_PRIMITIVES: ReadonlySet<string> = new Set([
    */
   'exileUntilLeaves',
   'returnExiledByThis',
+  /*
+   * COPYING A TRIGGERED ABILITY — SAFE. The copy is a stack object, never a
+   * card: nothing is drawn, searched or revealed by the copy machinery itself,
+   * and no decklist instance changes identity. The copied ability may of course
+   * read a library when it RESOLVES (a copied "search your library" trigger
+   * searches twice), and that read is attributed to the card that printed the
+   * trigger — which is correct, and the same split `exileUntilLeaves` documents.
+   */
+  'copyTriggeredAbility',
 ]);
 
 /**

@@ -359,6 +359,33 @@ const EFFECT_VALUE: Readonly<Record<string, EffectValuer>> = Object.freeze({
   },
 
   /**
+   * COPYING A TRIGGERED ABILITY is worth what the ability itself delivers — the
+   * same principle §3.33 established for spell copies, which is that a copy is
+   * worth its PAYLOAD and never a flat "copies are good" bonus.
+   *
+   * Priced by recursing into the trigger's own effects with the targets it is
+   * actually aimed at, so copying "draw a card" is worth a card and copying a
+   * trigger whose target has gone is worth nothing.
+   *
+   * ⚠️ The recursion is bounded by construction, unlike the spell case: a
+   * trigger's effects are read from the ability, and `copyTriggeredAbility` is
+   * an ACTIVATED ability that no trigger prints, so a copied trigger can never
+   * itself be another trigger-copy. There is no mirror to guard against here —
+   * but if a card ever prints one, this is the line that has to grow the same
+   * chain-depth guard `copyPayloadValue` carries.
+   */
+  copyTriggeredAbility: (params, ctx) => {
+    const target = ctx.targets?.[0];
+    if (target === undefined || target === 'A' || target === 'B') return 0;
+    const trigger = ctx.state.stack.find(
+      (o) => o.kind === 'trigger' && o.instanceId === target,
+    );
+    if (!trigger || trigger.kind !== 'trigger') return 0; // gone — a dead activation
+    const count = Math.max(intParam(params, 'count', 1), 0);
+    return count * valueOfEffects(trigger.effects, { ...ctx, targets: [...trigger.targets] });
+  },
+
+  /**
    * A TOKEN COPY is worth a creature of the copied body's size, priced through
    * the SAME formula `makeToken` uses so "a 4/4 token" means one thing to this
    * pilot however it was made.

@@ -139,6 +139,7 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | ✅ MERGED + DEPLOYED |
+| feat/copy-triggered-ability | DESKTOP-90PJPM4 (worker) | packages/core (targeting.ts +triggeredAbilityYouControl, events.ts +triggerCopied, instance-ids.ts), packages/cards (NEW trigger-copy-primitives.ts + trigger-copy.test.ts, compile/rules.ts +1 effect rule, primitives.ts, pool.test.ts count, GENERATED data/*), packages/ai (effect-value.ts +copyTriggeredAbility), packages/sim (config.ts +maxActionsPerTurn, match.ts loop outcome, soak.ts loopDraws, soak-config.ts, paired-arms-config.ts, NEW loop-draw.test.ts), apps/web GENERATED card-index.json, DESIGN §3.39, COORDINATION | 🚧 PUSHED, not merged |
 | feat/card-templates | DESKTOP-90PJPM4 (worker) | packages/cards (NEW exile-until-leaves.ts + test, compile/rules.ts +6 rules, primitives.ts registration, pool.test.ts count, GENERATED data/*), packages/core (targeting.ts +2 restrictions + optional exclude param, triggers.ts +targetsExcludeSelf, state.ts + internal/triggers-runtime.ts + internal/clone.ts threading, engine.ts trigger targeting), apps/web (lib/decklist/importedCards.ts re-compile on load; GENERATED src/data/card-index.json), packages/data-tools/data (GENERATED), DESIGN §3.38, COORDINATION | ✅ MERGED + DEPLOYED |
 | fix/pool-shadowed-by-import | DESKTOP-90PJPM4 (integrator) | apps/web (`lib/decklist/importedCards.ts` pool-first + NEW poolBeatsImport.test.ts; GENERATED src/data/card-index.json), packages/core (`targeting.ts` +1 restriction), packages/cards (`compile/rules.ts` +1 rule, `pool.test.ts` count, NEW restoration-angel.test.ts, GENERATED data/expanded-pool.ts + expansion-report.json), packages/data-tools/data (GENERATED), packages/sim (selesnya-blink.ts), DESIGN §3.37, COORDINATION | ✅ MERGED + DEPLOYED |
 | fix/returned-spell-keeps-back-face | DESKTOP-90PJPM4 (worker) | packages/cards (`copy-primitives.ts` returnSpellToHand reset + NEW returned-spell-face.test.ts + NEW granted-flashback-split.test.ts), packages/core (`engine.ts` ONE line — the flashback-grant accessor), DESIGN §3.34 rewritten + §3.36 + §3.33 pointer, COORDINATION. **Deep tier GREEN: 0/2000.** | ✅ MERGED + DEPLOYED |
@@ -147,6 +148,33 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-21 DESKTOP-90PJPM4: `feat/copy-triggered-ability` 🚧 PUSHED — Strionic Resonator, **and a
+  game the rules end**. DESIGN §3.39. Off `main`. Suite **5112 / 0**.
+
+  ⚠️ **Adding ONE card turned the soak red, and the card was not in the failing game.** Anchored decks
+  are a pure function of the pool, so a 529th card reshuffles all of them; the new pairing dealt
+  **Dualcaster Mage + Rite of Replication** — a genuine MANDATORY infinite loop in paper Magic (neither
+  half is a "may"). 2,138 tokens, 6,000-action cap. Expect this whenever you add to the pool: a red
+  soak after a pool change is often a NEW DECK, not a new bug.
+
+  **CR 104.4b now ends it.** `SimConfig.maxActionsPerTurn` (2,000) → outcome `{kind:'loop'}`,
+  deliberately not `'timeout'`: timeout means "we gave up, the verdict is suspect", loop means "the
+  rules end it here". Soak COUNTS loop-draws and prints them instead of failing — legal, but a rising
+  count is a finding. ⚠️ NOT the §3.33 copy mirror: that loop produced nothing, this one produces a
+  real 2/2 per iteration, so the valuation is right to like it. Do not "fix" it in the pilot.
+
+  ⚠️ **Known gap, MEASURED: the pilot cannot use Strionic Resonator.** The engine offers an activation
+  only when the pool already covers its cost, so copying a trigger needs tapping lands in response to
+  your own trigger — a two-step plan `bestAbility` does not make. Over six anchored games: Strionic
+  untapped with a trigger on the stack **122 times, activation offered 0 times**. So `trigger-copy` is
+  deliberately NOT registered as a soak-witnessed mechanic (it would fail the inert guard for a reason
+  the card cannot fix), and the reason is written into `soak-config.ts` so nobody re-derives it. The
+  card works for a HUMAN — the online board taps mana by hand. **Next work: teach `bestAbility` to plan
+  a mana payment** — the same gap the online client's `tapCastable` documents, and it would unlock
+  every mana-costed activated ability, not just this one.
+
+  Still blocked: `Angel of Serenity` (multi-zone targeting — battlefield and/or graveyards).
 
 - 2026-08-21 DESKTOP-90PJPM4: `feat/card-templates` ✅ MERGED + DEPLOYED (main = 5102 tests, verify 0) — **four more cards play; imports now
   re-compile.** DESIGN §3.38. Off `main`.

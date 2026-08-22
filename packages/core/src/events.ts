@@ -56,6 +56,25 @@ export type GameEvent =
     }
   | {
       /**
+       * A TRIGGERED ABILITY was copied on the stack (Strionic Resonator).
+       *
+       * Its own event rather than a widened `spellCopied`, because the two carry
+       * different identities: a spell copy has a card and a NAME, while a
+       * trigger copy has neither — what it has is the LABEL its ability prints,
+       * which is the only human-readable handle the log or the replay viewer can
+       * show for it.
+       */
+      readonly type: 'triggerCopied';
+      /** The COPY's own id — freshly minted, never the original's. */
+      readonly instanceId: InstanceId;
+      /** The ability it was copied from, still on the stack at this moment. */
+      readonly copiedInstanceId: InstanceId;
+      readonly controller: PlayerId;
+      /** The copied ability's label ("Enters: draw a card (copy)"). */
+      readonly label: string;
+    }
+  | {
+      /**
        * A discarded card with madness was exiled instead, and its owner now has
        * the window to cast it for its madness cost (CR 702.35a).
        */
