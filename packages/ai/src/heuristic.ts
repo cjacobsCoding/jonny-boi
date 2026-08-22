@@ -445,6 +445,11 @@ function choosePriorityAction(
   // `bestEquipPlay`. It is offered only at sorcery speed by the engine, so it can
   // only turn up in a window where a land or a spell is also possible.
   const equip = bestEquipPlay(ctx, weights, index);
+  // Every OTHER mana-costed activated ability, funded the same way — see
+  // `bestFundedActivation`. It competes on the same scale as the plays above
+  // rather than firing as a reflex, so an ability only happens when it beats the
+  // land drop and the spell it is spending the mana against.
+  const activation = bestFundedActivation(ctx, weights, index);
 
   // Lands outrank most spells: developing mana is almost always correct. We play
   // a land unless a spell scores higher than the land (e.g. lethal burn now).
@@ -458,8 +463,15 @@ function choosePriorityAction(
   const spellScore = bestSpell ? bestSpell.goal.score : -Infinity;
   const equipScore = equip ? equip.score : -Infinity;
   const cycleScore = cycle ? cycle.score : -Infinity;
+  const activationScore = activation ? activation.score : -Infinity;
 
-  if (landScore >= spellScore && landScore >= equipScore && landScore >= cycleScore && canPlayLand) {
+  if (
+    landScore >= spellScore &&
+    landScore >= equipScore &&
+    landScore >= cycleScore &&
+    landScore >= activationScore &&
+    canPlayLand
+  ) {
     const landAction = bestLandDrop(view, legalActions, weights);
     if (landAction) {
       const why = ctx.trace ? describeLandDrop(view, landAction, legalActions, weights) : NO_REASON;
@@ -467,8 +479,12 @@ function choosePriorityAction(
     }
   }
 
-  if (equip && equipScore >= spellScore && equipScore > weights.passScore) {
+  if (equip && equipScore >= spellScore && equipScore >= activationScore && equipScore > weights.passScore) {
     return emit(ctx, equip.action, ctx.trace ? equip.label : NO_REASON, equipScore);
+  }
+
+  if (activation && activationScore >= spellScore && activationScore > weights.passScore) {
+    return emit(ctx, activation.action, ctx.trace ? activation.label : NO_REASON, activationScore);
   }
 
   if (bestSpell && bestSpell.goal.score > weights.passScore && spellScore >= cycleScore) {
@@ -591,6 +607,127 @@ function fetchesALand(ability: { readonly effects: readonly EffectRef[] }): bool
  * (Mirrors core's `RESTRICTION_MEMO` for exactly the same reason.)
  */
 const FETCH_MEMO = new WeakMap<{ readonly effects: readonly EffectRef[] }, boolean>();
+
+/**
+ * The best MANA-COSTED ACTIVATED ABILITY worth using right now, together with the
+ * taps that fund it — the general case {@link bestEquipPlay} solved for Equip
+ * alone.
+ *
+ * Why enumerate the battlefield instead of reading `legalActions`: the engine
+ * offers an activation only once the FLOATING pool already covers its cost, and
+ * this pilot never floats mana speculatively. So every ability whose cost is not
+ * already paid for is invisible to the offered list — which is why the pool's
+ * activated abilities were, measurably, never used. Strionic Resonator sat
+ * untapped with a trigger on the stack 122 times across six games and was offered
+ * its own ability 0 times.
+ *
+ * ⚠️ This function deliberately does NOT own the abilities that already have a
+ * home. Loyalty is `bestLoyaltyActivation` (it prices counters), Equip is
+ * `bestEquipPlay` (it prices a host), and a land-fetch is `bestAbility` (it is
+ * unconditionally right and needs no scoring). Two paths bidding for the same
+ * ability would double-count it against the spell it competes with.
+ *
+ * Everything else is scored by `valueOfEffects` — the SAME ruler that picks a
+ * modal spell's modes, aims a trigger and prices a loyalty ability. The old
+ * comment here said such abilities were "left unused until they can be scored
+ * honestly"; this is that ruler, not a guess, and an ability that cannot beat
+ * `passScore` still goes unused.
+ */
+function bestFundedActivation(
+  ctx: DecisionContext,
+  weights: HeuristicWeights,
+  index: ContinuousIndex,
+): { readonly action: GameAction; readonly score: number; readonly label: string } | undefined {
+  const { view, legalActions } = ctx;
+  const me = view.priorityPlayer;
+  const sorcerySpeedOpen =
+    me === view.activePlayer &&
+    (view.step === 'precombatMain' || view.step === 'postcombatMain') &&
+    view.stack.length === 0;
+
+  let best: { action: GameAction; score: number; label: string } | undefined;
+  let cards: ReturnType<typeof cardValueContext> | undefined;
+
+  const battlefield = view.battlefield;
+  for (let b = 0; b < battlefield.length; b++) {
+    const perm = battlefield[b] as CardInstance;
+    const abilities = perm.def.activated;
+    // Cheapest test first: this runs on every priority decision, and `activated`
+    // is absent on almost every permanent (lands, vanilla creatures).
+    if (abilities === undefined || perm.controller !== me) continue;
+    // Equip has its own scorer, which knows about hosts.
+    if (perm.def.attachment !== undefined) continue;
+
+    for (let a = 0; a < abilities.length; a++) {
+      const ability = abilities[a]!;
+      const mana = ability.cost.mana;
+      // No mana cost ⇒ the engine already offers it (nothing to fund), so it is
+      // not ours. A cost we cannot price — sacrificing this permanent, paying
+      // life — is left alone rather than guessed at, exactly as before.
+      if (!mana || ability.cost.loyalty !== undefined) continue;
+      if (ability.cost.sacrificeSelf || ability.cost.life) continue;
+      if (fetchesALand(ability)) continue; // `bestAbility` owns it
+      if ((ability.timing ?? 'instant') === 'sorcery' && !sorcerySpeedOpen) continue;
+      // A {T} cost the permanent cannot pay: already tapped, or summoning-sick.
+      // Checked here so we never spend taps funding an activation the engine
+      // would refuse (DESIGN §3.36 — the offer and the apply must agree).
+      if (ability.cost.tap && (perm.tapped || perm.summoningSick)) continue;
+
+      const restriction = restrictionOfEffects(ability.effects);
+      let targets: readonly (InstanceId | PlayerId)[] = [];
+      if (restriction !== undefined) {
+        const options = legalTargetsFor(view as GameState, restriction, me, perm.def);
+        if (options.length === 0) continue; // nothing to aim at — not a play
+        cards ??= cardValueContext(view as GameState, index);
+        // Score each aim and take the best, the same way the loyalty path does.
+        let bestAim: { ref: InstanceId | PlayerId; value: number } | undefined;
+        for (const ref of options) {
+          const value = valueOfEffects(ability.effects, {
+            state: view as GameState,
+            player: me,
+            targets: [ref],
+            weights,
+            cards,
+            index,
+          });
+          if (!bestAim || value > bestAim.value) bestAim = { ref, value };
+        }
+        if (!bestAim) continue;
+        targets = [bestAim.ref];
+      }
+
+      cards ??= cardValueContext(view as GameState, index);
+      const score = valueOfEffects(ability.effects, {
+        state: view as GameState,
+        player: me,
+        targets: [...targets],
+        weights,
+        cards,
+        index,
+      });
+      // Not worth the mana — and this is the line that keeps the change honest:
+      // an ability the ruler cannot price scores 0 and is still never used.
+      if (score <= weights.passScore) continue;
+      if (best !== undefined && score <= best.score) continue;
+
+      const plan = planManaPayment(view as GameState, me, mana, legalActions, perm.def, 'activate');
+      if (!plan) continue; // cannot fund it right now
+
+      const action: GameAction =
+        plan.length > 0
+          ? { kind: 'tapForMana', player: me, instanceId: plan[0]!.instanceId, mode: plan[0]!.mode }
+          : {
+              kind: 'activateAbility',
+              player: me,
+              instanceId: perm.instanceId,
+              abilityIndex: a,
+              ...(targets.length > 0 ? { targets: [...targets] } : {}),
+            };
+      best = { action, score, label: ctx.trace ? `activate ${ability.label}` : NO_REASON };
+    }
+  }
+  return best;
+}
 
 /**
  * The best "attach me to that creature" play right now — the Equip half of the

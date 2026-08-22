@@ -3526,6 +3526,47 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.40 The pilot pays for its own abilities — ✅ done
+
+Two independent bugs stood between Strionic Resonator and being a real card, and §3.39 named only one
+of them — wrongly.
+
+**Bug 1: a one-line hole in a validator.** `isTargetRestriction` is the guard `restrictionOfEffects`
+consults before it will believe a `targets` param. The new `triggeredAbilityYouControl` word was added
+to the union, the legality check, the enumerator and the description — and not to the validator. So
+the restriction read back as `undefined`, the engine offered the activation **never**, and the pilot
+scored the ability **zero**. §3.39 measured that as "122 opportunities, 0 offers" and concluded the
+pilot could not plan mana. The measurement was right and the conclusion was wrong.
+
+⚠️ **The lesson is the shape, not the line.** A restriction word has FIVE homes — union, validator,
+`isLegalTarget`, `enumerateTargets`, `describeRestriction` — and missing the validator fails SILENTLY
+and looks exactly like an AI that is not clever enough. If you add a restriction, grep for an existing
+one and confirm five hits.
+
+**Bug 2 (real, and the one §3.39 guessed at): the pilot never floats mana for an ability.** The engine
+offers an activation only once the pool ALREADY covers its cost, and the pilot never taps
+speculatively — so every mana-costed activated ability was invisible to it. `bestEquipPlay` had solved
+this for Equip alone, with a comment saying exactly why. `bestFundedActivation` generalises it: walk
+the battlefield, score with `valueOfEffects` (the same ruler loyalty, modal spells and triggers use),
+fund with `planManaPayment`, emit the next tap or the activation.
+
+Both fixes were needed — with only the validator fixed, `trigger-copy` still reported inert.
+
+The old comment said other abilities were "left unused until they can be scored honestly". This is
+that ruler rather than a guess, and an ability it cannot price still scores 0 and still goes unused.
+Loyalty, Equip and land-fetch keep their own scorers; two paths bidding for one ability would
+double-count it.
+
+📊 **Gauntlet seed 99 byte-identical to main** on both Mono-Red Aggro (224/800) and UW Control
+(434/800, 53 timeout draws) — every row, not just the total. The curated decks hold no ability this
+path can price, so the new behaviour appears only where such cards exist. `trigger-copy` is now a
+registered, FIRING soak mechanic.
+
+⚠️ Its loop-draw test was rewritten too: the first version pinned a soak seed where the heuristic
+walked into the Dualcaster/Rite loop, and this very change made the pilot WIN that game instead. A
+test that goes red because the pilot got better was measuring the wrong thing — it now pins the
+mechanism and the boundary, and asserts only that the copy-mirror board TERMINATES.
+
 ### 3.39 Copying a triggered ability, and a game the rules end — ✅ done
 
 Strionic Resonator: "{2}, {T}: Copy target triggered ability you control." The stack holds two kinds
@@ -3551,14 +3592,12 @@ failing on them — legal, but a rising count is a finding.
 its payload. This one produces a real 2/2 every iteration, so the valuation is right to like it; what
 is missing is any way to stop. Do not "fix" it in the pilot.
 
-**Known gap, measured rather than assumed: the sim pilot cannot use Strionic Resonator.** The engine
-offers an activation only when the pool ALREADY covers its cost, so copying a trigger means tapping
-lands in response to your own trigger — a two-step plan the heuristic does not make. Over six anchored
-games it had Strionic untapped with a trigger on the stack **122 times and was offered the activation
-0 times**. So `trigger-copy` is deliberately not registered as a soak-witnessed mechanic: it would fail
-the inert-feature guard for a reason the card cannot fix. The card is real for a human (the online
-board taps mana by hand); teaching `bestAbility` to plan a payment is the next piece of work, and it
-is the same gap the online client's `tapCastable` documents.
+~~**Known gap: the sim pilot cannot use Strionic Resonator.**~~ **CORRECTED in §3.40 — the diagnosis
+here was wrong.** The measurement (122 opportunities, 0 offers) was real, but the cause was not the
+pilot's mana planning: `isTargetRestriction` had never been given the new restriction word, so
+`restrictionOfEffects` answered `undefined`, the engine never offered the activation and the pilot
+scored it zero. A missing line in a validator, wearing the costume of an AI limitation. See §3.40 —
+and note that "measured, not assumed" was true of the SYMPTOM and said nothing about the CAUSE.
 
 📊 Pool 528 → 529 compiled.
 

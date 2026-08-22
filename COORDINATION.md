@@ -139,6 +139,7 @@ throughput (games/sec) from regressing.
 | fix/max-hand-size-and-sba | worker | packages/core (`internal/sba.ts` CR 704.5q + the CR 704.3 gate + `resolveWinner`; `engine.ts` boundary call + CR 514.3a re-entrant cleanup + `NO_ASKING_OBJECT` source; `choices.ts` the sentinel; `index.ts` +2 exports; NEW `bench/sba-gate-cost.ts`; `sba.test.ts`, `selfplay-lock.test.ts` re-pinned, `planeswalker.test.ts` turn-runner, conformance `cr4xx`/`cr5xx`/`cr7xx` + `rules-manifest.ts`), packages/cards (`primitives.ts` persist counter kind + the primitive stops annihilating, `counters.test.ts`, `engine-cards.test.ts`, 3 interaction cells + the GAP register), packages/ai (`choices.ts` the discard policy written out + `choices.test.ts`), packages/sim (`paired-arms-config.ts` comment only), DESIGN §3.29 + §3.4a + §3.28, COORDINATION | 🚧 PUSHED, not merged |
 | fix/redaction-guarantee | worker | packages/core (NEW `instance-ids.ts` + `instance-ids.test.ts`, `index.ts` +4 exports — **no engine behaviour change**), packages/protocol (`index.ts` `collectInstanceIds` widened, `index.test.ts` +3), packages/sim (`observation.ts` the shared scanner + the guarantee restated, `observation.test.ts` REWRITTEN onto soak-anchored decks, `soak.ts` uses the shared scanner + reports `leakScanObservations`, `soak-config.ts` leak sampling 31→1, NEW `masking.test.ts`), apps/server (`security.test.ts` drops its local narrow copy), DESIGN §3.30, TESTING.md, COORDINATION | 🚧 PUSHED, not merged |
 | fix/sba-toughness-violation | worker | packages/core (`engine.ts` — the CR 704.3 check moved to the END of every action in `applyActionToDraft`; `sba.test.ts` +1), packages/sim (`soak.ts` NEW `replaySoakMixedGame` + `SoakReplayResult` + `describeMatchup`, `soak.test.ts` NEW pinned-replay block), DESIGN §3.32 (+ §3.30's deferral note closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | ✅ MERGED + DEPLOYED |
+| feat/pilot-pays-for-abilities | DESKTOP-90PJPM4 (worker) | packages/core/src/targeting.ts (ONE line — the missing validator entry), packages/ai/src/heuristic.ts (NEW bestFundedActivation + wiring in choosePriorityAction), packages/sim/src/soak-config.ts (trigger-copy re-registered as a witnessed mechanic), packages/sim/src/loop-draw.test.ts (rewritten to pin the mechanism), DESIGN §3.40 + §3.39 correction, COORDINATION | 🚧 PUSHED, not merged |
 | feat/copy-triggered-ability | DESKTOP-90PJPM4 (worker) | packages/core (targeting.ts +triggeredAbilityYouControl, events.ts +triggerCopied, instance-ids.ts), packages/cards (NEW trigger-copy-primitives.ts + trigger-copy.test.ts, compile/rules.ts +1 effect rule, primitives.ts, pool.test.ts count, GENERATED data/*), packages/ai (effect-value.ts +copyTriggeredAbility), packages/sim (config.ts +maxActionsPerTurn, match.ts loop outcome, soak.ts loopDraws, soak-config.ts, paired-arms-config.ts, NEW loop-draw.test.ts), apps/web GENERATED card-index.json, DESIGN §3.39, COORDINATION | ✅ MERGED + DEPLOYED |
 | feat/card-templates | DESKTOP-90PJPM4 (worker) | packages/cards (NEW exile-until-leaves.ts + test, compile/rules.ts +6 rules, primitives.ts registration, pool.test.ts count, GENERATED data/*), packages/core (targeting.ts +2 restrictions + optional exclude param, triggers.ts +targetsExcludeSelf, state.ts + internal/triggers-runtime.ts + internal/clone.ts threading, engine.ts trigger targeting), apps/web (lib/decklist/importedCards.ts re-compile on load; GENERATED src/data/card-index.json), packages/data-tools/data (GENERATED), DESIGN §3.38, COORDINATION | ✅ MERGED + DEPLOYED |
 | fix/pool-shadowed-by-import | DESKTOP-90PJPM4 (integrator) | apps/web (`lib/decklist/importedCards.ts` pool-first + NEW poolBeatsImport.test.ts; GENERATED src/data/card-index.json), packages/core (`targeting.ts` +1 restriction), packages/cards (`compile/rules.ts` +1 rule, `pool.test.ts` count, NEW restoration-angel.test.ts, GENERATED data/expanded-pool.ts + expansion-report.json), packages/data-tools/data (GENERATED), packages/sim (selesnya-blink.ts), DESIGN §3.37, COORDINATION | ✅ MERGED + DEPLOYED |
@@ -148,6 +149,38 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-22 DESKTOP-90PJPM4: `feat/pilot-pays-for-abilities` 🚧 PUSHED — DESIGN §3.40. Off `main`.
+  Suite **5113 / 0**, lint clean.
+
+  ⚠️ **§3.39's "known gap" was a WRONG DIAGNOSIS and is now corrected in DESIGN.** I reported that the
+  pilot could not plan a mana payment, backed by "122 opportunities, 0 offers". The measurement was
+  real; the cause was not. `isTargetRestriction` had never been given the new restriction word, so
+  `restrictionOfEffects` returned `undefined`, the ENGINE never offered the activation, and the pilot
+  scored it zero. A missing line in a validator wearing the costume of an AI limitation.
+
+  ⚠️ **A restriction word has FIVE homes** — the union, `isTargetRestriction`, `isLegalTarget`,
+  `enumerateTargets`, `describeRestriction`. Missing the validator fails SILENTLY and looks exactly
+  like a pilot that is not clever enough. Adding one? grep an existing word and confirm five hits.
+
+  **The pilot gap was ALSO real** — both fixes were needed; with only the validator fixed,
+  `trigger-copy` still reported inert. `bestFundedActivation` generalises what `bestEquipPlay` did for
+  Equip alone: the engine offers an activation only once the pool already covers its cost and the
+  pilot never floats mana speculatively, so every mana-costed ability was invisible to it. Scored with
+  `valueOfEffects` (the ruler loyalty/modal/triggers already use), funded with `planManaPayment`.
+  Loyalty, Equip and land-fetch keep their own scorers — two paths bidding for one ability would
+  double-count it against the spell it competes with.
+
+  📊 **Gauntlet seed 99 BYTE-IDENTICAL to main**, every row, on Mono-Red Aggro (224/800) and UW Control
+  (434/800, 53 timeouts). The curated decks hold no ability this path can price, so the behaviour
+  appears only where such cards exist. `trigger-copy` is now a registered, FIRING soak mechanic.
+
+  ⚠️ §3.39's loop-draw test was rewritten: it pinned a seed where the heuristic walked into the
+  Dualcaster/Rite loop, and THIS change made the pilot win that game instead. A test that reddens
+  because the pilot improved is measuring the wrong thing — it now pins the mechanism and asserts only
+  that the copy-mirror board terminates.
+
+  Still blocked: `Angel of Serenity` (multi-zone targeting — battlefield and/or graveyards).
 
 - 2026-08-21 DESKTOP-90PJPM4: `feat/copy-triggered-ability` ✅ MERGED + DEPLOYED — Strionic Resonator, **and a
   game the rules end**. DESIGN §3.39. Off `main`. Suite **5112 / 0**.

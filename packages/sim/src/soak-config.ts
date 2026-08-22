@@ -194,6 +194,7 @@ export type SoakMechanicId =
   // a REPLACEMENT on a card entering, these two are effects that MAKE a copy,
   // and a pool that prints one of them proves nothing about the others.
   | 'spell-copy'
+  | 'trigger-copy'
   | 'token-copy'
   // "This spell can't be countered", whose whole observable behaviour is a counter
   // effect resolving and doing NOTHING — so the prevented-counter event is the
@@ -488,6 +489,19 @@ export const SOAK_MECHANICS: readonly SoakMechanic[] = [
     printedBy: (_c, t) => t.includes('"copyAsEnters"'),
   },
   {
+    id: 'trigger-copy',
+    label: 'a TRIGGERED ABILITY on the stack was copied (CR 707.10) — the other kind of stack object',
+    witnessKind: 'event',
+    printedBy: (_c, t) => t.includes('"copyTriggeredAbility"'),
+    /*
+     * The enabler is an ETB trigger to copy: the ability needs a TRIGGER on the
+     * stack, and a deck of nothing but Strionic Resonators has none. Enters
+     * triggers are the kind a pilot reaches on purpose every turn.
+     */
+    enabledBy: (card) =>
+      card.types.includes('creature') && /"on":\s*"etb"/.test(JSON.stringify(card.triggers ?? [])),
+  },
+  {
     id: 'spell-copy',
     label: 'a spell on the stack was COPIED — an object that is not a card (CR 707.10)',
     witnessKind: 'event',
@@ -754,7 +768,7 @@ export const SOAK_EVENT_WITNESS: { readonly [K in GameEvent['type']]: SoakMechan
    * activation 0 times. Registering it as a witness today would fail the
    * "inert feature" guard for a reason the card cannot fix.
    */
-  triggerCopied: null,
+  triggerCopied: 'trigger-copy',
   /*
    * CR 704.5e — the copy left the stack and stopped existing. The SAME mechanic
    * as the creation, exactly as `tokenCeasedToExist` is the same mechanic as
