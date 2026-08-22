@@ -3526,6 +3526,35 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.41 Angel of Serenity, and the Angel type swept — ✅ done
+
+The last card §3.38 left blocked, and the two engine gaps it stood on.
+
+**Multi-target triggers.** Trigger targeting was single-target everywhere:
+`TriggeredAbility.targets` named ONE restriction and the engine asked for exactly one. Angel of
+Serenity wants "up to three". The fix is small because the engine was already asking a `selectTargets`
+choice to aim a trigger — it was just hard-coded `min: 1, max: 1`. `targetCount?: {min, max}` on the
+ability now drives it, absent ⇒ exactly one, so no existing trigger changes. **Targets are still
+chosen as the ability goes on the stack (CR 603.3d)** — this asks for a range, it does not defer the
+choice to resolution.
+
+⚠️ `min: 0` is what makes "UP TO three" different from "three": with no legal targets the ability must
+STAY on the stack and resolve doing nothing, where a must-target trigger is removed. Removing it would
+silently delete the rest of its text.
+
+**Multi-zone targets.** `creatureOnBattlefieldOrInGraveyard` — the pool's only target list spanning
+two zones. One restriction, not two, because "up to three" is three in TOTAL across both. Both
+graveyards are in scope: the card does not say "your". A graveyard card is NOT a permanent, so
+`exileUntilLeaves` grew a second path — the battlefield leave-funnel does not apply to it.
+
+📊 **The Angel type swept**: every modern-legal Angel offered to the compiler, **6 → 32 playable** —
+Avacyn, Akroma, Archangel of Thune, Lyra, Gisela, Angel of Despair, Emeria Angel and the rest. 143 of
+the 169 candidates are still rejected, and that is the honest number: they need ~71 DISTINCT templates
+between them, a long tail rather than one task.
+
+⚠️ Gauntlet seed 99 byte-identical (224/800) — 26 cards entering the pool must not, and did not, move
+a curated-deck baseline.
+
 ### 3.40 The pilot pays for its own abilities — ✅ done
 
 Two independent bugs stood between Strionic Resonator and being a real card, and §3.39 named only one

@@ -22,10 +22,12 @@
  */
 import {
   isCreature,
+  PLAYER_IDS,
   type CardInstance,
   type EffectContext,
   type EffectPrimitive,
   type InstanceId,
+  type PlayerId,
 } from '@jonny-boi/core';
 import { isLegalTarget } from '@jonny-boi/core';
 import {
@@ -76,19 +78,48 @@ export const exileUntilLeaves: EffectPrimitive = (ctx) => {
   let done = 0;
   for (const id of ids) {
     if (done >= max) break;
-    const permanent = permanentById(ctx.state, id);
-    if (!permanent) continue;
     if (!isLegalTarget(ctx.state, restriction, id, ctx.controller, ctx.source.def)) continue;
-    // Exile through the shared leave funnel, so a token ceases to exist and every
-    // CR 400.7 reset happens exactly as it does for any other exile.
-    movePermanentTo(ctx, permanent, 'exile');
-    // Stamped AFTER the move: `resetInstanceForNewZone` runs inside it and would
-    // otherwise be free to clear the link we are about to write.
-    const exiled = ctx.state.players[permanent.owner].exile.find((c) => c.instanceId === id);
+
+    const permanent = permanentById(ctx.state, id);
+    let owner: PlayerId;
+    if (permanent) {
+      owner = permanent.owner;
+      // Exile through the shared leave funnel, so a token ceases to exist and
+      // every CR 400.7 reset happens exactly as it does for any other exile.
+      movePermanentTo(ctx, permanent, 'exile');
+    } else {
+      // A creature CARD IN A GRAVEYARD (Angel of Serenity takes either). Not a
+      // permanent, so the battlefield funnel does not apply: it is already a
+      // card in an owned zone and simply moves to the next one.
+      const found = cardInAGraveyard(ctx, id);
+      if (!found) continue; // already left — the usual resolution-time re-check
+      owner = found.owner;
+      found.zone.splice(found.index, 1);
+      found.card.zone = 'exile';
+      ctx.state.players[owner].exile.push(found.card);
+      ctx.emit({ type: 'zoneChange', instanceId: id, from: 'graveyard', to: 'exile' });
+    }
+
+    // Stamped AFTER the move: `resetInstanceForNewZone` runs inside the
+    // battlefield funnel and would otherwise be free to clear the link.
+    const exiled = ctx.state.players[owner].exile.find((c) => c.instanceId === id);
     if (exiled) (exiled as ExiledCard).exiledUntilLeavesBy = ctx.source.instanceId;
     done += 1;
   }
 };
+
+/** Locate a card sitting in EITHER graveyard, with what is needed to move it. */
+function cardInAGraveyard(
+  ctx: EffectContext,
+  id: InstanceId,
+): { readonly card: CardInstance; readonly owner: PlayerId; readonly zone: CardInstance[]; readonly index: number } | undefined {
+  for (const owner of PLAYER_IDS) {
+    const zone = ctx.state.players[owner].graveyard as CardInstance[];
+    const index = zone.findIndex((c) => c.instanceId === id);
+    if (index >= 0) return { card: zone[index] as CardInstance, owner, zone, index };
+  }
+  return undefined;
+}
 
 /**
  * `returnExiledByThis` — the other half: bring back everything this source
@@ -101,7 +132,7 @@ export const exileUntilLeaves: EffectPrimitive = (ctx) => {
 export const returnExiledByThis: EffectPrimitive = (ctx) => {
   const to = returnDestination(ctx);
   const source = ctx.source.instanceId;
-  for (const owner of ['A', 'B'] as const) {
+  for (const owner of PLAYER_IDS) {
     const zone = ctx.state.players[owner].exile;
     // Snapshot: returning mutates the array being walked.
     const mine = zone.filter((c) => (c as ExiledCard).exiledUntilLeavesBy === source);

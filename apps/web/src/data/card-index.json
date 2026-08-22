@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-08-22T04:24:28.236Z",
+  "generatedAt": "2026-08-22T07:15:15.433Z",
   "attribution": "Card data and images via the Scryfall API (https://scryfall.com). Card names, text, and art © Wizards of the Coast.",
-  "requested": 561,
+  "requested": 587,
   "unresolved": [],
   "cards": [
     {
@@ -712,6 +712,68 @@
       ]
     },
     {
+      "id": "107f204c-9fd3-490d-8887-be63d14fc6a4",
+      "name": "Akroma, Angel of Wrath",
+      "manaCost": {
+        "generic": 5,
+        "W": 3,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 8,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Angel",
+      "oracleText": "Flying, first strike, vigilance, trample, haste, protection from black and from red",
+      "power": 6,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Vigilance",
+        "First strike",
+        "Protection",
+        "Haste",
+        "Trample"
+      ],
+      "set": "c20",
+      "collectorNumber": "73",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/f/bf1ef8ec-d915-41f2-b087-3d6d82e3db85.jpg?1783931206",
+        "normal": "https://cards.scryfall.io/normal/front/b/f/bf1ef8ec-d915-41f2-b087-3d6d82e3db85.jpg?1783931206",
+        "large": "https://cards.scryfall.io/large/front/b/f/bf1ef8ec-d915-41f2-b087-3d6d82e3db85.jpg?1783931206",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/f/bf1ef8ec-d915-41f2-b087-3d6d82e3db85.jpg?1783931206"
+      },
+      "localImages": {
+        "normal": "akroma-angel-of-wrath-normal.jpg",
+        "art_crop": "akroma-angel-of-wrath-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "9aaf0df7-5e2d-4f49-a8cb-66523be15ad6",
       "name": "Alchemist's Greeting",
       "manaCost": {
@@ -1067,6 +1129,63 @@
       "faces": []
     },
     {
+      "id": "02520741-d7f0-46e6-acbe-010b65fc24c0",
+      "name": "Angel of Despair",
+      "manaCost": {
+        "generic": 3,
+        "W": 2,
+        "U": 0,
+        "B": 2,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhen this creature enters, destroy target permanent.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "B",
+        "W"
+      ],
+      "colorIdentity": [
+        "B",
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "uma",
+      "collectorNumber": "196",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/0/a07809b2-dabe-4242-84c3-fd640d7d5998.jpg?1783933778",
+        "normal": "https://cards.scryfall.io/normal/front/a/0/a07809b2-dabe-4242-84c3-fd640d7d5998.jpg?1783933778",
+        "large": "https://cards.scryfall.io/large/front/a/0/a07809b2-dabe-4242-84c3-fd640d7d5998.jpg?1783933778",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/0/a07809b2-dabe-4242-84c3-fd640d7d5998.jpg?1783933778"
+      },
+      "localImages": {
+        "normal": "angel-of-despair-normal.jpg",
+        "art_crop": "angel-of-despair-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "a2daaf32-dbfe-4618-892e-0da24f63a44a",
       "name": "Angel of Mercy",
       "manaCost": {
@@ -1122,6 +1241,117 @@
       "faces": []
     },
     {
+      "id": "f4ce6078-8c7b-4f68-b324-13130c63a983",
+      "name": "Angel of Serenity",
+      "manaCost": {
+        "generic": 4,
+        "W": 3,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhen this creature enters, you may exile up to three other target creatures from the battlefield and/or creature cards from graveyards.\nWhen this creature leaves the battlefield, return the exiled cards to their owners' hands.",
+      "power": 5,
+      "toughness": 6,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "c21",
+      "collectorNumber": "83",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/0/60301fbc-1bd4-4c37-ad19-660d625a090a.jpg?1783927581",
+        "normal": "https://cards.scryfall.io/normal/front/6/0/60301fbc-1bd4-4c37-ad19-660d625a090a.jpg?1783927581",
+        "large": "https://cards.scryfall.io/large/front/6/0/60301fbc-1bd4-4c37-ad19-660d625a090a.jpg?1783927581",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/0/60301fbc-1bd4-4c37-ad19-660d625a090a.jpg?1783927581"
+      },
+      "localImages": {
+        "normal": "angel-of-serenity-normal.jpg",
+        "art_crop": "angel-of-serenity-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "701912d5-9995-4ac7-9858-188f78b2b8a3",
+      "name": "Angel of the God-Pharaoh",
+      "manaCost": {
+        "generic": 4,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Cycling"
+      ],
+      "set": "hou",
+      "collectorNumber": "4",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/d/ad202785-a91f-4dc8-bcc0-eb1bd49f162e.jpg?1783936066",
+        "normal": "https://cards.scryfall.io/normal/front/a/d/ad202785-a91f-4dc8-bcc0-eb1bd49f162e.jpg?1783936066",
+        "large": "https://cards.scryfall.io/large/front/a/d/ad202785-a91f-4dc8-bcc0-eb1bd49f162e.jpg?1783936066",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/d/ad202785-a91f-4dc8-bcc0-eb1bd49f162e.jpg?1783936066"
+      },
+      "localImages": {
+        "normal": "angel-of-the-god-pharaoh-normal.jpg",
+        "art_crop": "angel-of-the-god-pharaoh-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "6b232bb7-d372-4174-a049-5f8d620810e6",
       "name": "Angel's Mercy",
       "manaCost": {
@@ -1167,6 +1397,63 @@
       "localImages": {
         "normal": "angel-s-mercy-normal.jpg",
         "art_crop": "angel-s-mercy-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "cca29a9b-794f-4712-8e6c-36ce3da9cb8b",
+      "name": "Angelic Curator",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel",
+          "Spirit"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel Spirit",
+      "oracleText": "Flying, protection from artifacts",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Protection"
+      ],
+      "set": "mh2",
+      "collectorNumber": "262",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/3/3/332352c2-98f2-4eb8-b49a-026a39df227b.jpg?1783926792",
+        "normal": "https://cards.scryfall.io/normal/front/3/3/332352c2-98f2-4eb8-b49a-026a39df227b.jpg?1783926792",
+        "large": "https://cards.scryfall.io/large/front/3/3/332352c2-98f2-4eb8-b49a-026a39df227b.jpg?1783926792",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/3/3/332352c2-98f2-4eb8-b49a-026a39df227b.jpg?1783926792"
+      },
+      "localImages": {
+        "normal": "angelic-curator-normal.jpg",
+        "art_crop": "angelic-curator-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -1331,6 +1618,118 @@
       "localImages": {
         "normal": "aqueous-form-normal.jpg",
         "art_crop": "aqueous-form-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "9971697b-2acc-4bc2-a44e-074d03a51df7",
+      "name": "Archangel",
+      "manaCost": {
+        "generic": 5,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying, vigilance",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Vigilance"
+      ],
+      "set": "c13",
+      "collectorNumber": "5",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/5/85160859-9a2d-470b-a924-4b1b4caba860.jpg?1783939692",
+        "normal": "https://cards.scryfall.io/normal/front/8/5/85160859-9a2d-470b-a924-4b1b4caba860.jpg?1783939692",
+        "large": "https://cards.scryfall.io/large/front/8/5/85160859-9a2d-470b-a924-4b1b4caba860.jpg?1783939692",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/5/85160859-9a2d-470b-a924-4b1b4caba860.jpg?1783939692"
+      },
+      "localImages": {
+        "normal": "archangel-normal.jpg",
+        "art_crop": "archangel-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "4f2d4538-dc1d-4c09-964b-b0d7c240fb7d",
+      "name": "Archangel of Thune",
+      "manaCost": {
+        "generic": 3,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nWhenever you gain life, put a +1/+1 counter on each creature you control.",
+      "power": 3,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Lifelink"
+      ],
+      "set": "2xm",
+      "collectorNumber": "5",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/1/5/15c34447-b0f4-4fcc-b557-23c92850b31b.jpg?1783930222",
+        "normal": "https://cards.scryfall.io/normal/front/1/5/15c34447-b0f4-4fcc-b557-23c92850b31b.jpg?1783930222",
+        "large": "https://cards.scryfall.io/large/front/1/5/15c34447-b0f4-4fcc-b557-23c92850b31b.jpg?1783930222",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/1/5/15c34447-b0f4-4fcc-b557-23c92850b31b.jpg?1783930222"
+      },
+      "localImages": {
+        "normal": "archangel-of-thune-normal.jpg",
+        "art_crop": "archangel-of-thune-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -1822,6 +2221,65 @@
       "localImages": {
         "normal": "augury-owl-normal.jpg",
         "art_crop": "augury-owl-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "216cb26e-8da9-478b-bfbc-8030f7adee72",
+      "name": "Avacyn, Angel of Hope",
+      "manaCost": {
+        "generic": 5,
+        "W": 3,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 8,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Angel",
+      "oracleText": "Flying, vigilance, indestructible\nOther permanents you control have indestructible.",
+      "power": 8,
+      "toughness": 8,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Indestructible",
+        "Vigilance"
+      ],
+      "set": "inr",
+      "collectorNumber": "477",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/4/74e5dcec-ef1d-4461-bb23-61d98ff082dd.jpg?1783907976",
+        "normal": "https://cards.scryfall.io/normal/front/7/4/74e5dcec-ef1d-4461-bb23-61d98ff082dd.jpg?1783907976",
+        "large": "https://cards.scryfall.io/large/front/7/4/74e5dcec-ef1d-4461-bb23-61d98ff082dd.jpg?1783907976",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/4/74e5dcec-ef1d-4461-bb23-61d98ff082dd.jpg?1783907976"
+      },
+      "localImages": {
+        "normal": "avacyn-angel-of-hope-normal.jpg",
+        "art_crop": "avacyn-angel-of-hope-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -7203,6 +7661,61 @@
       "faces": []
     },
     {
+      "id": "a7d88510-d2ce-4dd6-938c-964cc74ff7d7",
+      "name": "Dawning Angel",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhen this creature enters, you gain 4 life.",
+      "power": 3,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "m20",
+      "collectorNumber": "11",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/f/4f3d90ef-6f70-4897-85c1-4e1beeb33363.jpg?1783933032",
+        "normal": "https://cards.scryfall.io/normal/front/4/f/4f3d90ef-6f70-4897-85c1-4e1beeb33363.jpg?1783933032",
+        "large": "https://cards.scryfall.io/large/front/4/f/4f3d90ef-6f70-4897-85c1-4e1beeb33363.jpg?1783933032",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/f/4f3d90ef-6f70-4897-85c1-4e1beeb33363.jpg?1783933032"
+      },
+      "localImages": {
+        "normal": "dawning-angel-normal.jpg",
+        "art_crop": "dawning-angel-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "d057289d-5e28-43d5-8ff3-4a1bc723477d",
       "name": "Day of Judgment",
       "manaCost": {
@@ -7248,6 +7761,61 @@
       "localImages": {
         "normal": "day-of-judgment-normal.jpg",
         "art_crop": "day-of-judgment-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "7de464e3-fae3-44cc-8233-776fc727c00a",
+      "name": "Dazzling Angel",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhenever another creature you control enters, you gain 1 life.",
+      "power": 2,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "fdn",
+      "collectorNumber": "732",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957",
+        "normal": "https://cards.scryfall.io/normal/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957",
+        "large": "https://cards.scryfall.io/large/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/a/0/a0bdf4d1-576f-41b6-a077-8725be608331.jpg?1783903957"
+      },
+      "localImages": {
+        "normal": "dazzling-angel-normal.jpg",
+        "art_crop": "dazzling-angel-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -7414,6 +7982,61 @@
       "localImages": {
         "normal": "death-grasp-normal.jpg",
         "art_crop": "death-grasp-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6098ba4b-ebfe-48da-a33d-b94c021ac559",
+      "name": "Deathless Angel",
+      "manaCost": {
+        "generic": 4,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\n{W}{W}: Target creature gains indestructible until end of turn.",
+      "power": 5,
+      "toughness": 7,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "roe",
+      "collectorNumber": "17",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/4/049fb314-184c-4411-9035-f04215659056.jpg?1783942009",
+        "normal": "https://cards.scryfall.io/normal/front/0/4/049fb314-184c-4411-9035-f04215659056.jpg?1783942009",
+        "large": "https://cards.scryfall.io/large/front/0/4/049fb314-184c-4411-9035-f04215659056.jpg?1783942009",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/4/049fb314-184c-4411-9035-f04215659056.jpg?1783942009"
+      },
+      "localImages": {
+        "normal": "deathless-angel-normal.jpg",
+        "art_crop": "deathless-angel-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -9318,6 +9941,62 @@
           "imageUris": {}
         }
       ]
+    },
+    {
+      "id": "ea6616e4-db8d-4905-80f8-cb0162906850",
+      "name": "Emeria Angel",
+      "manaCost": {
+        "generic": 2,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nLandfall — Whenever a land you control enters, you may create a 1/1 white Bird creature token with flying.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Landfall",
+        "Flying"
+      ],
+      "set": "tdc",
+      "collectorNumber": "114",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/4/2406ab7c-c6be-421a-a92c-048441a01acd.jpg?1783907128",
+        "normal": "https://cards.scryfall.io/normal/front/2/4/2406ab7c-c6be-421a-a92c-048441a01acd.jpg?1783907128",
+        "large": "https://cards.scryfall.io/large/front/2/4/2406ab7c-c6be-421a-a92c-048441a01acd.jpg?1783907128",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/4/2406ab7c-c6be-421a-a92c-048441a01acd.jpg?1783907128"
+      },
+      "localImages": {
+        "normal": "emeria-angel-normal.jpg",
+        "art_crop": "emeria-angel-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
     },
     {
       "id": "7a51780a-fa28-4ee0-94c7-4330800ca9cb",
@@ -11979,6 +12658,67 @@
       "faces": []
     },
     {
+      "id": "66f9f325-5e8e-4ebf-b5b3-c6410d80f2c5",
+      "name": "Gisela, Blade of Goldnight",
+      "manaCost": {
+        "generic": 4,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 1,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Angel",
+      "oracleText": "Flying, first strike\nIf a source would deal damage to an opponent or a permanent an opponent controls, that source deals double that damage to that player or permanent instead.\nIf a source would deal damage to you or a permanent you control, prevent half that damage, rounded up.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "R",
+        "W"
+      ],
+      "colorIdentity": [
+        "R",
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "First strike",
+        "Double"
+      ],
+      "set": "mkc",
+      "collectorNumber": "211",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/0/900b8908-ba51-472e-ab7a-43bd07f90577.jpg?1783912978",
+        "normal": "https://cards.scryfall.io/normal/front/9/0/900b8908-ba51-472e-ab7a-43bd07f90577.jpg?1783912978",
+        "large": "https://cards.scryfall.io/large/front/9/0/900b8908-ba51-472e-ab7a-43bd07f90577.jpg?1783912978",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/0/900b8908-ba51-472e-ab7a-43bd07f90577.jpg?1783912978"
+      },
+      "localImages": {
+        "normal": "gisela-blade-of-goldnight-normal.jpg",
+        "art_crop": "gisela-blade-of-goldnight-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3a3e8c9b-e458-4661-980d-0a84a4c2452b",
       "name": "Glasswing Grace // Age-Graced Chapel",
       "manaCost": {
@@ -13650,6 +14390,61 @@
       ]
     },
     {
+      "id": "cb97da84-1d13-4795-b68a-2bf111a50067",
+      "name": "Herald of Faith",
+      "manaCost": {
+        "generic": 3,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhenever this creature attacks, you gain 2 life.",
+      "power": 4,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "fdn",
+      "collectorNumber": "735",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956",
+        "normal": "https://cards.scryfall.io/normal/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956",
+        "large": "https://cards.scryfall.io/large/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/2/e/2e1705da-dc35-4bcb-82d4-b77712e79af3.jpg?1783903956"
+      },
+      "localImages": {
+        "normal": "herald-of-faith-normal.jpg",
+        "art_crop": "herald-of-faith-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "3525e263-e29a-49bf-a29f-fb3ce43bbd33",
       "name": "Heraldic Banner",
       "manaCost": {
@@ -13744,6 +14539,64 @@
       "localImages": {
         "normal": "hill-giant-normal.jpg",
         "art_crop": "hill-giant-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "748003fd-84c5-4c99-b146-d7d382eef64d",
+      "name": "Holy Cow",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Ox",
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Ox Angel",
+      "oracleText": "Flash\nFlying\nWhen this creature enters, you gain 2 life and scry 1. (Look at the top card of your library. You may put that card on the bottom.)",
+      "power": 2,
+      "toughness": 2,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Scry",
+        "Flying",
+        "Flash"
+      ],
+      "set": "otj",
+      "collectorNumber": "16",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/0/90de84c9-941b-4056-8501-ce8a948b9643.jpg?1783911856",
+        "normal": "https://cards.scryfall.io/normal/front/9/0/90de84c9-941b-4056-8501-ce8a948b9643.jpg?1783911856",
+        "large": "https://cards.scryfall.io/large/front/9/0/90de84c9-941b-4056-8501-ce8a948b9643.jpg?1783911856",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/0/90de84c9-941b-4056-8501-ce8a948b9643.jpg?1783911856"
+      },
+      "localImages": {
+        "normal": "holy-cow-normal.jpg",
+        "art_crop": "holy-cow-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -14114,6 +14967,62 @@
       "localImages": {
         "normal": "incorrigible-youths-normal.jpg",
         "art_crop": "incorrigible-youths-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d646e42b-5635-4798-b633-29c093b66a55",
+      "name": "Inspiring Overseer",
+      "manaCost": {
+        "generic": 2,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel",
+          "Cleric"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel Cleric",
+      "oracleText": "Flying\nWhen this creature enters, you gain 1 life and draw a card.",
+      "power": 2,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "fdn",
+      "collectorNumber": "736",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956",
+        "normal": "https://cards.scryfall.io/normal/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956",
+        "large": "https://cards.scryfall.io/large/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/7/9/79016cf3-6eea-4b21-9ff3-f187d606e19a.jpg?1783903956"
+      },
+      "localImages": {
+        "normal": "inspiring-overseer-normal.jpg",
+        "art_crop": "inspiring-overseer-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -14932,6 +15841,67 @@
       "localImages": {
         "normal": "izzet-signet-normal.jpg",
         "art_crop": "izzet-signet-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d06cd670-7ffc-4295-97d1-0eff042fb6d5",
+      "name": "Jenara, Asura of War",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 1,
+        "B": 0,
+        "R": 0,
+        "G": 1,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 3,
+      "typeLine": {
+        "supertypes": [
+          "Legendary"
+        ],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Legendary Creature — Angel",
+      "oracleText": "Flying\n{1}{W}: Put a +1/+1 counter on Jenara.",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "G",
+        "U",
+        "W"
+      ],
+      "colorIdentity": [
+        "G",
+        "U",
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "ncc",
+      "collectorNumber": "343",
+      "rarity": "mythic",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/b/4bcf5b5f-b908-4975-91f7-c4c6f819e0a6.jpg?1783923227",
+        "normal": "https://cards.scryfall.io/normal/front/4/b/4bcf5b5f-b908-4975-91f7-c4c6f819e0a6.jpg?1783923227",
+        "large": "https://cards.scryfall.io/large/front/4/b/4bcf5b5f-b908-4975-91f7-c4c6f819e0a6.jpg?1783923227",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/b/4bcf5b5f-b908-4975-91f7-c4c6f819e0a6.jpg?1783923227"
+      },
+      "localImages": {
+        "normal": "jenara-asura-of-war-normal.jpg",
+        "art_crop": "jenara-asura-of-war-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -16883,6 +17853,61 @@
       "localImages": {
         "normal": "loxodon-warhammer-normal.jpg",
         "art_crop": "loxodon-warhammer-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "8d7cf56c-94fd-47d8-9e0f-cd3163688983",
+      "name": "Luminous Angel",
+      "manaCost": {
+        "generic": 4,
+        "W": 3,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 7,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nAt the beginning of your upkeep, you may create a 1/1 white Spirit creature token with flying.",
+      "power": 4,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "dvd",
+      "collectorNumber": "12",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/c/3/c3ac419f-7630-48c7-9039-88ce28898b6d.jpg?1783938786",
+        "normal": "https://cards.scryfall.io/normal/front/c/3/c3ac419f-7630-48c7-9039-88ce28898b6d.jpg?1783938786",
+        "large": "https://cards.scryfall.io/large/front/c/3/c3ac419f-7630-48c7-9039-88ce28898b6d.jpg?1783938786",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/c/3/c3ac419f-7630-48c7-9039-88ce28898b6d.jpg?1783938786"
+      },
+      "localImages": {
+        "normal": "luminous-angel-normal.jpg",
+        "art_crop": "luminous-angel-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -23351,6 +24376,62 @@
       "faces": []
     },
     {
+      "id": "50372c54-359c-4ee6-9e21-1e40ba53652d",
+      "name": "Segovian Angel",
+      "manaCost": {
+        "generic": 0,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 1,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying, vigilance",
+      "power": 1,
+      "toughness": 1,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Vigilance"
+      ],
+      "set": "mh1",
+      "collectorNumber": "25",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/5/b5dbaec5-502d-48c2-9e71-c12cd0bccc6a.jpg?1783933157",
+        "normal": "https://cards.scryfall.io/normal/front/b/5/b5dbaec5-502d-48c2-9e71-c12cd0bccc6a.jpg?1783933157",
+        "large": "https://cards.scryfall.io/large/front/b/5/b5dbaec5-502d-48c2-9e71-c12cd0bccc6a.jpg?1783933157",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/5/b5dbaec5-502d-48c2-9e71-c12cd0bccc6a.jpg?1783933157"
+      },
+      "localImages": {
+        "normal": "segovian-angel-normal.jpg",
+        "art_crop": "segovian-angel-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "75b235d3-595a-4859-be45-9559d8445db5",
       "name": "Selesnya Guildgate",
       "manaCost": {
@@ -23447,6 +24528,62 @@
       "localImages": {
         "normal": "selesnya-signet-normal.jpg",
         "art_crop": "selesnya-signet-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "38c588ae-7254-4fae-aa9a-03e2a5524492",
+      "name": "Seraph of Dawn",
+      "manaCost": {
+        "generic": 2,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 4,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying, lifelink",
+      "power": 2,
+      "toughness": 4,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Lifelink"
+      ],
+      "set": "cmr",
+      "collectorNumber": "44",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/6/4/64bf33ea-2d2d-476d-ab1d-fba204fd034b.jpg?1783928874",
+        "normal": "https://cards.scryfall.io/normal/front/6/4/64bf33ea-2d2d-476d-ab1d-fba204fd034b.jpg?1783928874",
+        "large": "https://cards.scryfall.io/large/front/6/4/64bf33ea-2d2d-476d-ab1d-fba204fd034b.jpg?1783928874",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/6/4/64bf33ea-2d2d-476d-ab1d-fba204fd034b.jpg?1783928874"
+      },
+      "localImages": {
+        "normal": "seraph-of-dawn-normal.jpg",
+        "art_crop": "seraph-of-dawn-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -23614,6 +24751,62 @@
       "localImages": {
         "normal": "serra-s-embrace-normal.jpg",
         "art_crop": "serra-s-embrace-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "c50cd7e7-8d53-44af-ac96-3e104587bdb3",
+      "name": "Serra's Guardian",
+      "manaCost": {
+        "generic": 4,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying (This creature can't be blocked except by creatures with flying or reach.)\nVigilance (Attacking doesn't cause this creature to tap.)\nOther creatures you control have vigilance.",
+      "power": 5,
+      "toughness": 5,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Vigilance"
+      ],
+      "set": "m20",
+      "collectorNumber": "310",
+      "rarity": "rare",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/8/4/84784231-2675-4b5b-929f-a796c091a77c.jpg?1783932913",
+        "normal": "https://cards.scryfall.io/normal/front/8/4/84784231-2675-4b5b-929f-a796c091a77c.jpg?1783932913",
+        "large": "https://cards.scryfall.io/large/front/8/4/84784231-2675-4b5b-929f-a796c091a77c.jpg?1783932913",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/8/4/84784231-2675-4b5b-929f-a796c091a77c.jpg?1783932913"
+      },
+      "localImages": {
+        "normal": "serra-s-guardian-normal.jpg",
+        "art_crop": "serra-s-guardian-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -23830,6 +25023,63 @@
       "localImages": {
         "normal": "sheltered-thicket-normal.jpg",
         "art_crop": "sheltered-thicket-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "d8c70f2f-985c-4982-97eb-99da3810e048",
+      "name": "Shepherd of the Lost",
+      "manaCost": {
+        "generic": 4,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 5,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying, first strike, vigilance",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Vigilance",
+        "First strike"
+      ],
+      "set": "zen",
+      "collectorNumber": "34",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/f/f/ff23b1c2-7b99-4504-8944-ada264725524.jpg?1783942168",
+        "normal": "https://cards.scryfall.io/normal/front/f/f/ff23b1c2-7b99-4504-8944-ada264725524.jpg?1783942168",
+        "large": "https://cards.scryfall.io/large/front/f/f/ff23b1c2-7b99-4504-8944-ada264725524.jpg?1783942168",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/f/f/ff23b1c2-7b99-4504-8944-ada264725524.jpg?1783942168"
+      },
+      "localImages": {
+        "normal": "shepherd-of-the-lost-normal.jpg",
+        "art_crop": "shepherd-of-the-lost-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -25904,6 +27154,61 @@
       "faces": []
     },
     {
+      "id": "88b1e06c-5899-4e83-8204-e2c32c0c6aff",
+      "name": "Subjugator Angel",
+      "manaCost": {
+        "generic": 4,
+        "W": 2,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhen this creature enters, tap all creatures your opponents control.",
+      "power": 4,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "inr",
+      "collectorNumber": "43",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/b/b/bb89585f-0c68-42e6-8115-07d5752f6c1c.jpg?1783908173",
+        "normal": "https://cards.scryfall.io/normal/front/b/b/bb89585f-0c68-42e6-8115-07d5752f6c1c.jpg?1783908173",
+        "large": "https://cards.scryfall.io/large/front/b/b/bb89585f-0c68-42e6-8115-07d5752f6c1c.jpg?1783908173",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/b/b/bb89585f-0c68-42e6-8115-07d5752f6c1c.jpg?1783908173"
+      },
+      "localImages": {
+        "normal": "subjugator-angel-normal.jpg",
+        "art_crop": "subjugator-angel-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "08122109-6287-4d78-9242-2da8a25022b0",
       "name": "Subtle Strike",
       "manaCost": {
@@ -25999,6 +27304,64 @@
       "localImages": {
         "normal": "sulfurous-springs-normal.jpg",
         "art_crop": "sulfurous-springs-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "be37ef9d-955a-417e-bde8-bb9e0bdf3612",
+      "name": "Sunblade Angel",
+      "manaCost": {
+        "generic": 5,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying, first strike, vigilance, lifelink",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Lifelink",
+        "Vigilance",
+        "First strike"
+      ],
+      "set": "cmm",
+      "collectorNumber": "61",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/4/0/407041c4-0154-42ee-a736-7815024d1719.jpg?1783915710",
+        "normal": "https://cards.scryfall.io/normal/front/4/0/407041c4-0154-42ee-a736-7815024d1719.jpg?1783915710",
+        "large": "https://cards.scryfall.io/large/front/4/0/407041c4-0154-42ee-a736-7815024d1719.jpg?1783915710",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/4/0/407041c4-0154-42ee-a736-7815024d1719.jpg?1783915710"
+      },
+      "localImages": {
+        "normal": "sunblade-angel-normal.jpg",
+        "art_crop": "sunblade-angel-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,
@@ -31745,6 +33108,63 @@
       "faces": []
     },
     {
+      "id": "e18c93bc-2073-4bb6-83b4-c5c70f2d8a82",
+      "name": "Winged Shepherd",
+      "manaCost": {
+        "generic": 5,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 6,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying, vigilance\nCycling {W} ({W}, Discard this card: Draw a card.)",
+      "power": 3,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying",
+        "Vigilance",
+        "Cycling"
+      ],
+      "set": "akh",
+      "collectorNumber": "39",
+      "rarity": "common",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/0/4/04301470-82d9-43c7-aaf1-a41e185cb109.jpg?1783936530",
+        "normal": "https://cards.scryfall.io/normal/front/0/4/04301470-82d9-43c7-aaf1-a41e185cb109.jpg?1783936530",
+        "large": "https://cards.scryfall.io/large/front/0/4/04301470-82d9-43c7-aaf1-a41e185cb109.jpg?1783936530",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/0/4/04301470-82d9-43c7-aaf1-a41e185cb109.jpg?1783936530"
+      },
+      "localImages": {
+        "normal": "winged-shepherd-normal.jpg",
+        "art_crop": "winged-shepherd-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
       "id": "8d3a0b81-1895-47a8-87a3-3e4093cbd951",
       "name": "Winterflame",
       "manaCost": {
@@ -32320,6 +33740,61 @@
       "localImages": {
         "normal": "youthful-knight-normal.jpg",
         "art_crop": "youthful-knight-art_crop.jpg"
+      },
+      "layout": "normal",
+      "isDoubleFaced": false,
+      "faces": []
+    },
+    {
+      "id": "6d37ba4b-ff56-4eec-9dc2-2d7f357dc9c9",
+      "name": "Youthful Valkyrie",
+      "manaCost": {
+        "generic": 1,
+        "W": 1,
+        "U": 0,
+        "B": 0,
+        "R": 0,
+        "G": 0,
+        "C": 0,
+        "other": []
+      },
+      "cmc": 2,
+      "typeLine": {
+        "supertypes": [],
+        "types": [
+          "Creature"
+        ],
+        "subtypes": [
+          "Angel"
+        ]
+      },
+      "rawTypeLine": "Creature — Angel",
+      "oracleText": "Flying\nWhenever another Angel you control enters, put a +1/+1 counter on this creature.",
+      "power": 1,
+      "toughness": 3,
+      "loyalty": null,
+      "defense": null,
+      "colors": [
+        "W"
+      ],
+      "colorIdentity": [
+        "W"
+      ],
+      "keywords": [
+        "Flying"
+      ],
+      "set": "fdn",
+      "collectorNumber": "149",
+      "rarity": "uncommon",
+      "imageUris": {
+        "small": "https://cards.scryfall.io/small/front/9/d/9d795f79-c3a5-4ea1-a5cf-1ce73d6837b6.jpg?1783909083",
+        "normal": "https://cards.scryfall.io/normal/front/9/d/9d795f79-c3a5-4ea1-a5cf-1ce73d6837b6.jpg?1783909083",
+        "large": "https://cards.scryfall.io/large/front/9/d/9d795f79-c3a5-4ea1-a5cf-1ce73d6837b6.jpg?1783909083",
+        "art_crop": "https://cards.scryfall.io/art_crop/front/9/d/9d795f79-c3a5-4ea1-a5cf-1ce73d6837b6.jpg?1783909083"
+      },
+      "localImages": {
+        "normal": "youthful-valkyrie-normal.jpg",
+        "art_crop": "youthful-valkyrie-art_crop.jpg"
       },
       "layout": "normal",
       "isDoubleFaced": false,

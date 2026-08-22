@@ -187,7 +187,16 @@ export type TargetRestriction =
    * cannot hit a trigger). This is the mirror: only the trigger kind, and only
    * the ones this player controls.
    */
-  | 'triggeredAbilityYouControl';
+  | 'triggeredAbilityYouControl'
+  /**
+   * "creatures from the battlefield AND/OR creature cards from graveyards" —
+   * Angel of Serenity's printed line, and the pool's only two-zone target.
+   *
+   * One restriction rather than two, because the printed line is ONE target list
+   * whose members may come from either zone: "up to three" means three in total,
+   * not three of each. Both graveyards are in scope (it does not say "your").
+   */
+  | 'creatureOnBattlefieldOrInGraveyard';
 
 /**
  * Whether a spell on the stack is an INSTANT OR SORCERY spell — the one question
@@ -237,7 +246,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'permanent' ||
     value === 'instantOrSorceryInYourGraveyard' ||
     value === 'instantOrSorcerySpell' ||
-    value === 'triggeredAbilityYouControl'
+    value === 'triggeredAbilityYouControl' ||
+    value === 'creatureOnBattlefieldOrInGraveyard'
   );
 }
 
@@ -322,6 +332,20 @@ export function isLegalTarget(
     return restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker';
   }
   if (restriction === 'player' || restriction === 'opponent') return false;
+  if (restriction === 'creatureOnBattlefieldOrInGraveyard') {
+    for (const player of PLAYER_IDS) {
+      const yard = state.players[player].graveyard;
+      for (let i = 0; i < yard.length; i++) {
+        const card = yard[i] as CardInstance;
+        if (card.instanceId === target) return isCreature(card.def);
+      }
+    }
+    // Not in a graveyard ⇒ it must be a creature on the battlefield.
+    for (const permanent of state.battlefield) {
+      if (permanent.instanceId === target) return isCreature(permanent.def);
+    }
+    return false;
+  }
   if (restriction === 'instantOrSorceryInYourGraveyard') {
     // "Your graveyard" needs an actor; unknown ⇒ illegal, never guessed (see
     // the type's note). The candidate must be sitting in THAT player's
@@ -539,6 +563,23 @@ function enumerateTargets(
   // board carrying an anthem or an Equipment pays for the aggregation once rather
   // than once per candidate (which is what the previous shape did).
   const keywordIndex = keywordIndexFor(state);
+  if (restriction === 'creatureOnBattlefieldOrInGraveyard') {
+    const out: (InstanceId | PlayerId)[] = [];
+    for (const permanent of state.battlefield) {
+      if (isCreature(permanent.def) && isTargetableBy(state, permanent, controller, source, keywordIndex)) {
+        out.push(permanent.instanceId);
+      }
+    }
+    // BOTH graveyards — the printed line does not say "your". A card in a
+    // graveyard has no protection/hexproof to consult (those are battlefield
+    // qualities), so it is offered on type alone.
+    for (const player of PLAYER_IDS) {
+      for (const card of state.players[player].graveyard) {
+        if (isCreature(card.def)) out.push(card.instanceId);
+      }
+    }
+    return out;
+  }
   if (restriction === 'any' || restriction === 'player' || restriction === 'playerOrPlaneswalker') {
     targets.push(...PLAYER_IDS);
   }
@@ -726,6 +767,8 @@ export function describeRestriction(restriction: TargetRestriction): string {
       return 'a permanent';
     case 'instantOrSorceryInYourGraveyard':
       return 'an instant or sorcery card in your graveyard';
+    case 'creatureOnBattlefieldOrInGraveyard':
+      return 'a creature on the battlefield or a creature card in a graveyard';
     case 'triggeredAbilityYouControl':
       return 'a triggered ability you control';
     case 'instantOrSorcerySpell':

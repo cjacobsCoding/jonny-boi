@@ -285,6 +285,7 @@ export function createTriggerCollector(state: GameState, baseEmit: (e: GameEvent
         // trigger, so those are pushed byte-for-byte as they always were.
         ...(pending.ability.targets ? { awaitingTargets: pending.ability.targets } : {}),
         ...(pending.ability.targetsExcludeSelf === true ? { awaitingTargetsExcludeSelf: true } : {}),
+        ...(pending.ability.targetCount ? { awaitingTargetCount: pending.ability.targetCount } : {}),
       });
       baseEmit({
         type: 'triggerPutOnStack',

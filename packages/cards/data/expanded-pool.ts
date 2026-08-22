@@ -14,7 +14,7 @@
  * approximated into the pool — an almost-right card would silently bias every
  * A/B verdict the lab produces.
  *
- * 529 cards.
+ * 555 cards.
  */
 
 import type { CardDefinition } from '@jonny-boi/core';
@@ -227,6 +227,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     },
     backFaceCastable: true,
   },
+  // Flying, first strike, vigilance, trample, haste, protection from black and from red
+  {
+    id: '107f204c-9fd3-490d-8887-be63d14fc6a4',
+    name: 'Akroma, Angel of Wrath',
+    types: ['creature'],
+    cost: { generic: 5, W: 3 },
+    power: 6,
+    toughness: 6,
+    legendary: true,
+    keywords: {
+      flying: true,
+      firstStrike: true,
+      vigilance: true,
+      trample: true,
+      haste: true,
+      protectionFrom: ['black', 'red'],
+    },
+    subtypes: ['angel'],
+  },
   // Alchemist's Greeting deals 4 damage to target creature.
   // Madness {1}{R} (If you discard this card, discard it into exile. When you do, cast it for its madness cost or put it into your graveyard.)
   {
@@ -292,6 +311,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     manaAbilities: [{ produces: [{ C: 2 }], rider: { damageToController: 2 } }],
   },
   // Flying
+  // When this creature enters, destroy target permanent.
+  {
+    id: '02520741-d7f0-46e6-acbe-010b65fc24c0',
+    name: 'Angel of Despair',
+    types: ['creature'],
+    cost: { generic: 3, W: 2, B: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'destroyTarget', params: { targets: 'permanent' } }],
+        label: 'Enters: destroy target permanent',
+        targets: 'permanent',
+      },
+    ],
+  },
+  // Flying
   // When this creature enters, you gain 3 life.
   {
     id: 'a2daaf32-dbfe-4618-892e-0da24f63a44a',
@@ -310,6 +349,58 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Flying
+  // When this creature enters, you may exile up to three other target creatures from the battlefield and/or creature cards from graveyards.
+  // When this creature leaves the battlefield, return the exiled cards to their owners' hands.
+  {
+    id: 'f4ce6078-8c7b-4f68-b324-13130c63a983',
+    name: 'Angel of Serenity',
+    types: ['creature'],
+    cost: { generic: 4, W: 3 },
+    power: 5,
+    toughness: 6,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          {
+            primitive: 'exileUntilLeaves',
+            params: { targets: 'creatureOnBattlefieldOrInGraveyard', max: 3 },
+          },
+        ],
+        label: 'Enters: exile up to three other creatures until this leaves',
+        targets: 'creatureOnBattlefieldOrInGraveyard',
+        targetsExcludeSelf: true,
+        targetCount: { min: 0, max: 3 },
+      },
+      {
+        condition: { on: 'leaves' },
+        effects: [{ primitive: 'returnExiledByThis', params: { to: 'hand' } }],
+        label: 'Leaves: return the exiled cards to their owners\' hands',
+      },
+    ],
+  },
+  // Flying
+  // Cycling {2} ({2}, Discard this card: Draw a card.)
+  {
+    id: '701912d5-9995-4ac7-9858-188f78b2b8a3',
+    name: 'Angel of the God-Pharaoh',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    cycling: [
+      {
+        cost: { generic: 2 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {2}',
+      },
+    ],
+  },
   // You gain 7 life.
   {
     id: '6b232bb7-d372-4174-a049-5f8d620810e6',
@@ -317,6 +408,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['instant'],
     cost: { generic: 2, W: 2 },
     effects: [{ primitive: 'gainLife', params: { amount: 7 } }],
+  },
+  // Flying, protection from artifacts
+  {
+    id: 'cca29a9b-794f-4712-8e6c-36ce3da9cb8b',
+    name: 'Angelic Curator',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, protectionFrom: ['artifacts'] },
+    subtypes: ['angel', 'spirit'],
   },
   // Enchant creature
   // When this Aura enters, draw a card.
@@ -397,6 +499,37 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: 0, toughness: 0, keywords: { unblockable: true } },
     },
+  },
+  // Flying, vigilance
+  {
+    id: '9971697b-2acc-4bc2-a44e-074d03a51df7',
+    name: 'Archangel',
+    types: ['creature'],
+    cost: { generic: 5, W: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+  },
+  // Flying
+  // Lifelink (Damage dealt by this creature also causes you to gain that much life.)
+  // Whenever you gain life, put a +1/+1 counter on each creature you control.
+  {
+    id: '4f2d4538-dc1d-4c09-964b-b0d7c240fb7d',
+    name: 'Archangel of Thune',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 3,
+    toughness: 4,
+    keywords: { flying: true, lifelink: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'gainLife', who: 'you' },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, each: true, scope: 'you', filter: {} } }],
+        label: 'Gain life: put a +1/+1 counter on each creature you control',
+      },
+    ],
   },
   // Flying
   // Ward {2} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {2}.)
@@ -578,6 +711,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
         condition: { on: 'etb' },
         effects: [{ primitive: 'scry', params: { count: 3 } }],
         label: 'Enters: scry 3',
+      },
+    ],
+  },
+  // Flying, vigilance, indestructible
+  // Other permanents you control have indestructible.
+  {
+    id: '216cb26e-8da9-478b-bfbc-8030f7adee72',
+    name: 'Avacyn, Angel of Hope',
+    types: ['creature'],
+    cost: { generic: 5, W: 3 },
+    power: 8,
+    toughness: 8,
+    legendary: true,
+    keywords: { flying: true, vigilance: true, indestructible: true },
+    subtypes: ['angel'],
+    statics: [
+      {
+        affects: { controller: 'you', excludeSource: true },
+        keywords: { indestructible: true },
+        label: 'other permanents you control have indestructible',
       },
     ],
   },
@@ -1980,6 +2133,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { flash: true, vigilance: true, indestructible: true },
     subtypes: ['golem'],
   },
+  // Flying
+  // When this creature enters, you gain 4 life.
+  {
+    id: 'a7d88510-d2ce-4dd6-938c-964cc74ff7d7',
+    name: 'Dawning Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 2,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 4 } }],
+        label: 'Enters: you gain 4 life',
+      },
+    ],
+  },
   // Destroy all creatures.
   {
     id: 'd057289d-5e28-43d5-8ff3-4a1bc723477d',
@@ -1987,6 +2159,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['sorcery'],
     cost: { generic: 2, W: 2 },
     effects: [{ primitive: 'destroyAll' }],
+  },
+  // Flying
+  // Whenever another creature you control enters, you gain 1 life.
+  {
+    id: '7de464e3-fae3-44cc-8233-776fc727c00a',
+    name: 'Dazzling Angel',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfTypes: ['creature'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'gainLife', params: { amount: 1 } }],
+        label: 'another creature (you) enters: you gain 1 life',
+      },
+    ],
   },
   // Enchant creature
   // Enchanted creature gets -2/-2.
@@ -2026,6 +2222,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     effects: [
       { primitive: 'dealDamage', params: { amount: { chosenX: true } } },
       { primitive: 'gainLife', params: { amount: { chosenX: true } } },
+    ],
+  },
+  // Flying
+  // {W}{W}: Target creature gains indestructible until end of turn.
+  {
+    id: '6098ba4b-ebfe-48da-a33d-b94c021ac559',
+    name: 'Deathless Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 5,
+    toughness: 7,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    activated: [
+      {
+        cost: { mana: { W: 2 } },
+        effects: [
+          {
+            primitive: 'grantKeywordUntilEndOfTurn',
+            params: { keywords: { indestructible: true }, targets: 'creature' },
+          },
+        ],
+        label: '{w}{w}: target creature gains indestructible until end of turn',
+      },
     ],
   },
   // Search your library for a basic land card, put that card onto the battlefield tapped, then shuffle.
@@ -2555,6 +2775,46 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       adventure: true,
     },
     backFaceCastable: true,
+  },
+  // Flying
+  // Landfall — Whenever a land you control enters, you may create a 1/1 white Bird creature token with flying.
+  {
+    id: 'ea6616e4-db8d-4905-80f8-cb0162906850',
+    name: 'Emeria Angel',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'permanentEnters', who: 'you', permanentFilter: { anyOfTypes: ['land'] } },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may create a 1/1 white bird creature token with flying',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'makeToken',
+                  params: {
+                    power: 1,
+                    toughness: 1,
+                    name: 'Bird',
+                    colors: ['W'],
+                    subtypes: ['Bird'],
+                    keywords: { flying: true },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'land (you) enters: you may create a 1/1 white bird creature token with flying',
+      },
+    ],
   },
   // This creature enters with X +1/+1 counters on it.
   {
@@ -3252,6 +3512,34 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     cost: { generic: 5 },
     producesOptions: [{ W: 3 }, { U: 3 }, { B: 3 }, { R: 3 }, { G: 3 }],
   },
+  // Flying, first strike
+  // If a source would deal damage to an opponent or a permanent an opponent controls, that source deals double that damage to that player or permanent instead.
+  // If a source would deal damage to you or a permanent you control, prevent half that damage, rounded up.
+  {
+    id: '66f9f325-5e8e-4ebf-b5b3-c6410d80f2c5',
+    name: 'Gisela, Blade of Goldnight',
+    types: ['creature'],
+    cost: { generic: 4, W: 2, R: 1 },
+    power: 5,
+    toughness: 5,
+    legendary: true,
+    keywords: { flying: true, firstStrike: true },
+    subtypes: ['angel'],
+    replacements: [
+      {
+        event: 'damage',
+        applies: { recipientController: 'opponent' },
+        outcome: { times: 2 },
+        label: 'if a source would deal damage to an opponent or a permanent an opponent controls, that source deals double that damage to that player or permanent instead',
+      },
+      {
+        event: 'damage',
+        applies: { recipientController: 'you' },
+        outcome: { preventHalfRoundedUp: true },
+        label: 'if a source would deal damage to you or a permanent you control, prevent half that damage, rounded up',
+      },
+    ],
+  },
   // Enchant creature
   // Enchanted creature gets +2/+2 and has flying and lifelink.
   {
@@ -3678,6 +3966,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     },
     backFaceCastable: true,
   },
+  // Flying
+  // Whenever this creature attacks, you gain 2 life.
+  {
+    id: 'cb97da84-1d13-4795-b68a-2bf111a50067',
+    name: 'Herald of Faith',
+    types: ['creature'],
+    cost: { generic: 3, W: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'attacks' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }],
+        label: 'Attacks: you gain 2 life',
+      },
+    ],
+  },
   // As this artifact enters, choose a color.
   // Creatures you control of the chosen color get +1/+0.
   // {T}: Add one mana of the chosen color.
@@ -3706,6 +4013,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     power: 3,
     toughness: 3,
     subtypes: ['giant'],
+  },
+  // Flash
+  // Flying
+  // When this creature enters, you gain 2 life and scry 1. (Look at the top card of your library. You may put that card on the bottom.)
+  {
+    id: '748003fd-84c5-4c99-b146-d7d382eef64d',
+    name: 'Holy Cow',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 2,
+    keywords: { flash: true, flying: true },
+    subtypes: ['ox', 'angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'gainLife', params: { amount: 2 } }, { primitive: 'scry' }],
+        label: 'Enters: you gain 2 life and scry 1',
+      },
+    ],
   },
   // Prevent all combat damage that would be dealt this turn.
   {
@@ -3823,6 +4150,28 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     keywords: { haste: true },
     subtypes: ['vampire'],
     madness: { generic: 2, R: 1 },
+  },
+  // Flying
+  // When this creature enters, you gain 1 life and draw a card.
+  {
+    id: 'd646e42b-5635-4798-b633-29c093b66a55',
+    name: 'Inspiring Overseer',
+    types: ['creature'],
+    cost: { generic: 2, W: 1 },
+    power: 2,
+    toughness: 1,
+    keywords: { flying: true },
+    subtypes: ['angel', 'cleric'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [
+          { primitive: 'gainLife', params: { amount: 1 } },
+          { primitive: 'drawCards', params: { count: 1 } },
+        ],
+        label: 'Enters: you gain 1 life and draw a card',
+      },
+    ],
   },
   // Target creature gets +2/+2 until end of turn.
   {
@@ -4040,6 +4389,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['artifact'],
     cost: { generic: 2 },
     manaAbilities: [{ produces: [{ U: 1, R: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Flying
+  // {1}{W}: Put a +1/+1 counter on Jenara.
+  {
+    id: 'd06cd670-7ffc-4295-97d1-0eff042fb6d5',
+    name: 'Jenara, Asura of War',
+    types: ['creature'],
+    cost: { W: 1, U: 1, G: 1 },
+    power: 3,
+    toughness: 3,
+    legendary: true,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    activated: [
+      {
+        cost: { mana: { generic: 1, W: 1 } },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: '{1}{w}: put a +1/+1 counter on ~',
+      },
+    ],
   },
   // This land enters tapped.
   // When this land enters, you gain 1 life.
@@ -4502,6 +4871,46 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Equip {3}',
       modifies: { power: 3, toughness: 0, keywords: { trample: true, lifelink: true } },
     },
+  },
+  // Flying
+  // At the beginning of your upkeep, you may create a 1/1 white Spirit creature token with flying.
+  {
+    id: '8d7cf56c-94fd-47d8-9e0f-cd3163688983',
+    name: 'Luminous Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 3 },
+    power: 4,
+    toughness: 4,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'upkeep', who: 'you' },
+        effects: [
+          {
+            primitive: 'mayEffects',
+            params: {
+              prompt: 'You may create a 1/1 white spirit creature token with flying',
+              valence: 'gain',
+              effects: [
+                {
+                  primitive: 'makeToken',
+                  params: {
+                    power: 1,
+                    toughness: 1,
+                    name: 'Spirit',
+                    colors: ['W'],
+                    subtypes: ['Spirit'],
+                    keywords: { flying: true },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        label: 'your upkeep: you may create a 1/1 white spirit creature token with flying',
+      },
+    ],
   },
   // ({T}: Add {G} or {W}.)
   // This land enters tapped.
@@ -6106,6 +6515,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     buyback: { generic: 3 },
     effects: [{ primitive: 'pumpUntilEndOfTurn', params: { power: 3, toughness: 0, targets: 'creature' } }],
   },
+  // Flying, vigilance
+  {
+    id: '50372c54-359c-4ee6-9e21-1e40ba53652d',
+    name: 'Segovian Angel',
+    types: ['creature'],
+    cost: { W: 1 },
+    power: 1,
+    toughness: 1,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+  },
   // This land enters tapped.
   // {T}: Add {G} or {W}.
   {
@@ -6123,6 +6543,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     types: ['artifact'],
     cost: { generic: 2 },
     manaAbilities: [{ produces: [{ G: 1, W: 1 }], cost: { mana: { generic: 1 } } }],
+  },
+  // Flying, lifelink
+  {
+    id: '38c588ae-7254-4fae-aa9a-03e2a5524492',
+    name: 'Seraph of Dawn',
+    types: ['creature'],
+    cost: { generic: 2, W: 2 },
+    power: 2,
+    toughness: 4,
+    keywords: { flying: true, lifelink: true },
+    subtypes: ['angel'],
   },
   // Flying
   // Indestructible (Damage and effects that say "destroy" don't destroy this creature. If its toughness is 0 or less, it still dies.)
@@ -6151,6 +6582,26 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       label: 'Enchant creature',
       modifies: { power: 2, toughness: 2, keywords: { flying: true, vigilance: true } },
     },
+  },
+  // Flying (This creature can't be blocked except by creatures with flying or reach.)
+  // Vigilance (Attacking doesn't cause this creature to tap.)
+  // Other creatures you control have vigilance.
+  {
+    id: 'c50cd7e7-8d53-44af-ac96-3e104587bdb3',
+    name: 'Serra\'s Guardian',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 5,
+    toughness: 5,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+    statics: [
+      {
+        affects: { anyOfTypes: ['creature'], controller: 'you', excludeSource: true },
+        keywords: { vigilance: true },
+        label: 'other creatures you control have vigilance',
+      },
+    ],
   },
   // Draw a card. Scry 2.
   {
@@ -6199,6 +6650,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
     producesOptions: [{ R: 1 }, { G: 1 }],
+  },
+  // Flying, first strike, vigilance
+  {
+    id: 'd8c70f2f-985c-4982-97eb-99da3810e048',
+    name: 'Shepherd of the Lost',
+    types: ['creature'],
+    cost: { generic: 4, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, firstStrike: true, vigilance: true },
+    subtypes: ['angel'],
   },
   // Flying
   // {R}: This creature gets +1/+0 until end of turn.
@@ -6719,6 +7181,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Flying
+  // When this creature enters, tap all creatures your opponents control.
+  {
+    id: '88b1e06c-5899-4e83-8204-e2c32c0c6aff',
+    name: 'Subjugator Angel',
+    types: ['creature'],
+    cost: { generic: 4, W: 2 },
+    power: 4,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: { on: 'etb' },
+        effects: [{ primitive: 'tapPermanents', params: { who: 'opponent', types: ['creature'] } }],
+        label: 'Enters: tap all creatures your opponents control',
+      },
+    ],
+  },
   // Choose one or both —
   // • Target creature gets -1/-1 until end of turn.
   // • Put a +1/+1 counter on target creature.
@@ -6758,6 +7239,17 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     name: 'Sulfurous Springs',
     types: ['land'],
     manaAbilities: [{ produces: [{ C: 1 }] }, { produces: [{ B: 1 }, { R: 1 }], rider: { damageToController: 1 } }],
+  },
+  // Flying, first strike, vigilance, lifelink
+  {
+    id: 'be37ef9d-955a-417e-bde8-bb9e0bdf3612',
+    name: 'Sunblade Angel',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, firstStrike: true, vigilance: true, lifelink: true },
+    subtypes: ['angel'],
   },
   // {T}: Add {C}.
   // {U/B}, {T}: Add {U}{U}, {U}{B}, or {B}{B}.
@@ -8234,6 +8726,25 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
       },
     ],
   },
+  // Flying, vigilance
+  // Cycling {W} ({W}, Discard this card: Draw a card.)
+  {
+    id: 'e18c93bc-2073-4bb6-83b4-c5c70f2d8a82',
+    name: 'Winged Shepherd',
+    types: ['creature'],
+    cost: { generic: 5, W: 1 },
+    power: 3,
+    toughness: 3,
+    keywords: { flying: true, vigilance: true },
+    subtypes: ['angel'],
+    cycling: [
+      {
+        cost: { W: 1 },
+        effects: [{ primitive: 'drawCards', params: { count: 1 } }],
+        label: 'Cycling {W}',
+      },
+    ],
+  },
   // Choose one or both —
   // • Tap target creature.
   // • Winterflame deals 2 damage to target creature.
@@ -8357,6 +8868,30 @@ export const EXPANDED_CARD_POOL: readonly CardDefinition[] = Object.freeze([
     toughness: 1,
     keywords: { firstStrike: true },
     subtypes: ['human', 'knight'],
+  },
+  // Flying
+  // Whenever another Angel you control enters, put a +1/+1 counter on this creature.
+  {
+    id: '6d37ba4b-ff56-4eec-9dc2-2d7f357dc9c9',
+    name: 'Youthful Valkyrie',
+    types: ['creature'],
+    cost: { generic: 1, W: 1 },
+    power: 1,
+    toughness: 3,
+    keywords: { flying: true },
+    subtypes: ['angel'],
+    triggers: [
+      {
+        condition: {
+          on: 'permanentEnters',
+          who: 'you',
+          permanentFilter: { anyOfSubtypes: ['angel'] },
+          excludeSelf: true,
+        },
+        effects: [{ primitive: 'addCounters', params: { amount: 1, self: true } }],
+        label: 'another angel (you) enters: put a +1/+1 counter on ~',
+      },
+    ],
   },
   // Flying, double strike, vigilance, trample, indestructible
   {

@@ -553,6 +553,12 @@ export interface TriggeredStackObject {
    */
   readonly awaitingTargetsExcludeSelf?: boolean;
   /**
+   * How many targets this trigger is waiting for ("up to three"). Rides the
+   * stack object for the same reason as {@link awaitingTargets}: the choice is
+   * made while the trigger sits on the stack.
+   */
+  readonly awaitingTargetCount?: { readonly min: number; readonly max: number };
+  /**
    * The player the EVENT that set this ability off was about — the referent of
    * a body's "that player" / "them". Rides the stack object so it survives into
    * the resolution frame and then into `EffectContext`, exactly the way a cast's
