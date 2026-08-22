@@ -236,7 +236,8 @@ export function isTargetRestriction(value: unknown): value is TargetRestriction 
     value === 'creatureOrPlaneswalker' ||
     value === 'permanent' ||
     value === 'instantOrSorceryInYourGraveyard' ||
-    value === 'instantOrSorcerySpell'
+    value === 'instantOrSorcerySpell' ||
+    value === 'triggeredAbilityYouControl'
   );
 }
 
