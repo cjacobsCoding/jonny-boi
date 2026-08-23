@@ -3526,6 +3526,40 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.43 Solo play — a tile for playing the computer — ✅ done
+
+A third tile on the Play tab: **Solo (vs the computer)**, with a picker for WHICH pilot you face —
+Heuristic, Hybrid, MCTS or Random, the same four the Lab tests decks with, carrying the same blurbs
+and relative-cost hints.
+
+**Built on the seam that was already there.** `SeatTransport` was documented from the start as the
+place a non-hotseat mode plugs in, and solo needs exactly two answers from it: `localControls` is true
+only for the HUMAN seat (so the pilot's hand is hidden by the same masking an online opponent gets,
+with no new hiding logic), and `requiresHandoff` is always false (there is no device to pass).
+
+⚠️ **ONE game component, not a solo fork.** `LocalPlay` takes an optional `ai` config. The two modes
+differ in three places — which transport, whether the handoff interstitial appears, and who supplies
+seat B's actions — and every other line (mulligans, board, log, rematch, concede) is identical. A
+forked `SoloPlay` would have been a second copy of all of it, drifting the first time either was
+touched.
+
+**The driver is deliberately thin**, because the engine already presents every AI decision the same
+way: a parked question arrives as an `answerChoice` in `legalActions`, exactly as it does for the
+headless sim's match loop. So one "ask the pilot for a legal action and submit it" covers casting,
+combat, and every card that stops to ask something — rather than a branch per situation that would
+drift from how the sim plays the same board. A rejected AI action falls back to passing, the one move
+that always advances the game (the same guard `match.ts` keeps, for the same reason).
+
+Seeded from the game seed, so a solo game replays identically — using core's `Rng` rather than a
+second generator, since only one of them would be the one the sim uses. `aiThinkMs` is a named knob:
+without a pause the pilot resolves its whole turn between two frames and the board appears to
+teleport. The computer always KEEPS its opening hand: pilots decide in-game actions, not whether to
+ship a seven, so it does not pretend to a judgement it does not make.
+
+Verified in the browser end to end: no handoff screen, the computer's hand hidden behind card backs,
+and by turn 5 it had played lands, cast Savannah Lions and Youthful Knight, attacked, and put the
+human on 18.
+
 ### 3.42 The pilot could not price "you may" — ✅ done
 
 Found by asking a narrow question honestly: *are all 60 cards in Selesnya Blink functional?* They are

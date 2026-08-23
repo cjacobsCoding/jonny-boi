@@ -72,3 +72,30 @@ export function createLocalHotseatTransport(
     requiresHandoff: (from, to) => from !== to,
   };
 }
+
+/**
+ * SOLO vs the AI: one human on this device, the other seat driven by a pilot.
+ *
+ * Two differences from the hotseat transport, and both fall out of "the opponent
+ * is not a person sitting here":
+ *
+ *  - `localControls` is true only for the HUMAN seat. The AI's hand is hidden
+ *    exactly the way an online opponent's is, so the same masked board renders it
+ *    with no new hiding logic — and a human cannot accidentally read the pilot's
+ *    hand and play against it.
+ *  - `requiresHandoff` is always false. There is no device to pass: the pilot
+ *    does not need to confirm it is looking at the screen, and making the human
+ *    tap through an interstitial to hand control to a computer would be pure
+ *    friction.
+ */
+export function createSoloVsAiTransport(
+  seats: Readonly<Record<PlayerId, SeatInfo>>,
+  humanSeat: PlayerId,
+): SeatTransport {
+  return {
+    kind: 'solo-vs-ai',
+    seats,
+    localControls: (seat) => seat === humanSeat,
+    requiresHandoff: () => false,
+  };
+}
