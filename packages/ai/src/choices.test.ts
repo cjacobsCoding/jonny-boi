@@ -311,6 +311,50 @@ describe('the heuristic answers every choice kind sensibly', () => {
     expect(action.answer.pay).toBe(false);
   });
 
+  it('shocks itself while healthy and declines once the total is in the danger zone', () => {
+    // The pay-life rule is the pilot's existing danger line: pay while the
+    // REMAINING life stays above `desperateLifeThreshold`, decline once it would
+    // not. Both sides asserted so the boundary cannot drift silently.
+    const state = newGame().state;
+    const ask = (life: number): boolean => {
+      state.players.A.life = life;
+      const choice = park({
+        kind: 'payLife',
+        chooser: 'A',
+        prompt: 'Pay 2 life',
+        amount: 2,
+        affordable: true,
+        valence: 'neutral',
+      });
+      const action = answerChoiceHeuristically(state, choice, WEIGHTS);
+      if (action.kind !== 'answerChoice' || action.answer.kind !== 'payLife') throw new Error('wrong shape');
+      expect(validateChoiceAnswer(choice, action.answer).ok).toBe(true);
+      return action.answer.pay;
+    };
+
+    expect(ask(20)).toBe(true); // 18 left, comfortably healthy
+    expect(ask(WEIGHTS.desperateLifeThreshold + 3)).toBe(true); // one above the line
+    expect(ask(WEIGHTS.desperateLifeThreshold + 2)).toBe(false); // lands ON the line
+    expect(ask(4)).toBe(false); // deep in burn range
+  });
+
+  it('never agrees to pay life it does not have', () => {
+    const state = newGame().state;
+    state.players.A.life = 20;
+    const broke = park({
+      kind: 'payLife',
+      chooser: 'A',
+      prompt: 'Pay 2 life',
+      amount: 2,
+      affordable: false,
+      valence: 'gain',
+    });
+    const action = answerChoiceHeuristically(state, broke, WEIGHTS);
+    if (action.kind !== 'answerChoice' || action.answer.kind !== 'payLife') throw new Error('wrong shape');
+    expect(action.answer.pay).toBe(false);
+    expect(validateChoiceAnswer(broke, action.answer).ok).toBe(true);
+  });
+
   it('always addresses the answer to the choice\'s own chooser, never itself', () => {
     const state = newGame().state;
     state.players.B.hand = [];

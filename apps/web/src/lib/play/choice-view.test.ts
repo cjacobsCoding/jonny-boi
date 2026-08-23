@@ -11,6 +11,7 @@ import {
   isChoiceForViewer,
   orderBadge,
   setConfirm,
+  setPayLife,
   setPayMana,
   toggleOption,
   waitingForChoiceText,
@@ -233,6 +234,58 @@ describe('choice-view — a pay/decline choice', () => {
     expect(draftValues(draft)).toEqual([]);
     // The yes/no setter and the pay/decline setter do not cross-talk.
     expect(setConfirm(draft, false)).toBe(draft);
+  });
+});
+
+function payLife(over: Partial<Extract<PendingChoice, { kind: 'payLife' }>> = {}): PendingChoice {
+  return {
+    ...BASE,
+    kind: 'payLife',
+    prompt: 'Pay 2 life, or Blood Crypt enters tapped',
+    sourceName: 'Blood Crypt',
+    amount: 2,
+    affordable: true,
+    min: 1,
+    max: 1,
+    ...over,
+  } as PendingChoice;
+}
+
+describe('choice-view — a pay-life choice (a shockland)', () => {
+  it('is undecided until pressed, then submits pay or decline', () => {
+    const choice = payLife();
+    const draft = emptyDraft(choice);
+    expect(draftToAnswer(draft)).toBeNull();
+    expect(draftStatus(choice, draft).canSubmit).toBe(false);
+
+    for (const pay of [true, false]) {
+      const status = draftStatus(choice, setPayLife(draft, pay));
+      expect(status.answer).toEqual({ kind: 'payLife', pay });
+      expect(status.canSubmit).toBe(true);
+      expect(validateChoiceAnswer(choice, status.answer!)).toEqual({ ok: true });
+    }
+  });
+
+  it('agrees with the engine that paying unaffordable life cannot be submitted', () => {
+    const choice = payLife({ affordable: false });
+    expect(draftStatus(choice, setPayLife(emptyDraft(choice), true)).canSubmit).toBe(false);
+    expect(draftStatus(choice, setPayLife(emptyDraft(choice), false)).canSubmit).toBe(true);
+  });
+
+  it('spells out the price and the tapped consequence', () => {
+    expect(choicePromptView(payLife(), NAMES).requirement).toContain('Pay 2 life');
+    expect(choicePromptView(payLife(), NAMES).requirement).toContain('tapped');
+    expect(choicePromptView(payLife({ affordable: false }), NAMES).requirement).toContain('do not have');
+    expect(choicePromptView(payLife(), NAMES).optional).toBe(false);
+  });
+
+  it('ignores selection gestures and the other binary setter', () => {
+    const choice = payLife();
+    const draft = setPayLife(emptyDraft(choice), true);
+    expect(toggleOption(choice, draft, 1)).toBe(draft);
+    expect(clearDraft(choice, draft)).toBe(draft);
+    expect(setConfirm(draft, false)).toBe(draft);
+    expect(setPayMana(draft, false)).toBe(draft);
   });
 });
 
