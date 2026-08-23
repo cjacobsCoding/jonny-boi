@@ -149,9 +149,54 @@ throughput (games/sec) from regressing.
 | fix/returned-spell-keeps-back-face | DESKTOP-90PJPM4 (worker) | packages/cards (`copy-primitives.ts` returnSpellToHand reset + NEW returned-spell-face.test.ts + NEW granted-flashback-split.test.ts), packages/core (`engine.ts` ONE line — the flashback-grant accessor), DESIGN §3.34 rewritten + §3.36 + §3.33 pointer, COORDINATION. **Deep tier GREEN: 0/2000.** | ✅ MERGED + DEPLOYED |
 | feat/blink-selesnya | DESKTOP-90PJPM4 (worker) | packages/cards (NEW blink-primitives.ts + blink-play.test.ts; primitives.ts registration, effect-helpers.ts +1 option, compile/rules.ts +1 rule; GENERATED data/expanded-pool.ts + expansion-report.json + expansion-candidates.json), packages/data-tools/data (GENERATED card-index.json + starter-cards.json), apps/web/src/data/card-index.json (regenerated), packages/ai (heuristic.ts blink goal + picker), packages/sim (NEW data/decks/selesnya-blink.ts + decks/index.ts), DESIGN §3.35 + §3.21 note, COORDINATION. **Gauntlet seed 99 rows byte-identical; new 8th row.** | ✅ MERGED + DEPLOYED |
 | fix/soak-action-cap | DESKTOP-90PJPM4 (worker) | packages/ai (`effect-value.ts` copySpell chain pricing + `willFizzleOnResolution`; `weights.ts` +1 weight; NEW `copy-chain-pilot.test.ts`), packages/cards (`copy-primitives.ts` CR 707.10 `min`; NEW `copy-retarget-optional.test.ts`), packages/sim (`soak.test.ts` +3 pinned rows), DESIGN §3.33 (+ §3.32's handoff closed), COORDINATION. **Gauntlet seed 99 byte-identical (79/280).** | 🚧 PUSHED, not merged |
+| fix/blink-rules-fidelity | worker | packages/core (NEW `combat-removal.ts`; `state.ts` +`CombatState.removedFromCombat`, `attachments.ts` +`unattachDependentsOf`, `internal/continuous.ts` +`dropContinuousEffectsFor`, `internal/combat.ts` damage step, `internal/clone.ts`, `internal/replacement.ts` `isAttacking`, `engine.ts` 3 lines in declare-blockers, `instance-ids.ts` +1 field name, `index.ts` exports), packages/cards (`blink-primitives.ts` +3 calls + doc; `data/pool.ts` +10 printed `subtypes` lines; `fidelity.test.ts` +1 standing type-line guard; `restoration-angel.test.ts` +1 case; NEW `selesnya-blink-fidelity.test.ts`), DESIGN §3.43, COORDINATION. **No generated data regenerated; no soak or gauntlet row moved.** | 🚧 PUSHED, not merged |
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 worker: `fix/blink-rules-fidelity` 🚧 PUSHED — DESIGN §3.44. Off `main`. **5217 / 0**, verify 0.
+  Owns packages/core + packages/cards only; does not touch packages/ai or apps/web.
+
+  A printed-card audit of all 16 distinct **Selesnya Blink** cards against fresh Scryfall Oracle text.
+  **All 16 are faithful** — Thragtusk's two halves, the Closet's "your end step", Wood Elves' UNTAPPED
+  Forest, Eternal Witness on any card type, the white Soldier, Restoration Angel's flash and its
+  non-Angel restriction. `fidelity.test.ts` already guards the definitions; this asked whether the
+  ENGINE plays them as printed.
+
+  ⚠️ **Three defects, one root cause, and it will bite anything else that returns an id.** A blink
+  puts the SAME instance id back on the battlefield, and three rules here were enforced only by an id
+  ceasing to be there: removal from combat (CR 506.4 — a blinked attacker still connected for full
+  damage AND came back untapped), the attachment SBA (CR 704.5m/n — an Aura stayed on a creature it
+  had never enchanted), and floating continuous effects (CR 400.7 — a Giant Growth survived, and so
+  did a "gain control until end of turn", so blinking a STOLEN creature handed it back at end of turn,
+  the opposite of what §3.35 claims). If you write another same-id return (a reanimation that reuses
+  the instance, a "return it at the next end step" delayed blink), call the same three.
+
+  ⚠️ **`combat.attackers` / `combat.blocks` are the DECLARATION and are not rewritten.** Removal is an
+  optional overlay (`CombatState.removedFromCombat`) read through `attackingCreatureIds`, because
+  "was this attacker blocked?" is derived from `blocks` — deleting a removed blocker's entry would
+  promote its attacker to unblocked. New `CombatState` fields must also be added to `cloneCombat`
+  **and** to `instance-ids.ts` (the leak scanner's source scan fails the build otherwise — that is the
+  one test my first pass turned red).
+
+  ⚠️ **A fourth defect, and the audit that could not see it. `Serra Angel` was not an Angel.** Ten
+  hand-authored cards in `packages/cards/data/pool.ts` carried NO subtypes — so Restoration Angel's
+  printed "target **non-Angel** creature you control" did not exclude Serra Angel, Goblin Chieftain
+  did not see Goblin Guide, and Ophiomancer's intervening "if" did not see Sakura-Tribe Elder.
+  §3.41's Angel sweep went 32 deep through the GENERATED pool and never opened the curated file.
+  `fidelity.test.ts` compares a *behaviour signature* and deliberately leaves the frame to "the
+  compiler's ground-truth suite" — which tests the compiler, not a hand-typed definition, so a
+  hand-authored frame had no guard at all. It now also asserts printed subtypes for every pool card.
+  **If you hand-author a card, the frame is not audited by the behaviour signature.**
+
+  Sabotage-checked one line at a time: each of the three blink calls turns exactly its own two tests
+  red, and deleting Serra Angel's `subtypes` turns the new type-line guard and the new Restoration
+  Angel case red.
+
+  📊 **Selesnya Blink gauntlet seed 99 byte-identical** to `main` — 58 · 43 · 57 · 32 · 38 · 34 · 31 ·
+  51, 344/480, 6 timeout draws — because no curated list blinks into combat, runs an Aura next to
+  Cloudshift, or pairs a typal payoff with one of the ten curated cards. No baseline to re-record.
+  Throughput unchanged (interleaved 300-game runs, both ~29–35 games/sec).
 
 - 2026-08-23 DESKTOP-90PJPM4: `feat/play-vs-ai` ✅ MERGED + DEPLOYED — DESIGN §3.43. Off `main`. **5208 / 0**,
   verify 0, browser-verified.

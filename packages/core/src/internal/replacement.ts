@@ -86,6 +86,7 @@ import type {
   ReplacementOutcome,
 } from '../replacement.js';
 import { affectedPlayerPrefersMore, replacementIsInert } from '../replacement.js';
+import { isRemovedFromCombat } from '../combat-removal.js';
 import type { ContinuousDuration } from './continuous.js';
 
 /**
@@ -349,13 +350,16 @@ function appliesTo(state: GameState, entry: ActiveReplacement, event: Replaceabl
   return true;
 }
 
-/** Whether this permanent is currently declared as an attacker. */
+/**
+ * Whether this permanent is currently declared as an attacker — and has not been
+ * removed from combat since (CR 506.4; see `combat-removal.ts`).
+ */
 function isAttacking(state: GameState, instanceId: InstanceId): boolean {
   const combat = state.combat;
   if (!combat) return false;
   const attackers = combat.attackers;
   for (let i = 0; i < attackers.length; i++) {
-    if (attackers[i] === instanceId) return true;
+    if (attackers[i] === instanceId) return !isRemovedFromCombat(combat, instanceId);
   }
   return false;
 }

@@ -3526,6 +3526,84 @@ cannot reach this code at all. Full suite 5060 passed / 0 failed, `verify` 0.
 The tier stayed red for a different, pre-existing defect this change made reachable; that is §3.34,
 now also fixed.
 
+### 3.44 The blink audit — three rules that only an id could break, and a type line nobody checked — ✅ done
+
+A card-by-card rules-fidelity audit of **Selesnya Blink**: all 16 distinct cards fetched fresh from
+Scryfall and compared, printed line by printed line, against what the engine actually *does* with
+them in a played game.
+
+**The 16 cards play as printed.** Thragtusk fires both halves and one blink collects both (5 life
+*and* a 3/3 Beast); Conjurer's Closet triggers on its controller's end step and sits still on the
+opponent's; Wood Elves' Forest arrives UNTAPPED (the printed card does not say tapped); Eternal
+Witness offers every card type, not only creatures; Attended Knight's token is a 1/1 **white**
+Soldier; Restoration Angel has flash — it is castable on the opponent's turn where a creature
+without flash is not. The lands, the walls and the lifegain creatures are exact.
+`fidelity.test.ts` already re-compiles every pool entry from its Oracle text, so the *definitions*
+were never in doubt; this audit asked the other question — **does the engine then play them as
+printed** — and that is where it found things.
+
+**Three defects, one root cause.** The returned card keeps its INSTANCE ID. That is deliberate (a
+blink is not a new card, and every id-keyed reference in the state has to stay sound), but three
+rules in this engine were enforced *purely* by an id ceasing to be on the battlefield, and a blink is
+the one effect that puts the id straight back before any of them can look:
+
+| what leaked | what it looked like at the table |
+|---|---|
+| **CR 506.4** — removal from combat | a blinked ATTACKER still connected for full damage **and** came back untapped. Cloudshifting your own attacker in response to removal was pure profit — strictly better than the printed card. A blinked BLOCKER dealt its damage back too. |
+| **CR 704.5m/n** — the attachment SBA | an Aura stayed on a creature it had never enchanted, and an Equipment stayed equipped, because `isLegallyAttached` asks "is the host still on the battlefield?" and after a blink the answer is *yes*. |
+| **CR 400.7** — floating continuous effects | a Giant Growth survived the blink; so did a "gain control until end of turn", so blinking a **stolen** creature handed it BACK at end of turn — the exact opposite of what §3.35 built the `controller` seam for. |
+
+`blinkOne` now says all three explicitly, immediately after the leave funnel has emitted its
+`zoneChange` (so every `leaves`/`dies` trigger still sees the board it left — the same ordering
+`ceaseToExistIfToken` relies on). The rules themselves live in core, next to their neighbours:
+`combat-removal.ts` (new), `attachments.unattachDependentsOf`, and
+`continuous.dropContinuousEffectsFor`.
+
+⚠️ **`combat.attackers` and `combat.blocks` are the DECLARATION and are never rewritten.** Removal is
+a live OVERLAY (`CombatState.removedFromCombat`, optional and normally absent) because other rules are
+read off the declaration: "was this attacker blocked?" comes from `blocks` alone, so deleting a
+removed blocker's entry would silently promote its attacker to **unblocked** — the opposite of
+CR 509.1h. Every attacker-side read goes through one accessor, `attackingCreatureIds`, which returns
+the declared array itself when nothing was removed so the damage hot path allocates nothing.
+
+Only the LINK is broken for attachments: what each one then does about it — an Aura to its owner's
+graveyard, an Equipment merely unattached — stays the `whenIllegal` data the SBA already reads, so
+there is exactly one place that decides the consequence.
+
+#### A fourth defect, from the other end of the same card: Serra Angel was not an Angel
+
+Auditing Restoration Angel's "target **non-Angel** creature you control" meant asking what the
+engine thinks an Angel is. The restriction is right — it reads the type line through `hasSubtype` —
+but **ten hand-authored cards in `data/pool.ts` carried no subtypes at all**, and one of them is
+Serra Angel. So the printed exclusion silently did not apply to it: Restoration Angel could blink a
+Serra Angel, which the card forbids. §3.41 swept the Angel type 32 deep through the *generated*
+pool and this one sat in the curated file the sweep never looked at. The same hole hid a Goblin from
+Goblin Chieftain, a Snake from Ophiomancer's intervening "if", and an Elf, a Bird, three Humans, a
+Lhurgoyf and an Ouphe from anything that will ever ask.
+
+⚠️ **The audit could not see it, and that is the part worth remembering.** `fidelity.test.ts`
+compares a *behaviour signature* — effects, triggers, activated abilities, modes — and says so:
+frame data is "covered by the compiler's own ground-truth suite". But that suite tests the
+COMPILER, not a definition somebody typed by hand, so a hand-authored frame had no guard at all.
+The pool audit now also asserts every card's printed subtypes, front face against the index, which
+is what makes this a closed class rather than ten fixed cards.
+
+**Sabotage-checked, one line at a time.** Commenting out each of the three blink calls turns exactly
+its own two tests red and nothing else: `removeFromCombat` → the attacker and blocker tests;
+`unattachDependentsOf` → the Equipment and Aura tests; `dropContinuousEffectsFor` → the pump and the
+stolen-creature tests. Deleting Serra Angel's `subtypes` turns the new type-line guard AND the new
+Restoration Angel case red. Full suite **5217 passed / 0 failed** (5 skipped, up from 5201 on
+`main`), `npm run verify` clean.
+
+**Nothing measurable moved.** Selesnya Blink's gauntlet at seed 99 is byte-identical to `main` —
+58 · 43 · 57 · 32 · 38 · 34 · 31 · 51, overall 344/480 with 6 timeout draws — which is the expected
+shape: none of the four defects is reachable by a curated deck. Only a blink into combat, an
+attachment or a theft can see the first three, and no gauntlet list runs an Aura or Act of Treason
+alongside Cloudshift; the subtype fix needs a typal payoff on the same board as one of the ten
+curated cards. Throughput is unchanged (3 interleaved 300-game runs: `main` 30.1/33.5/28.8 games/sec,
+branch 31.0/29.0/35.1) — the overlay costs one property read when it is absent, which it always is
+outside a blink.
+
 ### 3.43 Solo play — a tile for playing the computer — ✅ done
 
 A third tile on the Play tab: **Solo (vs the computer)**, with a picker for WHICH pilot you face —

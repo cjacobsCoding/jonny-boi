@@ -196,7 +196,16 @@ export {
   isLegalHost,
   isLegallyAttached,
   illegalAttachmentReason,
+  unattachDependentsOf,
 } from './attachments.js';
+
+// Removal from combat (CR 506.4), for the one case an id-keyed combat cannot
+// see by itself: a blink that returns the same instance id to the battlefield.
+export {
+  attackingCreatureIds,
+  isRemovedFromCombat,
+  removeFromCombat,
+} from './combat-removal.js';
 
 // Target legality (targeting.ts): what a spell is ALLOWED to point at, declared
 // as data on the effect ref (`params.targets`) and enforced when actions are
@@ -357,6 +366,7 @@ export type {
 export {
   indexContinuous,
   aggregateFor,
+  dropContinuousEffectsFor,
   expireContinuousEffects,
   NO_MOD,
 } from './internal/continuous.js';

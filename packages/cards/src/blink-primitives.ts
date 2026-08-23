@@ -8,7 +8,9 @@
  *
  *  - its enters-the-battlefield trigger fires again (the payoff — Wall of Omens
  *    draws a second card, Thragtusk makes a second 5-life);
- *  - counters, damage, Auras and Equipment do not come with it;
+ *  - counters, damage, Auras, Equipment and "until end of turn" effects do not
+ *    come with it — including a "gain control until end of turn", which is why
+ *    blinking a stolen creature keeps it for good;
  *  - it arrives untapped and summoning-sick (CR 302.6), so blinking an attacker
  *    mid-combat removes it from combat rather than untapping a threat;
  *  - a TOKEN blinked this way ceases to exist (CR 111.7) — it is exiled, and a
@@ -20,6 +22,17 @@
  * do" for destroy, bounce, reanimate and fetch. A third opinion is how the funnels
  * drift, and `effect-helpers.ts` carries a scar comment about exactly that.
  *
+ * ⚠️ What the funnels canNOT answer, and why `blinkOne` says three more things.
+ * The returned card keeps its INSTANCE ID (a blink is not a new card, and every
+ * id-keyed reference in the state has to stay sound). Three rules in this engine
+ * were enforced purely by an id no longer being on the battlefield — removal from
+ * combat, the attachment state-based action, and the pruning of floating
+ * continuous effects — and a blink is the one effect that puts the id straight
+ * back before any of them can look. So the second and third bullets above were,
+ * until §3.43, quietly false: a blinked attacker still connected for its damage,
+ * an Aura stayed on a creature it had never enchanted, and a Giant Growth came
+ * back with it. See `blinkOne`.
+ *
  * ⚠️ Immediate return ONLY. "Return it at the beginning of the next end step"
  * (Flickerwisp, Eerie Interlude, Ghostway) is a DELAYED trigger, which the engine
  * does not have yet — see DESIGN §3.21's named-unsupported list. Those cards stay
@@ -27,7 +40,10 @@
  * would be a different card.
  */
 import {
+  dropContinuousEffectsFor,
   isLegalTarget,
+  removeFromCombat,
+  unattachDependentsOf,
   type CardInstance,
   type EffectContext,
   type EffectPrimitive,
@@ -60,6 +76,22 @@ function blinkOne(ctx: EffectContext, permanent: CardInstance): CardInstance | u
   // the classic way a temporary control effect becomes permanent.
   const owner = permanent.owner;
   movePermanentTo(ctx, permanent, 'exile');
+  // ⚠️ THE ID COMES BACK, so the two rules that normally notice a departure by
+  // the id simply being gone have to be told. Both are asked AFTER the funnel
+  // above has emitted its `zoneChange`, so every leaves/dies trigger still sees
+  // the board it left — the same ordering `ceaseToExistIfToken` relies on.
+  //   - CR 506.4: it is removed from combat. Without this a blinked attacker
+  //     still connects for full damage AND returns untapped.
+  //   - CR 400.7 + 704.5m/n: Auras and Equipment were attached to the OBJECT
+  //     that left, not to the one coming back. Only the link is broken here;
+  //     the state-based actions decide what each attachment does about it.
+  //   - CR 400.7 again: a floating continuous effect applied to that object, so
+  //     a Giant Growth does not follow it back — and neither does a "gain
+  //     control until end of turn", which is precisely what makes blinking a
+  //     stolen creature keep it (see the `controller` option below).
+  removeFromCombat(ctx.state.combat, id);
+  unattachDependentsOf(ctx.state, id, ctx.emit);
+  dropContinuousEffectsFor(ctx.state, id);
   return putOntoBattlefield(ctx, owner, id, 'exile', { controller: ctx.controller });
 }
 

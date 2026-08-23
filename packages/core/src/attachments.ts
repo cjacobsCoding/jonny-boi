@@ -276,3 +276,31 @@ export function detachFromHost(
   attachment.attachedTo = null;
   emit({ type: 'permanentUnattached', instanceId: attachment.instanceId, hostInstanceId: previous });
 }
+
+/**
+ * Unattach everything attached to `hostId` — used when that host has LEFT the
+ * battlefield but its instance id is coming straight back (a blink).
+ *
+ * Normally nothing has to say this: {@link isLegallyAttached} asks whether the
+ * host is still on the battlefield, so a died/bounced/exiled host knocks its
+ * Auras and Equipment off at the next state-based-action pass all by itself. A
+ * blink returns the SAME id, so that question answers "yes" about an object
+ * CR 400.7 says is a different one, and an Aura would stay on a creature it
+ * never enchanted.
+ *
+ * Only the LINK is broken here. What each attachment then does about it —
+ * an Aura to its owner's graveyard, an Equipment simply unattached — is the
+ * `whenIllegal` data the SBA already reads, so there is exactly one place that
+ * decides the consequence.
+ */
+export function unattachDependentsOf(
+  state: GameState,
+  hostId: InstanceId,
+  emit: (event: import('./events.js').GameEvent) => void,
+): void {
+  const battlefield = state.battlefield;
+  for (let i = 0; i < battlefield.length; i++) {
+    const perm = battlefield[i] as CardInstance;
+    if (perm.attachedTo === hostId) detachFromHost(perm, emit);
+  }
+}
