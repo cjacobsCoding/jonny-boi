@@ -88,6 +88,7 @@ throughput (games/sec) from regressing.
 | fix/land-sequencing | worker | packages/ai (new: land-sequencing.ts + test; heuristic/weights/index/bench + tactical-suite.test), DESIGN §3.4e + §3.4a/§3.4d baseline notes | 🚧 PUSHED, not merged — branches off main; **moves the recorded heuristic baselines** |
 | feat/optional-payment | DESKTOP-90PJPM4 (integrator) | packages/core (choices/effects/engine/events/mana/clone + new optional-payment.test.ts), packages/cards (choice-primitives/primitives/effect-helpers/compile rules+text+compile + new test), packages/ai (choices/effect-value/heuristic/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
 | feat/trigger-targets | DESKTOP-90PJPM4 (integrator) | packages/core (triggers/state/choices/engine/events/clone + new trigger-targets.test.ts), packages/cards (compile types/compile/rules + new test), packages/ai (choices/effect-value/weights + tests), packages/sim (2 classification lines), apps/web (choice-view + ChoicePrompt + tests), DESIGN §3.11 | ✅ MERGED + DEPLOYED |
+| feat/token-doublers | DESKTOP-90PJPM4 (integrator) | packages/core (replacement/internal-replacement/effects/events), packages/cards (primitives + compile rules + replacement-effects.test reversed + new token-doublers.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/modal-one-or-more | DESKTOP-90PJPM4 (integrator) | packages/core (targeting + 1 test fixture), packages/cards (compile rules/text + new modal-one-or-more.test.ts), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/cost-reduction | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine/index + new cost-reduction.test.ts), packages/cards (compile rules/compile/types), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
 | feat/karoo-lands | DESKTOP-90PJPM4 (integrator) | packages/core (card/engine), packages/cards (choice-primitives + compile rules/compile/types + new karoo-lands.test.ts), packages/sim (1 classification line), UNSUPPORTED-BACKLOG.md (regenerated) | ✅ MERGED + DEPLOYED |
@@ -157,6 +158,25 @@ throughput (games/sec) from regressing.
 
 ## Messages between agents
 _Append dated notes here; keep them short. Newest at top._
+
+- 2026-08-23 integrator: **`feat/token-doublers` MERGED + DEPLOYED** — the token-count
+  replacement (Anointed Procession, Parallel Lives, **Doubling Season now compiles WHOLE**,
+  Mondrak's wording, Ojer Taq's creature-only triple). Audit: **586 → 589**. Verify green,
+  build exit 0.
+  👉 New `ReplacementEventKind` `'tokens'`, evaluated at the ONE token funnel
+  (`ctx.createToken` → `createTokenInState`): the count is replaced per funnel call, and
+  `times` composes per call exactly as per batch — which is the arithmetic reason the compiler
+  emits MULTIPLICATIVE token replacements only and refuses a "plus one" wording rather than
+  compounding it per token. The created def rides the event as its recipient, so a printed
+  "creature tokens" filter reads what is actually being made.
+  ❗ **Leave-it-better with teeth: the legacy `createToken` primitive hand-built instances past
+  the funnel** — skipping `tokenCreated` (ETB observers missed those tokens) and, once doublers
+  landed, it would have silently dodged every Procession printed. It now routes through
+  `ctx.createToken`.
+  ⚠️ One existing test REVERSED because the world changed under it, not because it was wrong:
+  `replacement-effects.test.ts` pinned "refuses a TOKEN doubler"; it now pins Doubling Season
+  compiling whole with both halves paired to their own event kinds.
+  (Integrator)
 
 - 2026-08-23 integrator: **`feat/modal-one-or-more` MERGED + DEPLOYED** — the "Choose one or
   more —" header plus `enchantment` / `land` / `planeswalker` as target restrictions of their

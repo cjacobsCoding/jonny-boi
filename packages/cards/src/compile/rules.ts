@@ -4306,6 +4306,39 @@ export const STATIC_RULES: readonly CompileRule[] = Object.freeze([
     },
   },
   {
+    id: 'replacement-token-doubling',
+    description:
+      '"If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead." (Anointed Procession, Parallel Lives, Doubling Season) / "If one or more [creature] tokens would be created under your control, twice/three times that many…" (Mondrak, Ojer Taq)',
+    // MULTIPLICATIVE outcomes only, structurally: token creation runs one
+    // funnel call per token and `times` composes per call, while a "plus one"
+    // would compound per token instead of per batch — so no plus alternation
+    // appears in this pattern at all, and such a card keeps reporting.
+    pattern: new RegExp(
+      `^if (?:an effect would create one or more|one or more (creature )?tokens would be created under your control, ` +
+        `${REPLACEMENT_MULTIPLIER_TOKEN} that many of those tokens are created instead|an effect would create one or more tokens under your control, it creates ` +
+        `${REPLACEMENT_MULTIPLIER_TOKEN} that many of those tokens instead)$`,
+    ),
+    build(match, ctx) {
+      if (!cardIsPermanent(ctx)) return null;
+      const creatureOnly = match[1] !== undefined;
+      const times = REPLACEMENT_MULTIPLIERS[match[2] ?? match[3] ?? ''];
+      if (times === undefined) return null;
+      return {
+        replacements: [
+          {
+            event: 'tokens',
+            applies: {
+              recipientController: 'you',
+              ...(creatureOnly ? { recipientFilter: { anyOfTypes: ['creature'] } } : {}),
+            },
+            outcome: { times },
+            label: match[0],
+          },
+        ],
+      };
+    },
+  },
+  {
     /**
      * "If a [red] source you control would deal [noncombat] damage to RECIPIENT,
      * it deals DOUBLE that damage / that much damage PLUS N instead" — Torbran,

@@ -17,6 +17,7 @@ import { entersTapped } from './card.js';
 import { attachTo } from './attachments.js';
 import type { ContinuousDuration } from './internal/continuous.js';
 import { applyControlChange } from './internal/continuous.js';
+import { hasAnyReplacement, indexReplacements, replaceTokenCount } from './internal/replacement.js';
 import type { ReplacementAbility } from './replacement.js';
 import { addFloatingReplacement } from './internal/replacement.js';
 import { applyEnteringDefense, applyEnteringLoyalty } from './internal/stats.js';
@@ -539,6 +540,30 @@ function createTokenInState(
   def: CardDefinition,
   controller: PlayerId,
   emit: (event: GameEvent) => void,
+): InstanceId {
+  // "If one or more tokens would be created under your control, twice that
+  // many…" — the count is replaced HERE, at the one funnel every token-creating
+  // primitive uses, so a doubler cannot be dodged by a new primitive. The extra
+  // copies are created by the same inner loop rather than by re-entering the
+  // funnel, so a doubled token can never double itself.
+  const created = hasAnyReplacement(state)
+    ? replaceTokenCount(state, indexReplacements(state), controller, def, 1, emit)
+    : 1;
+  let firstId: InstanceId | undefined;
+  for (let n = 0; n < created; n++) {
+    firstId = createOneTokenInState(state, def, controller, emit);
+  }
+  // Zero is only reachable through a hand-built prevention; a caller holding an
+  // id contract still gets a real (if inert) token rather than a lie.
+  return firstId ?? createOneTokenInState(state, def, controller, emit);
+}
+
+/** The unreplaced single-token entry `createTokenInState` loops over. */
+function createOneTokenInState(
+  state: GameState,
+  def: CardDefinition,
+  controller: PlayerId,
+  emit: (e: GameEvent) => void,
 ): InstanceId {
   const instanceId = state.nextInstanceId++;
   const hasHaste = Boolean(def.keywords?.haste);
